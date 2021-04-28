@@ -52,6 +52,7 @@ func testAppDescription() AppDescription {
 		RegistryName:   "dapriotest",
 		Replicas:       1,
 		IngressEnabled: true,
+		MetricsEnabled: true,
 	}
 }
 
@@ -239,7 +240,7 @@ func TestScaleDeploymentReplica(t *testing.T) {
 	})
 }
 
-func TestValidiateSideCar(t *testing.T) {
+func TestValidateSidecar(t *testing.T) {
 	testApp := testAppDescription()
 
 	objMeta := metav1.ObjectMeta{
@@ -284,7 +285,7 @@ func TestValidiateSideCar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		found, err := appManager.ValidiateSideCar()
+		found, err := appManager.ValidateSidecar()
 
 		assert.NoError(t, err)
 		assert.True(t, found)
@@ -320,7 +321,7 @@ func TestValidiateSideCar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		found, err := appManager.ValidiateSideCar()
+		found, err := appManager.ValidateSidecar()
 		assert.False(t, found)
 		assert.Error(t, err)
 	})
@@ -343,7 +344,7 @@ func TestValidiateSideCar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		found, err := appManager.ValidiateSideCar()
+		found, err := appManager.ValidateSidecar()
 		assert.False(t, found)
 		assert.Error(t, err)
 	})

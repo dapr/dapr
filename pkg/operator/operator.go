@@ -14,9 +14,9 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
+	"github.com/dapr/kit/logger"
 	"k8s.io/apimachinery/pkg/runtime"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -63,7 +63,11 @@ func init() {
 
 // NewOperator returns a new Dapr Operator
 func NewOperator(config, certChainPath string, enableLeaderElection bool) Operator {
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	conf, err := ctrl.GetConfig()
+	if err != nil {
+		log.Fatalf("unable to get controller runtime configuration, err: %s", err)
+	}
+	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: "0",
 		LeaderElection:     enableLeaderElection,

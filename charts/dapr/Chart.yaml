@@ -1,23 +1,23 @@
 apiVersion: v1
-appVersion: "1.0.0"
+appVersion: "1.1.2"
 description: A Helm chart for Dapr on Kubernetes
 name: dapr
-version: 1.0.0
+version: 1.1.2
 dependencies:
   - name: dapr_rbac
-    version: "0.6.0"
+    version: "1.1.2"
     repository: "file://dapr_rbac"
   - name: dapr_operator
-    version: "0.6.0"
+    version: "1.1.2"
     repository: "file://dapr_operator"
   - name: dapr_placement
-    version: "0.6.0"
+    version: "1.1.2"
     repository: "file://dapr_placement"
   - name: dapr_sidecar_injector
-    version: "0.6.0"
+    version: "1.1.2"
     repository: "file://dapr_sidecar_injector"
   - name: dapr_sentry
-    version: "0.6.0"
+    version: "1.1.2"
     repository: "file://dapr_sentry"
   - name: dapr_dashboard
     version: "0.7.0"

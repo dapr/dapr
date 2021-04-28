@@ -9,6 +9,11 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
-sidecarImagePullPolicy: Always
+sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 resources: {}
+
+debug:
+  enabled: false
+  port: 40000
+  initialDelaySeconds: 30000

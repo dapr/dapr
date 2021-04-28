@@ -17,24 +17,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/channel/http"
-	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
-	"github.com/dapr/dapr/pkg/config"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/logger"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	daprt "github.com/dapr/dapr/pkg/testing"
-	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
@@ -48,6 +33,24 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/channel/http"
+	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	daprt "github.com/dapr/dapr/pkg/testing"
+	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/kit/logger"
 )
 
 var invalidJSON = []byte{0x7b, 0x7b}
@@ -137,14 +140,14 @@ func TestPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Publish without topic name ending in // - 404", func(t *testing.T) {
+	t.Run("Publish with topic name '/' - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/pubsubname//", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
 			// assert
-			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "success publishing with %s", method)
 		}
 	})
 
@@ -209,6 +212,43 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
 			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
 		}
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestShutdownEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	m := mock.Mock{}
+	m.On("shutdown", mock.Anything).Return()
+	testAPI := &api{
+		json: jsoniter.ConfigFastest,
+		shutdown: func() {
+			m.MethodCalled("shutdown")
+		},
+	}
+
+	fakeServer.StartServer(testAPI.constructShutdownEndpoints())
+
+	t.Run("Shutdown successfully - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
+		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
+			<-time.After(200 * time.Millisecond)
+		}
+		m.AssertCalled(t, "shutdown")
+	})
+
+	t.Run("Shutdown supports POST - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
+		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
+			<-time.After(200 * time.Millisecond)
+		}
+		m.AssertCalled(t, "shutdown")
 	})
 
 	fakeServer.Shutdown()
@@ -1381,41 +1421,43 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		components: []components_v1alpha1.Component{
-			{
-				ObjectMeta: meta_v1.ObjectMeta{
-					Name: "MockComponent1Name",
-				},
-				Spec: components_v1alpha1.ComponentSpec{
-					Type:    "mock.component1Type",
-					Version: "v1.0",
-					Metadata: []components_v1alpha1.MetadataItem{
-						{
-							Name: "actorMockComponent1",
-							Value: components_v1alpha1.DynamicValue{
-								JSON: v1.JSON{Raw: []byte("true")},
+		getComponentsFn: func() []components_v1alpha1.Component {
+			return []components_v1alpha1.Component{
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "MockComponent1Name",
+					},
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    "mock.component1Type",
+						Version: "v1.0",
+						Metadata: []components_v1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent1",
+								Value: components_v1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
 							},
 						},
 					},
 				},
-			},
-			{
-				ObjectMeta: meta_v1.ObjectMeta{
-					Name: "MockComponent2Name",
-				},
-				Spec: components_v1alpha1.ComponentSpec{
-					Type:    "mock.component2Type",
-					Version: "v1.0",
-					Metadata: []components_v1alpha1.MetadataItem{
-						{
-							Name: "actorMockComponent2",
-							Value: components_v1alpha1.DynamicValue{
-								JSON: v1.JSON{Raw: []byte("true")},
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "MockComponent2Name",
+					},
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    "mock.component2Type",
+						Version: "v1.0",
+						Metadata: []components_v1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent2",
+								Value: components_v1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
 							},
 						},
 					},
 				},
-			},
+			}
 		},
 		json: jsoniter.ConfigFastest,
 	}
@@ -2092,13 +2134,17 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 func TestV1StateEndpoints(t *testing.T) {
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
-	fakeStore := fakeStateStore{}
+	var fakeStore state.Store = fakeStateStore{}
 	fakeStores := map[string]state.Store{
 		"store1": fakeStore,
 	}
+	fakeTransactionalStores := map[string]state.TransactionalStore{
+		"store1": fakeStore.(state.TransactionalStore),
+	}
 	testAPI := &api{
-		stateStores: fakeStores,
-		json:        jsoniter.ConfigFastest,
+		stateStores:              fakeStores,
+		transactionalStateStores: fakeTransactionalStores,
+		json:                     jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -2315,13 +2361,13 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  jsoniter.RawMessage("life is good"),
-				ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
 				Key:   "foo",
 				Data:  nil,
-				ETag:  "",
+				ETag:  nil,
 				Error: "",
 			},
 		}
@@ -2348,13 +2394,13 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  jsoniter.RawMessage("life is good"),
-				ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
 				Key:   "error-key",
 				Data:  nil,
-				ETag:  "",
+				ETag:  nil,
 				Error: "UPSTREAM STATE ERROR",
 			},
 		}
@@ -2405,7 +2451,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
 			Data: []byte("\"bGlmZSBpcyBnb29k\""),
-			ETag: "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+			ETag: ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 		}, nil
 	}
 	if req.Key == "error-key" {
@@ -2422,6 +2468,13 @@ func (c fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetRe
 func (c fakeStateStore) Init(metadata state.Metadata) error {
 	c.counter = 0
 	return nil
+}
+
+func (c fakeStateStore) Features() []state.Feature {
+	return []state.Feature{
+		state.FeatureETag,
+		state.FeatureTransactional,
+	}
 }
 
 func (c fakeStateStore) Set(req *state.SetRequest) error {
@@ -2610,15 +2663,19 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 func TestV1TransactionEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	fakeStore := fakeStateStore{}
+	var fakeStore state.Store = fakeStateStore{}
 	fakeStoreNonTransactional := new(daprt.MockStateStore)
 	fakeStores := map[string]state.Store{
 		"store1":                fakeStore,
 		"storeNonTransactional": fakeStoreNonTransactional,
 	}
+	fakeTransactionalStores := map[string]state.TransactionalStore{
+		"store1": fakeStore.(state.TransactionalStore),
+	}
 	testAPI := &api{
-		stateStores: fakeStores,
-		json:        jsoniter.ConfigFastest,
+		stateStores:              fakeStores,
+		transactionalStateStores: fakeTransactionalStores,
+		json:                     jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}

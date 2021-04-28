@@ -16,12 +16,12 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -29,6 +29,7 @@ var log = logger.NewLogger("dapr.placement")
 const gracefulTimeout = 10 * time.Second
 
 func main() {
+	logger.DaprVersion = version.Version()
 	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
 
 	cfg := newConfig()

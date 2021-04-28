@@ -41,7 +41,11 @@ const (
 	daprAppTokenSecret                = "dapr.io/app-token-secret" /* #nosec */
 	daprLogAsJSON                     = "dapr.io/log-as-json"
 	daprAppMaxConcurrencyKey          = "dapr.io/app-max-concurrency"
+	daprEnableMetricsKey              = "dapr.io/enable-metrics"
 	daprMetricsPortKey                = "dapr.io/metrics-port"
+	daprEnableDebugKey                = "dapr.io/enable-debug"
+	daprDebugPortKey                  = "dapr.io/debug-port"
+	daprEnvKey                        = "dapr.io/env"
 	daprCPULimitKey                   = "dapr.io/sidecar-cpu-limit"
 	daprMemoryLimitKey                = "dapr.io/sidecar-memory-limit"
 	daprCPURequestKey                 = "dapr.io/sidecar-cpu-request"
@@ -69,12 +73,16 @@ const (
 	sidecarGRPCPortName               = "dapr-grpc"
 	sidecarInternalGRPCPortName       = "dapr-internal"
 	sidecarMetricsPortName            = "dapr-metrics"
+	sidecarDebugPortName              = "dapr-debug"
 	defaultLogLevel                   = "info"
 	defaultLogAsJSON                  = false
 	defaultAppSSL                     = false
 	kubernetesMountPath               = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig                     = "daprsystem"
+	defaultEnabledMetric              = true
 	defaultMetricsPort                = 9090
+	defaultSidecarDebug               = false
+	defaultSidecarDebugPort           = 40000
 	sidecarHealthzPath                = "healthz"
 	defaultHealthzProbeDelaySeconds   = 3
 	defaultHealthzProbeTimeoutSeconds = 3
@@ -177,7 +185,7 @@ func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation 
 			Value: strconv.Itoa(sidecarAPIGRPCPort),
 		},
 	}
-	envPatchOps := []PatchOperation{}
+	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
 		path := fmt.Sprintf("%s/%d/env", containersPath, i)
 		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
@@ -283,8 +291,20 @@ func getProtocol(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprAppProtocolKey, "http")
 }
 
+func getEnableMetrics(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprEnableMetricsKey, defaultEnabledMetric)
+}
+
 func getMetricsPort(annotations map[string]string) int {
 	return int(getInt32AnnotationOrDefault(annotations, daprMetricsPortKey, defaultMetricsPort))
+}
+
+func getEnableDebug(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprEnableDebugKey, defaultSidecarDebug)
+}
+
+func getDebugPort(annotations map[string]string) int {
+	return int(getInt32AnnotationOrDefault(annotations, daprDebugPortKey, defaultSidecarDebugPort))
 }
 
 func getAppID(pod corev1.Pod) string {
@@ -465,6 +485,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		appPortStr = fmt.Sprintf("%v", appPort)
 	}
 
+	metricsEnabled := getEnableMetrics(annotations)
 	metricsPort := getMetricsPort(annotations)
 	maxConcurrency, err := getMaxConcurrency(annotations)
 	if err != nil {
@@ -484,6 +505,68 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		log.Warn(err)
 	}
 
+	ports := []corev1.ContainerPort{
+		{
+			ContainerPort: int32(sidecarHTTPPort),
+			Name:          sidecarHTTPPortName,
+		},
+		{
+			ContainerPort: int32(sidecarAPIGRPCPort),
+			Name:          sidecarGRPCPortName,
+		},
+		{
+			ContainerPort: int32(sidecarInternalGRPCPort),
+			Name:          sidecarInternalGRPCPortName,
+		},
+		{
+			ContainerPort: int32(metricsPort),
+			Name:          sidecarMetricsPortName,
+		},
+	}
+
+	cmd := []string{"/daprd"}
+
+	args := []string{
+		"--mode", "kubernetes",
+		"--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort),
+		"--dapr-grpc-port", fmt.Sprintf("%v", sidecarAPIGRPCPort),
+		"--dapr-internal-grpc-port", fmt.Sprintf("%v", sidecarInternalGRPCPort),
+		"--app-port", appPortStr,
+		"--app-id", id,
+		"--control-plane-address", controlPlaneAddress,
+		"--app-protocol", getProtocol(annotations),
+		"--placement-host-address", placementServiceAddress,
+		"--config", getConfig(annotations),
+		"--log-level", getLogLevel(annotations),
+		"--app-max-concurrency", fmt.Sprintf("%v", maxConcurrency),
+		"--sentry-address", sentryAddress,
+		fmt.Sprintf("--enable-metrics=%t", metricsEnabled),
+		"--metrics-port", fmt.Sprintf("%v", metricsPort),
+		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
+	}
+
+	debugEnabled := getEnableDebug(annotations)
+	debugPort := getDebugPort(annotations)
+	if debugEnabled {
+		ports = append(ports, corev1.ContainerPort{
+			Name:          sidecarDebugPortName,
+			ContainerPort: int32(debugPort),
+		})
+
+		cmd = []string{"/dlv"}
+
+		args = append([]string{
+			fmt.Sprintf("--listen=:%v", debugPort),
+			"--accept-multiclient",
+			"--headless=true",
+			"--log",
+			"--api-version=2",
+			"exec",
+			"/daprd",
+			"--",
+		}, args...)
+	}
+
 	c := &corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -491,56 +574,15 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 		},
-		Ports: []corev1.ContainerPort{
-			{
-				ContainerPort: int32(sidecarHTTPPort),
-				Name:          sidecarHTTPPortName,
-			},
-			{
-				ContainerPort: int32(sidecarAPIGRPCPort),
-				Name:          sidecarGRPCPortName,
-			},
-			{
-				ContainerPort: int32(sidecarInternalGRPCPort),
-				Name:          sidecarInternalGRPCPortName,
-			},
-			{
-				ContainerPort: int32(metricsPort),
-				Name:          sidecarMetricsPortName,
-			},
-		},
-		Command: []string{"/daprd"},
+		Ports:   ports,
+		Command: cmd,
 		Env: []corev1.EnvVar{
-			{
-				Name: utils.HostIPEnvVar,
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "status.podIP",
-					},
-				},
-			},
 			{
 				Name:  "NAMESPACE",
 				Value: namespace,
 			},
 		},
-		Args: []string{
-			"--mode", "kubernetes",
-			"--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort),
-			"--dapr-grpc-port", fmt.Sprintf("%v", sidecarAPIGRPCPort),
-			"--dapr-internal-grpc-port", fmt.Sprintf("%v", sidecarInternalGRPCPort),
-			"--app-port", appPortStr,
-			"--app-id", id,
-			"--control-plane-address", controlPlaneAddress,
-			"--app-protocol", getProtocol(annotations),
-			"--placement-host-address", placementServiceAddress,
-			"--config", getConfig(annotations),
-			"--log-level", getLogLevel(annotations),
-			"--app-max-concurrency", fmt.Sprintf("%v", maxConcurrency),
-			"--sentry-address", sentryAddress,
-			"--metrics-port", fmt.Sprintf("%v", metricsPort),
-			"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
-		},
+		Args: args,
 		ReadinessProbe: &corev1.Probe{
 			Handler:             httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
@@ -556,6 +598,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprLivenessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
 	}
+
+	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
 
 	if tokenVolumeMount != nil {
 		c.VolumeMounts = []corev1.VolumeMount{

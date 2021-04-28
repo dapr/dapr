@@ -38,7 +38,7 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      GOVER: 1.15.3
+      GOVER: 1.16
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
@@ -99,8 +99,6 @@ jobs:
           image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
         - role: worker
           image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
-        - role: worker
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
         containerdConfigPatches:
         - |-
           [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:$REGISTRY_PORT"]
@@ -127,6 +125,12 @@ jobs:
                   -lkubernetes.io/hostname!=kind-control-plane \
                   -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
         echo "MINIKUBE_NODE_IP=$NODE_IP" >> $GITHUB_ENV
+
+    - name: Setup test output
+      shell: bash
+      run: |
+        export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
+        echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
 
     - name: Setup local registry
       run: |
@@ -175,6 +179,10 @@ jobs:
       run: |
         make setup-test-components
 
+    - name: Free up some diskspace
+      run: |
+        docker image prune -a -f
+
     - name: Run tests
       run: |
         make test-e2e-all
@@ -190,3 +198,9 @@ jobs:
       with:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_container_logs
         path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@master
+      with:
+        name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.json

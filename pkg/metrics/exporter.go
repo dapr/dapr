@@ -5,10 +5,9 @@ import (
 	"net/http"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
-	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/kit/logger"
 	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
-	"go.opencensus.io/stats/view"
 )
 
 const (
@@ -68,17 +67,12 @@ func (m *promMetricsExporter) Init() error {
 	registry.MustRegister(prom.NewGoCollector())
 
 	var err error
-	m.ocExporter, err = ocprom.NewExporter(ocprom.Options{
+	if m.ocExporter, err = ocprom.NewExporter(ocprom.Options{
 		Namespace: m.namespace,
 		Registry:  registry,
-	})
-
-	if err != nil {
+	}); err != nil {
 		return errors.Errorf("failed to create Prometheus exporter: %v", err)
 	}
-
-	// register exporter to view
-	view.RegisterExporter(m.ocExporter)
 
 	// start metrics server
 	return m.startMetricServer()

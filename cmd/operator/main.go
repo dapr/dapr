@@ -9,13 +9,14 @@ import (
 	"flag"
 	"time"
 
-	"github.com/dapr/dapr/pkg/logger"
+	"k8s.io/klog"
+
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
-	"k8s.io/klog"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -31,6 +32,7 @@ const (
 )
 
 func main() {
+	logger.DaprVersion = version.Version()
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()

@@ -62,6 +62,7 @@ export GOOS ?= $(TARGET_OS_LOCAL)
 # Default docker container and e2e test targst.
 TARGET_OS ?= linux
 TARGET_ARCH ?= amd64
+TEST_OUTPUT_FILE_PREFIX ?= ./test_report
 
 ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
@@ -205,7 +206,7 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
-		--set dapr_placement.logLevel=debug \
+		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=Always \
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) $(HELM_CHART_DIR)
 
 ################################################################################
@@ -217,8 +218,8 @@ release: build archive
 # Target: test                                                                 #
 ################################################################################
 .PHONY: test
-test:
-	go test ./pkg/... $(COVERAGE_OPTS)
+test: test-deps
+	gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json --format standard-quiet -- ./pkg/... $(COVERAGE_OPTS)
 	go test ./tests/...
 
 ################################################################################

@@ -75,10 +75,10 @@ The Helm chart has the follow configuration options that can be supplied:
 ### Global options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
-| `global.registry`                         | Docker image registry                                       | `docker.io/daprio`      |
-| `global.tag`                              | Docker image version tag                                    | `0.11.0`            |
+| `global.registry`                         | Docker image registry                                                   | `docker.io/daprio`      |
+| `global.tag`                              | Docker image version tag                                                | `1.1.2`                 |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
-| `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`                |
+| `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
 | `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
 | `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`             |
 | `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
@@ -112,6 +112,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.image.name`                | Docker image name (`global.registry/dapr_operator.image.name`)          | `dapr`                  |
 | `dapr_operator.runAsNonRoot`              | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_operator.resources`                 | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+| `dapr_operator.debug.enabled`             | Boolean value for enabling debug mode | `{}` |
 
 ### Dapr Placement options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -127,6 +128,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.volumeclaims.storageClassName` | storage class name |    |
 | `dapr_placement.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. Does not apply unless `forceInMemoryLog` is set to `true`. You may have to set this to `false` when running in Minikube | `false` |
 | `dapr_placement.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+| `dapr_placement.debug.enabled`            | Boolean value for enabling debug mode | `{}` |
 
 ### Dapr Sentry options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -140,17 +142,19 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sentry.trustDomain`                 | Trust domain (logical group to manage app trust relationship) for access control list | `cluster.local`  |
 | `dapr_sentry.runAsNonRoot`                | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_sentry.resources`                   | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+| `dapr_sentry.debug.enabled`               | Boolean value for enabling debug mode | `{}` |
 
 ### Dapr Sidecar Injector options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
-| `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                                | `Always`                     |
+| `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                                | `IfNotPresent`                     |
 | `dapr_sidecar_injector.replicaCount`      | Number of replicas                                                      | `1`                     |
 | `dapr_sidecar_injector.logLevel`          | Log level                                                               | `info`                  |
 | `dapr_sidecar_injector.image.name`        | Dapr runtime sidecar image name injecting to application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`|
 | `dapr_sidecar_injector.webhookFailurePolicy` | Failure policy for the sidecar injector                              | `Ignore`                |
 | `dapr_sidecar_injector.runAsNonRoot`      | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_sidecar_injector.resources`         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+| `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
 
 
 
@@ -200,4 +204,38 @@ global:
 Install dapr:
 ```bash
 helm install dapr dapr/dapr --namespace dapr-system --values values.yml --wait
+```
+
+## Example of debugging dapr
+Rebuild dapr binaries and docker images:
+```bash
+make release GOOS=linux GOARCH=amd64 DEBUG=1
+export DAPR_TAG=dev
+export DAPR_REGISTRY=<your docker.io id>
+docker login
+make docker-push DEBUG=1
+```
+Take dapr_operator as an example, configure the corresponding `debug.enabled` option in a value file:
+```yaml
+global:
+   registry: docker.io/<your docker.io id>
+   tag: "dev-linux-amd64"
+dapr_operator:
+  debug:
+    enabled: true
+```
+
+Step into dapr project, and install dapr:
+```bash
+helm install dapr charts/dapr --namespace dapr-system --values values.yml --wait
+```
+
+Find the target dapr-operator pod:
+```bash
+kubectl get pods -n dapr-system -o wide 
+```
+
+Port forward the debugging port so that it's visible to your IDE:
+```bash
+kubectl port-forward dapr-operator-5c99475ffc-m9z9f 40000:40000 -n dapr-system
 ```

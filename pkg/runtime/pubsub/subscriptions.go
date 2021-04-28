@@ -3,19 +3,20 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
+
+	"github.com/ghodss/yaml"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/ghodss/yaml"
-	"google.golang.org/protobuf/types/known/emptypb"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -106,7 +107,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 
 	for _, f := range files {
 		if !f.IsDir() {
-			filePath := fmt.Sprintf("%s/%s", componentsPath, f.Name())
+			filePath := filepath.Join(componentsPath, f.Name())
 			b, err := ioutil.ReadFile(filePath)
 			if err != nil {
 				log.Errorf("failed to read file %s: %s", filePath, err)

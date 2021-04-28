@@ -15,7 +15,7 @@ import (
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	"github.com/dapr/dapr/pkg/config"
 	cors_dapr "github.com/dapr/dapr/pkg/cors"
-	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/kit/logger"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -127,6 +127,7 @@ func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 	return func(ctx *fasthttp.RequestCtx) {
 		v := ctx.Request.Header.Peek(auth.APITokenHeader)
 		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || string(v) == token {
+			ctx.Request.Header.Del(auth.APITokenHeader)
 			next(ctx)
 		} else {
 			ctx.Error("invalid api token", http.StatusUnauthorized)

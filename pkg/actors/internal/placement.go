@@ -12,15 +12,16 @@ import (
 	"sync"
 	"time"
 
-	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/placement/hashing"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/placement/hashing"
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.internal.placement")
@@ -318,8 +319,8 @@ func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 
 		go func() {
 			// TODO: Use lock-free table update.
-			// current implemenation is distributed two-phase locking algorithm.
-			// If placement experiences intermitently outage during updateplacement,
+			// current implementation is distributed two-phase locking algorithm.
+			// If placement experiences intermittently outage during updateplacement,
 			// user application will face 5 second blocking even if it can avoid deadlock.
 			// It can impact the entire system.
 			time.Sleep(time.Second * 5)

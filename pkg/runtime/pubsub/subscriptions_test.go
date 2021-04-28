@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/ghodss/yaml"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.test")
@@ -56,7 +58,7 @@ func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePat
 }
 
 func TestDeclarativeSubscriptions(t *testing.T) {
-	dir := "./components"
+	dir := filepath.Join(".", "components")
 	os.Mkdir(dir, 0777)
 	defer os.RemoveAll(dir)
 
@@ -64,7 +66,7 @@ func TestDeclarativeSubscriptions(t *testing.T) {
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{"scope1"}
 
-		filePath := "./components/sub.yaml"
+		filePath := filepath.Join(".", "components", "sub.yaml")
 		writeSubscriptionToDisk(s, filePath)
 
 		subs := DeclarativeSelfHosted(dir, log)

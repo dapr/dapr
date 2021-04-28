@@ -29,7 +29,7 @@ const (
 	// daprInternalSpanAttrPrefix is the internal span attribution prefix.
 	// Middleware will not populate it if the span key starts with this prefix.
 	daprInternalSpanAttrPrefix = "__dapr."
-	// daprAPISpanNameInternal is the internal attributation, but not populated
+	// daprAPISpanNameInternal is the internal attribution, but not populated
 	// to span attribution.
 	daprAPISpanNameInternal = daprInternalSpanAttrPrefix + "spanname"
 
@@ -221,9 +221,8 @@ func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 }
 
 // StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
-func StartInternalCallbackSpan(spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, *trace.Span) {
+func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, *trace.Span) {
 	traceEnabled := diag_utils.IsTracingEnabled(spec.SamplingRate)
-	ctx := context.Background()
 	if !traceEnabled {
 		return ctx, nil
 	}
