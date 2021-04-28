@@ -27,7 +27,6 @@ func TestRegistry(t *testing.T) {
 		const (
 			resolverName   = "mockResolver"
 			resolverNameV2 = "mockResolver/v2"
-			componentName  = "nameresolution." + resolverName
 		)
 
 		// Initiate mock object
@@ -63,8 +62,7 @@ func TestRegistry(t *testing.T) {
 
 	t.Run("name resolver is not registered", func(t *testing.T) {
 		const (
-			resolverName  = "fakeResolver"
-			componentName = "nameresolution." + resolverName
+			resolverName = "fakeResolver"
 		)
 
 		// act
