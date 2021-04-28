@@ -63,7 +63,11 @@ func init() {
 
 // NewOperator returns a new Dapr Operator
 func NewOperator(config, certChainPath string, enableLeaderElection bool) Operator {
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	conf, err := ctrl.GetConfig()
+	if err != nil {
+		log.Fatalf("unable to get controller runtime configuration, err: %s", err)
+	}
+	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: "0",
 		LeaderElection:     enableLeaderElection,

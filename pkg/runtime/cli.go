@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 
 	global_config "github.com/dapr/dapr/pkg/config"
+	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -22,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -141,6 +143,28 @@ func FromFlags() (*DaprRuntime, error) {
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
 		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize)
 
+	// set environment variables
+	// TODO - consider adding host address to runtime config and/or caching result in utils package
+	host, err := utils.GetHostAddress()
+	if err != nil {
+		log.Warnf("failed to get host address, env variable %s will not be set", env.HostAddress)
+	}
+
+	variables := map[string]string{
+		env.AppID:           *appID,
+		env.AppPort:         *appPort,
+		env.HostAddress:     host,
+		env.DaprPort:        strconv.Itoa(daprInternalGRPC),
+		env.DaprGRPCPort:    *daprAPIGRPCPort,
+		env.DaprHTTPPort:    *daprHTTPPort,
+		env.DaprMetricsPort: metricsExporter.Options().Port, // TODO - consider adding to runtime config
+		env.DaprProfilePort: *profilePort,
+	}
+
+	if err = setEnvVariables(variables); err != nil {
+		return nil, err
+	}
+
 	var globalConfig *global_config.Configuration
 	var configErr error
 
@@ -188,6 +212,16 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Fatalf(err.Error())
 	}
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList), nil
+}
+
+func setEnvVariables(variables map[string]string) error {
+	for key, value := range variables {
+		err := os.Setenv(key, value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func parsePlacementAddr(val string) []string {
