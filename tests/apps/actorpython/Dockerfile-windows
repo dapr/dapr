@@ -1,4 +1,5 @@
-FROM python:3.7-windowsservercore
+ARG WINDOWS_VERSION=1809
+FROM daprio/windows-python-base:$WINDOWS_VERSION
 WORKDIR /app
 ADD . /app
 RUN pip install -r requirements.txt
@@ -6,3 +7,4 @@ RUN pip install -r requirements.txt
 EXPOSE 3000
 ENTRYPOINT ["python"]
 CMD ["flask_service.py"]
+

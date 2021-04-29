@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 jobs:
   automerge:
+    if: github.repository_owner == 'dapr'
     name: Automerge and update PRs.
     runs-on: ubuntu-latest
     steps:
