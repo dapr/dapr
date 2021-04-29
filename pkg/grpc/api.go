@@ -77,11 +77,8 @@ type API interface {
 
 	// GetConfiguration gets configuration from configuration store.
 	GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
-	// SaveConfiguration saves configuration into configuration store.
-	SaveConfiguration(ctx context.Context, in *runtimev1pb.SaveConfigurationRequest) (*emptypb.Empty, error)
-	// DeleteConfiguration deletes configuration from configuration store.
-	DeleteConfiguration(ctx context.Context, in *runtimev1pb.DeleteConfigurationRequest) (*emptypb.Empty, error)
-	SubscribeConfiguration(runtimev1pb.Dapr_SubscribeConfigurationServer) error
+	// SubscribeConfiguration subscribes the update event of configuration items.
+	SubscribeConfiguration(ctx context.Context, in *runtimev1pb.SubscribeConfigurationRequest) (*emptypb.Empty, error)
 
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
@@ -100,6 +97,7 @@ type api struct {
 	secretStores             map[string]secretstores.SecretStore
 	secretsConfiguration     map[string]config.SecretsScope
 	configurationStores      map[string]configuration.Store
+	configurationCaches      map[string]*runtimev1pb.GetConfigurationResponse
 	pubsubAdapter            runtime_pubsub.Adapter
 	id                       string
 	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -145,6 +143,7 @@ func NewAPI(
 		secretStores:             secretStores,
 		secretsConfiguration:     secretsConfiguration,
 		configurationStores:      configurationStores,
+		configurationCaches:      map[string]*runtimev1pb.GetConfigurationResponse{},
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		tracingSpec:              tracingSpec,
 		accessControlList:        accessControlList,
@@ -1101,34 +1100,41 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 	}
 
 	req := configuration.GetRequest{
-		AppID:           in.AppId,
-		Group:           in.Group,
-		Label:           in.Label,
-		Keys:            in.Keys,
-		Metadata:        in.Metadata,
-		SubscribeUpdate: in.SubscribeUpdate,
+		AppID:    in.AppId,
+		Metadata: in.Metadata,
 	}
 	// override appID in request for normal client
 	// TODO: add checking for normal client or admin client
 	req.AppID = a.id
 
-	handler := configurationEventHandler{
-		api:       a,
-		storeName: in.StoreName,
-		appId:     req.AppID,
-	}
-
-	getResponse, err := store.Get(ctx, &req, handler.updateEventHandler)
+	getResponse, err := store.Get(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, in.Keys, in.StoreName, err.Error())
+		// get from cache if store is unavailable
+		// TODO: defines error format for "store is unavailable"
+		if err.Error() == "unavailable" {
+			// if store is unavailable, try to get configuration from cache
+			cache := a.configurationCaches[fmt.Sprintf("%s||%s", in.StoreName, req.AppID)]
+			if cache != nil {
+				return cache, nil
+			}
+		}
+
+		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, req.AppID, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetConfigurationResponse{}, err
 	}
 
 	response := &runtimev1pb.GetConfigurationResponse{}
-	if getResponse != nil && len(getResponse.Items) > 0 {
-		response.Items = invokev1.ToConfigurationGRPCItems(getResponse.Items)
+	if getResponse != nil {
+		response.Revision = getResponse.Revision
+		if len(getResponse.Items) > 0 {
+			response.Items = invokev1.ToConfigurationGRPCItems(getResponse.Items)
+		}
 	}
+
+	// save to cache
+	a.configurationCaches[fmt.Sprintf("%s||%s", in.StoreName, req.AppID)] = response
+
 	return response, nil
 }
 
@@ -1138,7 +1144,7 @@ type configurationEventHandler struct {
 	appId     string
 }
 
-func (h *configurationEventHandler) updateEventHandler(e *configuration.UpdateEvent) error {
+func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
 	if h.api.appChannel == nil {
 		return status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
@@ -1149,54 +1155,30 @@ func (h *configurationEventHandler) updateEventHandler(e *configuration.UpdateEv
 	return h.api.appChannel.OnConfigurationEvent(context.Background(), h.storeName, h.appId, e.Items)
 }
 
-func (a *api) SaveConfiguration(ctx context.Context, in *runtimev1pb.SaveConfigurationRequest) (*emptypb.Empty, error) {
+func (a *api) SubscribeConfiguration(ctx context.Context, in *runtimev1pb.SubscribeConfigurationRequest) (*emptypb.Empty, error) {
 	store, err := a.getConfigurationStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
 
-	req := &configuration.SaveRequest{
-		AppID:    in.AppId,
-		Items:    invokev1.FromConfigurationGRPCItems(in.Items),
+	req := &configuration.SubscribeRequest{
+		AppID: in.AppId,
+		Keys: in.Keys,
 		Metadata: in.Metadata,
 	}
+	handler := configurationEventHandler{
+		api:       a,
+		storeName: in.StoreName,
+		appId:     req.AppID,
+	}
 
-	err = store.Save(ctx, req)
+	err = store.Subscribe(ctx, req, handler.updateEventHandler)
 	if err != nil {
-		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
 
 	return &emptypb.Empty{}, nil
-}
-
-func (a *api) DeleteConfiguration(ctx context.Context, in *runtimev1pb.DeleteConfigurationRequest) (*emptypb.Empty, error) {
-	store, err := a.getConfigurationStore(in.StoreName)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
-	}
-
-	req := &configuration.DeleteRequest{
-		AppID:    in.AppId,
-		Group:    in.Group,
-		Label:    in.Label,
-		Keys:     in.Keys,
-		Metadata: in.Metadata,
-	}
-
-	err = store.Delete(ctx, req)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
-	}
-
-	return &emptypb.Empty{}, nil
-}
-
-func (a *api) SubscribeConfiguration(configurationServer runtimev1pb.Dapr_SubscribeConfigurationServer) error {
-	panic("implement me")
 }
 
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {

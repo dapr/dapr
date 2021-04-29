@@ -19,8 +19,6 @@ func ToConfigurationGRPCItem(item *configuration.Item) *commonv1pb.Configuration
 	return &commonv1pb.ConfigurationItem{
 		Key:      item.Key,
 		Content:  item.Content,
-		Group:    item.Group,
-		Label:    item.Label,
 		Tags:     item.Tags,
 		Metadata: item.Metadata,
 	}
@@ -40,8 +38,6 @@ func FromConfigurationGRPCItem(item *commonv1pb.ConfigurationItem) *configuratio
 	return &configuration.Item{
 		Key:      item.Key,
 		Content:  item.Content,
-		Group:    item.Group,
-		Label:    item.Label,
 		Tags:     item.Tags,
 		Metadata: item.Metadata,
 	}

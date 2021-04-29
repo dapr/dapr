@@ -75,14 +75,9 @@ service Dapr {
   // GetConfiguration gets configuration from configuration store.
   rpc GetConfiguration(GetConfigurationRequest) returns (GetConfigurationResponse) {}
 
-  // SaveConfiguration saves configuration into configuration store.
-  rpc SaveConfiguration(SaveConfigurationRequest) returns (google.protobuf.Empty) {}
-
-  // DeleteConfiguration deletes configuration from configuration store.
-  rpc DeleteConfiguration(DeleteConfigurationRequest) returns (google.protobuf.Empty) {}
-
-  // SubscribeConfiguration gets configuration from configuration store and subscribe the updates.
-  rpc SubscribeConfiguration(stream SubscribeConfigurationRequest) returns (stream SubscribeConfigurationResponse) {}
+  // SubscribeConfiguration subscribes the update events of configuration items changed.
+  // The event will be sent by OnConfigurationEvent() in app callback
+  rpc SubscribeConfiguration(SubscribeConfigurationRequest) returns (google.protobuf.Empty) {}
 
   // Gets metadata of the sidecar
   rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
@@ -429,27 +424,17 @@ message GetConfigurationRequest {
   // Only used for admin, Ignored and reset for normal client
   string app_id = 2;
 
-  // The group of keys.
-  string group = 3;
-
-  // The label for keys.
-  string label = 4;
-
-  // The keys to get.
-  repeated string keys = 5;
-
   // The metadata which will be sent to configuration store components.
-  map<string,string> metadata = 6;
-
-  // Subscribes update event for given keys.
-  // If true, when any configuration item in this request is updated, app will receive event by OnConfigurationEvent() of app callback
-  bool subscribe_update = 7;
+  map<string,string> metadata = 3;
 }
 
 // GetConfigurationResponse is the response conveying the list of configuration values.
+// It should be the FULL configuration of specified application which contains all of its configuration items.
 message GetConfigurationResponse {
+  // the revision of app's configurations.
+  string revision = 1;
   // The list of items containing configuration values.
-  repeated common.v1.ConfigurationItem items = 1;
+  repeated common.v1.ConfigurationItem items = 2;
 }
 
 // SubscribeConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
@@ -461,68 +446,15 @@ message SubscribeConfigurationRequest {
   // Only used for admin, ignored and reset for normal client
   string app_id = 2;
 
-  // The group of keys.
-  string group = 3;
-
-  // The label for keys.
-  string label = 4;
-
   // The keys to get.
-  repeated string keys = 5;
+  repeated string keys = 3;
+
+  // the revision of app's configurations.
+  string revision = 4;
 
   // The metadata which will be sent to configuration store components.
-  map<string,string> metadata = 6;
+  map<string,string> metadata = 5;
 }
 
-// SubscribeConfigurationResponse is the response conveying the list of configuration values.
-message SubscribeConfigurationResponse {
-  // The name of configuration store.
-  string store_name = 1;
 
-  // The application id.
-  // Only used for admin client.
-  string app_id = 2;
-
-  // The list of items containing configuration values.
-  repeated common.v1.ConfigurationItem items = 3;
-}
-
-// SaveConfigurationRequest is the message to save a list of key-value configuration into specified configuration store.
-message SaveConfigurationRequest {
-  // The name of configuration store.
-  string store_name = 1;
-
-  // The application id which
-  // Only used for admin, ignored and reset for normal client
-  string app_id = 2;
-
-  // The list of configuration items to save.
-  // To delete a exist item, set the key (also label) and let content to be empty
-  repeated common.v1.ConfigurationItem items = 3;
-
-  // The metadata which will be sent to configuration store components.
-  map<string,string> metadata = 4;
-}
-
-// DeleteConfigurationRequest is the message to delete a list of key-value configuration from specified configuration store.
-message DeleteConfigurationRequest {
-  // The name of configuration store.
-  string store_name = 1;
-
-  // The application id which
-  // Only used for admin, Ignored and reset for normal client
-  string app_id = 2;
-
-  // The group of keys.
-  string group = 3;
-
-  // The label for keys.
-  string label = 4;
-
-  // The keys to get.
-  repeated string keys = 5;
-
-  // The metadata which will be sent to configuration store components.
-  map<string,string> metadata = 6;
-}
 

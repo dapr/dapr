@@ -79,7 +79,7 @@ require (
 
 replace (
 	// TODO: remove this replace after the code in components-contrib is merged
-	github.com/dapr/components-contrib => github.com/skyao/components-contrib v1.0.1-0.20210426115131-f25d6893edfb
+	github.com/dapr/components-contrib => github.com/skyao/components-contrib v1.0.1-0.20210428150800-89b95e4f40ea
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )

@@ -990,8 +990,8 @@ github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6Mwd
 github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrfsX/uA88=
 github.com/sirupsen/logrus v1.8.1 h1:dJKuHgqk1NNQlqoA6BTlM1Wf9DOH3NBjQyu0h9+AZZE=
 github.com/sirupsen/logrus v1.8.1/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=
-github.com/skyao/components-contrib v1.0.1-0.20210426115131-f25d6893edfb h1:VfJOw5O77BdojLjxJzT3fjOGBJyqZs+O+rXhMaZGrGQ=
-github.com/skyao/components-contrib v1.0.1-0.20210426115131-f25d6893edfb/go.mod h1:j03dhgT0/bEJzXTJfk5IIGUiQ69c5JnZ15A9BpGuSHM=
+github.com/skyao/components-contrib v1.0.1-0.20210428150800-89b95e4f40ea h1:QN+eNmGHjxodY0+/xTdr4EsKpAwnyJzoqwofMIBisMM=
+github.com/skyao/components-contrib v1.0.1-0.20210428150800-89b95e4f40ea/go.mod h1:j03dhgT0/bEJzXTJfk5IIGUiQ69c5JnZ15A9BpGuSHM=
 github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d/go.mod h1:OnSkiWE9lh6wB0YB77sQom3nweQdgAjqCqsofrRNTgc=
 github.com/smartystreets/goconvey v1.6.4/go.mod h1:syvi0/a8iFYH4r/RixwvyeAJjdLS9QV7WQ/tjFTllLA=
 github.com/soheilhy/cmux v0.1.4/go.mod h1:IM3LyeVVIOuxMH7sFAkER9+bJ4dT7Ms6E4xg4kGIyLM=
