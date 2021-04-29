@@ -37,3 +37,7 @@ func (_m *MockDirectMessaging) Invoke(ctx context.Context, targetAppID string, r
 
 	return r0, r1
 }
+
+func (_m *MockDirectMessaging) Close() error {
+	return nil
+}

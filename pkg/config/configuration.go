@@ -16,9 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/proto/common/v1"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/credentials"
@@ -26,6 +23,10 @@ import (
 	yaml "gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+
+	"github.com/dapr/dapr/pkg/proto/common/v1"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.configuration")
@@ -77,12 +78,13 @@ type AccessControlListOperationAction struct {
 }
 
 type ConfigurationSpec struct {
-	HTTPPipelineSpec  PipelineSpec      `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
-	TracingSpec       TracingSpec       `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MTLSSpec          MTLSSpec          `json:"mtls,omitempty"`
-	MetricSpec        MetricSpec        `json:"metric,omitempty" yaml:"metric,omitempty"`
-	Secrets           SecretsSpec       `json:"secrets,omitempty" yaml:"secrets,omitempty"`
-	AccessControlSpec AccessControlSpec `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
+	HTTPPipelineSpec   PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	TracingSpec        TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	MTLSSpec           MTLSSpec           `json:"mtls,omitempty"`
+	MetricSpec         MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
+	Secrets            SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
+	AccessControlSpec  AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
+	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -156,6 +158,12 @@ type AccessControlSpec struct {
 	AppPolicies   []AppPolicySpec `json:"policies" yaml:"policies"`
 }
 
+type NameResolutionSpec struct {
+	Component     string      `json:"component" yaml:"component"`
+	Version       string      `json:"version" yaml:"version"`
+	Configuration interface{} `json:"configuration" yaml:"configuration"`
+}
+
 type MTLSSpec struct {
 	Enabled          bool   `json:"enabled"`
 	WorkloadCertTTL  string `json:"workloadCertTTL"`
@@ -198,6 +206,9 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 	if err != nil {
 		return nil, "", err
 	}
+
+	// Parse environment variables from yaml
+	b = []byte(os.ExpandEnv(string(b)))
 
 	conf := LoadDefaultConfiguration()
 	err = yaml.Unmarshal(b, conf)

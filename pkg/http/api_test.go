@@ -45,12 +45,12 @@ import (
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/kit/logger"
 )
 
 var invalidJSON = []byte{0x7b, 0x7b}
@@ -234,6 +234,16 @@ func TestShutdownEndpoints(t *testing.T) {
 	t.Run("Shutdown successfully - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
+		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
+			<-time.After(200 * time.Millisecond)
+		}
+		m.AssertCalled(t, "shutdown")
+	})
+
+	t.Run("Shutdown supports POST - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
 		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
 			<-time.After(200 * time.Millisecond)
