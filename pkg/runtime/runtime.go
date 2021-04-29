@@ -72,8 +72,7 @@ import (
 )
 
 const (
-	appConfigEndpoint = "dapr/config"
-	actorStateStore   = "actorStateStore"
+	actorStateStore = "actorStateStore"
 
 	// output bindings concurrency
 	bindingsConcurrencyParallel   = "parallel"
@@ -1671,18 +1670,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 		return
 	}
 
-	var appConfigGetFn func() (*config.ApplicationConfig, error)
-
-	switch a.runtimeConfig.ApplicationProtocol {
-	case HTTPProtocol:
-		appConfigGetFn = a.getConfigurationHTTP
-	case GRPCProtocol:
-		appConfigGetFn = a.getConfigurationGRPC
-	default:
-		appConfigGetFn = a.getConfigurationHTTP
-	}
-
-	appConfig, err := appConfigGetFn()
+	appConfig, err := a.appChannel.GetAppConfig()
 	if err != nil {
 		return
 	}
@@ -1691,42 +1679,6 @@ func (a *DaprRuntime) loadAppConfiguration() {
 		a.appConfig = *appConfig
 		log.Info("application configuration loaded")
 	}
-}
-
-// getConfigurationHTTP gets application config from user application
-// GET http://localhost:<app_port>/dapr/config
-func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) {
-	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint)
-	req.WithHTTPExtension(nethttp.MethodGet, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
-
-	// TODO Propagate context
-	ctx := context.Background()
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	var config config.ApplicationConfig
-
-	if resp.Status().Code != nethttp.StatusOK {
-		return &config, nil
-	}
-
-	contentType, body := resp.RawData()
-	if contentType != invokev1.JSONContentType {
-		log.Debugf("dapr/config returns invalid content_type: %s", contentType)
-	}
-
-	if err = a.json.Unmarshal(body, &config); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
-}
-
-func (a *DaprRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) {
-	return nil, nil
 }
 
 func (a *DaprRuntime) createAppChannel() error {
