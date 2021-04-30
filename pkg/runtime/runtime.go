@@ -610,7 +610,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
 				bindingName,
-				"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent")
+				fmt.Sprintf("%s/OnBindingEvent", runtimev1pb.AppCallback_ServiceDesc.ServiceName))
 			diag.AddAttributesToSpan(span, m)
 			diag.UpdateSpanStatusFromGRPCError(span, err)
 			span.End()

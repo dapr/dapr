@@ -86,14 +86,16 @@ func SpanContextToW3CString(sc trace.SpanContext) string {
 // TraceStateToW3CString extracts the TraceState from given SpanContext and returns its string representation
 func TraceStateToW3CString(sc trace.SpanContext) string {
 	var pairs = make([]string, 0, len(sc.Tracestate.Entries()))
-	var h string
 	if sc.Tracestate != nil {
 		for _, entry := range sc.Tracestate.Entries() {
 			pairs = append(pairs, strings.Join([]string{entry.Key, entry.Value}, "="))
 		}
-		h = strings.Join(pairs, ",")
+		h := strings.Join(pairs, ",")
+		if h != "" && len(h) <= maxTracestateLen {
+			return h
+		}
 	}
-	return h
+	return ""
 }
 
 // SpanContextFromW3CString extracts a span context from given string which got earlier from SpanContextToW3CString format
