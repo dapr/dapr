@@ -66,7 +66,8 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		}
 
 		// Add grpc-trace-bin header for all non-invocation api's
-		if info.FullMethod != fmt.Sprintf("%s/InvokeService", runtimev1pb.Dapr_ServiceDesc) {
+		target := fmt.Sprintf("%s/InvokeService", runtimev1pb.Dapr_ServiceDesc.ServiceName)
+		if info.FullMethod != target {
 			traceContextBinary := propagation.Binary(span.SpanContext())
 			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
 		}
