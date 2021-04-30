@@ -133,8 +133,11 @@ func isPermanentHTTPHeader(hdr string) bool {
 
 // InternalMetadataToGrpcMetadata converts internal metadata map to gRPC metadata
 func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternalMetadata, httpHeaderConversion bool) metadata.MD {
-	var traceparentValue, tracestateValue, grpctracebinValue string
-	var md = metadata.MD{}
+	var (
+		traceparentValue, tracestateValue, grpctracebinValue string
+		md                                                   = metadata.MD{}
+		buff                                                 strings.Builder
+	)
 	for k, listVal := range internalMD {
 		keyName := strings.ToLower(k)
 		// get both the trace headers for HTTP/GRPC and continue
@@ -153,7 +156,10 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 		}
 
 		if httpHeaderConversion && isPermanentHTTPHeader(k) {
-			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
+			buff.WriteString(DaprHeaderPrefix)
+			buff.WriteString(keyName)
+			keyName = buff.String()
+			buff.Reset()
 		}
 
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
@@ -161,11 +167,11 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 			for _, val := range listVal.Values {
 				decoded, err := base64.StdEncoding.DecodeString(val)
 				if err == nil {
-					md.Append(keyName, string(decoded))
+					md[keyName] = append(md[keyName], string(decoded))
 				}
 			}
 		} else {
-			md.Append(keyName, listVal.Values...)
+			md[keyName] = append(md[keyName], listVal.Values...)
 		}
 	}
 
