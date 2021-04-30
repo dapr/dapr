@@ -49,6 +49,11 @@ func (g *Channel) GetBaseAddress() string {
 	return g.baseAddress
 }
 
+// GetAppConfig gets application config from user application
+func (g *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
+	return nil, nil
+}
+
 // InvokeMethod invokes user code via gRPC
 func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	var rsp *invokev1.InvokeMethodResponse
