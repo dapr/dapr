@@ -23,7 +23,7 @@ const (
 	daprV1URL            = "http://localhost:3500/v1.0"
 	actorMethodURLFormat = daprV1URL + "/actors/%s/%s/method/%s"
 
-	registedActorType       = "testactor" // Actor type must be unique per test app.
+	registeredActorType     = "testactor" // Actor type must be unique per test app.
 	actorIdleTimeout        = "5s"        // Short idle timeout.
 	actorScanInterval       = "1s"        // Smaller then actorIdleTimeout and short for speedy test.
 	drainOngoingCallTimeout = "1s"
@@ -53,7 +53,7 @@ type daprConfig struct {
 }
 
 var daprConfigResponse = daprConfig{
-	[]string{registedActorType},
+	[]string{registeredActorType},
 	actorIdleTimeout,
 	actorScanInterval,
 	drainOngoingCallTimeout,
@@ -133,7 +133,7 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
 
-	if actorType != registedActorType {
+	if actorType != registeredActorType {
 		log.Printf("Unknown actor type: %s", actorType)
 		w.WriteHeader(http.StatusBadRequest)
 		return
