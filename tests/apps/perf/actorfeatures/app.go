@@ -38,7 +38,7 @@ type daprConfig struct {
 	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
 
-var registedActorType = getActorType()
+var registeredActorType = getActorType()
 
 var daprConfigResponse = daprConfig{
 	[]string{getActorType()},
@@ -80,7 +80,7 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
 	actorType := mux.Vars(r)["actorType"]
 
-	if actorType != registedActorType {
+	if actorType != registeredActorType {
 		log.Printf("Unknown actor type: %s", actorType)
 		w.WriteHeader(http.StatusBadRequest)
 		return

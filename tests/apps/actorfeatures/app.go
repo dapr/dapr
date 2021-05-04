@@ -58,7 +58,6 @@ type daprConfig struct {
 	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
 
-
 // response object from an actor invocation request
 type daprActorResponse struct {
 	Data     []byte            `json:"data"`
@@ -100,7 +99,7 @@ type TempTransactionalDelete struct {
 
 var actorLogs = []actorLogEntry{}
 var actorLogsMutex = &sync.Mutex{}
-var registedActorType = getActorType()
+var registeredActorType = getActorType()
 var actors sync.Map
 
 var daprConfigResponse = daprConfig{
@@ -246,7 +245,7 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
 
-	if actorType != registedActorType {
+	if actorType != registeredActorType {
 		log.Printf("Unknown actor type: %s", actorType)
 		w.WriteHeader(http.StatusBadRequest)
 		return
