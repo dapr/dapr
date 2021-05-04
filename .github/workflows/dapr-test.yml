@@ -29,7 +29,9 @@ jobs:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
       HA_MODE: true
+      TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         target_arch: [amd64]
@@ -166,6 +168,12 @@ jobs:
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.json
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
         env:
