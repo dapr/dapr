@@ -26,3 +26,5 @@ spec:
     value: 1s
   - name: readTimeout
     value: 1s
+  - name: redisMaxRetries
+    value: 3
