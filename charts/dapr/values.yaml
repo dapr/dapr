@@ -5,6 +5,7 @@ global:
   logAsJson: false
   imagePullPolicy: IfNotPresent
   imagePullSecrets: ""
+  nodeSelector: {}
   ha:
     enabled: false
     replicaCount: 3
