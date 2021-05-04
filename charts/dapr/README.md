@@ -90,6 +90,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
+| `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector | `{}`                 |
 
 ### Dapr Dashboard options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -238,4 +239,8 @@ kubectl get pods -n dapr-system -o wide
 Port forward the debugging port so that it's visible to your IDE:
 ```bash
 kubectl port-forward dapr-operator-5c99475ffc-m9z9f 40000:40000 -n dapr-system
+```
+## Example of using nodeSelector option
+```
+helm install dapr dapr/dapr --namespace dapr-system --set global.nodeSelector.myLabel=myValue --wait
 ```
