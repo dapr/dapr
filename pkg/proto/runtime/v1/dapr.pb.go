@@ -14,10 +14,10 @@ package runtime
 import (
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/golang/protobuf/proto"
-	any "github.com/golang/protobuf/ptypes/any"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -1770,9 +1770,9 @@ type TransactionalActorStateOperation struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	OperationType string   `protobuf:"bytes,1,opt,name=operationType,proto3" json:"operationType,omitempty"`
-	Key           string   `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Value         *any.Any `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	OperationType string     `protobuf:"bytes,1,opt,name=operationType,proto3" json:"operationType,omitempty"`
+	Key           string     `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         *anypb.Any `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 }
 
 func (x *TransactionalActorStateOperation) Reset() {
@@ -1821,7 +1821,7 @@ func (x *TransactionalActorStateOperation) GetKey() string {
 	return ""
 }
 
-func (x *TransactionalActorStateOperation) GetValue() *any.Any {
+func (x *TransactionalActorStateOperation) GetValue() *anypb.Any {
 	if x != nil {
 		return x.Value
 	}
@@ -2766,8 +2766,8 @@ var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
 	(*v1.Etag)(nil),                             // 50: dapr.proto.common.v1.Etag
 	(*v1.StateOptions)(nil),                     // 51: dapr.proto.common.v1.StateOptions
 	(*v1.StateItem)(nil),                        // 52: dapr.proto.common.v1.StateItem
-	(*any.Any)(nil),                             // 53: google.protobuf.Any
-	(*empty.Empty)(nil),                         // 54: google.protobuf.Empty
+	(*anypb.Any)(nil),                           // 53: google.protobuf.Any
+	(*emptypb.Empty)(nil),                       // 54: google.protobuf.Empty
 	(*v1.InvokeResponse)(nil),                   // 55: dapr.proto.common.v1.InvokeResponse
 }
 var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
