@@ -41,7 +41,7 @@ const (
 	maxReplicas = 10
 
 	// maxSideCarDetectionRetries is the maximum number of retries to detect Dapr sidecar
-	maxSideCarDetectionRetries = 3
+	maxSideCarDetectionRetries = 10
 )
 
 // AppManager holds Kubernetes clients and namespace used for test apps
@@ -122,12 +122,12 @@ func (m *AppManager) Init() error {
 		log.Printf("Validating sidecar for app %v ....", m.app.AppName)
 		for i := 0; i <= maxSideCarDetectionRetries; i++ {
 			// Validate daprd side car is injected
-			if ok, err := m.ValidateSidecar(); err != nil || ok != m.app.IngressEnabled {
+			if err := m.ValidateSidecar(); err != nil {
 				if i == maxSideCarDetectionRetries {
 					return err
 				}
 
-				log.Printf("Did not find sidecar for app %v, retrying ....", m.app.AppName)
+				log.Printf("Did not find sidecar for app %v error %s, retrying ....", m.app.AppName, err)
 				time.Sleep(10 * time.Second)
 				continue
 			}
@@ -321,9 +321,9 @@ func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err erro
 }
 
 // ValidateSidecar validates that dapr side car is running in dapr enabled pods
-func (m *AppManager) ValidateSidecar() (bool, error) {
+func (m *AppManager) ValidateSidecar() error {
 	if !m.app.DaprEnabled {
-		return false, fmt.Errorf("dapr is not enabled for this app")
+		return fmt.Errorf("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -332,27 +332,28 @@ func (m *AppManager) ValidateSidecar() (bool, error) {
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	if len(podList.Items) != int(m.app.Replicas) {
-		return false, fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
+		return fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
 	}
 
 	// Each pod must have daprd sidecar
 	for _, pod := range podList.Items {
 		daprdFound := false
 		for _, container := range pod.Spec.Containers {
+			log.Printf("Looking for sidecard container in %s container: %s == %s", pod.Name, container.Name, DaprSideCarName)
 			if container.Name == DaprSideCarName {
 				daprdFound = true
 			}
 		}
 		if !daprdFound {
-			return false, fmt.Errorf("cannot find dapr sidecar in pod %s", pod.Name)
+			return fmt.Errorf("cannot find dapr sidecar in pod %s", pod.Name)
 		}
 	}
 
-	return true, nil
+	return nil
 }
 
 // getSidecarInfo returns if sidecar is present and how many containers there are.

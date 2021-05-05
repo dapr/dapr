@@ -82,7 +82,7 @@ func newHTTPClient() http.Client {
 				// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
 				Dial: (&net.Dialer{
 					Timeout:   5 * time.Minute,
-					KeepAlive: 6 * time.Minute,
+					KeepAlive: 1 * time.Second,
 				}).Dial,
 			},
 		}

@@ -7,6 +7,8 @@ package operator
 
 import (
 	"context"
+	"net"
+	"time"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -20,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -67,11 +70,22 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 	if err != nil {
 		log.Fatalf("unable to get controller runtime configuration, err: %s", err)
 	}
+	leaseDuration := time.Second * 600
+	renewDeadline := time.Second * 300
+	restConfig := rest.Config{
+		Timeout: time.Second * 3,
+		Dial: (&net.Dialer{
+			KeepAlive: 1 * time.Second,
+		}).DialContext,
+	}
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: "0",
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "operator.dapr.io",
+		Scheme:               scheme,
+		MetricsBindAddress:   "0",
+		LeaderElection:       enableLeaderElection,
+		LeaderElectionID:     "operator.dapr.io",
+		LeaseDuration:        &leaseDuration,
+		RenewDeadline:        &renewDeadline,
+		LeaderElectionConfig: &restConfig,
 	})
 	if err != nil {
 		log.Fatal("unable to start manager")

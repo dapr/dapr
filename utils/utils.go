@@ -8,6 +8,7 @@ package utils
 import (
 	"flag"
 	"fmt"
+	"net"
 	"path/filepath"
 	"strings"
 	"time"
@@ -24,6 +25,10 @@ var kubeConfig *rest.Config
 
 func initKubeConfig() {
 	kubeConfig = GetConfig()
+
+	kubeConfig.Dial = (&net.Dialer{
+		KeepAlive: time.Second * 1,
+	}).DialContext
 	clientset, err := kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
 		panic(err)
