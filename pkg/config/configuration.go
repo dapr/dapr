@@ -32,18 +32,21 @@ import (
 var log = logger.NewLogger("dapr.configuration")
 
 const (
-	operatorCallTimeout = time.Second * 5
-	operatorMaxRetries  = 100
-	AllowAccess         = "allow"
-	DenyAccess          = "deny"
-	DefaultTrustDomain  = "public"
-	DefaultNamespace    = "default"
-	ActionPolicyApp     = "app"
-	ActionPolicyGlobal  = "global"
-	SpiffeIDPrefix      = "spiffe://"
-	HTTPProtocol        = "http"
-	GRPCProtocol        = "grpc"
+	operatorCallTimeout         = time.Second * 5
+	operatorMaxRetries          = 100
+	AllowAccess                 = "allow"
+	DenyAccess                  = "deny"
+	DefaultTrustDomain          = "public"
+	DefaultNamespace            = "default"
+	ActionPolicyApp             = "app"
+	ActionPolicyGlobal          = "global"
+	SpiffeIDPrefix              = "spiffe://"
+	HTTPProtocol                = "http"
+	GRPCProtocol                = "grpc"
+	ActorRentrancy      Feature = "Actor.Reentrancy"
 )
+
+type Feature string
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
@@ -85,6 +88,7 @@ type ConfigurationSpec struct {
 	Secrets            SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 	AccessControlSpec  AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
 	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
+	Features           []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -175,6 +179,12 @@ type SpiffeID struct {
 	TrustDomain string
 	Namespace   string
 	AppID       string
+}
+
+// FeatureSpec defines which preview features are enabled
+type FeatureSpec struct {
+	Name    Feature `json:"name" yaml:"name"`
+	Enabled bool    `json:"enabled" yaml:"enabled"`
 }
 
 // LoadDefaultConfiguration returns the default config
@@ -622,4 +632,13 @@ func getOperationPrefixAndPostfix(operation string) (string, string) {
 	operationPostfix := "/" + strings.Join(operationParts[2:], "/")
 
 	return operationPrefix, operationPostfix
+}
+
+func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
+	for _, feature := range features {
+		if feature.Name == target {
+			return feature.Enabled
+		}
+	}
+	return false
 }
