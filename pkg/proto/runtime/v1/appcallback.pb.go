@@ -14,9 +14,9 @@ package runtime
 import (
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/golang/protobuf/proto"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -786,7 +786,7 @@ var file_dapr_proto_runtime_v1_appcallback_proto_goTypes = []interface{}{
 	nil,                                               // 10: dapr.proto.runtime.v1.TopicSubscription.MetadataEntry
 	(*v1.StateItem)(nil),                              // 11: dapr.proto.common.v1.StateItem
 	(*v1.InvokeRequest)(nil),                          // 12: dapr.proto.common.v1.InvokeRequest
-	(*empty.Empty)(nil),                               // 13: google.protobuf.Empty
+	(*emptypb.Empty)(nil),                             // 13: google.protobuf.Empty
 	(*v1.InvokeResponse)(nil),                         // 14: dapr.proto.common.v1.InvokeResponse
 }
 var file_dapr_proto_runtime_v1_appcallback_proto_depIdxs = []int32{
