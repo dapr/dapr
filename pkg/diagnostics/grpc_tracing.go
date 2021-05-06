@@ -56,8 +56,10 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 
 		if span.SpanContext().IsSampled() {
 			// Populates dapr- prefixed header first
+			for key, value := range reqSpanAttr {
+				prefixedMetadata[key] = value
+			}
 			AddAttributesToSpan(span, prefixedMetadata)
-			AddAttributesToSpan(span, reqSpanAttr)
 
 			// Correct the span name based on API.
 			if sname, ok := reqSpanAttr[daprAPISpanNameInternal]; ok {

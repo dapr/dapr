@@ -195,11 +195,15 @@ func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
 		return
 	}
 
+	var attrs []trace.Attribute
 	for k, v := range attributes {
 		// Skip if key is for internal use.
 		if !strings.HasPrefix(k, daprInternalSpanAttrPrefix) && v != "" {
-			span.AddAttributes(trace.StringAttribute(k, v))
+			attrs = append(attrs, trace.StringAttribute(k, v))
 		}
+	}
+	if len(attrs) > 0 {
+		span.AddAttributes(attrs...)
 	}
 }
 
