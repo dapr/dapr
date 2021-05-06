@@ -21,6 +21,8 @@ type mockHost struct {
 	hasCORS bool
 }
 
+const healthzEndpoint = "healthz"
+
 func (m *mockHost) mockHandler() fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		b := ctx.Response.Header.Peek("Access-Control-Allow-Origin")
@@ -67,9 +69,8 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == "healthz" {
+			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
-
 			} else {
 				assert.False(t, valid)
 			}
@@ -108,9 +109,8 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == "healthz" {
+			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
-
 			} else {
 				assert.False(t, valid)
 			}
@@ -149,9 +149,8 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == "healthz" {
+			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
-
 			} else {
 				assert.False(t, valid)
 			}
@@ -190,7 +189,7 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == "healthz" {
+			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
 
 			} else {
@@ -231,7 +230,7 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == "healthz" {
+			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
 
 			} else {
@@ -272,7 +271,7 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == "healthz" {
+			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
 
 			} else {
@@ -313,7 +312,7 @@ func TestAllowedAPISpec(t *testing.T) {
 
 		for _, e := range allOtherEndpoints {
 			valid := s.endpointAllowed(e)
-			if e.Route == "healthz" {
+			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
 
 			} else {
