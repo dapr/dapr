@@ -191,7 +191,6 @@ func TestAllowedAPISpec(t *testing.T) {
 			valid := s.endpointAllowed(e)
 			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
-
 			} else {
 				assert.False(t, valid)
 			}
@@ -232,7 +231,6 @@ func TestAllowedAPISpec(t *testing.T) {
 			valid := s.endpointAllowed(e)
 			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
-
 			} else {
 				assert.False(t, valid)
 			}
@@ -273,7 +271,6 @@ func TestAllowedAPISpec(t *testing.T) {
 			valid := s.endpointAllowed(e)
 			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
-
 			} else {
 				assert.False(t, valid)
 			}
@@ -314,7 +311,6 @@ func TestAllowedAPISpec(t *testing.T) {
 			valid := s.endpointAllowed(e)
 			if e.Route == healthzEndpoint {
 				assert.True(t, valid)
-
 			} else {
 				assert.False(t, valid)
 			}
