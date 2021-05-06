@@ -15,10 +15,10 @@ import (
 )
 
 var endpoints = map[string][]string{
-	"invoke.v1": []string{
+	"invoke.v1": {
 		"/dapr.proto.runtime.v1.Dapr/InvokeService",
 	},
-	"state.v1": []string{
+	"state.v1": {
 		"/dapr.proto.runtime.v1.Dapr/GetState",
 		"/dapr.proto.runtime.v1.Dapr/GetBulkState",
 		"/dapr.proto.runtime.v1.Dapr/SaveState",
@@ -26,17 +26,17 @@ var endpoints = map[string][]string{
 		"/dapr.proto.runtime.v1.Dapr/DeleteBulkState",
 		"/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction",
 	},
-	"publish.v1": []string{
+	"publish.v1": {
 		"/dapr.proto.runtime.v1.Dapr/PublishEvent",
 	},
-	"bindings.v1": []string{
+	"bindings.v1": {
 		"/dapr.proto.runtime.v1.Dapr/InvokeBinding",
 	},
-	"secrets.v1": []string{
+	"secrets.v1": {
 		"/dapr.proto.runtime.v1.Dapr/GetSecret",
 		"/dapr.proto.runtime.v1.Dapr/GetBulkSecret",
 	},
-	"actors.v1": []string{
+	"actors.v1": {
 		"/dapr.proto.runtime.v1.Dapr/RegisterActorTimer",
 		"/dapr.proto.runtime.v1.Dapr/UnregisterActorTimer",
 		"/dapr.proto.runtime.v1.Dapr/RegisterActorReminder",
@@ -45,11 +45,11 @@ var endpoints = map[string][]string{
 		"/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction",
 		"/dapr.proto.runtime.v1.Dapr/InvokeActor",
 	},
-	"metadata.v1": []string{
+	"metadata.v1": {
 		"/dapr.proto.runtime.v1.Dapr/GetMetadata",
 		"/dapr.proto.runtime.v1.Dapr/SetMetadata",
 	},
-	"shutdown.v1": []string{
+	"shutdown.v1": {
 		"/dapr.proto.runtime.v1.Dapr/Shutdown",
 	},
 }
