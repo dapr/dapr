@@ -114,13 +114,11 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
-			h.serverResponseCount.M(1))
-		stats.RecordWithTags(
-			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			h.serverResponseCount.M(1),
 			h.serverLatency.M(elapsed))
 		stats.RecordWithTags(
-			ctx, diag_utils.WithTags(appIDKey, h.appID),
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID),
 			h.serverResponseBytes.M(contentSize))
 	}
 }
@@ -139,10 +137,7 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
-			h.clientCompletedCount.M(1))
-		stats.RecordWithTags(
-			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
+			h.clientCompletedCount.M(1),
 			h.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx, diag_utils.WithTags(appIDKey, h.appID),

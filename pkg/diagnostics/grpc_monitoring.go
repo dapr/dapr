@@ -121,15 +121,11 @@ func (g *grpcMetrics) ServerRequestSent(ctx context.Context, method, status stri
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
-			g.serverCompletedRpcs.M(1))
+			g.serverCompletedRpcs.M(1), g.serverLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method),
 			g.serverSentBytes.M(contentSize))
-		stats.RecordWithTags(
-			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
-			g.serverLatency.M(elapsed))
 	}
 }
 
@@ -144,19 +140,16 @@ func (g *grpcMetrics) ClientRequestSent(ctx context.Context, method string, cont
 	return time.Now()
 }
 
-func (g *grpcMetrics) ClientRequestRecieved(ctx context.Context, method, status string, contentSize int64, start time.Time) {
+func (g *grpcMetrics) ClientRequestReceived(ctx context.Context, method, status string, contentSize int64, start time.Time) {
 	if g.enabled {
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
-			g.clientCompletedRpcs.M(1))
+			g.clientCompletedRpcs.M(1), g.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
-			g.clientRoundtripLatency.M(elapsed))
-		stats.RecordWithTags(
-			ctx, diag_utils.WithTags(appIDKey, g.appID),
+			diag_utils.WithTags(appIDKey, g.appID),
 			g.clientReceivedBytes.M(contentSize))
 	}
 }
@@ -188,7 +181,7 @@ func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method 
 		if err == nil {
 			size = g.getPayloadSize(reply)
 		}
-		g.ClientRequestRecieved(ctx, method, status.Code(err).String(), int64(size), start)
+		g.ClientRequestReceived(ctx, method, status.Code(err).String(), int64(size), start)
 		return err
 	}
 }
