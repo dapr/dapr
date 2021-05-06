@@ -56,17 +56,21 @@ var endpoints = map[string][]string{
 
 func setAPIEndpointsMiddlewareUnary(rules []config.APIAccessRule) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		if len(rules) == 0 {
+			return handler(ctx, req)
+		}
+
 		for _, rule := range rules {
 			if list, ok := endpoints[rule.Name+"."+rule.Version]; ok {
 				for _, method := range list {
 					if method == info.FullMethod {
-						err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "requested endpoint is not authorized")
-						return nil, err
+						return handler(ctx, req)
 					}
 				}
 			}
 		}
 
-		return handler(ctx, req)
+		err := v1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
+		return nil, err
 	}
 }

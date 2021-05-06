@@ -195,11 +195,15 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 }
 
 func (s *server) endpointAllowed(endpoint Endpoint) bool {
+	if len(s.apiSpec.Allowed) == 0 {
+		return true
+	}
+
 	for _, rule := range s.apiSpec.Allowed {
-		if strings.Index(endpoint.Route, rule.Name) == 0 && endpoint.Version == rule.Version {
-			return false
+		if (strings.Index(endpoint.Route, rule.Name) == 0 && endpoint.Version == rule.Version) || endpoint.Route == "healthz" {
+			return true
 		}
 	}
 
-	return true
+	return false
 }

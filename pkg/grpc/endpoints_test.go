@@ -15,7 +15,11 @@ import (
 )
 
 func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
-	t.Run("state endpoints disallowed", func(t *testing.T) {
+	h := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return nil, nil
+	}
+
+	t.Run("state endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
 				Name:    "state",
@@ -28,12 +32,23 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 		for _, e := range endpoints["state.v1"] {
 			_, err := f(nil, nil, &grpc.UnaryServerInfo{
 				FullMethod: e,
-			}, nil)
-			assert.Error(t, err)
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for k, v := range endpoints {
+			if k != "state.v1" {
+				for _, e := range v {
+					_, err := f(nil, nil, &grpc.UnaryServerInfo{
+						FullMethod: e,
+					}, h)
+					assert.Error(t, err)
+				}
+			}
 		}
 	})
 
-	t.Run("publish endpoints disallowed", func(t *testing.T) {
+	t.Run("publish endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
 				Name:    "publish",
@@ -46,12 +61,23 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 		for _, e := range endpoints["publish.v1"] {
 			_, err := f(nil, nil, &grpc.UnaryServerInfo{
 				FullMethod: e,
-			}, nil)
-			assert.Error(t, err)
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for k, v := range endpoints {
+			if k != "publish.v1" {
+				for _, e := range v {
+					_, err := f(nil, nil, &grpc.UnaryServerInfo{
+						FullMethod: e,
+					}, h)
+					assert.Error(t, err)
+				}
+			}
 		}
 	})
 
-	t.Run("actors endpoints disallowed", func(t *testing.T) {
+	t.Run("actors endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
 				Name:    "actors",
@@ -64,12 +90,23 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 		for _, e := range endpoints["actors.v1"] {
 			_, err := f(nil, nil, &grpc.UnaryServerInfo{
 				FullMethod: e,
-			}, nil)
-			assert.Error(t, err)
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for k, v := range endpoints {
+			if k != "actors.v1" {
+				for _, e := range v {
+					_, err := f(nil, nil, &grpc.UnaryServerInfo{
+						FullMethod: e,
+					}, h)
+					assert.Error(t, err)
+				}
+			}
 		}
 	})
 
-	t.Run("bindings endpoints disallowed", func(t *testing.T) {
+	t.Run("bindings endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
 				Name:    "bindings",
@@ -82,12 +119,23 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 		for _, e := range endpoints["bindings.v1"] {
 			_, err := f(nil, nil, &grpc.UnaryServerInfo{
 				FullMethod: e,
-			}, nil)
-			assert.Error(t, err)
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for k, v := range endpoints {
+			if k != "bindings.v1" {
+				for _, e := range v {
+					_, err := f(nil, nil, &grpc.UnaryServerInfo{
+						FullMethod: e,
+					}, h)
+					assert.Error(t, err)
+				}
+			}
 		}
 	})
 
-	t.Run("secrets endpoints disallowed", func(t *testing.T) {
+	t.Run("secrets endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
 				Name:    "secrets",
@@ -100,12 +148,23 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 		for _, e := range endpoints["secrets.v1"] {
 			_, err := f(nil, nil, &grpc.UnaryServerInfo{
 				FullMethod: e,
-			}, nil)
-			assert.Error(t, err)
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for k, v := range endpoints {
+			if k != "secrets.v1" {
+				for _, e := range v {
+					_, err := f(nil, nil, &grpc.UnaryServerInfo{
+						FullMethod: e,
+					}, h)
+					assert.Error(t, err)
+				}
+			}
 		}
 	})
 
-	t.Run("metadata endpoints disallowed", func(t *testing.T) {
+	t.Run("metadata endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
 				Name:    "metadata",
@@ -118,12 +177,23 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 		for _, e := range endpoints["metadata.v1"] {
 			_, err := f(nil, nil, &grpc.UnaryServerInfo{
 				FullMethod: e,
-			}, nil)
-			assert.Error(t, err)
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for k, v := range endpoints {
+			if k != "metadata.v1" {
+				for _, e := range v {
+					_, err := f(nil, nil, &grpc.UnaryServerInfo{
+						FullMethod: e,
+					}, h)
+					assert.Error(t, err)
+				}
+			}
 		}
 	})
 
-	t.Run("shutdown endpoints disallowed", func(t *testing.T) {
+	t.Run("shutdown endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
 				Name:    "shutdown",
@@ -136,12 +206,23 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 		for _, e := range endpoints["shutdown.v1"] {
 			_, err := f(nil, nil, &grpc.UnaryServerInfo{
 				FullMethod: e,
-			}, nil)
-			assert.Error(t, err)
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for k, v := range endpoints {
+			if k != "shutdown.v1" {
+				for _, e := range v {
+					_, err := f(nil, nil, &grpc.UnaryServerInfo{
+						FullMethod: e,
+					}, h)
+					assert.Error(t, err)
+				}
+			}
 		}
 	})
 
-	t.Run("invoke endpoints disallowed", func(t *testing.T) {
+	t.Run("invoke endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
 				Name:    "invoke",
@@ -154,20 +235,39 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 		for _, e := range endpoints["invoke.v1"] {
 			_, err := f(nil, nil, &grpc.UnaryServerInfo{
 				FullMethod: e,
-			}, nil)
-			assert.Error(t, err)
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for k, v := range endpoints {
+			if k != "invoke.v1" {
+				for _, e := range v {
+					_, err := f(nil, nil, &grpc.UnaryServerInfo{
+						FullMethod: e,
+					}, h)
+					assert.Error(t, err)
+				}
+			}
 		}
 	})
 
-	t.Run("no rules, call allowed", func(t *testing.T) {
-		h := func(ctx context.Context, req interface{}) (interface{}, error) {
-			return nil, nil
-		}
+	t.Run("no rules, all endpoints are allowed", func(t *testing.T) {
 		f := setAPIEndpointsMiddlewareUnary(nil)
 
-		_, err := f(nil, nil, &grpc.UnaryServerInfo{
-			FullMethod: "v1.method",
-		}, h)
-		assert.NoError(t, err)
+		for _, e := range endpoints["invoke.v1"] {
+			_, err := f(nil, nil, &grpc.UnaryServerInfo{
+				FullMethod: e,
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for _, v := range endpoints {
+			for _, e := range v {
+				_, err := f(nil, nil, &grpc.UnaryServerInfo{
+					FullMethod: e,
+				}, h)
+				assert.NoError(t, err)
+			}
+		}
 	})
 }
