@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
@@ -30,6 +31,176 @@ func newServer() server {
 	return server{
 		config: ServerConfig{},
 	}
+}
+
+func TestAllowedAPISpec(t *testing.T) {
+	t.Run("state disallowed", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "state",
+						Version: "v1.0",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.constructStateEndpoints()
+
+		for _, e := range eps {
+			valid := s.endpointAllowed(e)
+			assert.False(t, valid)
+		}
+	})
+
+	t.Run("publish disallowed", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "publish",
+						Version: "v1.0",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.constructPubSubEndpoints()
+
+		for _, e := range eps {
+			valid := s.endpointAllowed(e)
+			assert.False(t, valid)
+		}
+	})
+
+	t.Run("invoke disallowed", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "invoke",
+						Version: "v1.0",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.constructDirectMessagingEndpoints()
+
+		for _, e := range eps {
+			valid := s.endpointAllowed(e)
+			assert.False(t, valid)
+		}
+	})
+
+	t.Run("bindings disallowed", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "bindings",
+						Version: "v1.0",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.constructBindingsEndpoints()
+
+		for _, e := range eps {
+			valid := s.endpointAllowed(e)
+			assert.False(t, valid)
+		}
+	})
+
+	t.Run("metadata disallowed", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "metadata",
+						Version: "v1.0",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.constructMetadataEndpoints()
+
+		for _, e := range eps {
+			valid := s.endpointAllowed(e)
+			assert.False(t, valid)
+		}
+	})
+
+	t.Run("secrets disallowed", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "secrets",
+						Version: "v1.0",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.constructSecretEndpoints()
+
+		for _, e := range eps {
+			valid := s.endpointAllowed(e)
+			assert.False(t, valid)
+		}
+	})
+
+	t.Run("shutdown disallowed", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "shutdown",
+						Version: "v1.0",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.constructShutdownEndpoints()
+
+		for _, e := range eps {
+			valid := s.endpointAllowed(e)
+			assert.False(t, valid)
+		}
+	})
+
+	t.Run("authorized call is allowed", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "shutdown",
+						Version: "v1.0",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.constructActorEndpoints()
+
+		for _, e := range eps {
+			valid := s.endpointAllowed(e)
+			assert.True(t, valid)
+		}
+	})
 }
 
 func TestCorsHandler(t *testing.T) {

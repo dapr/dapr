@@ -39,16 +39,18 @@ type server struct {
 	metricSpec  config.MetricSpec
 	pipeline    http_middleware.Pipeline
 	api         API
+	apiSpec     config.APISpec
 }
 
 // NewServer returns a new HTTP server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline) Server {
+func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline, apiSpec config.APISpec) Server {
 	return &server{
 		api:         api,
 		config:      config,
 		tracingSpec: tracingSpec,
 		metricSpec:  metricSpec,
 		pipeline:    pipeline,
+		apiSpec:     apiSpec,
 	}
 }
 
@@ -174,6 +176,10 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 	router := routing.New()
 	parameterFinder, _ := regexp.Compile("/{.*}")
 	for _, e := range endpoints {
+		if !s.endpointAllowed(e) {
+			continue
+		}
+
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 		for _, m := range e.Methods {
 			pathIncludesParameters := parameterFinder.MatchString(path)
@@ -184,5 +190,16 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 			}
 		}
 	}
+
 	return router
+}
+
+func (s *server) endpointAllowed(endpoint Endpoint) bool {
+	for _, rule := range s.apiSpec.Allowed {
+		if strings.Index(endpoint.Route, rule.Name) == 0 && endpoint.Version == rule.Version {
+			return false
+		}
+	}
+
+	return true
 }
