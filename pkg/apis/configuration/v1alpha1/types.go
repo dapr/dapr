@@ -41,6 +41,8 @@ type ConfigurationSpec struct {
 	AccessControlSpec AccessControlSpec `json:"accessControl,omitempty"`
 	// +optional
 	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty"`
+	// +optional
+	Features []FeatureSpec `json:"features,omitempty"`
 }
 
 // NameResolutionSpec is the spec for name resolution configuration
@@ -143,6 +145,12 @@ type AccessControlSpec struct {
 	TrustDomain string `json:"trustDomain" yaml:"trustDomain"`
 	// +optional
 	AppPolicies []AppPolicySpec `json:"policies" yaml:"policies"`
+}
+
+// FeatureSpec defines the features that are enabled/disabled
+type FeatureSpec struct {
+	Name    string `json:"name" yaml:"name"`
+	Enabled bool   `json:"enabled" yaml:"enabled"`
 }
 
 // +kubebuilder:object:root=true

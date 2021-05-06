@@ -13,9 +13,9 @@ package internals
 
 import (
 	proto "github.com/golang/protobuf/proto"
-	any "github.com/golang/protobuf/ptypes/any"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -42,7 +42,7 @@ type Status struct {
 	// Error message
 	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	// A list of messages that carry the error details
-	Details []*any.Any `protobuf:"bytes,3,rep,name=details,proto3" json:"details,omitempty"`
+	Details []*anypb.Any `protobuf:"bytes,3,rep,name=details,proto3" json:"details,omitempty"`
 }
 
 func (x *Status) Reset() {
@@ -91,7 +91,7 @@ func (x *Status) GetMessage() string {
 	return ""
 }
 
-func (x *Status) GetDetails() []*any.Any {
+func (x *Status) GetDetails() []*anypb.Any {
 	if x != nil {
 		return x.Details
 	}
@@ -134,8 +134,8 @@ func file_dapr_proto_internals_v1_status_proto_rawDescGZIP() []byte {
 
 var file_dapr_proto_internals_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_dapr_proto_internals_v1_status_proto_goTypes = []interface{}{
-	(*Status)(nil),  // 0: dapr.proto.internals.v1.Status
-	(*any.Any)(nil), // 1: google.protobuf.Any
+	(*Status)(nil),    // 0: dapr.proto.internals.v1.Status
+	(*anypb.Any)(nil), // 1: google.protobuf.Any
 }
 var file_dapr_proto_internals_v1_status_proto_depIdxs = []int32{
 	1, // 0: dapr.proto.internals.v1.Status.details:type_name -> google.protobuf.Any
