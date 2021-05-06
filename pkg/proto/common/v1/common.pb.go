@@ -13,9 +13,9 @@ package common
 
 import (
 	proto "github.com/golang/protobuf/proto"
-	any "github.com/golang/protobuf/ptypes/any"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -214,7 +214,7 @@ type HTTPExtension struct {
 
 	// Required. HTTP verb.
 	Verb HTTPExtension_Verb `protobuf:"varint,1,opt,name=verb,proto3,enum=dapr.proto.common.v1.HTTPExtension_Verb" json:"verb,omitempty"`
-	// querystring includes HTTP querystring.
+	// Optional. querystring represents an encoded HTTP url query string in the following format: name=value&name2=value2
 	Querystring string `protobuf:"bytes,2,opt,name=querystring,proto3" json:"querystring,omitempty"`
 }
 
@@ -276,7 +276,7 @@ type InvokeRequest struct {
 	Method string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
 	// Required. Bytes value or Protobuf message which caller sent.
 	// Dapr treats Any.value as bytes type if Any.type_url is unset.
-	Data *any.Any `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Data *anypb.Any `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	// The type of data content.
 	//
 	// This field is required if data delivers http request body
@@ -328,7 +328,7 @@ func (x *InvokeRequest) GetMethod() string {
 	return ""
 }
 
-func (x *InvokeRequest) GetData() *any.Any {
+func (x *InvokeRequest) GetData() *anypb.Any {
 	if x != nil {
 		return x.Data
 	}
@@ -359,7 +359,7 @@ type InvokeResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Required. The content body of InvokeService response.
-	Data *any.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Data *anypb.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 	// Required. The type of data content.
 	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 }
@@ -396,7 +396,7 @@ func (*InvokeResponse) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_common_v1_common_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *InvokeResponse) GetData() *any.Any {
+func (x *InvokeResponse) GetData() *anypb.Any {
 	if x != nil {
 		return x.Data
 	}
@@ -721,7 +721,7 @@ var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
 	(*Etag)(nil),                       // 7: dapr.proto.common.v1.Etag
 	(*StateOptions)(nil),               // 8: dapr.proto.common.v1.StateOptions
 	nil,                                // 9: dapr.proto.common.v1.StateItem.MetadataEntry
-	(*any.Any)(nil),                    // 10: google.protobuf.Any
+	(*anypb.Any)(nil),                  // 10: google.protobuf.Any
 }
 var file_dapr_proto_common_v1_common_proto_depIdxs = []int32{
 	0,  // 0: dapr.proto.common.v1.HTTPExtension.verb:type_name -> dapr.proto.common.v1.HTTPExtension.Verb
