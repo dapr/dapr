@@ -318,7 +318,7 @@ func containsKey(s []string, key string) bool {
 func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string) (*AccessControlList, error) {
 	if accessControlSpec.TrustDomain == "" &&
 		accessControlSpec.DefaultAction == "" &&
-		(accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) == 0) {
+		len(accessControlSpec.AppPolicies) == 0 {
 		// No ACL has been specified
 		log.Debugf("No Access control policy specified")
 		return nil, nil
@@ -335,7 +335,7 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string
 
 	accessControlList.DefaultAction = accessControlSpec.DefaultAction
 	if accessControlSpec.DefaultAction == "" {
-		if accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) > 0 {
+		if len(accessControlSpec.AppPolicies) > 0 {
 			// Some app level policies have been specified but not default global action is set. Default to more secure option - Deny
 			log.Warnf("No global default action has been specified. Setting default global action as Deny")
 			accessControlList.DefaultAction = DenyAccess

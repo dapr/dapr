@@ -565,18 +565,18 @@ func TestParseAccessControlSpec(t *testing.T) {
 	})
 
 	t.Run("test when no access control policy has been specified", func(t *testing.T) {
-		invalidAccessControlSpec := AccessControlSpec{
+		noAccessControlSpec := AccessControlSpec{
 			DefaultAction: "",
 			TrustDomain:   "",
 			AppPolicies:   []AppPolicySpec{},
 		}
 
-		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec, "http")
+		accessControlList, _ := ParseAccessControlSpec(noAccessControlSpec, "http")
 		assert.Nil(t, accessControlList)
 	})
 
-	t.Run("test when no default global action has been specified", func(t *testing.T) {
-		invalidAccessControlSpec := AccessControlSpec{
+	t.Run("test when no default global action has been specified, default action is  deny", func(t *testing.T) {
+		validAccessControlSpec := AccessControlSpec{
 			TrustDomain: "public",
 			AppPolicies: []AppPolicySpec{
 				{
@@ -600,8 +600,16 @@ func TestParseAccessControlSpec(t *testing.T) {
 			},
 		}
 
-		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec, "http")
+		accessControlList, _ := ParseAccessControlSpec(validAccessControlSpec, "http")
 		assert.Equal(t, accessControlList.DefaultAction, DenyAccess)
+	})
+	t.Run("test when no default global action has been specified, default action is access", func(t *testing.T) {
+		validAccessControlSpec := AccessControlSpec{
+			TrustDomain: "public",
+		}
+
+		accessControlList, _ := ParseAccessControlSpec(validAccessControlSpec, "http")
+		assert.Equal(t, accessControlList.DefaultAction, AllowAccess)
 	})
 }
 
