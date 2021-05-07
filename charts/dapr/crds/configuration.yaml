@@ -68,6 +68,19 @@ spec:
                   trustDomain:
                     type: string
                 type: object
+              features:
+                items:
+                  description: FeatureSpec defines the features that are enabled/disabled
+                  properties:
+                    enabled:
+                      type: boolean
+                    name:
+                      type: string
+                  required:
+                  - enabled
+                  - name
+                  type: object
+                type: array
               httpPipeline:
                 description: PipelineSpec defines the middleware pipeline
                 properties:
