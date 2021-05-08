@@ -77,7 +77,15 @@ jobs:
         run: make modtidy check-diff
       - name: Run gen-proto check diff
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        run: make gen-proto check-proto-diff
+        run: |
+          wget https://github.com/protocolbuffers/protobuf/releases/download/v3.14.0/protoc-3.14.0-linux-x86_64.zip
+          unzip protoc-3.14.0-linux-x86_64.zip
+          cp -r include/google/ /usr/local/include/
+          chmod -R 755 /usr/local/include/google
+          cp bin/protoc /usr/local/bin/
+          chmod +x /usr/local/bin/protoc
+          make init-proto
+          make gen-proto check-proto-diff
       - name: Run make test
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
