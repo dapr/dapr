@@ -6,6 +6,9 @@ coverage:
       default:
         target: auto
         threshold: 0%
+    patch:
+      default:
+        informational: true
 
 ignore:
   # Configure what to ignore.
