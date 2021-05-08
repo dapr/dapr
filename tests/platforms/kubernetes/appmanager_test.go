@@ -285,10 +285,9 @@ func TestValidateSidecar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		found, err := appManager.ValidateSidecar()
+		err := appManager.ValidateSidecar()
 
 		assert.NoError(t, err)
-		assert.True(t, found)
 	})
 
 	t.Run("Sidecar is not injected", func(t *testing.T) {
@@ -321,8 +320,7 @@ func TestValidateSidecar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		found, err := appManager.ValidateSidecar()
-		assert.False(t, found)
+		err := appManager.ValidateSidecar()
 		assert.Error(t, err)
 	})
 
@@ -344,8 +342,7 @@ func TestValidateSidecar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		found, err := appManager.ValidateSidecar()
-		assert.False(t, found)
+		err := appManager.ValidateSidecar()
 		assert.Error(t, err)
 	})
 }
