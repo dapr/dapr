@@ -41,6 +41,21 @@ type ConfigurationSpec struct {
 	AccessControlSpec AccessControlSpec `json:"accessControl,omitempty"`
 	// +optional
 	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty"`
+	// +optional
+	Features []FeatureSpec `json:"features,omitempty"`
+	// +optional
+	APISpec APISpec `json:"api,omitempty"`
+}
+
+// APISpec describes the configuration for Dapr APIs
+type APISpec struct {
+	Allowed []APIAccessRule `json:"allowed,omitempty"`
+}
+
+// APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app
+type APIAccessRule struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 // NameResolutionSpec is the spec for name resolution configuration
@@ -143,6 +158,12 @@ type AccessControlSpec struct {
 	TrustDomain string `json:"trustDomain" yaml:"trustDomain"`
 	// +optional
 	AppPolicies []AppPolicySpec `json:"policies" yaml:"policies"`
+}
+
+// FeatureSpec defines the features that are enabled/disabled
+type FeatureSpec struct {
+	Name    string `json:"name" yaml:"name"`
+	Enabled bool   `json:"enabled" yaml:"enabled"`
 }
 
 // +kubebuilder:object:root=true

@@ -13,9 +13,9 @@ package sentry
 
 import (
 	proto "github.com/golang/protobuf/proto"
-	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -120,8 +120,8 @@ type SignCertificateResponse struct {
 	WorkloadCertificate []byte `protobuf:"bytes,1,opt,name=workload_certificate,json=workloadCertificate,proto3" json:"workload_certificate,omitempty"`
 	// A list of PEM-encoded x509 Certificates that establish the trust chain
 	// between the workload certificate and the well-known trust root cert.
-	TrustChainCertificates [][]byte             `protobuf:"bytes,2,rep,name=trust_chain_certificates,json=trustChainCertificates,proto3" json:"trust_chain_certificates,omitempty"`
-	ValidUntil             *timestamp.Timestamp `protobuf:"bytes,3,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"`
+	TrustChainCertificates [][]byte               `protobuf:"bytes,2,rep,name=trust_chain_certificates,json=trustChainCertificates,proto3" json:"trust_chain_certificates,omitempty"`
+	ValidUntil             *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"`
 }
 
 func (x *SignCertificateResponse) Reset() {
@@ -170,7 +170,7 @@ func (x *SignCertificateResponse) GetTrustChainCertificates() [][]byte {
 	return nil
 }
 
-func (x *SignCertificateResponse) GetValidUntil() *timestamp.Timestamp {
+func (x *SignCertificateResponse) GetValidUntil() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ValidUntil
 	}
@@ -240,7 +240,7 @@ var file_dapr_proto_sentry_v1_sentry_proto_msgTypes = make([]protoimpl.MessageIn
 var file_dapr_proto_sentry_v1_sentry_proto_goTypes = []interface{}{
 	(*SignCertificateRequest)(nil),  // 0: dapr.proto.sentry.v1.SignCertificateRequest
 	(*SignCertificateResponse)(nil), // 1: dapr.proto.sentry.v1.SignCertificateResponse
-	(*timestamp.Timestamp)(nil),     // 2: google.protobuf.Timestamp
+	(*timestamppb.Timestamp)(nil),   // 2: google.protobuf.Timestamp
 }
 var file_dapr_proto_sentry_v1_sentry_proto_depIdxs = []int32{
 	2, // 0: dapr.proto.sentry.v1.SignCertificateResponse.valid_until:type_name -> google.protobuf.Timestamp

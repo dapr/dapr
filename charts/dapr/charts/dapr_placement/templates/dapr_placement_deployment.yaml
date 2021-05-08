@@ -181,6 +181,10 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
 {{- end }}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
 {{- if eq .Values.global.ha.enabled true }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
   volumeClaimTemplates:
