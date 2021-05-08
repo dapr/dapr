@@ -55,6 +55,7 @@ require (
 )
 
 replace (
+	github.com/dapr/components-contrib => github.com/artursouza/components-contrib v0.0.0-20210508083743-5e112b9e916f
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )
