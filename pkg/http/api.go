@@ -1232,7 +1232,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
 	metadata := getMetadataFromRequest(reqCtx)
-	rawPayload, metaErr := contrib_metadata.TryIsRawPayload(metadata)
+	rawPayload, metaErr := contrib_metadata.IsRawPayload(metadata)
 	if metaErr != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_REQUEST_METADATA",
 			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))

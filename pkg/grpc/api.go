@@ -264,7 +264,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, err
 	}
 
-	rawPayload, metaErr := contrib_metadata.TryIsRawPayload(in.Metadata)
+	rawPayload, metaErr := contrib_metadata.IsRawPayload(in.Metadata)
 	if metaErr != nil {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
 		apiServerLogger.Debug(err)

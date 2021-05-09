@@ -179,8 +179,8 @@ github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmV
 github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878 h1:EFSB7Zo9Eg91v7MJPVsifUysc/wPdN+NOnVe6bWbdBM=
 github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878/go.mod h1:3AMJUQhVx52RsWOnlkpikZr01T/yAVN2gn0861vByNg=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
-github.com/artursouza/components-contrib v0.0.0-20210508083743-5e112b9e916f h1:ZZOod+5Ji8HJs4cdAsCMSdN/R5rbf9PeoRksK8opJ30=
-github.com/artursouza/components-contrib v0.0.0-20210508083743-5e112b9e916f/go.mod h1:XChBGNQy10mEp1t4+iVK9ruNqKIDT6G2Dx7dcK+roGs=
+github.com/artursouza/components-contrib v0.0.0-20210509064618-3fc93ab3198a h1:t/rJA0CkUIUAq7ICm4IBmDnaJh7GKT33CVO+lYYC+Es=
+github.com/artursouza/components-contrib v0.0.0-20210509064618-3fc93ab3198a/go.mod h1:XChBGNQy10mEp1t4+iVK9ruNqKIDT6G2Dx7dcK+roGs=
 github.com/aryann/difflib v0.0.0-20170710044230-e206f873d14a/go.mod h1:DAHtR1m6lCRdSC2Tm3DSWRPvIPr6xNKyeHdqDQSQT+A=
 github.com/asaskevich/govalidator v0.0.0-20180720115003-f9ffefc3facf/go.mod h1:lB+ZfQJz7igIIfQNfa7Ml4HSf2uFQQRzpGGRXenZAgY=
 github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a/go.mod h1:lB+ZfQJz7igIIfQNfa7Ml4HSf2uFQQRzpGGRXenZAgY=

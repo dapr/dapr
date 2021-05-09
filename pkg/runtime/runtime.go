@@ -457,7 +457,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 			msg.Metadata[pubsubName] = name
 
-			rawPayload, err := contrib_metadata.TryIsRawPayload(routeMetadata)
+			rawPayload, err := contrib_metadata.IsRawPayload(routeMetadata)
 			if err != nil {
 				log.Warnf("error deserializing pubsub metadata: %s", err)
 				return err
