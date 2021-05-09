@@ -190,7 +190,7 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 	if a.accessControlList == nil {
 		// No access control list is provided. Do nothing
 		// ActionPolicy is not app and global, so it need not to report metrics
-		// to reduce unneccessarily operation
+		// to reduce unnecessarily operation
 		return true, ""
 	}
 	// Apply access control list filter
