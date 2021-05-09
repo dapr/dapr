@@ -24,7 +24,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/config"
+	configuration "github.com/dapr/dapr/pkg/config"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -79,7 +79,8 @@ type actorsRuntime struct {
 	evaluationChan      chan bool
 	appHealthy          bool
 	certChain           *dapr_credentials.CertChain
-	tracingSpec         config.TracingSpec
+	tracingSpec         configuration.TracingSpec
+	reentrancyEnabled   bool
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -99,7 +100,8 @@ func NewActors(
 	grpcConnectionFn func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error),
 	config Config,
 	certChain *dapr_credentials.CertChain,
-	tracingSpec config.TracingSpec) Actors {
+	tracingSpec configuration.TracingSpec,
+	features []configuration.FeatureSpec) Actors {
 	var transactionalStore state.TransactionalStore
 	if stateStore != nil {
 		features := stateStore.Features()
@@ -127,6 +129,7 @@ func NewActors(
 		appHealthy:          true,
 		certChain:           certChain,
 		tracingSpec:         tracingSpec,
+		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy),
 	}
 }
 
@@ -247,7 +250,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
 						err := a.deactivateActor(actorType, actorID)
 						if err != nil {
-							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
+							log.Errorf("failed to deactivate actor %s: %s", actorKey, err)
 						}
 					}(key.(string))
 				}
@@ -515,7 +518,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 					if !actor.isBusy() {
 						err := a.deactivateActor(actorType, actorID)
 						if err != nil {
-							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
+							log.Errorf("failed to deactivate actor %s: %s", actorKey, err)
 						}
 						break
 					}
@@ -538,7 +541,7 @@ func (a *actorsRuntime) evaluateReminders() {
 	for _, t := range a.config.HostedActorTypes {
 		vals, _, err := a.getRemindersForActorType(t)
 		if err != nil {
-			log.Debugf("error getting reminders for actor type %s: %s", t, err)
+			log.Errorf("error getting reminders for actor type %s: %s", t, err)
 		} else {
 			a.remindersLock.Lock()
 			a.reminders[t] = vals
@@ -565,7 +568,7 @@ func (a *actorsRuntime) evaluateReminders() {
 							a.activeReminders.Store(reminderKey, stop)
 							err := a.startReminder(&r, stop)
 							if err != nil {
-								log.Debugf("error starting reminder: %s", err)
+								log.Errorf("error starting reminder: %s", err)
 							}
 						}
 					}
@@ -690,7 +693,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 					case <-ticker.C:
 						err := a.executeReminder(actorType, actorID, dueTime, period, reminder, data)
 						if err != nil {
-							log.Debugf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
+							log.Errorf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
 						}
 					case <-stop:
 						log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, dueTime, period, data)
@@ -734,7 +737,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 		key := a.constructCompositeKey(actorType, actorID)
 		err = a.updateReminderTrack(key, reminder)
 	} else {
-		log.Debugf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
+		log.Errorf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}
 	return err
 }
@@ -887,7 +890,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
 			req.Period, req.Callback, req.Data)
 		if err != nil {
-			log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+			log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 		}
 
 		ticker := a.configureTicker(period)
@@ -901,7 +904,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 					err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
 						req.Period, req.Callback, req.Data)
 					if err != nil {
-						log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+						log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 					}
 				} else {
 					a.DeleteTimer(ctx, &DeleteTimerRequest{
@@ -947,7 +950,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	req.WithRawData(b, invokev1.JSONContentType)
 	_, err = a.callLocalActor(context.Background(), req)
 	if err != nil {
-		log.Debugf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
+		log.Errorf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
 	}
 	return err
 }

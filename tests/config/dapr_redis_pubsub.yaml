@@ -22,3 +22,7 @@ spec:
     value: 1s
   - name: redeliverInterval
     value: 1s
+  - name: idleCheckFrequency
+    value: 1s
+  - name: readTimeout
+    value: 1s

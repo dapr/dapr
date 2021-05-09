@@ -93,6 +93,12 @@ func (m *AppManager) Init() error {
 		return err
 	}
 
+	m.logPrefix = os.Getenv(ContainerLogPathEnvVar)
+
+	if m.logPrefix == "" {
+		m.logPrefix = ContainerLogDefaultPath
+	}
+
 	log.Printf("Deploying app %v ...", m.app.AppName)
 	if m.app.IsJob {
 		// Deploy app and wait until deployment is done
@@ -104,6 +110,12 @@ func (m *AppManager) Init() error {
 		if _, err := m.WaitUntilJobState(m.IsJobCompleted); err != nil {
 			return err
 		}
+
+		if m.logPrefix != "" {
+			if err := m.StreamContainerLogs(); err != nil {
+				log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
+			}
+		}
 	} else {
 		// Deploy app and wait until deployment is done
 		if _, err := m.Deploy(); err != nil {
@@ -114,6 +126,12 @@ func (m *AppManager) Init() error {
 		if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
 			return err
 		}
+
+		if m.logPrefix != "" {
+			if err := m.StreamContainerLogs(); err != nil {
+				log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
+			}
+		}
 	}
 	log.Printf("App %v has been deployed.", m.app.AppName)
 
@@ -122,12 +140,12 @@ func (m *AppManager) Init() error {
 		log.Printf("Validating sidecar for app %v ....", m.app.AppName)
 		for i := 0; i <= maxSideCarDetectionRetries; i++ {
 			// Validate daprd side car is injected
-			if ok, err := m.ValidateSidecar(); err != nil || ok != m.app.IngressEnabled {
+			if err := m.ValidateSidecar(); err != nil {
 				if i == maxSideCarDetectionRetries {
 					return err
 				}
 
-				log.Printf("Did not find sidecar for app %v, retrying ....", m.app.AppName)
+				log.Printf("Did not find sidecar for app %v error %s, retrying ....", m.app.AppName, err)
 				time.Sleep(10 * time.Second)
 				continue
 			}
@@ -148,12 +166,6 @@ func (m *AppManager) Init() error {
 		log.Printf("Pod port forwarder for app %v has been created.", m.app.AppName)
 	}
 
-	m.logPrefix = os.Getenv(ContainerLogPathEnvVar)
-
-	if m.logPrefix == "" {
-		m.logPrefix = ContainerLogDefaultPath
-	}
-
 	if err := os.MkdirAll(m.logPrefix, os.ModePerm); err != nil {
 		log.Printf("Failed to create output log directory '%s' Error was: '%s'. Container logs will be discarded", m.logPrefix, err)
 		m.logPrefix = ""
@@ -164,12 +176,6 @@ func (m *AppManager) Init() error {
 
 // Dispose deletes deployment and service
 func (m *AppManager) Dispose(wait bool) error {
-	if m.logPrefix != "" {
-		if err := m.SaveContainerLogs(); err != nil {
-			log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
-		}
-	}
-
 	if m.app.IsJob {
 		if err := m.DeleteJob(true); err != nil {
 			return err
@@ -321,9 +327,9 @@ func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err erro
 }
 
 // ValidateSidecar validates that dapr side car is running in dapr enabled pods
-func (m *AppManager) ValidateSidecar() (bool, error) {
+func (m *AppManager) ValidateSidecar() error {
 	if !m.app.DaprEnabled {
-		return false, fmt.Errorf("dapr is not enabled for this app")
+		return fmt.Errorf("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -332,11 +338,11 @@ func (m *AppManager) ValidateSidecar() (bool, error) {
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	if len(podList.Items) != int(m.app.Replicas) {
-		return false, fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
+		return fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
 	}
 
 	// Each pod must have daprd sidecar
@@ -348,11 +354,11 @@ func (m *AppManager) ValidateSidecar() (bool, error) {
 			}
 		}
 		if !daprdFound {
-			return false, fmt.Errorf("cannot find dapr sidecar in pod %s", pod.Name)
+			return fmt.Errorf("cannot find dapr sidecar in pod %s", pod.Name)
 		}
 	}
 
-	return true, nil
+	return nil
 }
 
 // getSidecarInfo returns if sidecar is present and how many containers there are.
@@ -644,11 +650,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 }
 
 // SaveContainerLogs get container logs for all containers in the pod and saves them to disk
-func (m *AppManager) SaveContainerLogs() error {
-	if !m.app.DaprEnabled {
-		return fmt.Errorf("dapr is not enabled for this app")
-	}
-
+func (m *AppManager) StreamContainerLogs() error {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods
@@ -661,34 +663,52 @@ func (m *AppManager) SaveContainerLogs() error {
 
 	for _, pod := range podList.Items {
 		for _, container := range pod.Spec.Containers {
-			err := func() error {
-				req := podClient.GetLogs(pod.GetName(), &apiv1.PodLogOptions{
-					Container: container.Name,
+			go func(pod, container string) {
+				filename := fmt.Sprintf("%s/%s.%s.log", m.logPrefix, pod, container)
+				log.Printf("Streaming Kubernetes logs to %s", filename)
+				req := podClient.GetLogs(pod, &apiv1.PodLogOptions{
+					Container: container,
+					Follow:    true,
 				})
-				podLogs, err := req.Stream(context.TODO())
+				stream, err := req.Stream(context.TODO())
 				if err != nil {
-					return err
+					log.Printf("Error reading log stream for %s. Error was %s", filename, err)
+					return
 				}
-				defer podLogs.Close()
+				defer stream.Close()
 
-				filename := fmt.Sprintf("%s/%s.%s.log", m.logPrefix, pod.GetName(), container.Name)
 				fh, err := os.Create(filename)
 				if err != nil {
-					return err
+					log.Printf("Error creating %s. Error was %s", filename, err)
+					return
 				}
 				defer fh.Close()
-				_, err = io.Copy(fh, podLogs)
-				if err != nil {
-					return err
+
+				for {
+					buf := make([]byte, 2000)
+					numBytes, err := stream.Read(buf)
+					if numBytes == 0 {
+						continue
+					}
+
+					if err == io.EOF {
+						break
+					}
+
+					if err != nil {
+						log.Printf("Error reading log stream for %s. Error was %s", filename, err)
+						return
+					}
+
+					_, err = fh.Write(buf[:numBytes])
+					if err != nil {
+						log.Printf("Error writing to %s. Error was %s", filename, err)
+						return
+					}
 				}
 
 				log.Printf("Saved container logs to %s", filename)
-				return nil
-			}()
-
-			if err != nil {
-				return err
-			}
+			}(pod.GetName(), container.Name)
 		}
 	}
 
