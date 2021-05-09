@@ -209,10 +209,6 @@ func LoadDefaultConfiguration() *Configuration {
 			MetricSpec: MetricSpec{
 				Enabled: true,
 			},
-			AccessControlSpec: AccessControlSpec{
-				DefaultAction: AllowAccess,
-				TrustDomain:   "public",
-			},
 		},
 	}
 }
@@ -529,7 +525,6 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 		// No access control list is provided. Do nothing
 		return isActionAllowed(AllowAccess), ""
 	}
-
 	action := accessControlList.DefaultAction
 	actionPolicy := ActionPolicyGlobal
 
@@ -631,17 +626,26 @@ func isActionAllowed(action string) bool {
 }
 
 func getKeyForAppID(appID, namespace string) string {
-	key := appID + "||" + namespace
-	return key
+	var strs strings.Builder
+	strs.WriteString(appID)
+	strs.WriteString("||")
+	strs.WriteString(namespace)
+	return strs.String()
 }
 
 // getOperationPrefixAndPostfix returns an app operation prefix and postfix
 // The prefix can be stored in the in-memory ACL for fast lookup
 // e.g.: /invoke/*, prefix = /invoke, postfix = /*
 func getOperationPrefixAndPostfix(operation string) (string, string) {
+	var strs strings.Builder
 	operationParts := strings.Split(operation, "/")
-	operationPrefix := "/" + operationParts[1]
-	operationPostfix := "/" + strings.Join(operationParts[2:], "/")
+	strs.WriteByte('/')
+	strs.WriteString(operationParts[1])
+	operationPrefix := strs.String()
+	strs.Reset()
+	strs.WriteByte('/')
+	strs.WriteString(strings.Join(operationParts[2:], "/"))
+	operationPostfix := strs.String()
 
 	return operationPrefix, operationPostfix
 }

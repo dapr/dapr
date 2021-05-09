@@ -187,6 +187,12 @@ func normalizeOperation(operation string) (string, error) {
 }
 
 func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string) (bool, string) {
+	if a.accessControlList == nil {
+		// No access control list is provided. Do nothing
+		// ActionPolicy is not app and global, so it need not to report metrics
+		// to reduce unneccessarily operation
+		return true, ""
+	}
 	// Apply access control list filter
 	spiffeID, err := config.GetAndParseSpiffeID(ctx)
 	if err != nil {
