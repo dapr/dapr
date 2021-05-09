@@ -89,6 +89,7 @@ type ConfigurationSpec struct {
 	AccessControlSpec  AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
 	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
 	Features           []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
+	APISpec            APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -105,6 +106,17 @@ type SecretsScope struct {
 
 type PipelineSpec struct {
 	Handlers []HandlerSpec `json:"handlers" yaml:"handlers"`
+}
+
+// APISpec describes the configuration for Dapr APIs
+type APISpec struct {
+	Allowed []APIAccessRule `json:"allowed,omitempty"`
+}
+
+// APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app
+type APIAccessRule struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 type HandlerSpec struct {
