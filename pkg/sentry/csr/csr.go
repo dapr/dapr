@@ -22,8 +22,6 @@ const (
 	blockTypePrivateKey   = "PRIVATE KEY"    // PKCS#8 plain private key
 	encodeMsgCSR          = "CERTIFICATE REQUEST"
 	encodeMsgCert         = "CERTIFICATE"
-
-	notBeforeClockSkew = 15 * time.Minute
 )
 
 var (
