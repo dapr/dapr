@@ -187,7 +187,7 @@ func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation 
 	}
 	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/env", containersPath, i)
+		path := fmt.Sprintf("%s/%d/env", containersPath, i+1)
 		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
