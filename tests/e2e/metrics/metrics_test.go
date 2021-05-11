@@ -214,7 +214,7 @@ func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) 
 						foundPath = true
 
 						if strings.Contains(l.GetValue(), "healthz") {
-							if strings.Contains("outbound") {
+							if strings.Contains(l.GetValue(), "outbound") {
 								require.Equal(t, "/v1.0/healthz/outbound", l.GetValue())
 							} else {
 								require.Equal(t, "/v1.0/healthz", l.GetValue())
