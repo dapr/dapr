@@ -73,7 +73,6 @@ func (a *actor) channel() chan struct{} {
 
 // lock holds the lock for turn-based concurrency.
 func (a *actor) lock(reentrancyID *string) error {
-	log.Infof("Locking Actor - Req: %v", reentrancyID)
 	pending := a.pendingActorCalls.Inc()
 	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
 
@@ -93,7 +92,6 @@ func (a *actor) lock(reentrancyID *string) error {
 // unlock releases the lock for turn-based concurrency. If disposeCh is available,
 // it will close the channel to notify runtime to dispose actor.
 func (a *actor) unlock() {
-	log.Info("Unlocking actor")
 	pending := a.pendingActorCalls.Dec()
 	if pending == 0 {
 		if !a.disposed && a.disposeCh != nil {

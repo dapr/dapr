@@ -36,9 +36,7 @@ func NewActorLock(maxStackDepth int32) ActorLock {
 
 func (a *ActorLock) Lock(requestID *string) error {
 	currentRequest := a.getCurrentID()
-	log.Infof("Attempting to lock Req %s Cur %s", a.idToString(requestID), a.idToString(currentRequest))
 
-	log.Infof("Stack depth: %s -> %s", a.stackDepth.Load(), a.maxStackDepth)
 	if a.stackDepth.Load() == a.maxStackDepth {
 		return ErrMaxStackDepthExceeded
 	}
@@ -57,7 +55,6 @@ func (a *ActorLock) Lock(requestID *string) error {
 func (a *ActorLock) Unlock() {
 	a.stackDepth.Dec()
 	if a.stackDepth.Load() == 0 {
-		log.Infof("Unlocking Req %s", a.idToString(a.getCurrentID()))
 		a.clearCurrentID()
 		a.methodLock.Unlock()
 	}
@@ -82,11 +79,4 @@ func (a *ActorLock) clearCurrentID() {
 	defer a.requestLock.Unlock()
 
 	a.activeRequest = nil
-}
-
-func (a *ActorLock) idToString(id *string) string {
-	if id == nil {
-		return "nil"
-	}
-	return *id
 }

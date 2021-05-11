@@ -264,7 +264,6 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 }
 
 func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	log.Info("Calling actor\n")
 	a.placement.WaitUntilPlacementTableIsReady()
 
 	actor := req.Actor()
@@ -330,8 +329,6 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 }
 
 func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	log.Infof("Entering callLocalActor: %s - %s", req.Actor().GetActorType(), req.Actor().GetActorId())
-	log.Infof("callLocalActor Request Headers: %v", req.Metadata())
 	actorTypeID := req.Actor()
 
 	act := a.getOrCreateActor(actorTypeID.GetActorType(), actorTypeID.GetActorId())
@@ -339,10 +336,8 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	// Reentrancy to determine how we lock.
 	var reentrancyID *string
 	if headerValue, ok := req.Metadata()["Dapr-Reentrancy-Id"]; a.reentrancyEnabled && ok {
-		log.Infof("Reentrancy header found: %s", headerValue.GetValues()[0])
 		reentrancyID = &headerValue.GetValues()[0]
 	} else {
-		log.Info("No reentrancy header found, generatinga new one")
 		reentrancyHeader := fasthttp.RequestHeader{}
 		uuid := uuid.New().String()
 		reentrancyHeader.Add("Dapr-Reentrancy-Id", uuid)
