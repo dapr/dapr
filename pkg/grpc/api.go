@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/PuerkitoBio/purell"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -178,14 +177,6 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func normalizeOperation(operation string) (string, error) {
-	s, err := purell.NormalizeURLString(operation, purell.FlagsUsuallySafeGreedy|purell.FlagRemoveDuplicateSlashes)
-	if err != nil {
-		return "", err
-	}
-	return s, nil
-}
-
 func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := config.GetAndParseSpiffeID(ctx)
@@ -200,24 +191,16 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 		trustDomain = spiffeID.TrustDomain
 	}
 
-	operation, err = normalizeOperation(operation)
+	isActionAllowed, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
+	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), isActionAllowed)
+
 	var errMessage string
-
-	if err != nil {
-		errMessage = fmt.Sprintf("error in method normalization: %s", err)
-		apiServerLogger.Debugf(errMessage)
-		return false, errMessage
-	}
-
-	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
-	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
-
-	if !action {
+	if !isActionAllowed {
 		errMessage = fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
 		apiServerLogger.Debugf(errMessage)
 	}
 
-	return action, errMessage
+	return isActionAllowed, errMessage
 }
 
 // CallActor invokes a virtual actor

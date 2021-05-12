@@ -6,11 +6,11 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.2.0
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
-	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.0
 	github.com/dapr/components-contrib v1.0.1-0.20210504183956-c314444b5354
 	github.com/dapr/kit v0.0.1
+	github.com/fasthttp-contrib/websocket v0.0.0-20160511215533-1f3b11f56072 // indirect
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
@@ -25,6 +25,7 @@ require (
 	github.com/hashicorp/raft v1.2.0
 	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea
 	github.com/json-iterator/go v1.1.10
+	github.com/k0kubun/colorstring v0.0.0-20150214042306-9440f1994b88 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.3.3
@@ -36,6 +37,7 @@ require (
 	github.com/prometheus/common v0.14.0
 	github.com/stretchr/testify v1.7.0
 	github.com/valyala/fasthttp v1.21.0
+	github.com/yudai/pp v2.0.1+incompatible // indirect
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.6.0
