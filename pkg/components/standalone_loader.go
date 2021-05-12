@@ -56,7 +56,7 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 				continue
 			}
 
-			components, errors := s.decodeYaml(path, b)
+			components, errors := s.decodeYaml(b)
 			for _, err := range errors {
 				log.Warnf("error parsing components yaml resource in %s : %s", path, err)
 			}
@@ -77,7 +77,7 @@ func (s *StandaloneComponents) isYaml(fileName string) bool {
 }
 
 // decodeYaml decodes the yaml document
-func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]components_v1alpha1.Component, []error) {
+func (s *StandaloneComponents) decodeYaml(b []byte) ([]components_v1alpha1.Component, []error) {
 	list := []components_v1alpha1.Component{}
 	errors := []error{}
 	scanner := bufio.NewScanner(bytes.NewReader(b))
