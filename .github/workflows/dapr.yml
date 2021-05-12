@@ -75,6 +75,18 @@ jobs:
       - name: Run go mod tidy check diff
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: make modtidy check-diff
+      - name: Run gen-proto check diff
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        run: |
+          wget https://github.com/protocolbuffers/protobuf/releases/download/v3.14.0/protoc-3.14.0-linux-x86_64.zip
+          unzip protoc-3.14.0-linux-x86_64.zip -d protoc
+          sudo cp -r protoc/include/google/ /usr/local/include/
+          sudo chmod -R 755 /usr/local/include/google
+          sudo cp protoc/bin/protoc /usr/local/bin/
+          sudo chmod +x /usr/local/bin/protoc
+          rm -r protoc protoc-3.14.0-linux-x86_64.zip
+          make init-proto
+          make gen-proto check-proto-diff
       - name: Run make test
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
