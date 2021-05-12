@@ -56,7 +56,10 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 				continue
 			}
 
-			components, _ := s.decodeYaml(path, b)
+			components, errors := s.decodeYaml(path, b)
+			for _, err := range errors {
+				log.Warnf("error parsing components yaml resource in %s : %s", path, err)
+			}
 			list = append(list, components...)
 		}
 	}
@@ -86,6 +89,11 @@ func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]componen
 		err := s.decode(scanner, &comp)
 		if err == io.EOF {
 			break
+		}
+
+		if err != nil {
+			errors = append(errors, err)
+			continue
 		}
 
 		if comp.Kind != componentKind {
