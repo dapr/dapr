@@ -208,7 +208,7 @@ func (s *server) endpointAllowed(endpoint Endpoint) bool {
 		return true
 	}
 
-	for _, rule := range s.apiSpec.Allowed {
+	for _, rule := range httpRules {
 		if (strings.Index(endpoint.Route, rule.Name) == 0 && endpoint.Version == rule.Version) || endpoint.Route == "healthz" {
 			return true
 		}
