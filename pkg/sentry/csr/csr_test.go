@@ -20,7 +20,7 @@ func TestGenerateCSRTemplate(t *testing.T) {
 
 func TestGenerateBaseCertificate(t *testing.T) {
 	pk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	cert, err := generateBaseCert(time.Second*5, pk)
+	cert, err := generateBaseCert(time.Second*5, time.Minute*15, pk)
 
 	assert.NoError(t, err)
 	assert.Equal(t, cert.PublicKey, pk)
@@ -28,7 +28,7 @@ func TestGenerateBaseCertificate(t *testing.T) {
 
 func TestGenerateIssuerCertCSR(t *testing.T) {
 	pk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	cert, err := GenerateIssuerCertCSR("name", pk, time.Second*5)
+	cert, err := GenerateIssuerCertCSR("name", pk, time.Second*5, time.Minute*15)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "name", cert.DNSNames[0])
@@ -37,7 +37,7 @@ func TestGenerateIssuerCertCSR(t *testing.T) {
 
 func TestGenerateRootCertCSR(t *testing.T) {
 	pk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	cert, err := GenerateRootCertCSR("org", "name", pk, time.Second*5)
+	cert, err := GenerateRootCertCSR("org", "name", pk, time.Second*5, time.Minute*15)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "name", cert.Subject.CommonName)

@@ -100,7 +100,7 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, identity *identity.Bu
 		return nil, errors.Wrap(err, "error parsing csr pem")
 	}
 
-	crtb, err := csr.GenerateCSRCertificate(cert, subject, identity, signingCert, cert.PublicKey, signingKey.Key, certLifetime, isCA)
+	crtb, err := csr.GenerateCSRCertificate(cert, subject, identity, signingCert, cert.PublicKey, signingKey.Key, certLifetime, c.config.AllowedClockSkew, isCA)
 	if err != nil {
 		return nil, errors.Wrap(err, "error signing csr")
 	}
@@ -223,7 +223,7 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rootCsr, err := csr.GenerateRootCertCSR(caOrg, caCommonName, &rootKey.PublicKey, selfSignedRootCertLifetime)
+	rootCsr, err := csr.GenerateRootCertCSR(caOrg, caCommonName, &rootKey.PublicKey, selfSignedRootCertLifetime, c.config.AllowedClockSkew)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -245,7 +245,7 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 		return nil, nil, nil, err
 	}
 
-	issuerCsr, err := csr.GenerateIssuerCertCSR(caCommonName, &issuerKey.PublicKey, selfSignedRootCertLifetime)
+	issuerCsr, err := csr.GenerateIssuerCertCSR(caCommonName, &issuerKey.PublicKey, selfSignedRootCertLifetime, c.config.AllowedClockSkew)
 	if err != nil {
 		return nil, nil, nil, err
 	}
