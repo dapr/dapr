@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
+	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -129,7 +131,7 @@ func NewActors(
 		appHealthy:          true,
 		certChain:           certChain,
 		tracingSpec:         tracingSpec,
-		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy),
+		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
 	}
 }
 
@@ -320,7 +322,7 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID))
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.Reentrancy.MaxStackDepth))
 	}
 
 	return val.(*actor)
@@ -330,7 +332,20 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	actorTypeID := req.Actor()
 
 	act := a.getOrCreateActor(actorTypeID.GetActorType(), actorTypeID.GetActorId())
-	err := act.lock()
+
+	// Reentrancy to determine how we lock.
+	var reentrancyID *string
+	if headerValue, ok := req.Metadata()["Dapr-Reentrancy-Id"]; a.reentrancyEnabled && ok {
+		reentrancyID = &headerValue.GetValues()[0]
+	} else {
+		reentrancyHeader := fasthttp.RequestHeader{}
+		uuid := uuid.New().String()
+		reentrancyHeader.Add("Dapr-Reentrancy-Id", uuid)
+		req.AddHeaders(&reentrancyHeader)
+		reentrancyID = &uuid
+	}
+
+	err := act.lock(reentrancyID)
 	if err != nil {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
 	}
@@ -362,6 +377,8 @@ func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
 	targetAddress, targetID string,
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	log.Infof("Entering callRemoteActor: %s - %s", req.Actor().GetActorType(), req.Actor().GetActorId())
+	log.Infof("callRemoteActor Request Headers: %v", req.Metadata())
 	conn, err := a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, false, false)
 	if err != nil {
 		return nil, err
