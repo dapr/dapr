@@ -28,6 +28,8 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.http")
 
+const protocol = "http"
+
 // Server is an interface for the Dapr HTTP server
 type Server interface {
 	StartNonBlocking()
@@ -195,7 +197,14 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 }
 
 func (s *server) endpointAllowed(endpoint Endpoint) bool {
-	if len(s.apiSpec.Allowed) == 0 {
+	var httpRules []config.APIAccessRule
+
+	for _, rule := range s.apiSpec.Allowed {
+		if rule.Protocol == protocol {
+			httpRules = append(httpRules, rule)
+		}
+	}
+	if len(httpRules) == 0 {
 		return true
 	}
 
