@@ -459,7 +459,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 			rawPayload, err := contrib_metadata.IsRawPayload(routeMetadata)
 			if err != nil {
-				log.Warnf("error deserializing pubsub metadata: %s", err)
+				log.Errorf("error deserializing pubsub metadata: %s", err)
 				return err
 			}
 
@@ -469,13 +469,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
 				data, err = a.json.Marshal(cloudEvent)
 				if err != nil {
-					log.Warnf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
 					return err
 				}
 			} else {
 				err = a.json.Unmarshal(msg.Data, &cloudEvent)
 				if err != nil {
-					log.Warnf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
 					return err
 				}
 			}
@@ -487,7 +487,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				metadata:   msg.Metadata,
 			})
 		}); err != nil {
-			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
+			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
 		}
 	}
 
