@@ -200,24 +200,16 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 		trustDomain = spiffeID.TrustDomain
 	}
 
-	operation, err = normalizeOperation(operation)
+	isActionAllowed, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
+	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), isActionAllowed)
+
 	var errMessage string
-
-	if err != nil {
-		errMessage = fmt.Sprintf("error in method normalization: %s", err)
-		apiServerLogger.Debugf(errMessage)
-		return false, errMessage
-	}
-
-	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
-	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
-
-	if !action {
+	if !isActionAllowed {
 		errMessage = fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
 		apiServerLogger.Debugf(errMessage)
 	}
 
-	return action, errMessage
+	return isActionAllowed, errMessage
 }
 
 // CallActor invokes a virtual actor
