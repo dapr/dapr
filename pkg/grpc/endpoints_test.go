@@ -22,8 +22,9 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 	t.Run("state endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
-				Name:    "state",
-				Version: "v1",
+				Name:     "state",
+				Version:  "v1",
+				Protocol: "grpc",
 			},
 		}
 
@@ -51,8 +52,9 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 	t.Run("publish endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
-				Name:    "publish",
-				Version: "v1",
+				Name:     "publish",
+				Version:  "v1",
+				Protocol: "grpc",
 			},
 		}
 
@@ -80,8 +82,9 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 	t.Run("actors endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
-				Name:    "actors",
-				Version: "v1",
+				Name:     "actors",
+				Version:  "v1",
+				Protocol: "grpc",
 			},
 		}
 
@@ -109,8 +112,9 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 	t.Run("bindings endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
-				Name:    "bindings",
-				Version: "v1",
+				Name:     "bindings",
+				Version:  "v1",
+				Protocol: "grpc",
 			},
 		}
 
@@ -138,8 +142,9 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 	t.Run("secrets endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
-				Name:    "secrets",
-				Version: "v1",
+				Name:     "secrets",
+				Version:  "v1",
+				Protocol: "grpc",
 			},
 		}
 
@@ -167,8 +172,9 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 	t.Run("metadata endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
-				Name:    "metadata",
-				Version: "v1",
+				Name:     "metadata",
+				Version:  "v1",
+				Protocol: "grpc",
 			},
 		}
 
@@ -196,8 +202,9 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 	t.Run("shutdown endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
-				Name:    "shutdown",
-				Version: "v1",
+				Name:     "shutdown",
+				Version:  "v1",
+				Protocol: "grpc",
 			},
 		}
 
@@ -225,8 +232,9 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 	t.Run("invoke endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
-				Name:    "invoke",
-				Version: "v1",
+				Name:     "invoke",
+				Version:  "v1",
+				Protocol: "grpc",
 			},
 		}
 
@@ -260,6 +268,27 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 			}, h)
 			assert.NoError(t, err)
 		}
+
+		for _, v := range endpoints {
+			for _, e := range v {
+				_, err := f(nil, nil, &grpc.UnaryServerInfo{
+					FullMethod: e,
+				}, h)
+				assert.NoError(t, err)
+			}
+		}
+	})
+
+	t.Run("protocol mismatch, rule not applied", func(t *testing.T) {
+		a := []config.APIAccessRule{
+			{
+				Name:     "state",
+				Version:  "v1",
+				Protocol: "http",
+			},
+		}
+
+		f := setAPIEndpointsMiddlewareUnary(a)
 
 		for _, v := range endpoints {
 			for _, e := range v {

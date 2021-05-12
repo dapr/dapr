@@ -54,8 +54,9 @@ type APISpec struct {
 
 // APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app
 type APIAccessRule struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Protocol string `json:"protocol"`
 }
 
 // NameResolutionSpec is the spec for name resolution configuration
