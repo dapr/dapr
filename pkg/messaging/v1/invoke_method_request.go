@@ -158,3 +158,24 @@ func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 
 	return contentType, dataValue
 }
+
+// Adds a new header to the existing set.
+func (imr *InvokeMethodRequest) AddHeaders(header *fasthttp.RequestHeader) {
+	md := map[string][]string{}
+	header.VisitAll(func(key []byte, value []byte) {
+		md[string(key)] = []string{string(value)}
+	})
+
+	internalMd := MetadataToInternalMetadata(md)
+
+	if imr.r.Metadata == nil {
+		imr.r.Metadata = internalMd
+	} else {
+		for key, val := range internalMd {
+			// We're only adding new values, not overwriting existing
+			if _, ok := imr.r.Metadata[key]; !ok {
+				imr.r.Metadata[key] = val
+			}
+		}
+	}
+}
