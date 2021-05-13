@@ -42,8 +42,9 @@ func TestAllowedAPISpec(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "state",
-						Version: "v1.0",
+						Name:     "state",
+						Version:  "v1.0",
+						Protocol: "http",
 					},
 				},
 			},
@@ -82,8 +83,9 @@ func TestAllowedAPISpec(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "publish",
-						Version: "v1.0",
+						Name:     "publish",
+						Version:  "v1.0",
+						Protocol: "http",
 					},
 				},
 			},
@@ -122,8 +124,9 @@ func TestAllowedAPISpec(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "invoke",
-						Version: "v1.0",
+						Name:     "invoke",
+						Version:  "v1.0",
+						Protocol: "http",
 					},
 				},
 			},
@@ -162,8 +165,9 @@ func TestAllowedAPISpec(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "bindings",
-						Version: "v1.0",
+						Name:     "bindings",
+						Version:  "v1.0",
+						Protocol: "http",
 					},
 				},
 			},
@@ -202,8 +206,9 @@ func TestAllowedAPISpec(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "metadata",
-						Version: "v1.0",
+						Name:     "metadata",
+						Version:  "v1.0",
+						Protocol: "http",
 					},
 				},
 			},
@@ -242,8 +247,9 @@ func TestAllowedAPISpec(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "secrets",
-						Version: "v1.0",
+						Name:     "secrets",
+						Version:  "v1.0",
+						Protocol: "http",
 					},
 				},
 			},
@@ -282,8 +288,9 @@ func TestAllowedAPISpec(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Name:    "shutdown",
-						Version: "v1.0",
+						Name:     "shutdown",
+						Version:  "v1.0",
+						Protocol: "http",
 					},
 				},
 			},
@@ -350,13 +357,45 @@ func TestAllowedAPISpec(t *testing.T) {
 		}
 	})
 
+	t.Run("router handler mismatch protocol, all handlers exist", func(t *testing.T) {
+		s := server{
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:     "state",
+						Version:  "v1.0",
+						Protocol: "grpc",
+					},
+				},
+			},
+		}
+
+		a := &api{}
+		eps := a.APIEndpoints()
+
+		router := s.getRouter(eps)
+		r := &fasthttp.RequestCtx{
+			Request: fasthttp.Request{},
+		}
+
+		for _, e := range eps {
+			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
+			for _, m := range e.Methods {
+				handler, ok := router.Lookup(m, path, r)
+				assert.NotNil(t, handler)
+				assert.True(t, ok)
+			}
+		}
+	})
+
 	t.Run("router handler rules applied, only handlers exist", func(t *testing.T) {
 		s := server{
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Version: "v1.0",
-						Name:    "state",
+						Version:  "v1.0",
+						Name:     "state",
+						Protocol: "http",
 					},
 				},
 			},
