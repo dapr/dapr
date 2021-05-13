@@ -74,8 +74,7 @@ import (
 )
 
 const (
-	appConfigEndpoint = "dapr/config"
-	actorStateStore   = "actorStateStore"
+	actorStateStore = "actorStateStore"
 
 	// output bindings concurrency
 	bindingsConcurrencyParallel   = "parallel"
@@ -729,7 +728,7 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize)
 
-	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
+	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
 	server.StartNonBlocking()
 }
 
@@ -742,7 +741,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec)
 	err := server.StartNonBlocking()
 	return err
 }
@@ -1338,8 +1337,8 @@ func (a *DaprRuntime) initActors() error {
 		return err
 	}
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.appConfig.Entities,
-		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors, a.namespace)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec)
+		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors, a.namespace, a.appConfig.Reentrancy)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features)
 	err = act.Init()
 	a.actor = act
 	return err
@@ -1710,18 +1709,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 		return
 	}
 
-	var appConfigGetFn func() (*config.ApplicationConfig, error)
-
-	switch a.runtimeConfig.ApplicationProtocol {
-	case HTTPProtocol:
-		appConfigGetFn = a.getConfigurationHTTP
-	case GRPCProtocol:
-		appConfigGetFn = a.getConfigurationGRPC
-	default:
-		appConfigGetFn = a.getConfigurationHTTP
-	}
-
-	appConfig, err := appConfigGetFn()
+	appConfig, err := a.appChannel.GetAppConfig()
 	if err != nil {
 		return
 	}
@@ -1730,42 +1718,6 @@ func (a *DaprRuntime) loadAppConfiguration() {
 		a.appConfig = *appConfig
 		log.Info("application configuration loaded")
 	}
-}
-
-// getConfigurationHTTP gets application config from user application
-// GET http://localhost:<app_port>/dapr/config
-func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) {
-	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint)
-	req.WithHTTPExtension(nethttp.MethodGet, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
-
-	// TODO Propagate context
-	ctx := context.Background()
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	var config config.ApplicationConfig
-
-	if resp.Status().Code != nethttp.StatusOK {
-		return &config, nil
-	}
-
-	contentType, body := resp.RawData()
-	if contentType != invokev1.JSONContentType {
-		log.Debugf("dapr/config returns invalid content_type: %s", contentType)
-	}
-
-	if err = a.json.Unmarshal(body, &config); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
-}
-
-func (a *DaprRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) {
-	return nil, nil
 }
 
 func (a *DaprRuntime) createAppChannel() error {

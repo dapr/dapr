@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -20,6 +21,7 @@ const (
 // AppChannel is an abstraction over communications with user code
 type AppChannel interface {
 	GetBaseAddress() string
+	GetAppConfig() (*config.ApplicationConfig, error)
 	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	OnConfigurationEvent(ctx context.Context, storeName string, appID string, items []*configuration.Item) error
 }

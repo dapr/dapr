@@ -20,7 +20,7 @@ const (
 	// Configuration
 	ErrConfigurationStoresNotConfigured = "configuration store is not configured"
 	ErrConfigurationStoreNotFound       = "configuration store %s is not found"
-	ErrConfigurationGet                 = "fail to get configuration of app %s from configuration store %s"
+	ErrConfigurationGet                 = "fail to get configuration of app %s from configuration store %s: %s"
 	ErrConfigurationDelete              = "failed deleting configuration with key %s: %s"
 	ErrConfigurationSave                = "failed saving configuration in configuration store %s: %s"
 

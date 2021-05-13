@@ -68,6 +68,39 @@ spec:
                   trustDomain:
                     type: string
                 type: object
+              api:
+                description: APISpec describes the configuration for Dapr APIs
+                properties:
+                  allowed:
+                    items:
+                      description: APIAccessRule describes an access rule for allowing
+                        a Dapr API to be enabled and accessible by an app
+                      properties:
+                        name:
+                          type: string
+                        protocol:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - name
+                      - version
+                      type: object
+                    type: array
+                type: object
+              features:
+                items:
+                  description: FeatureSpec defines the features that are enabled/disabled
+                  properties:
+                    enabled:
+                      type: boolean
+                    name:
+                      type: string
+                  required:
+                  - enabled
+                  - name
+                  type: object
+                type: array
               httpPipeline:
                 description: PipelineSpec defines the middleware pipeline
                 properties:

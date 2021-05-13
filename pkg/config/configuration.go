@@ -32,18 +32,21 @@ import (
 var log = logger.NewLogger("dapr.configuration")
 
 const (
-	operatorCallTimeout = time.Second * 5
-	operatorMaxRetries  = 100
-	AllowAccess         = "allow"
-	DenyAccess          = "deny"
-	DefaultTrustDomain  = "public"
-	DefaultNamespace    = "default"
-	ActionPolicyApp     = "app"
-	ActionPolicyGlobal  = "global"
-	SpiffeIDPrefix      = "spiffe://"
-	HTTPProtocol        = "http"
-	GRPCProtocol        = "grpc"
+	operatorCallTimeout         = time.Second * 5
+	operatorMaxRetries          = 100
+	AllowAccess                 = "allow"
+	DenyAccess                  = "deny"
+	DefaultTrustDomain          = "public"
+	DefaultNamespace            = "default"
+	ActionPolicyApp             = "app"
+	ActionPolicyGlobal          = "global"
+	SpiffeIDPrefix              = "spiffe://"
+	HTTPProtocol                = "http"
+	GRPCProtocol                = "grpc"
+	ActorRentrancy      Feature = "Actor.Reentrancy"
 )
+
+type Feature string
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
@@ -85,6 +88,8 @@ type ConfigurationSpec struct {
 	Secrets            SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 	AccessControlSpec  AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
 	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
+	Features           []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
+	APISpec            APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -101,6 +106,18 @@ type SecretsScope struct {
 
 type PipelineSpec struct {
 	Handlers []HandlerSpec `json:"handlers" yaml:"handlers"`
+}
+
+// APISpec describes the configuration for Dapr APIs
+type APISpec struct {
+	Allowed []APIAccessRule `json:"allowed,omitempty"`
+}
+
+// APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app
+type APIAccessRule struct {
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Protocol string `json:"protocol"`
 }
 
 type HandlerSpec struct {
@@ -175,6 +192,12 @@ type SpiffeID struct {
 	TrustDomain string
 	Namespace   string
 	AppID       string
+}
+
+// FeatureSpec defines which preview features are enabled
+type FeatureSpec struct {
+	Name    Feature `json:"name" yaml:"name"`
+	Enabled bool    `json:"enabled" yaml:"enabled"`
 }
 
 // LoadDefaultConfiguration returns the default config
@@ -622,4 +645,13 @@ func getOperationPrefixAndPostfix(operation string) (string, string) {
 	operationPostfix := "/" + strings.Join(operationParts[2:], "/")
 
 	return operationPrefix, operationPostfix
+}
+
+func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
+	for _, feature := range features {
+		if feature.Name == target {
+			return feature.Enabled
+		}
+	}
+	return false
 }

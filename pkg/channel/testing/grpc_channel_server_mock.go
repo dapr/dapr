@@ -25,6 +25,10 @@ type MockServer struct {
 	TopicEventResponseStatus runtimev1pb.TopicEventResponse_TopicEventResponseStatus
 }
 
+func (m *MockServer) OnConfigurationEvent(ctx context.Context, request *runtimev1pb.ConfigurationEventRequest) (*emptypb.Empty, error) {
+	panic("implement me")
+}
+
 func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	dt := map[string]string{

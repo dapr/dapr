@@ -240,3 +240,9 @@ func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest)
 	fmt.Printf("Invoked from binding: %s\n", in.Name)
 	return &pb.BindingEventResponse{}, nil
 }
+
+
+func (s *server) OnConfigurationEvent(ctx context.Context, in *pb.ConfigurationEventRequest) (*emptypb.Empty, error) {
+	fmt.Printf("Received Configuration Event from store %s\n", in.StoreName)
+	return &emptypb.Empty{}, nil
+}

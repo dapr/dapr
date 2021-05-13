@@ -20,7 +20,7 @@ require (
 	github.com/gavv/httpexpect v2.0.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
 	github.com/golang/protobuf v1.4.3
-	github.com/google/go-cmp v0.5.4
+	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.7.3
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
@@ -51,7 +51,7 @@ require (
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
 	go.opencensus.io v0.22.5
-	go.opentelemetry.io/otel v0.13.0
+	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.6.0
 	goji.io v2.0.2+incompatible // indirect
 	google.golang.org/genproto v0.0.0-20201204160425-06b3db808446
@@ -65,7 +65,7 @@ require (
 	gopkg.in/gorethink/gorethink.v4 v4.1.0 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/kataras/go-serializer.v0 v0.0.4 // indirect
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.20.0
 	k8s.io/apiextensions-apiserver v0.20.0
 	k8s.io/apimachinery v0.20.0

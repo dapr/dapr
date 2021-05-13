@@ -15,6 +15,7 @@ import (
 
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -174,4 +175,9 @@ func (s *server) ListInputBindings(ctx context.Context, in *empty.Empty) (*pb.Li
 func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
 	fmt.Printf("Invoked from binding: %s - %s\n", in.Name, string(in.Data))
 	return &pb.BindingEventResponse{}, nil
+}
+
+func (s *server) OnConfigurationEvent(ctx context.Context, in *pb.ConfigurationEventRequest) (*emptypb.Empty, error) {
+	fmt.Printf("Received Configuration Event from store %s\n", in.StoreName)
+	return &emptypb.Empty{}, nil
 }
