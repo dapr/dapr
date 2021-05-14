@@ -42,6 +42,7 @@ import (
 type API interface {
 	APIEndpoints() []Endpoint
 	MarkStatusAsReady()
+	MarkStatusAsOutboundReady()
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
@@ -63,6 +64,7 @@ type api struct {
 	id                       string
 	extendedMetadata         sync.Map
 	readyStatus              bool
+	outboundReadyStatus      bool
 	tracingSpec              config.TracingSpec
 	shutdown                 func()
 }
@@ -157,6 +159,11 @@ func (a *api) APIEndpoints() []Endpoint {
 // MarkStatusAsReady marks the ready status of dapr
 func (a *api) MarkStatusAsReady() {
 	a.readyStatus = true
+}
+
+// MarkStatusAsOutboundReady marks the ready status of dapr for outbound traffic
+func (a *api) MarkStatusAsOutboundReady() {
+	a.outboundReadyStatus = true
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {
@@ -332,6 +339,12 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Route:   "healthz",
 			Version: apiVersionV1,
 			Handler: a.onGetHealthz,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "healthz/outbound",
+			Version: apiVersionV1,
+			Handler: a.onGetOutboundHealthz,
 		},
 	}
 }
@@ -1322,6 +1335,16 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 
 func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.readyStatus {
+		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		log.Debug(msg)
+	} else {
+		respondEmpty(reqCtx)
+	}
+}
+
+func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
+	if !a.outboundReadyStatus {
 		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
