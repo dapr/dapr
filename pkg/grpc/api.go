@@ -1124,12 +1124,13 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 		return &runtimev1pb.GetConfigurationResponse{}, err
 	}
 
-	response := &runtimev1pb.GetConfigurationResponse{}
-	if getResponse != nil {
-		response.Revision = getResponse.Revision
-		if len(getResponse.Items) > 0 {
-			response.Items = invokev1.ToConfigurationGRPCItems(getResponse.Items)
-		}
+	response := &runtimev1pb.GetConfigurationResponse{
+		Configuration: &commonv1pb.Configuration{
+			AppID: req.AppID,
+			StoreName: in.StoreName,
+			Revision: getResponse.Revision,
+			Items: invokev1.ToConfigurationGRPCItems(getResponse.Items),
+		},
 	}
 
 	// save to cache
@@ -1152,7 +1153,14 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		return nil
 	}
 
-	return h.api.appChannel.OnConfigurationEvent(context.Background(), h.storeName, h.appId, e.Items)
+	c := &configuration.Configuration{
+		AppID:     h.appId,
+		StoreName: h.storeName,
+		Revision:  e.Revision,
+		Items:     e.Items,
+	}
+
+	return h.api.appChannel.OnConfigurationEvent(context.Background(), c)
 }
 
 func (a *api) SubscribeConfiguration(ctx context.Context, in *runtimev1pb.SubscribeConfigurationRequest) (*emptypb.Empty, error) {
@@ -1163,8 +1171,8 @@ func (a *api) SubscribeConfiguration(ctx context.Context, in *runtimev1pb.Subscr
 	}
 
 	req := &configuration.SubscribeRequest{
-		AppID: in.AppId,
-		Keys: in.Keys,
+		AppID:    in.AppId,
+		Keys:     in.Keys,
 		Metadata: in.Metadata,
 	}
 	handler := configurationEventHandler{

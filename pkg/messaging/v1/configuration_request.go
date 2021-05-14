@@ -5,6 +5,15 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
+func ToGrpcConfiguration(c *configuration.Configuration) *commonv1pb.Configuration {
+	return &commonv1pb.Configuration {
+		AppID: c.AppID,
+		StoreName: c.StoreName,
+		Revision: c.Revision,
+		Items: ToConfigurationGRPCItems(c.Items),
+	}
+}
+
 func ToConfigurationGRPCItems(items []*configuration.Item) []*commonv1pb.ConfigurationItem {
 	result := make([]*commonv1pb.ConfigurationItem, 0, len(items))
 
@@ -17,7 +26,7 @@ func ToConfigurationGRPCItems(items []*configuration.Item) []*commonv1pb.Configu
 
 func ToConfigurationGRPCItem(item *configuration.Item) *commonv1pb.ConfigurationItem {
 	return &commonv1pb.ConfigurationItem{
-		Key:      item.Key,
+		Name:     item.Name,
 		Content:  item.Content,
 		Tags:     item.Tags,
 		Metadata: item.Metadata,
@@ -36,7 +45,7 @@ func FromConfigurationGRPCItems(items []*commonv1pb.ConfigurationItem) []*config
 
 func FromConfigurationGRPCItem(item *commonv1pb.ConfigurationItem) *configuration.Item {
 	return &configuration.Item{
-		Key:      item.Key,
+		Name:     item.Name,
 		Content:  item.Content,
 		Tags:     item.Tags,
 		Metadata: item.Metadata,

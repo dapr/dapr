@@ -23,5 +23,5 @@ type AppChannel interface {
 	GetBaseAddress() string
 	GetAppConfig() (*config.ApplicationConfig, error)
 	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
-	OnConfigurationEvent(ctx context.Context, storeName string, appID string, items []*configuration.Item) error
+	OnConfigurationEvent(ctx context.Context, configuration *configuration.Configuration) error
 }

@@ -124,10 +124,26 @@ message StateOptions {
   StateConsistency consistency = 2;
 }
 
+// Configuration represents all the configuration items of specified application.
+message Configuration {
+  // Required. The name of configuration item
+  string appID = 1;
+
+  // Required. The configuration store name to get and save this configuration document.
+  string storeName = 2;
+
+  // Required. The revision of this configuration.
+  // It should be an incremental integers and changed when configuration is updated.
+  string revision = 3;
+
+  // Configuration Item list.
+  repeated ConfigurationItem items = 4;
+}
+
 // ConfigurationItem represents a configuration item with key, content and other information.
 message ConfigurationItem {
-  // Required. The key of configuration item
-  string key = 1;
+  // Required. The name of configuration item
+  string name = 1;
 
   // The content of configuration item
   // Empty if the configuration is not set, including the case that the configuration is changed from value-set to value-not-set.

@@ -16,7 +16,7 @@ type MockAppChannel struct {
 	mock.Mock
 }
 
-func (_m *MockAppChannel) OnConfigurationEvent(ctx context.Context, storeName string, appID string, items []*configuration.Item) error {
+func (_m *MockAppChannel) OnConfigurationEvent(ctx context.Context, c *configuration.Configuration) error {
 	panic("implement me")
 }
 

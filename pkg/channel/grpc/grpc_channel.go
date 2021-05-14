@@ -112,16 +112,13 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 }
 
 // OnConfigurationEvent sends configuration update events to app.
-func (g *Channel) OnConfigurationEvent(ctx context.Context, storeName string, appID string, items []*configuration.Item) error {
-	grpcItems := invokev1.ToConfigurationGRPCItems(items)
-	var request =  &runtimev1pb.ConfigurationEventRequest {
-		StoreName: storeName,
-		AppId: appID,
-		Items: grpcItems,
+func (g *Channel) OnConfigurationEvent(ctx context.Context, c *configuration.Configuration) error {
+	var event =  &runtimev1pb.ConfigurationEventRequest {
+		Configuration: invokev1.ToGrpcConfiguration(c),
 	}
 
 	clientV1 := runtimev1pb.NewAppCallbackClient(g.client)
-	_, err := clientV1.OnConfigurationEvent(context.Background(), request)
+	_, err := clientV1.OnConfigurationEvent(context.Background(), event)
 	if err != nil {
 		return err
 	}

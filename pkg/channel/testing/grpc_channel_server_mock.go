@@ -25,7 +25,7 @@ type MockServer struct {
 	TopicEventResponseStatus runtimev1pb.TopicEventResponse_TopicEventResponseStatus
 }
 
-func (m *MockServer) OnConfigurationEvent(ctx context.Context, request *runtimev1pb.ConfigurationEventRequest) (*emptypb.Empty, error) {
+func (m *MockServer) GetEffectiveConfiguration(ctx context.Context, empty *emptypb.Empty) (*runtimev1pb.GetEffectiveConfigurationResponse, error) {
 	panic("implement me")
 }
 
@@ -66,4 +66,8 @@ func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 	return &runtimev1pb.TopicEventResponse{
 		Status: m.TopicEventResponseStatus,
 	}, m.Error
+}
+
+func (m *MockServer) OnConfigurationEvent(ctx context.Context, request *runtimev1pb.ConfigurationEventRequest) (*emptypb.Empty, error) {
+	panic("implement me")
 }

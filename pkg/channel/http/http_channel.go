@@ -222,7 +222,7 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *
 }
 
 // OnConfigurationEvent sends configuration update events to app.
-func (g *Channel) OnConfigurationEvent(ctx context.Context, storeName string, appID string, items []*configuration.Item) error {
+func (h *Channel) OnConfigurationEvent(ctx context.Context, c *configuration.Configuration) error {
 	// TODO: implement it later
 	return nil
 }

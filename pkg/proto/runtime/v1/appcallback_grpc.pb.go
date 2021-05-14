@@ -35,6 +35,8 @@ type AppCallbackClient interface {
 	OnBindingEvent(ctx context.Context, in *BindingEventRequest, opts ...grpc.CallOption) (*BindingEventResponse, error)
 	// Listens configuration update events from the configuration store.
 	OnConfigurationEvent(ctx context.Context, in *ConfigurationEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Get effective configuration in app. Daprd will call this method to do inspection.
+	GetEffectiveConfiguration(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetEffectiveConfigurationResponse, error)
 }
 
 type appCallbackClient struct {
@@ -99,6 +101,15 @@ func (c *appCallbackClient) OnConfigurationEvent(ctx context.Context, in *Config
 	return out, nil
 }
 
+func (c *appCallbackClient) GetEffectiveConfiguration(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetEffectiveConfigurationResponse, error) {
+	out := new(GetEffectiveConfigurationResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallback/GetEffectiveConfiguration", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AppCallbackServer is the server API for AppCallback service.
 // All implementations should embed UnimplementedAppCallbackServer
 // for forward compatibility
@@ -118,6 +129,8 @@ type AppCallbackServer interface {
 	OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error)
 	// Listens configuration update events from the configuration store.
 	OnConfigurationEvent(context.Context, *ConfigurationEventRequest) (*emptypb.Empty, error)
+	// Get effective configuration in app. Daprd will call this method to do inspection.
+	GetEffectiveConfiguration(context.Context, *emptypb.Empty) (*GetEffectiveConfigurationResponse, error)
 }
 
 // UnimplementedAppCallbackServer should be embedded to have forward compatible implementations.
@@ -141,6 +154,9 @@ func (UnimplementedAppCallbackServer) OnBindingEvent(context.Context, *BindingEv
 }
 func (UnimplementedAppCallbackServer) OnConfigurationEvent(context.Context, *ConfigurationEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnConfigurationEvent not implemented")
+}
+func (UnimplementedAppCallbackServer) GetEffectiveConfiguration(context.Context, *emptypb.Empty) (*GetEffectiveConfigurationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetEffectiveConfiguration not implemented")
 }
 
 // UnsafeAppCallbackServer may be embedded to opt out of forward compatibility for this service.
@@ -262,6 +278,24 @@ func _AppCallback_OnConfigurationEvent_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AppCallback_GetEffectiveConfiguration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AppCallbackServer).GetEffectiveConfiguration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.AppCallback/GetEffectiveConfiguration",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AppCallbackServer).GetEffectiveConfiguration(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AppCallback_ServiceDesc is the grpc.ServiceDesc for AppCallback service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -292,6 +326,10 @@ var AppCallback_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OnConfigurationEvent",
 			Handler:    _AppCallback_OnConfigurationEvent_Handler,
+		},
+		{
+			MethodName: "GetEffectiveConfiguration",
+			Handler:    _AppCallback_GetEffectiveConfiguration_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

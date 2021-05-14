@@ -39,6 +39,9 @@ service AppCallback {
 
   // Listens configuration update events from the configuration store.
   rpc OnConfigurationEvent(ConfigurationEventRequest) returns (google.protobuf.Empty) {}
+
+  // Get effective configuration in app. Daprd will call this method to do inspection.
+  rpc GetEffectiveConfiguration(google.protobuf.Empty) returns (GetEffectiveConfigurationResponse) {}
 }
 
 // TopicEventRequest message is compatible with CloudEvent spec v1.0
@@ -157,13 +160,10 @@ message ListInputBindingsResponse {
 
 // ConfigurationEventRequest represents update events of configuration items.
 message ConfigurationEventRequest {
-  // Required. The name of the configuration store component.
-  string store_name = 1;
+  common.v1.Configuration configuration = 1;
+}
 
-  // The application id.
-  // Only used for admin client.
-  string app_id = 2;
-
-  // Required. The updated configuration items.
-  repeated common.v1.ConfigurationItem items = 3;
+// GetEffectiveConfigurationResponse represents the effective configuration in app.
+message GetEffectiveConfigurationResponse {
+  repeated common.v1.Configuration configuration = 1;
 }

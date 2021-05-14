@@ -431,10 +431,7 @@ message GetConfigurationRequest {
 // GetConfigurationResponse is the response conveying the list of configuration values.
 // It should be the FULL configuration of specified application which contains all of its configuration items.
 message GetConfigurationResponse {
-  // the revision of app's configurations.
-  string revision = 1;
-  // The list of items containing configuration values.
-  repeated common.v1.ConfigurationItem items = 2;
+  common.v1.Configuration configuration = 1;
 }
 
 // SubscribeConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.

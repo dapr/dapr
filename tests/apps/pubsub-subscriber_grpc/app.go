@@ -241,8 +241,11 @@ func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest)
 	return &pb.BindingEventResponse{}, nil
 }
 
-
 func (s *server) OnConfigurationEvent(ctx context.Context, in *pb.ConfigurationEventRequest) (*emptypb.Empty, error) {
-	fmt.Printf("Received Configuration Event from store %s\n", in.StoreName)
+	fmt.Printf("Received Configuration Event from store %s\n", in.Configuration.StoreName)
 	return &emptypb.Empty{}, nil
+}
+
+func (s *server) GetEffectiveConfiguration(ctx context.Context, empty *emptypb.Empty) (*pb.GetEffectiveConfigurationResponse, error) {
+	panic("implement me")
 }
