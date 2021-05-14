@@ -184,32 +184,6 @@ func TestGetServiceAddress(t *testing.T) {
 	}
 }
 
-func TestKubernetesDNS(t *testing.T) {
-	testCases := []struct {
-		name          string
-		namespace     string
-		clusterDomain string
-		expect        string
-	}{
-		{
-			name:          "a",
-			namespace:     "b",
-			clusterDomain: "cluster.local",
-			expect:        "a.b.svc.cluster.local",
-		},
-		{
-			name:          "app",
-			namespace:     "default",
-			clusterDomain: "selfdefine.domain",
-			expect:        "app.default.svc.selfdefine.domain",
-		},
-	}
-	for _, tc := range testCases {
-		dns := getKubernetesDNS(tc.name, tc.namespace, tc.clusterDomain)
-		assert.Equal(t, tc.expect, dns)
-	}
-}
-
 func TestGetMetricsPort(t *testing.T) {
 	t.Run("metrics port override", func(t *testing.T) {
 		m := map[string]string{daprMetricsPortKey: "5050"}

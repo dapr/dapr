@@ -463,11 +463,7 @@ func isResourceDaprEnabled(annotations map[string]string) bool {
 }
 
 func getServiceAddress(name, namespace, clusterDomain string, port int) string {
-	return fmt.Sprintf("%s:%d", getKubernetesDNS(name, namespace, clusterDomain), port)
-}
-
-func getKubernetesDNS(name, namespace, clusterDomain string) string {
-	return fmt.Sprintf("%s.%s.svc.%s", name, namespace, clusterDomain)
+	return fmt.Sprintf("%s.%s.svc.%s:%d", name, namespace, clusterDomain, port)
 }
 
 func getPullPolicy(pullPolicy string) corev1.PullPolicy {
