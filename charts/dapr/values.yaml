@@ -9,6 +9,9 @@ global:
   ha:
     enabled: false
     replicaCount: 3
+    disruption:
+      minimumAvailable: ""
+      maximumUnavailable: "25%"
   prometheus:
     enabled: true
     port: 9090
