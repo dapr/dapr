@@ -56,13 +56,14 @@ type server struct {
 	logger             logger.Logger
 	maxConnectionAge   *time.Duration
 	authToken          string
+	apiSpec            config.APISpec
 }
 
 var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
 var internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
 
 // NewAPIServer returns a new user facing gRPC API server
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec) Server {
 	return &server{
 		api:         api,
 		config:      config,
@@ -71,6 +72,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		kind:        apiServer,
 		logger:      apiServerLogger,
 		authToken:   auth.GetAPIToken(),
+		apiSpec:     apiSpec,
 	}
 }
 
@@ -143,6 +145,11 @@ func (s *server) generateWorkloadCert() error {
 func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 	intr := []grpc_go.UnaryServerInterceptor{}
+
+	if len(s.apiSpec.Allowed) > 0 {
+		s.logger.Info("enabled API access list on gRPC server")
+		intr = append(intr, setAPIEndpointsMiddlewareUnary(s.apiSpec.Allowed))
+	}
 
 	if s.authToken != "" {
 		s.logger.Info("enabled token authentication on gRPC server")

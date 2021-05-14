@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
+	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -129,7 +131,7 @@ func NewActors(
 		appHealthy:          true,
 		certChain:           certChain,
 		tracingSpec:         tracingSpec,
-		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy),
+		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
 	}
 }
 
@@ -250,7 +252,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
 						err := a.deactivateActor(actorType, actorID)
 						if err != nil {
-							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
+							log.Errorf("failed to deactivate actor %s: %s", actorKey, err)
 						}
 					}(key.(string))
 				}
@@ -320,7 +322,7 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID))
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.Reentrancy.MaxStackDepth))
 	}
 
 	return val.(*actor)
@@ -330,7 +332,20 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	actorTypeID := req.Actor()
 
 	act := a.getOrCreateActor(actorTypeID.GetActorType(), actorTypeID.GetActorId())
-	err := act.lock()
+
+	// Reentrancy to determine how we lock.
+	var reentrancyID *string
+	if headerValue, ok := req.Metadata()["Dapr-Reentrancy-Id"]; a.reentrancyEnabled && ok {
+		reentrancyID = &headerValue.GetValues()[0]
+	} else {
+		reentrancyHeader := fasthttp.RequestHeader{}
+		uuid := uuid.New().String()
+		reentrancyHeader.Add("Dapr-Reentrancy-Id", uuid)
+		req.AddHeaders(&reentrancyHeader)
+		reentrancyID = &uuid
+	}
+
+	err := act.lock(reentrancyID)
 	if err != nil {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
 	}
@@ -362,6 +377,8 @@ func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
 	targetAddress, targetID string,
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	log.Infof("Entering callRemoteActor: %s - %s", req.Actor().GetActorType(), req.Actor().GetActorId())
+	log.Infof("callRemoteActor Request Headers: %v", req.Metadata())
 	conn, err := a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, false, false)
 	if err != nil {
 		return nil, err
@@ -518,7 +535,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 					if !actor.isBusy() {
 						err := a.deactivateActor(actorType, actorID)
 						if err != nil {
-							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
+							log.Errorf("failed to deactivate actor %s: %s", actorKey, err)
 						}
 						break
 					}
@@ -541,7 +558,7 @@ func (a *actorsRuntime) evaluateReminders() {
 	for _, t := range a.config.HostedActorTypes {
 		vals, _, err := a.getRemindersForActorType(t)
 		if err != nil {
-			log.Debugf("error getting reminders for actor type %s: %s", t, err)
+			log.Errorf("error getting reminders for actor type %s: %s", t, err)
 		} else {
 			a.remindersLock.Lock()
 			a.reminders[t] = vals
@@ -568,7 +585,7 @@ func (a *actorsRuntime) evaluateReminders() {
 							a.activeReminders.Store(reminderKey, stop)
 							err := a.startReminder(&r, stop)
 							if err != nil {
-								log.Debugf("error starting reminder: %s", err)
+								log.Errorf("error starting reminder: %s", err)
 							}
 						}
 					}
@@ -693,7 +710,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 					case <-ticker.C:
 						err := a.executeReminder(actorType, actorID, dueTime, period, reminder, data)
 						if err != nil {
-							log.Debugf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
+							log.Errorf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
 						}
 					case <-stop:
 						log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, dueTime, period, data)
@@ -737,7 +754,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 		key := a.constructCompositeKey(actorType, actorID)
 		err = a.updateReminderTrack(key, reminder)
 	} else {
-		log.Debugf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
+		log.Errorf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}
 	return err
 }
@@ -890,7 +907,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
 			req.Period, req.Callback, req.Data)
 		if err != nil {
-			log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+			log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 		}
 
 		ticker := a.configureTicker(period)
@@ -904,7 +921,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 					err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
 						req.Period, req.Callback, req.Data)
 					if err != nil {
-						log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+						log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 					}
 				} else {
 					a.DeleteTimer(ctx, &DeleteTimerRequest{
@@ -950,7 +967,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	req.WithRawData(b, invokev1.JSONContentType)
 	_, err = a.callLocalActor(context.Background(), req)
 	if err != nil {
-		log.Debugf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
+		log.Errorf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
 	}
 	return err
 }

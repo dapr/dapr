@@ -36,6 +36,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
+	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/middleware"
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
@@ -156,6 +157,13 @@ type DaprRuntime struct {
 
 type componentPreprocessRes struct {
 	unreadyDependency string
+}
+
+type pubsubSubscribedMessage struct {
+	cloudEvent map[string]interface{}
+	data       []byte
+	topic      string
+	metadata   map[string]string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -332,6 +340,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("internal gRPC server is running on port %v", a.runtimeConfig.InternalGRPCPort)
 
+	if a.daprHTTPAPI != nil {
+		a.daprHTTPAPI.MarkStatusAsOutboundReady()
+	}
+
 	a.blockUntilAppIsReady()
 
 	err = a.createAppChannel()
@@ -414,7 +426,7 @@ func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 }
 
 func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
-	var publishFunc pubsub.Handler
+	var publishFunc func(ctx context.Context, msg *pubsubSubscribedMessage) error
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
 		publishFunc = a.publishMessageHTTP
@@ -438,6 +450,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 		log.Debugf("subscribing to topic=%s on pubsub=%s", topic, name)
 
+		routeMetadata := route.metadata
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic:    topic,
 			Metadata: route.metadata,
@@ -447,9 +460,38 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			}
 
 			msg.Metadata[pubsubName] = name
-			return publishFunc(ctx, msg)
+
+			rawPayload, err := contrib_metadata.IsRawPayload(routeMetadata)
+			if err != nil {
+				log.Errorf("error deserializing pubsub metadata: %s", err)
+				return err
+			}
+
+			var cloudEvent map[string]interface{}
+			data := msg.Data
+			if rawPayload {
+				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
+				data, err = a.json.Marshal(cloudEvent)
+				if err != nil {
+					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+					return err
+				}
+			} else {
+				err = a.json.Unmarshal(msg.Data, &cloudEvent)
+				if err != nil {
+					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+					return err
+				}
+			}
+
+			return publishFunc(ctx, &pubsubSubscribedMessage{
+				cloudEvent: cloudEvent,
+				data:       data,
+				topic:      msg.Topic,
+				metadata:   msg.Metadata,
+			})
 		}); err != nil {
-			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
+			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
 		}
 	}
 
@@ -717,7 +759,7 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize)
 
-	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
+	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
 	server.StartNonBlocking()
 }
 
@@ -730,7 +772,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec)
 	err := server.StartNonBlocking()
 	return err
 }
@@ -1120,13 +1162,8 @@ func (a *DaprRuntime) initNameResolution() error {
 	return nil
 }
 
-func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMessage) error {
-	var cloudEvent map[string]interface{}
-	err := a.json.Unmarshal(msg.Data, &cloudEvent)
-	if err != nil {
-		log.Debug(errors.Errorf("failed to deserialize cloudevent: %s", err))
-		return err
-	}
+func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscribedMessage) error {
+	cloudEvent := msg.cloudEvent
 
 	if pubsub.HasExpired(cloudEvent) {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
@@ -1135,15 +1172,15 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMes
 
 	var span *trace.Span
 
-	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
+	route := a.topicRoutes[msg.metadata[pubsubName]].routes[msg.topic]
 	req := invokev1.NewInvokeMethodRequest(route.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.Data, contenttype.CloudEventContentType)
+	req.WithRawData(msg.data, contenttype.CloudEventContentType)
 
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
-		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 	}
 
@@ -1155,7 +1192,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMes
 	statusCode := int(resp.Status().Code)
 
 	if span != nil {
-		m := diag.ConstructSubscriptionSpanAttributes(msg.Topic)
+		m := diag.ConstructSubscriptionSpanAttributes(msg.topic)
 		diag.AddAttributesToSpan(span, m)
 		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
 		span.End()
@@ -1202,13 +1239,8 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMes
 	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
 }
 
-func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMessage) error {
-	var cloudEvent map[string]interface{}
-	err := a.json.Unmarshal(msg.Data, &cloudEvent)
-	if err != nil {
-		log.Debugf("error deserializing cloud events proto: %s", err)
-		return err
-	}
+func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
+	cloudEvent := msg.cloudEvent
 
 	if pubsub.HasExpired(cloudEvent) {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
@@ -1221,15 +1253,15 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMes
 		DataContentType: cloudEvent[pubsub.DataContentTypeField].(string),
 		Type:            cloudEvent[pubsub.TypeField].(string),
 		SpecVersion:     cloudEvent[pubsub.SpecVersionField].(string),
-		Topic:           msg.Topic,
-		PubsubName:      msg.Metadata[pubsubName],
+		Topic:           msg.topic,
+		PubsubName:      msg.metadata[pubsubName],
 	}
 
 	if data, ok := cloudEvent[pubsub.DataBase64Field]; ok && data != nil {
 		decoded, decodeErr := base64.StdEncoding.DecodeString(data.(string))
 		if decodeErr != nil {
 			log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
-			return err
+			return decodeErr
 		}
 
 		envelope.Data = decoded
@@ -1247,7 +1279,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMes
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
-		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 
 		// no ops if trace is off
 		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
@@ -1300,7 +1332,7 @@ func (a *DaprRuntime) initActors() error {
 		return err
 	}
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.appConfig.Entities,
-		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors, a.namespace)
+		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors, a.namespace, a.appConfig.Reentrancy)
 	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features)
 	err = act.Init()
 	a.actor = act
