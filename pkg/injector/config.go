@@ -14,7 +14,7 @@ type Config struct {
 	SidecarImage           string `envconfig:"SIDECAR_IMAGE" required:"true"`
 	SidecarImagePullPolicy string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
 	Namespace              string `envconfig:"NAMESPACE" required:"true"`
-	KubeClusterDomain      string `envconfig:"KUBE_CLUSTER_DOMAIN"`
+	KubeClusterDomain      string `envconfig:"KUBE_CLUSTER_DOMAIN" ignored:"true"`
 }
 
 // NewConfigWithDefaults returns a Config object with default values already
@@ -23,7 +23,6 @@ type Config struct {
 func NewConfigWithDefaults() Config {
 	return Config{
 		SidecarImagePullPolicy: "Always",
-		KubeClusterDomain:      "cluster.local",
 	}
 }
 

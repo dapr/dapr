@@ -37,6 +37,13 @@ func main() {
 		log.Fatalf("error getting config: %s", err)
 	}
 
+	clusterDomain, err := utils.GetKubeClusterDomain()
+	if err != nil {
+		log.Errorf("failed to get clusterDomain err:%s, set default:%s", err, utils.DefaultKubeClusterDomain)
+		clusterDomain = utils.DefaultKubeClusterDomain
+	}
+	cfg.KubeClusterDomain = clusterDomain
+
 	kubeClient := utils.GetKubeClient()
 	conf := utils.GetConfig()
 	daprClient, _ := scheme.NewForConfig(conf)
