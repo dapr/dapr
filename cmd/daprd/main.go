@@ -108,6 +108,8 @@ import (
 	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
 	"github.com/dapr/components-contrib/bindings/twilio/sms"
 	"github.com/dapr/components-contrib/bindings/twitter"
+	bindings_zeebe_command "github.com/dapr/components-contrib/bindings/zeebe/command"
+	bindings_zeebe_jobworker "github.com/dapr/components-contrib/bindings/zeebe/jobworker"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware
@@ -304,6 +306,9 @@ func main() {
 			bindings_loader.NewInput("rethinkdb.statechange", func() bindings.InputBinding {
 				return statechange.NewRethinkDBStateChangeBinding(logContrib)
 			}),
+			bindings_loader.NewInput("zeebe.jobworker", func() bindings.InputBinding {
+				return bindings_zeebe_jobworker.NewZeebeJobWorker(logContrib)
+			}),
 		),
 		runtime.WithOutputBindings(
 			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
@@ -398,6 +403,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("smtp", func() bindings.OutputBinding {
 				return smtp.NewSMTP(logContrib)
+			}),
+			bindings_loader.NewOutput("zeebe.command", func() bindings.OutputBinding {
+				return bindings_zeebe_command.NewZeebeCommand(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
