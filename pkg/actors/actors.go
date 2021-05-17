@@ -728,6 +728,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 							if quit, _ := a.stopReminderIfRepetitionsOver(reminder, actorID, actorType, repetitionsLeft); quit {
 								return
 							}
+						}
 					case <-stop:
 						log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, dueTime, period, data)
 						return
