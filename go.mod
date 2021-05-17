@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.0
-	github.com/dapr/components-contrib v1.0.1-0.20210511164829-e8628adafaf7
+	github.com/dapr/components-contrib v1.0.1-0.20210514161116-efd198026fa8
 	github.com/dapr/kit v0.0.1
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
