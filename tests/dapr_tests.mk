@@ -24,6 +24,7 @@ actorapp \
 actorclientapp \
 actorfeatures \
 actorinvocationapp \
+actorreentrancy \
 runtime \
 runtime_init \
 middleware \
@@ -239,9 +240,13 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_reentrant_actor.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
+
+	# Show the installed configurations
+	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
 
 # Clean up test environment
 clean-test-env:

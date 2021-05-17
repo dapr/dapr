@@ -1626,15 +1626,16 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
-	testPubSubMessage := &pubsub.NewMessage{
-		Topic:    topic,
-		Data:     b,
-		Metadata: map[string]string{pubsubName: TestPubsubName},
+	testPubSubMessage := &pubsubSubscribedMessage{
+		cloudEvent: envelope,
+		topic:      topic,
+		data:       b,
+		metadata:   map[string]string{pubsubName: TestPubsubName},
 	}
 
-	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)
+	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.Data, contenttype.CloudEventContentType)
+	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
@@ -1666,19 +1667,23 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 
-		delete(envelope, pubsub.TraceIDField)
-		bNoTraceID, err := json.Marshal(envelope)
+		// Generate a new envelope to avoid affecting other tests by modifying shared `envelope`
+		envelopeNoTraceID := pubsub.NewCloudEventsEnvelope(
+			"", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
+		delete(envelopeNoTraceID, pubsub.TraceIDField)
+		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
 		assert.Nil(t, err)
 
-		message := &pubsub.NewMessage{
-			Topic:    topic,
-			Data:     bNoTraceID,
-			Metadata: map[string]string{pubsubName: TestPubsubName},
+		message := &pubsubSubscribedMessage{
+			cloudEvent: envelopeNoTraceID,
+			topic:      topic,
+			data:       bNoTraceID,
+			metadata:   map[string]string{pubsubName: TestPubsubName},
 		}
 
-		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.Topic)
+		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.topic)
 		fakeReqNoTraceID.WithHTTPExtension(http.MethodPost, "")
-		fakeReqNoTraceID.WithRawData(message.Data, contenttype.CloudEventContentType)
+		fakeReqNoTraceID.WithRawData(message.data, contenttype.CloudEventContentType)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReqNoTraceID).Return(fakeResp, nil)
 
 		// act
@@ -1741,7 +1746,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
-		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
+		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
 		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
@@ -1869,7 +1874,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
-		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
+		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
 		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
@@ -1883,25 +1888,27 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
-	testPubSubMessage := &pubsub.NewMessage{
-		Topic:    topic,
-		Data:     b,
-		Metadata: map[string]string{pubsubName: TestPubsubName},
+	testPubSubMessage := &pubsubSubscribedMessage{
+		cloudEvent: envelope,
+		topic:      topic,
+		data:       b,
+		metadata:   map[string]string{pubsubName: TestPubsubName},
 	}
 
 	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "")
 	base64, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
-	testPubSubMessageBase64 := &pubsub.NewMessage{
-		Topic:    topic,
-		Data:     base64,
-		Metadata: map[string]string{pubsubName: TestPubsubName},
+	testPubSubMessageBase64 := &pubsubSubscribedMessage{
+		cloudEvent: envelope,
+		topic:      topic,
+		data:       base64,
+		metadata:   map[string]string{pubsubName: TestPubsubName},
 	}
 
 	testCases := []struct {
 		name             string
-		message          *pubsub.NewMessage
+		message          *pubsubSubscribedMessage
 		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
 		errorExpected    bool
 		noResponseStatus bool
@@ -2588,6 +2595,88 @@ func TestInitBindings(t *testing.T) {
 		err = r.initBinding(output)
 		assert.NoError(t, err)
 	})
+}
+
+func TestActorReentrancyConfig(t *testing.T) {
+	fullConfig := `{
+		"entities":["actorType1", "actorType2"],
+		"actorIdleTimeout": "1h",
+		"actorScanInterval": "30s",
+		"drainOngoingCallTimeout": "30s",
+		"drainRebalancedActors": true,
+		"reentrancy": {
+		  "enabled": true,
+		  "maxStackDepth": 64
+		}
+	  }`
+	limit := 64
+
+	minimumConfig := `{
+		"entities":["actorType1", "actorType2"],
+		"actorIdleTimeout": "1h",
+		"actorScanInterval": "30s",
+		"drainOngoingCallTimeout": "30s",
+		"drainRebalancedActors": true,
+		"reentrancy": {
+		  "enabled": true
+		}
+	  }`
+
+	emptyConfig := `{
+		"entities":["actorType1", "actorType2"],
+		"actorIdleTimeout": "1h",
+		"actorScanInterval": "30s",
+		"drainOngoingCallTimeout": "30s",
+		"drainRebalancedActors": true
+	  }`
+
+	testcases := []struct {
+		Name               string
+		Config             []byte
+		ExpectedReentrancy bool
+		ExpectedLimit      *int
+	}{
+		{
+			Name:               "Test full configuration",
+			Config:             []byte(fullConfig),
+			ExpectedReentrancy: true,
+			ExpectedLimit:      &limit,
+		},
+		{
+			Name:               "Test minimum configuration",
+			Config:             []byte(minimumConfig),
+			ExpectedReentrancy: true,
+			ExpectedLimit:      nil,
+		},
+		{
+			Name:               "Test minimum configuration",
+			Config:             []byte(emptyConfig),
+			ExpectedReentrancy: false,
+			ExpectedLimit:      nil,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.Name, func(t *testing.T) {
+			r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+
+			mockAppChannel := new(channelt.MockAppChannel)
+			r.appChannel = mockAppChannel
+			r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+
+			configResp := config.ApplicationConfig{}
+			json.Unmarshal(tc.Config, &configResp)
+
+			mockAppChannel.On("GetAppConfig").Return(&configResp, nil)
+
+			r.loadAppConfiguration()
+
+			assert.NotNil(t, r.appConfig)
+
+			assert.Equal(t, tc.ExpectedReentrancy, r.appConfig.Reentrancy.Enabled)
+			assert.Equal(t, tc.ExpectedLimit, r.appConfig.Reentrancy.MaxStackDepth)
+		})
+	}
 }
 
 type mockPubSub struct {

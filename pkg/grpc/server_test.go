@@ -60,4 +60,27 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		assert.Equal(t, 1, len(serverOption))
 	})
+
+	t.Run("should have api access rules middleware", func(t *testing.T) {
+		fakeServer := &server{
+			config: ServerConfig{},
+			tracingSpec: config.TracingSpec{
+				SamplingRate: "0",
+			},
+			renewMutex: &sync.Mutex{},
+			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "state",
+						Version: "v1",
+					},
+				},
+			},
+		}
+
+		serverOption := fakeServer.getMiddlewareOptions()
+
+		assert.Equal(t, 1, len(serverOption))
+	})
 }

@@ -143,8 +143,8 @@ github.com/Shopify/toxiproxy v2.1.4+incompatible/go.mod h1:OXgGpZ6Cli1/URJOF1DMx
 github.com/VividCortex/gohistogram v1.0.0/go.mod h1:Pf5mBqqDxYaXu3hDrrU+w6nw50o/4+TcAqDqk/vUH7g=
 github.com/a8m/documentdb v1.2.1-0.20190920062420-efdd52fe0905 h1:lrOYmNobGcyWEjvMIMJERJx1Y4ttPFobY7RHAD+6e10=
 github.com/a8m/documentdb v1.2.1-0.20190920062420-efdd52fe0905/go.mod h1:4Z0mpi7fkyqjxUdGiNMO3vagyiUoiwLncaIX6AsW5z0=
-github.com/aerospike/aerospike-client-go v2.7.0+incompatible h1:NbjGs0ZMHKge1+0m+XLdhcDm/2gCfjnlasSTtKSr8j4=
-github.com/aerospike/aerospike-client-go v2.7.0+incompatible/go.mod h1:zj8LBEnWBDOVEIJt8LvaRvDG5ARAoa5dBeHaB472NRc=
+github.com/aerospike/aerospike-client-go v4.5.0+incompatible h1:6ALev/Ge4jW5avSLoqgvPYTh+FLeeDD9xDhzoMCNgOo=
+github.com/aerospike/aerospike-client-go v4.5.0+incompatible/go.mod h1:zj8LBEnWBDOVEIJt8LvaRvDG5ARAoa5dBeHaB472NRc=
 github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5/go.mod h1:SkGFH1ia65gfNATL8TAiHDNxPzPdmEL5uirI2Uyuz6c=
 github.com/agnivade/levenshtein v1.0.1/go.mod h1:CURSv5d9Uaml+FovSIICkLbAUZ9S4RqaHDIsdSBg7lM=
 github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b h1:WMhlIaJkDgEQSVJQM06YV+cYUl1r5OY5//ijMXJNqtA=
@@ -262,8 +262,8 @@ github.com/cyphar/filepath-securejoin v0.2.2 h1:jCwT2GTP+PY5nBz3c/YL5PAIbusElVrP
 github.com/cyphar/filepath-securejoin v0.2.2/go.mod h1:FpkQEhXnPnOthhzymB7CGsFk2G9VLXONKD9G7QGMM+4=
 github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjmUv0qGF43aKCIKVE9A=
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
-github.com/dapr/components-contrib v1.0.1-0.20210504183956-c314444b5354 h1:kYZswtqQub9zG55u+6F0oVi98BXxnPKHvO99dDE/s5U=
-github.com/dapr/components-contrib v1.0.1-0.20210504183956-c314444b5354/go.mod h1:XChBGNQy10mEp1t4+iVK9ruNqKIDT6G2Dx7dcK+roGs=
+github.com/dapr/components-contrib v1.0.1-0.20210511164829-e8628adafaf7 h1:XurkXadN2dnXBx1RZOSyIGsd4M376hov9QwnVWxueqc=
+github.com/dapr/components-contrib v1.0.1-0.20210511164829-e8628adafaf7/go.mod h1:ODS3oWkP3thb+U/K+hMvWz1AaswAAPWgYF5EVlMKaeE=
 github.com/dapr/kit v0.0.1 h1:kvUrWOu2nR0rgbQ1fSRVN47RvpqOLtmWQpgwTMyf634=
 github.com/dapr/kit v0.0.1/go.mod h1:ejTo6+kTWZArs5xhru62CxdUF+JKHRdvENtL1KmhQrs=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
