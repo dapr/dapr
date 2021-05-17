@@ -1097,7 +1097,6 @@ func TestHostValidation(t *testing.T) {
 	})
 }
 
-
 func TestParseDuration(t *testing.T) {
 	t.Run("parse existing duration", func(t *testing.T) {
 		duration, repetition, err := parseDuration("0h30m0s")
