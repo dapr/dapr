@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/dapr/components-contrib/bindings"
+	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -41,6 +42,7 @@ import (
 type API interface {
 	APIEndpoints() []Endpoint
 	MarkStatusAsReady()
+	MarkStatusAsOutboundReady()
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
@@ -62,6 +64,7 @@ type api struct {
 	id                       string
 	extendedMetadata         sync.Map
 	readyStatus              bool
+	outboundReadyStatus      bool
 	tracingSpec              config.TracingSpec
 	shutdown                 func()
 }
@@ -156,6 +159,11 @@ func (a *api) APIEndpoints() []Endpoint {
 // MarkStatusAsReady marks the ready status of dapr
 func (a *api) MarkStatusAsReady() {
 	a.readyStatus = true
+}
+
+// MarkStatusAsOutboundReady marks the ready status of dapr for outbound traffic
+func (a *api) MarkStatusAsOutboundReady() {
+	a.outboundReadyStatus = true
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {
@@ -331,6 +339,12 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Route:   "healthz",
 			Version: apiVersionV1,
 			Handler: a.onGetHealthz,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "healthz/outbound",
+			Version: apiVersionV1,
+			Handler: a.onGetOutboundHealthz,
 		},
 	}
 }
@@ -1231,48 +1245,60 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
 	metadata := getMetadataFromRequest(reqCtx)
+	rawPayload, metaErr := contrib_metadata.IsRawPayload(metadata)
+	if metaErr != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_REQUEST_METADATA",
+			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		log.Debug(msg)
+		return
+	}
 
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 
-	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
-		ID:              a.id,
-		Topic:           topic,
-		DataContentType: contentType,
-		Data:            body,
-		TraceID:         corID,
-		Pubsub:          pubsubName,
-	})
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-			fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
+	data := body
+	if !rawPayload {
+		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+			ID:              a.id,
+			Topic:           topic,
+			DataContentType: contentType,
+			Data:            body,
+			TraceID:         corID,
+			Pubsub:          pubsubName,
+		})
+		if err != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+			respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+			log.Debug(msg)
+			return
+		}
 
-	features := thepubsub.Features()
+		features := thepubsub.Features()
 
-	pubsub.ApplyMetadata(envelope, features, metadata)
-	b, err := a.json.Marshal(envelope)
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-			fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
+		pubsub.ApplyMetadata(envelope, features, metadata)
+
+		data, err = a.json.Marshal(envelope)
+		if err != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
+			respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+			log.Debug(msg)
+			return
+		}
 	}
 
 	req := pubsub.PublishRequest{
 		PubsubName: pubsubName,
 		Topic:      topic,
-		Data:       b,
+		Data:       data,
 		Metadata:   metadata,
 	}
 
-	err = a.pubsubAdapter.Publish(&req)
+	err := a.pubsubAdapter.Publish(&req)
 	if err != nil {
 		status := fasthttp.StatusInternalServerError
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",
@@ -1309,6 +1335,16 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 
 func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.readyStatus {
+		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		log.Debug(msg)
+	} else {
+		respondEmpty(reqCtx)
+	}
+}
+
+func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
+	if !a.outboundReadyStatus {
 		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)

@@ -13,9 +13,9 @@ package operator
 
 import (
 	proto "github.com/golang/protobuf/proto"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -359,7 +359,7 @@ var file_dapr_proto_operator_v1_operator_proto_goTypes = []interface{}{
 	(*GetConfigurationRequest)(nil),   // 2: dapr.proto.operator.v1.GetConfigurationRequest
 	(*GetConfigurationResponse)(nil),  // 3: dapr.proto.operator.v1.GetConfigurationResponse
 	(*ListSubscriptionsResponse)(nil), // 4: dapr.proto.operator.v1.ListSubscriptionsResponse
-	(*empty.Empty)(nil),               // 5: google.protobuf.Empty
+	(*emptypb.Empty)(nil),             // 5: google.protobuf.Empty
 }
 var file_dapr_proto_operator_v1_operator_proto_depIdxs = []int32{
 	5, // 0: dapr.proto.operator.v1.Operator.ComponentUpdate:input_type -> google.protobuf.Empty
