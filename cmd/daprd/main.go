@@ -230,9 +230,6 @@ func main() {
 			}),
 		),
 		runtime.WithPubSubs(
-			pubsub_loader.New("alicloud.rocketmq", func() pubs.PubSub {
-				return rocketmq_pubsub.NewRocketMQ(logContrib)
-			}),
 			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
 				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
 			}),
@@ -263,6 +260,9 @@ func main() {
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)
 			}),
+			pubsub_loader.New("rocketmq", func() pubs.PubSub {
+				return rocketmq_pubsub.NewRocketMQ(logContrib)
+			}),
 			pubsub_loader.New("snssqs", func() pubs.PubSub {
 				return pubsub_snssqs.NewSnsSqs(logContrib)
 			}),
@@ -279,32 +279,17 @@ func main() {
 			}),
 		),
 		runtime.WithInputBindings(
-			bindings_loader.NewInput("alicloud.dingtalk.webhook", func() bindings.InputBinding {
-				return dingtalk_webhook.NewDingTalkWebhook(logContrib)
-			}),
-			bindings_loader.NewInput("alicloud.nacos", func() bindings.InputBinding {
-				return nacos.NewNacos(logContrib)
-			}),
-			bindings_loader.NewInput("alicloud.rocketmq", func() bindings.InputBinding {
-				return rocketmq_binding.NewAliCloudRocketMQ(logContrib)
-			}),
 			bindings_loader.NewInput("aws.sqs", func() bindings.InputBinding {
 				return sqs.NewAWSSQS(logContrib)
 			}),
 			bindings_loader.NewInput("aws.kinesis", func() bindings.InputBinding {
 				return kinesis.NewAWSKinesis(logContrib)
 			}),
+			bindings_loader.NewInput("azure.eventgrid", func() bindings.InputBinding {
+				return eventgrid.NewAzureEventGrid(logContrib)
+			}),
 			bindings_loader.NewInput("azure.eventhubs", func() bindings.InputBinding {
 				return eventhubs.NewAzureEventHubs(logContrib)
-			}),
-			bindings_loader.NewInput("kafka", func() bindings.InputBinding {
-				return kafka.NewKafka(logContrib)
-			}),
-			bindings_loader.NewInput("mqtt", func() bindings.InputBinding {
-				return mqtt.NewMQTT(logContrib)
-			}),
-			bindings_loader.NewInput("rabbitmq", func() bindings.InputBinding {
-				return bindings_rabbitmq.NewRabbitMQ(logContrib)
 			}),
 			bindings_loader.NewInput("azure.servicebusqueues", func() bindings.InputBinding {
 				return servicebusqueues.NewAzureServiceBusQueues(logContrib)
@@ -312,43 +297,52 @@ func main() {
 			bindings_loader.NewInput("azure.storagequeues", func() bindings.InputBinding {
 				return storagequeues.NewAzureStorageQueues(logContrib)
 			}),
+			bindings_loader.NewInput("cron", func() bindings.InputBinding {
+				return cron.NewCron(logContrib)
+			}),
+			bindings_loader.NewInput("dingtalk.webhook", func() bindings.InputBinding {
+				return dingtalk_webhook.NewDingTalkWebhook(logContrib)
+			}),
 			bindings_loader.NewInput("gcp.pubsub", func() bindings.InputBinding {
 				return pubsub.NewGCPPubSub(logContrib)
+			}),
+			bindings_loader.NewInput("kafka", func() bindings.InputBinding {
+				return kafka.NewKafka(logContrib)
 			}),
 			bindings_loader.NewInput("kubernetes", func() bindings.InputBinding {
 				return kubernetes.NewKubernetes(logContrib)
 			}),
-			bindings_loader.NewInput("azure.eventgrid", func() bindings.InputBinding {
-				return eventgrid.NewAzureEventGrid(logContrib)
+			bindings_loader.NewInput("mqtt", func() bindings.InputBinding {
+				return mqtt.NewMQTT(logContrib)
 			}),
-			bindings_loader.NewInput("twitter", func() bindings.InputBinding {
-				return twitter.NewTwitter(logContrib)
+			bindings_loader.NewInput("nacos", func() bindings.InputBinding {
+				return nacos.NewNacos(logContrib)
 			}),
-			bindings_loader.NewInput("cron", func() bindings.InputBinding {
-				return cron.NewCron(logContrib)
+			bindings_loader.NewInput("rabbitmq", func() bindings.InputBinding {
+				return bindings_rabbitmq.NewRabbitMQ(logContrib)
 			}),
 			bindings_loader.NewInput("rethinkdb.statechange", func() bindings.InputBinding {
 				return statechange.NewRethinkDBStateChangeBinding(logContrib)
+			}),
+			bindings_loader.NewInput("rocketmq", func() bindings.InputBinding {
+				return rocketmq_binding.NewAliCloudRocketMQ(logContrib)
+			}),
+			bindings_loader.NewInput("twitter", func() bindings.InputBinding {
+				return twitter.NewTwitter(logContrib)
 			}),
 			bindings_loader.NewInput("zeebe.jobworker", func() bindings.InputBinding {
 				return bindings_zeebe_jobworker.NewZeebeJobWorker(logContrib)
 			}),
 		),
 		runtime.WithOutputBindings(
-			bindings_loader.NewOutput("alicloud.dingtalk.webhook", func() bindings.OutputBinding {
-				return dingtalk_webhook.NewDingTalkWebhook(logContrib)
-			}),
-			bindings_loader.NewOutput("alicloud.nacos", func() bindings.OutputBinding {
-				return nacos.NewNacos(logContrib)
-			}),
 			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
 				return oss.NewAliCloudOSS(logContrib)
 			}),
-			bindings_loader.NewOutput("alicloud.rocketmq", func() bindings.OutputBinding {
-				return rocketmq_binding.NewAliCloudRocketMQ(logContrib)
-			}),
 			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
 				return apns.NewAPNS(logContrib)
+			}),
+			bindings_loader.NewOutput("aws.s3", func() bindings.OutputBinding {
+				return s3.NewAWSS3(logContrib)
 			}),
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
 				return sqs.NewAWSSQS(logContrib)
@@ -359,20 +353,47 @@ func main() {
 			bindings_loader.NewOutput("aws.kinesis", func() bindings.OutputBinding {
 				return kinesis.NewAWSKinesis(logContrib)
 			}),
-			bindings_loader.NewOutput("azure.eventhubs", func() bindings.OutputBinding {
-				return eventhubs.NewAzureEventHubs(logContrib)
-			}),
 			bindings_loader.NewOutput("aws.dynamodb", func() bindings.OutputBinding {
 				return dynamodb.NewDynamoDB(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.blobstorage", func() bindings.OutputBinding {
+				return blobstorage.NewAzureBlobStorage(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.cosmosdb", func() bindings.OutputBinding {
 				return bindings_cosmosdb.NewCosmosDB(logContrib)
 			}),
+			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
+				return eventgrid.NewAzureEventGrid(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.eventhubs", func() bindings.OutputBinding {
+				return eventhubs.NewAzureEventHubs(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.servicebusqueues", func() bindings.OutputBinding {
+				return servicebusqueues.NewAzureServiceBusQueues(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.signalr", func() bindings.OutputBinding {
+				return signalr.NewSignalR(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.storagequeues", func() bindings.OutputBinding {
+				return storagequeues.NewAzureStorageQueues(logContrib)
+			}),
+			bindings_loader.NewOutput("cron", func() bindings.OutputBinding {
+				return cron.NewCron(logContrib)
+			}),
+			bindings_loader.NewOutput("dingtalk.webhook", func() bindings.OutputBinding {
+				return dingtalk_webhook.NewDingTalkWebhook(logContrib)
+			}),
 			bindings_loader.NewOutput("gcp.bucket", func() bindings.OutputBinding {
 				return bucket.NewGCPStorage(logContrib)
 			}),
+			bindings_loader.NewOutput("gcp.pubsub", func() bindings.OutputBinding {
+				return pubsub.NewGCPPubSub(logContrib)
+			}),
 			bindings_loader.NewOutput("http", func() bindings.OutputBinding {
 				return http.NewHTTP(logContrib)
+			}),
+			bindings_loader.NewOutput("influx", func() bindings.OutputBinding {
+				return influx.NewInflux(logContrib)
 			}),
 			bindings_loader.NewOutput("kafka", func() bindings.OutputBinding {
 				return kafka.NewKafka(logContrib)
@@ -383,47 +404,11 @@ func main() {
 			bindings_loader.NewOutput("mqtt", func() bindings.OutputBinding {
 				return mqtt.NewMQTT(logContrib)
 			}),
-			bindings_loader.NewOutput("rabbitmq", func() bindings.OutputBinding {
-				return bindings_rabbitmq.NewRabbitMQ(logContrib)
+			bindings_loader.NewOutput("mysql", func() bindings.OutputBinding {
+				return mysql.NewMysql(logContrib)
 			}),
-			bindings_loader.NewOutput("redis", func() bindings.OutputBinding {
-				return redis.NewRedis(logContrib)
-			}),
-			bindings_loader.NewOutput("aws.s3", func() bindings.OutputBinding {
-				return s3.NewAWSS3(logContrib)
-			}),
-			bindings_loader.NewOutput("azure.blobstorage", func() bindings.OutputBinding {
-				return blobstorage.NewAzureBlobStorage(logContrib)
-			}),
-			bindings_loader.NewOutput("azure.servicebusqueues", func() bindings.OutputBinding {
-				return servicebusqueues.NewAzureServiceBusQueues(logContrib)
-			}),
-			bindings_loader.NewOutput("azure.storagequeues", func() bindings.OutputBinding {
-				return storagequeues.NewAzureStorageQueues(logContrib)
-			}),
-			bindings_loader.NewOutput("gcp.pubsub", func() bindings.OutputBinding {
-				return pubsub.NewGCPPubSub(logContrib)
-			}),
-			bindings_loader.NewOutput("azure.signalr", func() bindings.OutputBinding {
-				return signalr.NewSignalR(logContrib)
-			}),
-			bindings_loader.NewOutput("twilio.sms", func() bindings.OutputBinding {
-				return sms.NewSMS(logContrib)
-			}),
-			bindings_loader.NewOutput("twilio.sendgrid", func() bindings.OutputBinding {
-				return sendgrid.NewSendGrid(logContrib)
-			}),
-			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
-				return eventgrid.NewAzureEventGrid(logContrib)
-			}),
-			bindings_loader.NewOutput("cron", func() bindings.OutputBinding {
-				return cron.NewCron(logContrib)
-			}),
-			bindings_loader.NewOutput("twitter", func() bindings.OutputBinding {
-				return twitter.NewTwitter(logContrib)
-			}),
-			bindings_loader.NewOutput("influx", func() bindings.OutputBinding {
-				return influx.NewInflux(logContrib)
+			bindings_loader.NewOutput("nacos", func() bindings.OutputBinding {
+				return nacos.NewNacos(logContrib)
 			}),
 			bindings_loader.NewOutput("postgres", func() bindings.OutputBinding {
 				return postgres.NewPostgres(logContrib)
@@ -431,11 +416,26 @@ func main() {
 			bindings_loader.NewOutput("postmark", func() bindings.OutputBinding {
 				return postmark.NewPostmark(logContrib)
 			}),
-			bindings_loader.NewOutput("mysql", func() bindings.OutputBinding {
-				return mysql.NewMysql(logContrib)
+			bindings_loader.NewOutput("rabbitmq", func() bindings.OutputBinding {
+				return bindings_rabbitmq.NewRabbitMQ(logContrib)
+			}),
+			bindings_loader.NewOutput("redis", func() bindings.OutputBinding {
+				return redis.NewRedis(logContrib)
+			}),
+			bindings_loader.NewOutput("rocketmq", func() bindings.OutputBinding {
+				return rocketmq_binding.NewAliCloudRocketMQ(logContrib)
 			}),
 			bindings_loader.NewOutput("smtp", func() bindings.OutputBinding {
 				return smtp.NewSMTP(logContrib)
+			}),
+			bindings_loader.NewOutput("twilio.sms", func() bindings.OutputBinding {
+				return sms.NewSMS(logContrib)
+			}),
+			bindings_loader.NewOutput("twilio.sendgrid", func() bindings.OutputBinding {
+				return sendgrid.NewSendGrid(logContrib)
+			}),
+			bindings_loader.NewOutput("twitter", func() bindings.OutputBinding {
+				return twitter.NewTwitter(logContrib)
 			}),
 			bindings_loader.NewOutput("zeebe.command", func() bindings.OutputBinding {
 				return bindings_zeebe_command.NewZeebeCommand(logContrib)
