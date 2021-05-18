@@ -6,6 +6,11 @@ logLevel: info
 image:
   name: daprd
 
+# Specify full docker image name including registry url to use a custom injector service image
+# Otherwise, helm chart will use {{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}
+injectorImage:
+  name: dapr
+
 nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
