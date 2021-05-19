@@ -8,3 +8,7 @@ spec:
         - storeName: "local"
           defaultAccess: "allow"
           allowedSecrets: ["daprsecret","redissecret"]
+  gateways:
+    enabled: true
+    addresses: 
+      bla: "555.666.777.8888:8080"

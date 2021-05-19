@@ -90,6 +90,13 @@ type ConfigurationSpec struct {
 	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
 	Features           []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
 	APISpec            APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
+	GatewaysSpec       GatewaysSpec       `json:"gateways,omitempty" yaml:"gateways,omitempty"`
+}
+
+// Access external gateway
+type GatewaysSpec struct {
+	Enabled   bool              `json:"enabled" yaml:"enabled"`
+	Addresses map[string]string `json:"addresses,omitempty" yaml:"addresses,omitempty"`
 }
 
 type SecretsSpec struct {

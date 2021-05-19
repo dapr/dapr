@@ -955,3 +955,34 @@ func TestFeatureSpecForStandAlone(t *testing.T) {
 		})
 	}
 }
+
+func TestGatewaysSpecForStandAlone(t *testing.T) {
+	testCases := []struct {
+		name              string
+		confFile          string
+		gatewaysEnabled   bool
+		gatewaysAddresses map[string]string
+	}{
+		{
+			name:              "gatewats disabled by default",
+			confFile:          "./testdata/feature_config.yaml",
+			gatewaysEnabled:   false,
+			gatewaysAddresses: nil,
+		},
+		{
+			name:              "gateways exists in config and enabled",
+			confFile:          "./testdata/config.yaml",
+			gatewaysEnabled:   true,
+			gatewaysAddresses: map[string]string{"bla": "555.666.777.8888:8080"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config, _, err := LoadStandaloneConfiguration(tc.confFile)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.gatewaysEnabled, config.Spec.GatewaysSpec.Enabled)
+			assert.Equal(t, tc.gatewaysAddresses, config.Spec.GatewaysSpec.Addresses)
+		})
+	}
+}
