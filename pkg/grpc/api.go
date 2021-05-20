@@ -18,6 +18,14 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/golang/protobuf/ptypes/empty"
+	jsoniter "github.com/json-iterator/go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -33,13 +41,6 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/golang/protobuf/ptypes/empty"
-	jsoniter "github.com/json-iterator/go"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (

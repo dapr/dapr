@@ -13,9 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ghodss/yaml"
+
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
-	"github.com/ghodss/yaml"
 )
 
 const (

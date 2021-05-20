@@ -8,14 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	subscriptions "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	config "github.com/dapr/dapr/pkg/config/modes"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subscriptions "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	config "github.com/dapr/dapr/pkg/config/modes"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
 type mockOperator struct {

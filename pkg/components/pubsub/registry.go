@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/pubsub"
+
 	"github.com/dapr/dapr/pkg/components"
 )
 

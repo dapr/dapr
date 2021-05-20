@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"testing"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 func TestInvocationResponse(t *testing.T) {

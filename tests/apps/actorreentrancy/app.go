@@ -14,9 +14,10 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/gorilla/mux"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 const (

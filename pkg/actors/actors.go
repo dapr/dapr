@@ -24,6 +24,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/channel"
 	configuration "github.com/dapr/dapr/pkg/config"
@@ -36,7 +38,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/retry"
-	"github.com/dapr/kit/logger"
 )
 
 const (

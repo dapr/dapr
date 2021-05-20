@@ -17,9 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/kit/logger"
 )
 
 const (

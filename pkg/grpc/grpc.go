@@ -12,15 +12,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 const (
