@@ -20,7 +20,7 @@ var (
 )
 
 func GetKubeClusterDomain() (string, error) {
-	resolvContent, err := GetResolvContent(defaultResolvPath)
+	resolvContent, err := getResolvContent(defaultResolvPath)
 	if err != nil {
 		return "", err
 	}
@@ -29,7 +29,7 @@ func GetKubeClusterDomain() (string, error) {
 
 func getClusterDomain(resolvConf []byte) (string, error) {
 	var kubeClusterDomian string
-	searchDomains := GetResolvSearchDomains(resolvConf)
+	searchDomains := getResolvSearchDomains(resolvConf)
 	if len(searchDomains) == 0 {
 		kubeClusterDomian = DefaultKubeClusterDomain
 	} else {
@@ -39,11 +39,11 @@ func getClusterDomain(resolvConf []byte) (string, error) {
 	return kubeClusterDomian, nil
 }
 
-func GetResolvContent(resolvPath string) ([]byte, error) {
+func getResolvContent(resolvPath string) ([]byte, error) {
 	return ioutil.ReadFile(resolvPath)
 }
 
-func GetResolvSearchDomains(resolvConf []byte) []string {
+func getResolvSearchDomains(resolvConf []byte) []string {
 	var (
 		domains []string
 		lines   [][]byte

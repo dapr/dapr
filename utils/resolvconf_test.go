@@ -52,7 +52,7 @@ func TestGetSearchDomains(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		domains := GetResolvSearchDomains([]byte(tc.content))
+		domains := getResolvSearchDomains([]byte(tc.content))
 		assert.ElementsMatch(t, domains, tc.expected)
 	}
 }
