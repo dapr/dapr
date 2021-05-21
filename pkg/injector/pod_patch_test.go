@@ -7,15 +7,14 @@ package injector
 
 import (
 	"fmt"
+	"strconv"
+	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"strconv"
-	"testing"
 )
 
 func TestLogAsJSONEnabled(t *testing.T) {

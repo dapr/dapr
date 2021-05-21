@@ -457,6 +457,7 @@ func TestCorsHandler(t *testing.T) {
 		assert.True(t, mh.hasCORS)
 	})
 }
+
 func TestUnescapeRequestParametersHandler(t *testing.T) {
 	mh := func(reqCtx *fasthttp.RequestCtx) {
 		pc, _, _, ok := runtime.Caller(1)

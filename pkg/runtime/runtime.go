@@ -521,7 +521,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 }
 
 func (a *DaprRuntime) initProxy() {
-	//TODO: remove feature check once stable
+	// TODO: remove feature check once stable
 	if config.IsFeatureEnabled(a.globalConfig.Spec.Features, messaging.GRPCFeatureName) {
 		a.proxy = messaging.NewProxy(a.grpc.GetGRPCConnection, a.runtimeConfig.ID,
 			fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList)
@@ -1131,7 +1131,7 @@ func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, 
 func (a *DaprRuntime) initNameResolution() error {
 	var resolver nr.Resolver
 	var err error
-	var resolverMetadata = nr.Metadata{}
+	resolverMetadata := nr.Metadata{}
 
 	resolverName := a.globalConfig.Spec.NameResolutionSpec.Component
 	resolverVersion := a.globalConfig.Spec.NameResolutionSpec.Version
@@ -1867,6 +1867,7 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
+
 func (a *DaprRuntime) startSubscribing() {
 	for name, pubsub := range a.pubSubs {
 		if err := a.beginPubSub(name, pubsub); err != nil {
