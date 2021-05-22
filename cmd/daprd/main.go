@@ -53,7 +53,6 @@ import (
 
 	// Pub/Sub
 	pubs "github.com/dapr/components-contrib/pubsub"
-	rocketmq_pubsub "github.com/dapr/components-contrib/pubsub/alicloud/rocketmq"
 	pubsub_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
 	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
@@ -77,9 +76,7 @@ import (
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
 	dingtalk_webhook "github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
-	"github.com/dapr/components-contrib/bindings/alicloud/nacos"
 	"github.com/dapr/components-contrib/bindings/alicloud/oss"
-	rocketmq_binding "github.com/dapr/components-contrib/bindings/alicloud/rocketmq"
 	"github.com/dapr/components-contrib/bindings/apns"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
@@ -253,9 +250,6 @@ func main() {
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)
 			}),
-			pubsub_loader.New("rocketmq", func() pubs.PubSub {
-				return rocketmq_pubsub.NewRocketMQ(logContrib)
-			}),
 			pubsub_loader.New("snssqs", func() pubs.PubSub {
 				return pubsub_snssqs.NewSnsSqs(logContrib)
 			}),
@@ -308,17 +302,11 @@ func main() {
 			bindings_loader.NewInput("mqtt", func() bindings.InputBinding {
 				return mqtt.NewMQTT(logContrib)
 			}),
-			bindings_loader.NewInput("nacos", func() bindings.InputBinding {
-				return nacos.NewNacos(logContrib)
-			}),
 			bindings_loader.NewInput("rabbitmq", func() bindings.InputBinding {
 				return bindings_rabbitmq.NewRabbitMQ(logContrib)
 			}),
 			bindings_loader.NewInput("rethinkdb.statechange", func() bindings.InputBinding {
 				return statechange.NewRethinkDBStateChangeBinding(logContrib)
-			}),
-			bindings_loader.NewInput("rocketmq", func() bindings.InputBinding {
-				return rocketmq_binding.NewAliCloudRocketMQ(logContrib)
 			}),
 			bindings_loader.NewInput("twitter", func() bindings.InputBinding {
 				return twitter.NewTwitter(logContrib)
@@ -400,9 +388,6 @@ func main() {
 			bindings_loader.NewOutput("mysql", func() bindings.OutputBinding {
 				return mysql.NewMysql(logContrib)
 			}),
-			bindings_loader.NewOutput("nacos", func() bindings.OutputBinding {
-				return nacos.NewNacos(logContrib)
-			}),
 			bindings_loader.NewOutput("postgres", func() bindings.OutputBinding {
 				return postgres.NewPostgres(logContrib)
 			}),
@@ -414,9 +399,6 @@ func main() {
 			}),
 			bindings_loader.NewOutput("redis", func() bindings.OutputBinding {
 				return redis.NewRedis(logContrib)
-			}),
-			bindings_loader.NewOutput("rocketmq", func() bindings.OutputBinding {
-				return rocketmq_binding.NewAliCloudRocketMQ(logContrib)
 			}),
 			bindings_loader.NewOutput("smtp", func() bindings.OutputBinding {
 				return smtp.NewSMTP(logContrib)
