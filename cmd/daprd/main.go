@@ -53,6 +53,7 @@ import (
 
 	// Pub/Sub
 	pubs "github.com/dapr/components-contrib/pubsub"
+	rocketmq_pubsub "github.com/dapr/components-contrib/pubsub/alicloud/rocketmq"
 	pubsub_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
 	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
@@ -75,7 +76,10 @@ import (
 
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
+	dingtalk_webhook "github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
+	"github.com/dapr/components-contrib/bindings/alicloud/nacos"
 	"github.com/dapr/components-contrib/bindings/alicloud/oss"
+	rocketmq_binding "github.com/dapr/components-contrib/bindings/alicloud/rocketmq"
 	"github.com/dapr/components-contrib/bindings/apns"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
@@ -108,6 +112,8 @@ import (
 	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
 	"github.com/dapr/components-contrib/bindings/twilio/sms"
 	"github.com/dapr/components-contrib/bindings/twitter"
+	bindings_zeebe_command "github.com/dapr/components-contrib/bindings/zeebe/command"
+	bindings_zeebe_jobworker "github.com/dapr/components-contrib/bindings/zeebe/jobworker"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware
@@ -117,6 +123,7 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/oauth2clientcredentials"
 	"github.com/dapr/components-contrib/middleware/http/opa"
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
+	"github.com/dapr/components-contrib/middleware/http/sentinel"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/valyala/fasthttp"
@@ -216,11 +223,8 @@ func main() {
 			}),
 		),
 		runtime.WithPubSubs(
-			pubsub_loader.New("redis", func() pubs.PubSub {
-				return pubsub_redis.NewRedisStreams(logContrib)
-			}),
-			pubsub_loader.New("natsstreaming", func() pubs.PubSub {
-				return natsstreaming.NewNATSStreamingPubSub(logContrib)
+			pubsub_loader.New("alicloud.rocketmq", func() pubs.PubSub {
+				return rocketmq_pubsub.NewRocketMQ(logContrib)
 			}),
 			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
 				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
@@ -228,26 +232,32 @@ func main() {
 			pubsub_loader.New("azure.servicebus", func() pubs.PubSub {
 				return servicebus.NewAzureServiceBus(logContrib)
 			}),
-			pubsub_loader.New("rabbitmq", func() pubs.PubSub {
-				return rabbitmq.NewRabbitMQ(logContrib)
+			pubsub_loader.New("gcp.pubsub", func() pubs.PubSub {
+				return pubsub_gcp.NewGCPPubSub(logContrib)
 			}),
 			pubsub_loader.New("hazelcast", func() pubs.PubSub {
 				return pubsub_hazelcast.NewHazelcastPubSub(logContrib)
 			}),
-			pubsub_loader.New("gcp.pubsub", func() pubs.PubSub {
-				return pubsub_gcp.NewGCPPubSub(logContrib)
-			}),
 			pubsub_loader.New("kafka", func() pubs.PubSub {
 				return pubsub_kafka.NewKafka(logContrib)
-			}),
-			pubsub_loader.New("snssqs", func() pubs.PubSub {
-				return pubsub_snssqs.NewSnsSqs(logContrib)
 			}),
 			pubsub_loader.New("mqtt", func() pubs.PubSub {
 				return pubsub_mqtt.NewMQTTPubSub(logContrib)
 			}),
+			pubsub_loader.New("natsstreaming", func() pubs.PubSub {
+				return natsstreaming.NewNATSStreamingPubSub(logContrib)
+			}),
 			pubsub_loader.New("pulsar", func() pubs.PubSub {
 				return pubsub_pulsar.NewPulsar(logContrib)
+			}),
+			pubsub_loader.New("rabbitmq", func() pubs.PubSub {
+				return rabbitmq.NewRabbitMQ(logContrib)
+			}),
+			pubsub_loader.New("redis", func() pubs.PubSub {
+				return pubsub_redis.NewRedisStreams(logContrib)
+			}),
+			pubsub_loader.New("snssqs", func() pubs.PubSub {
+				return pubsub_snssqs.NewSnsSqs(logContrib)
 			}),
 		),
 		runtime.WithNameResolutions(
@@ -262,6 +272,15 @@ func main() {
 			}),
 		),
 		runtime.WithInputBindings(
+			bindings_loader.NewInput("alicloud.dingtalk.webhook", func() bindings.InputBinding {
+				return dingtalk_webhook.NewDingTalkWebhook(logContrib)
+			}),
+			bindings_loader.NewInput("alicloud.nacos", func() bindings.InputBinding {
+				return nacos.NewNacos(logContrib)
+			}),
+			bindings_loader.NewInput("alicloud.rocketmq", func() bindings.InputBinding {
+				return rocketmq_binding.NewAliCloudRocketMQ(logContrib)
+			}),
 			bindings_loader.NewInput("aws.sqs", func() bindings.InputBinding {
 				return sqs.NewAWSSQS(logContrib)
 			}),
@@ -304,10 +323,22 @@ func main() {
 			bindings_loader.NewInput("rethinkdb.statechange", func() bindings.InputBinding {
 				return statechange.NewRethinkDBStateChangeBinding(logContrib)
 			}),
+			bindings_loader.NewInput("zeebe.jobworker", func() bindings.InputBinding {
+				return bindings_zeebe_jobworker.NewZeebeJobWorker(logContrib)
+			}),
 		),
 		runtime.WithOutputBindings(
+			bindings_loader.NewOutput("alicloud.dingtalk.webhook", func() bindings.OutputBinding {
+				return dingtalk_webhook.NewDingTalkWebhook(logContrib)
+			}),
+			bindings_loader.NewOutput("alicloud.nacos", func() bindings.OutputBinding {
+				return nacos.NewNacos(logContrib)
+			}),
 			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
 				return oss.NewAliCloudOSS(logContrib)
+			}),
+			bindings_loader.NewOutput("alicloud.rocketmq", func() bindings.OutputBinding {
+				return rocketmq_binding.NewAliCloudRocketMQ(logContrib)
 			}),
 			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
 				return apns.NewAPNS(logContrib)
@@ -399,6 +430,9 @@ func main() {
 			bindings_loader.NewOutput("smtp", func() bindings.OutputBinding {
 				return smtp.NewSMTP(logContrib)
 			}),
+			bindings_loader.NewOutput("zeebe.command", func() bindings.OutputBinding {
+				return bindings_zeebe_command.NewZeebeCommand(logContrib)
+			}),
 		),
 		runtime.WithHTTPMiddleware(
 			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
@@ -428,6 +462,10 @@ func main() {
 			}),
 			http_middleware_loader.New("opa", func(metadata middleware.Metadata) http_middleware.Middleware {
 				handler, _ := opa.NewMiddleware(log).GetHandler(metadata)
+				return handler
+			}),
+			http_middleware_loader.New("sentinel", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := sentinel.NewMiddleware(log).GetHandler(metadata)
 				return handler
 			}),
 		),

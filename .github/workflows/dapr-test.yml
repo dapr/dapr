@@ -90,7 +90,7 @@ jobs:
           az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }} --output none
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
-        run: ./tests/test-infra/find_cluster.sh ./tests/test-infra/e2e-list.txt
+        run: ./tests/test-infra/find_cluster.sh ./tests/test-infra/e2e-list.${{ matrix.target_os }}.txt
         shell: bash
       - name: Add the test status comment to PR
         if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''

@@ -14,6 +14,7 @@ import (
 
 	"github.com/PuerkitoBio/purell"
 	"github.com/dapr/components-contrib/bindings"
+	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -263,47 +264,57 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, err
 	}
 
-	body := []byte{}
-
-	if in.Data != nil {
-		body = in.Data
+	rawPayload, metaErr := contrib_metadata.IsRawPayload(in.Metadata)
+	if metaErr != nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
 	}
 
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 
-	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
-		ID:              a.id,
-		Topic:           in.Topic,
-		DataContentType: in.DataContentType,
-		Data:            body,
-		TraceID:         corID,
-		Pubsub:          in.PubsubName,
-	})
-	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+	body := []byte{}
+	if in.Data != nil {
+		body = in.Data
 	}
 
-	features := thepubsub.Features()
-	pubsub.ApplyMetadata(envelope, features, in.Metadata)
+	data := body
 
-	b, err := jsoniter.ConfigFastest.Marshal(envelope)
-	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+	if !rawPayload {
+		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+			ID:              a.id,
+			Topic:           in.Topic,
+			DataContentType: in.DataContentType,
+			Data:            body,
+			TraceID:         corID,
+			Pubsub:          in.PubsubName,
+		})
+		if err != nil {
+			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+			apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
+
+		features := thepubsub.Features()
+		pubsub.ApplyMetadata(envelope, features, in.Metadata)
+
+		data, err = jsoniter.ConfigFastest.Marshal(envelope)
+		if err != nil {
+			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+			apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
 	}
 
 	req := pubsub.PublishRequest{
 		PubsubName: pubsubName,
 		Topic:      topic,
-		Data:       b,
+		Data:       data,
 		Metadata:   in.Metadata,
 	}
 
-	err = a.pubsubAdapter.Publish(&req)
+	err := a.pubsubAdapter.Publish(&req)
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {

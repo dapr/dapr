@@ -36,7 +36,7 @@ For more details on initializing Helm, [read the Helm docs](https://helm.sh/docs
 2. Install the Dapr chart on your cluster in the dapr-system namespace:
     ```
     helm install dapr dapr/dapr --namespace dapr-system --wait
-    ``` 
+    ```
 
 ## Verify installation
 
@@ -173,7 +173,7 @@ helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true
 
 ## Example of installing edge version of Dapr
 
-This command deploys the latest `edge` version of Dapr to `dapr-system` namespace. This is useful if you want to deploy the latest version of Dapr to test a feature or some capability in your Kubernetes cluster. 
+This command deploys the latest `edge` version of Dapr to `dapr-system` namespace. This is useful if you want to deploy the latest version of Dapr to test a feature or some capability in your Kubernetes cluster.
 
 ```
 helm install dapr dapr/dapr --namespace dapr-system --set-string global.tag=edge --wait
@@ -233,7 +233,7 @@ helm install dapr charts/dapr --namespace dapr-system --values values.yml --wait
 
 Find the target dapr-operator pod:
 ```bash
-kubectl get pods -n dapr-system -o wide 
+kubectl get pods -n dapr-system -o wide
 ```
 
 Port forward the debugging port so that it's visible to your IDE:
