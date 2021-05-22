@@ -1,4 +1,4 @@
-  
+
 # Dapr $dapr_version
 
 We're happy to announce the release of Dapr $dapr_version!
@@ -99,7 +99,7 @@ All done!
 
 *Note: Make sure your deployments are restarted to pick the latest version of the Dapr sidecar*
 
-#### Starting a fresh install on a cluster 
+#### Starting a fresh install on a cluster
 
 You can use Helm 3 to install Dapr:
 ```

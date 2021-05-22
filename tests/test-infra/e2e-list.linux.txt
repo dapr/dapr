@@ -1,5 +1,3 @@
-dapr-aks-e2e-05
-dapr-aks-e2e-06
 dapr-aks-e2e-07
 dapr-aks-e2e-08
 
