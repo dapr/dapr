@@ -593,7 +593,8 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 	if binding, ok := a.outputBindings[name]; ok {
 		ops := binding.Operations()
 		for _, o := range ops {
-			if o == req.Operation {
+			// ::TODO OperationKind provide a Equal method
+			if strings.EqualFold(string(o), string(req.Operation)) {
 				return binding.Invoke(req)
 			}
 		}
