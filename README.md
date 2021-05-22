@@ -109,6 +109,10 @@ Every two weeks we host a community call to showcase new features, review upcomi
 
 See the [Development Guide](https://docs.dapr.io/contributing/) to get started with building and developing.
 
+### Contributor over time
+
+[![Contributor over time](https://contributor-graph-api.apiseven.com/contributors-svg?chart=contributorOverTime&repo=dapr/dapr)](https://www.apiseven.com/en/contributor-graph?chart=contributorOverTime&repo=dapr/dapr)
+
 ## Repositories
 
 | Repo | Description |
