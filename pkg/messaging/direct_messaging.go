@@ -112,8 +112,8 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req, connPoolPrefix)
 }
 
-// requestAppIDAndNamespaceAndGateway takes an app id and returns the app id, namespace and error.
-func (d *directMessaging) requestAppIDAndNamespaceAndGateway(targetAppID string) (string, string, string, error) {
+// parseAppID takes an app id and returns its consistuent parts; id, namespace and gateway or error.
+func (d *directMessaging) parseAppID(targetAppID string) (string, string, string, error) {
 	items := strings.Split(targetAppID, ".")
 	switch len(items) {
 	case 1: // <appID> - use our namespace.
@@ -244,7 +244,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 }
 
 func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
-	id, namespace, gatewayName, err := d.requestAppIDAndNamespaceAndGateway(appID)
+	id, namespace, gatewayName, err := d.parseAppID(appID)
 	if err != nil {
 		return remoteApp{}, err
 	}

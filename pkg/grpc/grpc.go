@@ -64,24 +64,33 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 	return ch, nil
 }
 
-func getConnectionPoolKey(prefix, key string) string {
-	return fmt.Sprintf("%s//%s", prefix, key)
+func (g *Manager) getConnFromPool(prefix, address string) (*grpc.ClientConn, bool) {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
+	key := fmt.Sprintf("%s//%s", prefix, address)
+	val, ok := g.connectionPool[key]
+	return val, ok
+}
+
+func (g *Manager) addConnToPool(prefix, address string, conn *grpc.ClientConn) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	key := fmt.Sprintf("%s//%s", prefix, address)
+	g.connectionPool[key] = conn
 }
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist
-func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, connPoolKeyPrefix string) (*grpc.ClientConn, error) {
-	g.lock.RLock()
-	if val, ok := g.connectionPool[getConnectionPoolKey(connPoolKeyPrefix, address)]; ok && !recreateIfExists {
-		g.lock.RUnlock()
-		return val, nil
+func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, connPrefix string) (*grpc.ClientConn, error) {
+	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool && !recreateIfExists {
+		return conn, nil
 	}
-	g.lock.RUnlock()
 
-	g.lock.Lock()
-	defer g.lock.Unlock()
+	// TODO: Review why write lock used before.
 	// read the value once again, as a concurrent writer could create it
-	if val, ok := g.connectionPool[getConnectionPoolKey(connPoolKeyPrefix, address)]; ok && !recreateIfExists {
-		return val, nil
+	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool && !recreateIfExists {
+		return conn, nil
 	}
 
 	opts := []grpc.DialOption{
@@ -131,16 +140,16 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
+	newConn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	if c, ok := g.connectionPool[address]; ok {
-		c.Close()
+	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool {
+		conn.Close()
 	}
 
-	g.connectionPool[address] = conn
+	g.addConnToPool(connPrefix, address, newConn)
 
-	return conn, nil
+	return newConn, nil
 }

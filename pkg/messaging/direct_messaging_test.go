@@ -84,7 +84,7 @@ func TestKubernetesNamespace(t *testing.T) {
 		appID := "app1"
 
 		dm := newDirectMessaging()
-		id, ns, gw, err := dm.requestAppIDAndNamespaceAndGateway(appID)
+		id, ns, gw, err := dm.parseAppID(appID)
 
 		assert.NoError(t, err)
 		assert.Empty(t, ns)
@@ -96,7 +96,7 @@ func TestKubernetesNamespace(t *testing.T) {
 		appID := "app1.ns1"
 
 		dm := newDirectMessaging()
-		id, ns, gw, err := dm.requestAppIDAndNamespaceAndGateway(appID)
+		id, ns, gw, err := dm.parseAppID(appID)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "ns1", ns)
@@ -108,7 +108,7 @@ func TestKubernetesNamespace(t *testing.T) {
 		appID := "app1.ns1.gw1"
 
 		dm := newDirectMessaging()
-		id, ns, gw, err := dm.requestAppIDAndNamespaceAndGateway(appID)
+		id, ns, gw, err := dm.parseAppID(appID)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "ns1", ns)
@@ -120,7 +120,7 @@ func TestKubernetesNamespace(t *testing.T) {
 		appID := "app1.ns1.gw1.ext"
 
 		dm := newDirectMessaging()
-		_, _, _, err := dm.requestAppIDAndNamespaceAndGateway(appID)
+		_, _, _, err := dm.parseAppID(appID)
 
 		assert.Error(t, err)
 	})

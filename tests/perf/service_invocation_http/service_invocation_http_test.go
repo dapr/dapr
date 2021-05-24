@@ -90,42 +90,32 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform baseline test
+	testID := "baseline"
 	endpoint := fmt.Sprintf("http://testapp:3000/test")
 	p.TargetEndpoint = endpoint
-	body, err := json.Marshal(&p)
-	require.NoError(t, err)
-
-	t.Log("runnng baseline test...")
-	baselineResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
-	t.Log("checking err...")
-	require.NoError(t, err)
-	require.NotEmpty(t, baselineResp)
-
-	t.Logf("baseline test results: %s", string(baselineResp))
+	baselineResp := runTestCase(t, testID, testerAppURL, &p)
+	t.Logf("%s test results: %s", testID, string(baselineResp))
 
 	// Perform dapr test
+	testID = "dapr"
 	endpoint = fmt.Sprintf("http://127.0.0.1:3500/v1.0/invoke/testapp/method/test")
 	p.TargetEndpoint = endpoint
-	body, err = json.Marshal(&p)
-	require.NoError(t, err)
+	daprResp := runTestCase(t, testID, testerAppURL, &p)
+	t.Logf("%s test results: %s", testID, string(daprResp))
 
-	t.Log("running dapr test...")
-	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
-	t.Log("checking err...")
-	require.NoError(t, err)
-	require.NotEmpty(t, daprResp)
+	// Perform baseline cross network test
+	testID = "cross network baseline"
+	endpoint = fmt.Sprintf("http://20.90.168.44:3000/test")
+	p.TargetEndpoint = endpoint
+	xNetBaselineResp := runTestCase(t, testID, testerAppURL, &p)
+	t.Logf("%s test results: %s", testID, string(xNetBaselineResp))
 
 	// Perform cross network test
+	testID = "cross network dapr"
 	endpoint = fmt.Sprintf("http://127.0.0.1:3500/v1.0/invoke/testapp.default.network2/method/test")
 	p.TargetEndpoint = endpoint
-	body, err = json.Marshal(&p)
-	require.NoError(t, err)
-
-	t.Log("running cross network test...")
-	xNetResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
-	t.Log("checking err...")
-	require.NoError(t, err)
-	require.NotEmpty(t, xNetResp)
+	xNetDaprResp := runTestCase(t, testID, testerAppURL, &p)
+	t.Logf("%s test results: %s", testID, string(xNetDaprResp))
 
 	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
 	require.NoError(t, err)
@@ -136,7 +126,6 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts("testapp")
 	require.NoError(t, err)
 
-	t.Logf("dapr test results: %s", string(daprResp))
 	t.Logf("target dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 
 	var daprResult perf.TestResult
@@ -147,8 +136,12 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	err = json.Unmarshal(baselineResp, &baselineResult)
 	require.NoError(t, err)
 
-	var xNetResult perf.TestResult
-	err = json.Unmarshal(xNetResp, &xNetResult)
+	var xNetBaselineResult perf.TestResult
+	err = json.Unmarshal(xNetBaselineResp, &xNetBaselineResult)
+	require.NoError(t, err)
+
+	var xNetDaprResult perf.TestResult
+	err = json.Unmarshal(xNetDaprResp, &xNetDaprResult)
 	require.NoError(t, err)
 
 	percentiles := map[int]string{1: "75th", 2: "90th"}
@@ -156,12 +149,16 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
-		crossNetworkValue := xNetResult.DurationHistogram.Percentiles[k].Value
 
 		latency := (daprValue - baselineValue) * 1000
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
-		crossNetworkLatency := (crossNetworkValue - daprValue) * 1000
-		t.Logf("cross network added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", crossNetworkLatency))
+
+		// Cross network
+		xNetBaselineValue := xNetBaselineResult.DurationHistogram.Percentiles[k].Value
+		xNetDaprValue := xNetDaprResult.DurationHistogram.Percentiles[k].Value
+
+		xNetLatency := (xNetDaprValue - xNetBaselineValue) * 1000
+		t.Logf("added latency (cross network) for %s percentile: %sms", v, fmt.Sprintf("%.2f", xNetLatency))
 	}
 
 	report := perf.NewTestReport(
@@ -180,4 +177,17 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
+}
+
+func runTestCase(t *testing.T, id string, testerAppURL string, testParams *perf.TestParameters) []byte {
+	body, err := json.Marshal(&testParams)
+	require.NoError(t, err)
+
+	t.Logf("running %s test...", id)
+	resp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Logf("checking %s test err...", id)
+	require.NoError(t, err)
+	require.NotEmpty(t, resp)
+
+	return resp
 }
