@@ -508,7 +508,8 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		a.grpc.GetGRPCConnection,
 		resolver,
 		a.globalConfig.Spec.TracingSpec,
-		a.runtimeConfig.MaxRequestBodySize)
+		a.runtimeConfig.MaxRequestBodySize,
+		a.getGatewayMap())
 }
 
 func (a *DaprRuntime) beginComponentsUpdates() error {
@@ -1869,4 +1870,16 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 		}(name, binding)
 	}
 	return nil
+}
+
+func (a *DaprRuntime) getGatewayMap() map[string]config.Gateway {
+	if !a.globalConfig.Spec.GatewaySpec.Enabled {
+		return nil
+	}
+
+	gwMap := map[string]config.Gateway{}
+	for _, gw := range a.globalConfig.Spec.GatewaySpec.Gateways {
+		gwMap[gw.Name] = gw
+	}
+	return gwMap
 }

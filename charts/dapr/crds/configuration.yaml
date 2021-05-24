@@ -219,6 +219,30 @@ spec:
                 required:
                 - enabled
                 type: object
+              gateway:
+                description: GatewaySpec defines the gateways
+                properties:
+                  enabled:
+                    type: boolean
+                  gateways:
+                    items:
+                      properties:
+                        address:
+                          type: string
+                        hostname:
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - address
+                      - hostname
+                      - name
+                      type: object
+                    type: array
+                required:
+                - enabled
+                - gateways
+                type: object
             type: object
         type: object
     served: true

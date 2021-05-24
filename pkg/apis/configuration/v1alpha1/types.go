@@ -45,6 +45,8 @@ type ConfigurationSpec struct {
 	Features []FeatureSpec `json:"features,omitempty"`
 	// +optional
 	APISpec APISpec `json:"api,omitempty"`
+	// +optional
+	GatewaySpec GatewaySpec `json:"gateway,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs
@@ -165,6 +167,19 @@ type AccessControlSpec struct {
 type FeatureSpec struct {
 	Name    string `json:"name" yaml:"name"`
 	Enabled bool   `json:"enabled" yaml:"enabled"`
+}
+
+// GatewaySpec defines the gateways
+type GatewaySpec struct {
+	Gateways []Gateway `json:"gateways" yaml:"gateways"`
+	Enabled  bool      `json:"enabled" yaml:"enabled"`
+}
+
+// Gateway defines a gateway
+type Gateway struct {
+	Name     string `json:"name" yaml:"name"`
+	Address  string `json:"address" yaml:"address"`
+	Hostname string `json:"hostname" yaml:"hostname"`
 }
 
 // +kubebuilder:object:root=true

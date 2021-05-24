@@ -90,6 +90,7 @@ type ConfigurationSpec struct {
 	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
 	Features           []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
 	APISpec            APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
+	GatewaySpec        GatewaySpec        `json:"gateway,omitempty" yaml:"gateway,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -198,6 +199,19 @@ type SpiffeID struct {
 type FeatureSpec struct {
 	Name    Feature `json:"name" yaml:"name"`
 	Enabled bool    `json:"enabled" yaml:"enabled"`
+}
+
+// GatewaySpec defines the gateways
+type GatewaySpec struct {
+	Gateways []Gateway `json:"gateways" yaml:"gateways"`
+	Enabled  bool      `json:"enabled" yaml:"enabled"`
+}
+
+// Gateway defines a gateway
+type Gateway struct {
+	Name     string `json:"name" yaml:"name"`
+	Address  string `json:"address" yaml:"address"`
+	Hostname string `json:"hostname" yaml:"hostname"`
 }
 
 // LoadDefaultConfiguration returns the default config

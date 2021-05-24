@@ -33,9 +33,9 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
-// messageClientConnection is the function type to connect to the other
+// MessageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type messageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
+type MessageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, connPoolKeyPrefix string) (*grpc.ClientConn, error)
 
 // DirectMessaging is the API interface for invoking a remote app
 type DirectMessaging interface {
@@ -44,7 +44,7 @@ type DirectMessaging interface {
 
 type directMessaging struct {
 	appChannel          channel.AppChannel
-	connectionCreatorFn messageClientConnection
+	connectionCreatorFn MessageClientConnection
 	appID               string
 	mode                modes.DaprMode
 	grpcPort            int
@@ -54,12 +54,14 @@ type directMessaging struct {
 	hostAddress         string
 	hostName            string
 	maxRequestBodySize  int
+	gateways            map[string]config.Gateway
 }
 
 type remoteApp struct {
 	id        string
 	namespace string
 	address   string
+	gateway   string
 }
 
 // NewDirectMessaging returns a new direct messaging api
@@ -67,9 +69,11 @@ func NewDirectMessaging(
 	appID, namespace string,
 	port int, mode modes.DaprMode,
 	appChannel channel.AppChannel,
-	clientConnFn messageClientConnection,
+	clientConnFn MessageClientConnection,
 	resolver nr.Resolver,
-	tracingSpec config.TracingSpec, maxRequestBodySize int) DirectMessaging {
+	tracingSpec config.TracingSpec,
+	maxRequestBodySize int,
+	gateways map[string]config.Gateway) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 	return &directMessaging{
@@ -84,6 +88,7 @@ func NewDirectMessaging(
 		hostAddress:         hAddr,
 		hostName:            hName,
 		maxRequestBodySize:  maxRequestBodySize,
+		gateways:            gateways,
 	}
 }
 
@@ -94,21 +99,42 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 		return nil, err
 	}
 
-	if app.id == d.appID && app.namespace == d.namespace {
+	var connPoolPrefix string
+	if app.gateway != "" {
+		connPoolPrefix = app.gateway
+	} else {
+		connPoolPrefix = ""
+	}
+
+	if app.gateway != "" && app.id == d.appID && app.namespace == d.namespace {
 		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
+	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req, connPoolPrefix)
 }
 
-// requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
-func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, string, error) {
+// requestAppIDAndNamespaceAndGateway takes an app id and returns the app id, namespace and error.
+func (d *directMessaging) requestAppIDAndNamespaceAndGateway(targetAppID string) (string, string, string, error) {
 	items := strings.Split(targetAppID, ".")
-	if len(items) == 1 {
-		return targetAppID, d.namespace, nil
-	} else if len(items) == 2 {
-		return items[0], items[1], nil
-	} else {
-		return "", "", errors.Errorf("invalid app id %s", targetAppID)
+	switch len(items) {
+	case 1: // <appID> - use our namespace.
+		{
+			return targetAppID, d.namespace, "", nil
+		}
+	case 2: // <appID>.<namespace> - use provided namespace.
+		{
+			return items[0], items[1], "", nil
+		}
+	case 3: // <appID>.<namespace>.<gateway> - use provided namespace and gateway.
+		{
+			if d.gateways == nil || len(d.gateways) == 0 {
+				return "", "", "", errors.Errorf("gateway feature disabled or no gateways available, invalid app id %s", targetAppID)
+			}
+			return items[0], items[1], items[2], nil
+		}
+	default:
+		{
+			return "", "", "", errors.Errorf("invalid app id %s", targetAppID)
+		}
 	}
 }
 
@@ -120,10 +146,11 @@ func (d *directMessaging) invokeWithRetry(
 	numRetries int,
 	backoffInterval time.Duration,
 	app remoteApp,
-	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
-	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest, connPoolPrefix string) (*invokev1.InvokeMethodResponse, error),
+	req *invokev1.InvokeMethodRequest,
+	connPoolPrefix string) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(ctx, app.id, app.namespace, app.address, req)
+		resp, err := fn(ctx, app.id, app.namespace, app.address, req, connPoolPrefix)
 		if err == nil {
 			return resp, nil
 		}
@@ -133,7 +160,7 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true, false)
+			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true, false, connPoolPrefix)
 			if connerr != nil {
 				return nil, connerr
 			}
@@ -152,8 +179,8 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 	return d.appChannel.InvokeMethod(ctx, req)
 }
 
-func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false, false)
+func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest, connPoolKeyPrefix string) (*invokev1.InvokeMethodResponse, error) {
+	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false, false, connPoolKeyPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -217,9 +244,23 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 }
 
 func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
-	id, namespace, err := d.requestAppIDAndNamespace(appID)
+	id, namespace, gatewayName, err := d.requestAppIDAndNamespaceAndGateway(appID)
 	if err != nil {
 		return remoteApp{}, err
+	}
+
+	if gatewayName != "" {
+		gateway, ok := d.gateways[gatewayName]
+		if !ok {
+			return remoteApp{}, errors.Errorf("gateway %s not found", gatewayName)
+		}
+
+		return remoteApp{
+			namespace: namespace,
+			id:        id,
+			address:   gateway.Address,
+			gateway:   gateway.Name,
+		}, nil
 	}
 
 	request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}

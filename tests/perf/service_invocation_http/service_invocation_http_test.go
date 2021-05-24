@@ -41,6 +41,7 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Config:            "oneweek",
 		},
 		{
 			AppName:           "tester",
@@ -58,6 +59,7 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Config:            "oneweek",
 		},
 	}
 
@@ -83,7 +85,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
-	t.Logf("teter app url: %s", testerAppURL)
+	t.Logf("tester app url: %s", testerAppURL)
 	_, err = utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
 	require.NoError(t, err)
 
@@ -113,6 +115,18 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 
+	// Perform cross network test
+	endpoint = fmt.Sprintf("http://127.0.0.1:3500/v1.0/invoke/testapp.default.network2/method/test")
+	p.TargetEndpoint = endpoint
+	body, err = json.Marshal(&p)
+	require.NoError(t, err)
+
+	t.Log("running cross network test...")
+	xNetResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Log("checking err...")
+	require.NoError(t, err)
+	require.NotEmpty(t, xNetResp)
+
 	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
 	require.NoError(t, err)
 
@@ -133,14 +147,21 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	err = json.Unmarshal(baselineResp, &baselineResult)
 	require.NoError(t, err)
 
+	var xNetResult perf.TestResult
+	err = json.Unmarshal(xNetResp, &xNetResult)
+	require.NoError(t, err)
+
 	percentiles := map[int]string{1: "75th", 2: "90th"}
 
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
+		crossNetworkValue := xNetResult.DurationHistogram.Percentiles[k].Value
 
 		latency := (daprValue - baselineValue) * 1000
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
+		crossNetworkLatency := (crossNetworkValue - daprValue) * 1000
+		t.Logf("cross network added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", crossNetworkLatency))
 	}
 
 	report := perf.NewTestReport(

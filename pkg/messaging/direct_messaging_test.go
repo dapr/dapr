@@ -84,10 +84,11 @@ func TestKubernetesNamespace(t *testing.T) {
 		appID := "app1"
 
 		dm := newDirectMessaging()
-		id, ns, err := dm.requestAppIDAndNamespace(appID)
+		id, ns, gw, err := dm.requestAppIDAndNamespaceAndGateway(appID)
 
 		assert.NoError(t, err)
 		assert.Empty(t, ns)
+		assert.Empty(t, gw)
 		assert.Equal(t, appID, id)
 	})
 
@@ -95,18 +96,31 @@ func TestKubernetesNamespace(t *testing.T) {
 		appID := "app1.ns1"
 
 		dm := newDirectMessaging()
-		id, ns, err := dm.requestAppIDAndNamespace(appID)
+		id, ns, gw, err := dm.requestAppIDAndNamespaceAndGateway(appID)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "ns1", ns)
 		assert.Equal(t, "app1", id)
+		assert.Empty(t, gw)
+	})
+
+	t.Run("with gatewau", func(t *testing.T) {
+		appID := "app1.ns1.gw1"
+
+		dm := newDirectMessaging()
+		id, ns, gw, err := dm.requestAppIDAndNamespaceAndGateway(appID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "ns1", ns)
+		assert.Equal(t, "app1", id)
+		assert.Equal(t, "gw1", gw)
 	})
 
 	t.Run("invalid namespace", func(t *testing.T) {
-		appID := "app1.ns1.ns2"
+		appID := "app1.ns1.gw1.ext"
 
 		dm := newDirectMessaging()
-		_, _, err := dm.requestAppIDAndNamespace(appID)
+		_, _, _, err := dm.requestAppIDAndNamespaceAndGateway(appID)
 
 		assert.Error(t, err)
 	})

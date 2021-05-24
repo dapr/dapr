@@ -54,7 +54,7 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 
 // CreateLocalChannel creates a new gRPC AppChannel
 func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
-	conn, err := g.GetGRPCConnection(fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled)
+	conn, err := g.GetGRPCConnection(fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled, "")
 	if err != nil {
 		return nil, errors.Errorf("error establishing connection to app grpc on port %v: %s", port, err)
 	}
@@ -64,10 +64,14 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 	return ch, nil
 }
 
+func getConnectionPoolKey(prefix, key string) string {
+	return fmt.Sprintf("%s//%s", prefix, key)
+}
+
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist
-func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool) (*grpc.ClientConn, error) {
+func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, connPoolKeyPrefix string) (*grpc.ClientConn, error) {
 	g.lock.RLock()
-	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
+	if val, ok := g.connectionPool[getConnectionPoolKey(connPoolKeyPrefix, address)]; ok && !recreateIfExists {
 		g.lock.RUnlock()
 		return val, nil
 	}
@@ -76,7 +80,7 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	// read the value once again, as a concurrent writer could create it
-	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
+	if val, ok := g.connectionPool[getConnectionPoolKey(connPoolKeyPrefix, address)]; ok && !recreateIfExists {
 		return val, nil
 	}
 

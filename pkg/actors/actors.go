@@ -19,7 +19,6 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -31,6 +30,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -67,7 +67,7 @@ type actorsRuntime struct {
 	store               state.Store
 	transactionalStore  state.TransactionalStore
 	placement           *internal.ActorPlacement
-	grpcConnectionFn    func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
+	grpcConnectionFn    messaging.MessageClientConnection
 	config              Config
 	actorsTable         *sync.Map
 	activeTimers        *sync.Map
@@ -99,7 +99,7 @@ const (
 func NewActors(
 	stateStore state.Store,
 	appChannel channel.AppChannel,
-	grpcConnectionFn func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error),
+	grpcConnectionFn messaging.MessageClientConnection,
 	config Config,
 	certChain *dapr_credentials.CertChain,
 	tracingSpec configuration.TracingSpec,
@@ -303,7 +303,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, err = a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, true, false)
+			_, err = a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, true, false, "")
 			if err != nil {
 				return nil, err
 			}
@@ -379,7 +379,7 @@ func (a *actorsRuntime) callRemoteActor(
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	log.Infof("Entering callRemoteActor: %s - %s", req.Actor().GetActorType(), req.Actor().GetActorId())
 	log.Infof("callRemoteActor Request Headers: %v", req.Metadata())
-	conn, err := a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, false, false)
+	conn, err := a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, false, false, "")
 	if err != nil {
 		return nil, err
 	}
