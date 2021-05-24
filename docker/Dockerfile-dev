@@ -55,6 +55,11 @@ RUN apt-get update \
     # Install Dapr CLI.
     && wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash \
     #
+    # Copy devcontainer init, Docker bind-mount and GOPATH setup scripts
+    && mv -f -t /usr/local/share/ /tmp/staging/docker-bind-mount.sh /tmp/staging/devcontainer-init.sh /tmp/staging/setup-gopath.sh \
+    && chmod +x /usr/local/share/docker-bind-mount.sh /usr/local/share/devcontainer-init.sh /usr/local/share/setup-gopath.sh \
+    && chown ${USERNAME}:root /usr/local/share/docker-bind-mount.sh /usr/local/share/devcontainer-init.sh /usr/local/share/setup-gopath.sh \
+    #
     # Move the first run notice to the correct location for Codespaces.
     && mkdir -p /usr/local/etc/vscode-dev-containers/ \
     && mv -f /tmp/staging/first-run-notice.txt /usr/local/etc/vscode-dev-containers/ \
@@ -65,8 +70,8 @@ RUN apt-get update \
 # Mount for docker-in-docker
 VOLUME [ "/var/lib/docker" ]
 
-# Initialize Docker script
-ENTRYPOINT [ "/usr/local/share/docker-init.sh" ]
+# Initialize Dapr devcontainer script
+ENTRYPOINT [ "/usr/local/share/devcontainer-init.sh" ]
 CMD [ "sleep", "infinity" ]
 
 USER ${USERNAME}
