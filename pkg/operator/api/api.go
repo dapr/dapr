@@ -37,7 +37,7 @@ type Server interface {
 
 type apiServer struct {
 	Client     client.Client
-	updateChan chan (*componentsapi.Component)
+	updateChan chan *componentsapi.Component
 }
 
 // NewAPIServer returns a new API server
@@ -88,7 +88,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	}, nil
 }
 
-// GetComponents returns a list of Dapr components
+// ListComponents returns a list of Dapr components
 func (a *apiServer) ListComponents(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListComponentResponse, error) {
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components); err != nil {
