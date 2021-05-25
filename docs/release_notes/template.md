@@ -101,7 +101,7 @@ All done!
 
 #### Starting a fresh install on a cluster
 
-Please see [Deploying Dapr on a Kubernetes cluster](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-deploy/) for a complete guide to installing Dapr on Kubernetes
+Please see [how to deploy Dapr on a Kubernetes cluster](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-deploy/) for a complete guide to installing Dapr on Kubernetes
 
 You can use Helm 3 to install Dapr:
 ```
