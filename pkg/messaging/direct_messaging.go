@@ -99,20 +99,13 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 		return nil, err
 	}
 
-	var connPoolPrefix string
-	if app.gateway != "" {
-		connPoolPrefix = app.gateway
-	} else {
-		connPoolPrefix = ""
-	}
-
 	if app.gateway != "" && app.id == d.appID && app.namespace == d.namespace {
 		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req, connPoolPrefix)
+	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req, app.gateway)
 }
 
-// parseAppID takes an app id and returns its consistuent parts; id, namespace and gateway or error.
+// parseAppID takes an app id and returns its constituent parts; id, namespace and gateway or error.
 func (d *directMessaging) parseAppID(targetAppID string) (string, string, string, error) {
 	items := strings.Split(targetAppID, ".")
 	switch len(items) {

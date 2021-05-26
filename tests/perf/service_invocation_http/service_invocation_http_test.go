@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
-			Config:            "gateway-config",
+			Config:            "gateway-config", // TODO: How do we set config dynamically?
 		},
 		{
 			AppName:           "tester",
@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
-			Config:            "gateway-config",
+			Config:            "gateway-config", // TODO: How do we set config dynamically?
 		},
 	}
 
