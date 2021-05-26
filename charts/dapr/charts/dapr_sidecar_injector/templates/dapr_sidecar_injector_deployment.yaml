@@ -64,8 +64,8 @@ spec:
           {{- end }}
           periodSeconds: 3
           failureThreshold: 5
-{{- if contains "/" .Values.image.name }}
-        image: "{{ .Values.image.name }}"
+{{- if contains "/" .Values.injectorImage.name }}
+        image: "{{ .Values.injectorImage.name }}"
 {{- else }}
         image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
