@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
+
 	"github.com/dapr/dapr/pkg/components"
 )
 

@@ -8,8 +8,6 @@ package kubernetes
 import (
 	"path/filepath"
 
-	daprclient "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
 	"k8s.io/client-go/kubernetes"
 	appv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	batchv1 "k8s.io/client-go/kubernetes/typed/batch/v1"
@@ -18,6 +16,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	metrics "k8s.io/metrics/pkg/client/clientset/versioned"
+
+	daprclient "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
 )
 
 // KubeClient holds instances of Kubernetes clientset
