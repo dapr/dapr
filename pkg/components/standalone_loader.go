@@ -38,8 +38,7 @@ func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneC
 
 // LoadComponents loads dapr components from a given directory
 func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
-	dir := s.config.ComponentsPath
-	files, err := ioutil.ReadDir(dir)
+	files, err := ioutil.ReadDir(s.config.ComponentsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -48,23 +47,31 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 
 	for _, file := range files {
 		if !file.IsDir() && s.isYaml(file.Name()) {
-			path := filepath.Join(dir, file.Name())
-
-			b, err := ioutil.ReadFile(path)
-			if err != nil {
-				log.Warnf("error reading file %s : %s", path, err)
-				continue
+			components := s.loadComponentsFromFile(file.Name())
+			if len(components) > 0 {
+				list = append(list, components...)
 			}
-
-			components, errors := s.decodeYaml(b)
-			for _, err := range errors {
-				log.Warnf("error parsing components yaml resource in %s : %s", path, err)
-			}
-			list = append(list, components...)
 		}
 	}
 
 	return list, nil
+}
+
+func (s *StandaloneComponents) loadComponentsFromFile(filename string) []components_v1alpha1.Component {
+	components := []components_v1alpha1.Component{}
+	path := filepath.Join(s.config.ComponentsPath, filename)
+	errors := []error{}
+
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Warnf("daprd load components error when reading file %s : %s", path, err)
+		return components
+	}
+	components, errors = s.decodeYaml(b)
+	for _, err := range errors {
+		log.Warnf("daprd load components error when parsing components yaml resource in %s : %s", path, err)
+	}
+	return components
 }
 
 // isYaml checks whether the file is yaml or not
