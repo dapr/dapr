@@ -3,10 +3,11 @@ package diagnostics
 import (
 	"context"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // Tag keys

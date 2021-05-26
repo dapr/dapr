@@ -9,8 +9,9 @@ import (
 	"strings"
 
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/pkg/errors"
+
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type State struct {

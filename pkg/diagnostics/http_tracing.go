@@ -13,12 +13,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
 	"google.golang.org/grpc/codes"
+
+	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.

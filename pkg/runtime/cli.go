@@ -14,6 +14,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/dapr/kit/logger"
+
 	global_config "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
@@ -24,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance
