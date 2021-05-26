@@ -1885,6 +1885,7 @@ func (a *DaprRuntime) getGatewayMap() map[string]config.Gateway {
 
 	gwMap := map[string]config.Gateway{}
 	for _, gw := range a.globalConfig.Spec.GatewaySpec.Gateways {
+		log.Debugf("loaded gateway: %s", gw.Name)
 		gwMap[gw.Name] = gw
 	}
 	return gwMap

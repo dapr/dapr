@@ -50,7 +50,9 @@ Performance tests are designed to let you evaluate the latency, resource usage a
     export DAPR_SIDECAR_MEMORY_LIMIT
     export DAPR_SIDECAR_CPU_REQUEST
     export DAPR_SIDECAR_MEMORY_REQUEST
-
+    export DAPR_XNET_RUN
+    export DAPR_XNET_BASELINE_ENDPOINT
+    export DAPR_XNET_APP_ID
     ```
 
 ### Deploy your dapr runtime change

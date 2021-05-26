@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
-			Config:            "oneweek",
+			Config:            "gateway-config",
 		},
 		{
 			AppName:           "tester",
@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
-			Config:            "oneweek",
+			Config:            "gateway-config",
 		},
 	}
 
@@ -69,7 +69,16 @@ func TestMain(m *testing.M) {
 
 func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	p := perf.Params()
-	t.Logf("running service invocation http test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
+
+	var xNetLog string
+	if p.RunCrossNetworkTests {
+		if p.CrossNetworkAppID == "" || p.CrossNetworkBaselineEndpoint == "" {
+			t.Error("cross-network baseline endpoint and cross-network app id must be set when cross-network tests are enabled.")
+			return
+		}
+		xNetLog = fmt.Sprintf(", cross-network test=enabled, cross-network baseline address=%s, cross-network app id=%s", p.CrossNetworkBaselineEndpoint, p.CrossNetworkAppID)
+	}
+	t.Logf("running service invocation http test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v %s", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload, xNetLog)
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
@@ -103,19 +112,23 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	daprResp := runTestCase(t, testID, testerAppURL, &p)
 	t.Logf("%s test results: %s", testID, string(daprResp))
 
-	// Perform baseline cross network test
-	testID = "cross network baseline"
-	endpoint = fmt.Sprintf("http://20.90.168.44:3000/test")
-	p.TargetEndpoint = endpoint
-	xNetBaselineResp := runTestCase(t, testID, testerAppURL, &p)
-	t.Logf("%s test results: %s", testID, string(xNetBaselineResp))
+	var crossNetworkBaselineResp []byte
+	var crossNetworkDaprResp []byte
+	if p.RunCrossNetworkTests {
+		// Perform baseline cross-network test
+		testID = "cross-network baseline"
+		endpoint = fmt.Sprintf("http://%s/test", p.CrossNetworkBaselineEndpoint)
+		p.TargetEndpoint = endpoint
+		crossNetworkBaselineResp = runTestCase(t, testID, testerAppURL, &p)
+		t.Logf("%s test results: %s", testID, string(crossNetworkBaselineResp))
 
-	// Perform cross network test
-	testID = "cross network dapr"
-	endpoint = fmt.Sprintf("http://127.0.0.1:3500/v1.0/invoke/testapp.default.network2/method/test")
-	p.TargetEndpoint = endpoint
-	xNetDaprResp := runTestCase(t, testID, testerAppURL, &p)
-	t.Logf("%s test results: %s", testID, string(xNetDaprResp))
+		// Perform cross-network test
+		testID = "cross-network dapr"
+		endpoint = fmt.Sprintf("http://127.0.0.1:3500/v1.0/invoke/%s/method/test", p.CrossNetworkAppID)
+		p.TargetEndpoint = endpoint
+		crossNetworkDaprResp = runTestCase(t, testID, testerAppURL, &p)
+		t.Logf("%s test results: %s", testID, string(crossNetworkDaprResp))
+	}
 
 	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
 	require.NoError(t, err)
@@ -136,13 +149,15 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	err = json.Unmarshal(baselineResp, &baselineResult)
 	require.NoError(t, err)
 
-	var xNetBaselineResult perf.TestResult
-	err = json.Unmarshal(xNetBaselineResp, &xNetBaselineResult)
-	require.NoError(t, err)
+	var crossNetworkBaselineResult perf.TestResult
+	var crossNetworkDaprResult perf.TestResult
+	if p.RunCrossNetworkTests {
+		err = json.Unmarshal(crossNetworkBaselineResp, &crossNetworkBaselineResult)
+		require.NoError(t, err)
 
-	var xNetDaprResult perf.TestResult
-	err = json.Unmarshal(xNetDaprResp, &xNetDaprResult)
-	require.NoError(t, err)
+		err = json.Unmarshal(crossNetworkDaprResp, &crossNetworkDaprResult)
+		require.NoError(t, err)
+	}
 
 	percentiles := map[int]string{1: "75th", 2: "90th"}
 
@@ -151,18 +166,33 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
 
 		latency := (daprValue - baselineValue) * 1000
-		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
+		logPercentileLatency(t, v, latency, "added by dapr over baseline.")
 
-		// Cross network
-		xNetBaselineValue := xNetBaselineResult.DurationHistogram.Percentiles[k].Value
-		xNetDaprValue := xNetDaprResult.DurationHistogram.Percentiles[k].Value
+		if p.RunCrossNetworkTests {
+			crossNetworkBaselineValue := crossNetworkBaselineResult.DurationHistogram.Percentiles[k].Value
+			crossNetworkDaprValue := crossNetworkDaprResult.DurationHistogram.Percentiles[k].Value
 
-		xNetLatency := (xNetDaprValue - xNetBaselineValue) * 1000
-		t.Logf("added latency (cross network) for %s percentile: %sms", v, fmt.Sprintf("%.2f", xNetLatency))
+			// Compare cross-network baseline to internal network baseline.
+			crossNetworkBaselineLatency := (crossNetworkBaselineValue - baselineValue) * 1000
+			logPercentileLatency(t, v, crossNetworkBaselineLatency, "added by cross-network baseline over baseline.")
+
+			// Compare cross-network dapr to cross-network baseline.
+			crossNetworkDaprLatency := (crossNetworkDaprValue - crossNetworkBaselineValue) * 1000
+			logPercentileLatency(t, v, crossNetworkDaprLatency, "added by cross-network dapr calls over cross-network baseline.")
+
+			// Compare cross-network dapr to internal network dapr.
+			crossNetworkLatency := (crossNetworkDaprValue - daprValue) * 1000
+			logPercentileLatency(t, v, crossNetworkLatency, "added by cross-network dapr calls over dapr baseline.")
+		}
+	}
+
+	results := []perf.TestResult{baselineResult, daprResult}
+	if p.RunCrossNetworkTests {
+		results = append(results, crossNetworkBaselineResult, crossNetworkDaprResult)
 	}
 
 	report := perf.NewTestReport(
-		[]perf.TestResult{baselineResult, daprResult},
+		results,
 		"Service Invocation",
 		sidecarUsage,
 		appUsage)
@@ -177,6 +207,10 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
+}
+
+func logPercentileLatency(t *testing.T, percentile string, latency float64, reason string) {
+	t.Logf("percentile=%s, latencyDiff=%sms, reason=%s", percentile, fmt.Sprintf("%.2f", latency), reason)
 }
 
 func runTestCase(t *testing.T, id string, testerAppURL string, testParams *perf.TestParameters) []byte {
