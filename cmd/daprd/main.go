@@ -11,9 +11,10 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/version"
-	"github.com/dapr/kit/logger"
 
 	// Included components in compiled daprd
 
@@ -26,6 +27,7 @@ import (
 	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstore_env "github.com/dapr/components-contrib/secretstores/local/env"
 	secretstore_file "github.com/dapr/components-contrib/secretstores/local/file"
+
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 
 	// State Stores
@@ -49,6 +51,7 @@ import (
 	"github.com/dapr/components-contrib/state/rethinkdb"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
+
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 
 	// Pub/Sub
@@ -65,6 +68,7 @@ import (
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
+
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
 	// Name resolutions
@@ -72,6 +76,7 @@ import (
 	nr_consul "github.com/dapr/components-contrib/nameresolution/consul"
 	nr_kubernetes "github.com/dapr/components-contrib/nameresolution/kubernetes"
 	nr_mdns "github.com/dapr/components-contrib/nameresolution/mdns"
+
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 
 	// Bindings
@@ -114,6 +119,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/twitter"
 	bindings_zeebe_command "github.com/dapr/components-contrib/bindings/zeebe/command"
 	bindings_zeebe_jobworker "github.com/dapr/components-contrib/bindings/zeebe/jobworker"
+
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware
@@ -124,9 +130,10 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/opa"
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
+	"github.com/valyala/fasthttp"
+
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
-	"github.com/valyala/fasthttp"
 )
 
 var (

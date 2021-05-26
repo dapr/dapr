@@ -9,9 +9,10 @@ import (
 	"context"
 	"net/http"
 
+	"google.golang.org/grpc"
+
 	"github.com/dapr/dapr/pkg/config"
 	v1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"google.golang.org/grpc"
 )
 
 var endpoints = map[string][]string{

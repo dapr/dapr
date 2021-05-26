@@ -10,10 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/placement/raft"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+
+	"github.com/dapr/dapr/pkg/placement/raft"
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 func cleanupStates() {
