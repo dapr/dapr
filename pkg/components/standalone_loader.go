@@ -58,9 +58,10 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 }
 
 func (s *StandaloneComponents) loadComponentsFromFile(filename string) []components_v1alpha1.Component {
+	var errors []error
+
 	components := []components_v1alpha1.Component{}
 	path := filepath.Join(s.config.ComponentsPath, filename)
-	errors := []error{}
 
 	b, err := ioutil.ReadFile(path)
 	if err != nil {

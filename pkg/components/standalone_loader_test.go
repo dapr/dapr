@@ -8,8 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"bou.ke/monkey"
-	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/smartystreets/goconvey/convey"
+
+	config "github.com/dapr/dapr/pkg/config/modes"
 )
 
 func TestLoadComponentsFromFile(t *testing.T) {
