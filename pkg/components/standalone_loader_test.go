@@ -3,8 +3,9 @@ package components
 import (
 	"testing"
 
-	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/stretchr/testify/assert"
+
+	config "github.com/dapr/dapr/pkg/config/modes"
 )
 
 func TestIsYaml(t *testing.T) {

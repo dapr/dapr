@@ -10,10 +10,11 @@ import (
 	"strconv"
 	"sync"
 
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/hashicorp/go-msgpack/codec"
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
+
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 // CommandType is the type of raft command in log entry

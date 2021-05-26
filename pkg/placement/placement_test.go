@@ -12,14 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/placement/raft"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/pkg/placement/raft"
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 const testStreamSendLatency = 50 * time.Millisecond

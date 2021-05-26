@@ -12,9 +12,10 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/identity"
-	"github.com/pkg/errors"
 )
 
 const (

@@ -16,6 +16,14 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/fasthttp/router"
+	jsoniter "github.com/json-iterator/go"
+	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
+	"github.com/valyala/fasthttp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -29,13 +37,6 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/fasthttp/router"
-	jsoniter "github.com/json-iterator/go"
-	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
-	"github.com/valyala/fasthttp"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // API returns a list of HTTP endpoints for Dapr
