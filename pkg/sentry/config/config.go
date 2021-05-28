@@ -8,10 +8,11 @@ import (
 	"github.com/pkg/errors"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/dapr/kit/logger"
+
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	dapr_config "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
 )
 
 const (

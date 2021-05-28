@@ -18,6 +18,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -25,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"

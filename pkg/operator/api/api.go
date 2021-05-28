@@ -17,12 +17,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/dapr/kit/logger"
+
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/dapr/kit/logger"
 )
 
 const serverPort = 6500
@@ -37,7 +38,7 @@ type Server interface {
 
 type apiServer struct {
 	Client     client.Client
-	updateChan chan (*componentsapi.Component)
+	updateChan chan *componentsapi.Component
 }
 
 // NewAPIServer returns a new API server
@@ -88,7 +89,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	}, nil
 }
 
-// GetComponents returns a list of Dapr components
+// ListComponents returns a list of Dapr components
 func (a *apiServer) ListComponents(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListComponentResponse, error) {
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components); err != nil {
