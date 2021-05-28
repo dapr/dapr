@@ -97,7 +97,8 @@ type api struct {
 	secretStores             map[string]secretstores.SecretStore
 	secretsConfiguration     map[string]config.SecretsScope
 	configurationStores      map[string]configuration.Store
-	configurationCaches      map[string]*runtimev1pb.GetConfigurationResponse
+	configurationCaches      map[string]*configuration.Configuration
+	configurationSubscribe   map[string]*configurationEventHandler
 	pubsubAdapter            runtime_pubsub.Adapter
 	id                       string
 	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -143,7 +144,8 @@ func NewAPI(
 		secretStores:             secretStores,
 		secretsConfiguration:     secretsConfiguration,
 		configurationStores:      configurationStores,
-		configurationCaches:      map[string]*runtimev1pb.GetConfigurationResponse{},
+		configurationCaches:      map[string]*configuration.Configuration{},
+		configurationSubscribe:   map[string]*configurationEventHandler{},
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		tracingSpec:              tracingSpec,
 		accessControlList:        accessControlList,
@@ -1115,7 +1117,15 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 			// if store is unavailable, try to get configuration from cache
 			cache := a.configurationCaches[fmt.Sprintf("%s||%s", in.StoreName, req.AppID)]
 			if cache != nil {
-				return cache, nil
+				response := &runtimev1pb.GetConfigurationResponse{
+					Configuration: &commonv1pb.Configuration{
+						AppId:     cache.AppID,
+						StoreName: cache.StoreName,
+						Revision:  cache.Revision,
+						Items:     invokev1.ToConfigurationGRPCItems(cache.Items),
+					},
+				}
+				return response, nil
 			}
 		}
 
@@ -1126,15 +1136,20 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 
 	response := &runtimev1pb.GetConfigurationResponse{
 		Configuration: &commonv1pb.Configuration{
-			AppID: req.AppID,
+			AppId:     getResponse.AppID,
 			StoreName: in.StoreName,
-			Revision: getResponse.Revision,
-			Items: invokev1.ToConfigurationGRPCItems(getResponse.Items),
+			Revision:  getResponse.Revision,
+			Items:     invokev1.ToConfigurationGRPCItems(getResponse.Items),
 		},
 	}
 
 	// save to cache
-	a.configurationCaches[fmt.Sprintf("%s||%s", in.StoreName, req.AppID)] = response
+	a.configurationCaches[fmt.Sprintf("%s||%s", in.StoreName, req.AppID)] = &configuration.Configuration{
+		AppID:     getResponse.AppID,
+		StoreName: in.StoreName,
+		Revision:  getResponse.Revision,
+		Items:     getResponse.Items,
+	}
 
 	return response, nil
 }
@@ -1149,9 +1164,6 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 	if h.api.appChannel == nil {
 		return status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
-	if len(e.Items) == 0 {
-		return nil
-	}
 
 	c := &configuration.Configuration{
 		AppID:     h.appId,
@@ -1159,6 +1171,9 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		Revision:  e.Revision,
 		Items:     e.Items,
 	}
+
+	// save to cache
+	h.api.configurationCaches[fmt.Sprintf("%s||%s", h.storeName, h.appId)] = c
 
 	return h.api.appChannel.OnConfigurationEvent(context.Background(), c)
 }
@@ -1170,21 +1185,27 @@ func (a *api) SubscribeConfiguration(ctx context.Context, in *runtimev1pb.Subscr
 		return &emptypb.Empty{}, err
 	}
 
+	// check if Subscribe exist for this StoreName and appID
+	// we only need to start one subscribe for specified appID, we don't care the names in daprd
+	if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s",in.StoreName, in.AppId)]; ok {
+		// already subscribed for this appid, just return
+		return &emptypb.Empty{}, nil
+	}
+
 	req := &configuration.SubscribeRequest{
 		AppID:    in.AppId,
-		Keys:     in.Keys,
 		Metadata: in.Metadata,
 	}
-	handler := configurationEventHandler{
+	handler := &configurationEventHandler{
 		api:       a,
 		storeName: in.StoreName,
 		appId:     req.AppID,
 	}
-
 	err = store.Subscribe(ctx, req, handler.updateEventHandler)
 	if err != nil {
 		return &emptypb.Empty{}, err
 	}
+	a.configurationSubscribe[fmt.Sprintf("%s||%s",in.StoreName, in.AppId)] = handler
 
 	return &emptypb.Empty{}, nil
 }

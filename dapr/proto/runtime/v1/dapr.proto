@@ -443,10 +443,10 @@ message SubscribeConfigurationRequest {
   // Only used for admin, ignored and reset for normal client
   string app_id = 2;
 
-  // The keys to get.
-  repeated string keys = 3;
+  // The names to get.
+  repeated string names = 3;
 
-  // the revision of app's configurations.
+  // the revision of app's current configurations.
   string revision = 4;
 
   // The metadata which will be sent to configuration store components.

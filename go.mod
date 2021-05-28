@@ -56,7 +56,7 @@ require (
 
 replace (
 	// TODO: remove this replace after the code in components-contrib is merged
-	github.com/dapr/components-contrib => github.com/skyao/components-contrib v1.0.1-0.20210513134853-429ee0f991df
+	github.com/dapr/components-contrib => github.com/skyao/components-contrib v1.0.1-0.20210528081555-bfdbb8d9f5bb
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )

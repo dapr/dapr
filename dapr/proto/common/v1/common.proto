@@ -127,10 +127,10 @@ message StateOptions {
 // Configuration represents all the configuration items of specified application.
 message Configuration {
   // Required. The name of configuration item
-  string appID = 1;
+  string app_id = 1;
 
   // Required. The configuration store name to get and save this configuration document.
-  string storeName = 2;
+  string store_name = 2;
 
   // Required. The revision of this configuration.
   // It should be an incremental integers and changed when configuration is updated.
@@ -149,11 +149,8 @@ message ConfigurationItem {
   // Empty if the configuration is not set, including the case that the configuration is changed from value-set to value-not-set.
   string content = 2;
 
-  // The tag list of configuration item.
-  map<string,string> tags = 3;
-
   // The metadata which will be passed to configuration store component.
-  map<string,string> metadata = 4;
+  map<string,string> metadata = 3;
 }
 
 

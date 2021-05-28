@@ -7,7 +7,7 @@ import (
 
 func ToGrpcConfiguration(c *configuration.Configuration) *commonv1pb.Configuration {
 	return &commonv1pb.Configuration {
-		AppID: c.AppID,
+		AppId: c.AppID,
 		StoreName: c.StoreName,
 		Revision: c.Revision,
 		Items: ToConfigurationGRPCItems(c.Items),
@@ -28,7 +28,6 @@ func ToConfigurationGRPCItem(item *configuration.Item) *commonv1pb.Configuration
 	return &commonv1pb.ConfigurationItem{
 		Name:     item.Name,
 		Content:  item.Content,
-		Tags:     item.Tags,
 		Metadata: item.Metadata,
 	}
 }
@@ -47,7 +46,6 @@ func FromConfigurationGRPCItem(item *commonv1pb.ConfigurationItem) *configuratio
 	return &configuration.Item{
 		Name:     item.Name,
 		Content:  item.Content,
-		Tags:     item.Tags,
 		Metadata: item.Metadata,
 	}
 }
