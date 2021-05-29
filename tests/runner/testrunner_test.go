@@ -9,9 +9,10 @@ import (
 	"fmt"
 	"testing"
 
-	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
 type fakeTestingM struct{}
