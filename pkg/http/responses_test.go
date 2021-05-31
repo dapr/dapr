@@ -32,9 +32,20 @@ func TestHeaders(t *testing.T) {
 	t.Run("Respond with ETag JSON", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 		etagValue := "etagValue"
-		respondWithETaggedJSON(ctx, 200, nil, ptr.String(etagValue))
+		respondWithJSON(ctx, 200, nil)
+		respondWithETag(ctx, ptr.String(etagValue))
 
 		assert.Equal(t, etagValue, string(ctx.Response.Header.Peek(etagHeader)))
+	})
+
+	t.Run("Respond with metadata and JSON", func(t *testing.T) {
+		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
+		respondWithJSON(ctx, 200, nil)
+		respondWithMetadata(ctx, map[string]string{
+			"a": "b",
+		})
+
+		assert.Equal(t, "b", string(ctx.Response.Header.Peek(metadataPrefix+"a")))
 	})
 
 	t.Run("Respond with custom content type", func(t *testing.T) {

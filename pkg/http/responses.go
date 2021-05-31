@@ -15,6 +15,7 @@ import (
 const (
 	jsonContentTypeHeader = "application/json"
 	etagHeader            = "ETag"
+	metadataPrefix        = "metadata."
 )
 
 // BulkGetResponse is the response object for a state bulk get operation
@@ -41,12 +42,17 @@ func respond(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 	}
 }
 
-// respondWithETaggedJSON overrides the content-type with application/json and etag header
-func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag *string) {
-	respond(ctx, code, obj)
-	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+// respondWithETag sets etag header
+func respondWithETag(ctx *fasthttp.RequestCtx, etag *string) {
 	if etag != nil {
 		ctx.Response.Header.Set(etagHeader, *etag)
+	}
+}
+
+// respondWithMetadata sets metadata headers
+func respondWithMetadata(ctx *fasthttp.RequestCtx, metadata map[string]string) {
+	for k, v := range metadata {
+		ctx.Response.Header.Set(metadataPrefix+k, v)
 	}
 }
 

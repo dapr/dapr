@@ -559,7 +559,10 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		respondEmpty(reqCtx)
 		return
 	}
-	respondWithETaggedJSON(reqCtx, fasthttp.StatusOK, resp.Data, resp.ETag)
+
+	respondWithJSON(reqCtx, fasthttp.StatusOK, resp.Data)
+	respondWithETag(reqCtx, resp.ETag)
+	respondWithMetadata(reqCtx, resp.Metadata)
 }
 
 func extractEtag(reqCtx *fasthttp.RequestCtx) (bool, string) {
@@ -1356,7 +1359,6 @@ func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 
 func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	metadata := map[string]string{}
-	const metadataPrefix string = "metadata."
 	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
 		queryKey := string(key)
 		if strings.HasPrefix(queryKey, metadataPrefix) {
