@@ -4,15 +4,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/valyala/fasthttp/reuseport"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"github.com/dapr/kit/logger"
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/ca"
@@ -20,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -53,7 +52,7 @@ func NewCAServer(ca ca.CertificateAuthority, validator identity.Validator) CASer
 // It enforces client side cert validation using the trust root cert.
 func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 	addr := fmt.Sprintf(":%v", port)
-	lis, err := net.Listen("tcp", addr)
+	lis, err := reuseport.Listen("tcp4", addr)
 	if err != nil {
 		return errors.Wrapf(err, "could not listen on %s", addr)
 	}

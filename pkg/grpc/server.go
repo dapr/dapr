@@ -14,6 +14,7 @@ import (
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/pkg/errors"
+	"github.com/valyala/fasthttp/reuseport"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -105,7 +106,7 @@ func getDefaultMaxAgeDuration() *time.Duration {
 
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", s.config.Port))
+	lis, err := reuseport.Listen("tcp4", fmt.Sprintf(":%v", s.config.Port))
 	if err != nil {
 		return err
 	}

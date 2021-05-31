@@ -8,13 +8,13 @@ package internal
 import (
 	"fmt"
 	"io"
-	"net"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/valyala/fasthttp/reuseport"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -284,7 +284,7 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 func newTestServer() (string, *testServer, func()) {
 	port, _ := freeport.GetFreePort()
 	conn := fmt.Sprintf("127.0.0.1:%d", port)
-	listener, _ := net.Listen("tcp", conn)
+	listener, _ := reuseport.Listen("tcp4", conn)
 	server := grpc.NewServer()
 	srv := &testServer{}
 	srv.isGracefulShutdown.Store(false)

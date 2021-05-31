@@ -9,11 +9,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/valyala/fasthttp/reuseport"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/types"
@@ -55,7 +55,7 @@ func NewAPIServer(client client.Client) Server {
 
 // Run starts a new gRPC server.
 func (a *apiServer) Run(certChain *dapr_credentials.CertChain) {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
+	lis, err := reuseport.Listen("tcp4", fmt.Sprintf(":%v", serverPort))
 	if err != nil {
 		log.Fatal("error starting tcp listener: %s", err)
 	}

@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"os"
 	"reflect"
@@ -29,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp/reuseport"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -2253,7 +2253,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 }
 
 func startTestAppCallbackGRPCServer(t *testing.T, port int, mockServer runtimev1pb.AppCallbackServer) *grpc.Server {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, err := reuseport.Listen("tcp4", fmt.Sprintf(":%d", port))
 	assert.NoError(t, err)
 	grpcServer := grpc.NewServer()
 	go func() {

@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
@@ -19,6 +18,7 @@ import (
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/valyala/fasthttp/reuseport"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -36,7 +36,7 @@ func main() {
 	log.Printf("Initializing grpc")
 
 	/* #nosec */
-	lis, err := net.Listen("tcp", ":3000")
+	lis, err := reuseport.Listen("tcp4", ":3000")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

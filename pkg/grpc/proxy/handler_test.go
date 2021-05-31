@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	pb "github.com/trusch/grpc-proxy/testservice"
+	"github.com/valyala/fasthttp/reuseport"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -201,9 +202,9 @@ func (s *ProxyHappySuite) SetupSuite() {
 	require.NotNil(s.T(), pc, "proxy codec must be registered")
 	require.NotNil(s.T(), dc, "default codec must be registered")
 
-	s.proxyListener, err = net.Listen("tcp", "127.0.0.1:0")
+	s.proxyListener, err = reuseport.Listen("tcp4", "127.0.0.1:0")
 	require.NoError(s.T(), err, "must be able to allocate a port for proxyListener")
-	s.serverListener, err = net.Listen("tcp", "127.0.0.1:0")
+	s.serverListener, err = reuseport.Listen("tcp4", "127.0.0.1:0")
 	require.NoError(s.T(), err, "must be able to allocate a port for serverListener")
 
 	grpclog.SetLoggerV2(testingLog{s.T()})

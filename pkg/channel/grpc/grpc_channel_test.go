@@ -10,11 +10,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/valyala/fasthttp/reuseport"
 	"google.golang.org/grpc"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
@@ -26,7 +26,7 @@ import (
 // TODO: Add APIVersion testing
 
 func TestInvokeMethod(t *testing.T) {
-	lis, err := net.Listen("tcp", "127.0.0.1:9998")
+	lis, err := reuseport.Listen("tcp4", "127.0.0.1:9998")
 	assert.NoError(t, err)
 
 	grpcServer := grpc.NewServer()

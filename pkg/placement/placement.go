@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/valyala/fasthttp/reuseport"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -126,7 +127,7 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 // Run starts the placement service gRPC server.
 func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
 	var err error
-	p.serverListener, err = net.Listen("tcp", fmt.Sprintf(":%s", port))
+	p.serverListener, err = reuseport.Listen("tcp4", fmt.Sprintf(":%s", port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

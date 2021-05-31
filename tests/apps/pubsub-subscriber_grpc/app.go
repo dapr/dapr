@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"strings"
 	"sync"
 
@@ -22,6 +21,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
+	"github.com/valyala/fasthttp/reuseport"
 	"google.golang.org/grpc"
 )
 
@@ -65,7 +65,7 @@ func main() {
 	log.Printf("Initializing grpc")
 
 	/* #nosec */
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", appPort))
+	lis, err := reuseport.Listen("tcp4", fmt.Sprintf(":%s", appPort))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

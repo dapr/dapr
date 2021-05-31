@@ -8,9 +8,9 @@ package main
 import (
 	"context"
 	"log"
-	"net"
 
 	"google.golang.org/grpc"
+	"github.com/valyala/fasthttp/reuseport"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 )
 
@@ -30,7 +30,7 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 }
 
 func main() {
-	lis, err := net.Listen("tcp", port)
+	lis, err := reuseport.Listen("tcp4", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

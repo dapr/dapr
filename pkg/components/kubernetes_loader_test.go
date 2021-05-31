@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"testing"
 	"time"
 
@@ -12,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/valyala/fasthttp/reuseport"
 
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subscriptions "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
@@ -64,7 +65,7 @@ func getOperatorClient(address string) operatorv1pb.OperatorClient {
 
 func TestLoadComponents(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, err := reuseport.Listen("tcp4", fmt.Sprintf(":%d", port))
 	assert.NoError(t, err)
 
 	s := grpc.NewServer()

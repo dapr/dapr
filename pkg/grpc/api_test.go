@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"strconv"
 	"testing"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/valyala/fasthttp/reuseport"
 	"go.opencensus.io/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -122,7 +122,7 @@ func configureTestTraceExporter(buffer *string) {
 }
 
 func startTestServerWithTracing(port int) (*grpc.Server, *string) {
-	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, _ := reuseport.Listen("tcp4", fmt.Sprintf(":%d", port))
 
 	buffer := ""
 	configureTestTraceExporter(&buffer)
@@ -146,7 +146,7 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 }
 
 func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
-	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, _ := reuseport.Listen("tcp4", fmt.Sprintf(":%d", port))
 
 	server := grpc.NewServer()
 	go func() {
@@ -163,7 +163,7 @@ func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 }
 
 func startInternalServer(port int, testAPIServer *api) *grpc.Server {
-	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, _ := reuseport.Listen("tcp4", fmt.Sprintf(":%d", port))
 
 	server := grpc.NewServer()
 	go func() {
@@ -180,7 +180,7 @@ func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 }
 
 func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server {
-	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, _ := reuseport.Listen("tcp4", fmt.Sprintf(":%d", port))
 
 	opts := []grpc.ServerOption{}
 	if token != "" {
