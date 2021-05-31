@@ -42,10 +42,10 @@ func TestHeaders(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 		respondWithJSON(ctx, 200, nil)
 		respondWithMetadata(ctx, map[string]string{
-			"a": "b",
+			"key": "value",
 		})
 
-		assert.Equal(t, "b", string(ctx.Response.Header.Peek(metadataPrefix+"a")))
+		assert.Equal(t, "value", string(ctx.Response.Header.Peek(metadataPrefix+"key")))
 	})
 
 	t.Run("Respond with custom content type", func(t *testing.T) {
