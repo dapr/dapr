@@ -19,7 +19,7 @@ const (
 	payloadEnvVar                      = "DAPR_PAYLOAD"
 	runCrossNetworkTests               = "DAPR_XNET_RUN"
 	crossNetworkBaselineEndpointEnvVar = "DAPR_XNET_BASELINE_ENDPOINT"
-	crossNetworkAppIdEnvVar            = "DAPR_XNET_APP_ID"
+	crossNetworkAppIDEnvVar            = "DAPR_XNET_APP_ID"
 )
 
 type TestParameters struct {
@@ -47,7 +47,7 @@ func Params() TestParameters {
 		RunCrossNetworkTests: isSet(
 			getEnvVarOrDefault(runCrossNetworkTests, "")),
 		CrossNetworkBaselineEndpoint: getEnvVarOrDefault(crossNetworkBaselineEndpointEnvVar, ""),
-		CrossNetworkAppID:            getEnvVarOrDefault(crossNetworkAppIdEnvVar, ""),
+		CrossNetworkAppID:            getEnvVarOrDefault(crossNetworkAppIDEnvVar, ""),
 	}
 }
 

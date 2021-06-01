@@ -41,7 +41,6 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
-			Config:            "gateway-config", // TODO: How do we set config dynamically?
 		},
 		{
 			AppName:           "tester",
@@ -59,8 +58,13 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
-			Config:            "gateway-config", // TODO: How do we set config dynamically?
 		},
+	}
+
+	// If running cross network tests, add gateway config to apps.
+	if os.Getenv("DAPR_XNET_RUN") != "" {
+		testApps[0].Config = "gateway-config"
+		testApps[1].Config = "gateway-config"
 	}
 
 	tr = runner.NewTestRunner("serviceinvocationhttp", testApps, nil, nil)
@@ -165,24 +169,15 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
 
-		latency := (daprValue - baselineValue) * 1000
-		logPercentileLatency(t, v, latency, "added by dapr over baseline.")
+		latencyDiff := (daprValue - baselineValue) * 1000
+		logPercentileLatency(t, v, daprValue, latencyDiff, "latency added by dapr over baseline performance.")
 
 		if p.RunCrossNetworkTests {
 			crossNetworkBaselineValue := crossNetworkBaselineResult.DurationHistogram.Percentiles[k].Value
 			crossNetworkDaprValue := crossNetworkDaprResult.DurationHistogram.Percentiles[k].Value
 
-			// Compare cross-network baseline to internal network baseline.
-			crossNetworkBaselineLatency := (crossNetworkBaselineValue - baselineValue) * 1000
-			logPercentileLatency(t, v, crossNetworkBaselineLatency, "added by cross-network baseline over baseline.")
-
-			// Compare cross-network dapr to cross-network baseline.
 			crossNetworkDaprLatency := (crossNetworkDaprValue - crossNetworkBaselineValue) * 1000
-			logPercentileLatency(t, v, crossNetworkDaprLatency, "added by cross-network dapr calls over cross-network baseline.")
-
-			// Compare cross-network dapr to internal network dapr.
-			crossNetworkLatency := (crossNetworkDaprValue - daprValue) * 1000
-			logPercentileLatency(t, v, crossNetworkLatency, "added by cross-network dapr calls over dapr baseline.")
+			logPercentileLatency(t, v, crossNetworkDaprValue, crossNetworkDaprLatency, "latency added by dapr over cross-network baseline performance.")
 		}
 	}
 
@@ -209,8 +204,8 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
 }
 
-func logPercentileLatency(t *testing.T, percentile string, latency float64, reason string) {
-	t.Logf("percentile=%s, latencyDiff=%sms, reason=%s", percentile, fmt.Sprintf("%.2f", latency), reason)
+func logPercentileLatency(t *testing.T, percentile string, latency, baselineDiff float64, reason string) {
+	t.Logf("percentile=%s, latency=%sms, baselineDiff=%sms, reason=%s", percentile, fmt.Sprintf("%.2f", latency), fmt.Sprintf("%.2f", baselineDiff), reason)
 }
 
 func runTestCase(t *testing.T, id string, testerAppURL string, testParams *perf.TestParameters) []byte {
