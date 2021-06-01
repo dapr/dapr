@@ -5,12 +5,10 @@ import (
 	"io/ioutil"
 	"testing"
 
+	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/stretchr/testify/assert"
 
 	"bou.ke/monkey"
-	"github.com/smartystreets/goconvey/convey"
-
-	config "github.com/dapr/dapr/pkg/config/modes"
 )
 
 func TestLoadComponentsFromFile(t *testing.T) {
@@ -19,8 +17,7 @@ func TestLoadComponentsFromFile(t *testing.T) {
 			ComponentsPath: "test_component_path",
 		},
 	}
-
-	convey.Convey("valid yaml content", t, func() {
+	t.Run("valid yaml content", func(t *testing.T) {
 		filename := "test-component.yaml"
 		yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -40,10 +37,10 @@ spec:
 		})
 		defer monkey.UnpatchAll()
 		components := request.loadComponentsFromFile(filename)
-		convey.So(components, convey.ShouldHaveLength, 1)
+		assert.Len(t, components, 1)
 	})
 
-	convey.Convey("invalid yaml head", t, func() {
+	t.Run("invalid yaml head", func(t *testing.T) {
 		filename := "test-component.yaml"
 		yaml := `
 INVALID_YAML_HERE
@@ -56,17 +53,17 @@ name: statestore`
 		})
 		defer monkey.UnpatchAll()
 		components := request.loadComponentsFromFile(filename)
-		convey.So(components, convey.ShouldHaveLength, 0)
+		assert.Len(t, components, 0)
 	})
 
-	convey.Convey("load components file not exist", t, func() {
+	t.Run("load components file not exist", func(t *testing.T) {
 		filename := "test-component.yaml"
 		monkey.Patch(ioutil.ReadFile, func(_ string) ([]byte, error) {
 			return nil, fmt.Errorf("no such file or directory")
 		})
 		defer monkey.UnpatchAll()
 		components := request.loadComponentsFromFile(filename)
-		convey.So(components, convey.ShouldHaveLength, 0)
+		assert.Len(t, components, 0)
 	})
 }
 
