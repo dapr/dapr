@@ -5,10 +5,10 @@ import (
 	"io/ioutil"
 	"testing"
 
-	config "github.com/dapr/dapr/pkg/config/modes"
+	"bou.ke/monkey"
 	"github.com/stretchr/testify/assert"
 
-	"bou.ke/monkey"
+	config "github.com/dapr/dapr/pkg/config/modes"
 )
 
 func TestLoadComponentsFromFile(t *testing.T) {
