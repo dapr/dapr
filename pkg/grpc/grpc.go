@@ -97,7 +97,7 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool && !recreateIfExists {
 		return conn, nil
 	}
-	g.lock.Unlock()
+	g.lock.RUnlock()
 
 	g.lock.Lock()
 	defer g.lock.Unlock()
