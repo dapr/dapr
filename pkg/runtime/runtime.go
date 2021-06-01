@@ -969,7 +969,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	}
 
 	if a.appChannel == nil {
-		return nil, errors.New("app channel not initialized, make sure -app-port is specified.")
+		return nil, errors.New("app channel not initialized, make sure -app-port is specified")
 	}
 
 	var (
