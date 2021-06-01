@@ -64,10 +64,10 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 	return ch, nil
 }
 
-// getConnFromPool returns a connection from the pool if exists.
+// getConnectionFromPool returns a connection from the pool if exists.
 // WARN: this function is not thread safe and concurrent access to
 // the connection pool should be handled by the caller.
-func (g *Manager) getConnFromPool(prefix, address string) (*grpc.ClientConn, bool) {
+func (g *Manager) getConnectionFromPool(prefix, address string) (*grpc.ClientConn, bool) {
 	var key string
 	if len(prefix) > 0 {
 		key = fmt.Sprintf("%s//%s", prefix, address)
@@ -78,10 +78,10 @@ func (g *Manager) getConnFromPool(prefix, address string) (*grpc.ClientConn, boo
 	return val, ok
 }
 
-// addConnToPool adds a connection to the pool.
+// addConnectionToPool adds a connection to the pool.
 // WARN: this function is not thread safe and concurrent access to
 // the connection pool should be handled by the caller.
-func (g *Manager) addConnToPool(prefix, address string, conn *grpc.ClientConn) {
+func (g *Manager) addConnectionToPool(prefix, address string, conn *grpc.ClientConn) {
 	var key string
 	if len(prefix) > 0 {
 		key = fmt.Sprintf("%s//%s", prefix, address)
@@ -92,9 +92,9 @@ func (g *Manager) addConnToPool(prefix, address string, conn *grpc.ClientConn) {
 }
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist
-func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, connPrefix string) (*grpc.ClientConn, error) {
+func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, connectionPoolPrefix string) (*grpc.ClientConn, error) {
 	g.lock.RLock()
-	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool && !recreateIfExists {
+	if conn, foundInPool := g.getConnectionFromPool(connectionPoolPrefix, address); foundInPool && !recreateIfExists {
 		g.lock.RUnlock()
 		return conn, nil
 	}
@@ -103,7 +103,7 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	// read the value once again, as a concurrent writer could create it
-	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool && !recreateIfExists {
+	if conn, foundInPool := g.getConnectionFromPool(connectionPoolPrefix, address); foundInPool && !recreateIfExists {
 		return conn, nil
 	}
 
@@ -159,11 +159,11 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 		return nil, err
 	}
 
-	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool {
+	if conn, foundInPool := g.getConnectionFromPool(connectionPoolPrefix, address); foundInPool {
 		conn.Close()
 	}
 
-	g.addConnToPool(connPrefix, address, newConn)
+	g.addConnectionToPool(connectionPoolPrefix, address, newConn)
 
 	return newConn, nil
 }

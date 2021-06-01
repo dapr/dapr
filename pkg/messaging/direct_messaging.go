@@ -54,7 +54,8 @@ type directMessaging struct {
 	hostAddress         string
 	hostName            string
 	maxRequestBodySize  int
-	gateways            map[string]config.Gateway
+	gatewaysMap         map[string]config.Gateway
+	gatewaysEnabled     bool
 }
 
 type remoteApp struct {
@@ -73,9 +74,10 @@ func NewDirectMessaging(
 	resolver nr.Resolver,
 	tracingSpec config.TracingSpec,
 	maxRequestBodySize int,
-	gateways map[string]config.Gateway) DirectMessaging {
+	gatewaysMap map[string]config.Gateway) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
+	gatewaysEnabled := len(gatewaysMap) == 0 // Perform the check once.
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: clientConnFn,
@@ -88,7 +90,8 @@ func NewDirectMessaging(
 		hostAddress:         hAddr,
 		hostName:            hName,
 		maxRequestBodySize:  maxRequestBodySize,
-		gateways:            gateways,
+		gatewaysMap:         gatewaysMap,
+		gatewaysEnabled:     gatewaysEnabled,
 	}
 }
 
@@ -99,7 +102,7 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 		return nil, err
 	}
 
-	if app.gateway != "" && app.id == d.appID && app.namespace == d.namespace {
+	if app.id == d.appID && app.namespace == d.namespace && len(app.gateway) == 0 {
 		return d.invokeLocal(ctx, req)
 	}
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req, app.gateway)
@@ -119,9 +122,6 @@ func (d *directMessaging) parseAppID(targetAppID string) (string, string, string
 		}
 	case 3: // <appID>.<namespace>.<gateway> - use provided namespace and gateway.
 		{
-			if d.gateways == nil || len(d.gateways) == 0 {
-				return "", "", "", errors.Errorf("gateway feature disabled or no gateways available, invalid app id %s", targetAppID)
-			}
 			return items[0], items[1], items[2], nil
 		}
 	default:
@@ -141,9 +141,9 @@ func (d *directMessaging) invokeWithRetry(
 	app remoteApp,
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest, connPoolPrefix string) (*invokev1.InvokeMethodResponse, error),
 	req *invokev1.InvokeMethodRequest,
-	connPoolPrefix string) (*invokev1.InvokeMethodResponse, error) {
+	connectionPoolPrefix string) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(ctx, app.id, app.namespace, app.address, req, connPoolPrefix)
+		resp, err := fn(ctx, app.id, app.namespace, app.address, req, connectionPoolPrefix)
 		if err == nil {
 			return resp, nil
 		}
@@ -153,7 +153,7 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true, false, connPoolPrefix)
+			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true, false, connectionPoolPrefix)
 			if connerr != nil {
 				return nil, connerr
 			}
@@ -242,8 +242,12 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 		return remoteApp{}, err
 	}
 
-	if gatewayName != "" {
-		gateway, ok := d.gateways[gatewayName]
+	if len(gatewayName) > 0 {
+		if !d.gatewaysEnabled {
+			return remoteApp{}, errors.Errorf("gateway feature is disabled or no gateways available, invalid app id %s", appID)
+		}
+
+		gateway, ok := d.gatewaysMap[gatewayName]
 		if !ok {
 			return remoteApp{}, errors.Errorf("gateway %s not found", gatewayName)
 		}

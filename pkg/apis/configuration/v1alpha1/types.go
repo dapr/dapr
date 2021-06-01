@@ -171,12 +171,12 @@ type FeatureSpec struct {
 
 // GatewaySpec defines the gateways
 type GatewaySpec struct {
-	Gateways []Gateway `json:"gateways" yaml:"gateways"`
-	Enabled  bool      `json:"enabled" yaml:"enabled"`
+	Endpoints []GatewayEndpoint `json:"endpoints" yaml:"endpoints"`
+	Enabled   bool              `json:"enabled" yaml:"enabled"`
 }
 
-// Gateway defines a gateway
-type Gateway struct {
+// GatewayEndpoint defines a gateway
+type GatewayEndpoint struct {
 	Name     string `json:"name" yaml:"name"`
 	Address  string `json:"address" yaml:"address"`
 	Hostname string `json:"hostname" yaml:"hostname"`

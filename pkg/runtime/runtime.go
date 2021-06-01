@@ -510,7 +510,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		resolver,
 		a.globalConfig.Spec.TracingSpec,
 		a.runtimeConfig.MaxRequestBodySize,
-		a.getGatewayMap())
+		a.buildGatewayMap()) // Build a gateway map as it allows quick lookups.
 }
 
 func (a *DaprRuntime) beginComponentsUpdates() error {
@@ -1878,14 +1878,14 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 	return nil
 }
 
-func (a *DaprRuntime) getGatewayMap() map[string]config.Gateway {
+func (a *DaprRuntime) buildGatewayMap() map[string]config.Gateway {
 	if !a.globalConfig.Spec.GatewaySpec.Enabled {
 		return nil
 	}
 
 	gwMap := map[string]config.Gateway{}
 	for _, gw := range a.globalConfig.Spec.GatewaySpec.Gateways {
-		log.Debugf("loaded gateway: %s", gw.Name)
+		log.Debugf("loaded gateway: %s, with address: %s", gw.Name, gw.Address)
 		gwMap[gw.Name] = gw
 	}
 	return gwMap

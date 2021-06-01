@@ -224,8 +224,9 @@ spec:
                 properties:
                   enabled:
                     type: boolean
-                  gateways:
+                  endpoints:
                     items:
+                      description: Endpoints defines a gateway endpoint
                       properties:
                         address:
                           type: string
@@ -241,7 +242,7 @@ spec:
                     type: array
                 required:
                 - enabled
-                - gateways
+                - endpoints
                 type: object
             type: object
         type: object
