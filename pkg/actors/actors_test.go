@@ -1203,3 +1203,91 @@ func TestReentrancyStackLimit(t *testing.T) {
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 }
+
+func TestCreateTimer(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
+	requestTests := []*CreateTimerRequest{
+		{
+			Name:      "timer1",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "1s",
+			Period:    "2s",
+			Data:      nil,
+		},
+		{
+			Name:      "timer2",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "1s",
+			Period:    "",
+			Data:      nil,
+		},
+		{
+			Name:      "timer3",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "",
+			Period:    "1s",
+			Data:      nil,
+		},
+		{
+			Name:      "timer4",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "0s",
+			Period:    "2s",
+			Data:      nil,
+		},
+	}
+
+	deleteRequestTests := []*DeleteTimerRequest{
+		{
+			Name:      "timer1",
+			ActorID:   actorID,
+			ActorType: actorType,
+		},
+		{
+			Name:      "timer2",
+			ActorID:   actorID,
+			ActorType: actorType,
+		},
+		{
+			Name:      "timer3",
+			ActorID:   actorID,
+			ActorType: actorType,
+		},
+		{
+			Name:      "timer4",
+			ActorID:   actorID,
+			ActorType: actorType,
+		},
+	}
+
+	requestIllegalTests := []*CreateTimerRequest{
+		{
+			Name:      "timer5",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "duetime",
+			Period:    "2s",
+			Data:      nil,
+		},
+	}
+
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+	for _, test := range requestIllegalTests {
+		err := testActorsRuntime.CreateTimer(ctx, test)
+		assert.NotNil(t, err)
+	}
+
+	for index, test := range requestTests {
+		err := testActorsRuntime.CreateTimer(ctx, test)
+		assert.Nil(t, err)
+		err = testActorsRuntime.DeleteTimer(ctx, deleteRequestTests[index])
+		assert.Nil(t, err)
+	}
+
+}
