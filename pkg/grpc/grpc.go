@@ -95,6 +95,7 @@ func (g *Manager) addConnToPool(prefix, address string, conn *grpc.ClientConn) {
 func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, connPrefix string) (*grpc.ClientConn, error) {
 	g.lock.RLock()
 	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool && !recreateIfExists {
+		g.lock.RUnlock()
 		return conn, nil
 	}
 	g.lock.RUnlock()
