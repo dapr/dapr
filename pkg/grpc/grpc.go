@@ -64,30 +64,43 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 	return ch, nil
 }
 
+// getConnFromPool returns a connection from the pool if exists.
+// WARN: this function is not thread safe and concurrent access to
+// the connection pool should be handled by the caller.
 func (g *Manager) getConnFromPool(prefix, address string) (*grpc.ClientConn, bool) {
-	g.lock.RLock()
-	defer g.lock.RUnlock()
-
-	key := fmt.Sprintf("%s//%s", prefix, address)
+	var key string
+	if len(prefix) > 0 {
+		key = fmt.Sprintf("%s//%s", prefix, address)
+	} else {
+		key = address
+	}
 	val, ok := g.connectionPool[key]
 	return val, ok
 }
 
+// addConnToPool adds a connection to the pool.
+// WARN: this function is not thread safe and concurrent access to
+// the connection pool should be handled by the caller.
 func (g *Manager) addConnToPool(prefix, address string, conn *grpc.ClientConn) {
-	g.lock.Lock()
-	defer g.lock.Unlock()
-
-	key := fmt.Sprintf("%s//%s", prefix, address)
+	var key string
+	if len(prefix) > 0 {
+		key = fmt.Sprintf("%s//%s", prefix, address)
+	} else {
+		key = address
+	}
 	g.connectionPool[key] = conn
 }
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist
 func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, connPrefix string) (*grpc.ClientConn, error) {
+	g.lock.RLock()
 	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool && !recreateIfExists {
 		return conn, nil
 	}
+	g.lock.Unlock()
 
-	// TODO: Review why write lock used before.
+	g.lock.Lock()
+	defer g.lock.Unlock()
 	// read the value once again, as a concurrent writer could create it
 	if conn, foundInPool := g.getConnFromPool(connPrefix, address); foundInPool && !recreateIfExists {
 		return conn, nil

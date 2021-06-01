@@ -104,7 +104,7 @@ func TestKubernetesNamespace(t *testing.T) {
 		assert.Empty(t, gw)
 	})
 
-	t.Run("with gatewau", func(t *testing.T) {
+	t.Run("with gateway", func(t *testing.T) {
 		appID := "app1.ns1.gw1"
 
 		dm := newDirectMessaging()
