@@ -35,7 +35,7 @@ var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 // MessageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type MessageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, connPoolKeyPrefix string) (*grpc.ClientConn, error)
+type MessageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, connectionPoolPrefix string) (*grpc.ClientConn, error)
 
 // DirectMessaging is the API interface for invoking a remote app
 type DirectMessaging interface {
@@ -172,8 +172,8 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 	return d.appChannel.InvokeMethod(ctx, req)
 }
 
-func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest, connPoolKeyPrefix string) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false, false, connPoolKeyPrefix)
+func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest, connectionPoolPrefix string) (*invokev1.InvokeMethodResponse, error) {
+	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false, false, connectionPoolPrefix)
 	if err != nil {
 		return nil, err
 	}
