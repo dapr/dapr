@@ -968,13 +968,14 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 		return a.topicRoutes, nil
 	}
 
-	var topicRoutes map[string]TopicRoute = make(map[string]TopicRoute)
-
 	if a.appChannel == nil {
-		return topicRoutes, nil
+		return nil, errors.New("app channel not initialized, make sure -app-port is specified.")
 	}
 
-	var subscriptions []runtime_pubsub.Subscription
+	var (
+		topicRoutes   = make(map[string]TopicRoute)
+		subscriptions []runtime_pubsub.Subscription
+	)
 
 	// handle app subscriptions
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
