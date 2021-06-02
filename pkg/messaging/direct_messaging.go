@@ -54,8 +54,8 @@ type directMessaging struct {
 	hostAddress         string
 	hostName            string
 	maxRequestBodySize  int
-	gatewaysMap         map[string]config.Gateway
-	gatewaysEnabled     bool
+	gatewayEndpoints    map[string]config.GatewayEndpoints
+	gatewayEnabled      bool
 }
 
 type remoteApp struct {
@@ -74,10 +74,10 @@ func NewDirectMessaging(
 	resolver nr.Resolver,
 	tracingSpec config.TracingSpec,
 	maxRequestBodySize int,
-	gatewaysMap map[string]config.Gateway) DirectMessaging {
+	gatewayEndpoints map[string]config.GatewayEndpoints) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
-	gatewaysEnabled := len(gatewaysMap) == 0 // Perform the check once.
+	gatewayEnabled := len(gatewayEndpoints) == 0 // Perform this check once.
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: clientConnFn,
@@ -90,8 +90,8 @@ func NewDirectMessaging(
 		hostAddress:         hAddr,
 		hostName:            hName,
 		maxRequestBodySize:  maxRequestBodySize,
-		gatewaysMap:         gatewaysMap,
-		gatewaysEnabled:     gatewaysEnabled,
+		gatewayEndpoints:    gatewayEndpoints,
+		gatewayEnabled:      gatewayEnabled,
 	}
 }
 
@@ -243,11 +243,11 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 	}
 
 	if len(gatewayName) > 0 {
-		if !d.gatewaysEnabled {
+		if !d.gatewayEnabled {
 			return remoteApp{}, errors.Errorf("gateway feature is disabled or no gateways available, invalid app id %s", appID)
 		}
 
-		gateway, ok := d.gatewaysMap[gatewayName]
+		gateway, ok := d.gatewayEndpoints[gatewayName]
 		if !ok {
 			return remoteApp{}, errors.Errorf("gateway %s not found", gatewayName)
 		}

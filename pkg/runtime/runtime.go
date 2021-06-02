@@ -1878,12 +1878,12 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 	return nil
 }
 
-func (a *DaprRuntime) buildGatewayMap() map[string]config.Gateway {
+func (a *DaprRuntime) buildGatewayMap() map[string]config.GatewayEndpoints {
 	if !a.globalConfig.Spec.GatewaySpec.Enabled {
 		return nil
 	}
 
-	gwMap := map[string]config.Gateway{}
+	gwMap := map[string]config.GatewayEndpoints{}
 	for _, gw := range a.globalConfig.Spec.GatewaySpec.Gateways {
 		log.Debugf("loaded gateway: %s, with address: %s", gw.Name, gw.Address)
 		gwMap[gw.Name] = gw
