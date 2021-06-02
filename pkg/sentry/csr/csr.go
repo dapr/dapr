@@ -4,7 +4,6 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -247,19 +246,4 @@ func decodeCertificateRequestPEM(rest []byte) (*x509.CertificateRequest, []byte,
 	}
 	c, err := x509.ParseCertificateRequest(block.Bytes)
 	return c, rest, err
-}
-
-func matchCertificateAndKey(pk *certs.PrivateKey, cert *x509.CertificateRequest) bool {
-	switch pk.Type {
-	case certs.ECPrivateKey, certs.PKCS8PrivateKey:
-		key := pk.Key.(*ecdsa.PrivateKey)
-		pub, ok := cert.PublicKey.(*ecdsa.PublicKey)
-		return ok && pub.X.Cmp(key.X) == 0 && pub.Y.Cmp(key.Y) == 0
-	case certs.RSAPrivateKey:
-		key := pk.Key.(*rsa.PrivateKey)
-		pub, ok := cert.PublicKey.(*rsa.PublicKey)
-		return ok && pub.N.Cmp(key.N) == 0 && pub.E == key.E
-	default:
-		return false
-	}
 }
