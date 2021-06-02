@@ -790,6 +790,14 @@ func TestInitPubSub(t *testing.T) {
 		assert.NotNil(t, a)
 	})
 
+	t.Run("get topic routes but app channel is nil", func(t *testing.T) {
+		rts := NewTestDaprRuntime(modes.StandaloneMode)
+		rts.appChannel = nil
+		routes, err := rts.getTopicRoutes()
+		assert.NotNil(t, err)
+		assert.Nil(t, routes)
+	})
+
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
 		dir := "./components"
 
