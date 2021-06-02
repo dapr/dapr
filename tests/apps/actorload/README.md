@@ -26,7 +26,7 @@ docker build -t [your registry]/actorload .
 % ./stateactor --help
 Usage of ./stateactor:
   -actors string
-        Actor types array seperated by comma. e.g. StateActor,SaveActor (default "StateActor")
+        Actor types array separated by comma. e.g. StateActor,SaveActor (default "StateActor")
   -p int
         StateActor service app port. (default 3000)
 ```
