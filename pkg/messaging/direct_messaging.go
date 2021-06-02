@@ -77,7 +77,7 @@ func NewDirectMessaging(
 	gatewayEndpoints map[string]config.GatewayEndpoints) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
-	gatewayEnabled := len(gatewayEndpoints) == 0 // Perform this check once.
+	gatewayEnabled := len(gatewayEndpoints) > 0 // Perform this check once.
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: clientConnFn,
