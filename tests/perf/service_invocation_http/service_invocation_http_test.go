@@ -62,6 +62,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// If running cross network tests, add gateway config to apps.
+	// TODO: Dynamically create configuration CRD via test platform.
 	if os.Getenv("DAPR_XNET_RUN") != "" {
 		testApps[0].Config = "gateway-config"
 		testApps[1].Config = "gateway-config"
