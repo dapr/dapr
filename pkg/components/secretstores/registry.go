@@ -22,7 +22,7 @@ type (
 		FactoryMethod func() secretstores.SecretStore
 	}
 
-	// Registry is used to get registered secret store implementations
+	// Registry is used to get registered secret store implementations.
 	Registry interface {
 		Register(components ...SecretStore)
 		Create(name, version string) (secretstores.SecretStore, error)

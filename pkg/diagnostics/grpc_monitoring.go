@@ -22,7 +22,7 @@ import (
 // This implementation is inspired by
 // https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ocgrpc
 
-// Tag key definitions for http requests
+// Tag key definitions for http requests.
 var (
 	KeyServerMethod = tag.MustNewKey("grpc_server_method")
 	KeyServerStatus = tag.MustNewKey("grpc_server_status")

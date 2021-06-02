@@ -1435,7 +1435,7 @@ func TestExtractComponentCategory(t *testing.T) {
 	}
 }
 
-// Test that flushOutstandingComponents waits for components
+// Test that flushOutstandingComponents waits for components.
 func TestFlushOutstandingComponent(t *testing.T) {
 	t.Run("We can call flushOustandingComponents more than once", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
@@ -1572,7 +1572,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 	})
 }
 
-// Test InitSecretStore if secretstore.* refers to Kubernetes secret store
+// Test InitSecretStore if secretstore.* refers to Kubernetes secret store.
 func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 	fakeSecretStoreWithAuth := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
@@ -2482,17 +2482,17 @@ func TestAuthorizedComponents(t *testing.T) {
 type mockPublishPubSub struct {
 }
 
-// Init is a mock initialization method
+// Init is a mock initialization method.
 func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 	return nil
 }
 
-// Publish is a mock publish method
+// Publish is a mock publish method.
 func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 	return nil
 }
 
-// Subscribe is a mock subscribe method
+// Subscribe is a mock subscribe method.
 func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	return nil
 }

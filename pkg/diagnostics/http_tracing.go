@@ -35,7 +35,7 @@ const (
 
 var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
-// HTTPTraceMiddleware sets the trace context or starts the trace client span based on request
+// HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
 func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		path := string(ctx.Request.URI().Path())
@@ -112,7 +112,7 @@ func isHealthzRequest(name string) bool {
 	return strings.Contains(name, "/healthz")
 }
 
-// UpdateSpanStatusFromHTTPStatus updates trace span status based on response code
+// UpdateSpanStatusFromHTTPStatus updates trace span status based on response code.
 func UpdateSpanStatusFromHTTPStatus(span *trace.Span, code int) {
 	if span != nil {
 		span.SetStatus(traceStatusFromHTTPCode(code))

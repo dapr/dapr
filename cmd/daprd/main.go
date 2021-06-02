@@ -16,9 +16,9 @@ import (
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/version"
 
-	// Included components in compiled daprd
+	// Included components in compiled daprd.
 
-	// Secret stores
+	// Secret stores.
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
@@ -30,7 +30,7 @@ import (
 
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 
-	// State Stores
+	// State Stores.
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/aerospike"
 	state_dynamodb "github.com/dapr/components-contrib/state/aws/dynamodb"
@@ -54,7 +54,7 @@ import (
 
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 
-	// Pub/Sub
+	// Pub/Sub.
 	pubs "github.com/dapr/components-contrib/pubsub"
 	pubsub_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
 	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
@@ -70,7 +70,7 @@ import (
 
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
-	// Name resolutions
+	// Name resolutions.
 	nr "github.com/dapr/components-contrib/nameresolution"
 	nr_consul "github.com/dapr/components-contrib/nameresolution/consul"
 	nr_kubernetes "github.com/dapr/components-contrib/nameresolution/kubernetes"
@@ -78,7 +78,7 @@ import (
 
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 
-	// Bindings
+	// Bindings.
 	"github.com/dapr/components-contrib/bindings"
 	dingtalk_webhook "github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
 	"github.com/dapr/components-contrib/bindings/alicloud/oss"
@@ -119,7 +119,7 @@ import (
 
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
-	// HTTP Middleware
+	// HTTP Middleware.
 	middleware "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
