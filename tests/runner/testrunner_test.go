@@ -21,7 +21,7 @@ func (f *fakeTestingM) Run() int {
 	return 0
 }
 
-// MockPlatform is the mock of Disposable interface
+// MockPlatform is the mock of Disposable interface.
 type MockPlatform struct {
 	mock.Mock
 }

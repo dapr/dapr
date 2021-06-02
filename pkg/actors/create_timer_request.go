@@ -5,7 +5,7 @@
 
 package actors
 
-// CreateTimerRequest is the request object to create a new timer
+// CreateTimerRequest is the request object to create a new timer.
 type CreateTimerRequest struct {
 	Name      string
 	ActorType string

@@ -253,7 +253,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
 }
 
-// addStreamConn adds stream connection between runtime and placement to the dissemination pool
+// addStreamConn adds stream connection between runtime and placement to the dissemination pool.
 func (p *Service) addStreamConn(conn placementGRPCStream) {
 	p.streamConnPoolLock.Lock()
 	p.streamConnPool = append(p.streamConnPool, conn)

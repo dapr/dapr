@@ -11,7 +11,7 @@ import (
 	app_config "github.com/dapr/dapr/pkg/config"
 )
 
-// Config is the actor runtime configuration
+// Config is the actor runtime configuration.
 type Config struct {
 	HostAddress                   string
 	AppID                         string
@@ -35,7 +35,7 @@ const (
 	defaultReentrancyStackLimit = 32
 )
 
-// NewConfig returns the actor runtime configuration
+// NewConfig returns the actor runtime configuration.
 func NewConfig(hostAddress, appID string, placementAddresses []string, hostedActors []string, port int,
 	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string, drainRebalancedActors bool, namespace string,
 	reentrancy app_config.ReentrancyConfig) Config {

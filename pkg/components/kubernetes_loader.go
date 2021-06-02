@@ -27,13 +27,13 @@ const (
 	operatorMaxRetries  = 100
 )
 
-// KubernetesComponents loads components in a kubernetes environment
+// KubernetesComponents loads components in a kubernetes environment.
 type KubernetesComponents struct {
 	config config.KubernetesConfig
 	client operatorv1pb.OperatorClient
 }
 
-// NewKubernetesComponents returns a new kubernetes loader
+// NewKubernetesComponents returns a new kubernetes loader.
 func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClient operatorv1pb.OperatorClient) *KubernetesComponents {
 	return &KubernetesComponents{
 		config: configuration,
@@ -41,7 +41,7 @@ func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClie
 	}
 }
 
-// LoadComponents returns components from a given control plane address
+// LoadComponents returns components from a given control plane address.
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	resp, err := k.client.ListComponents(context.Background(), &emptypb.Empty{}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
