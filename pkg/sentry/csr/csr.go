@@ -219,34 +219,6 @@ type CredentialRequests struct {
 	Certificate *x509.CertificateRequest
 }
 
-func PEMCredentialRequestsFromFiles(certPem, keyPem []byte) (*CredentialRequests, error) {
-	pk, err := certs.DecodePEMKey(keyPem)
-	if err != nil {
-		return nil, err
-	}
-
-	crts, err := DecodePEMCertificateRequests(certPem)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(crts) == 0 {
-		return nil, errors.New("no certificates found")
-	}
-
-	match := matchCertificateAndKey(pk, crts[0])
-	if !match {
-		return nil, errors.New("error validating credentials: public and private key pair do not match")
-	}
-
-	creds := &CredentialRequests{
-		PrivateKey:  pk,
-		Certificate: crts[0],
-	}
-
-	return creds, nil
-}
-
 func DecodePEMCertificateRequests(rest []byte) ([]*x509.CertificateRequest, error) {
 	var certs []*x509.CertificateRequest
 	for len(rest) > 0 {

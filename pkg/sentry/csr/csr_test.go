@@ -82,9 +82,7 @@ func TestEncode(t *testing.T) {
 		assert.Nil(t, err)
 		csrBytes, err := x509.CreateCertificateRequest(rand.Reader, template, crypto.PrivateKey(key))
 		assert.Nil(t, err)
-		crtPem, keyPem, err := encode(true, csrBytes, key, test.isPkcs8)
-		assert.Nil(t, err)
-		_, err = PEMCredentialRequestsFromFiles(crtPem, keyPem)
+		_, _, err = encode(true, csrBytes, key, test.isPkcs8)
 		assert.Nil(t, err)
 	}
 }
