@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// If running cross network tests, add gateway config to apps.
-	if os.Getenv("DAPR_XNET_RUN") != "" {
+	if os.Getenv("DAPR_XNET_RUN") == "" {
 		testApps[0].Config = "gateway-config"
 		testApps[1].Config = "gateway-config"
 	}
@@ -170,14 +170,14 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
 
 		latencyDiff := (daprValue - baselineValue) * 1000
-		logPercentileLatency(t, v, daprValue, latencyDiff, "latency added by dapr over baseline performance.")
+		logPercentileLatency(t, v, daprValue*1000, latencyDiff, "latency added by dapr over baseline performance.")
 
 		if p.RunCrossNetworkTests {
 			crossNetworkBaselineValue := crossNetworkBaselineResult.DurationHistogram.Percentiles[k].Value
 			crossNetworkDaprValue := crossNetworkDaprResult.DurationHistogram.Percentiles[k].Value
 
 			crossNetworkDaprLatency := (crossNetworkDaprValue - crossNetworkBaselineValue) * 1000
-			logPercentileLatency(t, v, crossNetworkDaprValue, crossNetworkDaprLatency, "latency added by dapr over cross-network baseline performance.")
+			logPercentileLatency(t, v, crossNetworkDaprValue*1000, crossNetworkDaprLatency, "latency added by dapr over cross-network baseline performance.")
 		}
 	}
 
