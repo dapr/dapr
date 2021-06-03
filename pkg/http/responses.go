@@ -18,7 +18,7 @@ const (
 	metadataPrefix        = "metadata."
 )
 
-// BulkGetResponse is the response object for a state bulk get operation
+// BulkGetResponse is the response object for a state bulk get operation.
 type BulkGetResponse struct {
 	Key      string              `json:"key"`
 	Data     jsoniter.RawMessage `json:"data,omitempty"`
@@ -29,7 +29,7 @@ type BulkGetResponse struct {
 
 type option = func(ctx *fasthttp.RequestCtx)
 
-// withEtag sets etag header
+// withEtag sets etag header.
 func withEtag(etag *string) option {
 	return func(ctx *fasthttp.RequestCtx) {
 		if etag != nil {
@@ -38,7 +38,7 @@ func withEtag(etag *string) option {
 	}
 }
 
-// withMetadata sets metadata headers
+// withMetadata sets metadata headers.
 func withMetadata(metadata map[string]string) option {
 	return func(ctx *fasthttp.RequestCtx) {
 		for k, v := range metadata {
@@ -47,7 +47,7 @@ func withMetadata(metadata map[string]string) option {
 	}
 }
 
-// withJSON overrides the content-type with application/json
+// withJSON overrides the content-type with application/json.
 func withJSON(code int, obj []byte) option {
 	return func(ctx *fasthttp.RequestCtx) {
 		ctx.Response.SetStatusCode(code)
@@ -56,13 +56,13 @@ func withJSON(code int, obj []byte) option {
 	}
 }
 
-// withError sets error code and jsonized error message
+// withError sets error code and jsonized error message.
 func withError(code int, resp ErrorResponse) option {
 	b, _ := json.Marshal(&resp)
 	return withJSON(code, b)
 }
 
-// withEmpty sets 204 status code
+// withEmpty sets 204 status code.
 func withEmpty() option {
 	return func(ctx *fasthttp.RequestCtx) {
 		ctx.Response.SetBody(nil)
@@ -70,7 +70,7 @@ func withEmpty() option {
 	}
 }
 
-// with sets a default application/json content type if content type is not present
+// with sets a default application/json content type if content type is not present.
 func with(code int, obj []byte) option {
 	return func(ctx *fasthttp.RequestCtx) {
 		ctx.Response.SetStatusCode(code)

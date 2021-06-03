@@ -70,7 +70,7 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(""))
 }
 
-// This method is required for actor registration (provides supported types)
+// This method is required for actor registration (provides supported types).
 func configHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing dapr request for %s", r.URL.RequestURI())
 
@@ -146,14 +146,14 @@ func callDifferentActor(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// indexHandler is the handler for root path
+// indexHandler is the handler for root path.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler is called")
 
 	w.WriteHeader(http.StatusOK)
 }
 
-// appRouter initializes restful api router
+// appRouter initializes restful api router.
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 

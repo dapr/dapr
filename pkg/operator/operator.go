@@ -32,7 +32,7 @@ const (
 	healthzPort = 8080
 )
 
-// Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle
+// Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
 type Operator interface {
 	Run(ctx context.Context)
 }
@@ -62,7 +62,7 @@ func init() {
 	_ = subscriptionsapi.AddToScheme(scheme)
 }
 
-// NewOperator returns a new Dapr Operator
+// NewOperator returns a new Dapr Operator.
 func NewOperator(config, certChainPath string, enableLeaderElection bool) Operator {
 	conf, err := ctrl.GetConfig()
 	if err != nil {

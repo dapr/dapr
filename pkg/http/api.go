@@ -39,7 +39,7 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
-// API returns a list of HTTP endpoints for Dapr
+// API returns a list of HTTP endpoints for Dapr.
 type API interface {
 	APIEndpoints() []Endpoint
 	MarkStatusAsReady()
@@ -102,7 +102,7 @@ const (
 	tracestateHeader     = "tracestate"
 )
 
-// NewAPI returns a new API
+// NewAPI returns a new API.
 func NewAPI(
 	appID string,
 	appChannel channel.AppChannel,
@@ -152,17 +152,17 @@ func NewAPI(
 	return api
 }
 
-// APIEndpoints returns the list of registered endpoints
+// APIEndpoints returns the list of registered endpoints.
 func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
 }
 
-// MarkStatusAsReady marks the ready status of dapr
+// MarkStatusAsReady marks the ready status of dapr.
 func (a *api) MarkStatusAsReady() {
 	a.readyStatus = true
 }
 
-// MarkStatusAsOutboundReady marks the ready status of dapr for outbound traffic
+// MarkStatusAsOutboundReady marks the ready status of dapr for outbound traffic.
 func (a *api) MarkStatusAsOutboundReady() {
 	a.outboundReadyStatus = true
 }
@@ -767,7 +767,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, withEmpty())
 }
 
-// stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error
+// stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error.
 func (a *api) stateErrorResponse(err error, errorCode string) (int, string, ErrorResponse) {
 	var message string
 	var code int
@@ -786,7 +786,7 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 }
 
 // etagError checks if the error from the state store is an etag error and returns a bool for indication,
-// an status code and an error message
+// an status code and an error message.
 func (a *api) etagError(err error) (bool, int, string) {
 	e, ok := err.(*state.ETagError)
 	if !ok {
@@ -1325,7 +1325,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-// GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists
+// GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.
 func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	code := metadata[http.HTTPStatusCode]
 	if code != "" {

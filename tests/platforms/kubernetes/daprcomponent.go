@@ -12,14 +12,14 @@ import (
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
-// DaprComponent holds kubernetes client and component information
+// DaprComponent holds kubernetes client and component information.
 type DaprComponent struct {
 	namespace  string
 	kubeClient *KubeClient
 	component  ComponentDescription
 }
 
-// NewDaprComponent creates DaprComponent instance
+// NewDaprComponent creates DaprComponent instance.
 func NewDaprComponent(client *KubeClient, ns string, comp ComponentDescription) *DaprComponent {
 	return &DaprComponent{
 		namespace:  ns,

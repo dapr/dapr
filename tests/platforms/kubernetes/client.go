@@ -22,7 +22,7 @@ import (
 )
 
 // KubeClient holds instances of Kubernetes clientset
-// TODO: Add cluster management methods to clean up the old test apps
+// TODO: Add cluster management methods to clean up the old test apps.
 type KubeClient struct {
 	ClientSet     kubernetes.Interface
 	MetricsClient metrics.Interface
@@ -30,7 +30,7 @@ type KubeClient struct {
 	clientConfig  *rest.Config
 }
 
-// NewKubeClient creates KubeClient instance
+// NewKubeClient creates KubeClient instance.
 func NewKubeClient(configPath string, clusterName string) (*KubeClient, error) {
 	config, err := clientConfig(configPath, clusterName)
 	if err != nil {
@@ -73,37 +73,37 @@ func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, erro
 		&overrides).ClientConfig()
 }
 
-// GetClientConfig returns client configuration
+// GetClientConfig returns client configuration.
 func (c *KubeClient) GetClientConfig() *rest.Config {
 	return c.clientConfig
 }
 
-// Deployments gets Deployment client for namespace
+// Deployments gets Deployment client for namespace.
 func (c *KubeClient) Deployments(namespace string) appv1.DeploymentInterface {
 	return c.ClientSet.AppsV1().Deployments(namespace)
 }
 
-// Jobs gets Jobs client for namespace
+// Jobs gets Jobs client for namespace.
 func (c *KubeClient) Jobs(namespace string) batchv1.JobInterface {
 	return c.ClientSet.BatchV1().Jobs(namespace)
 }
 
-// Services gets Service client for namespace
+// Services gets Service client for namespace.
 func (c *KubeClient) Services(namespace string) apiv1.ServiceInterface {
 	return c.ClientSet.CoreV1().Services(namespace)
 }
 
-// Pods gets Pod client for namespace
+// Pods gets Pod client for namespace.
 func (c *KubeClient) Pods(namespace string) apiv1.PodInterface {
 	return c.ClientSet.CoreV1().Pods(namespace)
 }
 
-// Namespaces gets Namespace client
+// Namespaces gets Namespace client.
 func (c *KubeClient) Namespaces() apiv1.NamespaceInterface {
 	return c.ClientSet.CoreV1().Namespaces()
 }
 
-// DaprComponents gets Dapr component client for namespace
+// DaprComponents gets Dapr component client for namespace.
 func (c *KubeClient) DaprComponents(namespace string) componentsv1alpha1.ComponentInterface {
 	return c.DaprClientSet.ComponentsV1alpha1().Components(namespace)
 }
