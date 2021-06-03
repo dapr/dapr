@@ -30,10 +30,10 @@ func GetKubeClusterDomain() (string, error) {
 func getClusterDomain(resolvConf []byte) (string, error) {
 	var kubeClusterDomian string
 	searchDomains := getResolvSearchDomains(resolvConf)
-	if len(searchDomains) == 0 {
+	sort.Strings(searchDomains)
+	if len(searchDomains) == 0 || searchDomains[0] == "" {
 		kubeClusterDomian = DefaultKubeClusterDomain
 	} else {
-		sort.Strings(searchDomains)
 		kubeClusterDomian = searchDomains[0]
 	}
 	return kubeClusterDomian, nil
