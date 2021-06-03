@@ -32,17 +32,10 @@ func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
-	cfg, err := injector.GetConfigFromEnvironment()
+	cfg, err := injector.GetConfig()
 	if err != nil {
 		log.Fatalf("error getting config: %s", err)
 	}
-
-	clusterDomain, err := utils.GetKubeClusterDomain()
-	if err != nil {
-		log.Errorf("failed to get clusterDomain err:%s, set default:%s", err, utils.DefaultKubeClusterDomain)
-		clusterDomain = utils.DefaultKubeClusterDomain
-	}
-	cfg.KubeClusterDomain = clusterDomain
 
 	kubeClient := utils.GetKubeClient()
 	conf := utils.GetConfig()

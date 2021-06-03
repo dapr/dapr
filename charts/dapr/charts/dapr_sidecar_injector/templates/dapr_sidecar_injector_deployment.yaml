@@ -114,6 +114,10 @@ spec:
           value: /dapr/cert/tls.crt
         - name: TLS_KEY_FILE
           value: /dapr/cert/tls.key
+{{- if .Values.kubeClusterDomain }}
+        - name: KUBE_CLUSTER_DOMAIN
+          value: "{{ .Values.kubeClusterDomain }}"
+{{- end }}
         - name: SIDECAR_IMAGE
 {{- if contains "/" .Values.image.name }}
           value: "{{ .Values.image.name }}"
