@@ -26,42 +26,63 @@ type BulkGetResponse struct {
 	Error string              `json:"error,omitempty"`
 }
 
-// respondWithJSON overrides the content-type with application/json
-func respondWithJSON(ctx *fasthttp.RequestCtx, code int, obj []byte) {
-	respond(ctx, code, obj)
-	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+type option = func(ctx *fasthttp.RequestCtx)
+
+// withEtag sets etag header
+func withEtag(etag *string) option {
+	return func(ctx *fasthttp.RequestCtx) {
+		if etag != nil {
+			ctx.Response.Header.Set(etagHeader, *etag)
+		}
+	}
 }
 
-// respond sets a default application/json content type if content type is not present
-func respond(ctx *fasthttp.RequestCtx, code int, obj []byte) {
-	ctx.Response.SetStatusCode(code)
-	ctx.Response.SetBody(obj)
+// withMetadata sets metadata headers
+func withMetadata(metadata map[string]string) option {
+	return func(ctx *fasthttp.RequestCtx) {
+		for k, v := range metadata {
+			ctx.Response.Header.Set(metadataPrefix+k, v)
+		}
+	}
+}
 
-	if len(ctx.Response.Header.ContentType()) == 0 {
+// withJSON overrides the content-type with application/json
+func withJSON(code int, obj []byte) option {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.SetStatusCode(code)
+		ctx.Response.SetBody(obj)
 		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
 	}
 }
 
-// respondWithETag sets etag header
-func respondWithETag(ctx *fasthttp.RequestCtx, etag *string) {
-	if etag != nil {
-		ctx.Response.Header.Set(etagHeader, *etag)
-	}
-}
-
-// respondWithMetadata sets metadata headers
-func respondWithMetadata(ctx *fasthttp.RequestCtx, metadata map[string]string) {
-	for k, v := range metadata {
-		ctx.Response.Header.Set(metadataPrefix+k, v)
-	}
-}
-
-func respondWithError(ctx *fasthttp.RequestCtx, code int, resp ErrorResponse) {
+// withError sets error code and jsonized error message
+func withError(code int, resp ErrorResponse) option {
 	b, _ := json.Marshal(&resp)
-	respondWithJSON(ctx, code, b)
+	return withJSON(code, b)
 }
 
-func respondEmpty(ctx *fasthttp.RequestCtx) {
-	ctx.Response.SetBody(nil)
-	ctx.Response.SetStatusCode(fasthttp.StatusNoContent)
+// withEmpty sets 204 status code
+func withEmpty() option {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.SetBody(nil)
+		ctx.Response.SetStatusCode(fasthttp.StatusNoContent)
+	}
+}
+
+// with sets a default application/json content type if content type is not present
+func with(code int, obj []byte) option {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.SetStatusCode(code)
+		ctx.Response.SetBody(obj)
+
+		if len(ctx.Response.Header.ContentType()) == 0 {
+			ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+		}
+	}
+}
+
+func respond(ctx *fasthttp.RequestCtx, options ...option) {
+	for _, option := range options {
+		option(ctx)
+	}
 }
