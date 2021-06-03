@@ -3,14 +3,15 @@ package client
 import (
 	"crypto/x509"
 
-	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
 // GetOperatorClient returns a new k8s operator client and the underlying connection.

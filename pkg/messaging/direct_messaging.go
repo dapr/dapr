@@ -18,6 +18,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -25,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -37,7 +38,7 @@ var log = logger.NewLogger("dapr.runtime.direct_messaging")
 // applications to send the message using service invocation.
 type messageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
 
-// DirectMessaging is the API interface for invoking a remote app
+// DirectMessaging is the API interface for invoking a remote app.
 type DirectMessaging interface {
 	Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 }
@@ -62,7 +63,7 @@ type remoteApp struct {
 	address   string
 }
 
-// NewDirectMessaging returns a new direct messaging api
+// NewDirectMessaging returns a new direct messaging api.
 func NewDirectMessaging(
 	appID, namespace string,
 	port int, mode modes.DaprMode,
@@ -87,7 +88,7 @@ func NewDirectMessaging(
 	}
 }
 
-// Invoke takes a message requests and invokes an app, either local or remote
+// Invoke takes a message requests and invokes an app, either local or remote.
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	app, err := d.getRemoteApp(targetAppID)
 	if err != nil {

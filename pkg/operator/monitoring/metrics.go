@@ -8,10 +8,11 @@ package monitoring
 import (
 	"context"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 const (
@@ -32,26 +33,26 @@ var (
 		"The total number of dapr services updated.",
 		stats.UnitDimensionless)
 
-	// appIDKey is a tag key for App ID
+	// appIDKey is a tag key for App ID.
 	appIDKey = tag.MustNewKey(appID)
 )
 
-// RecordServiceCreatedCount records the number of dapr service created
+// RecordServiceCreatedCount records the number of dapr service created.
 func RecordServiceCreatedCount(appID string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceCreatedTotal.M(1))
 }
 
-// RecordServiceDeletedCount records the number of dapr service deleted
+// RecordServiceDeletedCount records the number of dapr service deleted.
 func RecordServiceDeletedCount(appID string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceDeletedTotal.M(1))
 }
 
-// RecordServiceUpdatedCount records the number of dapr service updated
+// RecordServiceUpdatedCount records the number of dapr service updated.
 func RecordServiceUpdatedCount(appID string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceUpdatedTotal.M(1))
 }
 
-// InitMetrics initialize the operator service metrics
+// InitMetrics initialize the operator service metrics.
 func InitMetrics() error {
 	err := view.Register(
 		diag_utils.NewMeasureView(serviceCreatedTotal, []tag.Key{appIDKey}, view.Count()),

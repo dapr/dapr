@@ -13,3 +13,6 @@ github.com/
 **/.project
 **/.factorypath
 google
+
+test_report_e2e.json
+test_report_unit.json

@@ -9,9 +9,10 @@ import (
 	"fmt"
 	"testing"
 
-	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
 type fakeTestingM struct{}
@@ -20,7 +21,7 @@ func (f *fakeTestingM) Run() int {
 	return 0
 }
 
-// MockPlatform is the mock of Disposable interface
+// MockPlatform is the mock of Disposable interface.
 type MockPlatform struct {
 	mock.Mock
 }

@@ -13,12 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/credentials"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/dapr/dapr/pkg/sentry/certs"
-	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/dapr/utils"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +20,13 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/credentials"
+	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/pkg/validation"
+	"github.com/dapr/dapr/utils"
 )
 
 const (
@@ -155,7 +156,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		value = []corev1.Container{*sidecarContainer}
 	} else {
 		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
-		path = "/spec/containers/-"
+		path = "/spec/containers/0"
 		value = sidecarContainer
 	}
 
@@ -187,7 +188,7 @@ func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation 
 	}
 	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/env", containersPath, i)
+		path := fmt.Sprintf("%s/%d/env", containersPath, i+1)
 		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
@@ -596,6 +597,13 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprLivenessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprLivenessProbePeriodKey, defaultHealthzProbePeriodSeconds),
 			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprLivenessProbeThresholdKey, defaultHealthzProbeThreshold),
+		},
+		Lifecycle: &corev1.Lifecycle{
+			PostStart: &corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/daprd", "--wait"},
+				},
+			},
 		},
 	}
 

@@ -11,8 +11,9 @@ import (
 
 	"go.uber.org/atomic"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/pkg/errors"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 var (
@@ -27,8 +28,8 @@ type actor struct {
 	// actorID is the ID of actorType.
 	actorID string
 
-	// concurrencyLock is the lock to maintain actor's turn-based concurrency.
-	concurrencyLock *sync.Mutex
+	// actorLock is the lock to maintain actor's turn-based concurrency with allowance for reentrancy if configured.
+	actorLock ActorLock
 	// pendingActorCalls is the number of the current pending actor calls by turn-based concurrency.
 	pendingActorCalls atomic.Int32
 
@@ -47,14 +48,14 @@ type actor struct {
 	once sync.Once
 }
 
-func newActor(actorType, actorID string) *actor {
+func newActor(actorType, actorID string, maxReentrancyDepth *int) *actor {
 	return &actor{
-		actorType:       actorType,
-		actorID:         actorID,
-		concurrencyLock: &sync.Mutex{},
-		disposeCh:       nil,
-		disposed:        false,
-		lastUsedTime:    time.Now().UTC(),
+		actorType:    actorType,
+		actorID:      actorID,
+		actorLock:    NewActorLock(int32(*maxReentrancyDepth)),
+		disposeCh:    nil,
+		disposed:     false,
+		lastUsedTime: time.Now().UTC(),
 	}
 }
 
@@ -72,10 +73,15 @@ func (a *actor) channel() chan struct{} {
 }
 
 // lock holds the lock for turn-based concurrency.
-func (a *actor) lock() error {
+func (a *actor) lock(reentrancyID *string) error {
 	pending := a.pendingActorCalls.Inc()
 	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
-	a.concurrencyLock.Lock()
+
+	err := a.actorLock.Lock(reentrancyID)
+	if err != nil {
+		return err
+	}
+
 	if a.disposed {
 		a.unlock()
 		return ErrActorDisposed
@@ -98,6 +104,6 @@ func (a *actor) unlock() {
 		return
 	}
 
-	a.concurrencyLock.Unlock()
+	a.actorLock.Unlock()
 	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, pending)
 }

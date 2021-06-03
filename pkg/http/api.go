@@ -12,9 +12,18 @@ import (
 	"sync"
 
 	"github.com/dapr/components-contrib/bindings"
+	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/fasthttp/router"
+	jsoniter "github.com/json-iterator/go"
+	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
+	"github.com/valyala/fasthttp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -28,19 +37,13 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/fasthttp/router"
-	jsoniter "github.com/json-iterator/go"
-	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
-	"github.com/valyala/fasthttp"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
-// API returns a list of HTTP endpoints for Dapr
+// API returns a list of HTTP endpoints for Dapr.
 type API interface {
 	APIEndpoints() []Endpoint
 	MarkStatusAsReady()
+	MarkStatusAsOutboundReady()
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
@@ -62,6 +65,7 @@ type api struct {
 	id                       string
 	extendedMetadata         sync.Map
 	readyStatus              bool
+	outboundReadyStatus      bool
 	tracingSpec              config.TracingSpec
 	shutdown                 func()
 }
@@ -98,7 +102,7 @@ const (
 	tracestateHeader     = "tracestate"
 )
 
-// NewAPI returns a new API
+// NewAPI returns a new API.
 func NewAPI(
 	appID string,
 	appChannel channel.AppChannel,
@@ -148,14 +152,19 @@ func NewAPI(
 	return api
 }
 
-// APIEndpoints returns the list of registered endpoints
+// APIEndpoints returns the list of registered endpoints.
 func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
 }
 
-// MarkStatusAsReady marks the ready status of dapr
+// MarkStatusAsReady marks the ready status of dapr.
 func (a *api) MarkStatusAsReady() {
 	a.readyStatus = true
+}
+
+// MarkStatusAsOutboundReady marks the ready status of dapr for outbound traffic.
+func (a *api) MarkStatusAsOutboundReady() {
+	a.outboundReadyStatus = true
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {
@@ -331,6 +340,12 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Route:   "healthz",
 			Version: apiVersionV1,
 			Handler: a.onGetHealthz,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "healthz/outbound",
+			Version: apiVersionV1,
+			Handler: a.onGetOutboundHealthz,
 		},
 	}
 }
@@ -749,7 +764,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	respondEmpty(reqCtx)
 }
 
-// stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error
+// stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error.
 func (a *api) stateErrorResponse(err error, errorCode string) (int, string, ErrorResponse) {
 	var message string
 	var code int
@@ -768,7 +783,7 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 }
 
 // etagError checks if the error from the state store is an etag error and returns a bool for indication,
-// an status code and an error message
+// an status code and an error message.
 func (a *api) etagError(err error) (bool, int, string) {
 	e, ok := err.(*state.ETagError)
 	if !ok {
@@ -1231,48 +1246,60 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
 	metadata := getMetadataFromRequest(reqCtx)
+	rawPayload, metaErr := contrib_metadata.IsRawPayload(metadata)
+	if metaErr != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_REQUEST_METADATA",
+			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		log.Debug(msg)
+		return
+	}
 
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 
-	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
-		ID:              a.id,
-		Topic:           topic,
-		DataContentType: contentType,
-		Data:            body,
-		TraceID:         corID,
-		Pubsub:          pubsubName,
-	})
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-			fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
+	data := body
+	if !rawPayload {
+		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+			ID:              a.id,
+			Topic:           topic,
+			DataContentType: contentType,
+			Data:            body,
+			TraceID:         corID,
+			Pubsub:          pubsubName,
+		})
+		if err != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+			respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+			log.Debug(msg)
+			return
+		}
 
-	features := thepubsub.Features()
+		features := thepubsub.Features()
 
-	pubsub.ApplyMetadata(envelope, features, metadata)
-	b, err := a.json.Marshal(envelope)
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-			fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
+		pubsub.ApplyMetadata(envelope, features, metadata)
+
+		data, err = a.json.Marshal(envelope)
+		if err != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
+			respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+			log.Debug(msg)
+			return
+		}
 	}
 
 	req := pubsub.PublishRequest{
 		PubsubName: pubsubName,
 		Topic:      topic,
-		Data:       b,
+		Data:       data,
 		Metadata:   metadata,
 	}
 
-	err = a.pubsubAdapter.Publish(&req)
+	err := a.pubsubAdapter.Publish(&req)
 	if err != nil {
 		status := fasthttp.StatusInternalServerError
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",
@@ -1295,7 +1322,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-// GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists
+// GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.
 func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	code := metadata[http.HTTPStatusCode]
 	if code != "" {
@@ -1309,6 +1336,16 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 
 func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.readyStatus {
+		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		log.Debug(msg)
+	} else {
+		respondEmpty(reqCtx)
+	}
+}
+
+func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
+	if !a.outboundReadyStatus {
 		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)

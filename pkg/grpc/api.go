@@ -14,9 +14,18 @@ import (
 
 	"github.com/PuerkitoBio/purell"
 	"github.com/dapr/components-contrib/bindings"
+	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/golang/protobuf/ptypes/empty"
+	jsoniter "github.com/json-iterator/go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -32,13 +41,6 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/golang/protobuf/ptypes/empty"
-	jsoniter "github.com/json-iterator/go"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -100,7 +102,7 @@ type api struct {
 	shutdown                 func()
 }
 
-// NewAPI returns a new gRPC API
+// NewAPI returns a new gRPC API.
 func NewAPI(
 	appID string, appChannel channel.AppChannel,
 	stateStores map[string]state.Store,
@@ -220,7 +222,7 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 	return action, errMessage
 }
 
-// CallActor invokes a virtual actor
+// CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
@@ -263,47 +265,57 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, err
 	}
 
-	body := []byte{}
-
-	if in.Data != nil {
-		body = in.Data
+	rawPayload, metaErr := contrib_metadata.IsRawPayload(in.Metadata)
+	if metaErr != nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
 	}
 
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 
-	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
-		ID:              a.id,
-		Topic:           in.Topic,
-		DataContentType: in.DataContentType,
-		Data:            body,
-		TraceID:         corID,
-		Pubsub:          in.PubsubName,
-	})
-	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+	body := []byte{}
+	if in.Data != nil {
+		body = in.Data
 	}
 
-	features := thepubsub.Features()
-	pubsub.ApplyMetadata(envelope, features, in.Metadata)
+	data := body
 
-	b, err := jsoniter.ConfigFastest.Marshal(envelope)
-	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+	if !rawPayload {
+		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+			ID:              a.id,
+			Topic:           in.Topic,
+			DataContentType: in.DataContentType,
+			Data:            body,
+			TraceID:         corID,
+			Pubsub:          in.PubsubName,
+		})
+		if err != nil {
+			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+			apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
+
+		features := thepubsub.Features()
+		pubsub.ApplyMetadata(envelope, features, in.Metadata)
+
+		data, err = jsoniter.ConfigFastest.Marshal(envelope)
+		if err != nil {
+			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+			apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
 	}
 
 	req := pubsub.PublishRequest{
 		PubsubName: pubsubName,
 		Topic:      topic,
-		Data:       b,
+		Data:       data,
 		Metadata:   in.Metadata,
 	}
 
-	err = a.pubsubAdapter.Publish(&req)
+	err := a.pubsubAdapter.Publish(&req)
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
@@ -535,7 +547,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	return &emptypb.Empty{}, nil
 }
 
-// stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error
+// stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error.
 func (a *api) stateErrorResponse(err error, format string, args ...interface{}) error {
 	e, ok := err.(*state.ETagError)
 	if !ok {
@@ -1094,13 +1106,13 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 	return response, nil
 }
 
-// Sets value in extended metadata of the sidecar
+// Sets value in extended metadata of the sidecar.
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
 	return &emptypb.Empty{}, nil
 }
 
-// Shutdown the sidecar
+// Shutdown the sidecar.
 func (a *api) Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
 	go func() {
 		<-ctx.Done()

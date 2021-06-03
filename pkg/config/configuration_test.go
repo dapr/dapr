@@ -10,8 +10,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 const (
@@ -900,4 +901,58 @@ func TestGetOperationPrefixAndPostfix(t *testing.T) {
 		assert.Equal(t, "/invoke", prefix)
 		assert.Equal(t, "/a/b/*", postfix)
 	})
+}
+
+func TestFeatureEnabled(t *testing.T) {
+	t.Run("Test feature enabled is correct", func(t *testing.T) {
+		features := []FeatureSpec{
+			{
+				Name:    "testEnabled",
+				Enabled: true,
+			},
+			{
+				Name:    "testDisabled",
+				Enabled: false,
+			},
+		}
+		assert.True(t, IsFeatureEnabled(features, "testEnabled"))
+		assert.False(t, IsFeatureEnabled(features, "testDisabled"))
+		assert.False(t, IsFeatureEnabled(features, "testMissing"))
+	})
+}
+
+func TestFeatureSpecForStandAlone(t *testing.T) {
+	testCases := []struct {
+		name           string
+		confFile       string
+		featureName    Feature
+		featureEnabled bool
+	}{
+		{
+			name:           "Feature is enabled",
+			confFile:       "./testdata/feature_config.yaml",
+			featureName:    Feature("Actor.Reentrancy"),
+			featureEnabled: true,
+		},
+		{
+			name:           "Feature is disabled",
+			confFile:       "./testdata/feature_config.yaml",
+			featureName:    Feature("Test.Feature"),
+			featureEnabled: false,
+		},
+		{
+			name:           "Feature is disabled if missing",
+			confFile:       "./testdata/feature_config.yaml",
+			featureName:    Feature("Test.Missing"),
+			featureEnabled: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config, _, err := LoadStandaloneConfiguration(tc.confFile)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.featureEnabled, IsFeatureEnabled(config.Spec.Features, tc.featureName))
+		})
+	}
 }

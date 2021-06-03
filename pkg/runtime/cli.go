@@ -14,6 +14,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/dapr/kit/logger"
+
 	global_config "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
@@ -24,10 +26,9 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
 )
 
-// FromFlags parses command flags and returns DaprRuntime instance
+// FromFlags parses command flags and returns DaprRuntime instance.
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
@@ -45,6 +46,7 @@ func FromFlags() (*DaprRuntime, error) {
 	allowedOrigins := flag.String("allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	enableProfiling := flag.Bool("enable-profiling", false, "Enable profiling")
 	runtimeVersion := flag.Bool("version", false, "Prints the runtime version")
+	waitCommand := flag.Bool("wait", false, "wait for Dapr outbound ready")
 	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
@@ -61,6 +63,11 @@ func FromFlags() (*DaprRuntime, error) {
 
 	if *runtimeVersion {
 		fmt.Println(version.Version())
+		os.Exit(0)
+	}
+
+	if *waitCommand {
+		waitUntilDaprOutboundReady(*daprHTTPPort)
 		os.Exit(0)
 	}
 
