@@ -929,7 +929,7 @@ func (a *actorsRuntime) startTimer(ctx context.Context,
 	err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
 		req.Period, req.Callback, req.Data)
 	if err != nil {
-		log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+		log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 	}
 
 	ticker := a.configureTicker(period)
@@ -942,7 +942,7 @@ func (a *actorsRuntime) startTimer(ctx context.Context,
 				err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
 					req.Period, req.Callback, req.Data)
 				if err != nil {
-					log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+					log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
 				} else {
 					a.DeleteTimer(ctx, &DeleteTimerRequest{
 						Name:      req.Name,

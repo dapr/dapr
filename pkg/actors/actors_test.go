@@ -1289,5 +1289,4 @@ func TestCreateTimer(t *testing.T) {
 		err = testActorsRuntime.DeleteTimer(ctx, deleteRequestTests[index])
 		assert.Nil(t, err)
 	}
-
 }
