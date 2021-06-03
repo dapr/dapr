@@ -20,10 +20,11 @@ const (
 
 // BulkGetResponse is the response object for a state bulk get operation
 type BulkGetResponse struct {
-	Key   string              `json:"key"`
-	Data  jsoniter.RawMessage `json:"data,omitempty"`
-	ETag  *string             `json:"etag,omitempty"`
-	Error string              `json:"error,omitempty"`
+	Key      string              `json:"key"`
+	Data     jsoniter.RawMessage `json:"data,omitempty"`
+	ETag     *string             `json:"etag,omitempty"`
+	Metadata map[string]string   `json:"metadata,omitempty"`
+	Error    string              `json:"error,omitempty"`
 }
 
 type option = func(ctx *fasthttp.RequestCtx)

@@ -461,6 +461,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 			} else {
 				bulkResp[i].Data = jsoniter.RawMessage(responses[i].Data)
 				bulkResp[i].ETag = responses[i].ETag
+				bulkResp[i].Metadata = responses[i].Metadata
 			}
 		}
 	} else {
@@ -490,6 +491,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 				} else if resp != nil {
 					r.Data = jsoniter.RawMessage(resp.Data)
 					r.ETag = resp.ETag
+					r.Metadata = resp.Metadata
 				}
 			}
 
