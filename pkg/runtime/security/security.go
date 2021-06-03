@@ -51,7 +51,7 @@ func GetCertChain() (*credentials.CertChain, error) {
 	}, nil
 }
 
-// GetSidecarAuthenticator returns a new authenticator with the extracted trust anchors
+// GetSidecarAuthenticator returns a new authenticator with the extracted trust anchors.
 func GetSidecarAuthenticator(sentryAddress string, certChain *credentials.CertChain) (Authenticator, error) {
 	trustAnchors, err := CertPool(certChain.RootCA)
 	if err != nil {

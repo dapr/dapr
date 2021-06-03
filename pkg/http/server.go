@@ -32,7 +32,7 @@ var log = logger.NewLogger("dapr.runtime.http")
 
 const protocol = "http"
 
-// Server is an interface for the Dapr HTTP server
+// Server is an interface for the Dapr HTTP server.
 type Server interface {
 	StartNonBlocking()
 }
@@ -46,7 +46,7 @@ type server struct {
 	apiSpec     config.APISpec
 }
 
-// NewServer returns a new HTTP server
+// NewServer returns a new HTTP server.
 func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline, apiSpec config.APISpec) Server {
 	return &server{
 		api:         api,
@@ -58,7 +58,7 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, met
 	}
 }
 
-// StartNonBlocking starts a new server in a goroutine
+// StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() {
 	handler :=
 		useAPIAuthentication(

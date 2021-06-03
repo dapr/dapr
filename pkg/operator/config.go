@@ -11,13 +11,13 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 )
 
-// Config returns an operator config options
+// Config returns an operator config options.
 type Config struct {
 	MTLSEnabled bool
 	Credentials credentials.TLSCredentials
 }
 
-// LoadConfiguration loads the Kubernetes configuration and returns an Operator Config
+// LoadConfiguration loads the Kubernetes configuration and returns an Operator Config.
 func LoadConfiguration(name string, client client.Client) (*Config, error) {
 	var conf v1alpha1.Configuration
 	key := types.NamespacedName{

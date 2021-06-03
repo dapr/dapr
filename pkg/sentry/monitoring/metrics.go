@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	// Metrics definitions
+	// Metrics definitions.
 	csrReceivedTotal = stats.Int64(
 		"sentry/cert/sign/request_received_total",
 		"The number of CSRs received.",
@@ -38,7 +38,7 @@ var (
 		"The unix timestamp, in seconds, when issuer/root cert will expire.",
 		stats.UnitDimensionless)
 
-	// Metrics Tags
+	// Metrics Tags.
 	failedReasonKey = tag.MustNewKey("reason")
 	noKeys          = []tag.Key{}
 )
@@ -48,12 +48,12 @@ func CertSignRequestRecieved() {
 	stats.Record(context.Background(), csrReceivedTotal.M(1))
 }
 
-// CertSignSucceed counts succeeded cert issuance
+// CertSignSucceed counts succeeded cert issuance.
 func CertSignSucceed() {
 	stats.Record(context.Background(), certSignSuccessTotal.M(1))
 }
 
-// CertSignFailed counts succeeded cert issuance
+// CertSignFailed counts succeeded cert issuance.
 func CertSignFailed(reason string) {
 	stats.RecordWithTags(
 		context.Background(),
@@ -61,7 +61,7 @@ func CertSignFailed(reason string) {
 		certSignFailedTotal.M(1))
 }
 
-// IssuerCertExpiry records root cert expiry
+// IssuerCertExpiry records root cert expiry.
 func IssuerCertExpiry(expiry time.Time) {
 	stats.Record(context.Background(), issuerCertExpiryTimestamp.M(expiry.Unix()))
 }
@@ -71,12 +71,12 @@ func ServerCertIssueFailed(reason string) {
 	stats.Record(context.Background(), serverTLSCertIssueFailedTotal.M(1))
 }
 
-// IssuerCertChanged records issuer credential change
+// IssuerCertChanged records issuer credential change.
 func IssuerCertChanged() {
 	stats.Record(context.Background(), issuerCertChangedTotal.M(1))
 }
 
-// InitMetrics initializes metrics
+// InitMetrics initializes metrics.
 func InitMetrics() error {
 	return view.Register(
 		diag_utils.NewMeasureView(csrReceivedTotal, noKeys, view.Count()),
