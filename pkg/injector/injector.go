@@ -41,7 +41,7 @@ var allowedControllersServiceAccounts = []string{
 	"statefulset-controller",
 }
 
-// Injector is the interface for the Dapr runtime sidecar injection component
+// Injector is the interface for the Dapr runtime sidecar injection component.
 type Injector interface {
 	Run(ctx context.Context)
 }
@@ -56,7 +56,7 @@ type injector struct {
 }
 
 // toAdmissionResponse is a helper function to create an AdmissionResponse
-// with an embedded error
+// with an embedded error.
 func toAdmissionResponse(err error) *v1.AdmissionResponse {
 	return &v1.AdmissionResponse{
 		Result: &metav1.Status{
@@ -84,7 +84,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 	return appID
 }
 
-// NewInjector returns a new Injector instance with the given config
+// NewInjector returns a new Injector instance with the given config.
 func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient *kubernetes.Clientset) Injector {
 	mux := http.NewServeMux()
 
@@ -106,7 +106,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 	return i
 }
 
-// AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler
+// AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
 func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient *kubernetes.Clientset) ([]string, error) {
 	allowedUids := []string{}
 	for i, allowedControllersServiceAccount := range allowedControllersServiceAccounts {

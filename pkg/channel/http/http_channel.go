@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	// HTTPStatusCode is an dapr http channel status code
+	// HTTPStatusCode is an dapr http channel status code.
 	HTTPStatusCode = "http.status_code"
 	httpScheme     = "http"
 	httpsScheme    = "https"
@@ -39,7 +39,7 @@ const (
 	appConfigEndpoint = "dapr/config"
 )
 
-// Channel is an HTTP implementation of an AppChannel
+// Channel is an HTTP implementation of an AppChannel.
 type Channel struct {
 	client         *fasthttp.Client
 	baseAddress    string
@@ -78,7 +78,7 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 	return c, nil
 }
 
-// GetBaseAddress returns the application base address
+// GetBaseAddress returns the application base address.
 func (h *Channel) GetBaseAddress() string {
 	return h.baseAddress
 }
@@ -111,7 +111,7 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	return &config, nil
 }
 
-// InvokeMethod invokes user code via HTTP
+// InvokeMethod invokes user code via HTTP.
 func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	// Check if HTTP Extension is given. Otherwise, it will return error.
 	httpExt := req.Message().GetHttpExtension()
