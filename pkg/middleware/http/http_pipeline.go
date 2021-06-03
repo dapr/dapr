@@ -13,7 +13,7 @@ import (
 
 type Middleware func(h fasthttp.RequestHandler) fasthttp.RequestHandler
 
-// HTTPPipeline defines the middleware pipeline to be plugged into Dapr sidecar
+// HTTPPipeline defines the middleware pipeline to be plugged into Dapr sidecar.
 type Pipeline struct {
 	Handlers []Middleware
 }

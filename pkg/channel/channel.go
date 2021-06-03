@@ -13,11 +13,11 @@ import (
 )
 
 const (
-	// DefaultChannelAddress is the address that user application listen to
+	// DefaultChannelAddress is the address that user application listen to.
 	DefaultChannelAddress = "127.0.0.1"
 )
 
-// AppChannel is an abstraction over communications with user code
+// AppChannel is an abstraction over communications with user code.
 type AppChannel interface {
 	GetBaseAddress() string
 	GetAppConfig() (*config.ApplicationConfig, error)

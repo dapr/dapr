@@ -1966,7 +1966,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	})
 }
 
-// Fake http server and client helpers to simplify endpoints test
+// Fake http server and client helpers to simplify endpoints test.
 func newFakeHTTPServer() *fakeHTTPServer {
 	return &fakeHTTPServer{}
 }
@@ -2461,7 +2461,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	return nil, nil
 }
 
-// BulkGet performs a bulks get operations
+// BulkGet performs a bulks get operations.
 func (c fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	return false, nil, nil
 }

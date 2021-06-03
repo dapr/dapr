@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockDisposable is the mock of Disposable interface
+// MockDisposable is the mock of Disposable interface.
 type MockDisposable struct {
 	mock.Mock
 }

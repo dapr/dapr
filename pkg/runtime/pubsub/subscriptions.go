@@ -92,7 +92,7 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 	return subscriptions
 }
 
-// DeclarativeSelfHosted loads subscriptions from the given components path
+// DeclarativeSelfHosted loads subscriptions from the given components path.
 func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscription {
 	var subs []Subscription
 
@@ -144,7 +144,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 	}, nil
 }
 
-// DeclarativeKubernetes loads subscriptions from the operator when running in Kubernetes
+// DeclarativeKubernetes loads subscriptions from the operator when running in Kubernetes.
 func DeclarativeKubernetes(client operatorv1pb.OperatorClient, log logger.Logger) []Subscription {
 	var subs []Subscription
 	resp, err := client.ListSubscriptions(context.TODO(), &emptypb.Empty{})

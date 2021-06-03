@@ -30,7 +30,7 @@ var log = logger.NewLogger("dapr.sentry")
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
-	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config
+	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
 
 	healthzPort = 8080

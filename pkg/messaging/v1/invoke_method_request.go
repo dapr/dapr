@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	// DefaultAPIVersion is the default Dapr API version
+	// DefaultAPIVersion is the default Dapr API version.
 	DefaultAPIVersion = internalv1pb.APIVersion_V1
 )
 
@@ -27,7 +27,7 @@ type InvokeMethodRequest struct {
 	r *internalv1pb.InternalInvokeRequest
 }
 
-// NewInvokeMethodRequest creates InvokeMethodRequest object for method
+// NewInvokeMethodRequest creates InvokeMethodRequest object for method.
 func NewInvokeMethodRequest(method string) *InvokeMethodRequest {
 	return &InvokeMethodRequest{
 		r: &internalv1pb.InternalInvokeRequest{
@@ -39,7 +39,7 @@ func NewInvokeMethodRequest(method string) *InvokeMethodRequest {
 	}
 }
 
-// FromInvokeRequestMessage creates InvokeMethodRequest object from InvokeRequest pb object
+// FromInvokeRequestMessage creates InvokeMethodRequest object from InvokeRequest pb object.
 func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest {
 	return &InvokeMethodRequest{
 		r: &internalv1pb.InternalInvokeRequest{
@@ -49,7 +49,7 @@ func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest
 	}
 }
 
-// InternalInvokeRequest creates InvokeMethodRequest object from InternalInvokeRequest pb object
+// InternalInvokeRequest creates InvokeMethodRequest object from InternalInvokeRequest pb object.
 func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
 	req := &InvokeMethodRequest{r: pb}
 	if pb.Message == nil {
@@ -59,19 +59,19 @@ func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMetho
 	return req, nil
 }
 
-// WithActor sets actor type and id
+// WithActor sets actor type and id.
 func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMethodRequest {
 	imr.r.Actor = &internalv1pb.Actor{ActorType: actorType, ActorId: actorID}
 	return imr
 }
 
-// WithMetadata sets metadata
+// WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
 	imr.r.Metadata = MetadataToInternalMetadata(md)
 	return imr
 }
 
-// WithFastHTTPHeaders sets fasthttp request headers
+// WithFastHTTPHeaders sets fasthttp request headers.
 func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
 	md := map[string][]string{}
 	header.VisitAll(func(key []byte, value []byte) {
@@ -81,7 +81,7 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 	return imr
 }
 
-// WithRawData sets message data and content_type
+// WithRawData sets message data and content_type.
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
 	if contentType == "" {
 		contentType = JSONContentType
@@ -91,7 +91,7 @@ func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *In
 	return imr
 }
 
-// WithHTTPExtension sets new HTTP extension with verb and querystring
+// WithHTTPExtension sets new HTTP extension with verb and querystring.
 func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring string) *InvokeMethodRequest {
 	httpMethod, ok := commonv1pb.HTTPExtension_Verb_value[strings.ToUpper(verb)]
 	if !ok {
@@ -106,7 +106,7 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 	return imr
 }
 
-// EncodeHTTPQueryString generates querystring for http using http extension object
+// EncodeHTTPQueryString generates querystring for http using http extension object.
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	m := imr.r.Message
 	if m == nil || m.GetHttpExtension() == nil {
@@ -116,32 +116,32 @@ func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	return m.GetHttpExtension().Querystring
 }
 
-// APIVersion gets API version of InvokeMethodRequest
+// APIVersion gets API version of InvokeMethodRequest.
 func (imr *InvokeMethodRequest) APIVersion() internalv1pb.APIVersion {
 	return imr.r.GetVer()
 }
 
-// Metadata gets Metadata of InvokeMethodRequest
+// Metadata gets Metadata of InvokeMethodRequest.
 func (imr *InvokeMethodRequest) Metadata() DaprInternalMetadata {
 	return imr.r.GetMetadata()
 }
 
-// Proto returns InternalInvokeRequest Proto object
+// Proto returns InternalInvokeRequest Proto object.
 func (imr *InvokeMethodRequest) Proto() *internalv1pb.InternalInvokeRequest {
 	return imr.r
 }
 
-// Actor returns actor type and id
+// Actor returns actor type and id.
 func (imr *InvokeMethodRequest) Actor() *internalv1pb.Actor {
 	return imr.r.GetActor()
 }
 
-// Message gets InvokeRequest Message object
+// Message gets InvokeRequest Message object.
 func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
 	return imr.r.Message
 }
 
-// RawData returns content_type and byte array body
+// RawData returns content_type and byte array body.
 func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 	m := imr.r.Message
 	if m == nil || m.Data == nil {
