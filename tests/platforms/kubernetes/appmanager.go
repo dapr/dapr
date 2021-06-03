@@ -279,7 +279,22 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 	})
 
 	if waitErr != nil {
-		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v: %s", m.app.AppName, lastDeployment, waitErr)
+		// get deployment's Pods detail status info
+		podClient := m.client.Pods(m.namespace)
+		// Filter only 'testapp=appName' labeled Pods
+		podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+		})
+		podStatus := map[string][]apiv1.ContainerStatus{}
+		if err == nil {
+			for _, pod := range podList.Items {
+				podStatus[pod.Name] = pod.Status.ContainerStatuses
+			}
+		} else {
+			log.Printf("Error list pod for deployment %s. Error was %s", m.app.AppName, err)
+		}
+
+		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v pod status: %+v error: %s", m.app.AppName, lastDeployment, podStatus, waitErr)
 	}
 
 	return lastDeployment, nil
