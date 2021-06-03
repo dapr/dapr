@@ -212,38 +212,3 @@ func newSerialNumber() (*big.Int, error) {
 	}
 	return serialNum, nil
 }
-
-type CredentialRequests struct {
-	PrivateKey  *certs.PrivateKey
-	Certificate *x509.CertificateRequest
-}
-
-func DecodePEMCertificateRequests(rest []byte) ([]*x509.CertificateRequest, error) {
-	var certs []*x509.CertificateRequest
-	for len(rest) > 0 {
-		var err error
-		var cert *x509.CertificateRequest
-
-		cert, rest, err = decodeCertificateRequestPEM(rest)
-		if err != nil {
-			return nil, err
-		}
-		if cert != nil {
-			// it's a cert, add to pool
-			certs = append(certs, cert)
-		}
-	}
-	return certs, nil
-}
-
-func decodeCertificateRequestPEM(rest []byte) (*x509.CertificateRequest, []byte, error) {
-	block, rest := pem.Decode(rest)
-	if block == nil {
-		return nil, rest, errors.New("invalid PEM certificate")
-	}
-	if block.Type != encodeMsgCSR {
-		return nil, nil, nil
-	}
-	c, err := x509.ParseCertificateRequest(block.Bytes)
-	return c, rest, err
-}
