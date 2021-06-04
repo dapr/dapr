@@ -79,9 +79,9 @@ func (lt *actorLoadTestRunnable) Run(t int) {
 
 	log.Debugf("got, code: %3d, size: %d", code, size)
 
-	elasped := time.Since(start)
+	elapsed := time.Since(start)
 
-	lt.telemetryClient.RecordLoadRequestCount(lt.testActorType, actorID, elasped, code)
+	lt.telemetryClient.RecordLoadRequestCount(lt.testActorType, actorID, elapsed, code)
 
 	lt.RetCodes[code]++
 	lt.sizes.Record(float64(size))
