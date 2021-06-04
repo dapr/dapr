@@ -34,7 +34,7 @@ const (
 	TestKeyName = "key0"
 )
 
-// testRequest is the request object that encapsulates the `data` field of a request
+// testRequest is the request object that encapsulates the `data` field of a request.
 type testRequest struct {
 	Data interface{} `json:"data"`
 }

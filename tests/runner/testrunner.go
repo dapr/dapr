@@ -13,15 +13,15 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
-// runnerFailExitCode is the exit code when test runner setup is failed
+// runnerFailExitCode is the exit code when test runner setup is failed.
 const runnerFailExitCode = 1
 
-// runnable is an interface to implement testing.M
+// runnable is an interface to implement testing.M.
 type runnable interface {
 	Run() int
 }
 
-// PlatformInterface defines the testing platform for test runner
+// PlatformInterface defines the testing platform for test runner.
 type PlatformInterface interface {
 	setup() error
 	tearDown() error
@@ -45,7 +45,7 @@ type AppUsage struct {
 }
 
 // TestRunner holds initial test apps and testing platform instance
-// maintains apps and platform for e2e test
+// maintains apps and platform for e2e test.
 type TestRunner struct {
 	// id is test runner id which will be used for logging
 	id string
@@ -62,7 +62,7 @@ type TestRunner struct {
 	Platform PlatformInterface
 }
 
-// NewTestRunner returns TestRunner instance for e2e test
+// NewTestRunner returns TestRunner instance for e2e test.
 func NewTestRunner(id string, apps []kube.AppDescription,
 	comps []kube.ComponentDescription,
 	initApps []kube.AppDescription) *TestRunner {
@@ -75,7 +75,7 @@ func NewTestRunner(id string, apps []kube.AppDescription,
 	}
 }
 
-// Start is the entry point of Dapr test runner
+// Start is the entry point of Dapr test runner.
 func (tr *TestRunner) Start(m runnable) int {
 	// TODO: Add logging and reporting initialization
 
