@@ -397,9 +397,9 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 		}
 
 		if len(body) != 0 {
-			log.Println("expected 0 length reponse")
+			log.Println("expected 0 length response")
 			w.WriteHeader(http.StatusInternalServerError)
-			return errors.New("expected 0 length reponse")
+			return errors.New("expected 0 length response")
 		}
 
 		// query a non-existing actor.  This should return 400.
@@ -461,9 +461,9 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 		}
 
 		if len(body) != 0 {
-			log.Println("expected 0 length reponse")
+			log.Println("expected 0 length response")
 			w.WriteHeader(http.StatusInternalServerError)
-			return errors.New("expected 0 length reponse")
+			return errors.New("expected 0 length response")
 		}
 	} else {
 		return errors.New("actorStateTest() - unexpected option")
