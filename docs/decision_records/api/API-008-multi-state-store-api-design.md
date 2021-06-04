@@ -26,7 +26,7 @@ We have reviewed multi storage API design for completeness and consistency.
    
    The actor API to save the state will fail in both these scenarios where actorStore is not specified or multiple actor stores
 are specified.
-*  It is noted that after this breaking change, actor state store has to be specifed unlike earlier where first state store is picked up by default.
+*  It is noted that after this breaking change, actor state store has to be specified unlike earlier where first state store is picked up by default.
 * It is noted that this breaking change will also require a CLI change to generate the state store YAML for redis with actorStateStore.
 
 * To provide multiple stores, user has to provide separate YAML for each store and giving unique name for the store.
