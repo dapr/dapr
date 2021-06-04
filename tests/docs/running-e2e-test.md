@@ -117,9 +117,9 @@ Run end-to-end tests
 make test-e2e-all
 ```
 
-## Cleanup local enviornment
+## Cleanup local environment
 
-To completely remove Dapr, test dependancies, and any lingering e2e test apps:
+To completely remove Dapr, test dependencies, and any lingering e2e test apps:
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
 ```bash
 make delete-test-namespace

@@ -62,7 +62,7 @@ func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(rsp))
 }
 
-// testHTTPHandler is used for querystring test
+// testHTTPHandler is used for querystring test.
 type testHTTPHandler struct {
 	serverURL string
 

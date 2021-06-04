@@ -31,7 +31,7 @@ This document helps you get started developing Dapr. If you find any problem whi
    PATH=%GOPATH%\bin;...
    ```
 2. [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Go debugging
-    Delve for Go (NOTE: this is NOT Delve from the Office365) is a debugger utility is a debugger for the Go programming language.  Please refer to [Delve Home Page](https://github.com/go-delve/delve) for a detailed explaination.
+    Delve for Go (NOTE: this is NOT Delve from the Office365) is a debugger utility is a debugger for the Go programming language.  Please refer to [Delve Home Page](https://github.com/go-delve/delve) for a detailed explanation.
 3. [Git for Windows](https://gitforwindows.org)
    * Install [Git with chocolatey](https://chocolatey.org/packages/git) and ensure that Git bin directory is in PATH environment variable
     ```powershell

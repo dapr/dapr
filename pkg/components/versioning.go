@@ -15,9 +15,9 @@ func IsInitialVersion(version string) bool {
 }
 
 const (
-	// Unstable version (v0)
+	// Unstable version (v0).
 	UnstableVersion = "v0"
 
-	// First stable version (v1)
+	// First stable version (v1).
 	FirstStableVersion = "v1"
 )

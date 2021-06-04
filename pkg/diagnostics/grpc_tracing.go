@@ -25,7 +25,7 @@ import (
 
 const grpcTraceContextKey = "grpc-trace-bin"
 
-// GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request
+// GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
 func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		var span *trace.Span
@@ -100,7 +100,7 @@ func userDefinedMetadata(ctx context.Context) map[string]string {
 	return daprMetadata
 }
 
-// UpdateSpanStatusFromGRPCError updates tracer span status based on error object
+// UpdateSpanStatusFromGRPCError updates tracer span status based on error object.
 func UpdateSpanStatusFromGRPCError(span *trace.Span, err error) {
 	if span == nil || err == nil {
 		return
@@ -139,7 +139,7 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 	return sc, ok
 }
 
-// SpanContextToGRPCMetadata appends binary serialized SpanContext to the outgoing GRPC context
+// SpanContextToGRPCMetadata appends binary serialized SpanContext to the outgoing GRPC context.
 func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContext) context.Context {
 	// if span context is empty, no ops
 	if (trace.SpanContext{}) == spanContext {
@@ -153,7 +153,7 @@ func isInternalCalls(method string) bool {
 	return strings.HasPrefix(method, "/dapr.proto.internals.")
 }
 
-// spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs
+// spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs.
 func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) map[string]string {
 	// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md
 	var m = map[string]string{}

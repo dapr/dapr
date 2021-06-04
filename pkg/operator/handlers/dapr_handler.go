@@ -43,7 +43,7 @@ const (
 
 var log = logger.NewLogger("dapr.operator.handlers")
 
-// DaprHandler handles the lifetime for Dapr CRDs
+// DaprHandler handles the lifetime for Dapr CRDs.
 type DaprHandler struct {
 	mgr ctrl.Manager
 
@@ -51,7 +51,7 @@ type DaprHandler struct {
 	Scheme *runtime.Scheme
 }
 
-// NewDaprHandler returns a new Dapr handler
+// NewDaprHandler returns a new Dapr handler.
 func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 	return &DaprHandler{
 		mgr: mgr,
@@ -61,7 +61,7 @@ func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 	}
 }
 
-// Init allows for various startup tasks
+// Init allows for various startup tasks.
 func (h *DaprHandler) Init() error {
 	if err := h.mgr.GetFieldIndexer().IndexField(
 		context.TODO(),

@@ -24,19 +24,19 @@ const (
 	componentKind = "Component"
 )
 
-// StandaloneComponents loads components in a standalone mode environment
+// StandaloneComponents loads components in a standalone mode environment.
 type StandaloneComponents struct {
 	config config.StandaloneConfig
 }
 
-// NewStandaloneComponents returns a new standalone loader
+// NewStandaloneComponents returns a new standalone loader.
 func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneComponents {
 	return &StandaloneComponents{
 		config: configuration,
 	}
 }
 
-// LoadComponents loads dapr components from a given directory
+// LoadComponents loads dapr components from a given directory.
 func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	files, err := ioutil.ReadDir(s.config.ComponentsPath)
 	if err != nil {
@@ -75,7 +75,7 @@ func (s *StandaloneComponents) loadComponentsFromFile(filename string) []compone
 	return components
 }
 
-// isYaml checks whether the file is yaml or not
+// isYaml checks whether the file is yaml or not.
 func (s *StandaloneComponents) isYaml(fileName string) bool {
 	extension := strings.ToLower(filepath.Ext(fileName))
 	if extension == ".yaml" || extension == ".yml" {
@@ -84,7 +84,7 @@ func (s *StandaloneComponents) isYaml(fileName string) bool {
 	return false
 }
 
-// decodeYaml decodes the yaml document
+// decodeYaml decodes the yaml document.
 func (s *StandaloneComponents) decodeYaml(b []byte) ([]components_v1alpha1.Component, []error) {
 	list := []components_v1alpha1.Component{}
 	errors := []error{}
@@ -114,7 +114,7 @@ func (s *StandaloneComponents) decodeYaml(b []byte) ([]components_v1alpha1.Compo
 	return list, errors
 }
 
-// decode reads the YAML resource in document
+// decode reads the YAML resource in document.
 func (s *StandaloneComponents) decode(scanner *bufio.Scanner, c interface{}) error {
 	if scanner.Scan() {
 		return yaml.Unmarshal(scanner.Bytes(), &c)
@@ -127,7 +127,7 @@ func (s *StandaloneComponents) decode(scanner *bufio.Scanner, c interface{}) err
 	return err
 }
 
-// splitYamlDoc - splits the yaml docs
+// splitYamlDoc - splits the yaml docs.
 func (s *StandaloneComponents) splitYamlDoc(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
