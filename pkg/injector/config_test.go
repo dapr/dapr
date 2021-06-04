@@ -43,6 +43,6 @@ func TestGetInectorConfig(t *testing.T) {
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)
 		assert.Equal(t, "IfNotPresent", cfg.SidecarImagePullPolicy)
 		assert.Equal(t, "test-namespace", cfg.Namespace)
-		assert.Equal(t, "cluster.local", cfg.KubeClusterDomain)
+		assert.NotEqual(t, "", cfg.KubeClusterDomain)
 	})
 }
