@@ -7,7 +7,7 @@ package injector
 
 import "github.com/kelseyhightower/envconfig"
 
-// Config represents configuration options for the Dapr Sidecar Injector webhook server
+// Config represents configuration options for the Dapr Sidecar Injector webhook server.
 type Config struct {
 	TLSCertFile            string `envconfig:"TLS_CERT_FILE" required:"true"`
 	TLSKeyFile             string `envconfig:"TLS_KEY_FILE" required:"true"`
@@ -25,7 +25,7 @@ func NewConfigWithDefaults() Config {
 	}
 }
 
-// GetConfigFromEnvironment returns configuration derived from environment variables
+// GetConfigFromEnvironment returns configuration derived from environment variables.
 func GetConfigFromEnvironment() (Config, error) {
 	c := NewConfigWithDefaults()
 	err := envconfig.Process("", &c)

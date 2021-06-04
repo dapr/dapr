@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-// FromFlags parses command flags and returns DaprRuntime instance
+// FromFlags parses command flags and returns DaprRuntime instance.
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")

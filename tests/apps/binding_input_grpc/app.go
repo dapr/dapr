@@ -26,7 +26,7 @@ const (
 	appPort = "3000"
 )
 
-// server is our user app
+// server is our user app.
 type server struct {
 }
 
@@ -170,7 +170,7 @@ func (s *server) ListInputBindings(ctx context.Context, in *empty.Empty) (*pb.Li
 	}, nil
 }
 
-// This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata
+// This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
 func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
 	fmt.Printf("Invoked from binding: %s - %s\n", in.Name, string(in.Data))
 	return &pb.BindingEventResponse{}, nil

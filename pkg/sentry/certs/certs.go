@@ -17,13 +17,13 @@ const (
 	RSAPrivateKey = "RSA PRIVATE KEY"
 )
 
-// PrivateKey wraps a EC or RSA private key
+// PrivateKey wraps a EC or RSA private key.
 type PrivateKey struct {
 	Type string
 	Key  interface{}
 }
 
-// Credentials holds a certificate, private key and trust chain
+// Credentials holds a certificate, private key and trust chain.
 type Credentials struct {
 	PrivateKey  *PrivateKey
 	Certificate *x509.Certificate
@@ -165,7 +165,7 @@ func ParsePemCSR(csrPem []byte) (*x509.CertificateRequest, error) {
 	return csr, nil
 }
 
-// GenerateECPrivateKey returns a new EC Private Key
+// GenerateECPrivateKey returns a new EC Private Key.
 func GenerateECPrivateKey() (*ecdsa.PrivateKey, error) {
 	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 }

@@ -97,7 +97,7 @@ func GenerateIssuerCertCSR(cn string, publicKey interface{}, ttl, skew time.Dura
 	return cert, nil
 }
 
-// GenerateRootCertCSR returns a CA root cert x509 Certificate
+// GenerateRootCertCSR returns a CA root cert x509 Certificate.
 func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl, skew time.Duration) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(ttl, skew, publicKey)
 	if err != nil {

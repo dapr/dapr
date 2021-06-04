@@ -112,7 +112,7 @@ func ExtractSpanContext(ctx context.Context) []byte {
 	return []byte(SerializeSpanContext(span.SpanContext()))
 }
 
-// SerializeSpanContext serializes a span context into a simple string
+// SerializeSpanContext serializes a span context into a simple string.
 func SerializeSpanContext(ctx trace.SpanContext) string {
 	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
 }
