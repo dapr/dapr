@@ -41,14 +41,14 @@ E2E tests are designed for verifying the functional correctness by replicating e
 
 If you are starting from scratch and just want to build dapr, deploy it, and run the e2e tests to your kubernetes cluster, do the following:
 
-1. Remove the test namespace, if it exists
+1. Uninstall dapr, dapr-kafka, dapr-redis services, if it exists
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
+```
+helm uninstall dapr dapr-kafka dapr-redis -n $DAPR_NAMESPACE
+```
+2. Remove the test namespace, if it exists
 ```bash
 make delete-test-namespace
-```
-2. Delete the mutatingwebhook configurations, if it exists
-```
-kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io dapr-sidecar-injector
 ```
 3. Build, deploy, run tests from start to finish
 ```bash
@@ -129,11 +129,11 @@ make test-e2e-all
 To completely remove Dapr, test dependancies, and any lingering e2e test apps:
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
 ```bash
+# Uninstall dapr, dapr-kafka, dapr-redis services
+helm uninstall dapr dapr-kafka dapr-redis -n $DAPR_NAMESPACE
+
 # Remove the test namespace
 make delete-test-namespace
-
-# Delete the mutatingwebhook configurations
-kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io dapr-sidecar-injector
 ```
 
 
