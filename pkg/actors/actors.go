@@ -49,6 +49,8 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.actor")
 
+var pattern = regexp.MustCompile(`^(R(?P<repetiton>\d+))?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
+
 // Actors allow calling into virtual actors as well as actor state management.
 type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
@@ -676,9 +678,18 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		return err
 	}
 
-	_, repetitionsLeft, err := parseDuration(reminder.Period)
-	log.Debugf("repetitions allowed are %d", repetitionsLeft)
-	go func(reminder *Reminder, repetitionsLeft int, stop chan bool) {
+	var period time.Duration
+	repetitionsLeft := -1
+	if reminder.Period != "" {
+		period, repetitionsLeft, err = parseDuration(reminder.Period)
+		if err != nil {
+			log.Errorf("error parsing reminder period %s: %s", reminder.Period, err)
+			return err
+		}
+		log.Debugf("repetitions allowed are %d", repetitionsLeft)
+	}
+
+	go func(reminder *Reminder, period time.Duration, repetitionsLeft int, stop chan bool) {
 		now := time.Now().UTC()
 		initialDuration := nextInvokeTime.Sub(now)
 		time.Sleep(initialDuration)
@@ -698,11 +709,6 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		}
 
 		if reminder.Period != "" {
-			period, _, err := parseDuration(reminder.Period)
-			if err != nil {
-				log.Errorf("error parsing reminder period: %s", err)
-			}
-
 			_, exists := a.activeReminders.Load(reminderKey)
 			if !exists {
 				log.Errorf("could not find active reminder with key: %s", reminderKey)
@@ -744,7 +750,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				log.Errorf("error deleting reminder: %s", err)
 			}
 		}
-	}(reminder, repetitionsLeft, stopChannel)
+	}(reminder, period, repetitionsLeft, stopChannel)
 
 	return nil
 }
@@ -1135,8 +1141,6 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	}
 	return nil
 }
-
-var pattern = regexp.MustCompile(`^(R(?P<repetiton>\d+))?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
 
 // parseDuration creates time.Duration from ISO8601 or time.duration string formats.
 func parseDuration(from string) (time.Duration, int, error) {
