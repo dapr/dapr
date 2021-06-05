@@ -10,10 +10,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/connectivity"
+
+	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/runtime/security"
 )
 
 type authenticatorMock struct {

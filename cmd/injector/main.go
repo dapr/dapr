@@ -9,6 +9,8 @@ import (
 	"flag"
 	"time"
 
+	"github.com/dapr/kit/logger"
+
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/injector"
@@ -17,7 +19,6 @@ import (
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.injector")

@@ -6,8 +6,9 @@
 package raft
 
 import (
-	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/dapr/dapr/pkg/placement/hashing"
 )
 
 // DaprHostMember represents Dapr runtime actor host member which serve actor types.

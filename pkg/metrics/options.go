@@ -14,7 +14,7 @@ const (
 	defaultMetricsEnabled = true
 )
 
-// Options defines the sets of options for Dapr logging
+// Options defines the sets of options for Dapr logging.
 type Options struct {
 	// OutputLevel is the level of logging
 	MetricsEnabled bool
@@ -40,7 +40,7 @@ func (o *Options) MetricsPort() uint64 {
 	return port
 }
 
-// AttachCmdFlags attaches metrics options to command flags
+// AttachCmdFlags attaches metrics options to command flags.
 func (o *Options) AttachCmdFlags(
 	stringVar func(p *string, name string, value string, usage string),
 	boolVar func(p *bool, name string, value bool, usage string)) {
@@ -56,7 +56,7 @@ func (o *Options) AttachCmdFlags(
 		"Enable prometheus metric")
 }
 
-// AttachCmdFlag attaches single metrics option to command flags
+// AttachCmdFlag attaches single metrics option to command flags.
 func (o *Options) AttachCmdFlag(
 	stringVar func(p *string, name string, value string, usage string)) {
 	stringVar(

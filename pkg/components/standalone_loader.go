@@ -13,9 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ghodss/yaml"
+
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
-	"github.com/ghodss/yaml"
 )
 
 const (
@@ -23,19 +24,19 @@ const (
 	componentKind = "Component"
 )
 
-// StandaloneComponents loads components in a standalone mode environment
+// StandaloneComponents loads components in a standalone mode environment.
 type StandaloneComponents struct {
 	config config.StandaloneConfig
 }
 
-// NewStandaloneComponents returns a new standalone loader
+// NewStandaloneComponents returns a new standalone loader.
 func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneComponents {
 	return &StandaloneComponents{
 		config: configuration,
 	}
 }
 
-// LoadComponents loads dapr components from a given directory
+// LoadComponents loads dapr components from a given directory.
 func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	dir := s.config.ComponentsPath
 	files, err := ioutil.ReadDir(dir)
@@ -63,7 +64,7 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 	return list, nil
 }
 
-// isYaml checks whether the file is yaml or not
+// isYaml checks whether the file is yaml or not.
 func (s *StandaloneComponents) isYaml(fileName string) bool {
 	extension := strings.ToLower(filepath.Ext(fileName))
 	if extension == ".yaml" || extension == ".yml" {
@@ -72,7 +73,7 @@ func (s *StandaloneComponents) isYaml(fileName string) bool {
 	return false
 }
 
-// decodeYaml decodes the yaml document
+// decodeYaml decodes the yaml document.
 func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]components_v1alpha1.Component, []error) {
 	list := []components_v1alpha1.Component{}
 	errors := []error{}
@@ -97,7 +98,7 @@ func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]componen
 	return list, errors
 }
 
-// decode reads the YAML resource in document
+// decode reads the YAML resource in document.
 func (s *StandaloneComponents) decode(scanner *bufio.Scanner, c interface{}) error {
 	if scanner.Scan() {
 		return yaml.Unmarshal(scanner.Bytes(), &c)
@@ -110,7 +111,7 @@ func (s *StandaloneComponents) decode(scanner *bufio.Scanner, c interface{}) err
 	return err
 }
 
-// splitYamlDoc - splits the yaml docs
+// splitYamlDoc - splits the yaml docs.
 func (s *StandaloneComponents) splitYamlDoc(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil

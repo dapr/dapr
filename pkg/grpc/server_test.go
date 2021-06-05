@@ -7,8 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 func TestCertRenewal(t *testing.T) {

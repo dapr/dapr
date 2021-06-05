@@ -3,13 +3,14 @@ package diagnostics
 import (
 	"context"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
-// Tag keys
+// Tag keys.
 var (
 	componentKey    = tag.MustNewKey("component")
 	failReasonKey   = tag.MustNewKey("reason")
@@ -20,7 +21,7 @@ var (
 	policyActionKey = tag.MustNewKey("policyAction")
 )
 
-// serviceMetrics holds dapr runtime metric monitoring methods
+// serviceMetrics holds dapr runtime metric monitoring methods.
 type serviceMetrics struct {
 	// component metrics
 	componentLoaded        *stats.Int64Measure
@@ -53,7 +54,7 @@ type serviceMetrics struct {
 	enabled bool
 }
 
-// newServiceMetrics returns serviceMetrics instance with default service metric stats
+// newServiceMetrics returns serviceMetrics instance with default service metric stats.
 func newServiceMetrics() *serviceMetrics {
 	return &serviceMetrics{
 		// Runtime Component metrics
@@ -142,7 +143,7 @@ func newServiceMetrics() *serviceMetrics {
 	}
 }
 
-// Init initialize metrics views for metrics
+// Init initialize metrics views for metrics.
 func (s *serviceMetrics) Init(appID string) error {
 	s.appID = appID
 	s.enabled = true
@@ -171,14 +172,14 @@ func (s *serviceMetrics) Init(appID string) error {
 	)
 }
 
-// ComponentLoaded records metric when component is loaded successfully
+// ComponentLoaded records metric when component is loaded successfully.
 func (s *serviceMetrics) ComponentLoaded() {
 	if s.enabled {
 		stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.componentLoaded.M(1))
 	}
 }
 
-// ComponentInitialized records metric when component is initialized
+// ComponentInitialized records metric when component is initialized.
 func (s *serviceMetrics) ComponentInitialized(component string) {
 	if s.enabled {
 		stats.RecordWithTags(
@@ -188,7 +189,7 @@ func (s *serviceMetrics) ComponentInitialized(component string) {
 	}
 }
 
-// ComponentInitFailed records metric when component initialization is failed
+// ComponentInitFailed records metric when component initialization is failed.
 func (s *serviceMetrics) ComponentInitFailed(component string, reason string) {
 	if s.enabled {
 		stats.RecordWithTags(
@@ -198,14 +199,14 @@ func (s *serviceMetrics) ComponentInitFailed(component string, reason string) {
 	}
 }
 
-// MTLSInitCompleted records metric when component is initialized
+// MTLSInitCompleted records metric when component is initialized.
 func (s *serviceMetrics) MTLSInitCompleted() {
 	if s.enabled {
 		stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.mtlsInitCompleted.M(1))
 	}
 }
 
-// MTLSInitFailed records metric when component initialization is failed
+// MTLSInitFailed records metric when component initialization is failed.
 func (s *serviceMetrics) MTLSInitFailed(reason string) {
 	if s.enabled {
 		stats.RecordWithTags(
@@ -214,14 +215,14 @@ func (s *serviceMetrics) MTLSInitFailed(reason string) {
 	}
 }
 
-// MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded
+// MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded.
 func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
 	if s.enabled {
 		stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.mtlsWorkloadCertRotated.M(1))
 	}
 }
 
-// MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed
+// MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed.
 func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
 	if s.enabled {
 		stats.RecordWithTags(
@@ -297,7 +298,7 @@ func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks 
 	}
 }
 
-// RequestAllowedByAppAction records the requests allowed due to a match with the action specified in the access control policy for the app
+// RequestAllowedByAppAction records the requests allowed due to a match with the action specified in the access control policy for the app.
 func (s *serviceMetrics) RequestAllowedByAppAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
 	if s.enabled {
 		stats.RecordWithTags(
@@ -313,7 +314,7 @@ func (s *serviceMetrics) RequestAllowedByAppAction(appID, trustDomain, namespace
 	}
 }
 
-// RequestBlockedByAppAction records the requests blocked due to a match with the action specified in the access control policy for the app
+// RequestBlockedByAppAction records the requests blocked due to a match with the action specified in the access control policy for the app.
 func (s *serviceMetrics) RequestBlockedByAppAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
 	if s.enabled {
 		stats.RecordWithTags(
@@ -329,7 +330,7 @@ func (s *serviceMetrics) RequestBlockedByAppAction(appID, trustDomain, namespace
 	}
 }
 
-// RequestAllowedByGlobalAction records the requests allowed due to a match with the global action in the access control policy
+// RequestAllowedByGlobalAction records the requests allowed due to a match with the global action in the access control policy.
 func (s *serviceMetrics) RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
 	if s.enabled {
 		stats.RecordWithTags(
@@ -345,7 +346,7 @@ func (s *serviceMetrics) RequestAllowedByGlobalAction(appID, trustDomain, namesp
 	}
 }
 
-// RequestBlockedByGlobalAction records the requests blocked due to a match with the global action in the access control policy
+// RequestBlockedByGlobalAction records the requests blocked due to a match with the global action in the access control policy.
 func (s *serviceMetrics) RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
 	if s.enabled {
 		stats.RecordWithTags(

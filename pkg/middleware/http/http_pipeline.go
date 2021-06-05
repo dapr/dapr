@@ -6,13 +6,14 @@
 package http
 
 import (
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 type Middleware func(h fasthttp.RequestHandler) fasthttp.RequestHandler
 
-// HTTPPipeline defines the middleware pipeline to be plugged into Dapr sidecar
+// HTTPPipeline defines the middleware pipeline to be plugged into Dapr sidecar.
 type Pipeline struct {
 	Handlers []Middleware
 }

@@ -19,12 +19,12 @@ If using [VS Code](https://code.visualstudio.com/), you can develop Dapr from a 
 
 ```json
 "runArgs": [
-	...
-	// Comment out if you do not use kubectl inside container
-	"--mount", "type=bind,source=${env:HOME}${env:USERPROFILE}/.kube,target=/home/dapr/.kube-localhost",
-	// Comment out if you do not use minikube inside container
-	"--mount", "type=bind,source=${env:HOME}${env:USERPROFILE}/.minikube,target=/home/dapr/.minikube-localhost",
-	...
+  ...
+  // Comment out if you do not use kubectl inside container
+  "--mount", "type=bind,source=${env:HOME}${env:USERPROFILE}/.kube,target=/home/dapr/.kube-localhost",
+  // Comment out if you do not use minikube inside container
+  "--mount", "type=bind,source=${env:HOME}${env:USERPROFILE}/.minikube,target=/home/dapr/.minikube-localhost",
+  ...
 ]
 ```
 
@@ -57,12 +57,12 @@ The [default remote-container config](../../.devcontainer/devcontainer.json) use
 
 ```json
 {
-	"name": "Dapr Dev Environment",
-	// Update container version when you update dev-container
-	// "image": "docker.io/daprio/dapr-dev:0.1.0",
-	// Uncomment if you want to use your local docker image
-	"dockerFile": "../docker/Dockerfile-dev",
-	"runArgs": [
+  "name": "Dapr Dev Environment",
+  // Update container version when you update dev-container
+  // "image": "docker.io/daprio/dapr-dev:0.1.0",
+  // Uncomment if you want to use your local docker image
+  "dockerFile": "../docker/Dockerfile-dev",
+  "runArgs": [
 ...
 ```
 
