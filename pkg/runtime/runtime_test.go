@@ -807,7 +807,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		rt.topicRoutes = nil
-		rt.pubSubs = make(map[string]pubSub)
+		rt.pubSubs = make(map[string]pubSubWrapper)
 
 		return mockPubSub, mockPubSub2
 	}
@@ -919,7 +919,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 		thepubsub, _ := initMockPubSubForRuntime(rts)
-		rts.pubSubs[TestPubsubName] = pubSub{
+		rts.pubSubs[TestPubsubName] = pubSubWrapper{
 			pubSub: thepubsub,
 		}
 		a := rts.getPublishAdapter()
@@ -1142,7 +1142,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 		thepubsub := &mockPublishPubSub{}
-		rt.pubSubs[TestPubsubName] = pubSub{
+		rt.pubSubs[TestPubsubName] = pubSubWrapper{
 			pubSub:        thepubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1156,7 +1156,7 @@ func TestInitPubSub(t *testing.T) {
 
 		assert.Nil(t, err)
 		thesecondpubsub := &mockPublishPubSub{}
-		rt.pubSubs[TestSecondPubsubName] = pubSub{
+		rt.pubSubs[TestSecondPubsubName] = pubSubWrapper{
 			pubSub:        thesecondpubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1191,7 +1191,7 @@ func TestInitPubSub(t *testing.T) {
 		}
 
 		thepubsub := &mockPublishPubSub{}
-		rt.pubSubs[TestPubsubName] = pubSub{
+		rt.pubSubs[TestPubsubName] = pubSubWrapper{
 			pubSub:        thepubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1202,7 +1202,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.NotNil(t, err)
 
 		thesecondpubsub := &mockPublishPubSub{}
-		rt.pubSubs[TestSecondPubsubName] = pubSub{
+		rt.pubSubs[TestSecondPubsubName] = pubSubWrapper{
 			pubSub:        thesecondpubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1223,7 +1223,7 @@ func TestInitPubSub(t *testing.T) {
 		}
 		thepubsub := &mockPublishPubSub{}
 		thepubsub.ReturnErrors = 1
-		rt.pubSubs[TestPubsubName] = pubSub{
+		rt.pubSubs[TestPubsubName] = pubSubWrapper{
 			pubSub:        thepubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1238,7 +1238,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.Nil(t, err)
 		thesecondpubsub := &mockPublishPubSub{}
 		thesecondpubsub.ReturnErrors = 1
-		rt.pubSubs[TestSecondPubsubName] = pubSub{
+		rt.pubSubs[TestSecondPubsubName] = pubSubWrapper{
 			pubSub:        thesecondpubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1260,7 +1260,7 @@ func TestInitPubSub(t *testing.T) {
 		}
 		thepubsub := &mockPublishPubSub{}
 		thepubsub.ReturnErrors = 4
-		rt.pubSubs[TestPubsubName] = pubSub{
+		rt.pubSubs[TestPubsubName] = pubSubWrapper{
 			pubSub:        thepubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1280,7 +1280,7 @@ func TestInitPubSub(t *testing.T) {
 		assert.Nil(t, err)
 		thesecondpubsub := &mockPublishPubSub{}
 		thesecondpubsub.ReturnErrors = 4
-		rt.pubSubs[TestSecondPubsubName] = pubSub{
+		rt.pubSubs[TestSecondPubsubName] = pubSubWrapper{
 			pubSub:        thesecondpubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1307,7 +1307,7 @@ func TestInitPubSub(t *testing.T) {
 		}
 		thepubsub := &mockPublishPubSub{}
 		thepubsub.ReturnErrors = 4
-		rt.pubSubs[TestPubsubName] = pubSub{
+		rt.pubSubs[TestPubsubName] = pubSubWrapper{
 			pubSub:        thepubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1323,7 +1323,7 @@ func TestInitPubSub(t *testing.T) {
 
 		thesecondpubsub := &mockPublishPubSub{}
 		thesecondpubsub.ReturnErrors = 4
-		rt.pubSubs[TestSecondPubsubName] = pubSub{
+		rt.pubSubs[TestSecondPubsubName] = pubSubWrapper{
 			pubSub:        thesecondpubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1345,7 +1345,7 @@ func TestInitPubSub(t *testing.T) {
 		}
 		thepubsub := &mockPublishPubSub{}
 		thepubsub.ReturnErrors = 4
-		rt.pubSubs[TestPubsubName] = pubSub{
+		rt.pubSubs[TestPubsubName] = pubSubWrapper{
 			pubSub:        thepubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}
@@ -1367,7 +1367,7 @@ func TestInitPubSub(t *testing.T) {
 
 		thesecondpubsub := &mockPublishPubSub{}
 		thesecondpubsub.ReturnErrors = 4
-		rt.pubSubs[TestSecondPubsubName] = pubSub{
+		rt.pubSubs[TestSecondPubsubName] = pubSubWrapper{
 			pubSub:        thesecondpubsub,
 			retrySettings: retry.DefaultRetrySettings,
 		}

@@ -119,7 +119,7 @@ type TopicRoute struct {
 }
 
 // Wrapper to PubSub interface to accommodate retry logic settings
-type pubSub struct {
+type pubSubWrapper struct {
 	retrySettings retry.Settings
 	pubSub        pubsub.PubSub
 }
@@ -146,7 +146,7 @@ type DaprRuntime struct {
 	outputBindings         map[string]bindings.OutputBinding
 	secretStores           map[string]secretstores.SecretStore
 	pubSubRegistry         pubsub_loader.Registry
-	pubSubs                map[string]pubSub
+	pubSubs                map[string]pubSubWrapper
 	nameResolver           nr.Resolver
 	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
@@ -193,7 +193,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		outputBindings:         map[string]bindings.OutputBinding{},
 		secretStores:           map[string]secretstores.SecretStore{},
 		stateStores:            map[string]state.Store{},
-		pubSubs:                map[string]pubSub{},
+		pubSubs:                map[string]pubSubWrapper{},
 		stateStoreRegistry:     state_loader.NewRegistry(),
 		bindingsRegistry:       bindings_loader.NewRegistry(),
 		pubSubRegistry:         pubsub_loader.NewRegistry(),
@@ -1069,7 +1069,7 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	if err != nil {
 		return errors.Errorf("error '%s' parsing retry settings for component %s", err.Error(), c.ObjectMeta.Name)
 	}
-	a.pubSubs[pubsubName] = pubSub{
+	a.pubSubs[pubsubName] = pubSubWrapper{
 		retrySettings: retrySettings,
 		pubSub:        thepubsub,
 	}
