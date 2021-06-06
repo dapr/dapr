@@ -21,7 +21,7 @@ const (
 	DefaultLinearRetryCount      = 3
 )
 
-// Strategy is the type that represents Retry Policy settings
+// Strategy is the type that represents Retry Policy settings.
 type Strategy string
 
 const (
