@@ -35,7 +35,7 @@ jobs:
           activity in the last 37 days. Please feel free to give a status update now, ping for review, or re-open when it's ready.
           Thank you for your contributions!
         stale-issue-label: 'stale'
-        exempt-issue-labels: 'pinned,help wanted'
+        exempt-issue-labels: 'pinned,help wanted,triage/resolved'
         stale-pr-label: 'stale'
         exempt-pr-labels: 'pinned'
         operations-per-run: 500
