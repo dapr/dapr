@@ -13,22 +13,26 @@ import (
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/config"
 	cors_dapr "github.com/dapr/dapr/pkg/cors"
-	"github.com/dapr/kit/logger"
+
+	routing "github.com/fasthttp/router"
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/pprofhandler"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	routing "github.com/fasthttp/router"
-	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/pprofhandler"
 )
 
 var log = logger.NewLogger("dapr.runtime.http")
 
-// Server is an interface for the Dapr HTTP server
+const protocol = "http"
+
+// Server is an interface for the Dapr HTTP server.
 type Server interface {
 	StartNonBlocking()
 }
@@ -42,7 +46,7 @@ type server struct {
 	apiSpec     config.APISpec
 }
 
-// NewServer returns a new HTTP server
+// NewServer returns a new HTTP server.
 func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline, apiSpec config.APISpec) Server {
 	return &server{
 		api:         api,
@@ -54,7 +58,7 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, met
 	}
 }
 
-// StartNonBlocking starts a new server in a goroutine
+// StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() {
 	handler :=
 		useAPIAuthentication(
@@ -195,11 +199,18 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 }
 
 func (s *server) endpointAllowed(endpoint Endpoint) bool {
-	if len(s.apiSpec.Allowed) == 0 {
+	var httpRules []config.APIAccessRule
+
+	for _, rule := range s.apiSpec.Allowed {
+		if rule.Protocol == protocol {
+			httpRules = append(httpRules, rule)
+		}
+	}
+	if len(httpRules) == 0 {
 		return true
 	}
 
-	for _, rule := range s.apiSpec.Allowed {
+	for _, rule := range httpRules {
 		if (strings.Index(endpoint.Route, rule.Name) == 0 && endpoint.Version == rule.Version) || endpoint.Route == "healthz" {
 			return true
 		}

@@ -11,10 +11,10 @@ EXPOSE 80
 ENTRYPOINT ["C:\\ServiceMonitor.exe", "w3svc"]
 
 RUN powershell -Command \
-	[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
-	Invoke-WebRequest -Method Get -Uri https://windows.php.net/downloads/releases/latest/php-8.0-nts-Win32-vs16-x64-latest.zip -OutFile c:\php.zip ; \
-	Expand-Archive -Path c:\php.zip -DestinationPath c:\php ; \
-	Remove-Item c:\php.zip -Force
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+  Invoke-WebRequest -Method Get -Uri https://windows.php.net/downloads/releases/latest/php-8.0-nts-Win32-vs16-x64-latest.zip -OutFile c:\php.zip ; \
+  Expand-Archive -Path c:\php.zip -DestinationPath c:\php ; \
+  Remove-Item c:\php.zip -Force
 
 ADD https://aka.ms/vs/16/release/VC_redist.x64.exe vc-redist.exe
 RUN start /w vc-redist.exe /q /norestart & del vc-redist.exe

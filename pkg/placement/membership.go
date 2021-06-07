@@ -9,10 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/peer"
+
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"google.golang.org/grpc/peer"
 )
 
 const (

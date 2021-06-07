@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	middleware "github.com/dapr/components-contrib/middleware"
+
 	"github.com/dapr/dapr/pkg/components"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 )
@@ -22,7 +23,7 @@ type (
 		FactoryMethod func(metadata middleware.Metadata) http_middleware.Middleware
 	}
 
-	// Registry is the interface for callers to get registered HTTP middleware
+	// Registry is the interface for callers to get registered HTTP middleware.
 	Registry interface {
 		Register(components ...Middleware)
 		Create(name, version string, metadata middleware.Metadata) (http_middleware.Middleware, error)

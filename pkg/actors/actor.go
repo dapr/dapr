@@ -11,8 +11,9 @@ import (
 
 	"go.uber.org/atomic"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/pkg/errors"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 var (

@@ -24,9 +24,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.configuration")
@@ -57,14 +58,14 @@ type Configuration struct {
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 }
 
-// AccessControlList is an in-memory access control list config for fast lookup
+// AccessControlList is an in-memory access control list config for fast lookup.
 type AccessControlList struct {
 	DefaultAction string
 	TrustDomain   string
 	PolicySpec    map[string]AccessControlListPolicySpec
 }
 
-// AccessControlListPolicySpec is an in-memory access control list config per app for fast lookup
+// AccessControlListPolicySpec is an in-memory access control list config per app for fast lookup.
 type AccessControlListPolicySpec struct {
 	AppName             string
 	DefaultAction       string
@@ -73,7 +74,7 @@ type AccessControlListPolicySpec struct {
 	AppOperationActions map[string]AccessControlListOperationAction
 }
 
-// AccessControlListOperationAction is an in-memory access control list config per operation for fast lookup
+// AccessControlListOperationAction is an in-memory access control list config per operation for fast lookup.
 type AccessControlListOperationAction struct {
 	VerbAction       map[string]string
 	OperationPostFix string
@@ -96,7 +97,7 @@ type SecretsSpec struct {
 	Scopes []SecretsScope `json:"scopes"`
 }
 
-// SecretsScope defines the scope for secrets
+// SecretsScope defines the scope for secrets.
 type SecretsScope struct {
 	DefaultAccess  string   `json:"defaultAccess,omitempty" yaml:"defaultAccess,omitempty"`
 	StoreName      string   `json:"storeName" yaml:"storeName"`
@@ -108,15 +109,16 @@ type PipelineSpec struct {
 	Handlers []HandlerSpec `json:"handlers" yaml:"handlers"`
 }
 
-// APISpec describes the configuration for Dapr APIs
+// APISpec describes the configuration for Dapr APIs.
 type APISpec struct {
 	Allowed []APIAccessRule `json:"allowed,omitempty"`
 }
 
-// APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app
+// APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
 type APIAccessRule struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Protocol string `json:"protocol"`
 }
 
 type HandlerSpec struct {
@@ -141,17 +143,17 @@ type TracingSpec struct {
 	Zipkin       ZipkinSpec `json:"zipkin" yaml:"zipkin"`
 }
 
-// ZipkinSpec defines Zipkin trace configurations
+// ZipkinSpec defines Zipkin trace configurations.
 type ZipkinSpec struct {
 	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 }
 
-// MetricSpec configuration for metrics
+// MetricSpec configuration for metrics.
 type MetricSpec struct {
 	Enabled bool `json:"enabled" yaml:"enabled"`
 }
 
-// AppPolicySpec defines the policy data structure for each app
+// AppPolicySpec defines the policy data structure for each app.
 type AppPolicySpec struct {
 	AppName             string         `json:"appId" yaml:"appId"`
 	DefaultAction       string         `json:"defaultAction" yaml:"defaultAction"`
@@ -160,14 +162,14 @@ type AppPolicySpec struct {
 	AppOperationActions []AppOperation `json:"operations" yaml:"operations"`
 }
 
-// AppOperation defines the data structure for each app operation
+// AppOperation defines the data structure for each app operation.
 type AppOperation struct {
 	Operation string   `json:"name" yaml:"name"`
 	HTTPVerb  []string `json:"httpVerb" yaml:"httpVerb"`
 	Action    string   `json:"action" yaml:"action"`
 }
 
-// AccessControlSpec is the spec object in ConfigurationSpec
+// AccessControlSpec is the spec object in ConfigurationSpec.
 type AccessControlSpec struct {
 	DefaultAction string          `json:"defaultAction" yaml:"defaultAction"`
 	TrustDomain   string          `json:"trustDomain" yaml:"trustDomain"`
@@ -186,20 +188,20 @@ type MTLSSpec struct {
 	AllowedClockSkew string `json:"allowedClockSkew"`
 }
 
-// SpiffeID represents the separated fields in a spiffe id
+// SpiffeID represents the separated fields in a spiffe id.
 type SpiffeID struct {
 	TrustDomain string
 	Namespace   string
 	AppID       string
 }
 
-// FeatureSpec defines which preview features are enabled
+// FeatureSpec defines which preview features are enabled.
 type FeatureSpec struct {
 	Name    Feature `json:"name" yaml:"name"`
 	Enabled bool    `json:"enabled" yaml:"enabled"`
 }
 
-// LoadDefaultConfiguration returns the default config
+// LoadDefaultConfiguration returns the default config.
 func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
@@ -213,7 +215,7 @@ func LoadDefaultConfiguration() *Configuration {
 	}
 }
 
-// LoadStandaloneConfiguration gets the path to a config file and loads it into a configuration
+// LoadStandaloneConfiguration gets the path to a config file and loads it into a configuration.
 func LoadStandaloneConfiguration(config string) (*Configuration, string, error) {
 	_, err := os.Stat(config)
 	if err != nil {
@@ -241,7 +243,7 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 	return conf, string(b), nil
 }
 
-// LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name
+// LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
 func LoadKubernetesConfiguration(config, namespace string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
 	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
 		Name:      config,
@@ -322,7 +324,7 @@ func containsKey(s []string, key string) bool {
 	return index < len(s) && s[index] == key
 }
 
-// ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
+// ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup.
 func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string) (*AccessControlList, error) {
 	if accessControlSpec.TrustDomain == "" &&
 		accessControlSpec.DefaultAction == "" &&
@@ -433,7 +435,7 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string
 	return &accessControlList, nil
 }
 
-// GetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it
+// GetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it.
 func GetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
 	spiffeID, err := getSpiffeID(ctx)
 	if err != nil {
@@ -519,7 +521,7 @@ func getSpiffeID(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-// IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
+// IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app.
 func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string, inputOperation string, httpVerb common.HTTPExtension_Verb, appProtocol string, accessControlList *AccessControlList) (bool, string) {
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
@@ -635,7 +637,7 @@ func getKeyForAppID(appID, namespace string) string {
 
 // getOperationPrefixAndPostfix returns an app operation prefix and postfix
 // The prefix can be stored in the in-memory ACL for fast lookup
-// e.g.: /invoke/*, prefix = /invoke, postfix = /*
+// e.g.: /invoke/*, prefix = /invoke, postfix = /*.
 func getOperationPrefixAndPostfix(operation string) (string, string) {
 	var strs strings.Builder
 	operationParts := strings.Split(operation, "/")

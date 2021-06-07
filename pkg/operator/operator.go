@@ -8,6 +8,14 @@ package operator
 import (
 	"context"
 
+	"github.com/dapr/kit/logger"
+	"k8s.io/apimachinery/pkg/runtime"
+	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/cache"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
@@ -16,13 +24,6 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
-	"github.com/dapr/kit/logger"
-	"k8s.io/apimachinery/pkg/runtime"
-	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/cache"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -31,7 +32,7 @@ const (
 	healthzPort = 8080
 )
 
-// Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle
+// Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
 type Operator interface {
 	Run(ctx context.Context)
 }
@@ -61,7 +62,7 @@ func init() {
 	_ = subscriptionsapi.AddToScheme(scheme)
 }
 
-// NewOperator returns a new Dapr Operator
+// NewOperator returns a new Dapr Operator.
 func NewOperator(config, certChainPath string, enableLeaderElection bool) Operator {
 	conf, err := ctrl.GetConfig()
 	if err != nil {

@@ -14,7 +14,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-// Server is the interface for the healthz server
+// Server is the interface for the healthz server.
 type Server interface {
 	Run(context.Context, int) error
 	Ready()
@@ -26,24 +26,24 @@ type server struct {
 	log   logger.Logger
 }
 
-// NewServer returns a new healthz server
+// NewServer returns a new healthz server.
 func NewServer(log logger.Logger) Server {
 	return &server{
 		log: log,
 	}
 }
 
-// Ready sets a ready state for the endpoint handlers
+// Ready sets a ready state for the endpoint handlers.
 func (s *server) Ready() {
 	s.ready = true
 }
 
-// NotReady sets a not ready state for the endpoint handlers
+// NotReady sets a not ready state for the endpoint handlers.
 func (s *server) NotReady() {
 	s.ready = false
 }
 
-// Run starts a net/http server with a healthz endpoint
+// Run starts a net/http server with a healthz endpoint.
 func (s *server) Run(ctx context.Context, port int) error {
 	router := http.NewServeMux()
 	router.Handle("/healthz", s.healthz())
@@ -78,7 +78,7 @@ func (s *server) Run(ctx context.Context, port int) error {
 	return err
 }
 
-// healthz is a health endpoint handler
+// healthz is a health endpoint handler.
 func (s *server) healthz() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var status int

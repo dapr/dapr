@@ -3,8 +3,9 @@ package config
 import (
 	"testing"
 
-	dapr_config "github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
+
+	dapr_config "github.com/dapr/dapr/pkg/config"
 )
 
 func TestConfig(t *testing.T) {
