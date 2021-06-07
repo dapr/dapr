@@ -40,6 +40,8 @@ RUN apt-get update \
     #
     # Install Kubectl, Helm and Minkikube.
     && bash /tmp/staging/kubectl-helm-debian.sh "${KUBECTL_VERSION}" "${HELM_VERSION}" "${MINIKUBE_VERSION}" \
+    # Install gopls
+    && GO111MODULE=on go get golang.org/x/tools/gopls \
     #
     # Install Go tools.
     && bash /tmp/staging/install-go-tools.sh "${USERNAME}" \
