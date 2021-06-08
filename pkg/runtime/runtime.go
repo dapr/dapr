@@ -598,7 +598,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 				return binding.Invoke(req)
 			}
 		}
-		supported := make([]string, len(ops))
+		supported := make([]string, 0, len(ops))
 		for _, o := range ops {
 			supported = append(supported, string(o))
 		}
