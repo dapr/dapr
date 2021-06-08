@@ -2211,7 +2211,7 @@ func (b *mockBinding) Read(handler func(*bindings.ReadResponse) ([]byte, error))
 }
 
 func (b *mockBinding) Operations() []bindings.OperationKind {
-	return []bindings.OperationKind{"create"}
+	return []bindings.OperationKind{bindings.CreateOperation, bindings.ListOperation}
 }
 
 func (b *mockBinding) Invoke(req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
@@ -2256,7 +2256,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			Operation: bindings.GetOperation,
 		})
 		assert.NotNil(t, err)
-		assert.Equal(t, "binding mockBinding does not support operation get. supported operations: create", err.Error())
+		assert.Equal(t, "binding mockBinding does not support operation get. supported operations:create list", err.Error())
 	})
 }
 
