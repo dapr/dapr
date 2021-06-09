@@ -23,7 +23,7 @@ type (
 		FactoryMethod func(metadata middleware.Metadata) http_middleware.Middleware
 	}
 
-	// Registry is the interface for callers to get registered HTTP middleware
+	// Registry is the interface for callers to get registered HTTP middleware.
 	Registry interface {
 		Register(components ...Middleware)
 		Create(name, version string, metadata middleware.Metadata) (http_middleware.Middleware, error)

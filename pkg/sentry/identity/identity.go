@@ -1,6 +1,6 @@
 package identity
 
-// Bundle contains all the elements to identify a workload across a trust domain and a namespace
+// Bundle contains all the elements to identify a workload across a trust domain and a namespace.
 type Bundle struct {
 	ID          string
 	Namespace   string

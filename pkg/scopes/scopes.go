@@ -14,7 +14,7 @@ const (
 )
 
 // GetScopedTopics returns a list of scoped topics for a given application from a Pub/Sub
-// Component properties
+// Component properties.
 func GetScopedTopics(scope, appID string, metadata map[string]string) []string {
 	var (
 		existM = map[string]struct{}{}
@@ -47,7 +47,7 @@ func GetScopedTopics(scope, appID string, metadata map[string]string) []string {
 	return topics
 }
 
-// GetAllowedTopics return the all topics list of params allowedTopics
+// GetAllowedTopics return the all topics list of params allowedTopics.
 func GetAllowedTopics(metadata map[string]string) []string {
 	var (
 		existM = map[string]struct{}{}

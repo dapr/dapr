@@ -18,7 +18,7 @@ const (
 	defaultSecretNamespace = "default"
 )
 
-// StoreCredentials saves the trust bundle in a Kubernetes secret store or locally on disk, depending on the hosting platform
+// StoreCredentials saves the trust bundle in a Kubernetes secret store or locally on disk, depending on the hosting platform.
 func StoreCredentials(conf config.SentryConfig, rootCertPem, issuerCertPem, issuerKeyPem []byte) error {
 	if config.IsKubernetesHosted() {
 		return storeKubernetes(rootCertPem, issuerCertPem, issuerKeyPem)
@@ -62,7 +62,7 @@ func getNamespace() string {
 	return namespace
 }
 
-// CredentialsExist checks root and issuer credentials exist on a hosting platform
+// CredentialsExist checks root and issuer credentials exist on a hosting platform.
 func CredentialsExist(conf config.SentryConfig) (bool, error) {
 	if config.IsKubernetesHosted() {
 		namespace := getNamespace()
@@ -80,7 +80,7 @@ func CredentialsExist(conf config.SentryConfig) (bool, error) {
 	return false, nil
 }
 
-/* #nosec */
+/* #nosec. */
 func storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem []byte, rootCertPath, issuerCertPath, issuerKeyPath string) error {
 	err := ioutil.WriteFile(rootCertPath, rootCertPem, 0644)
 	if err != nil {

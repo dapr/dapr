@@ -22,7 +22,7 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 )
 
-// Channel is a concrete AppChannel implementation for interacting with gRPC based user code
+// Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
 	client           *grpc.ClientConn
 	baseAddress      string
@@ -31,7 +31,7 @@ type Channel struct {
 	appMetadataToken string
 }
 
-// CreateLocalChannel creates a gRPC connection with user code
+// CreateLocalChannel creates a gRPC connection with user code.
 func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
 	c := &Channel{
 		client:           conn,
@@ -45,17 +45,17 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	return c
 }
 
-// GetBaseAddress returns the application base address
+// GetBaseAddress returns the application base address.
 func (g *Channel) GetBaseAddress() string {
 	return g.baseAddress
 }
 
-// GetAppConfig gets application config from user application
+// GetAppConfig gets application config from user application.
 func (g *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	return nil, nil
 }
 
-// InvokeMethod invokes user code via gRPC
+// InvokeMethod invokes user code via gRPC.
 func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	var rsp *invokev1.InvokeMethodResponse
 	var err error
@@ -73,7 +73,7 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	return rsp, err
 }
 
-// invokeMethodV1 calls user applications using daprclient v1
+// invokeMethodV1 calls user applications using daprclient v1.
 func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if g.ch != nil {
 		g.ch <- 1
