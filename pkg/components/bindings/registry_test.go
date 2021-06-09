@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	b "github.com/dapr/components-contrib/bindings"
+
 	"github.com/dapr/dapr/pkg/components/bindings"
 )
 

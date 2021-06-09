@@ -24,6 +24,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/channel"
 	configuration "github.com/dapr/dapr/pkg/config"
@@ -36,7 +38,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/retry"
-	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -46,7 +47,7 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.actor")
 
-// Actors allow calling into virtual actors as well as actor state management
+// Actors allow calling into virtual actors as well as actor state management.
 type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
@@ -85,7 +86,7 @@ type actorsRuntime struct {
 	reentrancyEnabled   bool
 }
 
-// ActiveActorsCount contain actorType and count of actors each type has
+// ActiveActorsCount contain actorType and count of actors each type has.
 type ActiveActorsCount struct {
 	Type  string `json:"type"`
 	Count int    `json:"count"`
@@ -95,7 +96,7 @@ const (
 	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
 
-// NewActors create a new actors runtime with given config
+// NewActors create a new actors runtime with given config.
 func NewActors(
 	stateStore state.Store,
 	appChannel channel.AppChannel,
@@ -287,7 +288,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	return resp, nil
 }
 
-// callRemoteActorWithRetry will call a remote actor for the specified number of retries and will only retry in the case of transient failures
+// callRemoteActorWithRetry will call a remote actor for the specified number of retries and will only retry in the case of transient failures.
 func (a *actorsRuntime) callRemoteActorWithRetry(
 	ctx context.Context,
 	numRetries int,
@@ -377,8 +378,6 @@ func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
 	targetAddress, targetID string,
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	log.Infof("Entering callRemoteActor: %s - %s", req.Actor().GetActorType(), req.Actor().GetActorId())
-	log.Infof("callRemoteActor Request Headers: %v", req.Metadata())
 	conn, err := a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, false, false)
 	if err != nil {
 		return nil, err
@@ -1098,7 +1097,7 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 	return activeActorsCount
 }
 
-// Stop closes all network connections and resources used in actor runtime
+// Stop closes all network connections and resources used in actor runtime.
 func (a *actorsRuntime) Stop() {
 	if a.placement != nil {
 		a.placement.Stop()

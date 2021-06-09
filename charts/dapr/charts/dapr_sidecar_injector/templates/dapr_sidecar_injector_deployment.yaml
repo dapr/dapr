@@ -64,8 +64,8 @@ spec:
           {{- end }}
           periodSeconds: 3
           failureThreshold: 5
-{{- if contains "/" .Values.image.name }}
-        image: "{{ .Values.image.name }}"
+{{- if contains "/" .Values.injectorImage.name }}
+        image: "{{ .Values.injectorImage.name }}"
 {{- else }}
         image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
@@ -164,6 +164,19 @@ spec:
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
+{{- end }}
+{{- if .Values.global.ha.enabled }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-sidecar-injector
+              topologyKey: topology.kubernetes.io/zone
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:

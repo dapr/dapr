@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
@@ -1434,7 +1435,7 @@ func TestExtractComponentCategory(t *testing.T) {
 	}
 }
 
-// Test that flushOutstandingComponents waits for components
+// Test that flushOutstandingComponents waits for components.
 func TestFlushOutstandingComponent(t *testing.T) {
 	t.Run("We can call flushOustandingComponents more than once", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
@@ -1571,7 +1572,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 	})
 }
 
-// Test InitSecretStore if secretstore.* refers to Kubernetes secret store
+// Test InitSecretStore if secretstore.* refers to Kubernetes secret store.
 func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 	fakeSecretStoreWithAuth := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
@@ -2210,7 +2211,7 @@ func (b *mockBinding) Read(handler func(*bindings.ReadResponse) ([]byte, error))
 }
 
 func (b *mockBinding) Operations() []bindings.OperationKind {
-	return []bindings.OperationKind{"create"}
+	return []bindings.OperationKind{bindings.CreateOperation, bindings.ListOperation}
 }
 
 func (b *mockBinding) Invoke(req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
@@ -2255,7 +2256,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			Operation: bindings.GetOperation,
 		})
 		assert.NotNil(t, err)
-		assert.Equal(t, "binding mockBinding does not support operation get. supported operations: create", err.Error())
+		assert.Equal(t, "binding mockBinding does not support operation get. supported operations:create list", err.Error())
 	})
 }
 
@@ -2481,17 +2482,17 @@ func TestAuthorizedComponents(t *testing.T) {
 type mockPublishPubSub struct {
 }
 
-// Init is a mock initialization method
+// Init is a mock initialization method.
 func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 	return nil
 }
 
-// Publish is a mock publish method
+// Publish is a mock publish method.
 func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 	return nil
 }
 
-// Subscribe is a mock subscribe method
+// Subscribe is a mock subscribe method.
 func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	return nil
 }

@@ -12,24 +12,25 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 const (
-	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances
+	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances.
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 	dialTimeout       = time.Second * 30
 )
 
-// Manager is a wrapper around gRPC connection pooling
+// Manager is a wrapper around gRPC connection pooling.
 type Manager struct {
 	AppClient      *grpc.ClientConn
 	lock           *sync.RWMutex
@@ -38,7 +39,7 @@ type Manager struct {
 	mode           modes.DaprMode
 }
 
-// NewGRPCManager returns a new grpc manager
+// NewGRPCManager returns a new grpc manager.
 func NewGRPCManager(mode modes.DaprMode) *Manager {
 	return &Manager{
 		lock:           &sync.RWMutex{},
@@ -47,12 +48,12 @@ func NewGRPCManager(mode modes.DaprMode) *Manager {
 	}
 }
 
-// SetAuthenticator sets the gRPC manager a tls authenticator context
+// SetAuthenticator sets the gRPC manager a tls authenticator context.
 func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 	g.auth = auth
 }
 
-// CreateLocalChannel creates a new gRPC AppChannel
+// CreateLocalChannel creates a new gRPC AppChannel.
 func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
 	conn, err := g.GetGRPCConnection(fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled)
 	if err != nil {
@@ -64,7 +65,7 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 	return ch, nil
 }
 
-// GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist
+// GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist.
 func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool) (*grpc.ClientConn, error) {
 	g.lock.RLock()
 	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {

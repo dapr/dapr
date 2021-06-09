@@ -35,7 +35,7 @@ type SimpleKeyValue struct {
 	Value interface{}
 }
 
-// StateTransactionKeyValue is a key-value pair with an operation type
+// StateTransactionKeyValue is a key-value pair with an operation type.
 type StateTransactionKeyValue struct {
 	Key           string
 	Value         string
@@ -116,7 +116,7 @@ func HTTPGetNTimes(url string, n int) ([]byte, error) {
 	return res, err
 }
 
-// httpGet is a helper to make GET request call to url
+// httpGet is a helper to make GET request call to url.
 func httpGet(url string, timeout time.Duration) ([]byte, error) {
 	resp, err := httpGetRaw(url, timeout) //nolint
 	if err != nil {
@@ -126,7 +126,7 @@ func httpGet(url string, timeout time.Duration) ([]byte, error) {
 	return extractBody(resp.Body)
 }
 
-// HTTPGet is a helper to make GET request call to url
+// HTTPGet is a helper to make GET request call to url.
 func HTTPGet(url string) ([]byte, error) {
 	return httpGet(url, 0 /* no timeout */)
 }
@@ -156,7 +156,7 @@ func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 	return res, err
 }
 
-// HTTPGetRaw is a helper to make GET request call to url
+// HTTPGetRaw is a helper to make GET request call to url.
 func httpGetRaw(url string, t time.Duration) (*http.Response, error) {
 	client := newHTTPClient()
 	if t != 0 {
@@ -169,12 +169,12 @@ func httpGetRaw(url string, t time.Duration) (*http.Response, error) {
 	return resp, nil
 }
 
-// HTTPGetRaw is a helper to make GET request call to url
+// HTTPGetRaw is a helper to make GET request call to url.
 func HTTPGetRaw(url string) (*http.Response, error) {
 	return httpGetRaw(url, 0)
 }
 
-// HTTPPost is a helper to make POST request call to url
+// HTTPPost is a helper to make POST request call to url.
 func HTTPPost(url string, data []byte) ([]byte, error) {
 	client := newHTTPClient()
 	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
@@ -185,7 +185,7 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 	return extractBody(resp.Body)
 }
 
-// HTTPPostWithStatus is a helper to make POST request call to url
+// HTTPPostWithStatus is a helper to make POST request call to url.
 func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
 	client := newHTTPClient()
 	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
