@@ -304,7 +304,6 @@ func TestStoreIsNotInited(t *testing.T) {
 		e := testActorsRuntime.DeleteReminder(context.Background(), &DeleteReminderRequest{})
 		assert.NotNil(t, e)
 	})
-
 }
 
 func TestTimerExecution(t *testing.T) {
