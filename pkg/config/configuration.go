@@ -323,17 +323,6 @@ func containsKey(s []string, key string) bool {
 	return index < len(s) && s[index] == key
 }
 
-// GetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it.
-func GetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
-	spiffeID, err := getSpiffeID(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	id, err := parseSpiffeID(spiffeID)
-	return id, err
-}
-
 func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
 	for _, feature := range features {
 		if feature.Name == target {
