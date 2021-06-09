@@ -8,10 +8,6 @@ package messaging
 import (
 	"context"
 
-	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/pkg/errors"
 	grpc_proxy "github.com/trusch/grpc-proxy/proxy"
 	codec "github.com/trusch/grpc-proxy/proxy/codec"
@@ -19,6 +15,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/pkg/acl"
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 const (
@@ -81,18 +82,18 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 
 		conn, err := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 		return ctx, conn, err
-	} else {
-		// proxy to a remote daprd
-		remote, err := p.remoteAppFn(appID)
-		if err != nil {
-			return ctx, nil, err
-		}
-
-		conn, err := p.connectionFactory(outCtx, remote.address, remote.id, remote.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
-		outCtx = p.telemetryFn(outCtx)
-
-		return outCtx, conn, err
 	}
+
+	// proxy to a remote daprd
+	remote, err := p.remoteAppFn(appID)
+	if err != nil {
+		return ctx, nil, err
+	}
+
+	conn, err := p.connectionFactory(outCtx, remote.address, remote.id, remote.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+	outCtx = p.telemetryFn(outCtx)
+
+	return outCtx, conn, err
 }
 
 // SetRemoteAppFn sets a function that helps the proxy resolve an app ID to an actual address.

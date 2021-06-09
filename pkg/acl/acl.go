@@ -13,12 +13,14 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/purell"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
+
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	"github.com/dapr/kit/logger"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/peer"
 )
 
 var log = logger.NewLogger("dapr.acl")

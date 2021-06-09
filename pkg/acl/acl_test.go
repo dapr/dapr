@@ -8,9 +8,10 @@ package acl
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
-	"github.com/stretchr/testify/assert"
 )
 
 const (

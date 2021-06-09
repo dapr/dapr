@@ -9,11 +9,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics"
 )
 
 func connectionFn(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
@@ -81,7 +82,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewOutgoingContext(context.TODO(), metadata.MD{"a": []string{"b"}})
 		proxy := p.(*proxy)
-		ctx, conn, err := proxy.intercept(ctx, "/test")
+		_, conn, err := proxy.intercept(ctx, "/test")
 
 		assert.Error(t, err)
 		assert.Nil(t, conn)
@@ -101,7 +102,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
-		ctx, _, err := proxy.intercept(ctx, "/test")
+		_, _, err := proxy.intercept(ctx, "/test")
 
 		assert.NoError(t, err)
 	})
@@ -120,7 +121,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
-		ctx, conn, err := proxy.intercept(ctx, "/test")
+		_, conn, err := proxy.intercept(ctx, "/test")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, conn)
@@ -167,7 +168,7 @@ func TestIntercept(t *testing.T) {
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 
-		ctx, conn, err := proxy.intercept(ctx, "/test")
+		_, conn, err := proxy.intercept(ctx, "/test")
 
 		assert.Error(t, err)
 		assert.Nil(t, conn)
