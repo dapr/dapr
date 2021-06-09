@@ -295,8 +295,8 @@ func TestReminderExecution(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
-	noRepetition := -1
-	err := testActorsRuntime.executeReminder(actorType, actorID, "2s", "2s", "reminder1", &noRepetition, "data")
+	noRepetition := newActorRepetition(-1)
+	err := testActorsRuntime.executeReminder(actorType, actorID, "2s", "2s", "reminder1", noRepetition, "data")
 	assert.Nil(t, err)
 }
 
@@ -304,8 +304,8 @@ func TestReminderExecutionZeroDuration(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
-	noRepetition := -1
-	err := testActorsRuntime.executeReminder(actorType, actorID, "0ms", "0ms", "reminder0", &noRepetition, "data")
+	noRepetition := newActorRepetition(-1)
+	err := testActorsRuntime.executeReminder(actorType, actorID, "0ms", "0ms", "reminder0", noRepetition, "data")
 	assert.Nil(t, err)
 }
 

@@ -96,6 +96,27 @@ type ActiveActorsCount struct {
 	Count int    `json:"count"`
 }
 
+type actorRepetiton struct {
+	value int
+	mutex *sync.Mutex
+}
+
+func (repetition *actorRepetiton) decrementAttempt() {
+	repetition.mutex.Lock()
+	defer repetition.mutex.Unlock()
+	if repetition.value != -1 {
+		repetition.value--
+	}
+}
+
+func (repetition *actorRepetiton) getValue() int {
+	return repetition.value
+}
+
+func newActorRepetition(value int) *actorRepetiton {
+	return &actorRepetiton{value: value, mutex: &sync.Mutex{}}
+}
+
 const (
 	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
@@ -689,7 +710,8 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		log.Debugf("repetitions allowed are %d", repetitionsLeft)
 	}
 
-	go func(reminder *Reminder, period time.Duration, repetitionsLeft int, stop chan bool) {
+	repetitions := newActorRepetition(repetitionsLeft)
+	go func(reminder *Reminder, period time.Duration, repetitions *actorRepetiton, stop chan bool) {
 		now := time.Now().UTC()
 		initialDuration := nextInvokeTime.Sub(now)
 		time.Sleep(initialDuration)
@@ -703,7 +725,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			break
 		}
 
-		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, &repetitionsLeft, reminder.Data)
+		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, repetitions, reminder.Data)
 		if err != nil {
 			log.Errorf("error executing reminder: %s", err)
 		}
@@ -715,12 +737,12 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				return
 			}
 
-			if quit, _ := a.stopReminderIfRepetitionsOver(reminder.Name, reminder.ActorID, reminder.ActorType, repetitionsLeft); quit {
+			if quit, _ := a.stopReminderIfRepetitionsOver(reminder.Name, reminder.ActorID, reminder.ActorType, repetitions.getValue()); quit {
 				return
 			}
 
 			t := a.configureTicker(period)
-			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, repetition *int, data interface{}) {
+			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, repetition *actorRepetiton, data interface{}) {
 				for {
 					select {
 					case <-ticker.C:
@@ -739,7 +761,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 						return
 					}
 				}
-			}(t, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, &repetitionsLeft, reminder.Data)
+			}(t, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, repetitions, reminder.Data)
 		} else {
 			err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
 				Name:      reminder.Name,
@@ -750,12 +772,12 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				log.Errorf("error deleting reminder: %s", err)
 			}
 		}
-	}(reminder, period, repetitionsLeft, stopChannel)
+	}(reminder, period, repetitions, stopChannel)
 
 	return nil
 }
 
-func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, repetition *int, data interface{}) error {
+func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, repetition *actorRepetiton, data interface{}) error {
 	r := ReminderResponse{
 		DueTime: dueTime,
 		Period:  period,
@@ -774,10 +796,8 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	_, err = a.callLocalActor(context.Background(), req)
 	if err == nil {
 		key := a.constructCompositeKey(actorType, actorID)
-		if *repetition != -1 {
-			*repetition--
-		}
-		err = a.updateReminderTrack(key, reminder, *repetition)
+		repetition.decrementAttempt()
+		err = a.updateReminderTrack(key, reminder, repetition.getValue())
 	} else {
 		log.Errorf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}
