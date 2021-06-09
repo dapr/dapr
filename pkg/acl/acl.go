@@ -25,7 +25,7 @@ import (
 
 var log = logger.NewLogger("dapr.acl")
 
-// ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
+// ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup.
 func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol string) (*config.AccessControlList, error) {
 	if accessControlSpec.TrustDomain == "" &&
 		accessControlSpec.DefaultAction == "" &&
@@ -136,7 +136,7 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 	return &accessControlList, nil
 }
 
-// GetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it
+// GetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it.
 func GetAndParseSpiffeID(ctx context.Context) (*config.SpiffeID, error) {
 	spiffeID, err := getSpiffeID(ctx)
 	if err != nil {
@@ -282,7 +282,7 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 	}
 }
 
-// IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
+// IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app.
 func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID string, inputOperation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string, accessControlList *config.AccessControlList) (bool, string) {
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
