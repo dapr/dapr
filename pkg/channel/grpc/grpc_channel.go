@@ -7,6 +7,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"google.golang.org/grpc"
@@ -52,7 +53,20 @@ func (g *Channel) GetBaseAddress() string {
 
 // GetAppConfig gets application config from user application.
 func (g *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
-	return nil, nil
+	var (
+		rsp     *invokev1.InvokeMethodResponse
+		aconfig = new(config.ApplicationConfig)
+		err     error
+	)
+	req := invokev1.NewInvokeMethodRequest("dapr/config")
+	if rsp, err = g.InvokeMethod(context.Background(), req); err != nil {
+		return nil, err
+	}
+	_, body := rsp.RawData()
+	if err = json.Unmarshal(body, aconfig); err != nil {
+		return nil, err
+	}
+	return aconfig, nil
 }
 
 // InvokeMethod invokes user code via gRPC.
