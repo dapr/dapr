@@ -80,7 +80,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 	}
 }
 
-// NewInternalServer returns a new gRPC server for Dapr to Dapr communications
+// NewInternalServer returns a new gRPC server for Dapr to Dapr communications.
 func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, authenticator auth.Authenticator, proxy messaging.Proxy) Server {
 	return &server{
 		api:              api,
