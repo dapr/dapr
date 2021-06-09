@@ -394,9 +394,9 @@ func getKeyForAppID(appID, namespace string) string {
 	return key
 }
 
-// getOperationPrefixAndPostfix returns an app operation prefix and postfix
-// The prefix can be stored in the in-memory ACL for fast lookup
-// e.g.: /invoke/*, prefix = /invoke, postfix = /*
+// getOperationPrefixAndPostfix returns an app operation prefix and postfix.
+// The prefix can be stored in the in-memory ACL for fast lookup.
+// e.g.: /invoke/*, prefix = /invoke, postfix = /*.
 func getOperationPrefixAndPostfix(operation string) (string, string) {
 	operationParts := strings.Split(operation, "/")
 	operationPrefix := "/" + operationParts[1]
