@@ -173,8 +173,17 @@ ifeq ($(DAPR_REGISTRY),)
 	$(error DAPR_REGISTRY environment variable must be set)
 endif
 
-build-dev-container: check-docker-env-for-dev-container
+build-dev-container:
+ifeq ($(DAPR_REGISTRY),)
+	$(info DAPR_REGISTRY environment variable not set, tagging image without registry prefix.)
+	$(info `make tag-dev-container` should be run with DAPR_REGISTRY before `make push-dev-container.)
+	$(DOCKER) build -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
+else
 	$(DOCKER) build -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
+endif
+
+tag-dev-container: check-docker-env-for-dev-container
+	$(DOCKER) tag $(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG) $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
 
 push-dev-container: check-docker-env-for-dev-container
 	$(DOCKER) push $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
