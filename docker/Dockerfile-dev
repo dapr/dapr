@@ -6,7 +6,7 @@
 FROM golang:1.16-buster
 
 # Optionally install zsh shell.
-ARG INSTALL_ZSH="true"
+ARG INSTALL_ZSH="false"
 
 # This Dockerfile adds a non-root 'dapr' user with sudo access. However, for Linux,
 # this user's GID/UID must match your local user UID/GID to avoid permission issues
