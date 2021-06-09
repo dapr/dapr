@@ -20,12 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/dapr/kit/logger"
-
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
-
-var log = logger.NewLogger("dapr.configuration")
 
 const (
 	operatorCallTimeout         = time.Second * 5

@@ -15,7 +15,6 @@ import (
 	"github.com/PuerkitoBio/purell"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/proto/common/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/kit/logger"
 	"google.golang.org/grpc/credentials"
@@ -125,11 +124,11 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 	}
 
 	if len(invalidTrustDomain) > 0 || len(invalidNamespace) > 0 || invalidAppName {
-		return nil, errors.New(fmt.Sprintf(
+		return nil, fmt.Errorf(
 			"invalid access control spec. missing trustdomain for apps: %v, missing namespace for apps: %v, missing app name on at least one of the app policies: %v",
 			invalidTrustDomain,
 			invalidNamespace,
-			invalidAppName))
+			invalidAppName)
 	}
 
 	return &accessControlList, nil
@@ -152,13 +151,13 @@ func parseSpiffeID(spiffeID string) (*config.SpiffeID, error) {
 	}
 
 	if !strings.HasPrefix(spiffeID, config.SpiffeIDPrefix) {
-		return nil, errors.New(fmt.Sprintf("input spiffe id: %s is invalid", spiffeID))
+		return nil, fmt.Errorf("input spiffe id: %s is invalid", spiffeID)
 	}
 
 	// The SPIFFE Id will be of the format: spiffe://<trust-domain/ns/<namespace>/<app-id>
 	parts := strings.Split(spiffeID, "/")
 	if len(parts) < 6 {
-		return nil, errors.New(fmt.Sprintf("input spiffe id: %s is invalid", spiffeID))
+		return nil, fmt.Errorf("input spiffe id: %s is invalid", spiffeID)
 	}
 
 	var id config.SpiffeID
@@ -282,7 +281,7 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 }
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
-func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID string, inputOperation string, httpVerb common.HTTPExtension_Verb, appProtocol string, accessControlList *config.AccessControlList) (bool, string) {
+func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID string, inputOperation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string, accessControlList *config.AccessControlList) (bool, string) {
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
 		return isActionAllowed(config.AllowAccess), ""
@@ -359,7 +358,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID
 
 		// Operation prefix and postfix match. Now check the operation specific policy
 		if appProtocol == config.HTTPProtocol {
-			if httpVerb != common.HTTPExtension_NONE {
+			if httpVerb != commonv1pb.HTTPExtension_NONE {
 				verbAction, found := operationPolicy.VerbAction[httpVerb.String()]
 				if found {
 					// An action for a specific verb is matched

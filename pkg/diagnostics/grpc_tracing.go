@@ -69,7 +69,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 	}
 }
 
-// GRPCTraceStreamServerInterceptor sets the trace context or starts the trace client span based on request
+// GRPCTraceStreamServerInterceptor sets the trace context or starts the trace client span based on request.
 func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		var span *trace.Span

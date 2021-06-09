@@ -14,7 +14,6 @@ import (
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -226,7 +225,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	opts = append(opts, grpc_go.MaxRecvMsgSize(s.config.MaxRequestBodySize*1024*1024), grpc_go.MaxSendMsgSize(s.config.MaxRequestBodySize*1024*1024))
 
 	if s.proxy != nil {
-		opts = append(opts, grpc.UnknownServiceHandler(s.proxy.Handler()))
+		opts = append(opts, grpc_go.UnknownServiceHandler(s.proxy.Handler()))
 	}
 
 	return grpc_go.NewServer(opts...), nil
