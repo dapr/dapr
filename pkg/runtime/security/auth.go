@@ -67,7 +67,7 @@ func (a *authenticator) GetTrustAnchors() *x509.CertPool {
 	return a.trustAnchors
 }
 
-// GetCurrentSignedCert returns the current and latest signed certificate
+// GetCurrentSignedCert returns the current and latest signed certificate.
 func (a *authenticator) GetCurrentSignedCert() *SignedCertificate {
 	a.certMutex.RLock()
 	defer a.certMutex.RUnlock()
@@ -154,7 +154,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	return signedCert, nil
 }
 
-// currently we support Kubernetes identities
+// currently we support Kubernetes identities.
 func getToken() string {
 	b, _ := ioutil.ReadFile(kubeTknPath)
 	return string(b)

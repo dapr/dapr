@@ -17,16 +17,16 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-// CommandType is the type of raft command in log entry
+// CommandType is the type of raft command in log entry.
 type CommandType uint8
 
 const (
-	// MemberUpsert is the command to update or insert new or existing member info
+	// MemberUpsert is the command to update or insert new or existing member info.
 	MemberUpsert CommandType = 0
-	// MemberRemove is the command to remove member from actor host member state
+	// MemberRemove is the command to remove member from actor host member state.
 	MemberRemove CommandType = 1
 
-	// TableDisseminate is the reserved command for dissemination loop
+	// TableDisseminate is the reserved command for dissemination loop.
 	TableDisseminate CommandType = 100
 )
 
@@ -48,7 +48,7 @@ func newFSM() *FSM {
 	}
 }
 
-// State is used to return a handle to the current state
+// State is used to return a handle to the current state.
 func (c *FSM) State() *DaprHostMemberState {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()

@@ -38,7 +38,7 @@ const (
 	defaultMaxConnectionAgeSeconds = 30
 )
 
-// Server is an interface for the dapr gRPC server
+// Server is an interface for the dapr gRPC server.
 type Server interface {
 	StartNonBlocking() error
 }
@@ -102,7 +102,7 @@ func getDefaultMaxAgeDuration() *time.Duration {
 	return &d
 }
 
-// StartNonBlocking starts a new server in a goroutine
+// StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", s.config.Port))
 	if err != nil {

@@ -30,7 +30,7 @@ runtime_init \
 middleware \
 job-publisher
 
-# PERFORMACE test app list
+# PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
 
 # E2E test app root directory
