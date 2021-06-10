@@ -623,6 +623,10 @@ func (a *actorsRuntime) evaluateReminders() {
 }
 
 func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack, error) {
+	if a.store == nil {
+		return nil, errors.New("actors: state store does not exist or incorrectly configured")
+	}
+
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: a.constructCompositeKey(actorKey, name),
 	})
@@ -637,8 +641,13 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 	return &track, nil
 }
 
+
 func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int) error {
-	track := ReminderTrack{
+	if a.store == nil {
+		return errors.New("actors: state store does not exist or incorrectly configured")
+	}
+
+  track := ReminderTrack{
 		LastFiredTime:  time.Now().UTC().Format(time.RFC3339),
 		RepetitionLeft: repetition,
 	}
@@ -828,6 +837,10 @@ func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
+	if a.store == nil {
+		return errors.New("actors: state store does not exist or incorrectly configured")
+	}
+
 	a.activeRemindersLock.Lock()
 	defer a.activeRemindersLock.Unlock()
 	r, exists := a.getReminder(req)
@@ -1018,6 +1031,10 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 }
 
 func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, *string, error) {
+	if a.store == nil {
+		return nil, nil, errors.New("actors: state store does not exist or incorrectly configured")
+	}
+
 	key := a.constructCompositeKey("actors", actorType)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
@@ -1033,6 +1050,10 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, 
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
+	if a.store == nil {
+		return errors.New("actors: state store does not exist or incorrectly configured")
+	}
+
 	if a.evaluationBusy {
 		select {
 		case <-time.After(time.Second * 5):

@@ -1,13 +1,17 @@
 package csr
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/sentry/certs"
 )
 
 func TestGenerateCSRTemplate(t *testing.T) {
@@ -55,4 +59,30 @@ func TestGenerateCSR(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, len(b) > 0)
 	assert.True(t, len(c) > 0)
+}
+
+func TestEncode(t *testing.T) {
+	var CertTests = []struct {
+		org     string
+		isPkcs8 bool
+	}{
+		{
+			org:     "dapr.io",
+			isPkcs8: false,
+		},
+		{
+			org:     "dapr.io",
+			isPkcs8: true,
+		},
+	}
+	for _, test := range CertTests {
+		key, err := certs.GenerateECPrivateKey()
+		assert.Nil(t, err)
+		template, err := genCSRTemplate(test.org)
+		assert.Nil(t, err)
+		csrBytes, err := x509.CreateCertificateRequest(rand.Reader, template, crypto.PrivateKey(key))
+		assert.Nil(t, err)
+		_, _, err = encode(true, csrBytes, key, test.isPkcs8)
+		assert.Nil(t, err)
+	}
 }

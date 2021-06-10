@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	Certificate   = "CERTIFICATE"
-	ECPrivateKey  = "EC PRIVATE KEY"
-	RSAPrivateKey = "RSA PRIVATE KEY"
+	Certificate     = "CERTIFICATE"
+	ECPrivateKey    = "EC PRIVATE KEY"
+	RSAPrivateKey   = "RSA PRIVATE KEY"
+	PKCS8PrivateKey = "PRIVATE KEY"
 )
 
 // PrivateKey wraps a EC or RSA private key.
@@ -49,6 +50,12 @@ func DecodePEMKey(key []byte) (*PrivateKey, error) {
 			return nil, err
 		}
 		return &PrivateKey{Type: RSAPrivateKey, Key: k}, nil
+	case PKCS8PrivateKey:
+		k, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		return &PrivateKey{Type: PKCS8PrivateKey, Key: k}, nil
 	default:
 		return nil, errors.Errorf("unsupported block type %s", block.Type)
 	}
