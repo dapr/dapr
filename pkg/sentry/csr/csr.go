@@ -190,7 +190,7 @@ func encode(csr bool, csrOrCert []byte, privKey *ecdsa.PrivateKey, pkcs8 bool) (
 	var err error
 
 	if pkcs8 {
-		if encodedKey, err = x509.MarshalECPrivateKey(privKey); err != nil {
+		if encodedKey, err = x509.MarshalPKCS8PrivateKey(privKey); err != nil {
 			return nil, nil, err
 		}
 		privPem = pem.EncodeToMemory(&pem.Block{Type: blockTypePrivateKey, Bytes: encodedKey})
