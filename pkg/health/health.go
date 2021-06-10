@@ -19,7 +19,7 @@ const (
 	successStatusCode = 200
 )
 
-// Option is an a function that applies a health check option
+// Option is an a function that applies a health check option.
 type Option func(o *healthCheckOptions)
 
 type healthCheckOptions struct {
@@ -85,35 +85,35 @@ func applyDefaults(o *healthCheckOptions) {
 	o.interval = interval
 }
 
-// WithInitialDelay sets the initial delay for the health check
+// WithInitialDelay sets the initial delay for the health check.
 func WithInitialDelay(delay time.Duration) Option {
 	return func(o *healthCheckOptions) {
 		o.initialDelay = delay
 	}
 }
 
-// WithFailureThreshold sets the failure threshold for the health check
+// WithFailureThreshold sets the failure threshold for the health check.
 func WithFailureThreshold(threshold int) Option {
 	return func(o *healthCheckOptions) {
 		o.failureThreshold = threshold
 	}
 }
 
-// WithRequestTimeout sets the request timeout for the health check
+// WithRequestTimeout sets the request timeout for the health check.
 func WithRequestTimeout(timeout time.Duration) Option {
 	return func(o *healthCheckOptions) {
 		o.requestTimeout = timeout
 	}
 }
 
-// WithSuccessStatusCode sets the status code for the health check
+// WithSuccessStatusCode sets the status code for the health check.
 func WithSuccessStatusCode(code int) Option {
 	return func(o *healthCheckOptions) {
 		o.successStatusCode = code
 	}
 }
 
-// WithInterval sets the interval for the health check
+// WithInterval sets the interval for the health check.
 func WithInterval(interval time.Duration) Option {
 	return func(o *healthCheckOptions) {
 		o.interval = interval

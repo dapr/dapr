@@ -16,16 +16,17 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/health"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"github.com/dapr/dapr/pkg/modes"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/health"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/modes"
 )
 
 const (
@@ -33,7 +34,7 @@ const (
 	TestKeyName = "key0"
 )
 
-// testRequest is the request object that encapsulates the `data` field of a request
+// testRequest is the request object that encapsulates the `data` field of a request.
 type testRequest struct {
 	Data interface{} `json:"data"`
 }

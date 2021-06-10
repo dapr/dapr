@@ -12,9 +12,10 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/identity"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -96,7 +97,7 @@ func GenerateIssuerCertCSR(cn string, publicKey interface{}, ttl, skew time.Dura
 	return cert, nil
 }
 
-// GenerateRootCertCSR returns a CA root cert x509 Certificate
+// GenerateRootCertCSR returns a CA root cert x509 Certificate.
 func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl, skew time.Duration) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(ttl, skew, publicKey)
 	if err != nil {
@@ -189,7 +190,7 @@ func encode(csr bool, csrOrCert []byte, privKey *ecdsa.PrivateKey, pkcs8 bool) (
 	var err error
 
 	if pkcs8 {
-		if encodedKey, err = x509.MarshalECPrivateKey(privKey); err != nil {
+		if encodedKey, err = x509.MarshalPKCS8PrivateKey(privKey); err != nil {
 			return nil, nil, err
 		}
 		privPem = pem.EncodeToMemory(&pem.Block{Type: blockTypePrivateKey, Bytes: encodedKey})

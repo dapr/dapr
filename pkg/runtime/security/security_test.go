@@ -5,8 +5,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/sentry/certs"
 )
 
 var testRootCert = `-----BEGIN CERTIFICATE-----

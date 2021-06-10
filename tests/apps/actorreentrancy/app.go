@@ -14,9 +14,10 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/gorilla/mux"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 const (
@@ -94,7 +95,7 @@ func getLogs() []actorLogEntry {
 	return actorLogs
 }
 
-// indexHandler is the handler for root path
+// indexHandler is the handler for root path.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler is called")
 
@@ -239,7 +240,7 @@ func advanceCallStackForNextRequest(req reentrantRequest) (actorCall, []byte) {
 	return nextCall, nextBody
 }
 
-// appRouter initializes restful api router
+// appRouter initializes restful api router.
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 

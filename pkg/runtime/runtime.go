@@ -42,6 +42,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -69,13 +71,12 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
 )
 
 const (
 	actorStateStore = "actorStateStore"
 
-	// output bindings concurrency
+	// output bindings concurrency.
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
@@ -84,12 +85,13 @@ const (
 type ComponentCategory string
 
 const (
-	bindingsComponent           ComponentCategory = "bindings"
-	pubsubComponent             ComponentCategory = "pubsub"
-	secretStoreComponent        ComponentCategory = "secretstores"
-	stateComponent              ComponentCategory = "state"
-	middlewareComponent         ComponentCategory = "middleware"
-	defaultComponentInitTimeout                   = time.Second * 5
+	bindingsComponent               ComponentCategory = "bindings"
+	pubsubComponent                 ComponentCategory = "pubsub"
+	secretStoreComponent            ComponentCategory = "secretstores"
+	stateComponent                  ComponentCategory = "state"
+	middlewareComponent             ComponentCategory = "middleware"
+	defaultComponentInitTimeout                       = time.Second * 5
+	defaultGracefulShutdownDuration                   = time.Second * 5
 )
 
 var componentCategoriesNeedProcess = []ComponentCategory{
@@ -111,7 +113,7 @@ type TopicRoute struct {
 	routes map[string]Route
 }
 
-// DaprRuntime holds all the core components of the runtime
+// DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
 	runtimeConfig          *Config
 	globalConfig           *config.Configuration
@@ -166,7 +168,7 @@ type pubsubSubscribedMessage struct {
 	metadata   map[string]string
 }
 
-// NewDaprRuntime returns a new runtime with the given runtime config and global config
+// NewDaprRuntime returns a new runtime with the given runtime config and global config.
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList) *DaprRuntime {
 	return &DaprRuntime{
 		runtimeConfig:          runtimeConfig,
@@ -199,7 +201,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 	}
 }
 
-// Run performs initialization of the runtime with the runtime and global configurations
+// Run performs initialization of the runtime with the runtime and global configurations.
 func (a *DaprRuntime) Run(opts ...Option) error {
 	start := time.Now().UTC()
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
@@ -596,7 +598,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 				return binding.Invoke(req)
 			}
 		}
-		supported := make([]string, len(ops))
+		supported := make([]string, 0, len(ops))
 		for _, o := range ops {
 			supported = append(supported, string(o))
 		}
@@ -1074,7 +1076,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	return a.pubSubs[req.PubsubName].Publish(req)
 }
 
-// GetPubSub is an adapter method to find a pubsub by name
+// GetPubSub is an adapter method to find a pubsub by name.
 func (a *DaprRuntime) GetPubSub(pubsubName string) pubsub.PubSub {
 	return a.pubSubs[pubsubName]
 }
@@ -1442,6 +1444,8 @@ func (a *DaprRuntime) processComponents() {
 		if err != nil {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
 			if !comp.Spec.IgnoreErrors {
+				log.Warnf("process component error daprd process will exited, gracefully to stop")
+				a.shutdownRuntime(defaultGracefulShutdownDuration)
 				log.Fatalf(e)
 			}
 			log.Errorf(e)
@@ -1540,7 +1544,7 @@ func (a *DaprRuntime) stopActor() {
 	}
 }
 
-// shutdownComponents allows for a graceful shutdown of all runtime internal operations or components
+// shutdownComponents allows for a graceful shutdown of all runtime internal operations or components.
 func (a *DaprRuntime) shutdownComponents() error {
 	log.Info("Shutting down all components")
 	var merr error
@@ -1600,14 +1604,17 @@ func (a *DaprRuntime) shutdownComponents() error {
 	return merr
 }
 
-// ShutdownWithWait will gracefully stop runtime and wait outstanding operations
+// ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
-	a.stopActor()
-	gracefulShutdownDuration := 5 * time.Second
-	log.Infof("dapr shutting down. Waiting %s to finish outstanding operations", gracefulShutdownDuration)
-	<-time.After(gracefulShutdownDuration)
-	a.shutdownComponents()
+	a.shutdownRuntime(defaultGracefulShutdownDuration)
 	os.Exit(0)
+}
+
+func (a *DaprRuntime) shutdownRuntime(duration time.Duration) {
+	a.stopActor()
+	log.Infof("dapr shutting down. Waiting %s to finish outstanding operations", duration)
+	<-time.After(duration)
+	a.shutdownComponents()
 }
 
 func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {

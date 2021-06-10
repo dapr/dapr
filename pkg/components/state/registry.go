@@ -9,8 +9,9 @@ import (
 	"strings"
 
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/pkg/errors"
+
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type State struct {
@@ -25,7 +26,7 @@ func New(name string, factoryMethod func() state.Store) State {
 	}
 }
 
-// Registry is an interface for a component that returns registered state store implementations
+// Registry is an interface for a component that returns registered state store implementations.
 type Registry interface {
 	Register(components ...State)
 	Create(name, version string) (state.Store, error)

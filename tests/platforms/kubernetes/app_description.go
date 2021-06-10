@@ -5,7 +5,7 @@
 
 package kubernetes
 
-// AppDescription holds the deployment information of test app
+// AppDescription holds the deployment information of test app.
 type AppDescription struct {
 	AppName           string
 	AppPort           int

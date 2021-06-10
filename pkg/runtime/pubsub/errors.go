@@ -11,7 +11,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 )
 
-// pubsub.NotFoundError is returned by the runtime when the pubsub does not exist
+// pubsub.NotFoundError is returned by the runtime when the pubsub does not exist.
 type NotFoundError struct {
 	PubsubName string
 }
@@ -20,7 +20,7 @@ func (e NotFoundError) Error() string {
 	return fmt.Sprintf("pubsub '%s' not found", e.PubsubName)
 }
 
-// pubsub.NotAllowedError is returned by the runtime when publishing is forbidden
+// pubsub.NotAllowedError is returned by the runtime when publishing is forbidden.
 type NotAllowedError struct {
 	Topic string
 	ID    string

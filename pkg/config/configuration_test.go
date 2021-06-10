@@ -10,8 +10,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 const (

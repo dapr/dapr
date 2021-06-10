@@ -8,10 +8,11 @@ package monitoring
 import (
 	"context"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 const (
@@ -35,29 +36,29 @@ var (
 
 	noKeys = []tag.Key{}
 
-	// appIDKey is a tag key for App ID
+	// appIDKey is a tag key for App ID.
 	appIDKey = tag.MustNewKey(appID)
 
-	// failedReasonKey is a tag key for failed reason
+	// failedReasonKey is a tag key for failed reason.
 	failedReasonKey = tag.MustNewKey(failedReason)
 )
 
-// RecordSidecarInjectionRequestsCount records the total number of sidecar injection requests
+// RecordSidecarInjectionRequestsCount records the total number of sidecar injection requests.
 func RecordSidecarInjectionRequestsCount() {
 	stats.Record(context.Background(), sidecarInjectionRequestsTotal.M(1))
 }
 
-// RecordSuccessfulSidecarInjectionCount records the number of successful sidecar injections
+// RecordSuccessfulSidecarInjectionCount records the number of successful sidecar injections.
 func RecordSuccessfulSidecarInjectionCount(appID string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), succeededSidecarInjectedTotal.M(1))
 }
 
-// RecordFailedSidecarInjectionCount records the number of failed sidecar injections
+// RecordFailedSidecarInjectionCount records the number of failed sidecar injections.
 func RecordFailedSidecarInjectionCount(appID, reason string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID, failedReasonKey, reason), failedSidecarInjectedTotal.M(1))
 }
 
-// InitMetrics initialize the injector service metrics
+// InitMetrics initialize the injector service metrics.
 func InitMetrics() error {
 	err := view.Register(
 		diag_utils.NewMeasureView(sidecarInjectionRequestsTotal, noKeys, view.Count()),
