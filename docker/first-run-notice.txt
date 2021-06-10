@@ -1,0 +1,9 @@
+👋 Welcome to the Dapr Codespace! You are on our Dapr Contributors image.
+It includes everything to build, run and test the https://github.com/dapr/dapr
+and https://github.com/dapr/components-contrib repositories.
+
+📚 Dapr contributing docs can be found at: https://docs.dapr.io/contributing
+
+🎓 If you are looking to run the Dapr quickstarts and tutorials, head over to
+https://github.com/dapr/quickstarts instead.
+
