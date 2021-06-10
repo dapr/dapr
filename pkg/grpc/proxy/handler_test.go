@@ -298,7 +298,6 @@ func (t testingLog) Info(args ...interface{}) {
 
 // Infoln logs to INFO log. Arguments are handled in the manner of fmt.Println.
 func (t testingLog) Infoln(args ...interface{}) {
-	t.T.Log(args...)
 }
 
 // Infof logs to INFO log. Arguments are handled in the manner of fmt.Printf.
