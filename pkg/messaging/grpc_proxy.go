@@ -8,9 +8,9 @@ package messaging
 import (
 	"context"
 
+	grpc_proxy "github.com/dapr/dapr/pkg/grpc/proxy"
+	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	"github.com/pkg/errors"
-	grpc_proxy "github.com/trusch/grpc-proxy/proxy"
-	codec "github.com/trusch/grpc-proxy/proxy/codec"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
