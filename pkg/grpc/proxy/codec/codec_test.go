@@ -28,7 +28,6 @@ func TestCodec_ReadYourWrites(t *testing.T) {
 	out, err = codec.Marshal(framePtr)
 	require.NoError(t, err, "no marshal error")
 	require.Equal(t, []byte{0x55}, out, "output and data must be the same")
-
 }
 
 func TestProtoCodec_ReadYourWrites(t *testing.T) {

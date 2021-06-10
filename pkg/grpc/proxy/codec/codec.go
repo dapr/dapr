@@ -60,8 +60,8 @@ func (p *Proxy) Marshal(v interface{}) ([]byte, error) {
 	if !ok {
 		return p.parentCodec.Marshal(v)
 	}
-	return out.payload, nil
 
+	return out.payload, nil
 }
 
 // Unmarshal implents the encoding.Codec interface method.
