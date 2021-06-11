@@ -111,6 +111,26 @@ func TestMain(m *testing.M) {
 			Namespace:      &secondaryNamespace,
 			AppProtocol:    "grpc",
 		},
+		{
+			AppName:        "grpcproxyclient",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_client",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
+			Config:         "grpcproxyconfig",
+		},
+		{
+			AppName:        "grpcproxyserver",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_server",
+			Replicas:       1,
+			IngressEnabled: false,
+			MetricsEnabled: true,
+			AppProtocol:    "grpc",
+			Config:         "grpcproxyconfig",
+			AppPort:        50051,
+		},
 	}
 
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
@@ -140,6 +160,12 @@ var serviceinvocationTests = []struct {
 		"serviceinvocation-callee-0",
 		"multihop",
 		"singlehop is called",
+	},
+	{
+		"Test grpc proxy",
+		"grpcproxyclient",
+		"",
+		"success",
 	},
 }
 
