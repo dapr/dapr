@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,10 @@ import (
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/metadata"
 )
+
+type appResponse struct {
+	Message string `json:"message,omitempty"`
+}
 
 func run(w http.ResponseWriter, r *http.Request) {
 	conn, err := grpc.Dial("localhost:50001", grpc.WithInsecure(), grpc.WithBlock())
@@ -38,8 +43,18 @@ func run(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Greeting: %s", resp.GetMessage())
+
+	appResp := appResponse{
+		Message: "success",
+	}
+
+	b, err := json.Marshal(appResp)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	w.WriteHeader(200)
-	w.Write([]byte("success"))
+	w.Write(b)
 }
 
 func main() {
