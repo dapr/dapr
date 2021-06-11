@@ -293,7 +293,6 @@ type testingLog struct {
 
 // Info logs to INFO log. Arguments are handled in the manner of fmt.Print.
 func (t testingLog) Info(args ...interface{}) {
-	t.T.Log(args...)
 }
 
 // Infoln logs to INFO log. Arguments are handled in the manner of fmt.Println.
@@ -302,22 +301,18 @@ func (t testingLog) Infoln(args ...interface{}) {
 
 // Infof logs to INFO log. Arguments are handled in the manner of fmt.Printf.
 func (t testingLog) Infof(format string, args ...interface{}) {
-	t.T.Logf(format, args...)
 }
 
 // Warning logs to WARNING log. Arguments are handled in the manner of fmt.Print.
 func (t testingLog) Warning(args ...interface{}) {
-	t.T.Log(args...)
 }
 
 // Warningln logs to WARNING log. Arguments are handled in the manner of fmt.Println.
 func (t testingLog) Warningln(args ...interface{}) {
-	t.T.Log(args...)
 }
 
 // Warningf logs to WARNING log. Arguments are handled in the manner of fmt.Printf.
 func (t testingLog) Warningf(format string, args ...interface{}) {
-	t.T.Logf(format, args...)
 }
 
 // Error logs to ERROR log. Arguments are handled in the manner of fmt.Print.
