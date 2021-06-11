@@ -161,12 +161,6 @@ var serviceinvocationTests = []struct {
 		"multihop",
 		"singlehop is called",
 	},
-	{
-		"Test grpc proxy",
-		"grpcproxyclient",
-		"",
-		"success",
-	},
 }
 
 var moreServiceinvocationTests = []struct {
@@ -235,6 +229,20 @@ var crossNamespaceTests = []struct {
 	},
 }
 
+var grpcProxyTests = []struct {
+	in               string
+	remoteApp        string
+	appMethod        string
+	expectedResponse string
+}{
+	{
+		"Test grpc proxy",
+		"grpcproxyclient",
+		"",
+		"success",
+	},
+}
+
 func TestServiceInvocation(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
@@ -282,6 +290,39 @@ func TestServiceInvocation(t *testing.T) {
 				url,
 				body)
 
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
+}
+
+func TestGRPCProxy(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("grpcproxyclient")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+	var err error
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	for _, tt := range grpcProxyTests {
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			resp, err := utils.HTTPPost(
+				fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
 			t.Log("checking err...")
 			require.NoError(t, err)
 
