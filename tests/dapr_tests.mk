@@ -14,6 +14,8 @@ stateapp \
 secretapp \
 service_invocation \
 service_invocation_grpc \
+service_invocation_grpc_proxy_client \
+service_invocation_grpc_proxy_server \
 binding_input \
 binding_input_grpc \
 binding_output \
@@ -29,8 +31,6 @@ runtime \
 runtime_init \
 middleware \
 job-publisher \
-service_invocation_grpc_proxy_client \
-service_invocation_grpc_proxy_server
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
