@@ -7,6 +7,7 @@ package pubsub
 
 import (
 	contrib_pubsub "github.com/dapr/components-contrib/pubsub"
+
 	"github.com/dapr/dapr/pkg/retry"
 )
 
