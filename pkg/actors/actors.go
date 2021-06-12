@@ -641,13 +641,12 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 	return &track, nil
 }
 
-
 func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
-  track := ReminderTrack{
+	track := ReminderTrack{
 		LastFiredTime:  time.Now().UTC().Format(time.RFC3339),
 		RepetitionLeft: repetition,
 	}

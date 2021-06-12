@@ -284,7 +284,7 @@ func TestStoreIsNotInited(t *testing.T) {
 	})
 
 	t.Run("updateReminderTrack", func(t *testing.T) {
-		e := testActorsRuntime.updateReminderTrack("foo", "bar")
+		e := testActorsRuntime.updateReminderTrack("foo", "bar", 1)
 		assert.NotNil(t, e)
 	})
 
