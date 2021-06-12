@@ -30,7 +30,7 @@ func (e NotAllowedError) Error() string {
 	return fmt.Sprintf(messages.ErrPubsubForbidden, e.Topic, e.ID)
 }
 
-// pubsub.InvalidRetrySettings is returned by the runtime when the custom retry settings provided in the request are invalid
+// pubsub.InvalidRetrySettings is returned by the runtime when the custom retry settings provided in the request are invalid.
 type InvalidRetrySettingsError struct {
 	InvalidRetrySettingErrorCause string
 }

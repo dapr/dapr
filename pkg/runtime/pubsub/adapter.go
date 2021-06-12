@@ -10,7 +10,7 @@ import (
 	"github.com/dapr/dapr/pkg/retry"
 )
 
-// PublisRequest is the runtime wrapper to allow handling retry settings
+// PublisRequest is the runtime wrapper to allow handling retry settings.
 type PublishRequest struct {
 	PubsubName    string
 	RetrySettings retry.Settings
@@ -19,7 +19,7 @@ type PublishRequest struct {
 	Metadata      map[string]string
 }
 
-// Adapter is the interface for message buses
+// Adapter is the interface for message buses.
 type Adapter interface {
 	GetPubSub(pubsubName string) contrib_pubsub.PubSub
 	Publish(req *PublishRequest) error

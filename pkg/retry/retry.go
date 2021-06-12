@@ -37,21 +37,21 @@ const (
 	MaxRetryIntervalInSeconds     int      = 3
 )
 
-// AllowedRetryStrategies lists allowed Retry Policies supported by the darp Retry
+// AllowedRetryStrategies lists allowed Retry Policies supported by the darp Retry.
 var AllowedRetryStrategies = map[string]Strategy{
 	"off":         off,
 	"linear":      linear,
 	"exponential": exponential,
 }
 
-// Settings contains retry settings supported by the dapr Retry
+// Settings contains retry settings supported by the dapr Retry.
 type Settings struct {
 	RetryStrategy          Strategy
 	RetryMaxCount          int
 	RetryIntervalInSeconds int
 }
 
-// DefaultRetrySettings object contains the default retry settings
+// DefaultRetrySettings object contains the default retry settings.
 var DefaultRetrySettings = Settings{
 	RetryStrategy:          defaultRetryStrategy,
 	RetryMaxCount:          defaultRetryMaxCount,
@@ -64,7 +64,7 @@ var nilRetrySettings = Settings{
 	RetryIntervalInSeconds: 0,
 }
 
-// NewRetrySettings returns a valid retry settings object based on the retry settings provided
+// NewRetrySettings returns a valid retry settings object based on the retry settings provided.
 func NewRetrySettings(retryStrategy string, retryMaxCount int, retryIntervalInSeconds int, log logger.Logger) (Settings, error) {
 	retrySettings := DefaultRetrySettings
 	if retryStrategy != "" {
@@ -110,7 +110,7 @@ func NewRetrySettings(retryStrategy string, retryMaxCount int, retryIntervalInSe
 	return retrySettings, nil
 }
 
-// CustomizeRetrySettings returns a valid retry settings object based on an existing retrySettings and applying a set of custom settings
+// CustomizeRetrySettings returns a valid retry settings object based on an existing retrySettings and applying a set of custom settings.
 func CustomizeRetrySettings(retrySettings Settings, customRetrySettings Settings, log logger.Logger) (Settings, error) {
 	log.Debugf("customizing base retry settings")
 	err := validateRetrySettings(retrySettings)
@@ -191,7 +191,7 @@ func validateRetryIntervalInSeconds(retryIntervalInSeconds int) error {
 	return nil
 }
 
-// Retry executes an Operation as per the Retry Policy specified and till it succeeds or the max number of retries specified in the retry settings provided
+// Retry executes an Operation as per the Retry Policy specified and till it succeeds or the max number of retries specified in the retry settings provided.
 func Retry(operation backoff.Operation, retrySettings Settings, notify backoff.Notify, recovered func(), log logger.Logger) error {
 	err := validateRetrySettings(retrySettings)
 	if err != nil {

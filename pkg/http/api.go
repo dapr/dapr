@@ -1379,7 +1379,7 @@ func (a *api) getRetrySettingsFromRequest(reqCtx *fasthttp.RequestCtx) (retry.Se
 	return retrySettings, nil
 }
 
-// GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists
+// GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.
 func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	code := metadata[http.HTTPStatusCode]
 	if code != "" {

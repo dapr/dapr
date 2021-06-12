@@ -118,13 +118,13 @@ type TopicRoute struct {
 	routes map[string]Route
 }
 
-// Wrapper to PubSub interface to accommodate retry logic settings
+// Wrapper to PubSub interface to accommodate retry logic settings.
 type pubSubWrapper struct {
 	retrySettings retry.Settings
 	pubSub        pubsub.PubSub
 }
 
-// DaprRuntime holds all the core components of the runtime
+// DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
 	runtimeConfig          *Config
 	globalConfig           *config.Configuration
