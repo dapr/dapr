@@ -273,6 +273,39 @@ func TestActorIsNotDeactivated(t *testing.T) {
 	assert.True(t, exists)
 }
 
+func TestStoreIsNotInited(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	testActorsRuntime.store = nil
+
+	t.Run("getReminderTrack", func(t *testing.T) {
+		r, e := testActorsRuntime.getReminderTrack("foo", "bar")
+		assert.NotNil(t, e)
+		assert.Nil(t, r)
+	})
+
+	t.Run("updateReminderTrack", func(t *testing.T) {
+		e := testActorsRuntime.updateReminderTrack("foo", "bar")
+		assert.NotNil(t, e)
+	})
+
+	t.Run("CreateReminder", func(t *testing.T) {
+		e := testActorsRuntime.CreateReminder(context.Background(), &CreateReminderRequest{})
+		assert.NotNil(t, e)
+	})
+
+	t.Run("getRemindersForActorType", func(t *testing.T) {
+		r1, r2, e := testActorsRuntime.getRemindersForActorType("foo")
+		assert.Nil(t, r1)
+		assert.Nil(t, r2)
+		assert.NotNil(t, e)
+	})
+
+	t.Run("DeleteReminder", func(t *testing.T) {
+		e := testActorsRuntime.DeleteReminder(context.Background(), &DeleteReminderRequest{})
+		assert.NotNil(t, e)
+	})
+}
+
 func TestTimerExecution(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
