@@ -68,7 +68,7 @@ type actorsRuntime struct {
 	store               state.Store
 	transactionalStore  state.TransactionalStore
 	placement           *internal.ActorPlacement
-	grpcConnectionFn    func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
+	grpcConnectionFn    func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error)
 	config              Config
 	actorsTable         *sync.Map
 	activeTimers        *sync.Map
@@ -100,7 +100,7 @@ const (
 func NewActors(
 	stateStore state.Store,
 	appChannel channel.AppChannel,
-	grpcConnectionFn func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error),
+	grpcConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error),
 	config Config,
 	certChain *dapr_credentials.CertChain,
 	tracingSpec configuration.TracingSpec,
@@ -304,7 +304,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, err = a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, true, false)
+			_, err = a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, true, false)
 			if err != nil {
 				return nil, err
 			}
@@ -378,7 +378,7 @@ func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
 	targetAddress, targetID string,
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, false, false)
+	conn, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, false, false)
 	if err != nil {
 		return nil, err
 	}
