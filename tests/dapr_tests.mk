@@ -14,6 +14,8 @@ stateapp \
 secretapp \
 service_invocation \
 service_invocation_grpc \
+service_invocation_grpc_proxy_client \
+service_invocation_grpc_proxy_server \
 binding_input \
 binding_input_grpc \
 binding_output \
@@ -28,7 +30,7 @@ actorreentrancy \
 runtime \
 runtime_init \
 middleware \
-job-publisher
+job-publisher \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
@@ -241,6 +243,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_reentrant_actor.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_grpc_proxy_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
