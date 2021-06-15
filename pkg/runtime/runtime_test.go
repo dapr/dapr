@@ -794,8 +794,8 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		rts.appChannel = nil
 		routes, err := rts.getTopicRoutes()
-		assert.NotNil(t, err)
-		assert.Nil(t, routes)
+		assert.Nil(t, err)
+		assert.Equal(t, 0, len(routes))
 	})
 
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
