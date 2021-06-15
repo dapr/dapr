@@ -92,8 +92,9 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
 
 	var header, trailer metadata.MD
-	resp, err := clientV1.OnInvoke(ctx, req.Message(), grpc.Header(&header), grpc.Trailer(&trailer),
-		grpc.MaxCallSendMsgSize(g.maxRequestBodySize*1024*1024), grpc.MaxCallRecvMsgSize(g.maxRequestBodySize*1024*1024))
+	var opts []grpc.CallOption
+	opts = append(opts, grpc.MaxCallRecvMsgSize(grpc.Header(&header), grpc.Trailer(&trailer), d.maxRequestBodySize*1024*1024), grpc.MaxCallSendMsgSize(d.maxRequestBodySize*1024*1024))
+	resp, err := clientV1.OnInvoke(ctx, req.Message(), opts...)
 
 	if g.ch != nil {
 		<-g.ch
