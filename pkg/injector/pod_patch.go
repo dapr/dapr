@@ -156,7 +156,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		value = []corev1.Container{*sidecarContainer}
 	} else {
 		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
-		path = "/spec/containers/0"
+		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
 
@@ -188,7 +188,7 @@ func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation 
 	}
 	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/env", containersPath, i+1)
+		path := fmt.Sprintf("%s/%d/env", containersPath, i)
 		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
