@@ -215,7 +215,7 @@ func fakeStore() state.Store {
 }
 
 func fakeCallAndActivateActor(actors *actorsRuntime, actorType, actorID string) {
-	actorKey := actors.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	actors.actorsTable.LoadOrStore(actorKey, newActor(actorType, actorID, &reentrancyStackDepth))
 }
 
@@ -252,7 +252,7 @@ func TestActorIsDeactivated(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	idleTimeout := time.Second * 2
 	actorType, actorID := getTestActorTypeAndID()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 
 	deactivateActorWithDuration(testActorsRuntime, actorType, actorID, idleTimeout)
 	time.Sleep(time.Second * 3)
@@ -266,7 +266,7 @@ func TestActorIsNotDeactivated(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	idleTimeout := time.Second * 5
 	actorType, actorID := getTestActorTypeAndID()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 
 	deactivateActorWithDuration(testActorsRuntime, actorType, actorID, idleTimeout)
 	time.Sleep(time.Second * 3)
@@ -400,7 +400,7 @@ func TestOverrideReminder(t *testing.T) {
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
-		assert.Equal(t, "b", reminders[0].Data)
+		assert.Equal(t, "b", reminders[0].reminder.Data)
 	})
 
 	t.Run("override dueTime", func(t *testing.T) {
@@ -414,7 +414,7 @@ func TestOverrideReminder(t *testing.T) {
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
-		assert.Equal(t, "2s", reminders[0].DueTime)
+		assert.Equal(t, "2s", reminders[0].reminder.DueTime)
 	})
 
 	t.Run("override period", func(t *testing.T) {
@@ -428,7 +428,7 @@ func TestOverrideReminder(t *testing.T) {
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
-		assert.Equal(t, "2s", reminders[0].Period)
+		assert.Equal(t, "2s", reminders[0].reminder.Period)
 	})
 }
 
@@ -452,23 +452,23 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 		// Check reminder is updated
-		assert.Equal(t, "9s", reminders[0].Period)
-		assert.Equal(t, "1s", reminders[0].DueTime)
-		assert.Equal(t, "b", reminders[0].Data)
+		assert.Equal(t, "9s", reminders[0].reminder.Period)
+		assert.Equal(t, "1s", reminders[0].reminder.DueTime)
+		assert.Equal(t, "b", reminders[0].reminder.Data)
 
 		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "2s", "c")
 		testActorsRuntime.CreateReminder(ctx, &reminder3)
 		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 		// Check reminder is updated
-		assert.Equal(t, "8s", reminders[0].Period)
-		assert.Equal(t, "2s", reminders[0].DueTime)
-		assert.Equal(t, "c", reminders[0].Data)
+		assert.Equal(t, "8s", reminders[0].reminder.Period)
+		assert.Equal(t, "2s", reminders[0].reminder.DueTime)
+		assert.Equal(t, "c", reminders[0].reminder.Data)
 
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, reminders[0].Data, request.Data)
+			assert.Equal(t, reminders[0].reminder.Data, request.Data)
 		case <-time.After(15 * time.Second):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -504,8 +504,8 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		assert.Nil(t, err)
 		// The statestore could have either reminder2 or reminder3 based on the timing.
 		// Therefore, not verifying data field
-		assert.Equal(t, "8s", reminders[0].Period)
-		assert.Equal(t, "4s", reminders[0].DueTime)
+		assert.Equal(t, "8s", reminders[0].reminder.Period)
+		assert.Equal(t, "4s", reminders[0].reminder.DueTime)
 
 		time.Sleep(50 * time.Millisecond)
 
@@ -517,12 +517,12 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, reminders[0].Data, request.Data)
+			assert.Equal(t, reminders[0].reminder.Data, request.Data)
 
 			// Check reminder is updated
-			assert.Equal(t, "7s", reminders[0].Period)
-			assert.Equal(t, "2s", reminders[0].DueTime)
-			assert.Equal(t, "d", reminders[0].Data)
+			assert.Equal(t, "7s", reminders[0].reminder.Period)
+			assert.Equal(t, "2s", reminders[0].reminder.DueTime)
+			assert.Equal(t, "d", reminders[0].reminder.Data)
 		case <-time.After(15 * time.Second):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -567,14 +567,14 @@ func TestDeleteTimer(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
 
 	timer := createTimerData(actorID, actorType, "timer1", "100ms", "100ms", "callback", "")
 	err := testActorsRuntime.CreateTimer(ctx, &timer)
 	assert.Nil(t, err)
 
-	timerKey := testActorsRuntime.constructCompositeKey(actorKey, timer.Name)
+	timerKey := constructCompositeKey(actorKey, timer.Name)
 
 	_, ok := testActorsRuntime.activeTimers.Load(timerKey)
 	assert.True(t, ok)
@@ -669,7 +669,7 @@ func TestReminderFires(t *testing.T) {
 	assert.Nil(t, err)
 
 	time.Sleep(time.Millisecond * 250)
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	track, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.Nil(t, err)
 	assert.NotNil(t, track)
@@ -680,7 +680,7 @@ func TestReminderDueDate(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	reminder := createReminderData(actorID, actorType, "reminder1", "100ms", "500ms", "a")
 	err := testActorsRuntime.CreateReminder(ctx, &reminder)
 	assert.Nil(t, err)
@@ -700,7 +700,7 @@ func TestReminderPeriod(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	reminder := createReminderData(actorID, actorType, "reminder1", "100ms", "100ms", "a")
 	err := testActorsRuntime.CreateReminder(ctx, &reminder)
 	assert.Nil(t, err)
@@ -723,7 +723,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	reminder := createReminderData(actorID, actorType, "reminder1", "", "100ms", "a")
 	err := testActorsRuntime.CreateReminder(ctx, &reminder)
 	assert.Nil(t, err)
@@ -874,7 +874,7 @@ func TestCallLocalActor(t *testing.T) {
 	t.Run("actor is already disposed", func(t *testing.T) {
 		// arrange
 		testActorRuntime := newTestActorsRuntime()
-		actorKey := testActorRuntime.constructCompositeKey(testActorType, testActorID)
+		actorKey := constructCompositeKey(testActorType, testActorID)
 		act := newActor(testActorType, testActorID, &reentrancyStackDepth)
 
 		// add test actor
@@ -1060,8 +1060,7 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 	actorType := "TestActor"
 	actorID := "abc123"
 
-	actorsRuntime := newTestActorsRuntime()
-	actorKey := actorsRuntime.constructCompositeKey(appID, actorType, actorID)
+	actorKey := constructCompositeKey(appID, actorType, actorID)
 
 	assert.Equal(t, "myapp||TestActor||abc123", actorKey)
 }

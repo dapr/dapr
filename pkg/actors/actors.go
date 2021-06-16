@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	nethttp "net/http"
 	"regexp"
 	"strconv"
@@ -81,7 +82,7 @@ type actorsRuntime struct {
 	activeReminders     *sync.Map
 	remindersLock       *sync.RWMutex
 	activeRemindersLock *sync.RWMutex
-	reminders           map[string][]Reminder
+	reminders           map[string][]actorReminderReference
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
 	evaluationChan      chan bool
@@ -102,6 +103,28 @@ type actorRepetiton struct {
 	mutex *sync.Mutex
 }
 
+// ActorMetadata represents information about the actor type.
+type ActorMetadata struct {
+	ID                string                 `json:"id"`
+	RemindersMetadata ActorRemindersMetadata `json:"actorRemindersMetadata"`
+}
+
+// ActorRemindersMetadata represents information about actor's reminders.
+type ActorRemindersMetadata struct {
+	PartitionCount int                `json:"partitionCount"`
+	partitionsEtag map[uint32]*string `json:"-"`
+}
+
+type actorReminderReference struct {
+	actorMetadataID           string
+	actorRemindersPartitionID uint32
+	reminder                  *Reminder
+}
+
+const (
+	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
+)
+
 func (repetition *actorRepetiton) decrementAttempt() {
 	repetition.mutex.Lock()
 	defer repetition.mutex.Unlock()
@@ -117,10 +140,6 @@ func (repetition *actorRepetiton) getValue() int {
 func newActorRepetition(value int) *actorRepetiton {
 	return &actorRepetiton{value: value, mutex: &sync.Mutex{}}
 }
-
-const (
-	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
-)
 
 // NewActors create a new actors runtime with given config.
 func NewActors(
@@ -151,7 +170,7 @@ func NewActors(
 		activeReminders:     &sync.Map{},
 		remindersLock:       &sync.RWMutex{},
 		activeRemindersLock: &sync.RWMutex{},
-		reminders:           map[string][]Reminder{},
+		reminders:           map[string][]actorReminderReference{},
 		evaluationLock:      &sync.RWMutex{},
 		evaluationBusy:      false,
 		evaluationChan:      make(chan bool),
@@ -223,11 +242,11 @@ func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
 	}
 }
 
-func (a *actorsRuntime) constructCompositeKey(keys ...string) string {
+func constructCompositeKey(keys ...string) string {
 	return strings.Join(keys, daprSeparator)
 }
 
-func (a *actorsRuntime) decomposeCompositeKey(compositeKey string) []string {
+func decomposeCompositeKey(compositeKey string) []string {
 	return strings.Split(compositeKey, daprSeparator)
 }
 
@@ -250,7 +269,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 		return errors.Errorf("error from actor service: %s", string(body))
 	}
 
-	actorKey := a.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	a.actorsTable.Delete(actorKey)
 	diag.DefaultMonitoring.ActorDeactivated(actorType)
 	log.Debugf("deactivated actor type=%s, id=%s\n", actorType, actorID)
@@ -259,7 +278,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 }
 
 func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
-	arr := a.decomposeCompositeKey(key)
+	arr := decomposeCompositeKey(key)
 	return arr[0], arr[1]
 }
 
@@ -343,7 +362,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 }
 
 func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
-	key := a.constructCompositeKey(actorType, actorID)
+	key := constructCompositeKey(actorType, actorID)
 
 	// This avoids allocating multiple actor allocations by calling newActor
 	// whenever actor is invoked. When storing actor key first, there is a chance to
@@ -431,7 +450,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
-	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
+	partitionKey := constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
 	metadata := map[string]string{metadataPartitionKey: partitionKey}
 
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
@@ -453,7 +472,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 	operations := []state.TransactionalStateOperation{}
-	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
+	partitionKey := constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
 	metadata := map[string]string{metadataPartitionKey: partitionKey}
 
 	for _, o := range req.Operations {
@@ -501,13 +520,13 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 }
 
 func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
-	key := a.constructCompositeKey(req.ActorType, req.ActorID)
+	key := constructCompositeKey(req.ActorType, req.ActorID)
 	_, exists := a.actorsTable.Load(key)
 	return exists
 }
 
 func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) string {
-	return a.constructCompositeKey(a.config.AppID, actorType, actorID, key)
+	return constructCompositeKey(a.config.AppID, actorType, actorID, key)
 }
 
 func (a *actorsRuntime) drainRebalancedActors() {
@@ -527,8 +546,8 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				// cancel any reminders
 				reminders := a.reminders[actorType]
 				for _, r := range reminders {
-					if r.ActorType == actorType && r.ActorID == actorID {
-						reminderKey := a.constructCompositeKey(actorKey, r.Name)
+					if r.reminder.ActorType == actorType && r.reminder.ActorID == actorID {
+						reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 						stopChan, exists := a.activeReminders.Load(reminderKey)
 						if exists {
 							close(stopChan.(chan bool))
@@ -591,25 +610,25 @@ func (a *actorsRuntime) evaluateReminders() {
 			a.remindersLock.Unlock()
 
 			wg.Add(1)
-			go func(wg *sync.WaitGroup, reminders []Reminder) {
+			go func(wg *sync.WaitGroup, reminders []actorReminderReference) {
 				defer wg.Done()
 
 				for i := range reminders {
 					r := reminders[i] // Make a copy since we will refer to this as a reference in this loop.
-					targetActorAddress, _ := a.placement.LookupActor(r.ActorType, r.ActorID)
+					targetActorAddress, _ := a.placement.LookupActor(r.reminder.ActorType, r.reminder.ActorID)
 					if targetActorAddress == "" {
 						continue
 					}
 
 					if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-						actorKey := a.constructCompositeKey(r.ActorType, r.ActorID)
-						reminderKey := a.constructCompositeKey(actorKey, r.Name)
+						actorKey := constructCompositeKey(r.reminder.ActorType, r.reminder.ActorID)
+						reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 						_, exists := a.activeReminders.Load(reminderKey)
 
 						if !exists {
 							stop := make(chan bool)
 							a.activeReminders.Store(reminderKey, stop)
-							err := a.startReminder(&r, stop)
+							err := a.startReminder(r.reminder, stop)
 							if err != nil {
 								log.Errorf("error starting reminder: %s", err)
 							}
@@ -630,7 +649,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 	}
 
 	resp, err := a.store.Get(&state.GetRequest{
-		Key: a.constructCompositeKey(actorKey, name),
+		Key: constructCompositeKey(actorKey, name),
 	})
 	if err != nil {
 		return nil, err
@@ -654,7 +673,7 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 	}
 
 	err := a.store.Set(&state.SetRequest{
-		Key:   a.constructCompositeKey(actorKey, name),
+		Key:   constructCompositeKey(actorKey, name),
 		Value: track,
 	})
 	return err
@@ -673,7 +692,7 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 		return nextInvokeTime, errors.Wrap(err, "error parsing reminder due time")
 	}
 
-	key := a.constructCompositeKey(reminder.ActorType, reminder.ActorID)
+	key := constructCompositeKey(reminder.ActorType, reminder.ActorID)
 	track, err := a.getReminderTrack(key, reminder.Name)
 	if err != nil {
 		return nextInvokeTime, errors.Wrap(err, "error getting reminder track")
@@ -702,8 +721,8 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 }
 
 func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool) error {
-	actorKey := a.constructCompositeKey(reminder.ActorType, reminder.ActorID)
-	reminderKey := a.constructCompositeKey(actorKey, reminder.Name)
+	actorKey := constructCompositeKey(reminder.ActorType, reminder.ActorID)
+	reminderKey := constructCompositeKey(actorKey, reminder.Name)
 	nextInvokeTime, err := a.getUpcomingReminderInvokeTime(reminder)
 	if err != nil {
 		return err
@@ -761,9 +780,9 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 
 						err := a.executeReminder(actorType, actorID, dueTime, period, reminder, repetition, data)
 						if err != nil {
-							log.Debugf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
+							log.Errorf("error invoking reminder on actor %s: %s", constructCompositeKey(actorType, actorID), err)
 						} else {
-							log.Debugf("executing reminder on actor succedeed; reminders pending for actor %s:  %d", a.constructCompositeKey(actorType, actorID), *repetition)
+							log.Debugf("executing reminder on actor succedeed; reminders pending for actor %s:  %d", constructCompositeKey(actorType, actorID), *repetition)
 							if quit, _ := a.stopReminderIfRepetitionsOver(reminder, actorID, actorType, repetition.getValue()); quit {
 								return
 							}
@@ -807,7 +826,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 
 	_, err = a.callLocalActor(context.Background(), req)
 	if err == nil {
-		key := a.constructCompositeKey(actorType, actorID)
+		key := constructCompositeKey(actorType, actorID)
 		repetition.decrementAttempt()
 		err = a.updateReminderTrack(key, reminder, repetition.getValue())
 	} else {
@@ -831,12 +850,100 @@ func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool
 	a.remindersLock.RUnlock()
 
 	for _, r := range reminders {
-		if r.ActorID == req.ActorID && r.ActorType == req.ActorType && r.Name == req.Name {
-			return &r, true
+		if r.reminder.ActorID == req.ActorID && r.reminder.ActorType == req.ActorType && r.reminder.Name == req.Name {
+			return r.reminder, true
 		}
 	}
 
 	return nil, false
+}
+
+func (m *ActorMetadata) calculateReminderPartition(actorID, reminderName string) uint32 {
+	if m.RemindersMetadata.PartitionCount <= 0 {
+		return 0
+	}
+
+	// do not change this hash function because it would be a breaking change.
+	h := fnv.New32a()
+	h.Write([]byte(actorID))
+	h.Write([]byte(reminderName))
+	return (h.Sum32() % uint32(m.RemindersMetadata.PartitionCount)) + 1
+}
+
+func (m *ActorMetadata) createReminderReference(reminder *Reminder) actorReminderReference {
+	if m.RemindersMetadata.PartitionCount > 0 {
+		return actorReminderReference{
+			actorMetadataID:           m.ID,
+			actorRemindersPartitionID: m.calculateReminderPartition(reminder.ActorID, reminder.Name),
+			reminder:                  reminder,
+		}
+	}
+
+	return actorReminderReference{
+		actorMetadataID:           "",
+		actorRemindersPartitionID: 0,
+		reminder:                  reminder,
+	}
+}
+
+func (m *ActorMetadata) calculateStateKey(actorType string, remindersPartitionID uint32) string {
+	if remindersPartitionID == 0 {
+		return constructCompositeKey("actors", actorType)
+	}
+
+	return constructCompositeKey(
+		"actors",
+		actorType,
+		m.ID,
+		strconv.Itoa(int(remindersPartitionID)))
+}
+
+func (m *ActorMetadata) calculateEtag(partitionID uint32) *string {
+	return m.RemindersMetadata.partitionsEtag[partitionID]
+}
+
+func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminderReference, actorType, actorID, reminderName string) ([]Reminder, string, *string) {
+	// First, we find the partition
+	var partitionID uint32 = 0
+	if m.RemindersMetadata.PartitionCount > 0 {
+		for _, reminderRef := range reminderRefs {
+			if reminderRef.reminder.ActorType == actorType && reminderRef.reminder.ActorID == actorID && reminderRef.reminder.Name == reminderName {
+				partitionID = reminderRef.actorRemindersPartitionID
+			}
+		}
+	}
+
+	var remindersInPartitionAfterRemoval []Reminder
+	for _, reminderRef := range reminderRefs {
+		if reminderRef.reminder.ActorType == actorType && reminderRef.reminder.ActorID == actorID && reminderRef.reminder.Name == reminderName {
+			continue
+		}
+
+		// Only the items in the partition to be updated.
+		if reminderRef.actorRemindersPartitionID == partitionID {
+			remindersInPartitionAfterRemoval = append(remindersInPartitionAfterRemoval, *reminderRef.reminder)
+		}
+	}
+
+	stateKey := m.calculateStateKey(actorType, partitionID)
+	return remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
+}
+
+func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderReference, reminder *Reminder) ([]Reminder, actorReminderReference, string, *string) {
+	newReminderRef := m.createReminderReference(reminder)
+
+	var remindersInPartitionAfterInsertion []Reminder
+	for _, reminderRef := range reminderRefs {
+		// Only the items in the partition to be updated.
+		if reminderRef.actorRemindersPartitionID == newReminderRef.actorRemindersPartitionID {
+			remindersInPartitionAfterInsertion = append(remindersInPartitionAfterInsertion, *reminderRef.reminder)
+		}
+	}
+
+	remindersInPartitionAfterInsertion = append(remindersInPartitionAfterInsertion, *reminder)
+
+	stateKey := m.calculateStateKey(newReminderRef.reminder.ActorType, newReminderRef.actorRemindersPartitionID)
+	return remindersInPartitionAfterInsertion, newReminderRef, stateKey, m.calculateEtag(newReminderRef.actorRemindersPartitionID)
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
@@ -863,8 +970,8 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	}
 
 	// Store the reminder in active reminders list
-	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
-	reminderKey := a.constructCompositeKey(actorKey, req.Name)
+	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
+	reminderKey := constructCompositeKey(actorKey, req.Name)
 	stop := make(chan bool)
 	a.activeReminders.Store(reminderKey, stop)
 
@@ -888,17 +995,22 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	}
 
 	err := backoff.Retry(func() error {
-		reminders, remindersEtag, err := a.getRemindersForActorType(req.ActorType)
+		reminders, actorMetadata, err := a.getRemindersForActorType(req.ActorType)
 		if err != nil {
 			return err
 		}
 
-		reminders = append(reminders, reminder)
+		// First we add it to the partition list.
+		remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, &reminder)
 
+		// Now we can add it to the "global" list.
+		reminders = append(reminders, reminderRef)
+
+		// Then, save the partition to the database.
 		err = a.store.Set(&state.SetRequest{
-			Key:   a.constructCompositeKey("actors", req.ActorType),
-			Value: reminders,
-			ETag:  remindersEtag,
+			Key:   stateKey,
+			Value: remindersInPartition,
+			ETag:  etag,
 		})
 		if err != nil {
 			return err
@@ -928,8 +1040,8 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	)
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
-	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
-	timerKey := a.constructCompositeKey(actorKey, req.Name)
+	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
+	timerKey := constructCompositeKey(actorKey, req.Name)
 
 	_, exists := a.actorsTable.Load(actorKey)
 	if !exists {
@@ -975,7 +1087,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		}
 
 		ticker := a.configureTicker(period)
-		actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
+		actorKey := constructCompositeKey(req.ActorType, req.ActorID)
 
 		for {
 			select {
@@ -1036,13 +1148,53 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	return err
 }
 
-func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, *string, error) {
+func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]actorReminderReference, *ActorMetadata, error) {
 	if a.store == nil {
 		return nil, nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
-	key := a.constructCompositeKey("actors", actorType)
+	metadataKey := constructCompositeKey("actors", actorType, "metadata")
 	resp, err := a.store.Get(&state.GetRequest{
+		Key: metadataKey,
+	})
+	var actorMetadata ActorMetadata
+	if err != nil {
+		err = json.Unmarshal(resp.Data, &actorMetadata)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
+			actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{}
+			var reminders []actorReminderReference
+			for i := 1; i <= actorMetadata.RemindersMetadata.PartitionCount; i++ {
+				partition := uint32(i)
+				key := constructCompositeKey("actors", actorType, strconv.Itoa(i))
+				resp, err = a.store.Get(&state.GetRequest{
+					Key: key,
+				})
+				if err != nil {
+					return nil, nil, err
+				}
+
+				actorMetadata.RemindersMetadata.partitionsEtag[partition] = resp.ETag
+				var batch []Reminder
+				json.Unmarshal(resp.Data, &batch)
+				for j := range batch {
+					reminders = append(reminders, actorReminderReference{
+						actorMetadataID:           actorMetadata.ID,
+						actorRemindersPartitionID: partition,
+						reminder:                  &batch[j],
+					})
+				}
+			}
+
+			return reminders, &actorMetadata, nil
+		}
+	}
+
+	key := constructCompositeKey("actors", actorType)
+	resp, err = a.store.Get(&state.GetRequest{
 		Key: key,
 	})
 	if err != nil {
@@ -1051,8 +1203,19 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, 
 
 	var reminders []Reminder
 	json.Unmarshal(resp.Data, &reminders)
+	reminderRefs := make([]actorReminderReference, len(reminders))
+	for j := range reminders {
+		reminderRefs[j] = actorReminderReference{
+			actorMetadataID:           "",
+			actorRemindersPartitionID: 0,
+			reminder:                  &reminders[j],
+		}
+	}
 
-	return reminders, resp.ETag, nil
+	actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{
+		0: resp.ETag,
+	}
+	return reminderRefs, &actorMetadata, nil
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
@@ -1069,9 +1232,8 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		}
 	}
 
-	key := a.constructCompositeKey("actors", req.ActorType)
-	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
-	reminderKey := a.constructCompositeKey(actorKey, req.Name)
+	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
+	reminderKey := constructCompositeKey(actorKey, req.Name)
 
 	stop, exists := a.activeReminders.Load(reminderKey)
 	if exists {
@@ -1081,21 +1243,26 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	}
 
 	err := backoff.Retry(func() error {
-		reminders, remindersEtag, err := a.getRemindersForActorType(req.ActorType)
+		reminders, actorMetadata, err := a.getRemindersForActorType(req.ActorType)
 		if err != nil {
 			return err
 		}
 
+		// remove from partition first.
+		remindersInPartition, stateKey, etag := actorMetadata.removeReminderFromPartition(reminders, req.ActorType, req.ActorID, req.Name)
+
+		// now, we can remove from the "global" list.
 		for i := len(reminders) - 1; i >= 0; i-- {
-			if reminders[i].ActorType == req.ActorType && reminders[i].ActorID == req.ActorID && reminders[i].Name == req.Name {
+			if reminders[i].reminder.ActorType == req.ActorType && reminders[i].reminder.ActorID == req.ActorID && reminders[i].reminder.Name == req.Name {
 				reminders = append(reminders[:i], reminders[i+1:]...)
 			}
 		}
 
+		// update partition, in case of "zero" partitions, it falls back to the old behavior.
 		err = a.store.Set(&state.SetRequest{
-			Key:   key,
-			Value: reminders,
-			ETag:  remindersEtag,
+			Key:   stateKey,
+			Value: remindersInPartition,
+			ETag:  etag,
 		})
 		if err != nil {
 			return err
@@ -1127,11 +1294,11 @@ func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest
 	}
 
 	for _, r := range reminders {
-		if r.ActorID == req.ActorID && r.Name == req.Name {
+		if r.reminder.ActorID == req.ActorID && r.reminder.Name == req.Name {
 			return &Reminder{
-				Data:    r.Data,
-				DueTime: r.DueTime,
-				Period:  r.Period,
+				Data:    r.reminder.Data,
+				DueTime: r.reminder.DueTime,
+				Period:  r.reminder.Period,
 			}, nil
 		}
 	}
@@ -1139,8 +1306,8 @@ func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest
 }
 
 func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error {
-	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
-	timerKey := a.constructCompositeKey(actorKey, req.Name)
+	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
+	timerKey := constructCompositeKey(actorKey, req.Name)
 
 	stopChan, exists := a.activeTimers.Load(timerKey)
 	if exists {
