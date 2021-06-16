@@ -101,6 +101,10 @@ func (f *fakeStateStore) Init(metadata state.Metadata) error {
 	return nil
 }
 
+func (f *fakeStateStore) Ping() error {
+	return nil
+}
+
 func (f *fakeStateStore) Features() []state.Feature {
 	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
 }
