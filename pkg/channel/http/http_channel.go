@@ -41,12 +41,13 @@ const (
 
 // Channel is an HTTP implementation of an AppChannel.
 type Channel struct {
-	client         *fasthttp.Client
-	baseAddress    string
-	ch             chan int
-	tracingSpec    config.TracingSpec
-	appHeaderToken string
-	json           jsoniter.API
+	client              *fasthttp.Client
+	baseAddress         string
+	ch                  chan int
+	tracingSpec         config.TracingSpec
+	appHeaderToken      string
+	json                jsoniter.API
+	maxResponseBodySize int
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
@@ -61,12 +62,12 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 		client: &fasthttp.Client{
 			MaxConnsPerHost:           1000000,
 			MaxIdemponentCallAttempts: 0,
-			MaxResponseBodySize:       maxRequestBodySize * 1024 * 1024,
 		},
-		baseAddress:    fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
-		tracingSpec:    spec,
-		appHeaderToken: auth.GetAppToken(),
-		json:           jsoniter.ConfigFastest,
+		baseAddress:         fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
+		tracingSpec:         spec,
+		appHeaderToken:      auth.GetAppToken(),
+		json:                jsoniter.ConfigFastest,
+		maxResponseBodySize: maxRequestBodySize,
 	}
 
 	if sslEnabled {
