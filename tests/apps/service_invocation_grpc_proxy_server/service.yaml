@@ -1,0 +1,30 @@
+# In e2e test, this will not be used to deploy the app to test cluster.
+# This is created for testing purpose in order to deploy this app using kubectl
+# before writing e2e test.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-invocation-grpc-proxy-server
+  labels:
+    testapp: service-invocation-grpc-proxy-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: service-invocation-grpc-proxy-server
+  template:
+    metadata:
+      labels:
+        testapp: service-invocation-grpc-proxy-server
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "grpcproxyserver"
+        dapr.io/app-port: "50051"
+        dapr.io/app-protocol: "grpc"
+    spec:
+      containers:
+      - name: service-invocation-grpc-proxy-server
+        image: docker.io/[YOUR ALIAS]/e2e-service_invocation_grpc_proxy_server:dev
+        ports:
+        - containerPort: 50051
+        imagePullPolicy: Always
