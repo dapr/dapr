@@ -28,8 +28,10 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-const port = 4000
-const getKubernetesServiceAccountTimeoutSeconds = 10
+const (
+	port                                      = 4000
+	getKubernetesServiceAccountTimeoutSeconds = 10
+)
 
 var log = logger.NewLogger("dapr.injector")
 

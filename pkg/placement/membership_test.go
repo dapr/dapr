@@ -138,7 +138,7 @@ func TestCleanupHeartBeats(t *testing.T) {
 		testServer.lastHeartBeat.Store(fmt.Sprintf("10.0.0.%d:1001", i), time.Now().UnixNano())
 	}
 
-	var getCount = func() int {
+	getCount := func() int {
 		cnt := 0
 		testServer.lastHeartBeat.Range(func(k, v interface{}) bool {
 			cnt++

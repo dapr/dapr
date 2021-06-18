@@ -62,7 +62,7 @@ func TestGenerateCSR(t *testing.T) {
 }
 
 func TestEncode(t *testing.T) {
-	var CertTests = []struct {
+	CertTests := []struct {
 		org     string
 		isPkcs8 bool
 	}{

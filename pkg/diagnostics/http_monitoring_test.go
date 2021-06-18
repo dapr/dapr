@@ -91,7 +91,7 @@ func TestFastHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 }
 
 func TestConvertPathToMethodName(t *testing.T) {
-	var convertTests = []struct {
+	convertTests := []struct {
 		in  string
 		out string
 	}{
