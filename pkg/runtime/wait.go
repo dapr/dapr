@@ -28,7 +28,7 @@ func waitUntilDaprOutboundReady(daprHTTPPort string) {
 
 	var err error
 	timeoutAt := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
-	var lastPrintErrorTime = time.Now()
+	lastPrintErrorTime := time.Now()
 	for time.Now().Before(timeoutAt) {
 		err = checkIfOutboundReady(client, outboundReadyHealthURL)
 		if err == nil {

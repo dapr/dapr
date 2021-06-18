@@ -6,7 +6,7 @@ labels: kind/question
 assignees: ''
 
 ---
-<!-- If you need to report a security issue please visit https://docs.dapr.io/operations/support/suport-security-issues -->
+<!-- If you need to report a security issue please visit https://docs.dapr.io/operations/support/support-security-issues -->
 ## In what area(s)?
 
 <!-- Remove the '> ' to select -->

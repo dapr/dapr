@@ -54,7 +54,6 @@ var daprConfigResponse = daprConfig{
 func parseCallRequest(r *http.Request) (callRequest, []byte, error) {
 	defer r.Body.Close()
 	body, err := ioutil.ReadAll(r.Body)
-
 	if err != nil {
 		log.Printf("Could not read request body: %s\n", err.Error())
 		return callRequest{}, body, err

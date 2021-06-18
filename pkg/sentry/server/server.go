@@ -128,7 +128,6 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	csrPem := req.GetCertificateSigningRequest()
 
 	csr, err := certs.ParsePemCSR(csrPem)
-
 	if err != nil {
 		err = errors.Wrap(err, "cannot parse certificate signing request pem")
 		log.Error(err)
