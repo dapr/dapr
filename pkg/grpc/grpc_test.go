@@ -18,15 +18,16 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 )
 
-type authenticatorMock struct {
-}
+type authenticatorMock struct{}
 
 func (a *authenticatorMock) GetTrustAnchors() *x509.CertPool {
 	return nil
 }
+
 func (a *authenticatorMock) GetCurrentSignedCert() *security.SignedCertificate {
 	return nil
 }
+
 func (a *authenticatorMock) CreateSignedWorkloadCert(id, namespace, trustDomain string) (*security.SignedCertificate, error) {
 	return nil, nil
 }
