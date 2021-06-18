@@ -45,6 +45,7 @@ func TestBuildDeploymentObject(t *testing.T) {
 		assert.Empty(t, obj.Spec.Template.Annotations)
 	})
 }
+
 func TestBuildJobObject(t *testing.T) {
 	testApp := AppDescription{
 		AppName:        "testapp",

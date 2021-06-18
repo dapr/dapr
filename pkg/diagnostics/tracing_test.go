@@ -25,7 +25,8 @@ func TestSpanContextToW3CString(t *testing.T) {
 		sc := trace.SpanContext{
 			TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
 			SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-			TraceOptions: trace.TraceOptions(1)}
+			TraceOptions: trace.TraceOptions(1),
+		}
 		got := SpanContextToW3CString(sc)
 		assert.Equal(t, expected, got)
 	})

@@ -7,10 +7,9 @@ package runner
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
-
-	"log"
 
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
