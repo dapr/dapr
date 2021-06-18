@@ -14,7 +14,7 @@ import (
 )
 
 func TestParsePeersFromFlag(t *testing.T) {
-	var peerAddressTests = []struct {
+	peerAddressTests := []struct {
 		in  string
 		out []raft.PeerInfo
 	}{

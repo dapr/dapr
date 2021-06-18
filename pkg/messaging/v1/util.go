@@ -71,9 +71,9 @@ func IsJSONContentType(contentType string) bool {
 
 // MetadataToInternalMetadata converts metadata to dapr internal metadata map.
 func MetadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
-	var internalMD = DaprInternalMetadata{}
+	internalMD := DaprInternalMetadata{}
 	for k, values := range md {
-		var listValue = internalv1pb.ListStringValue{}
+		listValue := internalv1pb.ListStringValue{}
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
 			// binary key requires base64 encoded.
 			for _, val := range values {
@@ -135,7 +135,7 @@ func isPermanentHTTPHeader(hdr string) bool {
 // InternalMetadataToGrpcMetadata converts internal metadata map to gRPC metadata.
 func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternalMetadata, httpHeaderConversion bool) metadata.MD {
 	var traceparentValue, tracestateValue, grpctracebinValue string
-	var md = metadata.MD{}
+	md := metadata.MD{}
 	for k, listVal := range internalMD {
 		keyName := strings.ToLower(k)
 		// get both the trace headers for HTTP/GRPC and continue
@@ -181,7 +181,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 
 // IsGRPCProtocol checks if metadata is originated from gRPC API.
 func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
-	var originContentType = ""
+	originContentType := ""
 	if val, ok := internalMD[ContentTypeHeader]; ok {
 		originContentType = val.Values[0]
 	}

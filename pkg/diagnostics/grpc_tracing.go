@@ -138,7 +138,7 @@ func addSpanMetadataAndUpdateStatus(ctx context.Context, span *trace.Span, fullM
 // userDefinedMetadata returns dapr- prefixed header from incoming metadata.
 // Users can add dapr- prefixed headers that they want to see in span attributes.
 func userDefinedMetadata(ctx context.Context) map[string]string {
-	var daprMetadata = map[string]string{}
+	daprMetadata := map[string]string{}
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return daprMetadata
@@ -211,7 +211,7 @@ func isInternalCalls(method string) bool {
 // spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs.
 func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) map[string]string {
 	// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md
-	var m = map[string]string{}
+	m := map[string]string{}
 
 	var dbType string
 	switch s := req.(type) {
