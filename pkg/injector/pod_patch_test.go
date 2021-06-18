@@ -230,7 +230,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			expOps: []PatchOperation{
 				{
 					Op:   "add",
-					Path: "/spec/containers/1/env",
+					Path: "/spec/containers/0/env",
 					Value: []corev1.EnvVar{
 						{
 							Name:  userContainerDaprHTTPPortName,
@@ -259,7 +259,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			expOps: []PatchOperation{
 				{
 					Op:   "add",
-					Path: "/spec/containers/1/env/-",
+					Path: "/spec/containers/0/env/-",
 					Value: corev1.EnvVar{
 						Name:  userContainerDaprHTTPPortName,
 						Value: strconv.Itoa(sidecarHTTPPort),
@@ -267,7 +267,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 				{
 					Op:   "add",
-					Path: "/spec/containers/1/env/-",
+					Path: "/spec/containers/0/env/-",
 					Value: corev1.EnvVar{
 						Name:  userContainerDaprGRPCPortName,
 						Value: strconv.Itoa(sidecarAPIGRPCPort),
@@ -294,7 +294,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			expOps: []PatchOperation{
 				{
 					Op:   "add",
-					Path: "/spec/containers/1/env/-",
+					Path: "/spec/containers/0/env/-",
 					Value: corev1.EnvVar{
 						Name:  userContainerDaprHTTPPortName,
 						Value: strconv.Itoa(sidecarHTTPPort),

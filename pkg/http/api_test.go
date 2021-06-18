@@ -2414,6 +2414,10 @@ type fakeStateStore struct {
 	counter int
 }
 
+func (c fakeStateStore) Ping() error {
+	return nil
+}
+
 func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
 	for i := range req {
 		r := req[i] // Make a copy since we will refer to this as a reference in this loop.
