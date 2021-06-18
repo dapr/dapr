@@ -2479,8 +2479,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 }
 
-type mockPublishPubSub struct {
-}
+type mockPublishPubSub struct{}
 
 // Init is a mock initialization method.
 func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {

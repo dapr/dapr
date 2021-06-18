@@ -27,8 +27,7 @@ const (
 )
 
 // server is our user app.
-type server struct {
-}
+type server struct{}
 
 type messageBuffer struct {
 	lock            *sync.RWMutex
