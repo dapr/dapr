@@ -72,7 +72,11 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
+  {{- if eq .Values.runAsNonRoot true }}
           runAsNonRoot: {{ .Values.runAsNonRoot }}
+  {{- else }}
+          runAsUser: 1000
+  {{- end }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add:
