@@ -517,7 +517,10 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		resolver,
 		a.globalConfig.Spec.TracingSpec,
 		a.runtimeConfig.MaxRequestBodySize,
-		a.proxy)
+		a.proxy,
+		a.runtimeConfig.ReadBufferSize,
+		a.runtimeConfig.StreamRequestBody,
+	)
 }
 
 func (a *DaprRuntime) initProxy() {
@@ -776,7 +779,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.stateStores, a.secretStores,
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.StreamRequestBody)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
 	server.StartNonBlocking()
@@ -803,7 +806,7 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize)
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
@@ -1739,7 +1742,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error)
+		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
@@ -1750,7 +1753,7 @@ func (a *DaprRuntime) createAppChannel() error {
 			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL)
+		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 		if err != nil {
 			return err
 		}

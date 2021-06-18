@@ -51,7 +51,9 @@ func FromFlags() (*DaprRuntime, error) {
 	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
-	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
+	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB")
+	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in MB to handle sending multi-KB headers. By default 4 KB")
+	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -133,6 +135,13 @@ func FromFlags() (*DaprRuntime, error) {
 		maxRequestBodySize = DefaultMaxRequestBodySize
 	}
 
+	var readBufferSize int
+	if *daprHTTPReadBufferSize != -1 {
+		readBufferSize = *daprHTTPReadBufferSize
+	} else {
+		readBufferSize = DefaultReadBufferSize
+	}
+
 	placementAddresses := []string{}
 	if *placementServiceHostAddr != "" {
 		placementAddresses = parsePlacementAddr(*placementServiceHostAddr)
@@ -149,7 +158,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, readBufferSize, *daprHTTPStreamRequestBody)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
