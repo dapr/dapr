@@ -19,8 +19,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
-type mockOperator struct {
-}
+type mockOperator struct{}
 
 func (o *mockOperator) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
 	return nil, nil

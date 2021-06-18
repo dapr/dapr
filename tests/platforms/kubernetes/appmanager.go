@@ -416,7 +416,6 @@ func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
-
 	if err != nil {
 		return nil, err
 	}
