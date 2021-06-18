@@ -1,5 +1,3 @@
-// +build e2e
-
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
@@ -213,13 +211,13 @@ func TestActorReminderPeriod(t *testing.T) {
 	reminder := actorReminder{
 		Data:    "reminderdata",
 		DueTime: "1s",
-		Period:  "R5P1S",
+		Period:  "R5PT1S",
 	}
 	reminderBody, err := json.Marshal(reminder)
 	require.NoError(t, err)
 
 	t.Run("Actor reminder with repetition should run correct number of times", func(t *testing.T) {
-		reminderName := "repetable-reminder"
+		reminderName := "repeatable-reminder"
 		actorID := "repetable-reminder-actor"
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		require.NoError(t, err)

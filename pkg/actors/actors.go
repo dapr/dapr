@@ -738,6 +738,8 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			log.Errorf("error executing reminder: %s", err)
 		}
 
+		log.Debugf("repetitions left for actors with id %s are %d", reminder.ActorID, repetitions.getValue())
+
 		if reminder.Period != "" {
 			_, exists := a.activeReminders.Load(reminderKey)
 			if !exists {
@@ -760,7 +762,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 							log.Debugf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
 						} else {
 							log.Debugf("executing reminder on actor succedeed; reminders pending for actor %s:  %d", a.constructCompositeKey(actorType, actorID), *repetition)
-							if quit, _ := a.stopReminderIfRepetitionsOver(reminder, actorID, actorType, repetitionsLeft); quit {
+							if quit, _ := a.stopReminderIfRepetitionsOver(reminder, actorID, actorType, repetition.getValue()); quit {
 								return
 							}
 						}
