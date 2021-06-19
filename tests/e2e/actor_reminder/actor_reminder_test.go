@@ -62,7 +62,7 @@ func countActorAction(resp []byte, actorID string, action string) int {
 	logEntries := parseLogEntries(resp)
 	for _, logEntry := range logEntries {
 		if (logEntry.ActorID == actorID) && (logEntry.Action == action) {
-			count = count + 1
+			count++
 		}
 	}
 
@@ -119,7 +119,7 @@ func TestActorReminder(t *testing.T) {
 
 	t.Run("Actor reminder unregister then restart should not trigger anymore.", func(t *testing.T) {
 		var wg sync.WaitGroup
-		for i := 1; i <= numIterations; i++ {
+		for iteration := 1; iteration <= numIterations; iteration++ {
 			wg.Add(1)
 			go func(iteration int) {
 				defer wg.Done()
@@ -160,7 +160,7 @@ func TestActorReminder(t *testing.T) {
 					// There are other E2E tests that validate the correct frequency of reminders in a happy path.
 					require.True(t, count >= 1, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
 				}
-			}(i)
+			}(iteration)
 		}
 		wg.Wait()
 
