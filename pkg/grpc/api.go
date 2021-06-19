@@ -397,8 +397,9 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 	// if store doesn't support bulk get, fallback to call get() method one by one
 	limiter := concurrency.NewLimiter(int(in.Parallelism))
-	resultCh := make(chan *runtimev1pb.BulkStateItem, len(reqs))
-	for i := 0; i < len(reqs); i++ {
+	n := len(reqs)
+	resultCh := make(chan *runtimev1pb.BulkStateItem, n)
+	for i := 0; i < n; i++ {
 		fn := func(param interface{}) {
 			req := param.(*state.GetRequest)
 			r, err := store.Get(req)
@@ -418,7 +419,9 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 	limiter.Wait()
 	// collect result
-	for item := range resultCh {
+	resultLen := len(resultCh)
+	for i := 0; i < resultLen; i++ {
+		item := <-resultCh
 		bulkResp.Items = append(bulkResp.Items, item)
 	}
 	return bulkResp, nil
