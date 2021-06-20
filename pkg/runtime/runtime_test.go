@@ -212,35 +212,10 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 		},
 	}
 
-	componentTypeWithNoSupportToRetrySettings := components_v1alpha1.Component{
-
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type:          "state",
-			Version:       "v1",
-			Metadata:      getFakeMetadataItems(),
-			RetryStrategy: "linear",
-		},
-	}
-
 	t.Run("test incorrect type", func(t *testing.T) {
 		err := rt.processComponentAndDependents(incorrectComponentType)
 		assert.Error(t, err, "expected an error")
 		assert.Equal(t, "incorrect type pubsubs.mockPubSub", err.Error(), "expected error strings to match")
-	})
-
-	t.Run("test component type that does not support retry settings", func(t *testing.T) {
-		for _, category := range componentCategoriesNeedProcess {
-			componentTypeWithNoSupportToRetrySettings.Spec.Type = fmt.Sprintf("%s.fakeComponentType", string(category))
-			if !rt.componentSupportRetries(category) {
-				expectedErrorMessage := fmt.Sprintf("component type %s does not support retry operations", string(category))
-				err := rt.processComponentAndDependents(componentTypeWithNoSupportToRetrySettings)
-				assert.Error(t, err, "expected an error")
-				assert.Equal(t, expectedErrorMessage, err.Error(), "expected error strings to match")
-			}
-		}
 	})
 }
 
@@ -361,10 +336,35 @@ func TestGetComponentRetrySettings(t *testing.T) {
 		}
 
 		for _, validRetrySetting := range validRetrySettings {
-			testComponent.Spec.RetryStrategy = validRetrySetting.retryStrategy
-			testComponent.Spec.RetryMaxCount = validRetrySetting.retryMaxCount
-			testComponent.Spec.RetryIntervalInSeconds = validRetrySetting.retryIntervalInSeconds
-			retrySettings, err := rt.getComponentRetrySettings(&testComponent)
+			metadataRetrySettings := []components_v1alpha1.MetadataItem{
+				{
+					Name: "dapr_RetryStrategy",
+					Value: components_v1alpha1.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte(validRetrySetting.retryStrategy),
+						},
+					},
+				},
+				{
+					Name: "dapr_RetryMaxCount",
+					Value: components_v1alpha1.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte(validRetrySetting.retryMaxCount),
+						},
+					},
+				},
+				{
+					Name: "dapr_RetryIntervalInSeconds",
+					Value: components_v1alpha1.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte(validRetrySetting.retryIntervalInSeconds),
+						},
+					},
+				},
+			}
+			testComponent.Spec.Metadata = append(testComponent.Spec.Metadata, metadataRetrySettings...)
+			properties := rt.convertMetadataItemsToProperties(testComponent.Spec.Metadata)
+			retrySettings, err := rt.getComponentRetrySettings(&testComponent, properties)
 			assert.NoError(t, err, "no error expected")
 			assert.EqualValues(t, validRetrySetting.expectedRetryStrategy, retrySettings.RetryStrategy)
 			assert.EqualValues(t, validRetrySetting.expectedRetryMaxCount, retrySettings.RetryMaxCount)
@@ -389,10 +389,35 @@ func TestGetComponentRetrySettings(t *testing.T) {
 		}
 
 		for _, invalidRetrySetting := range invalidRetrySettings {
-			testComponent.Spec.RetryStrategy = invalidRetrySetting.retryStrategy
-			testComponent.Spec.RetryMaxCount = invalidRetrySetting.retryMaxCount
-			testComponent.Spec.RetryIntervalInSeconds = invalidRetrySetting.retryIntervalInSeconds
-			_, err := rt.getComponentRetrySettings(&testComponent)
+			metadataRetrySettings := []components_v1alpha1.MetadataItem{
+				{
+					Name: "dapr_RetryStrategy",
+					Value: components_v1alpha1.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte(invalidRetrySetting.retryStrategy),
+						},
+					},
+				},
+				{
+					Name: "dapr_RetryMaxCount",
+					Value: components_v1alpha1.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte(invalidRetrySetting.retryMaxCount),
+						},
+					},
+				},
+				{
+					Name: "dapr_RetryIntervalInSeconds",
+					Value: components_v1alpha1.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte(invalidRetrySetting.retryIntervalInSeconds),
+						},
+					},
+				},
+			}
+			testComponent.Spec.Metadata = append(testComponent.Spec.Metadata, metadataRetrySettings...)
+			properties := rt.convertMetadataItemsToProperties(testComponent.Spec.Metadata)
+			_, err := rt.getComponentRetrySettings(&testComponent, properties)
 			assert.Error(t, err, "error expected")
 			assert.Equal(t, invalidRetrySetting.expectedErrorMessage, err.Error(), "expected error string to match")
 		}
@@ -1427,32 +1452,6 @@ func TestInitPubSub(t *testing.T) {
 
 		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.scopedPublishings[TestPubsubName])
 		assert.False(t, b)
-	})
-
-	t.Run("error parsing pubsub retry settings", func(t *testing.T) {
-		invalidPubsubComponents := []components_v1alpha1.Component{
-			{
-				ObjectMeta: meta_v1.ObjectMeta{
-					Name: TestPubsubName,
-				},
-				Spec: components_v1alpha1.ComponentSpec{
-					Type:          "pubsub.mockPubSub",
-					Version:       "v1",
-					Metadata:      getFakeMetadataItems(),
-					RetryStrategy: "linear",
-					RetryMaxCount: "1A",
-				},
-			},
-		}
-		// act
-		for _, comp := range invalidPubsubComponents {
-			// initMockPubSubForRuntime(rt)
-			err := rt.processComponentAndDependents(comp)
-			// assert
-			assert.Error(t, err, "an error is expected")
-			expectedErrorMessage := fmt.Sprintf("error 'retry max count value provided is invalid' parsing retry settings for component %s", comp.ObjectMeta.Name)
-			assert.Equal(t, expectedErrorMessage, err.Error(), "expected error string to match")
-		}
 	})
 }
 

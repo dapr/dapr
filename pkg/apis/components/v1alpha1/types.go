@@ -38,10 +38,6 @@ type ComponentSpec struct {
 	Metadata     []MetadataItem `json:"metadata"`
 	// +optional
 	InitTimeout string `json:"initTimeout"`
-	// +optional
-	RetryStrategy          string `json:"retryStrategy"`
-	RetryMaxCount          string `json:"retryMaxCount"`
-	RetryIntervalInSeconds string `json:"retryIntervalInSeconds"`
 }
 
 // MetadataItem is a name/value pair for a metadata.

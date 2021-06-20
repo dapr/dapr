@@ -103,10 +103,6 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	middlewareComponent,
 }
 
-var componentsSupportRetries = []ComponentCategory{
-	pubsubComponent,
-}
-
 var log = logger.NewLogger("dapr.runtime")
 
 type Route struct {
@@ -1082,7 +1078,7 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	a.scopedSubscriptions[pubsubName] = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
 	a.scopedPublishings[pubsubName] = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
 	a.allowedTopics[pubsubName] = scopes.GetAllowedTopics(properties)
-	retrySettings, err := a.getComponentRetrySettings(&c)
+	retrySettings, err := a.getComponentRetrySettings(&c, properties)
 	if err != nil {
 		return errors.Errorf("error '%s' parsing retry settings for component %s", err.Error(), c.ObjectMeta.Name)
 	}
@@ -1483,15 +1479,6 @@ func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Com
 	return ""
 }
 
-func (a *DaprRuntime) componentSupportRetries(componentCategory ComponentCategory) bool {
-	for _, supportedCategory := range componentsSupportRetries {
-		if componentCategory == supportedCategory {
-			return true
-		}
-	}
-	return false
-}
-
 func (a *DaprRuntime) processComponents() {
 	for comp := range a.pendingComponents {
 		if comp.Name == "" {
@@ -1538,12 +1525,6 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 	timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
 	if err != nil {
 		timeout = defaultComponentInitTimeout
-	}
-
-	// Parse retry logic settings
-	if !a.componentSupportRetries(compCategory) && (comp.Spec.RetryStrategy != "" || comp.Spec.RetryMaxCount != "" || comp.Spec.RetryIntervalInSeconds != "") {
-		// the Component does not support Retry operations
-		return errors.Errorf("component type %s does not support retry operations", compCategory)
 	}
 
 	go func() {
@@ -1601,7 +1582,7 @@ func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component
 	return componentPreprocessRes{}
 }
 
-func (a *DaprRuntime) getComponentRetrySettings(comp *components_v1alpha1.Component) (retry.Settings, error) {
+func (a *DaprRuntime) getComponentRetrySettings(comp *components_v1alpha1.Component, properties map[string]string) (retry.Settings, error) {
 	var retryStrategy string
 	var retryMaxCount, retryIntervalInSeconds int
 
@@ -1609,18 +1590,18 @@ func (a *DaprRuntime) getComponentRetrySettings(comp *components_v1alpha1.Compon
 
 	var err error
 
-	if comp.Spec.RetryStrategy != "" {
-		retryStrategy = strings.ToLower(comp.Spec.RetryStrategy)
+	if properties["dapr_RetryStrategy"] != "" {
+		retryStrategy = strings.ToLower(properties["dapr_RetryStrategy"])
 	}
-	if comp.Spec.RetryMaxCount != "" {
-		retryMaxCount, err = strconv.Atoi(comp.Spec.RetryMaxCount)
+	if properties["dapr_RetryMaxCount"] != "" {
+		retryMaxCount, err = strconv.Atoi(properties["dapr_RetryMaxCount"])
 		if err != nil {
 			err = errors.Errorf("retry max count value provided is invalid")
 			return retry.Settings{}, err
 		}
 	}
-	if comp.Spec.RetryIntervalInSeconds != "" {
-		retryIntervalInSeconds, err = strconv.Atoi(comp.Spec.RetryIntervalInSeconds)
+	if properties["dapr_RetryIntervalInSeconds"] != "" {
+		retryIntervalInSeconds, err = strconv.Atoi(properties["dapr_RetryIntervalInSeconds"])
 		if err != nil {
 			err = errors.Errorf("retry interval value provided is invalid")
 			return retry.Settings{}, err
