@@ -12,10 +12,8 @@ import (
 	"go.opencensus.io/tag"
 )
 
-var (
-	// appIDKey is a tag key for App ID.
-	appIDKey = tag.MustNewKey("app_id")
-)
+// appIDKey is a tag key for App ID.
+var appIDKey = tag.MustNewKey("app_id")
 
 var (
 	// DefaultReportingPeriod is the default view reporting period.
