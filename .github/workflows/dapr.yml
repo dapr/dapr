@@ -17,9 +17,21 @@ on:
       - master
       - release-*
 jobs:
+  pre_job:
+    name: Skip Duplicate Actions
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v3.4.0
+        with:
+          cancel_others: 'true'
+          paths_ignore: '["**.md", ".codecov.yaml", ".github/**/**.yml"]'
   build:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
+    needs: pre_job
     env:
       GOVER: 1.16
       GOLANGCILINT_VER: v1.31
@@ -49,12 +61,19 @@ jobs:
           - os: macOS-latest
             target_arch: arm64
     steps:
+      - name: Check if need skip
+        id: skip_check
+        uses: fkirc/skip-duplicate-actions@v3.4.0
+        with:
+          cancel_others: 'true'
+          paths_ignore: '["**.md", ".codecov.yaml", ".github/**/**.yml"]'
       - name: Set up Go ${{ env.GOVER }}
+        if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
         uses: actions/setup-go@v2
         with:
           go-version: ${{ env.GOVER }}
       - name: Install Docker CE for buildx
-        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        if: matrix.target_os == 'linux' && github.event_name != 'pull_request' && steps.skip_check.outputs.should_skip != 'true'
         run: |
           sudo apt update
           sudo apt install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
@@ -64,11 +83,13 @@ jobs:
           sudo apt install docker-ce
           docker -v
       - name: Check out code into the Go module directory
+        if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
         uses: actions/checkout@v2
       - name: Parse release version and set REL_VERSION
+        if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
         run: python ./.github/scripts/get_release_version.py
       - name: Check white space in .md files
-        if: matrix.target_os == 'linux' && github.event_name == 'pull_request'
+        if: matrix.target_os == 'linux' && github.event_name == 'pull_request' && steps.skip_check.outputs.should_skip != 'true'
         run: |
           TRAILING_WHITESPACE=0
           # only check changed docs in pr
@@ -87,15 +108,15 @@ jobs:
             exit 1
           fi
       - name: golangci-lint
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux' && steps.skip_check.outputs.should_skip != 'true'
         uses: golangci/golangci-lint-action@v2.2.1
         with:
           version: ${{ env.GOLANGCILINT_VER }}
       - name: Run go mod tidy check diff
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux' && steps.skip_check.outputs.should_skip != 'true'
         run: make modtidy check-diff
       - name: Run gen-proto check diff
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux' && steps.skip_check.outputs.should_skip != 'true'
         run: |
           wget https://github.com/protocolbuffers/protobuf/releases/download/v3.14.0/protoc-3.14.0-linux-x86_64.zip
           unzip protoc-3.14.0-linux-x86_64.zip -d protoc
@@ -109,37 +130,39 @@ jobs:
       - name: Run make test
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
-        if: matrix.target_arch == 'amd64'
+        if: matrix.target_arch == 'amd64' && steps.skip_check.outputs.should_skip != 'true'
         run: make test
       - name: Codecov
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux' && steps.skip_check.outputs.should_skip != 'true'
         uses: codecov/codecov-action@v1
       - name: Run make release to build and archive binaries
+        if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
         run: |
           mkdir -p ${{ env.ARCHIVE_OUTDIR }}
           make release GOOS=${{ matrix.target_os }} GOARCH=${{ matrix.target_arch }} ARCHIVE_OUT_DIR=${{ env.ARCHIVE_OUTDIR }}
       - name: upload artifacts
+        if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
         uses: actions/upload-artifact@master
         with:
           name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}
           path: ${{ env.ARCHIVE_OUTDIR }}
       - name: upload artifacts - grafana dashboards
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux' && steps.skip_check.outputs.should_skip != 'true'
         uses: actions/upload-artifact@master
         with:
           name: dapr_grafana_dashboards
           path: ./grafana/*.json
       - name: docker login
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && steps.skip_check.outputs.should_skip != 'true'
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: Build and push docker images
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && steps.skip_check.outputs.should_skip != 'true'
         run: |
           echo "Build docker image and push image..."
           make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }} DAPR_TAG=${{ env.REL_VERSION }}
       - name: Upload test results
-        if: always()
+        if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
         uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
@@ -147,7 +170,7 @@ jobs:
   publish:
     name: Publish docker image and binaries
     needs: build
-    if: github.event_name != 'pull_request'
+    if: needs.pre_job.outputs.should_skip != 'true' && github.event_name != 'pull_request'
     env:
       ARTIFACT_DIR: ./release
       HELM_PACKAGE_DIR: helm
@@ -287,7 +310,7 @@ jobs:
   helmpublish:
     name: Publish helm charts to Helm github pages repo
     needs: publish
-    if: startswith(github.ref, 'refs/tags/v')
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }} && github.event_name != 'pull_request' && startswith(github.ref, 'refs/tags/v')
     env:
       ARTIFACT_DIR: ./release
       DAPR_VERSION_ARTIFACT: dapr_version
