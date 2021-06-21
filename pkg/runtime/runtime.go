@@ -985,9 +985,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 		return a.topicRoutes, nil
 	}
 
-	var topicRoutes map[string]TopicRoute = make(map[string]TopicRoute)
+	topicRoutes := make(map[string]TopicRoute)
 
 	if a.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
 		return topicRoutes, nil
 	}
 
