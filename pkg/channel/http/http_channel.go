@@ -151,7 +151,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	startRequest := time.Now()
 
 	// Send request to user application
-	var resp = fasthttp.AcquireResponse()
+	resp := fasthttp.AcquireResponse()
 	err := h.client.Do(channelReq, resp)
 	defer func() {
 		fasthttp.ReleaseRequest(channelReq)
@@ -171,7 +171,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 }
 
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) *fasthttp.Request {
-	var channelReq = fasthttp.AcquireRequest()
+	channelReq := fasthttp.AcquireRequest()
 
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	uri := fmt.Sprintf("%s/%s", h.baseAddress, req.Message().GetMethod())

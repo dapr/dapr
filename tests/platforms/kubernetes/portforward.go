@@ -102,7 +102,6 @@ func (p *PodPortForwarder) Connect(name string, targetPorts ...int) ([]int, erro
 		stopChannel:  p.stopChannel,
 		readyChannel: p.readyChannel,
 	})
-
 	if err != nil {
 		return nil, err
 	}

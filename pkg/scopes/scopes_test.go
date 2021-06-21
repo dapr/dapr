@@ -7,7 +7,7 @@ import (
 )
 
 func TestGetAllowedTopics(t *testing.T) {
-	var allowedTests = []struct {
+	allowedTests := []struct {
 		Metadata map[string]string
 		Target   []string
 		Msg      string
@@ -52,7 +52,7 @@ func TestGetAllowedTopics(t *testing.T) {
 }
 
 func TestGetScopedTopics(t *testing.T) {
-	var scopedTests = []struct {
+	scopedTests := []struct {
 		Scope    string
 		AppID    string
 		Metadata map[string]string

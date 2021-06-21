@@ -45,7 +45,7 @@ func TestEnsureDir(t *testing.T) {
 }
 
 func TestRaftAddressForID(t *testing.T) {
-	var raftAddressTests = []struct {
+	raftAddressTests := []struct {
 		in  []PeerInfo
 		id  string
 		out string

@@ -172,7 +172,6 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
-
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
@@ -306,11 +305,11 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, err
 	}
 
-	var headerMD = invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
+	headerMD := invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
 
 	var respError error
 	if resp.IsHTTPResponse() {
-		var errorMessage = []byte("")
+		errorMessage := []byte("")
 		if resp != nil {
 			_, errorMessage = resp.RawData()
 		}
@@ -398,7 +397,9 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 	// if store doesn't support bulk get, fallback to call get() method one by one
 	limiter := concurrency.NewLimiter(int(in.Parallelism))
-	for i := 0; i < len(reqs); i++ {
+	n := len(reqs)
+	resultCh := make(chan *runtimev1pb.BulkStateItem, n)
+	for i := 0; i < n; i++ {
 		fn := func(param interface{}) {
 			req := param.(*state.GetRequest)
 			r, err := store.Get(req)
@@ -412,12 +413,17 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				item.Etag = stringValueOrEmpty(r.ETag)
 				item.Metadata = r.Metadata
 			}
-			bulkResp.Items = append(bulkResp.Items, item)
+			resultCh <- item
 		}
 		limiter.Execute(fn, &reqs[i])
 	}
 	limiter.Wait()
-
+	// collect result
+	resultLen := len(resultCh)
+	for i := 0; i < resultLen; i++ {
+		item := <-resultCh
+		bulkResp.Items = append(bulkResp.Items, item)
+	}
 	return bulkResp, nil
 }
 
@@ -618,7 +624,6 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	}
 
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
-
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrSecretGet, req.Name, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -652,7 +657,6 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	}
 
 	getResponse, err := a.secretStores[secretStoreName].BulkGetSecret(req)
-
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrBulkSecretGet, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -710,7 +714,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	operations := []state.TransactionalStateOperation{}
 	for _, inputReq := range in.Operations {
 		var operation state.TransactionalStateOperation
-		var req = inputReq.Request
+		req := inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
 		key, err := state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
@@ -777,7 +781,6 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		Operations: operations,
 		Metadata:   in.Metadata,
 	})
-
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
 		apiServerLogger.Debug(err)

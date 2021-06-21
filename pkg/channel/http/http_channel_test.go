@@ -43,15 +43,13 @@ func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	io.WriteString(w, r.URL.RawQuery)
 }
 
-type testContentTypeHandler struct {
-}
+type testContentTypeHandler struct{}
 
 func (t *testContentTypeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, r.Header.Get("Content-Type"))
 }
 
-type testHandlerHeaders struct {
-}
+type testHandlerHeaders struct{}
 
 func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	headers := map[string]string{}

@@ -12,9 +12,7 @@ import (
 	"go.uber.org/atomic"
 )
 
-var (
-	ErrMaxStackDepthExceeded error = errors.New("Maximum stack depth exceeded")
-)
+var ErrMaxStackDepthExceeded error = errors.New("Maximum stack depth exceeded")
 
 type ActorLock struct {
 	methodLock    *sync.Mutex

@@ -51,7 +51,7 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 }
 
 func TestGrpcMetadataToInternalMetadata(t *testing.T) {
-	var keyBinValue = []byte{101, 200}
+	keyBinValue := []byte{101, 200}
 	testMD := metadata.Pairs(
 		"key", "key value",
 		"key-bin", string(keyBinValue),
@@ -66,7 +66,7 @@ func TestGrpcMetadataToInternalMetadata(t *testing.T) {
 }
 
 func TestIsJSONContentType(t *testing.T) {
-	var contentTypeTests = []struct {
+	contentTypeTests := []struct {
 		in  string
 		out bool
 	}{
@@ -123,7 +123,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		// always trace header is returned
 		assert.Equal(t, 11, convertedMD.Len())
 
-		var testHeaders = []struct {
+		testHeaders := []struct {
 			key      string
 			expected string
 		}{
@@ -149,7 +149,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		// always trace header is returned
 		assert.Equal(t, 11, convertedMD.Len())
 
-		var testHeaders = []struct {
+		testHeaders := []struct {
 			key      string
 			expected string
 		}{
@@ -170,8 +170,8 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		}
 	})
 
-	var keyBinValue = []byte{100, 50}
-	var keyBinEncodedValue = base64.StdEncoding.EncodeToString(keyBinValue)
+	keyBinValue := []byte{100, 50}
+	keyBinEncodedValue := base64.StdEncoding.EncodeToString(keyBinValue)
 
 	traceBinValue := []byte{10, 30, 50, 60}
 	traceBinValueEncodedValue := base64.StdEncoding.EncodeToString(traceBinValue)
