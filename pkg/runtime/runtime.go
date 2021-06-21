@@ -485,7 +485,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 					return err
 				}
 			} else {
-				err = a.json.Unmarshal(msg.Data, &cloudEvent)
+				cloudEvent, err = pubsub.FromCloudEvent(msg.Data, msg.Topic, name, "")
 				if err != nil {
 					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
 					return err
