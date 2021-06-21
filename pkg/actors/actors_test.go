@@ -172,7 +172,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	}
 
 	if b.config == nil {
-		config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{})
+		config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
 		b.config = &config
 	}
 
@@ -191,7 +191,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{})
+	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
 	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
 
 	return a.(*actorsRuntime)
@@ -297,7 +297,7 @@ func TestStoreIsNotInited(t *testing.T) {
 	})
 
 	t.Run("getRemindersForActorType", func(t *testing.T) {
-		r1, r2, e := testActorsRuntime.getRemindersForActorType("foo")
+		r1, r2, e := testActorsRuntime.getRemindersForActorType("foo", false)
 		assert.Nil(t, r1)
 		assert.Nil(t, r2)
 		assert.NotNil(t, e)
@@ -398,7 +398,7 @@ func TestOverrideReminder(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		assert.Equal(t, "b", reminders[0].reminder.Data)
 	})
@@ -412,7 +412,7 @@ func TestOverrideReminder(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "2s", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		assert.Equal(t, "2s", reminders[0].reminder.DueTime)
 	})
@@ -426,7 +426,7 @@ func TestOverrideReminder(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		assert.Equal(t, "2s", reminders[0].reminder.Period)
 	})
@@ -449,7 +449,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		// Check reminder is updated
 		assert.Equal(t, "9s", reminders[0].reminder.Period)
@@ -458,7 +458,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 
 		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "2s", "c")
 		testActorsRuntime.CreateReminder(ctx, &reminder3)
-		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		// Check reminder is updated
 		assert.Equal(t, "8s", reminders[0].reminder.Period)
@@ -500,7 +500,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		// Check reminder is updated
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		// The statestore could have either reminder2 or reminder3 based on the timing.
 		// Therefore, not verifying data field
@@ -511,7 +511,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 
 		reminder4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "d")
 		testActorsRuntime.CreateReminder(ctx, &reminder4)
-		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 
 		select {
@@ -1066,7 +1066,8 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
-	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default", config.ReentrancyConfig{})
+	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500,
+		"1s", "2s", "3s", true, "default", config.ReentrancyConfig{}, 0)
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
 	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
@@ -1082,7 +1083,7 @@ func TestConfig(t *testing.T) {
 func TestReentrancyConfig(t *testing.T) {
 	t.Run("Test empty reentrancy values", func(t *testing.T) {
 		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
-			config.ReentrancyConfig{})
+			config.ReentrancyConfig{}, 0)
 		assert.False(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
@@ -1090,7 +1091,7 @@ func TestReentrancyConfig(t *testing.T) {
 
 	t.Run("Test minimum reentrancy values", func(t *testing.T) {
 		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
-			config.ReentrancyConfig{Enabled: true})
+			config.ReentrancyConfig{Enabled: true}, 0)
 		assert.True(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
@@ -1099,7 +1100,7 @@ func TestReentrancyConfig(t *testing.T) {
 	t.Run("Test full reentrancy values", func(t *testing.T) {
 		reentrancyLimit := 64
 		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
-			config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit})
+			config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}, 0)
 		assert.True(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 64, *c.Reentrancy.MaxStackDepth)
@@ -1152,7 +1153,7 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrant", "1")
 
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true})
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true}, 0)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
@@ -1178,7 +1179,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("other", "1")
 	req3 := invokev1.NewInvokeMethodRequest("third").WithActor("reentrant", "1")
 
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true})
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true}, 0)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
 	reentrantAppChannel.callLog = []string{}
@@ -1204,7 +1205,7 @@ func TestReentrancyStackLimit(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 
 	stackDepth := 0
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth})
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}, 0)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
