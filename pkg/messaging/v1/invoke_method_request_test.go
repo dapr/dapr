@@ -78,7 +78,7 @@ func TestMetadata(t *testing.T) {
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
-		var req = fasthttp.AcquireRequest()
+		req := fasthttp.AcquireRequest()
 		req.Header.Set("Header1", "Value1")
 		req.Header.Set("Header2", "Value2")
 		req.Header.Set("Header3", "Value3")

@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messaging"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
@@ -58,13 +59,16 @@ type server struct {
 	maxConnectionAge   *time.Duration
 	authToken          string
 	apiSpec            config.APISpec
+	proxy              messaging.Proxy
 }
 
-var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
-var internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
+var (
+	apiServerLogger      = logger.NewLogger("dapr.runtime.grpc.api")
+	internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
+)
 
 // NewAPIServer returns a new user facing gRPC API server.
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy) Server {
 	return &server{
 		api:         api,
 		config:      config,
@@ -74,11 +78,12 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		logger:      apiServerLogger,
 		authToken:   auth.GetAPIToken(),
 		apiSpec:     apiSpec,
+		proxy:       proxy,
 	}
 }
 
 // NewInternalServer returns a new gRPC server for Dapr to Dapr communications.
-func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, authenticator auth.Authenticator) Server {
+func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, authenticator auth.Authenticator, proxy messaging.Proxy) Server {
 	return &server{
 		api:              api,
 		config:           config,
@@ -89,6 +94,7 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		kind:             internalServer,
 		logger:           internalServerLogger,
 		maxConnectionAge: getDefaultMaxAgeDuration(),
+		proxy:            proxy,
 	}
 }
 
@@ -116,6 +122,7 @@ func (s *server) StartNonBlocking() error {
 	} else if s.kind == apiServer {
 		runtimev1pb.RegisterDaprServer(server, s.api)
 	}
+
 	go func() {
 		if err := server.Serve(lis); err != nil {
 			s.logger.Fatalf("gRPC serve error: %v", err)
@@ -146,6 +153,7 @@ func (s *server) generateWorkloadCert() error {
 func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 	intr := []grpc_go.UnaryServerInterceptor{}
+	intrStream := []grpc_go.StreamServerInterceptor{}
 
 	if len(s.apiSpec.Allowed) > 0 {
 		s.logger.Info("enabled API access list on gRPC server")
@@ -160,6 +168,10 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
 		s.logger.Info("enabled gRPC tracing middleware")
 		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
+
+		if s.proxy != nil {
+			intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
+		}
 	}
 
 	if s.metricSpec.Enabled {
@@ -174,6 +186,15 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 		opts,
 		grpc_go.UnaryInterceptor(chain),
 	)
+
+	if s.proxy != nil {
+		chainStream := grpc_middleware.ChainStreamServer(
+			intrStream...,
+		)
+
+		opts = append(opts, grpc_go.StreamInterceptor(chainStream))
+	}
+
 	return opts
 }
 
@@ -204,6 +225,10 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	}
 
 	opts = append(opts, grpc_go.MaxRecvMsgSize(s.config.MaxRequestBodySize*1024*1024), grpc_go.MaxSendMsgSize(s.config.MaxRequestBodySize*1024*1024))
+
+	if s.proxy != nil {
+		opts = append(opts, grpc_go.UnknownServiceHandler(s.proxy.Handler()))
+	}
 
 	return grpc_go.NewServer(opts...), nil
 }
