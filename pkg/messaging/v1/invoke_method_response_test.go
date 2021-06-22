@@ -103,7 +103,7 @@ func TestResponseHeader(t *testing.T) {
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
-		var resp = fasthttp.AcquireResponse()
+		resp := fasthttp.AcquireResponse()
 		resp.Header.Set("Header1", "Value1")
 		resp.Header.Set("Header2", "Value2")
 		resp.Header.Set("Header3", "Value3")

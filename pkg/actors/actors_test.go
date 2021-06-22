@@ -82,7 +82,6 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 			nextReq.AddHeaders(&header)
 		}
 		_, err := r.a.callLocalActor(context.Background(), nextReq)
-
 		if err != nil {
 			return nil, err
 		}
@@ -98,6 +97,10 @@ type fakeStateStore struct {
 }
 
 func (f *fakeStateStore) Init(metadata state.Metadata) error {
+	return nil
+}
+
+func (f *fakeStateStore) Ping() error {
 	return nil
 }
 
@@ -1147,8 +1150,10 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, []string{"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
-		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first"}, reentrantAppChannel.callLog)
+	assert.Equal(t, []string{
+		"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
+		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first",
+	}, reentrantAppChannel.callLog)
 }
 
 func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
@@ -1171,9 +1176,11 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, []string{"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
+	assert.Equal(t, []string{
+		"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
 		"Entering actors/reentrant/1/method/third", "Exiting actors/reentrant/1/method/third",
-		"Exiting actors/other/1/method/second", "Exiting actors/reentrant/1/method/first"}, reentrantAppChannel.callLog)
+		"Exiting actors/other/1/method/second", "Exiting actors/reentrant/1/method/first",
+	}, reentrantAppChannel.callLog)
 }
 
 func TestReentrancyStackLimit(t *testing.T) {

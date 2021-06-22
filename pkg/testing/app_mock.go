@@ -70,6 +70,7 @@ func (a *MockApp) Run(port int) {
 	cF()
 	server.Shutdown(ctx)
 }
+
 func (a *MockApp) echoHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 	var buffer bytes.Buffer
@@ -78,6 +79,7 @@ func (a *MockApp) echoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Write(buffer.Bytes())
 }
+
 func (a *MockApp) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(200)

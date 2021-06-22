@@ -14,12 +14,10 @@ import (
 	"github.com/dapr/dapr/pkg/grpc/proxy/codec"
 )
 
-var (
-	clientStreamDescForProxying = &grpc.StreamDesc{
-		ServerStreams: true,
-		ClientStreams: true,
-	}
-)
+var clientStreamDescForProxying = &grpc.StreamDesc{
+	ServerStreams: true,
+	ClientStreams: true,
+}
 
 // RegisterService sets up a proxy handler for a particular gRPC service and method.
 // The behaviour is the same as if you were registering a handler method, e.g. from a codegenerated pb.go file.
