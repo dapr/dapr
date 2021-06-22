@@ -27,7 +27,7 @@ const (
 )
 
 var (
-	actors  = flag.String("actors", actorType, "Actor types array seperated by comma. e.g. StateActor,SaveActor")
+	actors  = flag.String("actors", actorType, "Actor types array separated by comma. e.g. StateActor,SaveActor")
 	appPort = flag.Int("p", daprAppPort, "StateActor service app port.")
 )
 

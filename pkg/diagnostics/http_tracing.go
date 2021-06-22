@@ -13,12 +13,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
 	"google.golang.org/grpc/codes"
+
+	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
@@ -34,7 +35,7 @@ const (
 
 var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
-// HTTPTraceMiddleware sets the trace context or starts the trace client span based on request
+// HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
 func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		path := string(ctx.Request.URI().Path())
@@ -72,7 +73,7 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 // userDefinedHTTPHeaders returns dapr- prefixed header from incoming metadata.
 // Users can add dapr- prefixed headers that they want to see in span attributes.
 func userDefinedHTTPHeaders(reqCtx *fasthttp.RequestCtx) map[string]string {
-	var m = map[string]string{}
+	m := map[string]string{}
 
 	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
 		k := strings.ToLower(string(key))
@@ -111,7 +112,7 @@ func isHealthzRequest(name string) bool {
 	return strings.Contains(name, "/healthz")
 }
 
-// UpdateSpanStatusFromHTTPStatus updates trace span status based on response code
+// UpdateSpanStatusFromHTTPStatus updates trace span status based on response code.
 func UpdateSpanStatusFromHTTPStatus(span *trace.Span, code int) {
 	if span != nil {
 		span.SetStatus(traceStatusFromHTTPCode(code))
@@ -200,7 +201,7 @@ func getAPIComponent(apiPath string) (string, string) {
 	}
 
 	// Split up to 4 delimiters in '/v1.0/state/statestore/key' to get component api type and value
-	var tokens = strings.SplitN(apiPath, "/", 4)
+	tokens := strings.SplitN(apiPath, "/", 4)
 	if len(tokens) < 3 {
 		return "", ""
 	}
@@ -215,7 +216,7 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]strin
 	method := string(ctx.Request.Header.Method())
 	statusCode := ctx.Response.StatusCode()
 
-	var m = map[string]string{}
+	m := map[string]string{}
 	_, componentType := getAPIComponent(path)
 
 	var dbType string
@@ -272,14 +273,14 @@ func populateActorParams(ctx *fasthttp.RequestCtx, m map[string]string) string {
 	path := string(ctx.Request.URI().Path())
 	// Split up to 7 delimiters in '/v1.0/actors/{actorType}/{actorId}/method/{method}'
 	// to get component api type and value
-	var tokens = strings.SplitN(path, "/", 7)
+	tokens := strings.SplitN(path, "/", 7)
 	if len(tokens) < 7 {
 		return ""
 	}
 
 	m[daprAPIActorTypeID] = fmt.Sprintf("%s.%s", actorType, actorID)
 
-	var dbType = ""
+	dbType := ""
 	switch tokens[5] {
 	case "method":
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService

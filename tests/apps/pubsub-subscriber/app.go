@@ -6,6 +6,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ const (
 	pubsubB   = "pubsub-b-topic-http"
 	pubsubC   = "pubsub-c-topic-http"
 	pubsubJob = "pubsub-job-topic-http"
+	pubsubRaw = "pubsub-raw-topic-http"
 )
 
 type appResponse struct {
@@ -40,12 +42,14 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
 	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
 	ReceivedByTopicJob []string `json:"pubsub-job-topic"`
+	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
 }
 
 type subscription struct {
-	PubsubName string `json:"pubsubname"`
-	Topic      string `json:"topic"`
-	Route      string `json:"route"`
+	PubsubName string            `json:"pubsubname"`
+	Topic      string            `json:"topic"`
+	Route      string            `json:"route"`
+	Metadata   map[string]string `json:"metadata"`
 }
 
 // respondWith determines the response to return when a message
@@ -70,6 +74,7 @@ var (
 	receivedMessagesB   sets.String
 	receivedMessagesC   sets.String
 	receivedMessagesJob sets.String
+	receivedMessagesRaw sets.String
 	desiredResponse     respondWith
 	lock                sync.Mutex
 )
@@ -109,6 +114,14 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			PubsubName: pubsubName,
 			Topic:      pubsubJob,
 			Route:      pubsubJob,
+		},
+		{
+			PubsubName: pubsubName,
+			Topic:      pubsubRaw,
+			Route:      pubsubRaw,
+			Metadata: map[string]string{
+				"rawPayload": "true",
+			},
 		},
 	}
 	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)
@@ -187,6 +200,18 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Raw data does not have content-type, so it is handled as-is.
+	// Because the publisher encodes to JSON before publishing, we need to decode here.
+	if strings.HasSuffix(r.URL.String(), pubsubRaw) {
+		var actualMsg string
+		err = json.Unmarshal([]byte(msg), &actualMsg)
+		if err != nil {
+			log.Printf("Error extracing JSON from raw event: %v", err)
+		} else {
+			msg = actualMsg
+		}
+	}
+
 	lock.Lock()
 	defer lock.Unlock()
 	if strings.HasSuffix(r.URL.String(), pubsubA) && !receivedMessagesA.Has(msg) {
@@ -197,6 +222,8 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesC.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubJob) && !receivedMessagesJob.Has(msg) {
 		receivedMessagesJob.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubRaw) && !receivedMessagesRaw.Has(msg) {
+		receivedMessagesRaw.Insert(msg)
 	} else {
 		// This case is triggered when there is multiple redelivery of same message or a message
 		// is thre for an unknown URL path
@@ -237,6 +264,18 @@ func extractMessage(body []byte) (string, error) {
 		return "", err
 	}
 
+	if m["data_base64"] != nil {
+		b, err := base64.StdEncoding.DecodeString(m["data_base64"].(string))
+		if err != nil {
+			log.Printf("Could not base64 decode, %s", err.Error())
+			return "", err
+		}
+
+		msg := string(b)
+		log.Printf("output='%s'\n", msg)
+		return msg, nil
+	}
+
 	msg := m["data"].(string)
 	log.Printf("output='%s'\n", msg)
 
@@ -260,10 +299,11 @@ func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 	log.Println("Enter getReceivedMessages")
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicA: unique(receivedMessagesA.List()),
-		ReceivedByTopicB: unique(receivedMessagesB.List()),
-		ReceivedByTopicC: unique(receivedMessagesC.List()),
+		ReceivedByTopicA:   unique(receivedMessagesA.List()),
+		ReceivedByTopicB:   unique(receivedMessagesB.List()),
+		ReceivedByTopicC:   unique(receivedMessagesC.List()),
 		ReceivedByTopicJob: unique(receivedMessagesJob.List()),
+		ReceivedByTopicRaw: unique(receivedMessagesRaw.List()),
 	}
 
 	log.Printf("receivedMessagesResponse=%s", response)
@@ -298,6 +338,7 @@ func initializeSets() {
 	receivedMessagesB = sets.NewString()
 	receivedMessagesC = sets.NewString()
 	receivedMessagesJob = sets.NewString()
+	receivedMessagesRaw = sets.NewString()
 }
 
 // appRouter initializes restful api router
@@ -326,6 +367,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/"+pubsubB, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubC, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubJob, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubRaw, subscribeHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

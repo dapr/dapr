@@ -19,7 +19,7 @@ Dapr uses [GitHub Actions](https://github.com/features/actions) for continuous i
 ![GitHub Secrets Settings](./img/github_secrets.png)
 
 * DOCKER_REGISTRY : Your private docker registry name or dockerhub id e.g. docker.io/[your_dockerhub_id]
-* DOCKER_REGISTRY_ID : Your private docker registry id 
+* DOCKER_REGISTRY_ID : Your private docker registry id
 * DOCKER_REGISTRY_PASS : Your private docker registry password or dockerhub password/token
 * DAPR_BOT_TOKEN : Your [GitHub Personal Access Token](https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line) - You do not need this unless you want to publish binaries to your forked GitHub release.
 

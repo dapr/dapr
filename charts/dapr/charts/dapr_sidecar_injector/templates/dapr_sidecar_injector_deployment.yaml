@@ -46,30 +46,60 @@ spec:
           httpGet:
             path: /healthz
             port: 8080
+          {{- if eq .Values.debug.enabled false }}
           initialDelaySeconds: 3
+          {{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+          {{- end }}
           periodSeconds: 3
           failureThreshold: 5
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
+          {{- if eq .Values.debug.enabled false }}
           initialDelaySeconds: 3
+          {{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+          {{- end }}
           periodSeconds: 3
           failureThreshold: 5
-{{- if contains "/" .Values.image.name }}
-        image: "{{ .Values.image.name }}"
+{{- if contains "/" .Values.injectorImage.name }}
+        image: "{{ .Values.injectorImage.name }}"
 {{- else }}
         image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
+  {{- if eq .Values.runAsNonRoot true }}
+          runAsNonRoot: {{ .Values.runAsNonRoot }}
+  {{- else }}
           runAsUser: 1000
-          runAsNonRoot: {{ .Values.runAsNonRoot }}          
+  {{- end }}
+  {{- if eq .Values.debug.enabled true }}
+          capabilities:
+            add:
+              - SYS_PTRACE
+  {{- end }}
 {{- end }}
         command:
+{{- if eq .Values.debug.enabled false }}
         - "/injector"
+{{- else }}
+        - "/dlv"
+{{- end }}
         args:
+{{- if eq .Values.debug.enabled true }}
+        - "--listen=:{{ .Values.debug.port }}"
+        - "--accept-multiclient"
+        - "--headless=true"
+        - "--log"
+        - "--api-version=2"
+        - "exec"
+        - "/injector"
+        - "--"
+{{- end }}
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
@@ -108,6 +138,11 @@ spec:
           containerPort: {{ .Values.global.prometheus.port }}
           protocol: TCP
 {{- end }}
+{{- if eq .Values.debug.enabled true }}
+        - name: debug
+          containerPort: {{ .Values.debug.port }}
+          protocol: TCP
+{{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
@@ -133,7 +168,24 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
+{{- if .Values.global.ha.enabled }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-sidecar-injector
+              topologyKey: topology.kubernetes.io/zone
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
 {{- end }}

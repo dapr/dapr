@@ -9,14 +9,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/actors"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	"github.com/dapr/dapr/pkg/actors"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
 func TestRegisterActorReminder(t *testing.T) {

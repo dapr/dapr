@@ -211,7 +211,7 @@ func TestRemoveHashingTable(t *testing.T) {
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
 	}
 
-	var testcases = []struct {
+	testcases := []struct {
 		name       string
 		totalTable int
 	}{
@@ -238,7 +238,7 @@ func TestRemoveHashingTable(t *testing.T) {
 
 func TestRestoreHashingTables(t *testing.T) {
 	// arrange
-	var testnames = []string{
+	testnames := []string{
 		"127.0.0.1:8080",
 		"127.0.0.1:8081",
 	}

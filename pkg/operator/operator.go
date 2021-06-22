@@ -8,21 +8,22 @@ package operator
 import (
 	"context"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/fswatcher"
-	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/operator/api"
-	"github.com/dapr/dapr/pkg/operator/handlers"
+	"github.com/dapr/kit/logger"
 	"k8s.io/apimachinery/pkg/runtime"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	"github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/pkg/fswatcher"
+	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/operator/api"
+	"github.com/dapr/dapr/pkg/operator/handlers"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -31,7 +32,7 @@ const (
 	healthzPort = 8080
 )
 
-// Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle
+// Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
 type Operator interface {
 	Run(ctx context.Context)
 }
@@ -49,9 +50,7 @@ type operator struct {
 	client client.Client
 }
 
-var (
-	scheme = runtime.NewScheme()
-)
+var scheme = runtime.NewScheme()
 
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
@@ -61,9 +60,13 @@ func init() {
 	_ = subscriptionsapi.AddToScheme(scheme)
 }
 
-// NewOperator returns a new Dapr Operator
+// NewOperator returns a new Dapr Operator.
 func NewOperator(config, certChainPath string, enableLeaderElection bool) Operator {
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	conf, err := ctrl.GetConfig()
+	if err != nil {
+		log.Fatalf("unable to get controller runtime configuration, err: %s", err)
+	}
+	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: "0",
 		LeaderElection:     enableLeaderElection,

@@ -13,10 +13,6 @@ import (
 	"net/http"
 	"time"
 
-	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/injector/monitoring"
-	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/utils"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -24,10 +20,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/dapr/kit/logger"
+
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/injector/monitoring"
+	"github.com/dapr/dapr/utils"
 )
 
-const port = 4000
-const getKubernetesServiceAccountTimeoutSeconds = 10
+const (
+	port                                      = 4000
+	getKubernetesServiceAccountTimeoutSeconds = 10
+)
 
 var log = logger.NewLogger("dapr.injector")
 
@@ -39,7 +43,7 @@ var allowedControllersServiceAccounts = []string{
 	"statefulset-controller",
 }
 
-// Injector is the interface for the Dapr runtime sidecar injection component
+// Injector is the interface for the Dapr runtime sidecar injection component.
 type Injector interface {
 	Run(ctx context.Context)
 }
@@ -54,7 +58,7 @@ type injector struct {
 }
 
 // toAdmissionResponse is a helper function to create an AdmissionResponse
-// with an embedded error
+// with an embedded error.
 func toAdmissionResponse(err error) *v1.AdmissionResponse {
 	return &v1.AdmissionResponse{
 		Result: &metav1.Status{
@@ -82,7 +86,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 	return appID
 }
 
-// NewInjector returns a new Injector instance with the given config
+// NewInjector returns a new Injector instance with the given config.
 func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient *kubernetes.Clientset) Injector {
 	mux := http.NewServeMux()
 
@@ -104,7 +108,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 	return i
 }
 
-// AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler
+// AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
 func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient *kubernetes.Clientset) ([]string, error) {
 	allowedUids := []string{}
 	for i, allowedControllersServiceAccount := range allowedControllersServiceAccounts {
@@ -212,6 +216,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		admissionResponse = toAdmissionResponse(err)
+		log.Errorf("Sidecar injector failed to inject for app '%s'. Error: %s", diagAppID, err)
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "patch")
 	} else if len(patchOps) == 0 {
 		admissionResponse = &v1.AdmissionResponse{
@@ -246,20 +251,20 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	log.Infof("ready to write response ...")
 	respBytes, err := json.Marshal(admissionReview)
 	if err != nil {
-		log.Errorf("can't deserialize response: %s", err)
-
 		http.Error(
 			w,
 			err.Error(),
 			http.StatusInternalServerError,
 		)
 
+		log.Errorf("Sidecar injector failed to inject for app '%s'. Can't deserialize response: %s", diagAppID, err)
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(respBytes); err != nil {
 		log.Error(err)
 	} else {
+		log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
 		monitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
 	}
 }

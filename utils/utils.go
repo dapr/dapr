@@ -19,8 +19,10 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-var clientSet *kubernetes.Clientset
-var kubeConfig *rest.Config
+var (
+	clientSet  *kubernetes.Clientset
+	kubeConfig *rest.Config
+)
 
 func initKubeConfig() {
 	kubeConfig = GetConfig()
@@ -32,7 +34,7 @@ func initKubeConfig() {
 	clientSet = clientset
 }
 
-// GetConfig gets a kubernetes rest config
+// GetConfig gets a kubernetes rest config.
 func GetConfig() *rest.Config {
 	if kubeConfig != nil {
 		return kubeConfig
@@ -57,7 +59,7 @@ func GetConfig() *rest.Config {
 	return conf
 }
 
-// GetKubeClient gets a kubernetes client
+// GetKubeClient gets a kubernetes client.
 func GetKubeClient() *kubernetes.Clientset {
 	if clientSet == nil {
 		initKubeConfig()
@@ -67,7 +69,7 @@ func GetKubeClient() *kubernetes.Clientset {
 }
 
 // ToISO8601DateTimeString converts dateTime to ISO8601 Format
-// ISO8601 Format: 2020-01-01T01:01:01.10101Z
+// ISO8601 Format: 2020-01-01T01:01:01.10101Z.
 func ToISO8601DateTimeString(dateTime time.Time) string {
 	t := dateTime.UTC()
 
@@ -102,7 +104,7 @@ func ParseEnvString(envStr string) []corev1.EnvVar {
 	return envVars
 }
 
-// StringSliceContains return true if an array containe the "str" string
+// StringSliceContains return true if an array containe the "str" string.
 func StringSliceContains(needle string, haystack []string) bool {
 	for _, item := range haystack {
 		if item == needle {

@@ -28,7 +28,7 @@ Performance tests are designed to let you evaluate the latency, resource usage a
 
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube
-    
+
     # Set the below environment variables if you want to use the different registry and tag for test apps
     # export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
     # export DARP_TEST_TAG=dev

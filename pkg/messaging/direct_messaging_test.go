@@ -8,9 +8,10 @@ package messaging
 import (
 	"testing"
 
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
+
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 func newDirectMessaging() *directMessaging {

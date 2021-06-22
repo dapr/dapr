@@ -8,14 +8,16 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ghodss/yaml"
+	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/dapr/kit/logger"
+
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/ghodss/yaml"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -90,7 +92,7 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 	return subscriptions
 }
 
-// DeclarativeSelfHosted loads subscriptions from the given components path
+// DeclarativeSelfHosted loads subscriptions from the given components path.
 func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscription {
 	var subs []Subscription
 
@@ -142,7 +144,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 	}, nil
 }
 
-// DeclarativeKubernetes loads subscriptions from the operator when running in Kubernetes
+// DeclarativeKubernetes loads subscriptions from the operator when running in Kubernetes.
 func DeclarativeKubernetes(client operatorv1pb.OperatorClient, log logger.Logger) []Subscription {
 	var subs []Subscription
 	resp, err := client.ListSubscriptions(context.TODO(), &emptypb.Empty{})

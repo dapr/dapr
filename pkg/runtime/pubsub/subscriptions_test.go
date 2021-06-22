@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/ghodss/yaml"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/kit/logger"
+
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 )
 
 var log = logger.NewLogger("dapr.test")

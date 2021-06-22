@@ -29,7 +29,9 @@ jobs:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
       HA_MODE: true
+      TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         target_arch: [amd64]
@@ -88,7 +90,7 @@ jobs:
           az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }} --output none
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
-        run: ./tests/test-infra/find_cluster.sh ./tests/test-infra/e2e-list.txt
+        run: ./tests/test-infra/find_cluster.sh ./tests/test-infra/e2e-list.${{ matrix.target_os }}.txt
         shell: bash
       - name: Add the test status comment to PR
         if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''
@@ -166,6 +168,12 @@ jobs:
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.json
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
         env:

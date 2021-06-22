@@ -3,7 +3,9 @@ package sentry
 import (
 	"context"
 
-	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/kit/logger"
+	"github.com/pkg/errors"
+
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/identity"
@@ -12,7 +14,6 @@ import (
 	k8s "github.com/dapr/dapr/pkg/sentry/kubernetes"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
-	"github.com/pkg/errors"
 )
 
 var log = logger.NewLogger("dapr.sentry")

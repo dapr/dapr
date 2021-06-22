@@ -100,6 +100,11 @@ func (_m *MockStateStore) Init(metadata state.Metadata) error {
 	return r0
 }
 
+// Ping provides a mock function
+func (_m *MockStateStore) Ping() error {
+	return nil
+}
+
 // Set provides a mock function with given fields: req
 func (_m *MockStateStore) Set(req *state.SetRequest) error {
 	ret := _m.Called(req)
@@ -116,5 +121,9 @@ func (_m *MockStateStore) Set(req *state.SetRequest) error {
 
 // Features returns the features for this state store.
 func (_m *MockStateStore) Features() []state.Feature {
+	return nil
+}
+
+func (_m *MockStateStore) Close() error {
 	return nil
 }

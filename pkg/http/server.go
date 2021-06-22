@@ -13,22 +13,26 @@ import (
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/config"
 	cors_dapr "github.com/dapr/dapr/pkg/cors"
-	"github.com/dapr/dapr/pkg/logger"
+
+	routing "github.com/fasthttp/router"
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/pprofhandler"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	routing "github.com/fasthttp/router"
-	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/pprofhandler"
 )
 
 var log = logger.NewLogger("dapr.runtime.http")
 
-// Server is an interface for the Dapr HTTP server
+const protocol = "http"
+
+// Server is an interface for the Dapr HTTP server.
 type Server interface {
 	StartNonBlocking()
 }
@@ -39,20 +43,22 @@ type server struct {
 	metricSpec  config.MetricSpec
 	pipeline    http_middleware.Pipeline
 	api         API
+	apiSpec     config.APISpec
 }
 
-// NewServer returns a new HTTP server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline) Server {
+// NewServer returns a new HTTP server.
+func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline, apiSpec config.APISpec) Server {
 	return &server{
 		api:         api,
 		config:      config,
 		tracingSpec: tracingSpec,
 		metricSpec:  metricSpec,
 		pipeline:    pipeline,
+		apiSpec:     apiSpec,
 	}
 }
 
-// StartNonBlocking starts a new server in a goroutine
+// StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() {
 	handler :=
 		useAPIAuthentication(
@@ -174,6 +180,10 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 	router := routing.New()
 	parameterFinder, _ := regexp.Compile("/{.*}")
 	for _, e := range endpoints {
+		if !s.endpointAllowed(e) {
+			continue
+		}
+
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 		for _, m := range e.Methods {
 			pathIncludesParameters := parameterFinder.MatchString(path)
@@ -184,5 +194,27 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 			}
 		}
 	}
+
 	return router
+}
+
+func (s *server) endpointAllowed(endpoint Endpoint) bool {
+	var httpRules []config.APIAccessRule
+
+	for _, rule := range s.apiSpec.Allowed {
+		if rule.Protocol == protocol {
+			httpRules = append(httpRules, rule)
+		}
+	}
+	if len(httpRules) == 0 {
+		return true
+	}
+
+	for _, rule := range httpRules {
+		if (strings.Index(endpoint.Route, rule.Name) == 0 && endpoint.Version == rule.Version) || endpoint.Route == "healthz" {
+			return true
+		}
+	}
+
+	return false
 }
