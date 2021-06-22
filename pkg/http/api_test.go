@@ -1966,7 +1966,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	})
 }
 
-// Fake http server and client helpers to simplify endpoints test
+// Fake http server and client helpers to simplify endpoints test.
 func newFakeHTTPServer() *fakeHTTPServer {
 	return &fakeHTTPServer{}
 }
@@ -2414,6 +2414,10 @@ type fakeStateStore struct {
 	counter int
 }
 
+func (c fakeStateStore) Ping() error {
+	return nil
+}
+
 func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
 	for i := range req {
 		r := req[i] // Make a copy since we will refer to this as a reference in this loop.
@@ -2461,7 +2465,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	return nil, nil
 }
 
-// BulkGet performs a bulks get operations
+// BulkGet performs a bulks get operations.
 func (c fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	return false, nil, nil
 }

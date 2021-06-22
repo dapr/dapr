@@ -23,13 +23,13 @@ import (
 )
 
 const (
-	// MiniKubeIPEnvVar is the environment variable name which will have Minikube node IP
+	// MiniKubeIPEnvVar is the environment variable name which will have Minikube node IP.
 	MiniKubeIPEnvVar = "DAPR_TEST_MINIKUBE_IP"
 
-	// ContainerLogPathEnvVar is the environment variable name which will have the container logs
+	// ContainerLogPathEnvVar is the environment variable name which will have the container logs.
 	ContainerLogPathEnvVar = "DAPR_CONTAINER_LOG_PATH"
 
-	// ContainerLogDefaultPath
+	// ContainerLogDefaultPath.
 	ContainerLogDefaultPath = "./container_logs"
 
 	// PollInterval is how frequently e2e tests will poll for updates.
@@ -37,15 +37,15 @@ const (
 	// PollTimeout is how long e2e tests will wait for resource updates when polling.
 	PollTimeout = 10 * time.Minute
 
-	// maxReplicas is the maximum replicas of replica sets
+	// maxReplicas is the maximum replicas of replica sets.
 	maxReplicas = 10
 
-	// maxSideCarDetectionRetries is the maximum number of retries to detect Dapr sidecar
+	// maxSideCarDetectionRetries is the maximum number of retries to detect Dapr sidecar.
 	maxSideCarDetectionRetries = 3
 )
 
 // AppManager holds Kubernetes clients and namespace used for test apps
-// and provides the helpers to manage the test apps
+// and provides the helpers to manage the test apps.
 type AppManager struct {
 	client    *KubeClient
 	namespace string
@@ -62,7 +62,7 @@ type PodInfo struct {
 	IP   string
 }
 
-// NewAppManager creates AppManager instance
+// NewAppManager creates AppManager instance.
 func NewAppManager(kubeClients *KubeClient, namespace string, app AppDescription) *AppManager {
 	return &AppManager{
 		client:    kubeClients,
@@ -71,17 +71,17 @@ func NewAppManager(kubeClients *KubeClient, namespace string, app AppDescription
 	}
 }
 
-// Name returns app name
+// Name returns app name.
 func (m *AppManager) Name() string {
 	return m.app.AppName
 }
 
-// App returns app description
+// App returns app description.
 func (m *AppManager) App() AppDescription {
 	return m.app
 }
 
-// Init installs app by AppDescription
+// Init installs app by AppDescription.
 func (m *AppManager) Init() error {
 	// Get or create test namespaces
 	if _, err := m.GetOrCreateNamespace(); err != nil {
@@ -174,7 +174,7 @@ func (m *AppManager) Init() error {
 	return nil
 }
 
-// Dispose deletes deployment and service
+// Dispose deletes deployment and service.
 func (m *AppManager) Dispose(wait bool) error {
 	if m.app.IsJob {
 		if err := m.DeleteJob(true); err != nil {
@@ -213,7 +213,7 @@ func (m *AppManager) Dispose(wait bool) error {
 	return nil
 }
 
-// ScheduleJob deploys job based on app description
+// ScheduleJob deploys job based on app description.
 func (m *AppManager) ScheduleJob() (*batchv1.Job, error) {
 	jobsClient := m.client.Jobs(m.namespace)
 	obj := buildJobObject(m.namespace, m.app)
@@ -226,7 +226,7 @@ func (m *AppManager) ScheduleJob() (*batchv1.Job, error) {
 	return result, nil
 }
 
-// WaitUntilJobState waits until isState returns true
+// WaitUntilJobState waits until isState returns true.
 func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (*batchv1.Job, error) {
 	jobsClient := m.client.Jobs(m.namespace)
 
@@ -249,7 +249,7 @@ func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (
 	return lastJob, nil
 }
 
-// Deploy deploys app based on app description
+// Deploy deploys app based on app description.
 func (m *AppManager) Deploy() (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	obj := buildDeploymentObject(m.namespace, m.app)
@@ -262,7 +262,7 @@ func (m *AppManager) Deploy() (*appsv1.Deployment, error) {
 	return result, nil
 }
 
-// WaitUntilDeploymentState waits until isState returns true
+// WaitUntilDeploymentState waits until isState returns true.
 func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, error) bool) (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
@@ -285,7 +285,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 	return lastDeployment, nil
 }
 
-// WaitUntilSidecarPresent waits until Dapr sidecar is present
+// WaitUntilSidecarPresent waits until Dapr sidecar is present.
 func (m *AppManager) WaitUntilSidecarPresent() error {
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		allDaprd, minContainerCount, maxContainerCount, err := m.getContainerInfo()
@@ -306,27 +306,27 @@ func (m *AppManager) WaitUntilSidecarPresent() error {
 	return nil
 }
 
-// IsJobCompleted returns true if job object is complete
+// IsJobCompleted returns true if job object is complete.
 func (m *AppManager) IsJobCompleted(job *batchv1.Job, err error) bool {
 	return err == nil && job.Status.Succeeded == 1 && job.Status.Failed == 0 && job.Status.Active == 0 && job.Status.CompletionTime != nil
 }
 
-// IsDeploymentDone returns true if deployment object completes pod deployments
+// IsDeploymentDone returns true if deployment object completes pod deployments.
 func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error) bool {
 	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == m.app.Replicas && deployment.Status.AvailableReplicas == m.app.Replicas
 }
 
-// IsJobDeleted returns true if job does not exist
+// IsJobDeleted returns true if job does not exist.
 func (m *AppManager) IsJobDeleted(job *batchv1.Job, err error) bool {
 	return err != nil && errors.IsNotFound(err)
 }
 
-// IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero
+// IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero.
 func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err error) bool {
 	return err != nil && errors.IsNotFound(err)
 }
 
-// ValidateSidecar validates that dapr side car is running in dapr enabled pods
+// ValidateSidecar validates that dapr side car is running in dapr enabled pods.
 func (m *AppManager) ValidateSidecar() error {
 	if !m.app.DaprEnabled {
 		return fmt.Errorf("dapr is not enabled for this app")
@@ -409,14 +409,13 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 	return allDaprd, minContainerCount, maxContainerCount, nil
 }
 
-// DoPortForwarding performs port forwarding for given podname to access test apps in the cluster
+// DoPortForwarding performs port forwarding for given podname to access test apps in the cluster.
 func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int, error) {
 	podClient := m.client.Pods(m.namespace)
 	// Filter only 'testapp=appName' labeled Pods
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +433,7 @@ func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int
 	return m.forwarder.Connect(name, targetPorts...)
 }
 
-// ScaleDeploymentReplica scales the deployment
+// ScaleDeploymentReplica scales the deployment.
 func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	if replicas < 0 || replicas > maxReplicas {
 		return fmt.Errorf("%d is out of range", replicas)
@@ -459,7 +458,7 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	return err
 }
 
-// CreateIngressService creates Ingress endpoint for test app
+// CreateIngressService creates Ingress endpoint for test app.
 func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
 	obj := buildServiceObject(m.namespace, m.app)
@@ -471,7 +470,7 @@ func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 	return result, nil
 }
 
-// AcquireExternalURL gets external ingress endpoint from service when it is ready
+// AcquireExternalURL gets external ingress endpoint from service when it is ready.
 func (m *AppManager) AcquireExternalURL() string {
 	log.Printf("Waiting until service ingress is ready for %s...\n", m.app.AppName)
 	svc, err := m.WaitUntilServiceState(m.IsServiceIngressReady)
@@ -483,7 +482,7 @@ func (m *AppManager) AcquireExternalURL() string {
 	return m.AcquireExternalURLFromService(svc)
 }
 
-// WaitUntilServiceState waits until isState returns true
+// WaitUntilServiceState waits until isState returns true.
 func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) bool) (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
 	var lastService *apiv1.Service
@@ -529,7 +528,7 @@ func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 	return ""
 }
 
-// IsServiceIngressReady returns true if external ip is available
+// IsServiceIngressReady returns true if external ip is available.
 func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 	if err != nil || svc == nil {
 		return false
@@ -549,7 +548,7 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 	return false
 }
 
-// IsServiceDeleted returns true if service does not exist
+// IsServiceDeleted returns true if service does not exist.
 func (m *AppManager) IsServiceDeleted(svc *apiv1.Service, err error) bool {
 	return err != nil && errors.IsNotFound(err)
 }
@@ -562,7 +561,7 @@ func (m *AppManager) minikubeNodeIP() string {
 	return os.Getenv(MiniKubeIPEnvVar)
 }
 
-// DeleteJob deletes job for the test app
+// DeleteJob deletes job for the test app.
 func (m *AppManager) DeleteJob(ignoreNotFound bool) error {
 	jobsClient := m.client.Jobs(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
@@ -576,7 +575,7 @@ func (m *AppManager) DeleteJob(ignoreNotFound bool) error {
 	return nil
 }
 
-// DeleteDeployment deletes deployment for the test app
+// DeleteDeployment deletes deployment for the test app.
 func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
@@ -590,7 +589,7 @@ func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	return nil
 }
 
-// DeleteService deletes deployment for the test app
+// DeleteService deletes deployment for the test app.
 func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	serviceClient := m.client.Services(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
@@ -604,7 +603,7 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	return nil
 }
 
-// GetOrCreateNamespace gets or creates namespace unless namespace exists
+// GetOrCreateNamespace gets or creates namespace unless namespace exists.
 func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
 	namespaceClient := m.client.Namespaces()
 	ns, err := namespaceClient.Get(context.TODO(), m.namespace, metav1.GetOptions{})
@@ -618,7 +617,7 @@ func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
 	return ns, err
 }
 
-// GetHostDetails returns the name and IP address of the pods running the app
+// GetHostDetails returns the name and IP address of the pods running the app.
 func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	if !m.app.DaprEnabled {
 		return nil, fmt.Errorf("dapr is not enabled for this app")
@@ -649,7 +648,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	return result, nil
 }
 
-// SaveContainerLogs get container logs for all containers in the pod and saves them to disk
+// SaveContainerLogs get container logs for all containers in the pod and saves them to disk.
 func (m *AppManager) StreamContainerLogs() error {
 	podClient := m.client.Pods(m.namespace)
 
@@ -715,7 +714,7 @@ func (m *AppManager) StreamContainerLogs() error {
 	return nil
 }
 
-// GetCPUAndMemory returns the Cpu and Memory usage for the dapr app or sidecar
+// GetCPUAndMemory returns the Cpu and Memory usage for the dapr app or sidecar.
 func (m *AppManager) GetCPUAndMemory(sidecar bool) (int64, float64, error) {
 	pods, err := m.GetHostDetails()
 	if err != nil {
@@ -756,7 +755,7 @@ func (m *AppManager) GetCPUAndMemory(sidecar bool) (int64, float64, error) {
 	return maxCPU, maxMemory, nil
 }
 
-// GetTotalRestarts returns the total number of restarts for the app or sidecar
+// GetTotalRestarts returns the total number of restarts for the app or sidecar.
 func (m *AppManager) GetTotalRestarts() (int, error) {
 	if !m.app.DaprEnabled {
 		return 0, fmt.Errorf("dapr is not enabled for this app")

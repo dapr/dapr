@@ -12,18 +12,19 @@ import (
 )
 
 const (
-	Certificate   = "CERTIFICATE"
-	ECPrivateKey  = "EC PRIVATE KEY"
-	RSAPrivateKey = "RSA PRIVATE KEY"
+	Certificate     = "CERTIFICATE"
+	ECPrivateKey    = "EC PRIVATE KEY"
+	RSAPrivateKey   = "RSA PRIVATE KEY"
+	PKCS8PrivateKey = "PRIVATE KEY"
 )
 
-// PrivateKey wraps a EC or RSA private key
+// PrivateKey wraps a EC or RSA private key.
 type PrivateKey struct {
 	Type string
 	Key  interface{}
 }
 
-// Credentials holds a certificate, private key and trust chain
+// Credentials holds a certificate, private key and trust chain.
 type Credentials struct {
 	PrivateKey  *PrivateKey
 	Certificate *x509.Certificate
@@ -49,6 +50,12 @@ func DecodePEMKey(key []byte) (*PrivateKey, error) {
 			return nil, err
 		}
 		return &PrivateKey{Type: RSAPrivateKey, Key: k}, nil
+	case PKCS8PrivateKey:
+		k, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		return &PrivateKey{Type: PKCS8PrivateKey, Key: k}, nil
 	default:
 		return nil, errors.Errorf("unsupported block type %s", block.Type)
 	}
@@ -165,7 +172,7 @@ func ParsePemCSR(csrPem []byte) (*x509.CertificateRequest, error) {
 	return csr, nil
 }
 
-// GenerateECPrivateKey returns a new EC Private Key
+// GenerateECPrivateKey returns a new EC Private Key.
 func GenerateECPrivateKey() (*ecdsa.PrivateKey, error) {
 	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 }

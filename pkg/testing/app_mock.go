@@ -19,13 +19,13 @@ import (
 	"time"
 )
 
-// KeyValState is a key value struct for state
+// KeyValState is a key value struct for state.
 type KeyValState struct {
 	Key   string      `json:"key"`
 	Value interface{} `json:"value"`
 }
 
-// Event is an app response event
+// Event is an app response event.
 type Event struct {
 	EventName   string        `json:"eventName,omitempty"`
 	To          []string      `json:"to,omitempty"`
@@ -35,7 +35,7 @@ type Event struct {
 	Data        interface{}   `json:"data,omitempty"`
 }
 
-// MockApp is a mock for an app
+// MockApp is a mock for an app.
 type MockApp struct {
 	returnBody   bool
 	messageCount int
@@ -43,7 +43,7 @@ type MockApp struct {
 	noprint      bool
 }
 
-// NewMockApp returns a new mocked app
+// NewMockApp returns a new mocked app.
 func NewMockApp(returnBody bool, messageCount int, noprint bool) *MockApp {
 	ret := new(MockApp)
 	ret.returnBody = returnBody
@@ -53,7 +53,7 @@ func NewMockApp(returnBody bool, messageCount int, noprint bool) *MockApp {
 	return ret
 }
 
-// Run opens a test HTTP server and echo endpoint on the mock object
+// Run opens a test HTTP server and echo endpoint on the mock object.
 func (a *MockApp) Run(port int) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/httptest", a.handler)
@@ -70,6 +70,7 @@ func (a *MockApp) Run(port int) {
 	cF()
 	server.Shutdown(ctx)
 }
+
 func (a *MockApp) echoHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 	var buffer bytes.Buffer
@@ -78,6 +79,7 @@ func (a *MockApp) echoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Write(buffer.Bytes())
 }
+
 func (a *MockApp) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(200)

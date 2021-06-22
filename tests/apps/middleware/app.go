@@ -31,7 +31,7 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(""))
 }
 
-// indexHandler is the handler for root path
+// indexHandler is the handler for root path.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler is called")
 
@@ -46,7 +46,6 @@ func testLogCall(w http.ResponseWriter, r *http.Request) {
 	input := "hello"
 	url := fmt.Sprintf("%s/invoke/%s/method/logCall", daprBaseURL, service)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer([]byte(input))) // nolint:gosec
-
 	if err != nil {
 		log.Printf("Could not call service")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -75,7 +74,7 @@ func logCall(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-// appRouter initializes restful api router
+// appRouter initializes restful api router.
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 

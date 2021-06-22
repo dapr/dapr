@@ -14,6 +14,8 @@ stateapp \
 secretapp \
 service_invocation \
 service_invocation_grpc \
+service_invocation_grpc_proxy_client \
+service_invocation_grpc_proxy_server \
 binding_input \
 binding_input_grpc \
 binding_output \
@@ -28,9 +30,9 @@ actorreentrancy \
 runtime \
 runtime_init \
 middleware \
-job-publisher
+job-publisher \
 
-# PERFORMACE test app list
+# PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
 
 # E2E test app root directory
@@ -159,7 +161,7 @@ test-deps:
 	# In golang >=1.16 there is a new way to do this with `go install gotest.tools/gotestsum@latest`
 	# But this doesn't work with <=1.15, so we do it the old way for now 
 	# (see: https://golang.org/ref/mod#go-install)
-	GO111MODULE=off go get gotest.tools/gotestsum
+	command -v gotestsum || GO111MODULE=off go get gotest.tools/gotestsum
 
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
@@ -241,6 +243,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_reentrant_actor.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_grpc_proxy_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)

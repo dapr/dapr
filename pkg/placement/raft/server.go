@@ -29,7 +29,7 @@ const (
 	nameResolveMaxRetry      = 120
 )
 
-// PeerInfo represents raft peer node information
+// PeerInfo represents raft peer node information.
 type PeerInfo struct {
 	ID      string
 	Address string
@@ -226,17 +226,17 @@ func (s *Server) raftStorePath() string {
 	return s.raftLogStorePath
 }
 
-// FSM returns fsm
+// FSM returns fsm.
 func (s *Server) FSM() *FSM {
 	return s.fsm
 }
 
-// Raft returns raft node
+// Raft returns raft node.
 func (s *Server) Raft() *raft.Raft {
 	return s.raft
 }
 
-// IsLeader returns true if the current node is leader
+// IsLeader returns true if the current node is leader.
 func (s *Server) IsLeader() bool {
 	return s.raft.State() == raft.Leader
 }
@@ -261,7 +261,7 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 	return resp.(bool), nil
 }
 
-// Shutdown shutdown raft server gracefully
+// Shutdown shutdown raft server gracefully.
 func (s *Server) Shutdown() {
 	if s.raft != nil {
 		s.raftTransport.Close()

@@ -28,7 +28,7 @@ type (
 		FactoryMethod func() bindings.OutputBinding
 	}
 
-	// Registry is the interface of a components that allows callers to get registered instances of input and output bindings
+	// Registry is the interface of a components that allows callers to get registered instances of input and output bindings.
 	Registry interface {
 		RegisterInputBindings(components ...InputBinding)
 		RegisterOutputBindings(components ...OutputBinding)

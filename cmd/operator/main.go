@@ -20,15 +20,17 @@ import (
 	"github.com/dapr/dapr/pkg/version"
 )
 
-var log = logger.NewLogger("dapr.operator")
-var config string
-var certChainPath string
-var disableLeaderElection bool
+var (
+	log                   = logger.NewLogger("dapr.operator")
+	config                string
+	certChainPath         string
+	disableLeaderElection bool
+)
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
 
-	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config
+	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
 )
 

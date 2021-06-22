@@ -16,6 +16,7 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	"github.com/dapr/dapr/pkg/acl"
 	global_config "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
@@ -28,7 +29,7 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-// FromFlags parses command flags and returns DaprRuntime instance
+// FromFlags parses command flags and returns DaprRuntime instance.
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
@@ -212,7 +213,7 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
-	accessControlList, err = global_config.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
+	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}

@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const key = "state-key-1234567"
+
 func TestMain(m *testing.M) {
 	SaveStateConfiguration("store1", map[string]string{strategyKey: strategyNone})
 	SaveStateConfiguration("store2", map[string]string{strategyKey: strategyAppid})
@@ -60,8 +62,6 @@ func TestGetModifiedStateKey(t *testing.T) {
 }
 
 func TestNonePrefix(t *testing.T) {
-	var key = "state-key-1234567"
-
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store1", "appid1")
 	require.Equal(t, key, modifiedStateKey)
 
@@ -70,8 +70,6 @@ func TestNonePrefix(t *testing.T) {
 }
 
 func TestAppidPrefix(t *testing.T) {
-	var key = "state-key-1234567"
-
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store2", "appid1")
 	require.Equal(t, "appid1||state-key-1234567", modifiedStateKey)
 
@@ -80,8 +78,6 @@ func TestAppidPrefix(t *testing.T) {
 }
 
 func TestAppidPrefix_WithEnptyAppid(t *testing.T) {
-	var key = "state-key-1234567"
-
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store2", "")
 	require.Equal(t, "state-key-1234567", modifiedStateKey)
 
@@ -90,8 +86,6 @@ func TestAppidPrefix_WithEnptyAppid(t *testing.T) {
 }
 
 func TestDefaultPrefix(t *testing.T) {
-	var key = "state-key-1234567"
-
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store3", "appid1")
 	require.Equal(t, "appid1||state-key-1234567", modifiedStateKey)
 
@@ -100,7 +94,7 @@ func TestDefaultPrefix(t *testing.T) {
 }
 
 func TestStoreNamePrefix(t *testing.T) {
-	var key = "state-key-1234567"
+	key := "state-key-1234567"
 
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store4", "appid1")
 	require.Equal(t, "store4||state-key-1234567", modifiedStateKey)
@@ -110,8 +104,6 @@ func TestStoreNamePrefix(t *testing.T) {
 }
 
 func TestOtherFixedPrefix(t *testing.T) {
-	var key = "state-key-1234567"
-
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store5", "appid1")
 	require.Equal(t, "other-fixed-prefix||state-key-1234567", modifiedStateKey)
 
@@ -120,8 +112,6 @@ func TestOtherFixedPrefix(t *testing.T) {
 }
 
 func TestLegacyPrefix(t *testing.T) {
-	var key = "state-key-1234567"
-
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store6", "appid1")
 	require.Equal(t, "appid1||state-key-1234567", modifiedStateKey)
 
@@ -130,8 +120,6 @@ func TestLegacyPrefix(t *testing.T) {
 }
 
 func TestPrefix_StoreNotInitial(t *testing.T) {
-	var key = "state-key-1234567"
-
 	// no config for store999
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store999", "appid99")
 	require.Equal(t, "appid99||state-key-1234567", modifiedStateKey)

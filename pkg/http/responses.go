@@ -15,47 +15,75 @@ import (
 const (
 	jsonContentTypeHeader = "application/json"
 	etagHeader            = "ETag"
+	metadataPrefix        = "metadata."
 )
 
-// BulkGetResponse is the response object for a state bulk get operation
+// BulkGetResponse is the response object for a state bulk get operation.
 type BulkGetResponse struct {
-	Key   string              `json:"key"`
-	Data  jsoniter.RawMessage `json:"data,omitempty"`
-	ETag  *string             `json:"etag,omitempty"`
-	Error string              `json:"error,omitempty"`
+	Key      string              `json:"key"`
+	Data     jsoniter.RawMessage `json:"data,omitempty"`
+	ETag     *string             `json:"etag,omitempty"`
+	Metadata map[string]string   `json:"metadata,omitempty"`
+	Error    string              `json:"error,omitempty"`
 }
 
-// respondWithJSON overrides the content-type with application/json
-func respondWithJSON(ctx *fasthttp.RequestCtx, code int, obj []byte) {
-	respond(ctx, code, obj)
-	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+type option = func(ctx *fasthttp.RequestCtx)
+
+// withEtag sets etag header.
+func withEtag(etag *string) option {
+	return func(ctx *fasthttp.RequestCtx) {
+		if etag != nil {
+			ctx.Response.Header.Set(etagHeader, *etag)
+		}
+	}
 }
 
-// respond sets a default application/json content type if content type is not present
-func respond(ctx *fasthttp.RequestCtx, code int, obj []byte) {
-	ctx.Response.SetStatusCode(code)
-	ctx.Response.SetBody(obj)
+// withMetadata sets metadata headers.
+func withMetadata(metadata map[string]string) option {
+	return func(ctx *fasthttp.RequestCtx) {
+		for k, v := range metadata {
+			ctx.Response.Header.Set(metadataPrefix+k, v)
+		}
+	}
+}
 
-	if len(ctx.Response.Header.ContentType()) == 0 {
+// withJSON overrides the content-type with application/json.
+func withJSON(code int, obj []byte) option {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.SetStatusCode(code)
+		ctx.Response.SetBody(obj)
 		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
 	}
 }
 
-// respondWithETaggedJSON overrides the content-type with application/json and etag header
-func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag *string) {
-	respond(ctx, code, obj)
-	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
-	if etag != nil {
-		ctx.Response.Header.Set(etagHeader, *etag)
+// withError sets error code and jsonized error message.
+func withError(code int, resp ErrorResponse) option {
+	b, _ := json.Marshal(&resp)
+	return withJSON(code, b)
+}
+
+// withEmpty sets 204 status code.
+func withEmpty() option {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.SetBody(nil)
+		ctx.Response.SetStatusCode(fasthttp.StatusNoContent)
 	}
 }
 
-func respondWithError(ctx *fasthttp.RequestCtx, code int, resp ErrorResponse) {
-	b, _ := json.Marshal(&resp)
-	respondWithJSON(ctx, code, b)
+// with sets a default application/json content type if content type is not present.
+func with(code int, obj []byte) option {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.SetStatusCode(code)
+		ctx.Response.SetBody(obj)
+
+		if len(ctx.Response.Header.ContentType()) == 0 {
+			ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+		}
+	}
 }
 
-func respondEmpty(ctx *fasthttp.RequestCtx) {
-	ctx.Response.SetBody(nil)
-	ctx.Response.SetStatusCode(fasthttp.StatusNoContent)
+func respond(ctx *fasthttp.RequestCtx, options ...option) {
+	for _, option := range options {
+		option(ctx)
+	}
 }

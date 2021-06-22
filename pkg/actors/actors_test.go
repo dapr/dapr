@@ -34,7 +34,7 @@ const (
 	TestKeyName = "key0"
 )
 
-// testRequest is the request object that encapsulates the `data` field of a request
+// testRequest is the request object that encapsulates the `data` field of a request.
 type testRequest struct {
 	Data interface{} `json:"data"`
 }
@@ -82,7 +82,6 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 			nextReq.AddHeaders(&header)
 		}
 		_, err := r.a.callLocalActor(context.Background(), nextReq)
-
 		if err != nil {
 			return nil, err
 		}
@@ -98,6 +97,10 @@ type fakeStateStore struct {
 }
 
 func (f *fakeStateStore) Init(metadata state.Metadata) error {
+	return nil
+}
+
+func (f *fakeStateStore) Ping() error {
 	return nil
 }
 
@@ -271,6 +274,39 @@ func TestActorIsNotDeactivated(t *testing.T) {
 	_, exists := testActorsRuntime.actorsTable.Load(actorKey)
 
 	assert.True(t, exists)
+}
+
+func TestStoreIsNotInited(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	testActorsRuntime.store = nil
+
+	t.Run("getReminderTrack", func(t *testing.T) {
+		r, e := testActorsRuntime.getReminderTrack("foo", "bar")
+		assert.NotNil(t, e)
+		assert.Nil(t, r)
+	})
+
+	t.Run("updateReminderTrack", func(t *testing.T) {
+		e := testActorsRuntime.updateReminderTrack("foo", "bar")
+		assert.NotNil(t, e)
+	})
+
+	t.Run("CreateReminder", func(t *testing.T) {
+		e := testActorsRuntime.CreateReminder(context.Background(), &CreateReminderRequest{})
+		assert.NotNil(t, e)
+	})
+
+	t.Run("getRemindersForActorType", func(t *testing.T) {
+		r1, r2, e := testActorsRuntime.getRemindersForActorType("foo")
+		assert.Nil(t, r1)
+		assert.Nil(t, r2)
+		assert.NotNil(t, e)
+	})
+
+	t.Run("DeleteReminder", func(t *testing.T) {
+		e := testActorsRuntime.DeleteReminder(context.Background(), &DeleteReminderRequest{})
+		assert.NotNil(t, e)
+	})
 }
 
 func TestTimerExecution(t *testing.T) {
@@ -1114,8 +1150,10 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, []string{"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
-		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first"}, reentrantAppChannel.callLog)
+	assert.Equal(t, []string{
+		"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
+		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first",
+	}, reentrantAppChannel.callLog)
 }
 
 func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
@@ -1138,9 +1176,11 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, []string{"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
+	assert.Equal(t, []string{
+		"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
 		"Entering actors/reentrant/1/method/third", "Exiting actors/reentrant/1/method/third",
-		"Exiting actors/other/1/method/second", "Exiting actors/reentrant/1/method/first"}, reentrantAppChannel.callLog)
+		"Exiting actors/other/1/method/second", "Exiting actors/reentrant/1/method/first",
+	}, reentrantAppChannel.callLog)
 }
 
 func TestReentrancyStackLimit(t *testing.T) {

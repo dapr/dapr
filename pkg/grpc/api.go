@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/PuerkitoBio/purell"
 	"github.com/dapr/components-contrib/bindings"
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -26,6 +25,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -102,7 +102,7 @@ type api struct {
 	shutdown                 func()
 }
 
-// NewAPI returns a new gRPC API
+// NewAPI returns a new gRPC API.
 func NewAPI(
 	appID string, appChannel channel.AppChannel,
 	stateStores map[string]state.Store,
@@ -164,7 +164,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 				httpVerb = httpExt.GetVerb()
 			}
 		}
-		callAllowed, errMsg := a.applyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol)
+		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol, a.accessControlList)
 
 		if !callAllowed {
 			return nil, status.Errorf(codes.PermissionDenied, errMsg)
@@ -172,7 +172,6 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
-
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
@@ -180,49 +179,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func normalizeOperation(operation string) (string, error) {
-	s, err := purell.NormalizeURLString(operation, purell.FlagsUsuallySafeGreedy|purell.FlagRemoveDuplicateSlashes)
-	if err != nil {
-		return "", err
-	}
-	return s, nil
-}
-
-func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string) (bool, string) {
-	// Apply access control list filter
-	spiffeID, err := config.GetAndParseSpiffeID(ctx)
-	if err != nil {
-		// Apply the default action
-		apiServerLogger.Debugf("error while reading spiffe id from client cert: %v. applying default global policy action", err.Error())
-	}
-	var appID, trustDomain, namespace string
-	if spiffeID != nil {
-		appID = spiffeID.AppID
-		namespace = spiffeID.Namespace
-		trustDomain = spiffeID.TrustDomain
-	}
-
-	operation, err = normalizeOperation(operation)
-	var errMessage string
-
-	if err != nil {
-		errMessage = fmt.Sprintf("error in method normalization: %s", err)
-		apiServerLogger.Debugf(errMessage)
-		return false, errMessage
-	}
-
-	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
-	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
-
-	if !action {
-		errMessage = fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
-		apiServerLogger.Debugf(errMessage)
-	}
-
-	return action, errMessage
-}
-
-// CallActor invokes a virtual actor
+// CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
@@ -348,11 +305,11 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, err
 	}
 
-	var headerMD = invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
+	headerMD := invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
 
 	var respError error
 	if resp.IsHTTPResponse() {
-		var errorMessage = []byte("")
+		errorMessage := []byte("")
 		if resp != nil {
 			_, errorMessage = resp.RawData()
 		}
@@ -440,7 +397,9 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 	// if store doesn't support bulk get, fallback to call get() method one by one
 	limiter := concurrency.NewLimiter(int(in.Parallelism))
-	for i := 0; i < len(reqs); i++ {
+	n := len(reqs)
+	resultCh := make(chan *runtimev1pb.BulkStateItem, n)
+	for i := 0; i < n; i++ {
 		fn := func(param interface{}) {
 			req := param.(*state.GetRequest)
 			r, err := store.Get(req)
@@ -454,12 +413,17 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				item.Etag = stringValueOrEmpty(r.ETag)
 				item.Metadata = r.Metadata
 			}
-			bulkResp.Items = append(bulkResp.Items, item)
+			resultCh <- item
 		}
 		limiter.Execute(fn, &reqs[i])
 	}
 	limiter.Wait()
-
+	// collect result
+	resultLen := len(resultCh)
+	for i := 0; i < resultLen; i++ {
+		item := <-resultCh
+		bulkResp.Items = append(bulkResp.Items, item)
+	}
 	return bulkResp, nil
 }
 
@@ -547,7 +511,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	return &emptypb.Empty{}, nil
 }
 
-// stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error
+// stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error.
 func (a *api) stateErrorResponse(err error, format string, args ...interface{}) error {
 	e, ok := err.(*state.ETagError)
 	if !ok {
@@ -660,7 +624,6 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	}
 
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
-
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrSecretGet, req.Name, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -694,7 +657,6 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	}
 
 	getResponse, err := a.secretStores[secretStoreName].BulkGetSecret(req)
-
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrBulkSecretGet, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -752,7 +714,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	operations := []state.TransactionalStateOperation{}
 	for _, inputReq := range in.Operations {
 		var operation state.TransactionalStateOperation
-		var req = inputReq.Request
+		req := inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
 		key, err := state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
@@ -819,7 +781,6 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		Operations: operations,
 		Metadata:   in.Metadata,
 	})
-
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
 		apiServerLogger.Debug(err)
@@ -1051,24 +1012,6 @@ func (a *api) isSecretAllowed(storeName, key string) bool {
 	return true
 }
 
-func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb string, action bool) {
-	if action {
-		switch actionPolicy {
-		case config.ActionPolicyApp:
-			diag.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
-		case config.ActionPolicyGlobal:
-			diag.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
-		}
-	} else {
-		switch actionPolicy {
-		case config.ActionPolicyApp:
-			diag.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
-		case config.ActionPolicyGlobal:
-			diag.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
-		}
-	}
-}
-
 func (a *api) SetAppChannel(appChannel channel.AppChannel) {
 	a.appChannel = appChannel
 }
@@ -1106,13 +1049,13 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 	return response, nil
 }
 
-// Sets value in extended metadata of the sidecar
+// Sets value in extended metadata of the sidecar.
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
 	return &emptypb.Empty{}, nil
 }
 
-// Shutdown the sidecar
+// Shutdown the sidecar.
 func (a *api) Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
 	go func() {
 		<-ctx.Done()

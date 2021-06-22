@@ -59,9 +59,11 @@ type actorCall struct {
 	Method    string `json:"method"`
 }
 
-var actorLogs = []actorLogEntry{}
-var actorLogsMutex = &sync.Mutex{}
-var maxStackDepth = 5
+var (
+	actorLogs      = []actorLogEntry{}
+	actorLogsMutex = &sync.Mutex{}
+	maxStackDepth  = 5
+)
 
 var daprConfigResponse = daprConfig{
 	[]string{defaultActorType},
@@ -95,7 +97,7 @@ func getLogs() []actorLogEntry {
 	return actorLogs
 }
 
-// indexHandler is the handler for root path
+// indexHandler is the handler for root path.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler is called")
 
@@ -240,7 +242,7 @@ func advanceCallStackForNextRequest(req reentrantRequest) (actorCall, []byte) {
 	return nextCall, nextBody
 }
 
-// appRouter initializes restful api router
+// appRouter initializes restful api router.
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 

@@ -67,7 +67,7 @@ func (a *authenticator) GetTrustAnchors() *x509.CertPool {
 	return a.trustAnchors
 }
 
-// GetCurrentSignedCert returns the current and latest signed certificate
+// GetCurrentSignedCert returns the current and latest signed certificate.
 func (a *authenticator) GetCurrentSignedCert() *SignedCertificate {
 	a.certMutex.RLock()
 	defer a.certMutex.RUnlock()
@@ -117,7 +117,6 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 			TrustDomain:               trustDomain,
 			Namespace:                 namespace,
 		}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
-
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, errors.Wrap(err, "error from sentry SignCertificate")
@@ -154,7 +153,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	return signedCert, nil
 }
 
-// currently we support Kubernetes identities
+// currently we support Kubernetes identities.
 func getToken() string {
 	b, _ := ioutil.ReadFile(kubeTknPath)
 	return string(b)

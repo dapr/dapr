@@ -1,6 +1,6 @@
 global:
   registry: docker.io/daprio
-  tag: "1.2.0"
+  tag: "1.2.1"
   dnsSuffix: ".cluster.local"
   logAsJson: false
   imagePullPolicy: IfNotPresent
@@ -9,6 +9,9 @@ global:
   ha:
     enabled: false
     replicaCount: 3
+    disruption:
+      minimumAvailable: ""
+      maximumUnavailable: "25%"
   prometheus:
     enabled: true
     port: 9090
