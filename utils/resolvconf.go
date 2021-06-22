@@ -10,15 +10,15 @@ import (
 )
 
 const (
+	// DefaultKubeClusterDomain is the default value of KubeClusterDomain.
 	DefaultKubeClusterDomain = "cluster.local"
 	defaultResolvPath        = "/etc/resolv.conf"
 	commentMarker            = "#"
 )
 
-var (
-	searchRegexp = regexp.MustCompile(`^\s*search\s*(([^\s]+\s*)*)$`)
-)
+var searchRegexp = regexp.MustCompile(`^\s*search\s*(([^\s]+\s*)*)$`)
 
+// GetKubeClusterDomain search KubeClusterDomain value from /etc/resolv.conf file.
 func GetKubeClusterDomain() (string, error) {
 	resolvContent, err := getResolvContent(defaultResolvPath)
 	if err != nil {
@@ -52,7 +52,7 @@ func getResolvSearchDomains(resolvConf []byte) []string {
 	scanner := bufio.NewScanner(bytes.NewReader(resolvConf))
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		var commentIndex = bytes.Index(line, []byte(commentMarker))
+		commentIndex := bytes.Index(line, []byte(commentMarker))
 		if commentIndex == -1 {
 			lines = append(lines, line)
 		} else {
