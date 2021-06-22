@@ -29,7 +29,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube
 
-    # Set kubernetes master ip
+# If you are using minikube, you'll need to set the IP address for the minikube control plane.
     export MINIKUBE_NODE_IP=your_k8s_master_ip
 
     # Set the below environment variables if you want to use the different registry and tag for test apps
