@@ -125,7 +125,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 }
 
 func TestGetAPIComponent(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		path    string
 		version string
 		api     string
@@ -151,7 +151,7 @@ func TestGetAPIComponent(t *testing.T) {
 }
 
 func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		path string
 		out  map[string]string
 	}{

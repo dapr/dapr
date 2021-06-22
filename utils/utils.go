@@ -19,8 +19,10 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-var clientSet *kubernetes.Clientset
-var kubeConfig *rest.Config
+var (
+	clientSet  *kubernetes.Clientset
+	kubeConfig *rest.Config
+)
 
 func initKubeConfig() {
 	kubeConfig = GetConfig()

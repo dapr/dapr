@@ -27,7 +27,7 @@ import (
 )
 
 func TestSpanAttributesMapFromGRPC(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		rpcMethod                    string
 		requestType                  string
 		expectedServiceNameAttribute string

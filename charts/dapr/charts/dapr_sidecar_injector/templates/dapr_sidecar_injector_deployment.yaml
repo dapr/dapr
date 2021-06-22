@@ -72,8 +72,11 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsUser: 1000
+  {{- if eq .Values.runAsNonRoot true }}
           runAsNonRoot: {{ .Values.runAsNonRoot }}
+  {{- else }}
+          runAsUser: 1000
+  {{- end }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add:
@@ -168,6 +171,19 @@ spec:
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
+{{- end }}
+{{- if .Values.global.ha.enabled }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-sidecar-injector
+              topologyKey: topology.kubernetes.io/zone
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:

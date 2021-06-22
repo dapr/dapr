@@ -155,6 +155,8 @@ type DaprRuntime struct {
 
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentDependents map[string][]components_v1alpha1.Component
+
+	proxy messaging.Proxy
 }
 
 type componentPreprocessRes struct {
@@ -322,6 +324,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
+
+	// Start proxy
+	a.initProxy()
+
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
 
@@ -510,7 +516,18 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		a.grpc.GetGRPCConnection,
 		resolver,
 		a.globalConfig.Spec.TracingSpec,
-		a.runtimeConfig.MaxRequestBodySize)
+		a.runtimeConfig.MaxRequestBodySize,
+		a.proxy)
+}
+
+func (a *DaprRuntime) initProxy() {
+	// TODO: remove feature check once stable
+	if config.IsFeatureEnabled(a.globalConfig.Spec.Features, messaging.GRPCFeatureName) {
+		a.proxy = messaging.NewProxy(a.grpc.GetGRPCConnection, a.runtimeConfig.ID,
+			fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList)
+
+		log.Info("gRPC proxy enabled")
+	}
 }
 
 func (a *DaprRuntime) beginComponentsUpdates() error {
@@ -598,7 +615,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 				return binding.Invoke(req)
 			}
 		}
-		supported := make([]string, len(ops))
+		supported := make([]string, 0, len(ops))
 		for _, o := range ops {
 			supported = append(supported, string(o))
 		}
@@ -767,14 +784,14 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(port)
-	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator)
+	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator, a.proxy)
 	err := server.StartNonBlocking()
 	return err
 }
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy)
 	err := server.StartNonBlocking()
 	return err
 }
@@ -968,9 +985,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 		return a.topicRoutes, nil
 	}
 
-	var topicRoutes map[string]TopicRoute = make(map[string]TopicRoute)
+	topicRoutes := make(map[string]TopicRoute)
 
 	if a.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
 		return topicRoutes, nil
 	}
 
@@ -1114,7 +1132,7 @@ func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, 
 func (a *DaprRuntime) initNameResolution() error {
 	var resolver nr.Resolver
 	var err error
-	var resolverMetadata = nr.Metadata{}
+	resolverMetadata := nr.Metadata{}
 
 	resolverName := a.globalConfig.Spec.NameResolutionSpec.Component
 	resolverVersion := a.globalConfig.Spec.NameResolutionSpec.Version
@@ -1722,7 +1740,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error)
+		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
@@ -1733,7 +1751,7 @@ func (a *DaprRuntime) createAppChannel() error {
 			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL)
+		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize)
 		if err != nil {
 			return err
 		}
@@ -1850,6 +1868,7 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
+
 func (a *DaprRuntime) startSubscribing() {
 	for name, pubsub := range a.pubSubs {
 		if err := a.beginPubSub(name, pubsub); err != nil {

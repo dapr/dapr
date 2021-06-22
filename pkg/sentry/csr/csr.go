@@ -25,10 +25,8 @@ const (
 	encodeMsgCert         = "CERTIFICATE"
 )
 
-var (
-	// The OID for the SAN extension (http://www.alvestrand.no/objectid/2.5.29.17.html)
-	oidSubjectAlternativeName = asn1.ObjectIdentifier{2, 5, 29, 17}
-)
+// The OID for the SAN extension (http://www.alvestrand.no/objectid/2.5.29.17.html)
+var oidSubjectAlternativeName = asn1.ObjectIdentifier{2, 5, 29, 17}
 
 // GenerateCSR creates a X.509 certificate sign request and private key.
 func GenerateCSR(org string, pkcs8 bool) ([]byte, []byte, error) {
@@ -190,7 +188,7 @@ func encode(csr bool, csrOrCert []byte, privKey *ecdsa.PrivateKey, pkcs8 bool) (
 	var err error
 
 	if pkcs8 {
-		if encodedKey, err = x509.MarshalECPrivateKey(privKey); err != nil {
+		if encodedKey, err = x509.MarshalPKCS8PrivateKey(privKey); err != nil {
 			return nil, nil, err
 		}
 		privPem = pem.EncodeToMemory(&pem.Block{Type: blockTypePrivateKey, Bytes: encodedKey})
