@@ -96,7 +96,9 @@ HELM_REGISTRY?=daprio.azurecr.io
 ################################################################################
 BASE_PACKAGE_NAME := github.com/dapr/dapr
 
-DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)
+DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.gitcommit=$(GIT_COMMIT) \
+  -X $(BASE_PACKAGE_NAME)/pkg/version.gitversion=$(GIT_VERSION) \
+  -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)
 
 ifeq ($(origin DEBUG), undefined)
   BUILDTYPE_DIR:=release
