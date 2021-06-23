@@ -1,6 +1,6 @@
 # Monitoring Dashboard
 
-This includes dashboard templates to monitor Dapr system services and sidecars. For more detail information, please read [Dapr Observability](https://docs.dapr.io/concepts/observability-concept/).
+This includes dashboard templates to monitor Dapr system services and sidecars. For more detailed information, please read [Dapr Observability](https://docs.dapr.io/concepts/observability-concept/).
 
 ## Grafana
 
@@ -13,7 +13,7 @@ You can set up [Prometheus](https://docs.dapr.io/operations/monitoring/prometheu
     - Shows Dapr sidecar status - sidecar health/resources, throughput/latency of HTTP and gRPC, Actor, mTLS, etc.
 
 3. [Dapr Actor Dashboard](./grafana-actor-dashboard.json)
-    - Shows Dapr sidecar status - actor invocation throughput/latency, timer/reminder triggers, and turn-based concurrnecy.
+    - Shows Dapr sidecar status - actor invocation throughput/latency, timer/reminder triggers, and turn-based concurrency.
 
 ## Reference
 
