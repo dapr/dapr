@@ -73,7 +73,7 @@ for clustername in `cat $1 | sed 's/\r//g' | sort -R | xargs`; do
     # If running time is greater than $MAX_TEST_TIMEOUT seconds, it might be because of test failure.
     # In this case, we can use this cluster.
     if [ $running_time -gt $MAX_TEST_TIMEOUT ]; then
-        echo "The previous test running in this cluster might be cancelled or failed accidently so use $clustername cluster for e2e test."
+        echo "The previous test running in this cluster might be cancelled or failed accidentally so use $clustername cluster for e2e test."
         current_dir=$(dirname "$0")
         $current_dir/clean_up.sh ${DAPR_TEST_NAMESPACE}
     fi

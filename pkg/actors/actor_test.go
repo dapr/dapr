@@ -12,19 +12,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestIsBusy(t *testing.T) {
-	testActor := newActor("testType", "testID")
+var reentrancyStackDepth = 32
 
-	testActor.lock()
+func TestIsBusy(t *testing.T) {
+	testActor := newActor("testType", "testID", &reentrancyStackDepth)
+
+	testActor.lock(nil)
 	assert.Equal(t, true, testActor.isBusy())
 	testActor.unlock()
 }
 
 func TestTurnBasedConcurrencyLocks(t *testing.T) {
-	testActor := newActor("testType", "testID")
+	testActor := newActor("testType", "testID", &reentrancyStackDepth)
 
 	// first lock
-	testActor.lock()
+	testActor.lock(nil)
 	assert.Equal(t, true, testActor.isBusy())
 	firstLockTime := testActor.lastUsedTime
 
@@ -33,7 +35,7 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 	// second lock
 	go func() {
 		waitCh <- false
-		testActor.lock()
+		testActor.lock(nil)
 		time.Sleep(100 * time.Millisecond)
 		testActor.unlock()
 		waitCh <- false
@@ -61,22 +63,22 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 
 func TestDisposedActor(t *testing.T) {
 	t.Run("not disposed", func(t *testing.T) {
-		testActor := newActor("testType", "testID")
+		testActor := newActor("testType", "testID", &reentrancyStackDepth)
 
-		testActor.lock()
+		testActor.lock(nil)
 		testActor.unlock()
 		assert.False(t, testActor.disposed)
 	})
 
 	t.Run("disposed", func(t *testing.T) {
-		testActor := newActor("testType", "testID")
+		testActor := newActor("testType", "testID", &reentrancyStackDepth)
 
-		testActor.lock()
+		testActor.lock(nil)
 		ch := testActor.channel()
 		assert.NotNil(t, ch)
 		testActor.unlock()
 
-		err := testActor.lock()
+		err := testActor.lock(nil)
 
 		assert.Equal(t, int32(0), testActor.pendingActorCalls.Load())
 		assert.IsType(t, ErrActorDisposed, err)
@@ -85,7 +87,7 @@ func TestDisposedActor(t *testing.T) {
 
 func TestPendingActorCalls(t *testing.T) {
 	t.Run("no pending actor call with new actor object", func(t *testing.T) {
-		testActor := newActor("testType", "testID")
+		testActor := newActor("testType", "testID", &reentrancyStackDepth)
 		channelClosed := false
 
 		select {
@@ -100,8 +102,8 @@ func TestPendingActorCalls(t *testing.T) {
 	})
 
 	t.Run("close channel before timeout", func(t *testing.T) {
-		testActor := newActor("testType", "testID")
-		testActor.lock()
+		testActor := newActor("testType", "testID", &reentrancyStackDepth)
+		testActor.lock(nil)
 
 		channelClosed := false
 		go func() {
@@ -121,8 +123,8 @@ func TestPendingActorCalls(t *testing.T) {
 	})
 
 	t.Run("multiple listeners", func(t *testing.T) {
-		testActor := newActor("testType", "testID")
-		testActor.lock()
+		testActor := newActor("testType", "testID", &reentrancyStackDepth)
+		testActor.lock(nil)
 
 		nListeners := 10
 		releaseSignaled := make([]bool, nListeners)

@@ -17,9 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -42,7 +43,7 @@ const (
 
 var log = logger.NewLogger("dapr.operator.handlers")
 
-// DaprHandler handles the lifetime for Dapr CRDs
+// DaprHandler handles the lifetime for Dapr CRDs.
 type DaprHandler struct {
 	mgr ctrl.Manager
 
@@ -50,7 +51,7 @@ type DaprHandler struct {
 	Scheme *runtime.Scheme
 }
 
-// NewDaprHandler returns a new Dapr handler
+// NewDaprHandler returns a new Dapr handler.
 func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 	return &DaprHandler{
 		mgr: mgr,
@@ -60,7 +61,7 @@ func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 	}
 }
 
-// Init allows for various startup tasks
+// Init allows for various startup tasks.
 func (h *DaprHandler) Init() error {
 	if err := h.mgr.GetFieldIndexer().IndexField(
 		context.TODO(),
@@ -111,11 +112,8 @@ func (h *DaprHandler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Res
 		if err := h.ensureDaprServicePresent(ctx, req.Namespace, &deployment); err != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
-	} else {
-		if err := h.ensureDaprServiceAbsent(ctx, req.NamespacedName); err != nil {
-			return ctrl.Result{Requeue: true}, err
-		}
 	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -195,7 +193,8 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 					Port:       int32(daprSidecarAPIGRPCPort),
 					TargetPort: intstr.FromInt(daprSidecarAPIGRPCPort),
 					Name:       daprSidecarAPIGRPCPortName,
-				}, {
+				},
+				{
 					Protocol:   corev1.ProtocolTCP,
 					Port:       int32(daprSidecarInternalGRPCPort),
 					TargetPort: intstr.FromInt(daprSidecarInternalGRPCPort),
@@ -210,28 +209,6 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 			},
 		},
 	}
-}
-
-func (h *DaprHandler) ensureDaprServiceAbsent(ctx context.Context, deploymentKey types.NamespacedName) error {
-	var services corev1.ServiceList
-	if err := h.List(ctx, &services,
-		client.InNamespace(deploymentKey.Namespace),
-		client.MatchingFields{daprServiceOwnerField: deploymentKey.Name}); err != nil {
-		log.Errorf("unable to list services, err: %s", err)
-		return err
-	}
-	for i := range services.Items {
-		svc := services.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		log.Debugf("deleting service: %s/%s", svc.Namespace, svc.Name)
-		if err := h.Delete(ctx, &svc, client.PropagationPolicy(meta_v1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
-			log.Errorf("unable to delete svc: %s/%s, err: %s", svc.Namespace, svc.Name, err)
-		} else {
-			log.Debugf("deleted service: %s/%s", svc.Namespace, svc.Name)
-			appID := svc.Annotations[appIDAnnotationKey]
-			monitoring.RecordServiceDeletedCount(appID)
-		}
-	}
-	return nil
 }
 
 func (h *DaprHandler) getAppID(deployment *appsv1.Deployment) string {

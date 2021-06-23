@@ -12,9 +12,10 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/identity"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -24,10 +25,8 @@ const (
 	encodeMsgCert         = "CERTIFICATE"
 )
 
-var (
-	// The OID for the SAN extension (http://www.alvestrand.no/objectid/2.5.29.17.html)
-	oidSubjectAlternativeName = asn1.ObjectIdentifier{2, 5, 29, 17}
-)
+// The OID for the SAN extension (http://www.alvestrand.no/objectid/2.5.29.17.html)
+var oidSubjectAlternativeName = asn1.ObjectIdentifier{2, 5, 29, 17}
 
 // GenerateCSR creates a X.509 certificate sign request and private key.
 func GenerateCSR(org string, pkcs8 bool) ([]byte, []byte, error) {
@@ -60,25 +59,27 @@ func genCSRTemplate(org string) (*x509.CertificateRequest, error) {
 
 // generateBaseCert returns a base non-CA cert that can be made a workload or CA cert
 // By adding subjects, key usage and additional proerties.
-func generateBaseCert(ttl time.Duration, publicKey interface{}) (*x509.Certificate, error) {
+func generateBaseCert(ttl, skew time.Duration, publicKey interface{}) (*x509.Certificate, error) {
 	serNum, err := newSerialNumber()
 	if err != nil {
 		return nil, err
 	}
 
 	now := time.Now().UTC()
+	// Allow for clock skew with the NotBefore validity bound.
+	notBefore := now.Add(-1 * skew)
 	notAfter := now.Add(ttl)
 
 	return &x509.Certificate{
 		SerialNumber: serNum,
-		NotBefore:    now,
+		NotBefore:    notBefore,
 		NotAfter:     notAfter,
 		PublicKey:    publicKey,
 	}, nil
 }
 
-func GenerateIssuerCertCSR(cn string, publicKey interface{}, ttl time.Duration) (*x509.Certificate, error) {
-	cert, err := generateBaseCert(ttl, publicKey)
+func GenerateIssuerCertCSR(cn string, publicKey interface{}, ttl, skew time.Duration) (*x509.Certificate, error) {
+	cert, err := generateBaseCert(ttl, skew, publicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -94,9 +95,9 @@ func GenerateIssuerCertCSR(cn string, publicKey interface{}, ttl time.Duration) 
 	return cert, nil
 }
 
-// GenerateRootCertCSR returns a CA root cert x509 Certificate
-func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl time.Duration) (*x509.Certificate, error) {
-	cert, err := generateBaseCert(ttl, publicKey)
+// GenerateRootCertCSR returns a CA root cert x509 Certificate.
+func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl, skew time.Duration) (*x509.Certificate, error) {
+	cert, err := generateBaseCert(ttl, skew, publicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -116,8 +117,8 @@ func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl time.Duratio
 
 // GenerateCSRCertificate returns an x509 Certificate from a CSR, signing cert, public key, signing private key and duration.
 func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identityBundle *identity.Bundle, signingCert *x509.Certificate, publicKey interface{}, signingKey crypto.PrivateKey,
-	ttl time.Duration, isCA bool) ([]byte, error) {
-	cert, err := generateBaseCert(ttl, publicKey)
+	ttl, skew time.Duration, isCA bool) ([]byte, error) {
+	cert, err := generateBaseCert(ttl, skew, publicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "error generating csr certificate")
 	}
@@ -187,7 +188,7 @@ func encode(csr bool, csrOrCert []byte, privKey *ecdsa.PrivateKey, pkcs8 bool) (
 	var err error
 
 	if pkcs8 {
-		if encodedKey, err = x509.MarshalECPrivateKey(privKey); err != nil {
+		if encodedKey, err = x509.MarshalPKCS8PrivateKey(privKey); err != nil {
 			return nil, nil, err
 		}
 		privPem = pem.EncodeToMemory(&pem.Block{Type: blockTypePrivateKey, Bytes: encodedKey})

@@ -8,8 +8,9 @@ package grpc
 import (
 	"testing"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/stretchr/testify/assert"
+
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 func TestConsistency(t *testing.T) {

@@ -28,16 +28,16 @@ import (
 
 var replicationFactor int
 
-// ErrNoHosts is an error for no hosts
+// ErrNoHosts is an error for no hosts.
 var ErrNoHosts = errors.New("no hosts added")
 
-// ConsistentHashTables is a table holding a map of consistent hashes with a given version
+// ConsistentHashTables is a table holding a map of consistent hashes with a given version.
 type ConsistentHashTables struct {
 	Version string
 	Entries map[string]*Consistent
 }
 
-// Host represents a host of stateful entities with a given name, id, port and load
+// Host represents a host of stateful entities with a given name, id, port and load.
 type Host struct {
 	Name  string
 	Port  int64
@@ -45,7 +45,7 @@ type Host struct {
 	AppID string
 }
 
-// Consistent represents a data structure for consistent hashing
+// Consistent represents a data structure for consistent hashing.
 type Consistent struct {
 	hosts     map[uint64]string
 	sortedSet []uint64
@@ -55,7 +55,7 @@ type Consistent struct {
 	sync.RWMutex
 }
 
-// NewPlacementTables returns new stateful placement tables with a given version
+// NewPlacementTables returns new stateful placement tables with a given version.
 func NewPlacementTables(version string, entries map[string]*Consistent) *ConsistentHashTables {
 	return &ConsistentHashTables{
 		Version: version,
@@ -63,7 +63,7 @@ func NewPlacementTables(version string, entries map[string]*Consistent) *Consist
 	}
 }
 
-// NewHost returns a new host
+// NewHost returns a new host.
 func NewHost(name, id string, load int64, port int64) *Host {
 	return &Host{
 		Name:  name,
@@ -73,7 +73,7 @@ func NewHost(name, id string, load int64, port int64) *Host {
 	}
 }
 
-// NewConsistentHash returns a new consistent hash
+// NewConsistentHash returns a new consistent hash.
 func NewConsistentHash() *Consistent {
 	return &Consistent{
 		hosts:     map[uint64]string{},
@@ -82,7 +82,7 @@ func NewConsistentHash() *Consistent {
 	}
 }
 
-// NewFromExisting creates a new consistent hash from existing values
+// NewFromExisting creates a new consistent hash from existing values.
 func NewFromExisting(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*Host) *Consistent {
 	return &Consistent{
 		hosts:     hosts,
@@ -91,7 +91,7 @@ func NewFromExisting(hosts map[uint64]string, sortedSet []uint64, loadMap map[st
 	}
 }
 
-// GetInternals returns the internal data structure of the consistent hash
+// GetInternals returns the internal data structure of the consistent hash.
 func (c *Consistent) GetInternals() (map[uint64]string, []uint64, map[string]*Host, int64) {
 	c.RLock()
 	defer c.RUnlock()
@@ -99,7 +99,7 @@ func (c *Consistent) GetInternals() (map[uint64]string, []uint64, map[string]*Ho
 	return c.hosts, c.sortedSet, c.loadMap, c.totalLoad
 }
 
-// Add adds a host with port to the table
+// Add adds a host with port to the table.
 func (c *Consistent) Add(host, id string, port int64) bool {
 	c.Lock()
 	defer c.Unlock()
@@ -140,7 +140,7 @@ func (c *Consistent) Get(key string) (string, error) {
 	return c.hosts[c.sortedSet[idx]], nil
 }
 
-// GetHost gets a host
+// GetHost gets a host.
 func (c *Consistent) GetHost(key string) (*Host, error) {
 	h, err := c.Get(key)
 	if err != nil {
@@ -193,7 +193,7 @@ func (c *Consistent) search(key uint64) int {
 	return idx
 }
 
-// UpdateLoad sets the load of `host` to the given `load`
+// UpdateLoad sets the load of `host` to the given `load`.
 func (c *Consistent) UpdateLoad(host string, load int64) {
 	c.Lock()
 	defer c.Unlock()
@@ -208,7 +208,7 @@ func (c *Consistent) UpdateLoad(host string, load int64) {
 
 // Inc increments the load of host by 1
 //
-// should only be used with if you obtained a host with GetLeast
+// should only be used with if you obtained a host with GetLeast.
 func (c *Consistent) Inc(host string) {
 	c.Lock()
 	defer c.Unlock()
@@ -219,7 +219,7 @@ func (c *Consistent) Inc(host string) {
 
 // Done decrements the load of host by 1
 //
-// should only be used with if you obtained a host with GetLeast
+// should only be used with if you obtained a host with GetLeast.
 func (c *Consistent) Done(host string) {
 	c.Lock()
 	defer c.Unlock()
@@ -231,7 +231,7 @@ func (c *Consistent) Done(host string) {
 	atomic.AddInt64(&c.totalLoad, -1)
 }
 
-// Remove deletes host from the ring
+// Remove deletes host from the ring.
 func (c *Consistent) Remove(host string) bool {
 	c.Lock()
 	defer c.Unlock()
@@ -245,7 +245,7 @@ func (c *Consistent) Remove(host string) bool {
 	return true
 }
 
-// Hosts return the list of hosts in the ring
+// Hosts return the list of hosts in the ring.
 func (c *Consistent) Hosts() (hosts []string) {
 	c.RLock()
 	defer c.RUnlock()
@@ -255,7 +255,7 @@ func (c *Consistent) Hosts() (hosts []string) {
 	return hosts
 }
 
-// GetLoads returns the loads of all the hosts
+// GetLoads returns the loads of all the hosts.
 func (c *Consistent) GetLoads() map[string]int64 {
 	loads := map[string]int64{}
 
@@ -334,7 +334,7 @@ func (c *Consistent) hash(key string) uint64 {
 	return binary.LittleEndian.Uint64(out[:])
 }
 
-// SetReplicationFactor sets the replication factor for actor placement on vnodes
+// SetReplicationFactor sets the replication factor for actor placement on vnodes.
 func SetReplicationFactor(factor int) {
 	replicationFactor = factor
 }

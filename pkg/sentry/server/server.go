@@ -12,13 +12,14 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/dapr/kit/logger"
+
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
-	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -27,7 +28,7 @@ const (
 
 var log = logger.NewLogger("dapr.sentry.server")
 
-// CAServer is an interface for the Certificate Authority server
+// CAServer is an interface for the Certificate Authority server.
 type CAServer interface {
 	Run(port int, trustBundle ca.TrustRootBundler) error
 	Shutdown()
@@ -40,7 +41,7 @@ type server struct {
 	validator   identity.Validator
 }
 
-// NewCAServer returns a new CA Server running a gRPC server
+// NewCAServer returns a new CA Server running a gRPC server.
 func NewCAServer(ca ca.CertificateAuthority, validator identity.Validator) CAServer {
 	return &server{
 		certAuth:  ca,
@@ -127,7 +128,6 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	csrPem := req.GetCertificateSigningRequest()
 
 	csr, err := certs.ParsePemCSR(csrPem)
-
 	if err != nil {
 		err = errors.Wrap(err, "cannot parse certificate signing request pem")
 		log.Error(err)

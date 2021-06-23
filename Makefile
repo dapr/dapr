@@ -38,6 +38,8 @@ else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
 	TARGET_ARCH_LOCAL=arm64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
 	TARGET_ARCH_LOCAL=arm
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),arm64)
+	TARGET_ARCH_LOCAL=arm64
 else
 	TARGET_ARCH_LOCAL=amd64
 endif
@@ -207,7 +209,7 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
 		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=Always \
-		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) $(HELM_CHART_DIR)
+		--set global.imagePullPolicy=Always --set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) $(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #
@@ -263,7 +265,7 @@ $(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
 GEN_PROTOS:=$(foreach ITEM,$(GRPC_PROTOS),gen-proto-$(ITEM))
 
 .PHONY: gen-proto
-gen-proto: $(GEN_PROTOS) modtidy
+gen-proto: check-proto-version $(GEN_PROTOS) modtidy
 
 ################################################################################
 # Target: get-components-contrib                                               #
@@ -279,6 +281,36 @@ get-components-contrib:
 check-diff:
 	git diff --exit-code ./go.mod # check no changes
 	git diff --exit-code ./go.sum # check no changes
+
+################################################################################
+# Target: check-proto-version                                                         #
+################################################################################
+.PHONY: check-proto-version
+check-proto-version: ## Checking the version of proto related tools
+	@test "$(shell protoc --version)" = "libprotoc 3.14.0" \
+	|| { echo "please use protoc 3.14.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+
+	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc 1.1.0" \
+	|| { echo "please use protoc-gen-go-grpc 1.1.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+
+	@test "$(shell protoc-gen-go --version 2>&1)" = "protoc-gen-go v1.25.0" \
+	|| { echo "please use protoc-gen-go v1.25.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+
+################################################################################
+# Target: check-proto-diff                                                           #
+################################################################################
+.PHONY: check-proto-diff
+check-proto-diff:
+	git diff --exit-code ./pkg/proto/common/v1/common.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/internals/v1/status.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/operator/v1/operator.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/operator/v1/operator_grpc.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/appcallback.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/appcallback_grpc.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/dapr.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/dapr_grpc.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/sentry/v1/sentry.pb.go # check no changes
+
 
 ################################################################################
 # Target: codegen                                                              #

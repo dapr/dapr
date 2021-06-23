@@ -1,0 +1,8 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: grpcproxyconfig
+spec:
+  features:
+    - name: proxy.grpc
+      enabled: true
