@@ -92,7 +92,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
-	"github.com/dapr/components-contrib/bindings/hasura"
+	"github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
@@ -400,8 +400,8 @@ func main() {
 			bindings_loader.NewOutput("smtp", func() bindings.OutputBinding {
 				return smtp.NewSMTP(logContrib)
 			}),
-			bindings_loader.NewOutput("hasura", func() bindings.OutputBinding {
-				return hasura.NewHasura(logContrib)
+			bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
+				return graphql.NewGraphQL(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
