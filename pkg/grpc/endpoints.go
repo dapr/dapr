@@ -9,9 +9,10 @@ import (
 	"context"
 	"net/http"
 
+	"google.golang.org/grpc"
+
 	"github.com/dapr/dapr/pkg/config"
 	v1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"google.golang.org/grpc"
 )
 
 var endpoints = map[string][]string{
@@ -54,13 +55,23 @@ var endpoints = map[string][]string{
 	},
 }
 
+const protocol = "grpc"
+
 func setAPIEndpointsMiddlewareUnary(rules []config.APIAccessRule) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		if len(rules) == 0 {
+		var grpcRules []config.APIAccessRule
+
+		for _, rule := range rules {
+			if rule.Protocol == protocol {
+				grpcRules = append(grpcRules, rule)
+			}
+		}
+
+		if len(grpcRules) == 0 {
 			return handler(ctx, req)
 		}
 
-		for _, rule := range rules {
+		for _, rule := range grpcRules {
 			if list, ok := endpoints[rule.Name+"."+rule.Version]; ok {
 				for _, method := range list {
 					if method == info.FullMethod {

@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/pubsub"
+
 	"github.com/dapr/dapr/pkg/components"
 )
 
@@ -21,7 +22,7 @@ type (
 		FactoryMethod func() pubsub.PubSub
 	}
 
-	// Registry is the interface for callers to get registered pub-sub components
+	// Registry is the interface for callers to get registered pub-sub components.
 	Registry interface {
 		Register(components ...PubSub)
 		Create(name, version string) (pubsub.PubSub, error)
@@ -40,7 +41,7 @@ func New(name string, factoryMethod func() pubsub.PubSub) PubSub {
 	}
 }
 
-// NewRegistry returns a new pub sub registry
+// NewRegistry returns a new pub sub registry.
 func NewRegistry() Registry {
 	return &pubSubRegistry{
 		messageBuses: map[string]func() pubsub.PubSub{},

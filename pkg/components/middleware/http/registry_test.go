@@ -15,6 +15,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	h "github.com/dapr/components-contrib/middleware"
+
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 )

@@ -10,50 +10,51 @@ import (
 	"os"
 	"strconv"
 
-	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
 const (
-	// TestAppLabelKey is the label key for Kubernetes label selector
+	// TestAppLabelKey is the label key for Kubernetes label selector.
 	TestAppLabelKey = "testapp"
-	// DaprSideCarName is the Pod name of Dapr side car
+	// DaprSideCarName is the Pod name of Dapr side car.
 	DaprSideCarName = "daprd"
 
-	// DefaultContainerPort is the default container port exposed from test app
+	// DefaultContainerPort is the default container port exposed from test app.
 	DefaultContainerPort = 3000
-	// DefaultExternalPort is the default external port exposed by load balancer ingress
+	// DefaultExternalPort is the default external port exposed by load balancer ingress.
 	DefaultExternalPort = 3000
 
-	// DaprComponentsKind is component kind
+	// DaprComponentsKind is component kind.
 	DaprComponentsKind = "components.dapr.io"
 
-	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests
+	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests.
 	DaprTestNamespaceEnvVar = "DAPR_TEST_NAMESPACE"
 
-	// Environment variable for setting Kubernetes node affinity OS
+	// Environment variable for setting Kubernetes node affinity OS.
 	TargetOsEnvVar = "TARGET_OS"
 
-	// Environment variable for setting Kubernetes node affinity ARCH
+	// Environment variable for setting Kubernetes node affinity ARCH.
 	TargetArchEnvVar = "TARGET_ARCH"
 )
 
 var (
-	// DaprTestNamespace is the default Kubernetes namespace for e2e tests
+	// DaprTestNamespace is the default Kubernetes namespace for e2e tests.
 	DaprTestNamespace = "dapr-tests"
 
-	// TargetOs is default os affinity for Kubernetes nodes
+	// TargetOs is default os affinity for Kubernetes nodes.
 	TargetOs = "linux"
 
-	// TargetArch is the default architecture affinity for Kubernetes nodes
+	// TargetArch is the default architecture affinity for Kubernetes nodes.
 	TargetArch = "amd64"
 )
 
-// buildDaprAnnotations creates the Kubernetes Annotations object for dapr test app
+// buildDaprAnnotations creates the Kubernetes Annotations object for dapr test app.
 func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	annotationObject := map[string]string{}
 
@@ -85,7 +86,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	return annotationObject
 }
 
-// buildPodTemplate creates the Kubernetes Pod Template object for dapr test app
+// buildPodTemplate creates the Kubernetes Pod Template object for dapr test app.
 func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 	appEnv := []apiv1.EnvVar{}
 	if appDesc.AppEnv != nil {
@@ -146,7 +147,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 	}
 }
 
-// buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
+// buildDeploymentObject creates the Kubernetes Deployment object for dapr test app.
 func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
 	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly
 		appDesc.AppPort = DefaultContainerPort
@@ -169,7 +170,7 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 	}
 }
 
-// buildJobObject creates the Kubernetes Job object for dapr test app
+// buildJobObject creates the Kubernetes Job object for dapr test app.
 func buildJobObject(namespace string, appDesc AppDescription) *batchv1.Job {
 	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly
 		appDesc.AppPort = DefaultContainerPort
@@ -187,7 +188,7 @@ func buildJobObject(namespace string, appDesc AppDescription) *batchv1.Job {
 	return &job
 }
 
-// buildServiceObject creates the Kubernetes Service Object for dapr test app
+// buildServiceObject creates the Kubernetes Service Object for dapr test app.
 func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service {
 	serviceType := apiv1.ServiceTypeClusterIP
 
@@ -224,7 +225,7 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 	}
 }
 
-// buildDaprComponentObject creates dapr component object
+// buildDaprComponentObject creates dapr component object.
 func buildDaprComponentObject(componentName string, typeName string, metaData []v1alpha1.MetadataItem) *v1alpha1.Component {
 	return &v1alpha1.Component{
 		TypeMeta: metav1.TypeMeta{
@@ -240,7 +241,7 @@ func buildDaprComponentObject(componentName string, typeName string, metaData []
 	}
 }
 
-// buildNamespaceObject creates the Kubernetes Namespace object
+// buildNamespaceObject creates the Kubernetes Namespace object.
 func buildNamespaceObject(namespace string) *apiv1.Namespace {
 	return &apiv1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 }

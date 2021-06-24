@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	ss "github.com/dapr/components-contrib/secretstores"
+
 	"github.com/dapr/dapr/pkg/components/secretstores"
 )
 

@@ -12,24 +12,22 @@ import (
 	"go.opencensus.io/tag"
 )
 
-var (
-	// appIDKey is a tag key for App ID
-	appIDKey = tag.MustNewKey("app_id")
-)
+// appIDKey is a tag key for App ID.
+var appIDKey = tag.MustNewKey("app_id")
 
 var (
-	// DefaultReportingPeriod is the default view reporting period
+	// DefaultReportingPeriod is the default view reporting period.
 	DefaultReportingPeriod = 1 * time.Minute
 
-	// DefaultMonitoring holds service monitoring metrics definitions
+	// DefaultMonitoring holds service monitoring metrics definitions.
 	DefaultMonitoring = newServiceMetrics()
-	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middlewares
+	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middlewares.
 	DefaultGRPCMonitoring = newGRPCMetrics()
-	// DefaultHTTPMonitoring holds default HTTP monitoring handlers and middlewares
+	// DefaultHTTPMonitoring holds default HTTP monitoring handlers and middlewares.
 	DefaultHTTPMonitoring = newHTTPMetrics()
 )
 
-// InitMetrics initializes metrics
+// InitMetrics initializes metrics.
 func InitMetrics(appID string) error {
 	if err := DefaultMonitoring.Init(appID); err != nil {
 		return err
