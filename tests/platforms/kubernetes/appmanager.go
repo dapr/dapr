@@ -99,6 +99,11 @@ func (m *AppManager) Init() error {
 		m.logPrefix = ContainerLogDefaultPath
 	}
 
+	if err := os.MkdirAll(m.logPrefix, os.ModePerm); err != nil {
+		log.Printf("Failed to create output log directory '%s' Error was: '%s'. Container logs will be discarded", m.logPrefix, err)
+		m.logPrefix = ""
+	}
+
 	log.Printf("Deploying app %v ...", m.app.AppName)
 	if m.app.IsJob {
 		// Deploy app and wait until deployment is done
@@ -164,11 +169,6 @@ func (m *AppManager) Init() error {
 		log.Printf("Creating pod port forwarder for app %v ....", m.app.AppName)
 		m.forwarder = NewPodPortForwarder(m.client, m.namespace)
 		log.Printf("Pod port forwarder for app %v has been created.", m.app.AppName)
-	}
-
-	if err := os.MkdirAll(m.logPrefix, os.ModePerm); err != nil {
-		log.Printf("Failed to create output log directory '%s' Error was: '%s'. Container logs will be discarded", m.logPrefix, err)
-		m.logPrefix = ""
 	}
 
 	return nil
