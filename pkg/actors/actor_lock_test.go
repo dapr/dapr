@@ -11,9 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var (
-	baseID = "test"
-)
+var baseID = "test"
 
 func TestLockBaseCase(t *testing.T) {
 	for _, requestID := range []*string{&baseID, nil} {

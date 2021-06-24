@@ -52,17 +52,16 @@ import (
 
 const maxGRPCServerUptime = 100 * time.Millisecond
 
-type mockGRPCAPI struct {
-}
+type mockGRPCAPI struct{}
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	var resp = invokev1.NewInvokeMethodResponse(0, "", nil)
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
 	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
 	return resp.Proto(), nil
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	var resp = invokev1.NewInvokeMethodResponse(0, "", nil)
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
 	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
 	return resp.Proto(), nil
 }
@@ -125,7 +124,7 @@ func configureTestTraceExporter(buffer *string) {
 func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	var buffer = ""
+	buffer := ""
 	configureTestTraceExporter(&buffer)
 
 	spec := config.TracingSpec{SamplingRate: "1"}
@@ -469,7 +468,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 		directMessaging: mockDirectMessaging,
 	}
 
-	var httpResponseTests = []struct {
+	httpResponseTests := []struct {
 		status         int
 		statusMessage  string
 		grpcStatusCode codes.Code
@@ -1494,6 +1493,7 @@ func TestGetMetadata(t *testing.T) {
 	assert.Contains(t, response.ExtendedMetadata, "testKey")
 	assert.Equal(t, response.ExtendedMetadata["testKey"], "testValue")
 }
+
 func TestSetMetadata(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	fakeComponent := components_v1alpha.Component{}

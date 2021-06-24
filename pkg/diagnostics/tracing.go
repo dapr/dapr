@@ -70,10 +70,8 @@ const (
 	daprGRPCDaprService              = "Dapr"
 )
 
-var (
-	// Effectively const, but isn't a const from upstream.
-	messagingDestinationTopicKind = semconv.MessagingDestinationKindKeyTopic.Value.AsString()
-)
+// Effectively const, but isn't a const from upstream.
+var messagingDestinationTopicKind = semconv.MessagingDestinationKindKeyTopic.Value.AsString()
 
 // SpanContextToW3CString returns the SpanContext string representation.
 func SpanContextToW3CString(sc trace.SpanContext) string {
@@ -86,7 +84,7 @@ func SpanContextToW3CString(sc trace.SpanContext) string {
 
 // TraceStateToW3CString extracts the TraceState from given SpanContext and returns its string representation.
 func TraceStateToW3CString(sc trace.SpanContext) string {
-	var pairs = make([]string, 0, len(sc.Tracestate.Entries()))
+	pairs := make([]string, 0, len(sc.Tracestate.Entries()))
 	var h string
 	if sc.Tracestate != nil {
 		for _, entry := range sc.Tracestate.Entries() {

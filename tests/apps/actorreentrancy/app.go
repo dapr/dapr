@@ -59,9 +59,11 @@ type actorCall struct {
 	Method    string `json:"method"`
 }
 
-var actorLogs = []actorLogEntry{}
-var actorLogsMutex = &sync.Mutex{}
-var maxStackDepth = 5
+var (
+	actorLogs      = []actorLogEntry{}
+	actorLogsMutex = &sync.Mutex{}
+	maxStackDepth  = 5
+)
 
 var daprConfigResponse = daprConfig{
 	[]string{defaultActorType},

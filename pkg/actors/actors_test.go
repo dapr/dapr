@@ -82,7 +82,6 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 			nextReq.AddHeaders(&header)
 		}
 		_, err := r.a.callLocalActor(context.Background(), nextReq)
-
 		if err != nil {
 			return nil, err
 		}
@@ -288,7 +287,7 @@ func TestStoreIsNotInited(t *testing.T) {
 	})
 
 	t.Run("updateReminderTrack", func(t *testing.T) {
-		e := testActorsRuntime.updateReminderTrack("foo", "bar")
+		e := testActorsRuntime.updateReminderTrack("foo", "bar", 1)
 		assert.NotNil(t, e)
 	})
 
@@ -332,8 +331,8 @@ func TestReminderExecution(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
-
-	err := testActorsRuntime.executeReminder(actorType, actorID, "2s", "2s", "reminder1", "data")
+	noRepetition := newActorRepetition(-1)
+	err := testActorsRuntime.executeReminder(actorType, actorID, "2s", "2s", "reminder1", noRepetition, "data")
 	assert.Nil(t, err)
 }
 
@@ -341,15 +340,16 @@ func TestReminderExecutionZeroDuration(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
-
-	err := testActorsRuntime.executeReminder(actorType, actorID, "0ms", "0ms", "reminder0", "data")
+	noRepetition := newActorRepetition(-1)
+	err := testActorsRuntime.executeReminder(actorType, actorID, "0ms", "0ms", "reminder0", noRepetition, "data")
 	assert.Nil(t, err)
 }
 
 func TestSetReminderTrack(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	err := testActorsRuntime.updateReminderTrack(actorType, actorID)
+	noRepetition := -1
+	err := testActorsRuntime.updateReminderTrack(actorType, actorID, noRepetition)
 	assert.Nil(t, err)
 }
 
@@ -364,9 +364,11 @@ func TestGetReminderTrack(t *testing.T) {
 	t.Run("reminder exists", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
-		testActorsRuntime.updateReminderTrack(actorType, actorID)
+		repetition := 10
+		testActorsRuntime.updateReminderTrack(actorType, actorID, repetition)
 		r, _ := testActorsRuntime.getReminderTrack(actorType, actorID)
 		assert.NotEmpty(t, r.LastFiredTime)
+		assert.Equal(t, repetition, r.RepetitionLeft)
 	})
 }
 
@@ -1132,6 +1134,21 @@ func TestHostValidation(t *testing.T) {
 	})
 }
 
+func TestParseDuration(t *testing.T) {
+	t.Run("parse existing duration", func(t *testing.T) {
+		duration, repetition, err := parseDuration("0h30m0s")
+		assert.Equal(t, time.Minute*30, duration)
+		assert.Equal(t, -1, repetition)
+		assert.Nil(t, err)
+	})
+	t.Run("parse ISO 8601 duration", func(t *testing.T) {
+		duration, repetition, err := parseDuration("R5PT30M")
+		assert.Equal(t, time.Minute*30, duration)
+		assert.Equal(t, 5, repetition)
+		assert.Nil(t, err)
+	})
+}
+
 func TestBasicReentrantActorLocking(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrant", "1")
@@ -1151,8 +1168,10 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, []string{"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
-		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first"}, reentrantAppChannel.callLog)
+	assert.Equal(t, []string{
+		"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
+		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first",
+	}, reentrantAppChannel.callLog)
 }
 
 func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
@@ -1175,9 +1194,11 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, []string{"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
+	assert.Equal(t, []string{
+		"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
 		"Entering actors/reentrant/1/method/third", "Exiting actors/reentrant/1/method/third",
-		"Exiting actors/other/1/method/second", "Exiting actors/reentrant/1/method/first"}, reentrantAppChannel.callLog)
+		"Exiting actors/other/1/method/second", "Exiting actors/reentrant/1/method/first",
+	}, reentrantAppChannel.callLog)
 }
 
 func TestReentrancyStackLimit(t *testing.T) {

@@ -28,8 +28,10 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-const port = 4000
-const getKubernetesServiceAccountTimeoutSeconds = 10
+const (
+	port                                      = 4000
+	getKubernetesServiceAccountTimeoutSeconds = 10
+)
 
 var log = logger.NewLogger("dapr.injector")
 
@@ -112,9 +114,10 @@ func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient *kubern
 	for i, allowedControllersServiceAccount := range allowedControllersServiceAccounts {
 		saUUID, err := getServiceAccount(ctx, kubeClient, allowedControllersServiceAccount)
 		// i == 0 => "replicaset-controller" is the only one mandatory
-		if err != nil && i == 0 {
-			return nil, err
-		} else if err != nil {
+		if err != nil {
+			if i == 0 {
+				return nil, err
+			}
 			log.Warnf("Unable to get SA %s UID (%s)", allowedControllersServiceAccount, err)
 			continue
 		}
@@ -179,11 +182,11 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contentType := r.Header.Get("Content-Type")
-	if contentType != "application/json" {
-		log.Errorf("Content-Type=%s, expect application/json", contentType)
+	if contentType != runtime.ContentTypeJSON {
+		log.Errorf("Content-Type=%s, expect %s", contentType, runtime.ContentTypeJSON)
 		http.Error(
 			w,
-			"invalid Content-Type, expect `application/json`",
+			fmt.Sprintf("invalid Content-Type, expect `%s`", runtime.ContentTypeJSON),
 			http.StatusUnsupportedMediaType,
 		)
 
@@ -258,7 +261,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		log.Errorf("Sidecar injector failed to inject for app '%s'. Can't deserialize response: %s", diagAppID, err)
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", runtime.ContentTypeJSON)
 	if _, err := w.Write(respBytes); err != nil {
 		log.Error(err)
 	} else {

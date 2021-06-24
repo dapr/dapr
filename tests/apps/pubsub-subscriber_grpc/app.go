@@ -6,16 +6,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"sync"
-
-	"context"
-
-	"net"
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -61,8 +59,7 @@ type receivedMessagesResponse struct {
 }
 
 // server is our user app.
-type server struct {
-}
+type server struct{}
 
 func main() {
 	log.Printf("Initializing grpc")
