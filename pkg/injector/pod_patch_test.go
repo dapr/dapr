@@ -113,6 +113,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-metrics=true",
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
 			"--log-as-json",
 		}
 
@@ -164,7 +165,6 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--log-as-json",
-			"--http-stream-request-body",
 		}
 
 		assert.Equal(t, "/dlv", container.Command[0])
