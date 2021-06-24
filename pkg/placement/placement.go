@@ -18,10 +18,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/kit/logger"
+
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -252,7 +253,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
 }
 
-// addStreamConn adds stream connection between runtime and placement to the dissemination pool
+// addStreamConn adds stream connection between runtime and placement to the dissemination pool.
 func (p *Service) addStreamConn(conn placementGRPCStream) {
 	p.streamConnPoolLock.Lock()
 	p.streamConnPool = append(p.streamConnPool, conn)

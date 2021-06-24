@@ -5,15 +5,20 @@
 
 package injector
 
-import "github.com/kelseyhightower/envconfig"
+import (
+	"github.com/kelseyhightower/envconfig"
 
-// Config represents configuration options for the Dapr Sidecar Injector webhook server
+	"github.com/dapr/dapr/utils"
+)
+
+// Config represents configuration options for the Dapr Sidecar Injector webhook server.
 type Config struct {
 	TLSCertFile            string `envconfig:"TLS_CERT_FILE" required:"true"`
 	TLSKeyFile             string `envconfig:"TLS_KEY_FILE" required:"true"`
 	SidecarImage           string `envconfig:"SIDECAR_IMAGE" required:"true"`
 	SidecarImagePullPolicy string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
 	Namespace              string `envconfig:"NAMESPACE" required:"true"`
+	KubeClusterDomain      string `envconfig:"KUBE_CLUSTER_DOMAIN"`
 }
 
 // NewConfigWithDefaults returns a Config object with default values already
@@ -25,9 +30,24 @@ func NewConfigWithDefaults() Config {
 	}
 }
 
-// GetConfigFromEnvironment returns configuration derived from environment variables
-func GetConfigFromEnvironment() (Config, error) {
+// GetConfig returns configuration derived from environment variables.
+func GetConfig() (Config, error) {
+	// get config from environment variables
 	c := NewConfigWithDefaults()
 	err := envconfig.Process("", &c)
-	return c, err
+	if err != nil {
+		return c, err
+	}
+
+	if c.KubeClusterDomain == "" {
+		// auto-detect KubeClusterDomain from resolv.conf file
+		clusterDomain, err := utils.GetKubeClusterDomain()
+		if err != nil {
+			log.Errorf("failed to get clusterDomain err:%s, set default:%s", err, utils.DefaultKubeClusterDomain)
+			c.KubeClusterDomain = utils.DefaultKubeClusterDomain
+		} else {
+			c.KubeClusterDomain = clusterDomain
+		}
+	}
+	return c, nil
 }

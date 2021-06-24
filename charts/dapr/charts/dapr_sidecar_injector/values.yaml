@@ -4,7 +4,12 @@ logLevel: info
 # Specify full docker image name including registry url to use the custom side car image
 # Otherwise, helm chart will use {{ .Values.global.registry }}/daprd:{{ .Values.global.tag }}
 image:
-  name: daprd
+  name: ""
+
+# Specify full docker image name including registry url to use a custom injector service image
+# Otherwise, helm chart will use {{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}
+injectorImage:
+  name: ""
 
 nameOverride: ""
 fullnameOverride: ""
@@ -12,6 +17,7 @@ webhookFailurePolicy: Ignore
 sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 resources: {}
+kubeClusterDomain: cluster.local
 
 debug:
   enabled: false

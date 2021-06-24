@@ -8,11 +8,12 @@ package v1
 import (
 	"testing"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 func TestInvokeRequest(t *testing.T) {
@@ -77,7 +78,7 @@ func TestMetadata(t *testing.T) {
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
-		var req = fasthttp.AcquireRequest()
+		req := fasthttp.AcquireRequest()
 		req.Header.Set("Header1", "Value1")
 		req.Header.Set("Header2", "Value2")
 		req.Header.Set("Header3", "Value3")

@@ -10,7 +10,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
 ### Prerequisites
 
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
-  - [Install the latest Helm v3](https://docs.dapr.io/getting-started/install-dapr/#install-with-helm-advanced).
+* [Install the latest Helm v3](https://helm.sh/docs/intro/install/)
 * Create your DockerHub ID
 * Set the environment variables
     ```bash
@@ -29,6 +29,9 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube
 
+# If you are using minikube, you'll need to set the IP address for the minikube control plane.
+    export MINIKUBE_NODE_IP=your_k8s_master_ip
+
     # Set the below environment variables if you want to use the different registry and tag for test apps
     # export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
     # export DARP_TEST_TAG=dev
@@ -38,12 +41,16 @@ E2E tests are designed for verifying the functional correctness by replicating e
 
 If you are starting from scratch and just want to build dapr, deploy it, and run the e2e tests to your kubernetes cluster, do the following:
 
-1. Remove the test namespace, if it exists.
+1. Uninstall dapr, dapr-kafka, dapr-redis services, if it exists
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
+```
+helm uninstall dapr dapr-kafka dapr-redis -n $DAPR_NAMESPACE
+```
+2. Remove the test namespace, if it exists
 ```bash
 make delete-test-namespace
 ```
-2. Build, deploy, run tests from start to finish
+3. Build, deploy, run tests from start to finish
 ```bash
 make e2e-build-deploy-run
 ```
@@ -117,26 +124,21 @@ Run end-to-end tests
 make test-e2e-all
 ```
 
-## Cleanup local enviornment
+## Cleanup local environment
 
-To completely remove Dapr, test dependancies, and any lingering e2e test apps:
+To completely remove Dapr, test dependencies, and any lingering e2e test apps:
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
 ```bash
+# Uninstall dapr, dapr-kafka, dapr-redis services
+helm uninstall dapr dapr-kafka dapr-redis -n $DAPR_NAMESPACE
+
+# Remove the test namespace
 make delete-test-namespace
 ```
 
 
 ## Run E2E tests through GitHub Actions
 
-To keep the build infrastructure simple, Dapr uses [dapr-test GitHub
-Actions
-Workflow](https://github.com/dapr/dapr/actions?query=workflow%3Adapr-test)
-to run e2e tests using one of [AKS
-clusters](https://github.com/dapr/dapr/blob/4cd61680a3129f729deae24a51da241d0701376c/tests/test-infra/find_cluster.sh#L12-L17). A
-separate workflow also runs E2E in [KinD](https://kind.sigs.k8s.io/)
-clusters.
+To keep the build infrastructure simple, Dapr uses [dapr-test GitHub Actions Workflow](https://github.com/dapr/dapr/actions?query=workflow%3Adapr-test) to run e2e tests using one of [AKS clusters](https://github.com/dapr/dapr/blob/4cd61680a3129f729deae24a51da241d0701376c/tests/test-infra/find_cluster.sh#L12-L17). A separate workflow also runs E2E in [KinD](https://kind.sigs.k8s.io/) clusters.
 
-Once a contributor creates a pull request, E2E tests on KinD clusters
-are automatically executed for faster feedback. In order to run the
-E2E tests on AKS, ask a maintainer or approver to add `/ok-to-test` comment to
-the Pull Request.
+Once a contributor creates a pull request, E2E tests on KinD clusters are automatically executed for faster feedback. In order to run the E2E tests on AKS, ask a maintainer or approver to add `/ok-to-test` comment to the Pull Request.

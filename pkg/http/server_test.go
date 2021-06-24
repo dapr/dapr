@@ -11,10 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/cors"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/cors"
 )
 
 type mockHost struct {
@@ -456,6 +457,7 @@ func TestCorsHandler(t *testing.T) {
 		assert.True(t, mh.hasCORS)
 	})
 }
+
 func TestUnescapeRequestParametersHandler(t *testing.T) {
 	mh := func(reqCtx *fasthttp.RequestCtx) {
 		pc, _, _, ok := runtime.Caller(1)

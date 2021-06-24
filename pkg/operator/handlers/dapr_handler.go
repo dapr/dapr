@@ -17,9 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -42,7 +43,7 @@ const (
 
 var log = logger.NewLogger("dapr.operator.handlers")
 
-// DaprHandler handles the lifetime for Dapr CRDs
+// DaprHandler handles the lifetime for Dapr CRDs.
 type DaprHandler struct {
 	mgr ctrl.Manager
 
@@ -50,7 +51,7 @@ type DaprHandler struct {
 	Scheme *runtime.Scheme
 }
 
-// NewDaprHandler returns a new Dapr handler
+// NewDaprHandler returns a new Dapr handler.
 func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 	return &DaprHandler{
 		mgr: mgr,
@@ -60,7 +61,7 @@ func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 	}
 }
 
-// Init allows for various startup tasks
+// Init allows for various startup tasks.
 func (h *DaprHandler) Init() error {
 	if err := h.mgr.GetFieldIndexer().IndexField(
 		context.TODO(),
@@ -192,7 +193,8 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 					Port:       int32(daprSidecarAPIGRPCPort),
 					TargetPort: intstr.FromInt(daprSidecarAPIGRPCPort),
 					Name:       daprSidecarAPIGRPCPortName,
-				}, {
+				},
+				{
 					Protocol:   corev1.ProtocolTCP,
 					Port:       int32(daprSidecarInternalGRPCPort),
 					TargetPort: intstr.FromInt(daprSidecarInternalGRPCPort),

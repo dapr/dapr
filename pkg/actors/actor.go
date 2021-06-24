@@ -11,14 +11,13 @@ import (
 
 	"go.uber.org/atomic"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/pkg/errors"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
-var (
-	// ErrActorDisposed is the error when runtime tries to hold the lock of the disposed actor.
-	ErrActorDisposed error = errors.New("actor is already disposed")
-)
+// ErrActorDisposed is the error when runtime tries to hold the lock of the disposed actor.
+var ErrActorDisposed error = errors.New("actor is already disposed")
 
 // actor represents single actor object and maintains its turn-based concurrency.
 type actor struct {
