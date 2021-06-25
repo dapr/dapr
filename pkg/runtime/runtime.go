@@ -1186,7 +1186,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	cloudEvent := msg.cloudEvent
 
 	if pubsub.HasExpired(cloudEvent) {
-		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
+		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 		return nil
 	}
 
@@ -1225,7 +1225,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		var appResponse pubsub.AppResponse
 		err := a.json.Unmarshal(body, &appResponse)
 		if err != nil {
-			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField].(string))
+			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
 			// Return no error so message does not get reprocessed.
 			return nil
 		}
@@ -1237,26 +1237,26 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		case pubsub.Success:
 			return nil
 		case pubsub.Retry:
-			return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField].(string))
+			return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 		case pubsub.Drop:
-			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField].(string))
+			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 			return nil
 		}
 		// Consider unknown status field as error and retry
-		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField].(string), appResponse.Status)
+		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
 	}
 
 	if statusCode == nethttp.StatusNotFound {
 		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
 		// https://cloud.google.com/apis/design/errors#handling_errors
-		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
+		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
 		return nil
 	}
 
 	// Every error from now on is a retriable error.
-	log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
-	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
+	log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
+	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
 }
 
 func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
