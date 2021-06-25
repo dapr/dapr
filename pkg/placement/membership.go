@@ -294,22 +294,25 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 		Tables:    tables,
 	}
 
-	var err error
+	var wg sync.WaitGroup
+	wg.Add(len(targets))
 	for _, s := range targets {
-		err = s.Send(o)
+		go func(stream placementGRPCStream) {
+			err := stream.Send(o)
+			if err != nil {
+				remoteAddr := "n/a"
+				if peer, ok := peer.FromContext(stream.Context()); ok {
+					remoteAddr = peer.Addr.String()
+				}
 
-		if err != nil {
-			remoteAddr := "n/a"
-			if peer, ok := peer.FromContext(s.Context()); ok {
-				remoteAddr = peer.Addr.String()
+				log.Errorf("error updating runtime host (%q) on %q operation: %s", remoteAddr, operation, err)
+				// TODO: the error should not be ignored. By handing error or retrying dissemination,
+				// this logic needs to be improved. Otherwise, the runtimes throwing the exception
+				// will have the inconsistent hashing tables.
 			}
-
-			log.Errorf("error updating runtime host (%q) on %q operation: %s", remoteAddr, operation, err)
-			// TODO: the error should not be ignored. By handing error or retrying dissemination,
-			// this logic needs to be improved. Otherwise, the runtimes throwing the exception
-			// will have the inconsistent hashing tables.
-		}
+			wg.Done()
+		}(s)
 	}
-
-	return err
+	wg.Wait()
+	return nil
 }
