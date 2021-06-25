@@ -20,10 +20,12 @@ import (
 	"github.com/dapr/dapr/pkg/version"
 )
 
-var log = logger.NewLogger("dapr.operator")
-var config string
-var certChainPath string
-var disableLeaderElection bool
+var (
+	log                   = logger.NewLogger("dapr.operator")
+	config                string
+	certChainPath         string
+	disableLeaderElection bool
+)
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"

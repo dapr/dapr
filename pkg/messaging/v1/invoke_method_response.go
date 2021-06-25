@@ -68,7 +68,7 @@ func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodR
 
 // WithFastHTTPHeaders populates fasthttp response header to gRPC header metadata.
 func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
-	var md = DaprInternalMetadata{}
+	md := DaprInternalMetadata{}
 	header.VisitAll(func(key []byte, value []byte) {
 		md[string(key)] = &internalv1pb.ListStringValue{
 			Values: []string{string(value)},

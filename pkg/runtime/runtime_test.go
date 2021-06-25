@@ -790,6 +790,14 @@ func TestInitPubSub(t *testing.T) {
 		assert.NotNil(t, a)
 	})
 
+	t.Run("get topic routes but app channel is nil", func(t *testing.T) {
+		rts := NewTestDaprRuntime(modes.StandaloneMode)
+		rts.appChannel = nil
+		routes, err := rts.getTopicRoutes()
+		assert.Nil(t, err)
+		assert.Equal(t, 0, len(routes))
+	})
+
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
 		dir := "./components"
 
@@ -2211,7 +2219,7 @@ func (b *mockBinding) Read(handler func(*bindings.ReadResponse) ([]byte, error))
 }
 
 func (b *mockBinding) Operations() []bindings.OperationKind {
-	return []bindings.OperationKind{"create"}
+	return []bindings.OperationKind{bindings.CreateOperation, bindings.ListOperation}
 }
 
 func (b *mockBinding) Invoke(req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
@@ -2256,7 +2264,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			Operation: bindings.GetOperation,
 		})
 		assert.NotNil(t, err)
-		assert.Equal(t, "binding mockBinding does not support operation get. supported operations: create", err.Error())
+		assert.Equal(t, "binding mockBinding does not support operation get. supported operations:create list", err.Error())
 	})
 }
 
@@ -2479,8 +2487,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 }
 
-type mockPublishPubSub struct {
-}
+type mockPublishPubSub struct{}
 
 // Init is a mock initialization method.
 func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {

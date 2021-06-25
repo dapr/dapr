@@ -24,20 +24,22 @@ import (
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
-	client           *grpc.ClientConn
-	baseAddress      string
-	ch               chan int
-	tracingSpec      config.TracingSpec
-	appMetadataToken string
+	client             *grpc.ClientConn
+	baseAddress        string
+	ch                 chan int
+	tracingSpec        config.TracingSpec
+	appMetadataToken   string
+	maxRequestBodySize int
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
+func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int) *Channel {
 	c := &Channel{
-		client:           conn,
-		baseAddress:      fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, port),
-		tracingSpec:      spec,
-		appMetadataToken: auth.GetAppToken(),
+		client:             conn,
+		baseAddress:        fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, port),
+		tracingSpec:        spec,
+		appMetadataToken:   auth.GetAppToken(),
+		maxRequestBodySize: maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)
@@ -90,7 +92,12 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
 
 	var header, trailer metadata.MD
-	resp, err := clientV1.OnInvoke(ctx, req.Message(), grpc.Header(&header), grpc.Trailer(&trailer))
+
+	var opts []grpc.CallOption
+	opts = append(opts, grpc.Header(&header), grpc.Trailer(&trailer),
+		grpc.MaxCallSendMsgSize(g.maxRequestBodySize*1024*1024), grpc.MaxCallRecvMsgSize(g.maxRequestBodySize*1024*1024))
+
+	resp, err := clientV1.OnInvoke(ctx, req.Message(), opts...)
 
 	if g.ch != nil {
 		<-g.ch
