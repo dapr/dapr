@@ -196,53 +196,6 @@ func TestActorReminder(t *testing.T) {
 
 		t.Log("Done.")
 	})
-
-	t.Run("Actor reminder changes number of partitions.", func(t *testing.T) {
-		for i := 0; i < numActorsPerThread; i++ {
-			if i == numActorsPerThread/2 {
-				// We change the number of partitions midway.
-				// This will test that the migration path also works.
-				// And validate that new reminders can work after increasing number of partitions.
-				tr.Platform.SetAppEnv(appName, "TEST_APP_ACTOR_REMINDERS_PARTITIONS", "5")
-			}
-
-			actorID := fmt.Sprintf(actorIDPartitionTemplate, i+1000)
-			// Deleting pre-existing reminder
-			_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
-			require.NoError(t, err)
-
-			// Registering reminder
-			_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reminderBody)
-			require.NoError(t, err)
-		}
-
-		t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
-		time.Sleep(secondsToCheckReminderResult * time.Second)
-
-		for i := 0; i < numActorsPerThread; i++ {
-			actorID := fmt.Sprintf(actorIDRestartTemplate, i+1000)
-			// Unregistering reminder
-			_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
-			require.NoError(t, err)
-		}
-
-		t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURL)
-		resp, err := utils.HTTPGet(logsURL)
-		require.NoError(t, err)
-
-		t.Log("Checking if all reminders did trigger ...")
-		// Errors below should NOT be considered flakyness and must be investigated.
-		// If there was no other error until now, there should be reminders triggered.
-		for i := 0; i < numActorsPerThread; i++ {
-			actorID := fmt.Sprintf(actorIDRestartTemplate, i+1000)
-			count := countActorAction(resp, actorID, reminderName)
-			// Due to possible load stress, we do not expect all reminders to be called at the same frequency.
-			// There are other E2E tests that validate the correct frequency of reminders in a happy path.
-			require.True(t, count >= 1, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
-		}
-
-		t.Log("Done.")
-	})
 }
 
 func TestActorReminderPeriod(t *testing.T) {
