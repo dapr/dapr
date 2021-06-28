@@ -27,7 +27,7 @@ const (
 	numIterations                = 7                                             // Number of times each test should run.
 	numHealthChecks              = 60                                            // Number of get calls before starting tests.
 	numActorsPerThread           = 10                                            // Number of get calls before starting tests.
-	secondsToCheckReminderResult = 20 + 60                                       // How much time to wait to make sure the result is in logs.
+	secondsToCheckReminderResult = 20                                            // How much time to wait to make sure the result is in logs.
 	actorInvokeURLFormat         = "%s/test/testactorreminderpartition/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat           = "%s/test/logs"                                // URL to fetch logs from test app.
 )
@@ -90,6 +90,7 @@ func TestMain(m *testing.M) {
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": "testactorreminderpartition",
 			},
+			Config: "actortypemetadata",
 		},
 	}
 

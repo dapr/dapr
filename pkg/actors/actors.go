@@ -70,26 +70,27 @@ type Actors interface {
 }
 
 type actorsRuntime struct {
-	appChannel          channel.AppChannel
-	store               state.Store
-	transactionalStore  state.TransactionalStore
-	placement           *internal.ActorPlacement
-	grpcConnectionFn    func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error)
-	config              Config
-	actorsTable         *sync.Map
-	activeTimers        *sync.Map
-	activeTimersLock    *sync.RWMutex
-	activeReminders     *sync.Map
-	remindersLock       *sync.RWMutex
-	activeRemindersLock *sync.RWMutex
-	reminders           map[string][]actorReminderReference
-	evaluationLock      *sync.RWMutex
-	evaluationBusy      bool
-	evaluationChan      chan bool
-	appHealthy          *atomic.Bool
-	certChain           *dapr_credentials.CertChain
-	tracingSpec         configuration.TracingSpec
-	reentrancyEnabled   bool
+	appChannel               channel.AppChannel
+	store                    state.Store
+	transactionalStore       state.TransactionalStore
+	placement                *internal.ActorPlacement
+	grpcConnectionFn         func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error)
+	config                   Config
+	actorsTable              *sync.Map
+	activeTimers             *sync.Map
+	activeTimersLock         *sync.RWMutex
+	activeReminders          *sync.Map
+	remindersLock            *sync.RWMutex
+	activeRemindersLock      *sync.RWMutex
+	reminders                map[string][]actorReminderReference
+	evaluationLock           *sync.RWMutex
+	evaluationBusy           bool
+	evaluationChan           chan bool
+	appHealthy               *atomic.Bool
+	certChain                *dapr_credentials.CertChain
+	tracingSpec              configuration.TracingSpec
+	reentrancyEnabled        bool
+	actorTypeMetadataEnabled bool
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -160,25 +161,26 @@ func NewActors(
 	}
 
 	return &actorsRuntime{
-		appChannel:          appChannel,
-		config:              config,
-		store:               stateStore,
-		transactionalStore:  transactionalStore,
-		grpcConnectionFn:    grpcConnectionFn,
-		actorsTable:         &sync.Map{},
-		activeTimers:        &sync.Map{},
-		activeTimersLock:    &sync.RWMutex{},
-		activeReminders:     &sync.Map{},
-		remindersLock:       &sync.RWMutex{},
-		activeRemindersLock: &sync.RWMutex{},
-		reminders:           map[string][]actorReminderReference{},
-		evaluationLock:      &sync.RWMutex{},
-		evaluationBusy:      false,
-		evaluationChan:      make(chan bool),
-		appHealthy:          atomic.NewBool(true),
-		certChain:           certChain,
-		tracingSpec:         tracingSpec,
-		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
+		appChannel:               appChannel,
+		config:                   config,
+		store:                    stateStore,
+		transactionalStore:       transactionalStore,
+		grpcConnectionFn:         grpcConnectionFn,
+		actorsTable:              &sync.Map{},
+		activeTimers:             &sync.Map{},
+		activeTimersLock:         &sync.RWMutex{},
+		activeReminders:          &sync.Map{},
+		remindersLock:            &sync.RWMutex{},
+		activeRemindersLock:      &sync.RWMutex{},
+		reminders:                map[string][]actorReminderReference{},
+		evaluationLock:           &sync.RWMutex{},
+		evaluationBusy:           false,
+		evaluationChan:           make(chan bool),
+		appHealthy:               atomic.NewBool(true),
+		certChain:                certChain,
+		tracingSpec:              tracingSpec,
+		reentrancyEnabled:        configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
+		actorTypeMetadataEnabled: configuration.IsFeatureEnabled(features, configuration.ActorTypeMetadata),
 	}
 }
 
@@ -1013,6 +1015,10 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			return err
 		}
 
+		// Finally, we must save metadata to get a new eTag.
+		// This avoids a race condition between an update and a repartitioning.
+		a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+
 		a.remindersLock.Lock()
 		a.reminders[req.ActorType] = reminders
 		a.remindersLock.Unlock()
@@ -1145,18 +1151,33 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	return err
 }
 
-func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *ActorMetadata, etag *string) error {
+func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *ActorMetadata) error {
+	if !a.actorTypeMetadataEnabled {
+		return nil
+	}
+
 	metadataKey := constructCompositeKey("actors", actorType, "metadata")
 	return a.store.Set(&state.SetRequest{
 		Key:   metadataKey,
 		Value: actorMetadata,
-		ETag:  etag,
+		ETag:  actorMetadata.Etag,
 	})
 }
 
 func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*ActorMetadata, error) {
 	if a.store == nil {
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
+	}
+
+	if !a.actorTypeMetadataEnabled {
+		return &ActorMetadata{
+			ID: uuid.NewString(),
+			RemindersMetadata: ActorRemindersMetadata{
+				partitionsEtag: nil,
+				PartitionCount: 0,
+			},
+			Etag: nil,
+		}, nil
 	}
 
 	metadataKey := constructCompositeKey("actors", actorType, "metadata")
@@ -1172,6 +1193,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 				partitionsEtag: nil,
 				PartitionCount: 0,
 			},
+			Etag: nil,
 		}
 
 		// Save metadata field to make sure the error was due to record not found.
@@ -1185,7 +1207,8 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 			etag = *resp.ETag
 		}
 
-		err = a.saveActorTypeMetadata(actorType, &actorMetadata, &etag)
+		actorMetadata.Etag = &etag
+		err = a.saveActorTypeMetadata(actorType, &actorMetadata)
 		if err != nil {
 			return nil, err
 		}
@@ -1213,6 +1236,10 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 }
 
 func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMetadata *ActorMetadata) (*ActorMetadata, error) {
+	if !a.actorTypeMetadataEnabled {
+		return actorMetadata, nil
+	}
+
 	if actorMetadata.RemindersMetadata.PartitionCount == a.config.RemindersStoragePartitions {
 		return actorMetadata, nil
 	}
@@ -1263,7 +1290,7 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 		}
 	}
 	// Save new metadata so the new "metadataID" becomes the new de-factor referenced list for reminders.
-	err = a.saveActorTypeMetadata(actorType, actorMetadata, actorMetadata.Etag)
+	err = a.saveActorTypeMetadata(actorType, actorMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -1349,6 +1376,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 }
 
 func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string) error {
+	// Even when data is not partitioned, the save operation is the same.
+	// The only difference is stateKey.
 	return a.store.Set(&state.SetRequest{
 		Key:   stateKey,
 		Value: reminders,
@@ -1396,15 +1425,15 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 			}
 		}
 
-		// update partition, in case of "zero" partitions, it falls back to the old behavior.
-		err = a.store.Set(&state.SetRequest{
-			Key:   stateKey,
-			Value: remindersInPartition,
-			ETag:  etag,
-		})
+		// Then, save the partition to the database.
+		err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag)
 		if err != nil {
 			return err
 		}
+
+		// Finally, we must save metadata to get a new eTag.
+		// This avoids a race condition between an update and a repartitioning.
+		a.saveActorTypeMetadata(req.ActorType, actorMetadata)
 
 		a.remindersLock.Lock()
 		a.reminders[req.ActorType] = reminders
