@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package actor_activation_e2e
+package activation
 
 import (
 	"encoding/json"
@@ -48,22 +48,22 @@ func parseLogEntries(resp []byte) []actorLogEntry {
 	return logEntries
 }
 
-func findActorActivation(resp []byte, actorId string) bool {
-	return findActorAction(resp, actorId, "activation")
+func findActorActivation(resp []byte, actorID string) bool {
+	return findActorAction(resp, actorID, "activation")
 }
 
-func findActorDeactivation(resp []byte, actorId string) bool {
-	return findActorAction(resp, actorId, "deactivation")
+func findActorDeactivation(resp []byte, actorID string) bool {
+	return findActorAction(resp, actorID, "deactivation")
 }
 
-func findActorMethodInvokation(resp []byte, actorId string) bool {
-	return findActorAction(resp, actorId, "actormethod")
+func findActorMethodInvokation(resp []byte, actorID string) bool {
+	return findActorAction(resp, actorID, "actormethod")
 }
 
-func findActorAction(resp []byte, actorId string, action string) bool {
+func findActorAction(resp []byte, actorID string, action string) bool {
 	logEntries := parseLogEntries(resp)
 	for _, logEntry := range logEntries {
-		if (logEntry.ActorID == actorId) && (logEntry.Action == action) {
+		if (logEntry.ActorID == actorID) && (logEntry.Action == action) {
 			return true
 		}
 	}
@@ -106,9 +106,9 @@ func TestActorActivation(t *testing.T) {
 	time.Sleep(15 * time.Second)
 
 	t.Run("Actor deactivates due to timeout.", func(t *testing.T) {
-		actorId := "100"
+		actorID := "100"
 
-		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorId)
+		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID)
 
 		_, err = utils.HTTPPost(invokeURL, []byte{})
 		require.NoError(t, err)
@@ -118,10 +118,10 @@ func TestActorActivation(t *testing.T) {
 		require.NoError(t, err)
 
 		// there is no longer an activate message
-		require.False(t, findActorActivation(resp, actorId))
+		require.False(t, findActorActivation(resp, actorID))
 
-		require.True(t, findActorMethodInvokation(resp, actorId))
-		require.False(t, findActorDeactivation(resp, actorId))
+		require.True(t, findActorMethodInvokation(resp, actorID))
+		require.False(t, findActorDeactivation(resp, actorID))
 
 		time.Sleep(secondsToCheckActorDeactivation * time.Second)
 
@@ -130,15 +130,15 @@ func TestActorActivation(t *testing.T) {
 		require.NoError(t, err)
 
 		// there is no longer an activate message
-		require.False(t, findActorActivation(resp, actorId))
+		require.False(t, findActorActivation(resp, actorID))
 
-		require.True(t, findActorMethodInvokation(resp, actorId))
-		require.True(t, findActorDeactivation(resp, actorId))
+		require.True(t, findActorMethodInvokation(resp, actorID))
+		require.True(t, findActorDeactivation(resp, actorID))
 	})
 
 	t.Run("Actor does not deactivate since there is no timeout.", func(t *testing.T) {
-		actorId := guuid.New().String()
-		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorId)
+		actorID := guuid.New().String()
+		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID)
 
 		_, err = utils.HTTPPost(invokeURL, []byte{})
 		require.NoError(t, err)
@@ -147,10 +147,10 @@ func TestActorActivation(t *testing.T) {
 		require.NoError(t, err)
 
 		// there is no longer an activate message
-		require.False(t, findActorActivation(resp, actorId))
+		require.False(t, findActorActivation(resp, actorID))
 
-		require.True(t, findActorMethodInvokation(resp, actorId))
-		require.False(t, findActorDeactivation(resp, actorId))
+		require.True(t, findActorMethodInvokation(resp, actorID))
+		require.False(t, findActorDeactivation(resp, actorID))
 
 		time.Sleep(secondsToCheckActorRemainsActive * time.Second)
 
@@ -158,9 +158,9 @@ func TestActorActivation(t *testing.T) {
 		require.NoError(t, err)
 
 		// there is no longer an activate message
-		require.False(t, findActorActivation(resp, actorId))
+		require.False(t, findActorActivation(resp, actorID))
 
-		require.True(t, findActorMethodInvokation(resp, actorId))
-		require.False(t, findActorDeactivation(resp, actorId))
+		require.True(t, findActorMethodInvokation(resp, actorID))
+		require.False(t, findActorDeactivation(resp, actorID))
 	})
 }
