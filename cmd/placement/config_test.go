@@ -8,12 +8,13 @@ package main
 import (
 	"testing"
 
-	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/placement/raft"
 )
 
 func TestParsePeersFromFlag(t *testing.T) {
-	var peerAddressTests = []struct {
+	peerAddressTests := []struct {
 		in  string
 		out []raft.PeerInfo
 	}{

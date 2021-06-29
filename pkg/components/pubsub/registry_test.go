@@ -10,9 +10,10 @@ import (
 	"testing"
 
 	"github.com/dapr/components-contrib/pubsub"
-	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+
+	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
 func TestCreateFullName(t *testing.T) {

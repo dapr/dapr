@@ -11,10 +11,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
+
+	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 
 	// We currently don't depend on the Otel SDK since it has not GAed.
 	// This package, however, only contains the conventions from the Otel Spec,
@@ -69,12 +70,10 @@ const (
 	daprGRPCDaprService              = "Dapr"
 )
 
-var (
-	// Effectively const, but isn't a const from upstream.
-	messagingDestinationTopicKind = semconv.MessagingDestinationKindKeyTopic.Value.AsString()
-)
+// Effectively const, but isn't a const from upstream.
+var messagingDestinationTopicKind = semconv.MessagingDestinationKindKeyTopic.Value.AsString()
 
-// SpanContextToW3CString returns the SpanContext string representation
+// SpanContextToW3CString returns the SpanContext string representation.
 func SpanContextToW3CString(sc trace.SpanContext) string {
 	return fmt.Sprintf("%x-%x-%x-%x",
 		[]byte{supportedVersion},
@@ -83,9 +82,9 @@ func SpanContextToW3CString(sc trace.SpanContext) string {
 		[]byte{byte(sc.TraceOptions)})
 }
 
-// TraceStateToW3CString extracts the TraceState from given SpanContext and returns its string representation
+// TraceStateToW3CString extracts the TraceState from given SpanContext and returns its string representation.
 func TraceStateToW3CString(sc trace.SpanContext) string {
-	var pairs = make([]string, 0, len(sc.Tracestate.Entries()))
+	pairs := make([]string, 0, len(sc.Tracestate.Entries()))
 	var h string
 	if sc.Tracestate != nil {
 		for _, entry := range sc.Tracestate.Entries() {
@@ -96,7 +95,7 @@ func TraceStateToW3CString(sc trace.SpanContext) string {
 	return h
 }
 
-// SpanContextFromW3CString extracts a span context from given string which got earlier from SpanContextToW3CString format
+// SpanContextFromW3CString extracts a span context from given string which got earlier from SpanContextToW3CString format.
 func SpanContextFromW3CString(h string) (sc trace.SpanContext, ok bool) {
 	if h == "" {
 		return trace.SpanContext{}, false
@@ -154,7 +153,7 @@ func SpanContextFromW3CString(h string) (sc trace.SpanContext, ok bool) {
 	return sc, true
 }
 
-// TraceStateFromW3CString extracts a span tracestate from given string which got earlier from TraceStateFromW3CString format
+// TraceStateFromW3CString extracts a span tracestate from given string which got earlier from TraceStateFromW3CString format.
 func TraceStateFromW3CString(h string) *tracestate.Tracestate {
 	if h == "" {
 		return nil
@@ -187,7 +186,7 @@ func TraceStateFromW3CString(h string) *tracestate.Tracestate {
 	return ts
 }
 
-// AddAttributesToSpan adds the given attributes in the span
+// AddAttributesToSpan adds the given attributes in the span.
 func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
 	if span == nil {
 		return

@@ -1,4 +1,4 @@
-  
+
 # Dapr $dapr_version
 
 We're happy to announce the release of Dapr $dapr_version!
@@ -99,7 +99,9 @@ All done!
 
 *Note: Make sure your deployments are restarted to pick the latest version of the Dapr sidecar*
 
-#### Starting a fresh install on a cluster 
+#### Starting a fresh install on a cluster
+
+Please see [how to deploy Dapr on a Kubernetes cluster](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-deploy/) for a complete guide to installing Dapr on Kubernetes
 
 You can use Helm 3 to install Dapr:
 ```

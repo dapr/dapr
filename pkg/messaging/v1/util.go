@@ -12,9 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -24,36 +21,40 @@ import (
 	grpc_status "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 const (
-	// GRPCContentType is the MIME media type for grpc
+	// GRPCContentType is the MIME media type for grpc.
 	GRPCContentType = "application/grpc"
-	// JSONContentType is the MIME media type for JSON
+	// JSONContentType is the MIME media type for JSON.
 	JSONContentType = "application/json"
-	// ProtobufContentType is the MIME media type for Protobuf
+	// ProtobufContentType is the MIME media type for Protobuf.
 	ProtobufContentType = "application/x-protobuf"
 
-	// ContentTypeHeader is the header key of content-type
+	// ContentTypeHeader is the header key of content-type.
 	ContentTypeHeader = "content-type"
-	// DaprHeaderPrefix is the prefix if metadata is defined by non user-defined http headers
+	// DaprHeaderPrefix is the prefix if metadata is defined by non user-defined http headers.
 	DaprHeaderPrefix = "dapr-"
-	// gRPCBinaryMetadata is the suffix of grpc metadata binary value
+	// gRPCBinaryMetadata is the suffix of grpc metadata binary value.
 	gRPCBinaryMetadataSuffix = "-bin"
 
-	// W3C trace correlation headers
+	// W3C trace correlation headers.
 	traceparentHeader = "traceparent"
 	tracestateHeader  = "tracestate"
 	tracebinMetadata  = "grpc-trace-bin"
 
-	// DestinationIDHeader is the header carrying the value of the invoked app id
+	// DestinationIDHeader is the header carrying the value of the invoked app id.
 	DestinationIDHeader = "destination-app-id"
 
 	// ErrorInfo metadata value is limited to 64 chars
 	// https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L126
 	maxMetadataValueLen = 63
 
-	// ErrorInfo metadata for HTTP response
+	// ErrorInfo metadata for HTTP response.
 	errorInfoDomain            = "dapr.io"
 	errorInfoHTTPCodeMetadata  = "http.code"
 	errorInfoHTTPErrorMetadata = "http.error_message"
@@ -63,16 +64,16 @@ const (
 // from user app to Dapr.
 type DaprInternalMetadata map[string]*internalv1pb.ListStringValue
 
-// IsJSONContentType returns true if contentType is the mime media type for JSON
+// IsJSONContentType returns true if contentType is the mime media type for JSON.
 func IsJSONContentType(contentType string) bool {
 	return strings.HasPrefix(strings.ToLower(contentType), JSONContentType)
 }
 
-// MetadataToInternalMetadata converts metadata to dapr internal metadata map
+// MetadataToInternalMetadata converts metadata to dapr internal metadata map.
 func MetadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
-	var internalMD = DaprInternalMetadata{}
+	internalMD := DaprInternalMetadata{}
 	for k, values := range md {
-		var listValue = internalv1pb.ListStringValue{}
+		listValue := internalv1pb.ListStringValue{}
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
 			// binary key requires base64 encoded.
 			for _, val := range values {
@@ -131,10 +132,10 @@ func isPermanentHTTPHeader(hdr string) bool {
 	return false
 }
 
-// InternalMetadataToGrpcMetadata converts internal metadata map to gRPC metadata
+// InternalMetadataToGrpcMetadata converts internal metadata map to gRPC metadata.
 func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternalMetadata, httpHeaderConversion bool) metadata.MD {
 	var traceparentValue, tracestateValue, grpctracebinValue string
-	var md = metadata.MD{}
+	md := metadata.MD{}
 	for k, listVal := range internalMD {
 		keyName := strings.ToLower(k)
 		// get both the trace headers for HTTP/GRPC and continue
@@ -178,9 +179,9 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 	return md
 }
 
-// IsGRPCProtocol checks if metadata is originated from gRPC API
+// IsGRPCProtocol checks if metadata is originated from gRPC API.
 func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
-	var originContentType = ""
+	originContentType := ""
 	if val, ok := internalMD[ContentTypeHeader]; ok {
 		originContentType = val.Values[0]
 	}
@@ -199,7 +200,7 @@ func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 	return key
 }
 
-// InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers
+// InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers.
 func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	var traceparentValue, tracestateValue, grpctracebinValue string
 	for k, listVal := range internalMD {
@@ -312,7 +313,7 @@ func CodeFromHTTPStatus(httpStatusCode int) codes.Code {
 	return codes.Unknown
 }
 
-// ErrorFromHTTPResponseCode converts http response code to gRPC status error
+// ErrorFromHTTPResponseCode converts http response code to gRPC status error.
 func ErrorFromHTTPResponseCode(code int, detail string) error {
 	grpcCode := CodeFromHTTPStatus(code)
 	if grpcCode == codes.OK {
@@ -343,7 +344,7 @@ func ErrorFromHTTPResponseCode(code int, detail string) error {
 	return resps.Err()
 }
 
-// ErrorFromInternalStatus converts internal status to gRPC status error
+// ErrorFromInternalStatus converts internal status to gRPC status error.
 func ErrorFromInternalStatus(internalStatus *internalv1pb.Status) error {
 	respStatus := &spb.Status{
 		Code:    internalStatus.GetCode(),

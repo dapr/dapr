@@ -12,18 +12,18 @@ import (
 )
 
 const (
-	// DefaultLimit is the default concurrency limit
+	// DefaultLimit is the default concurrency limit.
 	DefaultLimit = 100
 )
 
-// Limiter object
+// Limiter object.
 type Limiter struct {
 	limit         int
 	tickets       chan int
 	numInProgress int32
 }
 
-// NewLimiter allocates a new ConcurrencyLimiter
+// NewLimiter allocates a new ConcurrencyLimiter.
 func NewLimiter(limit int) *Limiter {
 	if limit <= 0 {
 		limit = DefaultLimit
@@ -46,7 +46,7 @@ func NewLimiter(limit int) *Limiter {
 // Execute adds a function to the execution queue.
 // if num of go routines allocated by this instance is < limit
 // launch a new go routine to execute job
-// else wait until a go routine becomes available
+// else wait until a go routine becomes available.
 func (c *Limiter) Execute(job func(param interface{}), param interface{}) int {
 	ticket := <-c.tickets
 	atomic.AddInt32(&c.numInProgress, 1)

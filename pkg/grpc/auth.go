@@ -4,9 +4,10 @@ import (
 	"context"
 	"net/http"
 
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.UnaryServerInterceptor {

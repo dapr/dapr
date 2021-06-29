@@ -22,4 +22,4 @@ As we keep building up Dapr features, it becomes apparent that we need to refact
 
 ## Consequences
 
-This will improve testability and maintainability in long run. 
+This will improve testability and maintainability in long run.

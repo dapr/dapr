@@ -65,7 +65,7 @@ func (t *TelemetryClient) Init() {
 }
 
 // RecordLoadRequestCount records request count and latency.
-func (t *TelemetryClient) RecordLoadRequestCount(actorType, actorID string, elasped time.Duration, code int) {
+func (t *TelemetryClient) RecordLoadRequestCount(actorType, actorID string, elapsed time.Duration, code int) {
 	t.meter.RecordBatch(
 		context.Background(),
 		[]label.KeyValue{
@@ -77,7 +77,7 @@ func (t *TelemetryClient) RecordLoadRequestCount(actorType, actorID string, elas
 
 	t.reqLatency.Record(
 		context.Background(),
-		elasped.Milliseconds(),
+		elapsed.Milliseconds(),
 		label.String("hostname", t.hostname),
 		label.Int("code", code),
 		label.Bool("success", code == 200),
