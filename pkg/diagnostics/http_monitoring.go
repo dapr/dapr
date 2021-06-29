@@ -206,7 +206,7 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 	}
 
 	// Split up to 6 delimiters in 'v1/actors/DemoActor/1/timer/name'
-	var parsedPath = strings.SplitN(p, "/", 6)
+	parsedPath := strings.SplitN(p, "/", 6)
 
 	if len(parsedPath) < 3 {
 		return path

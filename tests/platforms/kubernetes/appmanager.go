@@ -99,6 +99,11 @@ func (m *AppManager) Init() error {
 		m.logPrefix = ContainerLogDefaultPath
 	}
 
+	if err := os.MkdirAll(m.logPrefix, os.ModePerm); err != nil {
+		log.Printf("Failed to create output log directory '%s' Error was: '%s'. Container logs will be discarded", m.logPrefix, err)
+		m.logPrefix = ""
+	}
+
 	log.Printf("Deploying app %v ...", m.app.AppName)
 	if m.app.IsJob {
 		// Deploy app and wait until deployment is done
@@ -164,11 +169,6 @@ func (m *AppManager) Init() error {
 		log.Printf("Creating pod port forwarder for app %v ....", m.app.AppName)
 		m.forwarder = NewPodPortForwarder(m.client, m.namespace)
 		log.Printf("Pod port forwarder for app %v has been created.", m.app.AppName)
-	}
-
-	if err := os.MkdirAll(m.logPrefix, os.ModePerm); err != nil {
-		log.Printf("Failed to create output log directory '%s' Error was: '%s'. Container logs will be discarded", m.logPrefix, err)
-		m.logPrefix = ""
 	}
 
 	return nil
@@ -279,7 +279,23 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 	})
 
 	if waitErr != nil {
-		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v: %s", m.app.AppName, lastDeployment, waitErr)
+		// get deployment's Pods detail status info
+		podClient := m.client.Pods(m.namespace)
+		// Filter only 'testapp=appName' labeled Pods
+		podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+		})
+		podStatus := map[string][]apiv1.ContainerStatus{}
+		if err == nil {
+			for _, pod := range podList.Items {
+				podStatus[pod.Name] = pod.Status.ContainerStatuses
+			}
+			log.Printf("deployment %s relate pods: %+v", m.app.AppName, podList)
+		} else {
+			log.Printf("Error list pod for deployment %s. Error was %s", m.app.AppName, err)
+		}
+
+		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v pod status: %+v error: %s", m.app.AppName, lastDeployment, podStatus, waitErr)
 	}
 
 	return lastDeployment, nil
@@ -416,7 +432,6 @@ func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
-
 	if err != nil {
 		return nil, err
 	}

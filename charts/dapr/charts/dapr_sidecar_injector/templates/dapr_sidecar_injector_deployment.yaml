@@ -72,8 +72,11 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsUser: 1000
+  {{- if eq .Values.runAsNonRoot true }}
           runAsNonRoot: {{ .Values.runAsNonRoot }}
+  {{- else }}
+          runAsUser: 1000
+  {{- end }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add:
@@ -114,6 +117,10 @@ spec:
           value: /dapr/cert/tls.crt
         - name: TLS_KEY_FILE
           value: /dapr/cert/tls.key
+{{- if .Values.kubeClusterDomain }}
+        - name: KUBE_CLUSTER_DOMAIN
+          value: "{{ .Values.kubeClusterDomain }}"
+{{- end }}
         - name: SIDECAR_IMAGE
 {{- if contains "/" .Values.image.name }}
           value: "{{ .Values.image.name }}"

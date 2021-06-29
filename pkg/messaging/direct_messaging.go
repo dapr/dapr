@@ -36,7 +36,7 @@ var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type messageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
+type messageClientConnection func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error)
 
 // DirectMessaging is the API interface for invoking a remote app.
 type DirectMessaging interface {
@@ -55,6 +55,7 @@ type directMessaging struct {
 	hostAddress         string
 	hostName            string
 	maxRequestBodySize  int
+	proxy               Proxy
 }
 
 type remoteApp struct {
@@ -70,10 +71,11 @@ func NewDirectMessaging(
 	appChannel channel.AppChannel,
 	clientConnFn messageClientConnection,
 	resolver nr.Resolver,
-	tracingSpec config.TracingSpec, maxRequestBodySize int) DirectMessaging {
+	tracingSpec config.TracingSpec, maxRequestBodySize int, proxy Proxy) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
-	return &directMessaging{
+
+	dm := &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: clientConnFn,
 		appID:               appID,
@@ -85,7 +87,15 @@ func NewDirectMessaging(
 		hostAddress:         hAddr,
 		hostName:            hName,
 		maxRequestBodySize:  maxRequestBodySize,
+		proxy:               proxy,
 	}
+
+	if proxy != nil {
+		proxy.SetRemoteAppFn(dm.getRemoteApp)
+		proxy.SetTelemetryFn(dm.setContextSpan)
+	}
+
+	return dm
 }
 
 // Invoke takes a message requests and invokes an app, either local or remote.
@@ -134,7 +144,7 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true, false)
+			_, connerr := d.connectionCreatorFn(context.TODO(), app.address, app.id, app.namespace, false, true, false)
 			if connerr != nil {
 				return nil, connerr
 			}
@@ -153,14 +163,20 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 	return d.appChannel.InvokeMethod(ctx, req)
 }
 
+func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
+	span := diag_utils.SpanFromContext(ctx)
+	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+
+	return ctx
+}
+
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false, false)
+	conn, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
 	if err != nil {
 		return nil, err
 	}
 
-	span := diag_utils.SpanFromContext(ctx)
-	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	ctx = d.setContextSpan(ctx)
 
 	d.addForwardedHeadersToMetadata(req)
 	d.addDestinationAppIDHeaderToMetadata(appID, req)

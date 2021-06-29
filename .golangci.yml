@@ -247,7 +247,6 @@ linters:
     - exhaustive
     - noctx
     - gci
-    - gofumpt
 issues:
   exclude:
     # staticcheck

@@ -52,13 +52,13 @@ func (s *stateStoreRegistry) Register(components ...State) {
 }
 
 func (s *stateStoreRegistry) Create(name, version string) (state.Store, error) {
-	if method, ok := s.getSecretStore(name, version); ok {
+	if method, ok := s.getStateStore(name, version); ok {
 		return method(), nil
 	}
 	return nil, errors.Errorf("couldn't find state store %s/%s", name, version)
 }
 
-func (s *stateStoreRegistry) getSecretStore(name, version string) (func() state.Store, bool) {
+func (s *stateStoreRegistry) getStateStore(name, version string) (func() state.Store, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	stateStoreFn, ok := s.stateStores[nameLower+"/"+versionLower]
