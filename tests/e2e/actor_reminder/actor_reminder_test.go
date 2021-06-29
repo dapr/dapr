@@ -64,7 +64,7 @@ func countActorAction(resp []byte, actorID string, action string) int {
 	logEntries := parseLogEntries(resp)
 	for _, logEntry := range logEntries {
 		if (logEntry.ActorID == actorID) && (logEntry.Action == action) {
-			count = count + 1
+			count++
 		}
 	}
 
@@ -121,7 +121,7 @@ func TestActorReminder(t *testing.T) {
 
 	t.Run("Actor reminder unregister then restart should not trigger anymore.", func(t *testing.T) {
 		var wg sync.WaitGroup
-		for i := 1; i <= numIterations; i++ {
+		for iteration := 1; iteration <= numIterations; iteration++ {
 			wg.Add(1)
 			go func(iteration int) {
 				defer wg.Done()
@@ -162,7 +162,7 @@ func TestActorReminder(t *testing.T) {
 					// There are other E2E tests that validate the correct frequency of reminders in a happy path.
 					require.True(t, count >= 1, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
 				}
-			}(i)
+			}(iteration)
 		}
 		wg.Wait()
 
@@ -194,5 +194,48 @@ func TestActorReminder(t *testing.T) {
 		}
 
 		t.Log("Done.")
+	})
+}
+
+func TestActorReminderPeriod(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	logsURL := fmt.Sprintf(actorlogsURLFormat, externalURL)
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	t.Logf("Checking if app is healthy ...")
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// Set reminder
+	reminder := actorReminder{
+		Data:    "reminderdata",
+		DueTime: "1s",
+		Period:  "R5/PT1S",
+	}
+	reminderBody, err := json.Marshal(reminder)
+	require.NoError(t, err)
+
+	t.Run("Actor reminder with repetition should run correct number of times", func(t *testing.T) {
+		reminderName := "repeatable-reminder"
+		actorID := "repetable-reminder-actor"
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+		// Registering reminder
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reminderBody)
+		require.NoError(t, err)
+
+		t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
+		time.Sleep(secondsToCheckReminderResult * time.Second)
+
+		t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURL)
+		resp, err := utils.HTTPGet(logsURL)
+		require.NoError(t, err)
+
+		t.Log("Checking if all reminders did trigger ...")
+		count := countActorAction(resp, actorID, reminderName)
+		require.Equal(t, 5, count)
 	})
 }
