@@ -2194,11 +2194,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer func() {
-				if clientConn, ok := rt.grpc.AppClient.(*grpc.ClientConn); ok {
-					clientConn.Close()
-				}
-			}()
+			defer rt.grpc.AppClient.Close()
 
 			// act
 			err = rt.publishMessageGRPC(context.Background(), tc.message)
@@ -2245,11 +2241,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer func() {
-				if clientConn, ok := rt.grpc.AppClient.(*grpc.ClientConn); ok {
-					clientConn.Close()
-				}
-			}()
+			defer rt.grpc.AppClient.Close()
 
 			// act
 			resp := rt.getSubscribedBindingsGRPC()

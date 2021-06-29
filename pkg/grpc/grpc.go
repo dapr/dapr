@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -30,9 +31,16 @@ const (
 	dialTimeout       = time.Second * 30
 )
 
+// ClientConnCloser combines grpc.ClientConnInterface and io.Closer
+// to cover the methods used from *grpc.ClientConn.
+type ClientConnCloser interface {
+	grpc.ClientConnInterface
+	io.Closer
+}
+
 // Manager is a wrapper around gRPC connection pooling.
 type Manager struct {
-	AppClient      grpc.ClientConnInterface
+	AppClient      ClientConnCloser
 	lock           *sync.RWMutex
 	connectionPool map[string]*grpc.ClientConn
 	auth           security.Authenticator

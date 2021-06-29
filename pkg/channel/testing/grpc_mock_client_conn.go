@@ -15,3 +15,8 @@ type MockClientConn struct {
 func (m *MockClientConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
 	return m.InvokeFn(ctx, method, args, reply, opts...)
 }
+
+// Close implements io.Closer.
+func (m *MockClientConn) Close() error {
+	return nil
+}
