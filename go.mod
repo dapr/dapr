@@ -27,6 +27,7 @@ require (
 	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea
 	github.com/json-iterator/go v1.1.10
 	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/labstack/echo/v4 v4.2.1 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.3.3
 	github.com/openzipkin/zipkin-go v0.2.2
