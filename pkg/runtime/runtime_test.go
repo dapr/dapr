@@ -1628,7 +1628,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 	assert.Equal(t, "value1", string(fakeSecretStoreWithAuth.Spec.Metadata[0].Value.Raw))
 }
 
-func TestErrorPublishedNonCloudEvent(t *testing.T) {
+func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	topic := "topic1"
 
 	testPubSubMessage := &pubsubSubscribedMessage{
@@ -1735,6 +1735,87 @@ func TestErrorPublishedNonCloudEvent(t *testing.T) {
 		// assert
 		assert.NoError(t, err)
 	})
+}
+
+func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
+	topic := "topic1"
+
+	testPubSubMessage := &pubsubSubscribedMessage{
+		cloudEvent: map[string]interface{}{},
+		topic:      topic,
+		data:       []byte("testing"),
+		metadata:   map[string]string{pubsubName: TestPubsubName},
+	}
+
+	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
+	fakeReq.WithHTTPExtension(http.MethodPost, "")
+	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
+
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	defer stopRuntime(t, rt)
+	rt.topicRoutes = map[string]TopicRoute{}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
+
+	testcases := []struct {
+		Name        string
+		Status      runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+		Error       error
+		ExpectError bool
+	}{
+		{
+			Name:   "ok without success",
+			Status: runtimev1pb.TopicEventResponse_SUCCESS,
+		},
+		{
+			Name:        "ok with retry",
+			Status:      runtimev1pb.TopicEventResponse_RETRY,
+			ExpectError: true,
+		},
+		{
+			Name:   "ok with drop",
+			Status: runtimev1pb.TopicEventResponse_DROP,
+		},
+		{
+			Name:        "ok with unknown",
+			Status:      runtimev1pb.TopicEventResponse_TopicEventResponseStatus(999),
+			ExpectError: true,
+		},
+		{
+			Name:        "ok with error",
+			Error:       errors.New("TEST"),
+			ExpectError: true,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.Name, func(t *testing.T) {
+			mockClientConn := channelt.MockClientConn{
+				InvokeFn: func(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
+					if tc.Error != nil {
+						return tc.Error
+					}
+
+					response, ok := reply.(*runtimev1pb.TopicEventResponse)
+					if !ok {
+						return errors.Errorf("unexpected reply type: %s", reflect.TypeOf(reply))
+					}
+
+					response.Status = tc.Status
+
+					return nil
+				},
+			}
+			rt.grpc.AppClient = &mockClientConn
+
+			err := rt.publishMessageGRPC(context.Background(), testPubSubMessage)
+			if tc.ExpectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestOnNewPublishedMessage(t *testing.T) {
@@ -2113,7 +2194,11 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer func() {
+				if clientConn, ok := rt.grpc.AppClient.(*grpc.ClientConn); ok {
+					clientConn.Close()
+				}
+			}()
 
 			// act
 			err = rt.publishMessageGRPC(context.Background(), tc.message)
@@ -2160,7 +2245,11 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer func() {
+				if clientConn, ok := rt.grpc.AppClient.(*grpc.ClientConn); ok {
+					clientConn.Close()
+				}
+			}()
 
 			// act
 			resp := rt.getSubscribedBindingsGRPC()

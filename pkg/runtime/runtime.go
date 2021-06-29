@@ -1264,15 +1264,16 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 
 	if pubsub.HasExpired(cloudEvent) {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
+
 		return nil
 	}
 
 	envelope := &runtimev1pb.TopicEventRequest{
-		Id:              cloudEvent[pubsub.IDField].(string),
-		Source:          cloudEvent[pubsub.SourceField].(string),
-		DataContentType: cloudEvent[pubsub.DataContentTypeField].(string),
-		Type:            cloudEvent[pubsub.TypeField].(string),
-		SpecVersion:     cloudEvent[pubsub.SpecVersionField].(string),
+		Id:              extractCloudEventProperty(cloudEvent, pubsub.IDField),
+		Source:          extractCloudEventProperty(cloudEvent, pubsub.SourceField),
+		DataContentType: extractCloudEventProperty(cloudEvent, pubsub.DataContentTypeField),
+		Type:            extractCloudEventProperty(cloudEvent, pubsub.TypeField),
+		SpecVersion:     extractCloudEventProperty(cloudEvent, pubsub.SpecVersionField),
 		Topic:           msg.topic,
 		PubsubName:      msg.metadata[pubsubName],
 	}
@@ -1281,6 +1282,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		decoded, decodeErr := base64.StdEncoding.DecodeString(data.(string))
 		if decodeErr != nil {
 			log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
+
 			return decodeErr
 		}
 
@@ -1321,12 +1323,14 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		errStatus, hasErrStatus := status.FromError(err)
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
-			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField].(string), err)
+			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField], err)
+
 			return nil
 		}
 
-		err = errors.Errorf("error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField].(string), err)
+		err = errors.Errorf("error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField], err)
 		log.Debug(err)
+
 		// on error from application, return error for redelivery of event
 		return err
 	}
@@ -1337,13 +1341,29 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		// success from protobuf definition
 		return nil
 	case runtimev1pb.TopicEventResponse_RETRY:
-		return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField].(string))
+		return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 	case runtimev1pb.TopicEventResponse_DROP:
-		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField].(string))
+		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
+
 		return nil
 	}
+
 	// Consider unknown status field as error and retry
-	return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField].(string), res.GetStatus())
+	return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], res.GetStatus())
+}
+
+func extractCloudEventProperty(cloudEvent map[string]interface{}, property string) string {
+	if cloudEvent == nil {
+		return ""
+	}
+	iValue, ok := cloudEvent[property]
+	if ok {
+		if value, ok := iValue.(string); ok {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func (a *DaprRuntime) initActors() error {

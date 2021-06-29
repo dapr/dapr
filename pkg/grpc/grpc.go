@@ -32,7 +32,7 @@ const (
 
 // Manager is a wrapper around gRPC connection pooling.
 type Manager struct {
-	AppClient      *grpc.ClientConn
+	AppClient      grpc.ClientConnInterface
 	lock           *sync.RWMutex
 	connectionPool map[string]*grpc.ClientConn
 	auth           security.Authenticator
