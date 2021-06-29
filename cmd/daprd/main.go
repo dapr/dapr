@@ -20,6 +20,7 @@ import (
 
 	// Secret stores.
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/secretstores/aws/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
@@ -158,6 +159,9 @@ func main() {
 			}),
 			secretstores_loader.New("aws.secretmanager", func() secretstores.SecretStore {
 				return secretmanager.NewSecretManager(logContrib)
+			}),
+			secretstores_loader.New("aws.parameterstore", func() secretstores.SecretStore {
+				return parameterstore.NewParameterStore(logContrib)
 			}),
 			secretstores_loader.New("gcp.secretmanager", func() secretstores.SecretStore {
 				return gcp_secretmanager.NewSecreteManager(logContrib)
