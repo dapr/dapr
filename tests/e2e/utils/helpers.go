@@ -78,6 +78,7 @@ func GenerateRandomStringKeyValues(num int) []SimpleKeyValue {
 func newHTTPClient() http.Client {
 	doOnce.Do(func() {
 		defaultClient = http.Client{
+			Timeout: time.Second * 15,
 			Transport: &http.Transport{
 				// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
 				Dial: (&net.Dialer{
