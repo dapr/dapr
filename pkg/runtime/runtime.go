@@ -104,6 +104,8 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 
 var log = logger.NewLogger("dapr.runtime")
 
+var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
+
 type Route struct {
 	path     string
 	metadata map[string]string
@@ -1263,7 +1265,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	cloudEvent := msg.cloudEvent
 
 	if pubsub.HasExpired(cloudEvent) {
-		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
+		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 
 		return nil
 	}
@@ -1279,33 +1281,47 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	}
 
 	if data, ok := cloudEvent[pubsub.DataBase64Field]; ok && data != nil {
-		decoded, decodeErr := base64.StdEncoding.DecodeString(data.(string))
-		if decodeErr != nil {
-			log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
+		if dataAsString, ok := data.(string); ok {
+			decoded, decodeErr := base64.StdEncoding.DecodeString(dataAsString)
+			if decodeErr != nil {
+				log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
 
-			return decodeErr
+				return decodeErr
+			}
+
+			envelope.Data = decoded
+		} else {
+			return ErrUnexpectedEnvelopeData
 		}
-
-		envelope.Data = decoded
 	} else if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
 
 		if contenttype.IsStringContentType(envelope.DataContentType) {
-			envelope.Data = []byte(data.(string))
+			switch v := data.(type) {
+			case string:
+				envelope.Data = []byte(v)
+			case []byte:
+				envelope.Data = v
+			default:
+				return ErrUnexpectedEnvelopeData
+			}
 		} else if contenttype.IsJSONContentType(envelope.DataContentType) {
 			envelope.Data, _ = a.json.Marshal(data)
 		}
 	}
 
 	var span *trace.Span
-	if cloudEvent[pubsub.TraceIDField] != nil {
-		traceID := cloudEvent[pubsub.TraceIDField].(string)
-		sc, _ := diag.SpanContextFromW3CString(traceID)
-		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
+	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
+		if traceID, ok := iTraceID.(string); ok {
+			sc, _ := diag.SpanContextFromW3CString(traceID)
+			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 
-		// no ops if trace is off
-		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			// no ops if trace is off
+			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+		} else {
+			log.Warnf("ignored non-string traceid value: %v", iTraceID)
+		}
 	}
 
 	// call appcallback
