@@ -135,7 +135,7 @@ jobs:
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
-        run: make docker-deploy-k8s
+        run: make docker-deploy-k8s || kubectl get pods --all-namespaces;  kubectl describe pod -l app.kubernetes.io/name=dapr -n dapr-tests
       - name: Deploy test components
         if: env.TEST_CLUSTER != ''
         run: make setup-test-components
