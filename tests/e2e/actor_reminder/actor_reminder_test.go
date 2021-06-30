@@ -213,7 +213,7 @@ func TestActorReminderPeriod(t *testing.T) {
 	reminder := actorReminder{
 		Data:    "reminderdata",
 		DueTime: "1s",
-		Period:  "R5PT1S",
+		Period:  "R5/PT1S",
 	}
 	reminderBody, err := json.Marshal(reminder)
 	require.NoError(t, err)
