@@ -145,6 +145,7 @@ func (a *apiServer) ComponentUpdate(in *emptypb.Empty, srv operatorv1pb.Operator
 	key := uuid.New().String()
 	a.connLock.Lock()
 	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
+	updateChan := a.allConnUpdateChan[key]
 	a.connLock.Unlock()
 	defer func() {
 		a.connLock.Lock()
@@ -153,7 +154,7 @@ func (a *apiServer) ComponentUpdate(in *emptypb.Empty, srv operatorv1pb.Operator
 		a.connLock.Unlock()
 	}()
 
-	for c := range a.allConnUpdateChan[key] {
+	for c := range updateChan {
 		go func(c *componentsapi.Component) {
 			b, err := json.Marshal(&c)
 			if err != nil {
