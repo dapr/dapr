@@ -518,11 +518,7 @@ func TestActorFeatures(t *testing.T) {
 		quit := make(chan struct{})
 		go func() {
 			for {
-				select {
-				case <-quit:
-					return
-				default:
-				}
+				<-quit
 
 				_, backgroundError := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
 				require.NoError(t, backgroundError)
