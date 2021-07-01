@@ -104,6 +104,8 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 
 var log = logger.NewLogger("dapr.runtime")
 
+// ErrUnexpectedEnvelopeData denotes that an unexpected data type
+// was encountered when processing a cloud event's data property.
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
 
 type Route struct {
