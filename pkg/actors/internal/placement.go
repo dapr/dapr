@@ -141,18 +141,29 @@ func NewActorPlacement(
 func (p *ActorPlacement) Start() {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
-	p.clientLock.Lock()
-	p.clientStream, p.clientConn = p.establishStreamConn()
-	if p.clientStream == nil {
-		p.clientLock.Unlock()
+
+	established := false
+	func() {
+		p.clientLock.Lock()
+		defer p.clientLock.Unlock()
+
+		p.clientStream, p.clientConn = p.establishStreamConn()
+		if p.clientStream == nil {
+			return
+		}
+		established = true
+	}()
+	if !established {
 		return
 	}
-	p.clientLock.Unlock()
 
-	p.streamConnectedCond.L.Lock()
-	p.streamConnAlive = true
-	p.streamConnectedCond.Broadcast()
-	p.streamConnectedCond.L.Unlock()
+	func() {
+		p.streamConnectedCond.L.Lock()
+		defer p.streamConnectedCond.L.Unlock()
+
+		p.streamConnAlive = true
+		p.streamConnectedCond.Broadcast()
+	}()
 
 	// Establish receive channel to retrieve placement table update
 	p.shutdownConnLoop.Add(1)
@@ -186,10 +197,13 @@ func (p *ActorPlacement) Start() {
 					p.clientStream = newStream
 					p.clientLock.Unlock()
 
-					p.streamConnectedCond.L.Lock()
-					p.streamConnAlive = true
-					p.streamConnectedCond.Broadcast()
-					p.streamConnectedCond.L.Unlock()
+					func() {
+						p.streamConnectedCond.L.Lock()
+						defer p.streamConnectedCond.L.Unlock()
+
+						p.streamConnAlive = true
+						p.streamConnectedCond.Broadcast()
+					}()
 				}
 
 				continue
@@ -206,11 +220,14 @@ func (p *ActorPlacement) Start() {
 		defer p.shutdownConnLoop.Done()
 		for !p.shutdown.Load() {
 			// Wait until stream is connected.
-			p.streamConnectedCond.L.Lock()
-			for !p.streamConnAlive && !p.shutdown.Load() {
-				p.streamConnectedCond.Wait()
-			}
-			p.streamConnectedCond.L.Unlock()
+			func() {
+				p.streamConnectedCond.L.Lock()
+				defer p.streamConnectedCond.L.Unlock()
+
+				for !p.streamConnAlive && !p.shutdown.Load() {
+					p.streamConnectedCond.Wait()
+				}
+			}()
 
 			if p.shutdown.Load() {
 				break
@@ -237,9 +254,13 @@ func (p *ActorPlacement) Start() {
 
 			var err error
 			// Do lock to avoid being called with CloseSend concurrently
-			p.clientLock.RLock()
-			err = p.clientStream.Send(&host)
-			p.clientLock.RUnlock()
+			func() {
+				p.clientLock.RLock()
+				defer p.clientLock.RUnlock()
+
+				err = p.clientStream.Send(&host)
+			}()
+
 			if err != nil {
 				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
 				log.Debugf("failed to report status to placement service : %v", err)
@@ -267,25 +288,29 @@ func (p *ActorPlacement) Stop() {
 }
 
 func (p *ActorPlacement) closeStream() {
-	p.clientLock.Lock()
+	func() {
+		p.clientLock.Lock()
+		defer p.clientLock.Unlock()
 
-	if p.clientStream != nil {
-		p.clientStream.CloseSend()
-		p.clientStream = nil
-	}
+		if p.clientStream != nil {
+			p.clientStream.CloseSend()
+			p.clientStream = nil
+		}
 
-	if p.clientConn != nil {
-		p.clientConn.Close()
-		p.clientConn = nil
-	}
+		if p.clientConn != nil {
+			p.clientConn.Close()
+			p.clientConn = nil
+		}
+	}()
 
-	p.clientLock.Unlock()
+	func() {
+		p.streamConnectedCond.L.Lock()
+		defer p.streamConnectedCond.L.Unlock()
 
-	p.streamConnectedCond.L.Lock()
-	p.streamConnAlive = false
-	// Let waiters wake up from block
-	p.streamConnectedCond.Broadcast()
-	p.streamConnectedCond.L.Unlock()
+		p.streamConnAlive = false
+		// Let waiters wake up from block
+		p.streamConnectedCond.Broadcast()
+	}()
 }
 
 func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusClient, *grpc.ClientConn) {
@@ -385,23 +410,32 @@ func (p *ActorPlacement) unblockPlacements() {
 }
 
 func (p *ActorPlacement) updatePlacements(in *v1pb.PlacementTables) {
-	p.placementTableLock.Lock()
+	updated := false
+	func() {
+		p.placementTableLock.Lock()
+		defer p.placementTableLock.Unlock()
 
-	if in.Version == p.placementTables.Version {
-		p.placementTableLock.Unlock()
+		if in.Version == p.placementTables.Version {
+			return
+		}
+
+		tables := &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)}
+		for k, v := range in.Entries {
+			loadMap := map[string]*hashing.Host{}
+			for lk, lv := range v.LoadMap {
+				loadMap[lk] = hashing.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
+			}
+			tables.Entries[k] = hashing.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
+		}
+
+		p.placementTables = tables
+		p.placementTables.Version = in.Version
+		updated = true
+	}()
+
+	if !updated {
 		return
 	}
-
-	for k, v := range in.Entries {
-		loadMap := map[string]*hashing.Host{}
-		for lk, lv := range v.LoadMap {
-			loadMap[lk] = hashing.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
-		}
-		p.placementTables.Entries[k] = hashing.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
-	}
-	p.placementTables.Version = in.Version
-
-	p.placementTableLock.Unlock()
 
 	// May call LookupActor inside, so should not do this with placementTableLock locked.
 	p.afterTableUpdateFn()
