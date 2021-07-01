@@ -960,8 +960,6 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		case <-stop:
 			log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
 			return
-		default:
-			break
 		}
 
 		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
