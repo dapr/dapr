@@ -10,15 +10,14 @@ import (
 
 	"github.com/ghodss/yaml"
 	"google.golang.org/protobuf/types/known/emptypb"
-
-	"github.com/dapr/kit/logger"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/dapr/kit/logger"
 )
 
 const (
