@@ -21,6 +21,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -84,7 +85,7 @@ type actorsRuntime struct {
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
 	evaluationChan      chan bool
-	appHealthy          bool
+	appHealthy          *atomic.Bool
 	certChain           *dapr_credentials.CertChain
 	tracingSpec         configuration.TracingSpec
 	reentrancyEnabled   bool
@@ -154,7 +155,7 @@ func NewActors(
 		evaluationLock:      &sync.RWMutex{},
 		evaluationBusy:      false,
 		evaluationChan:      make(chan bool),
-		appHealthy:          true,
+		appHealthy:          atomic.NewBool(true),
 		certChain:           certChain,
 		tracingSpec:         tracingSpec,
 		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
@@ -183,7 +184,7 @@ func (a *actorsRuntime) Init() error {
 		a.drainRebalancedActors()
 		a.evaluateReminders()
 	}
-	appHealthFn := func() bool { return a.appHealthy }
+	appHealthFn := func() bool { return a.appHealthy.Load() }
 
 	a.placement = internal.NewActorPlacement(
 		a.config.PlacementAddresses, a.certChain,
@@ -217,7 +218,8 @@ func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
 	healthAddress := fmt.Sprintf("%s/healthz", a.appChannel.GetBaseAddress())
 	ch := health.StartEndpointHealthCheck(healthAddress, opts...)
 	for {
-		a.appHealthy = <-ch
+		appHealthy := <-ch
+		a.appHealthy.Store(appHealthy)
 	}
 }
 
