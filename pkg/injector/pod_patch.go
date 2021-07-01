@@ -545,7 +545,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--app-max-concurrency", fmt.Sprintf("%v", maxConcurrency),
 		"--sentry-address", sentryAddress,
 		fmt.Sprintf("--enable-metrics=%t", metricsEnabled),
-		//"--enable-metrics", strconv.FormatBool(metricsEnabled),
 		"--metrics-port", fmt.Sprintf("%v", metricsPort),
 		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 	}
