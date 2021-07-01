@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -143,7 +144,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
 			Operation: "lock",
 		})
-		assert.True(t, testPlacement.tableIsBlocked)
+		assert.True(t, testPlacement.tableIsBlocked.Load())
 	})
 
 	t.Run("update operation", func(t *testing.T) {
@@ -175,7 +176,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
 			Operation: "unlock",
 		})
-		assert.False(t, testPlacement.tableIsBlocked)
+		assert.False(t, testPlacement.tableIsBlocked.Load())
 	})
 }
 
@@ -244,6 +245,34 @@ func TestLookupActor(t *testing.T) {
 		name, appID = testPlacement.LookupActor("nonExistingActorType", "id0")
 		assert.Empty(t, name)
 		assert.Empty(t, appID)
+	})
+}
+
+func TestConcurrentUnblockPlacements(t *testing.T) {
+	appHealthFunc := func() bool { return true }
+	tableUpdateFunc := func() {}
+	testPlacement := NewActorPlacement(
+		[]string{}, nil,
+		"testAppID", "127.0.0.1:1000",
+		[]string{"actorOne", "actorTwo"},
+		appHealthFunc, tableUpdateFunc)
+
+	t.Run("concurrent_unlock", func(t *testing.T) {
+		for i := 0; i < 10000; i++ {
+			testPlacement.blockPlacements()
+			wg := sync.WaitGroup{}
+			wg.Add(2)
+			go func() {
+				testPlacement.unblockPlacements()
+				wg.Done()
+			}()
+			go func() {
+				testPlacement.unblockPlacements()
+				wg.Done()
+			}()
+			// Waiting for the goroutines to finish
+			wg.Wait()
+		}
 	})
 }
 

@@ -398,7 +398,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	if resp == nil {
 		respond(reqCtx, withEmpty())
 	} else {
-		respond(reqCtx, withJSON(fasthttp.StatusOK, resp.Data))
+		respond(reqCtx, withMetadata(resp.Metadata), withJSON(fasthttp.StatusOK, resp.Data))
 	}
 }
 

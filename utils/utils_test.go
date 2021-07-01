@@ -19,12 +19,14 @@ func TestToISO8601DateTimeString(t *testing.T) {
 		testDateTime, err := time.Parse(time.RFC3339, "2020-01-02T15:04:05.123Z")
 		assert.NoError(t, err)
 		isoString := ToISO8601DateTimeString(testDateTime)
-		assert.Equal(t, "2020-01-02T15:04:05.123000Z", isoString)
+		assert.Equal(t, "2020-01-02T15:04:05.123Z", isoString)
 	})
 
 	t.Run("succeed to parse generated iso8601 string to time.Time using RFC3339 Parser", func(t *testing.T) {
-		currentTime := time.Now()
+		currentTime := time.Unix(1623306411, 123000)
+		assert.Equal(t, 123000, currentTime.UTC().Nanosecond())
 		isoString := ToISO8601DateTimeString(currentTime)
+		assert.Equal(t, "2021-06-10T06:26:51.000123Z", isoString)
 		parsed, err := time.Parse(time.RFC3339, isoString)
 
 		// assert

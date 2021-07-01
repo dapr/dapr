@@ -47,6 +47,7 @@ func FromFlags() (*DaprRuntime, error) {
 	allowedOrigins := flag.String("allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	enableProfiling := flag.Bool("enable-profiling", false, "Enable profiling")
 	runtimeVersion := flag.Bool("version", false, "Prints the runtime version")
+	buildInfo := flag.Bool("build-info", false, "Prints the build info")
 	waitCommand := flag.Bool("wait", false, "wait for Dapr outbound ready")
 	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
@@ -64,6 +65,11 @@ func FromFlags() (*DaprRuntime, error) {
 
 	if *runtimeVersion {
 		fmt.Println(version.Version())
+		os.Exit(0)
+	}
+
+	if *buildInfo {
+		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", version.Version(), version.Commit(), version.GitVersion())
 		os.Exit(0)
 	}
 

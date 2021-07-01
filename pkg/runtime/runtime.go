@@ -992,9 +992,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 		return a.topicRoutes, nil
 	}
 
-	var topicRoutes map[string]TopicRoute = make(map[string]TopicRoute)
+	topicRoutes := make(map[string]TopicRoute)
 
 	if a.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
 		return topicRoutes, nil
 	}
 
@@ -1796,7 +1797,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error)
+		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
@@ -1807,7 +1808,7 @@ func (a *DaprRuntime) createAppChannel() error {
 			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL)
+		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize)
 		if err != nil {
 			return err
 		}
