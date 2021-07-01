@@ -149,14 +149,12 @@ func (a *apiServer) ComponentUpdate(in *emptypb.Empty, srv operatorv1pb.Operator
 	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
 	updateChan := a.allConnUpdateChan[key]
 	a.connLock.Unlock()
-	/*
-		defer func() {
-			a.connLock.Lock()
-			close(a.allConnUpdateChan[key])
-			delete(a.allConnUpdateChan, key)
-			a.connLock.Unlock()
-		}()
-	*/
+	defer func() {
+		a.connLock.Lock()
+		close(a.allConnUpdateChan[key])
+		delete(a.allConnUpdateChan, key)
+		a.connLock.Unlock()
+	}()
 
 	for c := range updateChan {
 		go func(c *componentsapi.Component) {
