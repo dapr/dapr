@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -71,7 +72,7 @@ type ActorPlacement struct {
 	// unblockSignal is the channel to unblock table locking.
 	unblockSignal chan struct{}
 	// tableIsBlocked is the status of table lock.
-	tableIsBlocked bool
+	tableIsBlocked *atomic.Bool
 	// operationUpdateLock is the lock for three stage commit.
 	operationUpdateLock *sync.Mutex
 
@@ -117,9 +118,9 @@ func NewActorPlacement(
 		placementTables:     &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 		clientCert:          clientCert,
 		operationUpdateLock: &sync.Mutex{},
-
-		appHealthFn:        appHealthFn,
-		afterTableUpdateFn: afterTableUpdateFn,
+		tableIsBlocked:      atomic.NewBool(false),
+		appHealthFn:         appHealthFn,
+		afterTableUpdateFn:  afterTableUpdateFn,
 
 		shutdown: false,
 	}
@@ -338,12 +339,11 @@ func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 
 func (p *ActorPlacement) blockPlacements() {
 	p.unblockSignal = make(chan struct{})
-	p.tableIsBlocked = true
+	p.tableIsBlocked.Store(true)
 }
 
 func (p *ActorPlacement) unblockPlacements() {
-	if p.tableIsBlocked {
-		p.tableIsBlocked = false
+	if p.tableIsBlocked.CAS(true, false) {
 		close(p.unblockSignal)
 	}
 }
@@ -373,7 +373,7 @@ func (p *ActorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 
 // WaitUntilPlacementTableIsReady waits until placement table is until table lock is unlocked.
 func (p *ActorPlacement) WaitUntilPlacementTableIsReady() {
-	if p.tableIsBlocked {
+	if p.tableIsBlocked.Load() {
 		<-p.unblockSignal
 	}
 }
