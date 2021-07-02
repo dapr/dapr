@@ -130,7 +130,8 @@ spec:
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
-        - "--enable-metrics=false"
+        - "--enable-metrics"
+        - "false"
 {{- end }}
 {{- if eq .Values.global.mtls.enabled true }}
         - "--tls-enabled"

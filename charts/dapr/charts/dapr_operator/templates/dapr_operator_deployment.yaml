@@ -130,7 +130,8 @@ spec:
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
-        - "--enable-metrics=false"
+        - "--enable-metrics"
+        - "false"
 {{- end }}
       serviceAccountName: dapr-operator
       volumes:
