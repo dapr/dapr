@@ -126,9 +126,6 @@ func NewActorPlacement(
 		placementTableLock: &sync.RWMutex{},
 		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
-		tableIsBlocked:   false,
-		tableUnblockCond: sync.NewCond(&sync.Mutex{}),
-
 		operationUpdateLock: &sync.Mutex{},
 		tableIsBlocked:      atomic.NewBool(false),
 		appHealthFn:         appHealthFn,
