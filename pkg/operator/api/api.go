@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -37,15 +39,17 @@ type Server interface {
 }
 
 type apiServer struct {
-	Client     client.Client
-	updateChan chan *componentsapi.Component
+	Client client.Client
+	// notify all dapr runtime
+	connLock          sync.Mutex
+	allConnUpdateChan map[string]chan *componentsapi.Component
 }
 
 // NewAPIServer returns a new API server.
 func NewAPIServer(client client.Client) Server {
 	return &apiServer{
-		Client:     client,
-		updateChan: make(chan *componentsapi.Component, 1),
+		Client:            client,
+		allConnUpdateChan: make(map[string]chan *componentsapi.Component),
 	}
 }
 
@@ -70,7 +74,11 @@ func (a *apiServer) Run(certChain *dapr_credentials.CertChain) {
 }
 
 func (a *apiServer) OnComponentUpdated(component *componentsapi.Component) {
-	a.updateChan <- component
+	a.connLock.Lock()
+	for _, connUpdateChan := range a.allConnUpdateChan {
+		connUpdateChan <- component
+	}
+	a.connLock.Unlock()
 }
 
 // GetConfiguration returns a Dapr configuration.
@@ -134,8 +142,19 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified.
 func (a *apiServer) ComponentUpdate(in *emptypb.Empty, srv operatorv1pb.Operator_ComponentUpdateServer) error {
 	log.Info("sidecar connected for component updates")
+	key := uuid.New().String()
+	a.connLock.Lock()
+	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
+	updateChan := a.allConnUpdateChan[key]
+	a.connLock.Unlock()
+	defer func() {
+		close(updateChan)
+		a.connLock.Lock()
+		delete(a.allConnUpdateChan, key)
+		a.connLock.Unlock()
+	}()
 
-	for c := range a.updateChan {
+	for c := range updateChan {
 		go func(c *componentsapi.Component) {
 			b, err := json.Marshal(&c)
 			if err != nil {
