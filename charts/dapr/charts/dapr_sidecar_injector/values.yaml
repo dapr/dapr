@@ -17,6 +17,7 @@ webhookFailurePolicy: Ignore
 sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 resources: {}
+kubeClusterDomain: cluster.local
 
 debug:
   enabled: false
