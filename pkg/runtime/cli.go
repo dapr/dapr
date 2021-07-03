@@ -218,6 +218,9 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Info("loading default configuration")
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
+	if globalConfig != nil {
+		globalConfig.Spec.MetricSpec.Enabled = metricsExporter.Options().MetricsEnabled
+	}
 
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
