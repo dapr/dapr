@@ -312,7 +312,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.appendBuiltinSecretStore()
 	err = a.loadComponents(opts)
 	if err != nil {
-		log.Warnf("failed to load components: %s", err)
+		log.Fatalf("failed to load components: %s", err)
 	}
 
 	a.flushOutstandingComponents()

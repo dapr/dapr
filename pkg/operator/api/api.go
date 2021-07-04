@@ -93,6 +93,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 func (a *apiServer) ListComponents(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListComponentResponse, error) {
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components); err != nil {
+		log.Warnf("error get components: %s", err)
 		return nil, errors.Wrap(err, "error getting components")
 	}
 	resp := &operatorv1pb.ListComponentResponse{

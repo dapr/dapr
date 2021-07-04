@@ -45,6 +45,7 @@ func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClie
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	resp, err := k.client.ListComponents(context.Background(), &emptypb.Empty{}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
+		log.Warnf("daprd runtime error get components: %s", err)
 		return nil, err
 	}
 	comps := resp.GetComponents()
