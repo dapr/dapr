@@ -124,14 +124,13 @@ spec:
         - "--log-as-json"
 {{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
-        - "--enable-metrics"
+        - "--enable-metrics=true"
         - "--replicationFactor"
         - "{{ .Values.replicationFactor }}"
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
-        - "--enable-metrics"
-        - "false"
+        - "--enable-metrics=false"
 {{- end }}
 {{- if eq .Values.global.mtls.enabled true }}
         - "--tls-enabled"
