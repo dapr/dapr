@@ -580,6 +580,23 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 }
 
 func TestDeleteReminder(t *testing.T) {
+	appChannel := new(mockAppChannel)
+	testActorsRuntime := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
+	reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "")
+	testActorsRuntime.CreateReminder(ctx, &reminder)
+	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+	err := testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+		Name:      "reminder1",
+		ActorID:   actorID,
+		ActorType: actorType,
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+}
+
+func TestDeleteReminderWithPartitions(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
