@@ -953,16 +953,19 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 
-	go func(stop chan (bool), req *CreateTimerRequest) {
-		time.Sleep(dueTime)
-
+	go func(stop chan bool, req *CreateTimerRequest) {
 		// Check if timer is still active
+		timer := time.NewTimer(dueTime)
 		select {
+		case <-time.After(dueTime):
+			log.Debugf("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been overdue.", timerKey, req.DueTime, req.Period, req.Data)
+			break
 		case <-stop:
 			log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
+			// Stop timer to free resource
+			timer.Stop()
+			timer = nil
 			return
-		default:
-			break
 		}
 
 		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
