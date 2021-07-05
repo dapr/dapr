@@ -11,9 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/kit/logger"
-
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.test")
