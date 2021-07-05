@@ -80,7 +80,7 @@ jobs:
       id: skip_check
       uses: fkirc/skip-duplicate-actions@v3.4.0
       with:
-        paths_ignore: '["**.md", ".codecov.yaml"]'
+        paths_ignore: '["**.md", ".codecov.yaml", ".github/ISSUE_TEMPLATE/*"]'
 
     - name: Configure KinD
       # Generate a KinD configuration file that uses:
