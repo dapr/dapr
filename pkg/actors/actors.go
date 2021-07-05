@@ -1225,7 +1225,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 	var actorMetadata ActorMetadata
 	err = json.Unmarshal(resp.Data, &actorMetadata)
 	if err != nil {
-		return nil, fmt.Errorf("could not parse metadata for actor type %s (%s): %v", actorType, string(resp.Data), err)
+		return nil, fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
 	}
 	actorMetadata.Etag = resp.ETag
 	if !migrate {
@@ -1250,6 +1250,7 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	}
 
 	log.Warnf("migrating actor metadata record for actor type %s", actorType)
+
 	// Fetch all reminders for actor type.
 	reminderRefs, refreshedActorMetadata, err := a.getRemindersForActorType(actorType, false)
 	if err != nil {
@@ -1266,29 +1267,27 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		actorRemindersPartitions[i] = make([]*Reminder, 0)
 	}
+
 	// Recalculate partition for each reminder.
 	for _, reminderRef := range reminderRefs {
 		partitionID := actorMetadata.calculateReminderPartition(reminderRef.reminder.ActorID, reminderRef.reminder.Name)
 		actorRemindersPartitions[partitionID-1] = append(actorRemindersPartitions[partitionID-1], reminderRef.reminder)
 	}
+
 	// Save to database.
-	emptyEtag := ""
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		partitionID := i + 1
 		stateKey := actorMetadata.calculateStateKey(actorType, uint32(partitionID))
 		err = a.store.Set(&state.SetRequest{
 			Key:   stateKey,
 			Value: actorRemindersPartitions[i],
-			ETag:  &emptyEtag,
-			Options: state.SetStateOption{
-				Concurrency: "first-write",
-			},
 		})
 
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	// Save new metadata so the new "metadataID" becomes the new de-factor referenced list for reminders.
 	err = a.saveActorTypeMetadata(actorType, actorMetadata)
 	if err != nil {
@@ -1307,7 +1306,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 
 	actorMetadata, merr := a.getActorTypeMetadata(actorType, migrate)
 	if merr != nil {
-		return nil, nil, fmt.Errorf("could not read actor type metadata: %v", merr)
+		return nil, nil, fmt.Errorf("could not read actor type metadata: %w", merr)
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
@@ -1328,7 +1327,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			if len(resp.Data) > 0 {
 				err = json.Unmarshal(resp.Data, &batch)
 				if err != nil {
-					return nil, nil, fmt.Errorf("could not parse actor reminders partition: %v", err)
+					return nil, nil, fmt.Errorf("could not parse actor reminders partition: %w", err)
 				}
 			}
 

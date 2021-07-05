@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	TestAppID   = "fakeAppID"
-	TestKeyName = "key0"
+	TestAppID                       = "fakeAppID"
+	TestKeyName                     = "key0"
+	TestActorMetadataPartitionCount = 3
 )
 
 // testRequest is the request object that encapsulates the `data` field of a request.
@@ -193,6 +194,21 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 	store := fakeStore()
 	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
 	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
+
+	return a.(*actorsRuntime)
+}
+
+func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.AppChannel) *actorsRuntime {
+	spec := config.TracingSpec{SamplingRate: "1"}
+	store := fakeStore()
+	c := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{},
+		TestActorMetadataPartitionCount)
+	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{
+		{
+			Name:    config.ActorTypeMetadata,
+			Enabled: true,
+		},
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -373,18 +389,52 @@ func TestGetReminderTrack(t *testing.T) {
 }
 
 func TestCreateReminder(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime()
+	numReminders := 100
+	appChannel := new(mockAppChannel)
+	testActorsRuntime := newTestActorsRuntimeWithMock(appChannel)
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
 	err := testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Name:      "reminder1",
+		Name:      "reminder0",
 		Period:    "1s",
 		DueTime:   "1s",
 		Data:      nil,
 	})
 	assert.Nil(t, err)
+
+	// Now creates new reminders and migrates the previous one.
+	testActorsRuntimeWithPartition := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
+	testActorsRuntimeWithPartition.store = testActorsRuntime.store
+	for i := 1; i < numReminders; i++ {
+		err = testActorsRuntimeWithPartition.CreateReminder(ctx, &CreateReminderRequest{
+			ActorID:   actorID,
+			ActorType: actorType,
+			Name:      "reminder" + strconv.Itoa(i),
+			Period:    "1s",
+			DueTime:   "1s",
+			Data:      nil,
+		})
+		assert.Nil(t, err)
+	}
+
+	reminderReferences, actorTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(actorType, false)
+	assert.Nil(t, err)
+	assert.True(t, len(actorTypeMetadata.ID) > 0)
+	assert.Equal(t, TestActorMetadataPartitionCount, actorTypeMetadata.RemindersMetadata.PartitionCount)
+
+	partitions := map[uint32]bool{}
+	reminders := map[string]bool{}
+	for _, reminderRef := range reminderReferences {
+		partition := reminderRef.actorRemindersPartitionID
+		partitions[partition] = true
+		reminders[reminderRef.reminder.Name] = true
+		assert.Equal(t, actorTypeMetadata.ID, reminderRef.actorMetadataID)
+	}
+	assert.Equal(t, TestActorMetadataPartitionCount, len(partitions))
+	assert.Equal(t, numReminders, len(reminderReferences))
+	assert.Equal(t, numReminders, len(reminders))
 }
 
 func TestOverrideReminder(t *testing.T) {
