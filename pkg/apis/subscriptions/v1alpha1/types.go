@@ -29,7 +29,7 @@ type SubscriptionSpec struct {
 	Route      string `json:"route"`
 	Pubsubname string `json:"pubsubname"`
 	// +optional
-	Metadata map[string]string `json:"metadata"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // +kubebuilder:object:root=true
