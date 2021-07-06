@@ -19,6 +19,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/concurrency"
 	configuration "github.com/dapr/dapr/pkg/config"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -1275,17 +1277,22 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	}
 
 	// Save to database.
+	transaction := state.TransactionalStateRequest{}
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		partitionID := i + 1
 		stateKey := actorMetadata.calculateStateKey(actorType, uint32(partitionID))
-		err = a.store.Set(&state.SetRequest{
-			Key:   stateKey,
-			Value: actorRemindersPartitions[i],
+		stateValue := actorRemindersPartitions[i]
+		transaction.Operations = append(transaction.Operations, state.TransactionalStateOperation{
+			Operation: state.Upsert,
+			Request: state.SetRequest{
+				Key:   stateKey,
+				Value: stateValue,
+			},
 		})
-
-		if err != nil {
-			return nil, err
-		}
+	}
+	err = a.transactionalStore.Multi(&transaction)
+	if err != nil {
+		return nil, err
 	}
 
 	// Save new metadata so the new "metadataID" becomes the new de-factor referenced list for reminders.
@@ -1311,23 +1318,62 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
 		actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{}
-		var reminders []actorReminderReference
+		reminders := []actorReminderReference{}
+
+		keyPartitionMap := map[string]uint32{}
+		getRequests := []state.GetRequest{}
 		for i := 1; i <= actorMetadata.RemindersMetadata.PartitionCount; i++ {
 			partition := uint32(i)
 			key := actorMetadata.calculateStateKey(actorType, partition)
-			resp, err := a.store.Get(&state.GetRequest{
+			keyPartitionMap[key] = partition
+			getRequests = append(getRequests, state.GetRequest{
 				Key: key,
 			})
+		}
+
+		bulkGet, bulkResponse, err := a.store.BulkGet(getRequests)
+		if bulkGet {
 			if err != nil {
 				return nil, nil, err
 			}
+		} else {
+			// TODO(artursouza): refactor this fallback into default implementation in contrib.
+			// if store doesn't support bulk get, fallback to call get() method one by one
+			limiter := concurrency.NewLimiter(actorMetadata.RemindersMetadata.PartitionCount)
+			bulkResponse = make([]state.BulkGetResponse, len(getRequests))
+			for i := range getRequests {
+				getRequest := getRequests[i]
+				bulkResponse[i].Key = getRequest.Key
 
+				fn := func(param interface{}) {
+					r := param.(*state.BulkGetResponse)
+					resp, ferr := a.store.Get(&getRequest)
+					if ferr != nil {
+						r.Error = ferr.Error()
+					} else if resp != nil {
+						r.Data = jsoniter.RawMessage(resp.Data)
+						r.ETag = resp.ETag
+						r.Metadata = resp.Metadata
+					}
+				}
+
+				limiter.Execute(fn, &bulkResponse[i])
+			}
+			limiter.Wait()
+		}
+
+		for _, resp := range bulkResponse {
+			partition := keyPartitionMap[resp.Key]
 			actorMetadata.RemindersMetadata.partitionsEtag[partition] = resp.ETag
+			if resp.Error != "" {
+				return nil, nil, fmt.Errorf("could not get reminders partition %v: %v", resp.Key, resp.Error)
+			}
+
 			var batch []Reminder
 			if len(resp.Data) > 0 {
 				err = json.Unmarshal(resp.Data, &batch)
 				if err != nil {
-					return nil, nil, fmt.Errorf("could not parse actor reminders partition: %w", err)
+					return nil, nil, fmt.Errorf("could not parse actor reminders partition %v: %w", resp.Key, err)
 				}
 			}
 

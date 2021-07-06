@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/components-contrib/state"
+	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
@@ -92,9 +94,23 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
 }
 
+type fakeStateStoreItem struct {
+	data []byte
+	etag *string
+}
+
 type fakeStateStore struct {
-	items map[string][]byte
+	items map[string]*fakeStateStoreItem
 	lock  *sync.RWMutex
+}
+
+func (f *fakeStateStore) newItem(data []byte) *fakeStateStoreItem {
+	etag, _ := uuid.NewRandom()
+	etagString := etag.String()
+	return &fakeStateStoreItem{
+		data: data,
+		etag: &etagString,
+	}
 }
 
 func (f *fakeStateStore) Init(metadata state.Metadata) error {
@@ -126,18 +142,40 @@ func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) 
 	defer f.lock.RUnlock()
 	item := f.items[req.Key]
 
-	return &state.GetResponse{Data: item}, nil
+	if item == nil {
+		return &state.GetResponse{Data: nil, ETag: nil}, nil
+	}
+
+	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
 }
 
 func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
-	return false, nil, nil
+	res := []state.BulkGetResponse{}
+	for _, oneRequest := range req {
+		oneResponse, err := f.Get(&state.GetRequest{
+			Key:      oneRequest.Key,
+			Metadata: oneRequest.Metadata,
+			Options:  oneRequest.Options,
+		})
+		if err != nil {
+			return false, nil, err
+		}
+
+		res = append(res, state.BulkGetResponse{
+			Key:  oneRequest.Key,
+			Data: oneResponse.Data,
+			ETag: oneResponse.ETag,
+		})
+	}
+
+	return true, res, nil
 }
 
 func (f *fakeStateStore) Set(req *state.SetRequest) error {
 	b, _ := json.Marshal(&req.Value)
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	f.items[req.Key] = b
+	f.items[req.Key] = f.newItem(b)
 
 	return nil
 }
@@ -147,11 +185,36 @@ func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 }
 
 func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	// First we check all eTags
+	for _, o := range request.Operations {
+		var eTag *string
+		key := ""
+		if o.Operation == state.Upsert {
+			key = o.Request.(state.SetRequest).Key
+			eTag = o.Request.(state.SetRequest).ETag
+		} else if o.Operation == state.Delete {
+			key = o.Request.(state.DeleteRequest).Key
+			eTag = o.Request.(state.DeleteRequest).ETag
+		}
+		item := f.items[key]
+		if eTag != nil && item != nil {
+			if *eTag != *item.etag {
+				return fmt.Errorf("etag does not match for key %v", key)
+			}
+		}
+		if eTag != nil && item == nil {
+			return fmt.Errorf("etag does not match for key not found %v", key)
+		}
+	}
+
+	// Now we can perform the operation.
 	for _, o := range request.Operations {
 		if o.Operation == state.Upsert {
 			req := o.Request.(state.SetRequest)
 			b, _ := json.Marshal(req.Value)
-			f.items[req.Key] = b
+			f.items[req.Key] = f.newItem(b)
 		} else if o.Operation == state.Delete {
 			req := o.Request.(state.DeleteRequest)
 			delete(f.items, req.Key)
@@ -225,7 +288,7 @@ func getTestActorTypeAndID() (string, string) {
 
 func fakeStore() state.Store {
 	return &fakeStateStore{
-		items: map[string][]byte{},
+		items: map[string]*fakeStateStoreItem{},
 		lock:  &sync.RWMutex{},
 	}
 }
@@ -407,6 +470,7 @@ func TestCreateReminder(t *testing.T) {
 	// Now creates new reminders and migrates the previous one.
 	testActorsRuntimeWithPartition := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
 	testActorsRuntimeWithPartition.store = testActorsRuntime.store
+	testActorsRuntimeWithPartition.transactionalStore = testActorsRuntime.transactionalStore
 	for i := 1; i < numReminders; i++ {
 		err = testActorsRuntimeWithPartition.CreateReminder(ctx, &CreateReminderRequest{
 			ActorID:   actorID,
