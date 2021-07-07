@@ -103,5 +103,5 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: dashboard-reader
+  name: view
   apiGroup: rbac.authorization.k8s.io
