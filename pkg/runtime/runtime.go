@@ -76,7 +76,8 @@ import (
 )
 
 const (
-	sidecarContainerName = "daprd"
+	sidecarContainerName    = "daprd"
+	getKubernetesPodSeconds = 10
 
 	actorStateStore = "actorStateStore"
 
@@ -285,6 +286,52 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 	a.namespace = a.getNamespace()
+
+	if a.runtimeConfig.Mode == modes.KubernetesMode {
+		log.Debug("Started fetching pod and container metadata")
+		kubeConfig, err := rest.InClusterConfig()
+		if err != nil {
+			return fmt.Errorf("defining k8s config: %v", err.Error())
+		}
+		kubeClient, err := kubernetes.NewForConfig(kubeConfig)
+		if err != nil {
+			return fmt.Errorf("getting k8s kubeClient: %v", err.Error())
+		}
+
+		podName, err := os.Hostname()
+		if err != nil {
+			return fmt.Errorf("getting pod host name: %v", err.Error())
+		}
+
+		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), getKubernetesPodSeconds*time.Second)
+		defer cancel()
+
+		a.podInfo.Pod, err = kubeClient.CoreV1().Pods(a.namespace).Get(ctxWithTimeout, podName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("fetching pod metadata: %v", err.Error())
+		}
+
+		containers := a.podInfo.Pod.Spec.Containers
+
+		if len(containers) == 2 {
+			for _, container := range containers {
+				if container.Name != sidecarContainerName {
+					a.podInfo.AppContainer = &container
+				}
+			}
+		}
+
+		if a.runtimeConfig.ApplicationPort != 0 {
+			a.podInfo.ApplicationProbingPort = a.runtimeConfig.ApplicationPort
+		} else if a.podInfo.AppContainer != nil {
+			containerPorts := a.podInfo.AppContainer.Ports
+			for _, port := range containerPorts {
+				a.podInfo.ApplicationProbingPort = int(port.ContainerPort)
+				break
+			}
+		}
+	}
+
 	a.operatorClient, err = a.getOperatorClient()
 	if err != nil {
 		return err
@@ -386,54 +433,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	err = a.startReadingFromBindings()
 	if err != nil {
 		log.Warnf("failed to read from bindings: %s ", err)
-	}
-
-	var podInfo PodInfo
-	if a.runtimeConfig.Mode == modes.KubernetesMode {
-		config, err := rest.InClusterConfig()
-		if err != nil {
-			return fmt.Errorf("defining k8s config: %v", err.Error())
-		}
-		clientset, err := kubernetes.NewForConfig(config)
-		if err != nil {
-			return fmt.Errorf("getting k8s clientset: %v", err.Error())
-		}
-
-		podName, err := os.Hostname()
-		if err != nil {
-			return fmt.Errorf("getting pod host name: %v", err.Error())
-		}
-
-		podInfo.Pod, err = clientset.CoreV1().Pods(a.namespace).Get(context.TODO(), podName, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("fetching pod metadata: %v", err.Error())
-		}
-
-		log.Infof("POD: %+v", podInfo.Pod)
-
-		containers := podInfo.Pod.Spec.Containers
-
-		if len(containers) == 2 {
-			for _, container := range containers {
-				if container.Name != sidecarContainerName {
-					podInfo.AppContainer = &container
-				}
-			}
-		}
-
-		log.Infof("app container: %+v", podInfo.AppContainer)
-
-		if a.runtimeConfig.ApplicationPort != 0 {
-			podInfo.ApplicationProbingPort = a.runtimeConfig.ApplicationPort
-		} else if podInfo.AppContainer != nil {
-			containerPorts := podInfo.AppContainer.Ports
-			for _, port := range containerPorts {
-				podInfo.ApplicationProbingPort = int(port.ContainerPort)
-				break
-			}
-		}
-
-		log.Infof("app probing port: %v", podInfo.ApplicationProbingPort)
 	}
 
 	return nil
