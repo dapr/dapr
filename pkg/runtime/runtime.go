@@ -399,7 +399,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Fatalf("getting k8s clientset: ", err.Error())
 		}
 
-		podInfo.Pod, err = clientset.CoreV1().Pods(a.globalConfig.Namespace).Get(context.TODO(), a.globalConfig.Name, metav1.GetOptions{})
+		podName, err := os.Hostname()
+		if err != nil {
+			log.Fatal("getting pod host name: ", err.Error())
+		}
+
+		podInfo.Pod, err = clientset.CoreV1().Pods(a.globalConfig.Namespace).Get(context.TODO(), podName, metav1.GetOptions{})
 		if err != nil {
 			log.Fatal("fetching pod metadata: ", err.Error())
 		}
