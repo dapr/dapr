@@ -392,16 +392,16 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		config, err := rest.InClusterConfig()
 		if err != nil {
-			log.Fatalf(err.Error())
+			log.Fatalf("defining k8s config: ", err.Error())
 		}
 		clientset, err := kubernetes.NewForConfig(config)
 		if err != nil {
-			log.Fatalf(err.Error())
+			log.Fatalf("getting k8s clientset: ", err.Error())
 		}
 
 		podInfo.Pod, err = clientset.CoreV1().Pods(a.globalConfig.Namespace).Get(context.TODO(), a.globalConfig.Name, metav1.GetOptions{})
 		if err != nil {
-			log.Fatal(err.Error())
+			log.Fatal("fetching pod metadata: ", err.Error())
 		}
 
 		containers := podInfo.Pod.Spec.Containers
