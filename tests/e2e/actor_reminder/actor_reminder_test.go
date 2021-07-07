@@ -143,6 +143,9 @@ func TestActorReminder(t *testing.T) {
 				time.Sleep(secondsToCheckReminderResult * time.Second)
 
 				for i := 0; i < numActorsPerThread; i++ {
+					_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+					require.NoError(t, err)
+
 					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 					// Unregistering reminder
 					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
