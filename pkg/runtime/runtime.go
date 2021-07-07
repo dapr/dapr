@@ -409,6 +409,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			return fmt.Errorf("fetching pod metadata: %v", err.Error())
 		}
 
+		log.Infof("POD: %+v", podInfo.Pod)
+
 		containers := podInfo.Pod.Spec.Containers
 
 		if len(containers) == 2 {
@@ -419,6 +421,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			}
 		}
 
+		log.Infof("app container: %+v", podInfo.AppContainer)
+
 		if a.runtimeConfig.ApplicationPort != 0 {
 			podInfo.ApplicationProbingPort = a.runtimeConfig.ApplicationPort
 		} else if podInfo.AppContainer != nil {
@@ -428,8 +432,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 				break
 			}
 		}
+
+		log.Infof("app probing port: %v", podInfo.ApplicationProbingPort)
 	}
-	log.Infof("!!!PODINFO:%+v", podInfo)
 
 	return nil
 }
