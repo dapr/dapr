@@ -157,6 +157,8 @@ type DaprRuntime struct {
 	pendingComponentDependents map[string][]components_v1alpha1.Component
 
 	proxy messaging.Proxy
+
+	podInfo PodInfo
 }
 
 type componentPreprocessRes struct {
@@ -381,6 +383,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if err != nil {
 		log.Warnf("failed to read from bindings: %s ", err)
 	}
+
 	return nil
 }
 
