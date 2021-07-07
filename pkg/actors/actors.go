@@ -846,27 +846,13 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 	a.activeRemindersLock.Lock()
 	defer a.activeRemindersLock.Unlock()
+
 	r, exists := a.getReminder(req)
 	if exists {
-		if a.reminderRequiresUpdate(req, r) {
-			err := a.DeleteReminder(ctx, &DeleteReminderRequest{
-				ActorID:   req.ActorID,
-				ActorType: req.ActorType,
-				Name:      req.Name,
-			})
-			if err != nil {
-				return err
-			}
-		} else {
+		if !a.reminderRequiresUpdate(req, r) {
 			return nil
 		}
 	}
-
-	// Store the reminder in active reminders list
-	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
-	reminderKey := a.constructCompositeKey(actorKey, req.Name)
-	stop := make(chan bool)
-	a.activeReminders.Store(reminderKey, stop)
 
 	if a.evaluationBusy {
 		select {
@@ -876,6 +862,29 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			break
 		}
 	}
+
+	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
+	reminderKey := a.constructCompositeKey(actorKey, req.Name)
+
+	// If active reminder exists, delete it.
+	val, exists := a.activeReminders.Load(reminderKey)
+	if exists {
+		log.Infof("Found active reminder with key: %v. Deleting reminder.", reminderKey)
+		// Delete reminder track.
+		err := a.store.Delete(&state.DeleteRequest{
+			Key: reminderKey,
+		})
+		if err != nil {
+			return err
+		}
+		// Stop active reminder.
+		stop := val.(chan bool)
+		close(stop)
+		a.activeReminders.Delete(reminderKey)
+	}
+	// Store the reminder in active reminders list.
+	stop := make(chan bool)
+	a.activeReminders.Store(reminderKey, stop)
 
 	reminder := Reminder{
 		ActorID:        req.ActorID,
@@ -893,7 +902,17 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			return err
 		}
 
-		reminders = append(reminders, reminder)
+		updated := false
+		for i, r := range reminders {
+			if r.ActorID == req.ActorID && r.ActorType == req.ActorType && r.Name == req.Name {
+				reminders[i] = reminder
+				updated = true
+				break
+			}
+		}
+		if !updated {
+			reminders = append(reminders, reminder)
+		}
 
 		err = a.store.Set(&state.SetRequest{
 			Key:   a.constructCompositeKey("actors", req.ActorType),
