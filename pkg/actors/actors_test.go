@@ -1042,7 +1042,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 		health.WithRequestTimeout(100*time.Millisecond))
 
 	time.Sleep(time.Second * 2)
-	assert.False(t, testActorRuntime.appHealthy)
+	assert.False(t, testActorRuntime.appHealthy.Load())
 }
 
 func TestShutdown(t *testing.T) {
@@ -1142,7 +1142,7 @@ func TestParseDuration(t *testing.T) {
 		assert.Nil(t, err)
 	})
 	t.Run("parse ISO 8601 duration", func(t *testing.T) {
-		duration, repetition, err := parseDuration("R5PT30M")
+		duration, repetition, err := parseDuration("R5/PT30M")
 		assert.Equal(t, time.Minute*30, duration)
 		assert.Equal(t, 5, repetition)
 		assert.Nil(t, err)
