@@ -69,9 +69,7 @@ func getAppContainer(pod *v1.Pod) v1.Container {
 	containers := pod.Spec.Containers
 	if len(containers) == 2 {
 		for _, container := range containers {
-			log.Debugf("container name: %v", container.Name)
 			if container.Name != sidecarContainerName {
-				log.Debugf("container name selected: %v", container.Name)
 				appContainer = container
 				break
 			}
