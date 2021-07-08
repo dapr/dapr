@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package actor_features_e2e
+package features
 
 import (
 	"encoding/json"
@@ -84,7 +84,7 @@ func countActorAction(resp []byte, actorID string, action string) int {
 	logEntries := parseLogEntries(resp)
 	for _, logEntry := range logEntries {
 		if (logEntry.ActorID == actorID) && (logEntry.Action == action) {
-			count = count + 1
+			count++
 		}
 	}
 
@@ -105,7 +105,7 @@ func findNthActorAction(resp []byte, actorID string, action string, position int
 				return &logEntry
 			}
 
-			skips = skips - 1
+			skips--
 		}
 	}
 
@@ -171,9 +171,10 @@ func TestActorFeatures(t *testing.T) {
 
 	logsURL := fmt.Sprintf(actorlogsURLFormat, externalURL)
 
+	var err error
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
-	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
 	t.Run("Actor state.", func(t *testing.T) {
@@ -206,7 +207,8 @@ func TestActorFeatures(t *testing.T) {
 			DueTime: "1s",
 			Period:  "1s",
 		}
-		reqBody, err := json.Marshal(req)
+		var reqBody []byte
+		reqBody, err = json.Marshal(req)
 		require.NoError(t, err)
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
 		require.NoError(t, err)
@@ -217,7 +219,8 @@ func TestActorFeatures(t *testing.T) {
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		require.NoError(t, err)
 
-		resp, err := utils.HTTPGet(logsURL)
+		var resp []byte
+		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 		require.True(t, countActorAction(resp, actorID, reminderName) >= 1)
 		require.True(t, countActorAction(resp, actorID, reminderName) >= minimumCallsForTimerAndReminderResult)
@@ -245,7 +248,8 @@ func TestActorFeatures(t *testing.T) {
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		require.NoError(t, err)
 
-		resp, err := utils.HTTPGet(logsURL)
+		var resp []byte
+		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 		require.True(t, countActorAction(resp, actorID, reminderName) == 1)
 	})
@@ -280,7 +284,8 @@ func TestActorFeatures(t *testing.T) {
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		require.NoError(t, err)
 
-		resp, err := utils.HTTPGet(logsURL)
+		var resp []byte
+		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 		require.True(t, countActorAction(resp, actorID, reminderName) == 1)
 	})
@@ -305,13 +310,14 @@ func TestActorFeatures(t *testing.T) {
 		sleepTime := secondsToCheckTimerAndReminderResult / 2 * time.Second
 		time.Sleep(sleepTime)
 
-		resp, err := utils.HTTPGet(logsURL)
+		var resp []byte
+		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 		firstCount := countActorAction(resp, actorID, reminderName)
 		// Min call is based off of having a 1s period/due time, the amount of seconds we've waited, and a bit of room for timing.
 		require.GreaterOrEqual(t, firstCount, 9)
 
-		_, err = utils.HTTPDelete(fmt.Sprintf(actorDeleteURLFormat, externalURL, actorID))
+		_, _ = utils.HTTPDelete(fmt.Sprintf(actorDeleteURLFormat, externalURL, actorID))
 
 		time.Sleep(sleepTime)
 
@@ -345,7 +351,8 @@ func TestActorFeatures(t *testing.T) {
 		sleepTime := secondsToCheckTimerAndReminderResult / 2 * time.Second
 		time.Sleep(sleepTime)
 
-		resp, err := utils.HTTPGet(logsURL)
+		var resp []byte
+		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 		firstCount := countActorAction(resp, actorID, reminderName)
 		minFirstCount := 9
@@ -396,7 +403,8 @@ func TestActorFeatures(t *testing.T) {
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
 		require.NoError(t, err)
 
-		resp, err := utils.HTTPGet(logsURL)
+		var resp []byte
+		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 		require.True(t, countActorAction(resp, actorID, timerName) >= 1)
 		require.True(t, countActorAction(resp, actorID, timerName) >= minimumCallsForTimerAndReminderResult)
@@ -463,7 +471,8 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err)
 		logOne := findNthActorAction(resp, actorID, "concurrency", 1)
 		logTwo := findNthActorAction(resp, actorID, "concurrency", 2)
-		require.True(t, (logOne != nil) && (logTwo != nil))
+		require.NotNil(t, logOne)
+		require.NotNil(t, logTwo)
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logOne.StartTimestamp >= logTwo.EndTimestamp) || (logTwo.StartTimestamp >= logOne.EndTimestamp))
@@ -494,7 +503,8 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err)
 		logOne := findActorAction(resp, actorIDOne, "concurrency")
 		logTwo := findActorAction(resp, actorIDTwo, "concurrency")
-		require.True(t, (logOne != nil) && (logTwo != nil))
+		require.NotNil(t, logOne)
+		require.NotNil(t, logTwo)
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
 		// Both methods run in parallel, with the sleep time both should start before the other ends.
@@ -508,10 +518,7 @@ func TestActorFeatures(t *testing.T) {
 		quit := make(chan struct{})
 		go func() {
 			for {
-				select {
-				case <-quit:
-					return
-				}
+				<-quit
 
 				_, backgroundError := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
 				require.NoError(t, backgroundError)
@@ -595,7 +602,7 @@ func TestActorFeatures(t *testing.T) {
 		actorIDBase := "1008Instance"
 
 		for index := 0; index < actorsToCheckMetadata; index++ {
-			_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
+			_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
 			require.NoError(t, err)
 		}
 

@@ -1063,7 +1063,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	if a.evaluationBusy {
 		select {
 		case <-time.After(time.Second * 5):
-			return errors.New("error creating reminder: timed out after 5s")
+			return errors.New("error deleting reminder: timed out after 5s")
 		case <-a.evaluationChan:
 			break
 		}
