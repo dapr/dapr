@@ -8,8 +8,9 @@ package components_test
 import (
 	"testing"
 
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/components"
 )
 
 func TestIsInitialVersion(t *testing.T) {

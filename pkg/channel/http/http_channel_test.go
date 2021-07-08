@@ -14,10 +14,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/config"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/config"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 type testConcurrencyHandler struct {
@@ -42,15 +43,13 @@ func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	io.WriteString(w, r.URL.RawQuery)
 }
 
-type testContentTypeHandler struct {
-}
+type testContentTypeHandler struct{}
 
 func (t *testContentTypeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, r.Header.Get("Content-Type"))
 }
 
-type testHandlerHeaders struct {
-}
+type testHandlerHeaders struct{}
 
 func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	headers := map[string]string{}
@@ -61,7 +60,7 @@ func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(rsp))
 }
 
-// testHTTPHandler is used for querystring test
+// testHTTPHandler is used for querystring test.
 type testHTTPHandler struct {
 	serverURL string
 
@@ -322,7 +321,7 @@ func TestAppToken(t *testing.T) {
 
 func TestCreateChannel(t *testing.T) {
 	t.Run("ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, true)
+		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, true, 4)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()
@@ -330,7 +329,7 @@ func TestCreateChannel(t *testing.T) {
 	})
 
 	t.Run("non-ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, false)
+		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, false, 4)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()

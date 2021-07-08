@@ -10,12 +10,13 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
-	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -30,7 +31,7 @@ var log = logger.NewLogger("dapr.sentry.ca")
 
 // CertificateAuthority represents an interface for a compliant Certificate Authority.
 // Responsibilities include loading trust anchors and issuer certs, providing safe access to the trust bundle,
-// Validating and signing CSRs
+// Validating and signing CSRs.
 type CertificateAuthority interface {
 	LoadOrStoreTrustBundle() error
 	GetCACertBundle() TrustRootBundler
@@ -73,7 +74,7 @@ func (c *defaultCA) LoadOrStoreTrustBundle() error {
 	return nil
 }
 
-// GetCACertBundle returns the Trust Root Bundle
+// GetCACertBundle returns the Trust Root Bundle.
 func (c *defaultCA) GetCACertBundle() TrustRootBundler {
 	return c.bundle
 }
@@ -100,7 +101,7 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, identity *identity.Bu
 		return nil, errors.Wrap(err, "error parsing csr pem")
 	}
 
-	crtb, err := csr.GenerateCSRCertificate(cert, subject, identity, signingCert, cert.PublicKey, signingKey.Key, certLifetime, isCA)
+	crtb, err := csr.GenerateCSRCertificate(cert, subject, identity, signingCert, cert.PublicKey, signingKey.Key, certLifetime, c.config.AllowedClockSkew, isCA)
 	if err != nil {
 		return nil, errors.Wrap(err, "error signing csr")
 	}
@@ -223,7 +224,7 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rootCsr, err := csr.GenerateRootCertCSR(caOrg, caCommonName, &rootKey.PublicKey, selfSignedRootCertLifetime)
+	rootCsr, err := csr.GenerateRootCertCSR(caOrg, caCommonName, &rootKey.PublicKey, selfSignedRootCertLifetime, c.config.AllowedClockSkew)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -245,7 +246,7 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 		return nil, nil, nil, err
 	}
 
-	issuerCsr, err := csr.GenerateIssuerCertCSR(caCommonName, &issuerKey.PublicKey, selfSignedRootCertLifetime)
+	issuerCsr, err := csr.GenerateIssuerCertCSR(caCommonName, &issuerKey.PublicKey, selfSignedRootCertLifetime, c.config.AllowedClockSkew)
 	if err != nil {
 		return nil, nil, nil, err
 	}

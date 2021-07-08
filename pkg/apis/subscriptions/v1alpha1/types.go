@@ -13,7 +13,7 @@ import (
 // +genclient:noStatus
 // +kubebuilder:object:root=true
 
-// Subscription describes an pub/sub event subscription
+// Subscription describes an pub/sub event subscription.
 type Subscription struct {
 	metav1.TypeMeta `json:",inline"`
 	// +optional
@@ -23,16 +23,18 @@ type Subscription struct {
 	Scopes []string `json:"scopes,omitempty"`
 }
 
-// SubscriptionSpec is the spec for an event subscription
+// SubscriptionSpec is the spec for an event subscription.
 type SubscriptionSpec struct {
 	Topic      string `json:"topic"`
 	Route      string `json:"route"`
 	Pubsubname string `json:"pubsubname"`
+	// +optional
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// SubscriptionList is a list of Dapr event sources
+// SubscriptionList is a list of Dapr event sources.
 type SubscriptionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`

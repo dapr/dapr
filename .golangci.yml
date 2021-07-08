@@ -99,7 +99,7 @@ linters-settings:
   goimports:
     # put imports beginning with prefix after 3rd-party packages;
     # it's a comma-separated list of prefixes
-    local-prefixes:
+    local-prefixes: github.com/dapr/
   gocyclo:
     # minimal code complexity to report, 30 by default (but we recommend 10-20)
     min-complexity: 10
@@ -193,6 +193,11 @@ linters-settings:
       - NOTE
       - OPTIMIZE # marks code that should be optimized before merging
       - HACK # marks hack-arounds that should be removed before merging
+  godot:
+    exclude:
+      - 'nosec'
+    capital: false
+    scope: all
   dogsled:
     # checks assignments with too many blank identifiers; default is 2
     max-blank-identifiers: 2
@@ -235,7 +240,6 @@ linters:
     - unparam
     - wsl
     - gomnd
-    - godot
     - testpackage
     - goerr113
     - nestif
@@ -243,7 +247,6 @@ linters:
     - exhaustive
     - noctx
     - gci
-    - gofumpt
 issues:
   exclude:
     # staticcheck

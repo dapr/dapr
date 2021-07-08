@@ -6,16 +6,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"sync"
-
-	"context"
-
-	"net"
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -28,38 +26,40 @@ import (
 )
 
 const (
-	appPort = "3000"
-	pubsubA = "pubsub-a-topic-grpc"
-	pubsubB = "pubsub-b-topic-grpc"
-	pubsubC = "pubsub-c-topic-grpc"
+	appPort   = "3000"
+	pubsubA   = "pubsub-a-topic-grpc"
+	pubsubB   = "pubsub-b-topic-grpc"
+	pubsubC   = "pubsub-c-topic-grpc"
+	pubsubRaw = "pubsub-raw-topic-grpc"
 )
 
 var (
-	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesA sets.String
-	receivedMessagesB sets.String
-	receivedMessagesC sets.String
+	// using sets to make the test idempotent on multiple delivery of same message.
+	receivedMessagesA   sets.String
+	receivedMessagesB   sets.String
+	receivedMessagesC   sets.String
+	receivedMessagesRaw sets.String
 
-	// boolean variable to respond with empty json message if set
+	// boolean variable to respond with empty json message if set.
 	respondWithEmptyJSON bool
-	// boolean variable to respond with error if set
+	// boolean variable to respond with error if set.
 	respondWithError bool
-	// boolean variable to respond with retry if set
+	// boolean variable to respond with retry if set.
 	respondWithRetry bool
-	// boolean variable to respond with invalid status if set
+	// boolean variable to respond with invalid status if set.
 	respondWithInvalidStatus bool
 	lock                     sync.Mutex
 )
 
 type receivedMessagesResponse struct {
-	ReceivedByTopicA []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC []string `json:"pubsub-c-topic"`
+	ReceivedByTopicA   []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
+	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
 }
 
-// server is our user app
-type server struct {
-}
+// server is our user app.
+type server struct{}
 
 func main() {
 	log.Printf("Initializing grpc")
@@ -87,10 +87,11 @@ func initializeSets() {
 	receivedMessagesA = sets.NewString()
 	receivedMessagesB = sets.NewString()
 	receivedMessagesC = sets.NewString()
+	receivedMessagesRaw = sets.NewString()
 }
 
 // This method gets invoked when a remote service has called the app through Dapr
-// The payload carries a Method to identify the method, a set of metadata properties and an optional payload
+// The payload carries a Method to identify the method, a set of metadata properties and an optional payload.
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	log.Printf("Got invoked method %s\n", in.Method)
 
@@ -115,9 +116,10 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 
 func (s *server) getReceivedMessages() []byte {
 	resp := receivedMessagesResponse{
-		ReceivedByTopicA: receivedMessagesA.List(),
-		ReceivedByTopicB: receivedMessagesB.List(),
-		ReceivedByTopicC: receivedMessagesC.List(),
+		ReceivedByTopicA:   receivedMessagesA.List(),
+		ReceivedByTopicB:   receivedMessagesB.List(),
+		ReceivedByTopicC:   receivedMessagesC.List(),
+		ReceivedByTopicRaw: receivedMessagesRaw.List(),
 	}
 
 	rawResp, _ := json.Marshal(resp)
@@ -153,7 +155,7 @@ func (s *server) setRespondWithInvalidStatus() {
 }
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
-// To subscribe to a topic named TopicA
+// To subscribe to a topic named TopicA.
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &pb.ListTopicSubscriptionsResponse{
@@ -169,6 +171,13 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 			{
 				PubsubName: "messagebus",
 				Topic:      pubsubC,
+			},
+			{
+				PubsubName: "messagebus",
+				Topic:      pubsubRaw,
+				Metadata: map[string]string{
+					"rawPayload": "true",
+				},
 			},
 		},
 	}, nil
@@ -208,6 +217,18 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 		}, nil
 	}
 
+	// Raw data does not have content-type, so it is handled as-is.
+	// Because the publisher encodes to JSON before publishing, we need to decode here.
+	if strings.HasPrefix(in.Topic, pubsubRaw) {
+		var actualMsg string
+		err = json.Unmarshal([]byte(msg), &actualMsg)
+		if err != nil {
+			log.Printf("Error extracing JSON from raw event: %v", err)
+		} else {
+			msg = actualMsg
+		}
+	}
+
 	lock.Lock()
 	defer lock.Unlock()
 	if strings.HasPrefix(in.Topic, pubsubA) && !receivedMessagesA.Has(msg) {
@@ -216,6 +237,8 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 		receivedMessagesB.Insert(msg)
 	} else if strings.HasPrefix(in.Topic, pubsubC) && !receivedMessagesC.Has(msg) {
 		receivedMessagesC.Insert(msg)
+	} else if strings.HasPrefix(in.Topic, pubsubRaw) && !receivedMessagesRaw.Has(msg) {
+		receivedMessagesRaw.Insert(msg)
 	} else {
 		log.Printf("Received duplicate message: %s - %s", in.Topic, msg)
 	}
@@ -229,13 +252,13 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 }
 
 // Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
-// To invoke our app with a binding named storage
+// To invoke our app with a binding named storage.
 func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
 	log.Println("List Input Bindings called")
 	return &pb.ListInputBindingsResponse{}, nil
 }
 
-// This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata
+// This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
 func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
 	fmt.Printf("Invoked from binding: %s\n", in.Name)
 	return &pb.BindingEventResponse{}, nil

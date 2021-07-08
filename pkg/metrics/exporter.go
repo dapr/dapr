@@ -5,18 +5,19 @@ import (
 	"net/http"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
-	"github.com/dapr/kit/logger"
 	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
+
+	"github.com/dapr/kit/logger"
 )
 
 const (
-	// DefaultMetricNamespace is the prefix of metric name
+	// DefaultMetricNamespace is the prefix of metric name.
 	DefaultMetricNamespace = "dapr"
 	defaultMetricsPath     = "/"
 )
 
-// Exporter is the interface for metrics exporters
+// Exporter is the interface for metrics exporters.
 type Exporter interface {
 	// Init initializes metrics exporter
 	Init() error
@@ -24,7 +25,7 @@ type Exporter interface {
 	Options() *Options
 }
 
-// NewExporter creates new MetricsExporter instance
+// NewExporter creates new MetricsExporter instance.
 func NewExporter(namespace string) Exporter {
 	// TODO: support multiple exporters
 	return &promMetricsExporter{
@@ -37,39 +38,34 @@ func NewExporter(namespace string) Exporter {
 	}
 }
 
-// exporter is the base struct
+// exporter is the base struct.
 type exporter struct {
 	namespace string
 	options   *Options
 	logger    logger.Logger
 }
 
-// Options returns current metric exporter options
+// Options returns current metric exporter options.
 func (m *exporter) Options() *Options {
 	return m.options
 }
 
-// promMetricsExporter is prometheus metric exporter
+// promMetricsExporter is prometheus metric exporter.
 type promMetricsExporter struct {
 	*exporter
 	ocExporter *ocprom.Exporter
 }
 
-// Init initializes opencensus exporter
+// Init initializes opencensus exporter.
 func (m *promMetricsExporter) Init() error {
 	if !m.exporter.Options().MetricsEnabled {
 		return nil
 	}
 
-	// Add default health metrics for process
-	registry := prom.NewRegistry()
-	registry.MustRegister(prom.NewProcessCollector(prom.ProcessCollectorOpts{}))
-	registry.MustRegister(prom.NewGoCollector())
-
 	var err error
 	if m.ocExporter, err = ocprom.NewExporter(ocprom.Options{
 		Namespace: m.namespace,
-		Registry:  registry,
+		Registry:  prom.DefaultRegisterer.(*prom.Registry),
 	}); err != nil {
 		return errors.Errorf("failed to create Prometheus exporter: %v", err)
 	}
@@ -78,7 +74,7 @@ func (m *promMetricsExporter) Init() error {
 	return m.startMetricServer()
 }
 
-// startMetricServer starts metrics server
+// startMetricServer starts metrics server.
 func (m *promMetricsExporter) startMetricServer() error {
 	if !m.exporter.Options().MetricsEnabled {
 		// skip if metrics is not enabled

@@ -13,6 +13,12 @@ type ApplicationConfig struct {
 	// Duration. example: "30s"
 	ActorScanInterval string `json:"actorScanInterval"`
 	// Duration. example: "30s"
-	DrainOngoingCallTimeout string `json:"drainOngoingCallTimeout"`
-	DrainRebalancedActors   bool   `json:"drainRebalancedActors"`
+	DrainOngoingCallTimeout string           `json:"drainOngoingCallTimeout"`
+	DrainRebalancedActors   bool             `json:"drainRebalancedActors"`
+	Reentrancy              ReentrancyConfig `json:"reentrancy,omitempty"`
+}
+
+type ReentrancyConfig struct {
+	Enabled       bool `json:"enabled"`
+	MaxStackDepth *int `json:"maxStackDepth,omitempty"`
 }

@@ -48,6 +48,9 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 			Topic:      "topic1",
 			Route:      "myroute",
 			Pubsubname: "pubsub",
+			Metadata: map[string]string{
+				"testName": "testValue",
+			},
 		},
 	}
 }
@@ -75,6 +78,7 @@ func TestDeclarativeSubscriptions(t *testing.T) {
 		assert.Equal(t, "myroute", subs[0].Route)
 		assert.Equal(t, "pubsub", subs[0].PubsubName)
 		assert.Equal(t, "scope1", subs[0].Scopes[0])
+		assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 	})
 
 	t.Run("load multiple subscriptions", func(t *testing.T) {
@@ -83,7 +87,9 @@ func TestDeclarativeSubscriptions(t *testing.T) {
 			s.Spec.Topic = fmt.Sprintf("%v", i)
 			s.Spec.Route = fmt.Sprintf("%v", i)
 			s.Spec.Pubsubname = fmt.Sprintf("%v", i)
-			s.Spec.Topic = fmt.Sprintf("%v", i)
+			s.Spec.Metadata = map[string]string{
+				"testName": fmt.Sprintf("%v", i),
+			}
 			s.Scopes = []string{fmt.Sprintf("%v", i)}
 
 			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v", dir, i))
@@ -97,6 +103,7 @@ func TestDeclarativeSubscriptions(t *testing.T) {
 			assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Route)
 			assert.Equal(t, fmt.Sprintf("%v", i), subs[i].PubsubName)
 			assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Scopes[0])
+			assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Metadata["testName"])
 		}
 	})
 
