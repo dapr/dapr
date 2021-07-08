@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/components-contrib/state"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
