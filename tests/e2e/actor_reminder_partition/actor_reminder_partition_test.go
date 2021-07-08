@@ -26,8 +26,8 @@ const (
 	reminderName                 = "PartitionTestReminder"                       // Reminder name.
 	numIterations                = 7                                             // Number of times each test should run.
 	numHealthChecks              = 60                                            // Number of get calls before starting tests.
-	numActorsPerThread           = 10                                            // Number of get calls before starting tests.
-	secondsToCheckReminderResult = 20                                            // How much time to wait to make sure the result is in logs.
+	numActors                    = 40                                            // Number of actors to register a reminder.
+	secondsToCheckReminderResult = 90                                            // How much time to wait to make sure the result is in logs.
 	actorInvokeURLFormat         = "%s/test/testactorreminderpartition/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat           = "%s/test/logs"                                // URL to fetch logs from test app.
 )
@@ -120,12 +120,19 @@ func TestActorReminder(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("Actor reminder changes number of partitions.", func(t *testing.T) {
-		for i := 0; i < numActorsPerThread; i++ {
-			if i == numActorsPerThread/2 {
-				// We change the number of partitions midway.
-				// This will test that the migration path also works.
-				// And validate that new reminders can work after increasing number of partitions.
+		for i := 0; i < numActors; i++ {
+			if i == numActors/4 {
+				// We set the number of partitions midway.
+				// This will test that the migration path also works from the old format.
+				// And validate that new reminders can work after setting number of partitions.
 				tr.Platform.SetAppEnv(appName, "TEST_APP_ACTOR_REMINDERS_PARTITIONS", "5")
+			}
+
+			if i == numActors/2 {
+				// We increase the number of partitions midway.
+				// This will test that the migration path also works with a partition change.
+				// And validate that new reminders can work after increasing number of partitions.
+				tr.Platform.SetAppEnv(appName, "TEST_APP_ACTOR_REMINDERS_PARTITIONS", "7")
 			}
 
 			actorID := fmt.Sprintf(actorIDPartitionTemplate, i+1000)
@@ -141,7 +148,10 @@ func TestActorReminder(t *testing.T) {
 		t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
 		time.Sleep(secondsToCheckReminderResult * time.Second)
 
-		for i := 0; i < numActorsPerThread; i++ {
+		for i := 0; i < numActors; i++ {
+			_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
+			require.NoError(t, err)
+
 			actorID := fmt.Sprintf(actorIDPartitionTemplate, i+1000)
 			// Unregistering reminder
 			_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
@@ -155,7 +165,7 @@ func TestActorReminder(t *testing.T) {
 		t.Log("Checking if all reminders did trigger ...")
 		// Errors below should NOT be considered flakyness and must be investigated.
 		// If there was no other error until now, there should be reminders triggered.
-		for i := 0; i < numActorsPerThread; i++ {
+		for i := 0; i < numActors; i++ {
 			actorID := fmt.Sprintf(actorIDPartitionTemplate, i+1000)
 			count := countActorAction(resp, actorID, reminderName)
 			// Due to possible load stress, we do not expect all reminders to be called at the same frequency.
