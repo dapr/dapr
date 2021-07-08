@@ -17,6 +17,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
+	github.com/google/cel-go v0.7.3
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.8.0

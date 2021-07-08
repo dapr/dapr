@@ -4,5 +4,5 @@
 // ------------------------------------------------------------
 
 // +kubebuilder:object:generate=true
-// +groupName=subscriptions.dapr.io
+// +groupName=dapr.io
 package v1alpha1

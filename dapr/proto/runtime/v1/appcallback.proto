@@ -70,6 +70,10 @@ message TopicEventRequest {
 
   // The name of the pubsub the publisher sent to.
   string pubsub_name = 8;
+
+  // The matching path from TopicSubscription/routes (if specified) for this event.
+  // This value is used by OnTopicEvent to "switch" inside the handler.
+  string path = 9;
 }
 
 // TopicEventResponse is response from app on published message
@@ -144,6 +148,30 @@ message TopicSubscription {
 
   // The optional properties used for this topic's subscription e.g. session id
   map<string,string> metadata = 3;
+
+  // The optional routing rules to match against. In the gRPC interface, OnTopicEvent
+  // is still invoked but the matching path is sent in the TopicEventRequest.
+  TopicRoutes routes = 5;
+}
+
+message TopicRoutes {
+  // The list of rules for this topic.
+  repeated TopicRule rules = 1;
+
+  // The default path for this topic.
+  string default = 2;
+}
+
+message TopicRule {
+  // The optional CEL expression used to match the event.
+	// If the match is not specified, then the route is considered
+	// the default.
+  string match = 1;
+
+  // The path used to identify matches for this subscription.
+  // This value is passed in TopicEventRequest and used by OnTopicEvent to "switch"
+  // inside the handler.
+  string path = 2;
 }
 
 // ListInputBindingsResponse is the message including the list of input bindings.

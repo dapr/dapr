@@ -22,6 +22,8 @@ binding_output \
 pubsub-publisher \
 pubsub-subscriber \
 pubsub-subscriber_grpc \
+pubsub-subscriber-routing \
+pubsub-subscriber-routing_grpc \
 actorapp \
 actorclientapp \
 actorfeatures \
@@ -244,6 +246,9 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_reentrant_actor.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_actor_type_metadata.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_pubsub_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_grpc_proxy_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components

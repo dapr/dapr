@@ -5,4 +5,4 @@
 
 // +kubebuilder:object:generate=true
 // +groupName=dapr.io
-package v1alpha1
+package v2alpha1
