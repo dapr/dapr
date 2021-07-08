@@ -33,8 +33,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
@@ -291,49 +289,36 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	a.namespace = a.getNamespace()
 
+	if a.runtimeConfig.ApplicationPort != 0 {
+		a.podInfo.ApplicationProbingPort = a.runtimeConfig.ApplicationPort
+	}
+
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		log.Debug("Started fetching pod and container metadata")
-		kubeConfig, err := rest.InClusterConfig()
-		if err != nil {
-			return fmt.Errorf("defining k8s config: %v", err.Error())
-		}
-		kubeClient, err := kubernetes.NewForConfig(kubeConfig)
-		if err != nil {
-			return fmt.Errorf("getting k8s kubeClient: %v", err.Error())
-		}
-
 		podName, err := os.Hostname()
 		if err != nil {
 			return fmt.Errorf("getting pod host name: %v", err.Error())
 		}
+		a.podInfo.podName = podName
 
-		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), getKubernetesPodSeconds*time.Second)
-		defer cancel()
-
-		a.podInfo.Pod, err = kubeClient.CoreV1().Pods(a.namespace).Get(ctxWithTimeout, podName, metav1.GetOptions{})
+		pod, err := getPod(a.namespace, a.podInfo.podName)
 		if err != nil {
-			return fmt.Errorf("fetching pod metadata: %v", err.Error())
+			return err
 		}
 
-		containers := a.podInfo.Pod.Spec.Containers
+		appContainer := getAppContainer(pod)
 
-		if len(containers) == 2 {
-			for _, container := range containers {
-				if container.Name != sidecarContainerName {
-					a.podInfo.AppContainer = &container
-				}
-			}
-		}
+		log.Debugf("app container: %+v", appContainer)
 
-		if a.runtimeConfig.ApplicationPort != 0 {
-			a.podInfo.ApplicationProbingPort = a.runtimeConfig.ApplicationPort
-		} else if a.podInfo.AppContainer != nil {
-			containerPorts := a.podInfo.AppContainer.Ports
+		if a.podInfo.ApplicationProbingPort == 0 && len(appContainer.Ports) == 0 {
+			containerPorts := appContainer.Ports
 			for _, port := range containerPorts {
 				a.podInfo.ApplicationProbingPort = int(port.ContainerPort)
 				break
 			}
 		}
+
+		log.Debugf("app probing port: %v", a.podInfo.ApplicationProbingPort)
 	}
 
 	a.operatorClient, err = a.getOperatorClient()
