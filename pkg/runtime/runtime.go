@@ -114,6 +114,8 @@ var log = logger.NewLogger("dapr.runtime")
 // was encountered when processing a cloud event's data property.
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
 
+var suspendInboundTrafficMutex = sync.Mutex{}
+
 type Route struct {
 	path     string
 	metadata map[string]string
@@ -724,6 +726,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if err != nil {
+			go a.suspendInboundTrafficUntilAppAvailable()
 			return nil, errors.Wrap(err, "error invoking app")
 		}
 		if resp != nil {
@@ -1252,6 +1255,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
+		go a.suspendInboundTrafficUntilAppAvailable()
 		return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
 	}
 
@@ -1384,6 +1388,8 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
 			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField], err)
+
+			go a.suspendInboundTrafficUntilAppAvailable()
 
 			return nil
 		}
@@ -2076,6 +2082,9 @@ func (a *DaprRuntime) gracefulShutdown() {
 
 func (a *DaprRuntime) suspendInboundTrafficUntilAppAvailable() {
 	time.Sleep(appUnavailableGraceTime)
+	suspendInboundTrafficMutex.Lock()
+	defer suspendInboundTrafficMutex.Unlock()
+
 	appAvailable, err := a.ProbeApplicationAvailability()
 	if err != nil {
 		log.Error(err.Error())
