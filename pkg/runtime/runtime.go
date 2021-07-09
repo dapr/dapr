@@ -77,7 +77,8 @@ const (
 	sidecarContainerName    = "daprd"
 	getKubernetesPodSeconds = 10
 
-	getAppAvailabilityTime = 100 * time.Millisecond
+	getAppAvailabilityTime  = 100 * time.Millisecond
+	appUnavailableGraceTime = 3 * time.Second
 
 	actorStateStore = "actorStateStore"
 
@@ -2074,7 +2075,16 @@ func (a *DaprRuntime) gracefulShutdown() {
 }
 
 func (a *DaprRuntime) suspendInboundTrafficUntilAppAvailable() {
-	err := a.suspendInboundTraffics()
+	time.Sleep(appUnavailableGraceTime)
+	appAvailable, err := a.ProbeApplicationAvailability()
+	if err != nil {
+		log.Error(err.Error())
+	}
+	if appAvailable {
+		return
+	}
+
+	err = a.suspendInboundTraffics()
 	if err != nil {
 		log.Error(err.Error())
 	}
