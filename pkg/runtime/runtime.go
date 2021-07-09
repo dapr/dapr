@@ -77,6 +77,8 @@ const (
 	sidecarContainerName    = "daprd"
 	getKubernetesPodSeconds = 10
 
+	getAppAvailabilityTime = 100 * time.Millisecond
+
 	actorStateStore = "actorStateStore"
 
 	// output bindings concurrency.
@@ -1972,4 +1974,56 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 		}(name, binding)
 	}
 	return nil
+}
+
+func (a *DaprRuntime) shutdownInboundTraffics() error {
+	var merr error
+
+	for name, binding := range a.inputBindings {
+		if closer, ok := binding.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing input binding %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+
+	for name, pubSub := range a.pubSubs {
+		if closer, ok := pubSub.(pubsub.SuspendableSub); ok {
+			if err := closer.SuspendSubscription(); err != nil {
+				err = fmt.Errorf("error closing subscription %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+
+	return merr
+}
+
+func (a *DaprRuntime) waitUntilAppUnavailable(doneCh chan bool) {
+	for {
+		appAvailable, err := a.ProbeApplicationAvailability()
+		if err != nil {
+			log.Error(err.Error())
+		}
+		if !appAvailable {
+			doneCh <- true
+		}
+		time.Sleep(getAppAvailabilityTime)
+	}
+}
+
+func (a *DaprRuntime) gracefulShutdown() {
+	a.shutdownComponents()
+
+	doneChan := make(chan bool)
+	go a.waitUntilAppUnavailable(doneChan)
+	<-doneChan
+
+	a.stopActor()
+	a.shutdownComponents()
+
+	os.Exit(0)
 }

@@ -23,7 +23,7 @@ const portScanTimeout = 100 * time.Millisecond
 func (rt *DaprRuntime) ProbeApplicationAvailability() (bool, error) {
 	pod, err := getPod(rt.namespace, rt.podInfo.podName)
 	if err != nil {
-		return false, err
+		return true, err // assume app is available when error occurs
 	}
 
 	if pod != nil {
@@ -32,7 +32,7 @@ func (rt *DaprRuntime) ProbeApplicationAvailability() (bool, error) {
 		appContainerName := getAppContainer(pod).Name
 		appContainerStatus := getContainerStatusByName(&podStatus, appContainerName)
 		if appContainerName == "" {
-			return false, fmt.Errorf("cannot identify app container in pod %v", pod.Name)
+			return true, fmt.Errorf("cannot identify app container in pod %v", pod.Name) // assume app is available when error occurs
 		} else if !appContainerStatus.Ready {
 			log.Debugf("app container status: %+v", appContainerStatus)
 			return false, nil
