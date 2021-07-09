@@ -1976,12 +1976,12 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 	return nil
 }
 
-func (a *DaprRuntime) shutdownInboundTraffics() error {
+func (a *DaprRuntime) suspendInboundTraffics() error {
 	var merr error
 
 	for name, binding := range a.inputBindings {
-		if closer, ok := binding.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
+		if closer, ok := binding.(bindings.SuspendableInputBinding); ok {
+			if err := closer.SuspendReading(); err != nil {
 				err = fmt.Errorf("error closing input binding %s: %w", name, err)
 				merr = multierror.Append(merr, err)
 				log.Warn(err)
@@ -1990,9 +1990,35 @@ func (a *DaprRuntime) shutdownInboundTraffics() error {
 	}
 
 	for name, pubSub := range a.pubSubs {
-		if closer, ok := pubSub.(pubsub.SuspendableSub); ok {
-			if err := closer.SuspendSubscription(); err != nil {
+		if subscription, ok := pubSub.(pubsub.SuspendableSub); ok {
+			if err := subscription.SuspendSubscription(); err != nil {
 				err = fmt.Errorf("error closing subscription %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+
+	return merr
+}
+
+func (a *DaprRuntime) resumeInboundTraffic() error {
+	var merr error
+
+	for name, binding := range a.inputBindings {
+		if closer, ok := binding.(bindings.SuspendableInputBinding); ok {
+			if err := closer.ResumeReading(); err != nil {
+				err = fmt.Errorf("error resuming reading input binding %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+
+	for name, pubSub := range a.pubSubs {
+		if subscription, ok := pubSub.(pubsub.SuspendableSub); ok {
+			if err := subscription.ResumeSubscription(); err != nil {
+				err = fmt.Errorf("error resuming subscription %s: %w", name, err)
 				merr = multierror.Append(merr, err)
 				log.Warn(err)
 			}
@@ -2015,15 +2041,50 @@ func (a *DaprRuntime) waitUntilAppUnavailable(doneCh chan bool) {
 	}
 }
 
+func (a *DaprRuntime) waitUntilAppAvailable(doneCh chan bool) {
+	for {
+		appAvailable, err := a.ProbeApplicationAvailability()
+		if err != nil {
+			log.Error(err.Error())
+		}
+		if appAvailable {
+			doneCh <- true
+		}
+		time.Sleep(getAppAvailabilityTime)
+	}
+}
+
 func (a *DaprRuntime) gracefulShutdown() {
-	a.shutdownComponents()
+	err := a.suspendInboundTraffics()
+	if err != nil {
+		log.Error(err.Error())
+	}
 
 	doneChan := make(chan bool)
 	go a.waitUntilAppUnavailable(doneChan)
 	<-doneChan
 
 	a.stopActor()
-	a.shutdownComponents()
+	err = a.shutdownComponents()
+	if err != nil {
+		log.Error(err.Error())
+	}
 
 	os.Exit(0)
+}
+
+func (a *DaprRuntime) suspendInboundTrafficUntilAppAvailable() {
+	err := a.suspendInboundTraffics()
+	if err != nil {
+		log.Error(err.Error())
+	}
+
+	doneChan := make(chan bool)
+	go a.waitUntilAppAvailable(doneChan)
+	<-doneChan
+
+	err = a.resumeInboundTraffic()
+	if err != nil {
+		log.Error(err.Error())
+	}
 }
