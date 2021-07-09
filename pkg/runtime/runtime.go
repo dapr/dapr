@@ -2061,7 +2061,7 @@ func (a *DaprRuntime) waitUntilAppAvailable(doneCh chan bool) {
 	}
 }
 
-func (a *DaprRuntime) gracefulShutdown() {
+func (a *DaprRuntime) GracefulShutdown() {
 	err := a.suspendInboundTraffics()
 	if err != nil {
 		log.Error(err.Error())

@@ -475,5 +475,5 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
 	<-stop
-	rt.ShutdownWithWait()
+	rt.GracefulShutdown()
 }
