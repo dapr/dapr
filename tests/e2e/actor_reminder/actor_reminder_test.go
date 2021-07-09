@@ -149,8 +149,8 @@ func TestActorReminder(t *testing.T) {
 				}
 
 				t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURL)
-				resp, err := utils.HTTPGet(logsURL)
-				require.NoError(t, err)
+				resp, httpErr := utils.HTTPGet(logsURL)
+				require.NoError(t, httpErr)
 
 				t.Log("Checking if all reminders did trigger ...")
 				// Errors below should NOT be considered flakyness and must be investigated.
