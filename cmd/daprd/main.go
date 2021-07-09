@@ -11,10 +11,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/dapr/kit/logger"
+	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/kit/logger"
 
 	// Included components in compiled daprd.
 
@@ -99,6 +100,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
+	"github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
@@ -121,6 +123,7 @@ import (
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware.
+
 	middleware "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
@@ -128,7 +131,6 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/opa"
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
-	"github.com/valyala/fasthttp"
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -425,6 +427,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("zeebe.command", func() bindings.OutputBinding {
 				return bindings_zeebe_command.NewZeebeCommand(logContrib)
+			}),
+			bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
+				return graphql.NewGraphQL(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

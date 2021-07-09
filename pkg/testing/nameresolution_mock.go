@@ -1,8 +1,9 @@
 package testing
 
 import (
-	nr "github.com/dapr/components-contrib/nameresolution"
 	mock "github.com/stretchr/testify/mock"
+
+	nr "github.com/dapr/components-contrib/nameresolution"
 )
 
 // MockResolver is a mock nameresolution component object.
