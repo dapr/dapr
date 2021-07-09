@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -46,6 +49,8 @@ const (
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
+
+var pattern = regexp.MustCompile(`^(R(?P<repetiton>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
 
 // Actors allow calling into virtual actors as well as actor state management.
 type Actors interface {
@@ -80,7 +85,7 @@ type actorsRuntime struct {
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
 	evaluationChan      chan bool
-	appHealthy          bool
+	appHealthy          *atomic.Bool
 	certChain           *dapr_credentials.CertChain
 	tracingSpec         configuration.TracingSpec
 	reentrancyEnabled   bool
@@ -90,6 +95,27 @@ type actorsRuntime struct {
 type ActiveActorsCount struct {
 	Type  string `json:"type"`
 	Count int    `json:"count"`
+}
+
+type actorRepetiton struct {
+	value int
+	mutex *sync.Mutex
+}
+
+func (repetition *actorRepetiton) decrementAttempt() {
+	repetition.mutex.Lock()
+	defer repetition.mutex.Unlock()
+	if repetition.value != -1 {
+		repetition.value--
+	}
+}
+
+func (repetition *actorRepetiton) getValue() int {
+	return repetition.value
+}
+
+func newActorRepetition(value int) *actorRepetiton {
+	return &actorRepetiton{value: value, mutex: &sync.Mutex{}}
 }
 
 const (
@@ -129,7 +155,7 @@ func NewActors(
 		evaluationLock:      &sync.RWMutex{},
 		evaluationBusy:      false,
 		evaluationChan:      make(chan bool),
-		appHealthy:          true,
+		appHealthy:          atomic.NewBool(true),
 		certChain:           certChain,
 		tracingSpec:         tracingSpec,
 		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
@@ -158,7 +184,7 @@ func (a *actorsRuntime) Init() error {
 		a.drainRebalancedActors()
 		a.evaluateReminders()
 	}
-	appHealthFn := func() bool { return a.appHealthy }
+	appHealthFn := func() bool { return a.appHealthy.Load() }
 
 	a.placement = internal.NewActorPlacement(
 		a.config.PlacementAddresses, a.certChain,
@@ -192,7 +218,8 @@ func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
 	healthAddress := fmt.Sprintf("%s/healthz", a.appChannel.GetBaseAddress())
 	ch := health.StartEndpointHealthCheck(healthAddress, opts...)
 	for {
-		a.appHealthy = <-ch
+		appHealthy := <-ch
+		a.appHealthy.Store(appHealthy)
 	}
 }
 
@@ -609,18 +636,21 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		return nil, err
 	}
 
-	var track ReminderTrack
+	track := ReminderTrack{
+		RepetitionLeft: -1,
+	}
 	json.Unmarshal(resp.Data, &track)
 	return &track, nil
 }
 
-func (a *actorsRuntime) updateReminderTrack(actorKey, name string) error {
+func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
 	track := ReminderTrack{
-		LastFiredTime: time.Now().UTC().Format(time.RFC3339),
+		LastFiredTime:  time.Now().UTC().Format(time.RFC3339),
+		RepetitionLeft: repetition,
 	}
 
 	err := a.store.Set(&state.SetRequest{
@@ -661,7 +691,7 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 	if lastFiredTime.IsZero() {
 		nextInvokeTime = registeredTime.Add(dueTime)
 	} else {
-		period, err := time.ParseDuration(reminder.Period)
+		period, _, err := parseDuration(reminder.Period)
 		if err != nil {
 			return nextInvokeTime, errors.Wrap(err, "error parsing reminder period")
 		}
@@ -679,7 +709,19 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		return err
 	}
 
-	go func(reminder *Reminder, stop chan bool) {
+	var period time.Duration
+	repetitionsLeft := -1
+	if reminder.Period != "" {
+		period, repetitionsLeft, err = parseDuration(reminder.Period)
+		if err != nil {
+			log.Errorf("error parsing reminder period %s: %s", reminder.Period, err)
+			return err
+		}
+		log.Debugf("repetitions allowed are %d", repetitionsLeft)
+	}
+
+	repetitions := newActorRepetition(repetitionsLeft)
+	go func(reminder *Reminder, period time.Duration, repetitions *actorRepetiton, stop chan bool) {
 		now := time.Now().UTC()
 		initialDuration := nextInvokeTime.Sub(now)
 		time.Sleep(initialDuration)
@@ -693,38 +735,45 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			break
 		}
 
-		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, reminder.Data)
+		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, repetitions, reminder.Data)
 		if err != nil {
 			log.Errorf("error executing reminder: %s", err)
 		}
 
-		if reminder.Period != "" {
-			period, err := time.ParseDuration(reminder.Period)
-			if err != nil {
-				log.Errorf("error parsing reminder period: %s", err)
-			}
+		log.Debugf("repetitions left for actors with id %s are %d", reminder.ActorID, repetitions.getValue())
 
+		if reminder.Period != "" {
 			_, exists := a.activeReminders.Load(reminderKey)
 			if !exists {
 				log.Errorf("could not find active reminder with key: %s", reminderKey)
 				return
 			}
 
+			if quit, _ := a.stopReminderIfRepetitionsOver(reminder.Name, reminder.ActorID, reminder.ActorType, repetitions.getValue()); quit {
+				return
+			}
+
 			t := a.configureTicker(period)
-			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, data interface{}) {
+			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, repetition *actorRepetiton, data interface{}) {
 				for {
 					select {
 					case <-ticker.C:
-						err := a.executeReminder(actorType, actorID, dueTime, period, reminder, data)
+
+						err := a.executeReminder(actorType, actorID, dueTime, period, reminder, repetition, data)
 						if err != nil {
-							log.Errorf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
+							log.Debugf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
+						} else {
+							log.Debugf("executing reminder on actor succedeed; reminders pending for actor %s:  %d", a.constructCompositeKey(actorType, actorID), *repetition)
+							if quit, _ := a.stopReminderIfRepetitionsOver(reminder, actorID, actorType, repetition.getValue()); quit {
+								return
+							}
 						}
 					case <-stop:
 						log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, dueTime, period, data)
 						return
 					}
 				}
-			}(t, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
+			}(t, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, repetitions, reminder.Data)
 		} else {
 			err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
 				Name:      reminder.Name,
@@ -735,12 +784,12 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				log.Errorf("error deleting reminder: %s", err)
 			}
 		}
-	}(reminder, stopChannel)
+	}(reminder, period, repetitions, stopChannel)
 
 	return nil
 }
 
-func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, data interface{}) error {
+func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, repetition *actorRepetiton, data interface{}) error {
 	r := ReminderResponse{
 		DueTime: dueTime,
 		Period:  period,
@@ -759,7 +808,8 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	_, err = a.callLocalActor(context.Background(), req)
 	if err == nil {
 		key := a.constructCompositeKey(actorType, actorID)
-		err = a.updateReminderTrack(key, reminder)
+		repetition.decrementAttempt()
+		err = a.updateReminderTrack(key, reminder, repetition.getValue())
 	} else {
 		log.Errorf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}
@@ -903,16 +953,19 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 
-	go func(stop chan (bool), req *CreateTimerRequest) {
-		time.Sleep(dueTime)
-
+	go func(stop chan bool, req *CreateTimerRequest) {
 		// Check if timer is still active
+		timer := time.NewTimer(dueTime)
 		select {
+		case <-time.After(dueTime):
+			log.Debugf("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been overdue.", timerKey, req.DueTime, req.Period, req.Data)
+			break
 		case <-stop:
 			log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
+			// Stop timer to free resource
+			timer.Stop()
+			timer = nil
 			return
-		default:
-			break
 		}
 
 		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
@@ -1010,7 +1063,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	if a.evaluationBusy {
 		select {
 		case <-time.After(time.Second * 5):
-			return errors.New("error creating reminder: timed out after 5s")
+			return errors.New("error deleting reminder: timed out after 5s")
 		case <-a.evaluationChan:
 			break
 		}
@@ -1134,4 +1187,66 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 		}
 	}
 	return nil
+}
+
+// parseDuration creates time.Duration from ISO8601 or time.duration string formats.
+func parseDuration(from string) (time.Duration, int, error) {
+	var match []string
+	if pattern.MatchString(from) {
+		match = pattern.FindStringSubmatch(from)
+	} else {
+		d, err := time.ParseDuration(from)
+		return d, -1, err
+	}
+	duration := time.Duration(0)
+	// -1 signifies infinite repetition
+	repetition := -1
+	for i, name := range pattern.SubexpNames() {
+		part := match[i]
+		if i == 0 || name == "" || part == "" {
+			continue
+		}
+
+		val, err := strconv.Atoi(part)
+		if err != nil {
+			return time.Duration(0), 0, err
+		}
+		switch name {
+		case "year":
+			duration += time.Hour * 24 * 365 * time.Duration(val)
+		case "month":
+			duration += time.Hour * 24 * 30 * time.Duration(val)
+		case "week":
+			duration += time.Hour * 24 * 7 * time.Duration(val)
+		case "day":
+			duration += time.Hour * 24 * time.Duration(val)
+		case "hour":
+			duration += time.Hour * time.Duration(val)
+		case "minute":
+			duration += time.Minute * time.Duration(val)
+		case "second":
+			duration += time.Second * time.Duration(val)
+		case "repetiton":
+			repetition = val
+		default:
+			return time.Duration(0), -1, fmt.Errorf("unknown field %s", name)
+		}
+	}
+
+	return duration, repetition, nil
+}
+
+func (a *actorsRuntime) stopReminderIfRepetitionsOver(name, actorID, actorType string, repetitionLeft int) (bool, error) {
+	if repetitionLeft == 0 {
+		err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
+			Name:      name,
+			ActorID:   actorID,
+			ActorType: actorType,
+		})
+		if err != nil {
+			log.Errorf("error deleting reminder: %s", err)
+		}
+		return true, nil
+	}
+	return false, nil
 }
