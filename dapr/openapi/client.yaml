@@ -1,0 +1,1114 @@
+openapi: 3.0.0
+info:
+  title: Dapr HTTP API
+  description: |
+    REST API Specification
+  version: v1
+  contact:
+    name: Dapr Issues
+    url: https://github.com/dapr/dapr/issues
+servers:
+  - url: '{scheme}://localhost:{daprPort}/v1.0'
+    description: Sidecar Default
+    variables:
+      daprPort:
+        default: '3500'
+      scheme:
+        default: http
+security: [{}, {"daprToken": []}]
+tags:
+  - name: Service Invocation
+    description: Call remote apps
+    externalDocs:
+      description: Dapr Reference
+      url: https://docs.dapr.io/reference/api/service_invocation_api/
+  - name: State Management
+    description: Save and retrieve state
+    externalDocs:
+      description: Dapr Reference
+      url: https://docs.dapr.io/reference/api/state_api/
+  - name: Publish Subscribe
+    description: Publish and subscribe to events
+    externalDocs:
+      description: Dapr Reference
+      url: https://docs.dapr.io/reference/api/pubsub_api/
+  - name: Bindings
+    description: Send data to components
+    externalDocs:
+      description: Dapr Reference
+      url: https://docs.dapr.io/reference/api/bindings_api/
+  - name: Actors
+    description: Communicate with actors
+    externalDocs:
+      description: Dapr Reference
+      url: https://docs.dapr.io/reference/api/actors_api/
+  - name: Secrets
+    description: Retrieve application secrets
+    externalDocs:
+      description: Dapr Reference
+      url: https://docs.dapr.io/reference/api/secrets_api/
+  - name: Health
+    description: Get sidecar health
+    externalDocs:
+      description: Dapr Reference
+      url: https://docs.dapr.io/reference/api/health_api/
+  - name: Metadata
+    description: Get sidecar information
+    externalDocs:
+      description: Dapr Reference
+      url: https://docs.dapr.io/reference/api/metadata_api/
+paths:
+  /invoke/{appId}/method/{methodName}:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+      - $ref: "#/components/parameters/MethodName"
+    get:
+      description: Get a result from a remote apps method
+      tags: 
+        - Service Invocation
+      responses:
+        default:
+          description: Application defined result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Any'
+        '400':
+          description: Method name not given
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+              example:
+                errorCode: ERR_MALFORMED_REQUEST
+                message: Method name not given
+        '403':
+          description: Invocation forbidden by access control
+        '500':
+          description: Request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    delete:
+      description: Get a result from a remote apps method
+      tags: 
+        - Service Invocation
+      responses:
+        default:
+          description: Application defined result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Any'
+        '400':
+          description: Method name not given
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+              example:
+                errorCode: ERR_MALFORMED_REQUEST
+                message: Method name not given
+        '403':
+          description: Invocation forbidden by access control
+        '500':
+          description: Request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    put:
+      description: Get a result from a remote apps method
+      tags: 
+        - Service Invocation
+      requestBody:
+        description: Application Specific body
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Any'
+      responses:
+        default:
+          description: Application defined result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Any'
+        '400':
+          description: Method name not given
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+              example:
+                errorCode: ERR_MALFORMED_REQUEST
+                message: Method name not given
+        '403':
+          description: Invocation forbidden by access control
+        '500':
+          description: Request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    post:
+      description: Get a result from a remote apps method
+      tags: 
+        - Service Invocation
+      requestBody:
+        description: Application Specific body
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Any'
+      responses:
+        default:
+          description: Application defined result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Any'
+        '400':
+          description: Method name not given
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+              example:
+                errorCode: ERR_MALFORMED_REQUEST
+                message: Method name not given
+        '403':
+          description: Invocation forbidden by access control
+        '500':
+          description: Request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /state/{storeName}:
+    parameters:
+      - $ref: '#/components/parameters/StoreName'
+    post:
+      description: Store an array of state objects
+      tags:
+        - State Management
+      requestBody:
+        description: An array of state objects
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/StateObject'
+      responses:
+        '204':
+          description: State saved
+        '400':
+          description: State store is missing or misconfigured or malformed request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Failed to save state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /state/{storeName}/{key}:
+    parameters:
+     - $ref: '#/components/parameters/StoreName'
+     - $ref: '#/components/parameters/Key'
+     - $ref: '#/components/parameters/Consistency'
+     - $ref: '#/components/parameters/Metadata'
+    get:
+      description: Get a single state value
+      tags:
+        - State Management
+      responses:
+        '200':
+          description: The state
+          headers:
+            Etag:
+              description: The etag
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: string
+        '204':
+          description: Key not found
+        '400':
+          description: State store is missing or misconfigured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Get state failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    delete:
+      parameters:
+        - $ref: '#/components/parameters/Concurrency'
+        - $ref: '#/components/parameters/IfMatch'
+      description: Delete a key from state
+      tags:
+        - State Management
+      responses:
+        '204':
+          description: Delete state successful
+        '400':
+          description: State store is missing or misconfigured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Delete state failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /state/{storeName}/bulk:
+    parameters:
+     - $ref: '#/components/parameters/StoreName'
+     - $ref: '#/components/parameters/Metadata'
+    # also allowed to PUT, but no reason to define both if the behavior is the same
+    post:
+      description: Get keys by bulk
+      tags:
+        - State Management
+      requestBody:
+        description: An array of keys
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - keys
+              properties:
+                keys:
+                  type: array
+                  items:
+                    type: string
+                parallelism:
+                  type: integer
+                  example: 10
+                  minimum: 1
+      responses:
+        '200':
+          description: Get state successful
+          content:
+            application/json:
+              example:
+                [
+                  {
+                    "key": "key1",
+                    "data": "value1",
+                    "etag": "1"
+                  },
+                  {
+                    "key": "key2",
+                    "data": "value2",
+                    "etag": "1"
+                  }
+                ]
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StateObject'
+        '400':
+          description: State store is missing or misconfigured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Get bulk state failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /state/{storeName}/transaction:
+    parameters:
+     - $ref: '#/components/parameters/StoreName'
+    post:
+      description: Persists the changes to the state store as a multi-item transaction.
+      tags:
+        - State Management
+      requestBody:
+        description: The transaction
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Transaction'
+      responses:
+        '204':
+          description: Request successful
+        '400':
+          description: State store is missing or misconfigured or malformed request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Failed to save state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /publish/{pubsubName}/{topic}:
+    parameters:
+      - $ref: '#/components/parameters/PubsubName'
+      - $ref: '#/components/parameters/Topic'
+      - $ref: '#/components/parameters/Metadata'
+    post:
+      description: This endpoint lets you publish data to multiple consumers who are listening on a topic. Dapr guarantees at least once semantics for this endpoint.
+      tags:
+        - Publish Subscribe
+      requestBody:
+        description: The data to publish to subscribers
+        content:
+          text/plain:
+            schema:
+              type: string
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Any'
+          application/cloudevents+json:
+            schema:
+              $ref: '#/components/schemas/CloudEvent'
+      responses:
+        '200':
+          description: Message delivered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - completed
+        '403':
+          description: Message forbidden by access controls
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '404':
+           description: No pubsub name or topic given
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Delivery failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /bindings/{bindingName}:
+    parameters:
+      - $ref: '#/components/parameters/BindingName'
+    post:
+      description: Send data to an output binding
+      tags:
+        - Bindings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: string
+                metadata:
+                  $ref: '#/components/schemas/Metadata'
+                operation:
+                  type: string
+      responses:
+        '200':
+          description: Request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Any'
+        '204':
+          description: Empty Response
+        '400':
+          description: Malformed request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Request Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /actors/{actorType}/{actorId}/method/{methodName}:
+    parameters:
+      - $ref: '#/components/parameters/ActorType'
+      - $ref: '#/components/parameters/ActorId'
+      - $ref: '#/components/parameters/MethodName'
+    post:
+      description: Invoke an actor method through Dapr
+      tags:
+        - Actors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Any'
+      responses:
+        default:
+          description: Response from upstream
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Any'
+        '500':
+          description: Request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    get:
+      description: Invoke an actor method through Dapr
+      tags:
+        - Actors
+      responses:
+        default:
+          description: Response from upstream
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Any'
+        '500':
+          description: Request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    put:
+      description: Invoke an actor method through Dapr
+      tags:
+        - Actors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Any'
+      responses:
+        default:
+          description: Response from upstream
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Any'
+        '500':
+          description: Request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    delete:
+      description: Invoke an actor method through Dapr
+      tags:
+        - Actors
+      responses:
+        default:
+          description: Response from upstream
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Any'
+        '500':
+          description: Request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /actors/{actorType}/{actorId}/state:
+    parameters:
+      - $ref: '#/components/parameters/ActorType'
+      - $ref: '#/components/parameters/ActorId'
+    post:
+      description: Persist actor state
+      tags:
+        - Actors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/TransactionOperation'
+      responses:
+        '204':
+          description: Request successful
+        '400':
+          description: Actor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Request Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /actors/{actorType}/{actorId}/state/{key}:
+    parameters:
+      - $ref: '#/components/parameters/ActorType'
+      - $ref: '#/components/parameters/ActorId'
+      - $ref: '#/components/parameters/Key'
+    get:
+      description: Gets the state for an actor using a specified key.
+      tags:
+        - Actors
+      responses:
+        '200':
+          description: Request successful
+          content:
+            application/json:
+              schema:
+                type: string
+        '204':
+          description: Key not found, and the response will be empty
+        '400':
+          description: Actor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Request Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /actors/{actorType}/{actorId}/reminders/{methodName}:
+    parameters:
+      - $ref: '#/components/parameters/ActorType'
+      - $ref: '#/components/parameters/ActorId'
+      - $ref: '#/components/parameters/MethodName'
+    post:
+      description: Creates a persistent reminder for an actor.
+      tags:
+        - Actors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reminder'
+      responses:
+        '204':
+          description: Request successful
+        '400':
+          description: Actor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Request Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    get:
+      description: Gets a reminder for an actor.
+      tags:
+        - Actors
+      responses:
+        '200':
+          description: Request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+        '500':
+          description: Request Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    delete:
+      description: Deletes a reminder for an actor
+      tags:
+        - Actors
+      responses:
+        '204':
+          description: Request successful
+        '500':
+          description: Request Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /actors/{actorType}/{actorId}/timers/{methodName}:
+    parameters:
+      - $ref: '#/components/parameters/ActorType'
+      - $ref: '#/components/parameters/ActorId'
+      - $ref: '#/components/parameters/MethodName'
+    post:
+      description: Creates a timer for an actor.
+      tags:
+        - Actors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Timer'
+      responses:
+        '204':
+          description: Request successful
+        '400':
+          description: Actor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Request Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+    delete:
+      description: Deletes a timer for an actor
+      tags:
+        - Actors
+      responses:
+        '204':
+          description: Request successful
+        '500':
+          description: Request Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /secrets/{secretStore}/{name}:
+    parameters:
+      - $ref: '#/components/parameters/SecretStore'
+      - $ref: '#/components/parameters/Name'
+    get:
+      tags:
+        - Secrets
+      description: get the value of a secret for a given secret store
+      parameters:
+        - $ref: '#/components/parameters/Metadata'
+      responses:
+        '200':
+          description: A secret
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '204':
+          description: Secret not found
+        '400':
+          description: Secret store is missing or misconfigured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /secrets/{secretStore}/bulk:
+    parameters:
+      - $ref: '#/components/parameters/SecretStore'
+    get:
+      tags:
+        - Secrets
+      description: Get all values from a secret store
+      responses:
+        '200':
+          description: Request successful
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Secret store missing or misconfigured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+        '403':
+          description: Access denied
+          content:
+           application/json:
+             schema:
+               $ref: '#/components/schemas/DaprError'
+        '500':
+          description: Request Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaprError'
+  /healthz:
+    get:
+      tags:
+        - Health
+      description: Gets the health state for Dapr.
+      responses:
+        '200':
+          description: Dapr is healthy
+        '500':
+          description: Dapr is not healthy
+  /metadata:
+    get:
+      tags:
+        - Metadata
+      description: Gets the Dapr sidecar information provided by the Metadata Endpoint
+      responses:
+        '200':
+          description: Metadata information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetadataResponse'
+          
+components:
+  requestBodies:
+    Anything:
+      description: Application Defined values
+      content: 
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Any"
+          
+  parameters:
+    ActorType:
+      name: actorType
+      in: path
+      description: An actor type
+      required: true
+      schema:
+        type: string
+    ActorId:
+      name: actorId
+      in: path
+      description: An actor identifier
+      required: true
+      schema:
+        type: string
+    AppId:
+      name: appId
+      in: path
+      description: A remote app id
+      required: true
+      schema:
+        type: string
+    BindingName:
+      name: bindingName
+      in: path
+      description: A binding name
+      required: true
+      schema:
+        type: string
+    Key:
+      name: key
+      in: path
+      description: A state key
+      required: true
+      schema:
+        type: string
+    MethodName:
+      name: methodName
+      in: path
+      description: A remote method
+      required: true
+      schema:
+        type: string
+    StoreName:
+      name: storeName
+      in: path
+      description: A state store name
+      required: true
+      schema:
+        type: string
+    SecretStore:
+      name: secretStore
+      in: path
+      description: A secret store name
+      required: true
+      schema:
+        type: string
+    Metadata:
+      name: metadata
+      in: query
+      description: Metadata to pass to the component
+      schema:
+        # todo: research this
+        type: string
+    Name:
+      name: name
+      in: path
+      description: A name
+      required: true
+      schema:
+        type: string
+    Consistency:
+      name: consistency
+      in: query
+      description: Consistency to use
+      schema:
+        type: string
+        enum:
+          - strong
+          - eventual
+    Concurrency:
+      name: concurrency
+      in: query
+      description: Concurrency to use
+      schema:
+        type: string
+        enum:
+          - first-write
+          - last-write
+    IfMatch:
+      name: If-Match
+      in: header
+      description: ETag associated with the key to be deleted
+      required: false
+      schema:
+        type: string
+    PubsubName:
+      name: pubsubName
+      in: path
+      description: the name of pubsub component
+      required: true
+      schema:
+        type: string
+    Topic:
+      name: topic
+      in: path
+      description: the name of the topic
+      required: true
+      schema:
+        type: string
+  schemas:
+    Any:
+      type: object
+      additionalProperties: true
+    CloudEvent:
+      description: The cloud event spec is not defined here
+      type: object
+      additionalProperties: true
+      example: {}
+    Component:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the component
+        type:
+          type: string
+          description: Component type
+        version:
+          type: string
+          description: Component version
+    DaprError:
+      type: object
+      required:
+        - errorCode
+        - message
+      properties:
+        errorCode:
+          type: string
+          enum:
+            - ERR_ACTOR_INSTANCE_MISSING
+            - ERR_ACTOR_RUNTIME_NOT_FOUND
+            - ERR_ACTOR_REMINDER_CREATE
+            - ERR_ACTOR_REMINDER_DELETE
+            - ERR_ACTOR_TIMER_CREATE
+            - ERR_ACTOR_TIMER_DELETE
+            - ERR_ACTOR_REMINDER_GET
+            - ERR_ACTOR_INVOKE_METHOD
+            - ERR_ACTOR_STATE_DELETE
+            - ERR_ACTOR_STATE_GET
+            - ERR_ACTOR_STATE_TRANSACTION_SAVE
+            - ERR_PUBSUB_NOT_FOUND
+            - ERR_PUBSUB_PUBLISH_MESSAGE
+            - ERR_PUBSUB_FORBIDDEN
+            - ERR_PUBSUB_CLOUD_EVENTS_SER
+            - ERR_STATE_STORE_NOT_FOUND
+            - ERR_STATE_STORES_NOT_CONFIGURED
+            - ERR_NOT_SUPPORTED_STATE_OPERATION
+            - ERR_STATE_GET
+            - ERR_STATE_DELETE
+            - ERR_STATE_SAVE
+            - ERR_INVOKE_OUTPUT_BINDING
+            - ERR_MALFORMED_REQUEST
+            - ERR_DIRECT_INVOKE
+            - ERR_DESERIALIZE_HTTP_BODY
+            - ERR_SECRET_STORES_NOT_CONFIGURED
+            - ERR_SECRET_STORE_NOT_FOUND
+            - ERR_HEALTH_NOT_READY
+            - ERR_METADATA_GET
+        message:
+          type: string
+    StateObject:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+          nullable: true
+        etag:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        options:
+          $ref: '#/components/schemas/StateOperationOptions'
+      required:
+        - key
+        - value
+    StateOperationOptions:
+      type: object
+      required:
+        - concurrency
+        - consistency
+      properties:
+        concurrency:
+          type: string
+          enum:
+           - first-write
+           - last-write
+        consistency:
+          type: string
+          enum:
+            - strong
+            - eventual
+    Metadata:
+      type: object
+      additionalProperties: true
+    MetadataResponse:
+      type: object
+      properties:
+        id:
+          description: The application id
+          type: string
+        actors:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegisteredActor'
+        extended:
+          type: object
+          additionalProperties: true
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/Component'
+    RegisteredActor:
+      type: object
+      properties:
+        type:
+          type: string
+          description: The registered actor type
+        count:
+          type: integer
+          description: Number of actors running
+    Reminder:
+      type: object
+      required:
+        - dueTime
+        - period
+      properties:
+        dueTime:
+          type: string
+        period:
+          type: string
+        data:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: array
+            - type: integer
+            - type: object
+    Timer:
+      type: object
+      required:
+        - callback
+        - duetime
+        - period
+      properties:
+        callback:
+          type: string
+        dueTime:
+          type: string
+        period:
+          type: string
+        data:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: array
+            - type: integer
+            - type: object
+    Transaction:
+      type: object
+      required:
+        - operations
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionOperation'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+    TransactionOperation:
+      type: object
+      required:
+        - operation
+        - request
+      properties:
+        operation:
+          type: string
+          enum:
+            - upsert
+            - delete
+        request:
+          $ref: '#/components/schemas/StateObject'
+       
+  securitySchemes:
+    daprToken:
+      type: apiKey
+      description: |
+        By default, Dapr relies on the network boundary to limit access to its 
+        public API. If you plan on exposing the Dapr API outside of that boundary, 
+        or if your deployment demands an additional level of security, consider 
+        enabling the token authentication for Dapr APIs. This will cause Dapr to 
+        require every incoming gRPC and HTTP request for its APIs for to include 
+        authentication token, before allowing that request to pass through
+      name: dapr-api-token
+      in: header
+      
