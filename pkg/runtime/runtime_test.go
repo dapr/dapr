@@ -429,7 +429,7 @@ func TestComponentsUpdate(t *testing.T) {
 	mockOpCli.UpdateComponent(comp1)
 	select {
 	case <-processedCh:
-	case <-time.After(time.Second * 10):
+	case <-time.After(time.Second * 30):
 		t.Errorf("Expect component [comp1] processed.")
 		t.FailNow()
 	}
@@ -447,7 +447,7 @@ func TestComponentsUpdate(t *testing.T) {
 
 	// Allow a new stream to create and wait until one is created.
 	mockOpCli.AllowOneClientStream()
-	timeC := time.After(time.Second * 10)
+	timeC := time.After(time.Second * 30)
 	for {
 		if mockOpCli.ClientStreamCount() > 0 {
 			break
@@ -465,7 +465,7 @@ func TestComponentsUpdate(t *testing.T) {
 	// Wait comp2 received and processed.
 	select {
 	case <-processedCh:
-	case <-time.After(time.Second * 10):
+	case <-time.After(time.Second * 30):
 		t.Errorf("Expect component [comp2] processed.")
 		t.FailNow()
 	}
@@ -477,7 +477,7 @@ func TestComponentsUpdate(t *testing.T) {
 	// Wait comp3 received and processed.
 	select {
 	case <-processedCh:
-	case <-time.After(time.Second * 10):
+	case <-time.After(time.Second * 30):
 		t.Errorf("Expect component [comp3] processed.")
 		t.FailNow()
 	}
