@@ -547,10 +547,11 @@ func (a *actorsRuntime) drainRebalancedActors() {
 			actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
 			address, _ := a.placement.LookupActor(actorType, actorID)
 			if address != "" && !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
-				// actor has been moved to a different host, deactivate when calls are done
-				// cancel any reminders
+				// actor has been moved to a different host, deactivate when calls are done cancel any reminders
+				// each item in reminders contain a struct with some metadata + the actual reminder struct
 				reminders := a.reminders[actorType]
 				for _, r := range reminders {
+					// r.reminder refers to the actual reminder struct that is saved in the db
 					if r.reminder.ActorType == actorType && r.reminder.ActorID == actorID {
 						reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 						stopChan, exists := a.activeReminders.Load(reminderKey)
@@ -1295,7 +1296,7 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 		return nil, err
 	}
 
-	// Save new metadata so the new "metadataID" becomes the new de-factor referenced list for reminders.
+	// Save new metadata so the new "metadataID" becomes the new de factor referenced list for reminders.
 	err = a.saveActorTypeMetadata(actorType, actorMetadata)
 	if err != nil {
 		return nil, err
