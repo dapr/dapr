@@ -37,6 +37,8 @@ type actor struct {
 	// the duration of ongoing calls to time out.
 	lastUsedTime time.Time
 
+	// disposeLock guards disposed and disposeCh.
+	disposeLock *sync.RWMutex
 	// disposed is true when actor is already disposed.
 	disposed bool
 	// disposeCh is the channel to signal when all pending actor calls are completed. This channel
@@ -51,6 +53,7 @@ func newActor(actorType, actorID string, maxReentrancyDepth *int) *actor {
 		actorType:    actorType,
 		actorID:      actorID,
 		actorLock:    NewActorLock(int32(*maxReentrancyDepth)),
+		disposeLock:  &sync.RWMutex{},
 		disposeCh:    nil,
 		disposed:     false,
 		lastUsedTime: time.Now().UTC(),
@@ -59,14 +62,22 @@ func newActor(actorType, actorID string, maxReentrancyDepth *int) *actor {
 
 // isBusy returns true when pending actor calls are ongoing.
 func (a *actor) isBusy() bool {
-	return !a.disposed && a.pendingActorCalls.Load() > 0
+	a.disposeLock.RLock()
+	disposed := a.disposed
+	a.disposeLock.RUnlock()
+	return !disposed && a.pendingActorCalls.Load() > 0
 }
 
 // channel creates or get new dispose channel. This channel is used for draining the actor.
 func (a *actor) channel() chan struct{} {
 	a.once.Do(func() {
+		a.disposeLock.Lock()
 		a.disposeCh = make(chan struct{})
+		a.disposeLock.Unlock()
 	})
+
+	a.disposeLock.RLock()
+	defer a.disposeLock.RUnlock()
 	return a.disposeCh
 }
 
@@ -80,7 +91,10 @@ func (a *actor) lock(reentrancyID *string) error {
 		return err
 	}
 
-	if a.disposed {
+	a.disposeLock.RLock()
+	disposed := a.disposed
+	a.disposeLock.RUnlock()
+	if disposed {
 		a.unlock()
 		return ErrActorDisposed
 	}
@@ -93,10 +107,14 @@ func (a *actor) lock(reentrancyID *string) error {
 func (a *actor) unlock() {
 	pending := a.pendingActorCalls.Dec()
 	if pending == 0 {
-		if !a.disposed && a.disposeCh != nil {
-			a.disposed = true
-			close(a.disposeCh)
-		}
+		func() {
+			a.disposeLock.Lock()
+			defer a.disposeLock.Unlock()
+			if !a.disposed && a.disposeCh != nil {
+				a.disposed = true
+				close(a.disposeCh)
+			}
+		}()
 	} else if pending < 0 {
 		log.Error("BUGBUG: tried to unlock actor before locking actor.")
 		return

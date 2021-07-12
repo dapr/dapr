@@ -5,9 +5,10 @@ import (
 	"net/http"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
-	"github.com/dapr/kit/logger"
 	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
+
+	"github.com/dapr/kit/logger"
 )
 
 const (
