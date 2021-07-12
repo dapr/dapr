@@ -11,7 +11,6 @@ require (
 	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/dapr/components-contrib v1.2.1-0.20210709051932-534c2d978385
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
-	github.com/dgrijalva/jwt-go/v4 v4.0.0-preview1 // indirect
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
