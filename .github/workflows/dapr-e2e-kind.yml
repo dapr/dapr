@@ -82,6 +82,28 @@ jobs:
       with:
         paths_ignore: '["**.md", ".codecov.yaml"]'
 
+    - name: Setup local registry
+      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
+      run: |
+        # Run a registry.
+        docker run -d --restart=always \
+          -p $REGISTRY_PORT:$REGISTRY_PORT --name $REGISTRY_NAME registry:2
+        # Connect the registry to the KinD network.
+        docker network connect "kind" $REGISTRY_NAME
+
+    - name: Build and push Dapr
+      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
+      run: |
+        make build-linux
+        make docker-build
+        make docker-push
+
+    - name: Build and push test apps
+      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
+      run: |
+        make build-e2e-app-all
+        make push-e2e-app-all
+
     - name: Configure KinD
       # Generate a KinD configuration file that uses:
       # (a) a couple of worker nodes: this is needed to run both
@@ -141,33 +163,11 @@ jobs:
         export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
         echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
 
-    - name: Setup local registry
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
-      run: |
-        # Run a registry.
-        docker run -d --restart=always \
-          -p $REGISTRY_PORT:$REGISTRY_PORT --name $REGISTRY_NAME registry:2
-        # Connect the registry to the KinD network.
-        docker network connect "kind" $REGISTRY_NAME
-
     - name: Setup Helm
       if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       uses: azure/setup-helm@v1
       with:
         version: v3.3.4
-
-    - name: Build and push Dapr
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
-      run: |
-        make build-linux
-        make docker-build
-        make docker-push
-
-    - name: Build and push test apps
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
-      run: |
-        make build-e2e-app-all
-        make push-e2e-app-all
 
     - name: Setup Dapr
       if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
