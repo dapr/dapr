@@ -474,6 +474,44 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	return err
 }
 
+// SetAppEnv sets an environment variable.
+func (m *AppManager) SetAppEnv(key, value string) error {
+	deploymentsClient := m.client.Deployments(m.namespace)
+
+	deployment, err := deploymentsClient.Get(context.TODO(), m.app.AppName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	for i, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name != DaprSideCarName {
+			found := false
+			for j, envName := range deployment.Spec.Template.Spec.Containers[i].Env {
+				if envName.Name == key {
+					deployment.Spec.Template.Spec.Containers[i].Env[j].Value = value
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				deployment.Spec.Template.Spec.Containers[i].Env = append(
+					deployment.Spec.Template.Spec.Containers[i].Env,
+					apiv1.EnvVar{
+						Name:  key,
+						Value: value,
+					},
+				)
+			}
+			break
+		}
+	}
+
+	_, err = deploymentsClient.Update(context.TODO(), deployment, metav1.UpdateOptions{})
+
+	return err
+}
+
 // CreateIngressService creates Ingress endpoint for test app.
 func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
