@@ -21,6 +21,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -49,7 +50,7 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.actor")
 
-var pattern = regexp.MustCompile(`^(R(?P<repetiton>\d+))?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
+var pattern = regexp.MustCompile(`^(R(?P<repetiton>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
 
 // Actors allow calling into virtual actors as well as actor state management.
 type Actors interface {
@@ -84,7 +85,7 @@ type actorsRuntime struct {
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
 	evaluationChan      chan bool
-	appHealthy          bool
+	appHealthy          *atomic.Bool
 	certChain           *dapr_credentials.CertChain
 	tracingSpec         configuration.TracingSpec
 	reentrancyEnabled   bool
@@ -154,7 +155,7 @@ func NewActors(
 		evaluationLock:      &sync.RWMutex{},
 		evaluationBusy:      false,
 		evaluationChan:      make(chan bool),
-		appHealthy:          true,
+		appHealthy:          atomic.NewBool(true),
 		certChain:           certChain,
 		tracingSpec:         tracingSpec,
 		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
@@ -183,7 +184,7 @@ func (a *actorsRuntime) Init() error {
 		a.drainRebalancedActors()
 		a.evaluateReminders()
 	}
-	appHealthFn := func() bool { return a.appHealthy }
+	appHealthFn := func() bool { return a.appHealthy.Load() }
 
 	a.placement = internal.NewActorPlacement(
 		a.config.PlacementAddresses, a.certChain,
@@ -217,7 +218,8 @@ func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
 	healthAddress := fmt.Sprintf("%s/healthz", a.appChannel.GetBaseAddress())
 	ch := health.StartEndpointHealthCheck(healthAddress, opts...)
 	for {
-		a.appHealthy = <-ch
+		appHealthy := <-ch
+		a.appHealthy.Store(appHealthy)
 	}
 }
 
@@ -951,16 +953,19 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 
-	go func(stop chan (bool), req *CreateTimerRequest) {
-		time.Sleep(dueTime)
-
+	go func(stop chan bool, req *CreateTimerRequest) {
 		// Check if timer is still active
+		timer := time.NewTimer(dueTime)
 		select {
+		case <-time.After(dueTime):
+			log.Debugf("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been overdue.", timerKey, req.DueTime, req.Period, req.Data)
+			break
 		case <-stop:
 			log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
+			// Stop timer to free resource
+			timer.Stop()
+			timer = nil
 			return
-		default:
-			break
 		}
 
 		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
@@ -1058,7 +1063,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	if a.evaluationBusy {
 		select {
 		case <-time.After(time.Second * 5):
-			return errors.New("error creating reminder: timed out after 5s")
+			return errors.New("error deleting reminder: timed out after 5s")
 		case <-a.evaluationChan:
 			break
 		}
