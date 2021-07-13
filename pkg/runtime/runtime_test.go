@@ -436,7 +436,8 @@ func TestComponentsUpdate(t *testing.T) {
 	// Allow a new stream to create.
 	mockOpCli.AllowOneNewClientStreamCreate()
 	// Wait a new stream created.
-	waitCtx, _ := context.WithTimeout(context.Background(), time.Second*3)
+	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
 	if err := mockOpCli.WaitOneNewClientStreamCreated(waitCtx); err != nil {
 		t.Errorf("Wait new stream err: %s", err.Error())
 		t.FailNow()
@@ -465,7 +466,8 @@ func TestComponentsUpdate(t *testing.T) {
 	// Allow a new stream to create.
 	mockOpCli.AllowOneNewClientStreamCreate()
 	// Wait a new stream created.
-	waitCtx, _ = context.WithTimeout(context.Background(), time.Second*3)
+	waitCtx, cancel = context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
 	if err := mockOpCli.WaitOneNewClientStreamCreated(waitCtx); err != nil {
 		t.Errorf("Wait new stream err: %s", err.Error())
 		t.FailNow()
