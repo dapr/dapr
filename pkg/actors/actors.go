@@ -892,7 +892,7 @@ func (m *ActorMetadata) createReminderReference(reminder *Reminder) actorReminde
 	}
 }
 
-func (m *ActorMetadata) calculateStateKey(actorType string, remindersPartitionID uint32) string {
+func (m *ActorMetadata) calculateRemindersStateKey(actorType string, remindersPartitionID uint32) string {
 	if remindersPartitionID == 0 {
 		return constructCompositeKey("actors", actorType)
 	}
@@ -901,6 +901,7 @@ func (m *ActorMetadata) calculateStateKey(actorType string, remindersPartitionID
 		"actors",
 		actorType,
 		m.ID,
+		"reminders",
 		strconv.Itoa(int(remindersPartitionID)))
 }
 
@@ -931,7 +932,7 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminder
 		}
 	}
 
-	stateKey := m.calculateStateKey(actorType, partitionID)
+	stateKey := m.calculateRemindersStateKey(actorType, partitionID)
 	return remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
 }
 
@@ -948,7 +949,7 @@ func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderRe
 
 	remindersInPartitionAfterInsertion = append(remindersInPartitionAfterInsertion, *reminder)
 
-	stateKey := m.calculateStateKey(newReminderRef.reminder.ActorType, newReminderRef.actorRemindersPartitionID)
+	stateKey := m.calculateRemindersStateKey(newReminderRef.reminder.ActorType, newReminderRef.actorRemindersPartitionID)
 	return remindersInPartitionAfterInsertion, newReminderRef, stateKey, m.calculateEtag(newReminderRef.actorRemindersPartitionID)
 }
 
@@ -1281,7 +1282,7 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	transaction := state.TransactionalStateRequest{}
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		partitionID := i + 1
-		stateKey := actorMetadata.calculateStateKey(actorType, uint32(partitionID))
+		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(partitionID))
 		stateValue := actorRemindersPartitions[i]
 		transaction.Operations = append(transaction.Operations, state.TransactionalStateOperation{
 			Operation: state.Upsert,
@@ -1325,7 +1326,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		getRequests := []state.GetRequest{}
 		for i := 1; i <= actorMetadata.RemindersMetadata.PartitionCount; i++ {
 			partition := uint32(i)
-			key := actorMetadata.calculateStateKey(actorType, partition)
+			key := actorMetadata.calculateRemindersStateKey(actorType, partition)
 			keyPartitionMap[key] = partition
 			getRequests = append(getRequests, state.GetRequest{
 				Key: key,
