@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"os"
 	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -275,33 +274,36 @@ func TestDoProcessComponent(t *testing.T) {
 type mockOperatorClient struct {
 	operator.OperatorClient
 
-	lock               sync.RWMutex
-	compsByName        map[string]*components_v1alpha1.Component
-	clientStreams      []*mockOperatorComponentUpdateClientStream
-	clientStreamWaitCh chan struct{}
+	lock                      sync.RWMutex
+	compsByName               map[string]*components_v1alpha1.Component
+	clientStreams             []*mockOperatorComponentUpdateClientStream
+	clientStreamCreateWait    chan struct{}
+	clientStreamCreatedNotify chan struct{}
 }
 
 func newMockOperatorClient() *mockOperatorClient {
 	mockOpCli := &mockOperatorClient{
-		compsByName:        make(map[string]*components_v1alpha1.Component),
-		clientStreams:      make([]*mockOperatorComponentUpdateClientStream, 0, 1),
-		clientStreamWaitCh: make(chan struct{}, 1),
+		compsByName:               make(map[string]*components_v1alpha1.Component),
+		clientStreams:             make([]*mockOperatorComponentUpdateClientStream, 0, 1),
+		clientStreamCreateWait:    make(chan struct{}, 1),
+		clientStreamCreatedNotify: make(chan struct{}, 1),
 	}
 	return mockOpCli
 }
 
 func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (operator.Operator_ComponentUpdateClient, error) {
 	// Used to block stream creation.
-	<-c.clientStreamWaitCh
+	<-c.clientStreamCreateWait
 
 	cs := &mockOperatorComponentUpdateClientStream{
 		updateCh: make(chan *operator.ComponentUpdateEvent, 1),
 	}
 
 	c.lock.Lock()
-	defer c.lock.Unlock()
-
 	c.clientStreams = append(c.clientStreams, cs)
+	c.lock.Unlock()
+
+	c.clientStreamCreatedNotify <- struct{}{}
 
 	return cs, nil
 }
@@ -330,8 +332,17 @@ func (c *mockOperatorClient) ClientStreamCount() int {
 	return len(c.clientStreams)
 }
 
-func (c *mockOperatorClient) AllowOneClientStream() {
-	c.clientStreamWaitCh <- struct{}{}
+func (c *mockOperatorClient) AllowOneNewClientStreamCreate() {
+	c.clientStreamCreateWait <- struct{}{}
+}
+
+func (c *mockOperatorClient) WaitOneNewClientStreamCreated(ctx context.Context) error {
+	select {
+	case <-c.clientStreamCreatedNotify:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (c *mockOperatorClient) CloseAllClientStreams() {
@@ -423,13 +434,19 @@ func TestComponentsUpdate(t *testing.T) {
 	}
 
 	// Allow a new stream to create.
-	mockOpCli.AllowOneClientStream()
+	mockOpCli.AllowOneNewClientStreamCreate()
+	// Wait a new stream created.
+	waitCtx, _ := context.WithTimeout(context.Background(), time.Second*3)
+	if err := mockOpCli.WaitOneNewClientStreamCreated(waitCtx); err != nil {
+		t.Errorf("Wait new stream err: %s", err.Error())
+		t.FailNow()
+	}
 
 	// Wait comp1 received and processed.
 	mockOpCli.UpdateComponent(comp1)
 	select {
 	case <-processedCh:
-	case <-time.After(time.Second * 60):
+	case <-time.After(time.Second * 10):
 		t.Errorf("Expect component [comp1] processed.")
 		t.FailNow()
 	}
@@ -445,27 +462,19 @@ func TestComponentsUpdate(t *testing.T) {
 	// Assert no client stream created.
 	assert.Equal(t, mockOpCli.ClientStreamCount(), 0, "Expect 0 client stream")
 
-	// Allow a new stream to create and wait until one is created.
-	mockOpCli.AllowOneClientStream()
-	timeC := time.After(time.Second * 60)
-	for {
-		if mockOpCli.ClientStreamCount() > 0 {
-			break
-		}
-		select {
-		case <-timeC:
-			t.Errorf("Expect stream recreated.")
-			t.FailNow()
-			break
-		default:
-		}
-		runtime.Gosched()
+	// Allow a new stream to create.
+	mockOpCli.AllowOneNewClientStreamCreate()
+	// Wait a new stream created.
+	waitCtx, _ = context.WithTimeout(context.Background(), time.Second*3)
+	if err := mockOpCli.WaitOneNewClientStreamCreated(waitCtx); err != nil {
+		t.Errorf("Wait new stream err: %s", err.Error())
+		t.FailNow()
 	}
 
 	// Wait comp2 received and processed.
 	select {
 	case <-processedCh:
-	case <-time.After(time.Second * 60):
+	case <-time.After(time.Second * 10):
 		t.Errorf("Expect component [comp2] processed.")
 		t.FailNow()
 	}
@@ -477,7 +486,7 @@ func TestComponentsUpdate(t *testing.T) {
 	// Wait comp3 received and processed.
 	select {
 	case <-processedCh:
-	case <-time.After(time.Second * 60):
+	case <-time.After(time.Second * 10):
 		t.Errorf("Expect component [comp3] processed.")
 		t.FailNow()
 	}
