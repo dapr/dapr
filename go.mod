@@ -37,7 +37,7 @@ require (
 	github.com/prometheus/common v0.14.0
 	github.com/stretchr/testify v1.7.0
 	github.com/trusch/grpc-proxy v0.0.0-20190529073533-02b64529f274
-	github.com/valyala/fasthttp v1.21.0
+	github.com/valyala/fasthttp v1.28.0
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.8.0
