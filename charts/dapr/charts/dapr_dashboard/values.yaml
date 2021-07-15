@@ -4,7 +4,7 @@ logLevel: info
 image:
   registry: docker.io/daprio
   name: dashboard
-  tag: "0.6.0"
+  tag: "0.7.0-rc.1"
   imagePullSecrets: ""
 
 nameOverride: ""
