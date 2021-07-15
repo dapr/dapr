@@ -683,8 +683,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		if err != nil {
 			body := resp.Data
-			if len(body) > 75 {
-				body = body[:75]
+			const charLimit = 75
+			if len(body) > charLimit {
+				body = body[:charLimit]
 			}
 			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body:%x", body))
 		}
@@ -745,8 +746,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		if resp.Status().Code != nethttp.StatusOK {
 			_, body := resp.RawData()
-			if len(body) > 29 {
-				body = body[:29]
+			const charLimit = 29
+			if len(body) > charLimit {
+				body = body[:charLimit]
 			}
 			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d\nbody: %x", resp.Status().Code, body)
 		}
