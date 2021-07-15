@@ -92,6 +92,10 @@ const (
 	middlewareComponent             ComponentCategory = "middleware"
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
+
+	// Pre-calculated limit to keep binding error message to 120 characters max
+	grpcBodyLimit = 95
+	httpBodyLimit = 49
 )
 
 var componentCategoriesNeedProcess = []ComponentCategory{
@@ -683,9 +687,8 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		if err != nil {
 			body := resp.Data
-			const charLimit = 75
-			if len(body) > charLimit {
-				body = body[:charLimit]
+			if len(body) > grpcBodyLimit {
+				body = body[:grpcBodyLimit]
 			}
 			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body:%x", body))
 		}
@@ -746,9 +749,8 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		if resp.Status().Code != nethttp.StatusOK {
 			_, body := resp.RawData()
-			const charLimit = 29
-			if len(body) > charLimit {
-				body = body[:charLimit]
+			if len(body) > httpBodyLimit {
+				body = body[:httpBodyLimit]
 			}
 			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d\nbody: %x", resp.Status().Code, body)
 		}
