@@ -36,6 +36,7 @@ const (
 	HTTPProtocol                = "http"
 	GRPCProtocol                = "grpc"
 	ActorRentrancy      Feature = "Actor.Reentrancy"
+	ActorTypeMetadata   Feature = "Actor.TypeMetadata"
 )
 
 type Feature string
