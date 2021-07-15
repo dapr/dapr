@@ -38,7 +38,7 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      GOVER: 1.16
+      GOVER: 1.16.6
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
