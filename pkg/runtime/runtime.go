@@ -95,7 +95,7 @@ const (
 
 	// Pre-calculated limits to keep binding error messages to 120 characters max.
 	// grpc: "error invoking app, body: " = 25 chars + 95 = 120 max
-	// http: "fails to send binding event to http app channel, status code: 200 body: " = 71 chars + 49 = 120 max
+	// http: "fails to send binding event to http app channel, status code: 200 body: " = 71 chars + 49 = 120 max.
 	grpcBodyLimit = 95
 	httpBodyLimit = 49
 )
