@@ -93,7 +93,7 @@ const (
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
 
-	// Pre-calculated limit to keep binding error message to 120 characters max
+	// Pre-calculated limit to keep binding error message to 120 characters max.
 	grpcBodyLimit = 95
 	httpBodyLimit = 49
 )
