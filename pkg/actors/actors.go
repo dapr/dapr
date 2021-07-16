@@ -53,7 +53,7 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.actor")
 
-var pattern = regexp.MustCompile(`^(R(?P<repetiton>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
+var pattern = regexp.MustCompile(`^(R(?P<repetition>\d+)/)?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
 
 // Actors allow calling into virtual actors as well as actor state management.
 type Actors interface {
@@ -101,7 +101,7 @@ type ActiveActorsCount struct {
 	Count int    `json:"count"`
 }
 
-type actorRepetiton struct {
+type actorRepetition struct {
 	value int
 	mutex *sync.Mutex
 }
@@ -129,7 +129,7 @@ const (
 	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
 
-func (repetition *actorRepetiton) decrementAttempt() {
+func (repetition *actorRepetition) decrementAttempt() {
 	repetition.mutex.Lock()
 	defer repetition.mutex.Unlock()
 	if repetition.value != -1 {
@@ -137,12 +137,12 @@ func (repetition *actorRepetiton) decrementAttempt() {
 	}
 }
 
-func (repetition *actorRepetiton) getValue() int {
+func (repetition *actorRepetition) getValue() int {
 	return repetition.value
 }
 
-func newActorRepetition(value int) *actorRepetiton {
-	return &actorRepetiton{value: value, mutex: &sync.Mutex{}}
+func newActorRepetition(value int) *actorRepetition {
+	return &actorRepetition{value: value, mutex: &sync.Mutex{}}
 }
 
 // NewActors create a new actors runtime with given config.
@@ -746,7 +746,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 	}
 
 	repetitions := newActorRepetition(repetitionsLeft)
-	go func(reminder *Reminder, period time.Duration, repetitions *actorRepetiton, stop chan bool) {
+	go func(reminder *Reminder, period time.Duration, repetitions *actorRepetition, stop chan bool) {
 		now := time.Now().UTC()
 		initialDuration := nextInvokeTime.Sub(now)
 		time.Sleep(initialDuration)
@@ -779,7 +779,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			}
 
 			t := a.configureTicker(period)
-			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, repetition *actorRepetiton, data interface{}) {
+			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, repetition *actorRepetition, data interface{}) {
 				for {
 					select {
 					case <-ticker.C:
@@ -814,7 +814,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 	return nil
 }
 
-func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, repetition *actorRepetiton, data interface{}) error {
+func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, repetition *actorRepetition, data interface{}) error {
 	r := ReminderResponse{
 		DueTime: dueTime,
 		Period:  period,
@@ -892,7 +892,7 @@ func (m *ActorMetadata) createReminderReference(reminder *Reminder) actorReminde
 	}
 }
 
-func (m *ActorMetadata) calculateStateKey(actorType string, remindersPartitionID uint32) string {
+func (m *ActorMetadata) calculateRemindersStateKey(actorType string, remindersPartitionID uint32) string {
 	if remindersPartitionID == 0 {
 		return constructCompositeKey("actors", actorType)
 	}
@@ -901,6 +901,7 @@ func (m *ActorMetadata) calculateStateKey(actorType string, remindersPartitionID
 		"actors",
 		actorType,
 		m.ID,
+		"reminders",
 		strconv.Itoa(int(remindersPartitionID)))
 }
 
@@ -931,7 +932,7 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminder
 		}
 	}
 
-	stateKey := m.calculateStateKey(actorType, partitionID)
+	stateKey := m.calculateRemindersStateKey(actorType, partitionID)
 	return remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
 }
 
@@ -948,7 +949,7 @@ func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderRe
 
 	remindersInPartitionAfterInsertion = append(remindersInPartitionAfterInsertion, *reminder)
 
-	stateKey := m.calculateStateKey(newReminderRef.reminder.ActorType, newReminderRef.actorRemindersPartitionID)
+	stateKey := m.calculateRemindersStateKey(newReminderRef.reminder.ActorType, newReminderRef.actorRemindersPartitionID)
 	return remindersInPartitionAfterInsertion, newReminderRef, stateKey, m.calculateEtag(newReminderRef.actorRemindersPartitionID)
 }
 
@@ -1281,7 +1282,7 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	transaction := state.TransactionalStateRequest{}
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		partitionID := i + 1
-		stateKey := actorMetadata.calculateStateKey(actorType, uint32(partitionID))
+		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(partitionID))
 		stateValue := actorRemindersPartitions[i]
 		transaction.Operations = append(transaction.Operations, state.TransactionalStateOperation{
 			Operation: state.Upsert,
@@ -1325,7 +1326,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		getRequests := []state.GetRequest{}
 		for i := 1; i <= actorMetadata.RemindersMetadata.PartitionCount; i++ {
 			partition := uint32(i)
-			key := actorMetadata.calculateStateKey(actorType, partition)
+			key := actorMetadata.calculateRemindersStateKey(actorType, partition)
 			keyPartitionMap[key] = partition
 			getRequests = append(getRequests, state.GetRequest{
 				Key: key,
@@ -1606,7 +1607,7 @@ func parseDuration(from string) (time.Duration, int, error) {
 			duration += time.Minute * time.Duration(val)
 		case "second":
 			duration += time.Second * time.Duration(val)
-		case "repetiton":
+		case "repetition":
 			repetition = val
 		default:
 			return time.Duration(0), -1, fmt.Errorf("unknown field %s", name)
