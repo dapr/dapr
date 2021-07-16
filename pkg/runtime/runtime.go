@@ -93,7 +93,9 @@ const (
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
 
-	// Pre-calculated limit to keep binding error message to 120 characters max.
+	// Pre-calculated limits to keep binding error messages to 120 characters max.
+	// grpc: "error invoking app, body: " = 25 chars + 95 = 120 max
+	// http: "fails to send binding event to http app channel, status code: 200 body: " = 71 chars + 49 = 120 max
 	grpcBodyLimit = 95
 	httpBodyLimit = 49
 )
@@ -690,7 +692,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			if len(body) > grpcBodyLimit {
 				body = body[:grpcBodyLimit]
 			}
-			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body:%x", body))
+			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %x", body))
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
@@ -752,7 +754,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			if len(body) > httpBodyLimit {
 				body = body[:httpBodyLimit]
 			}
-			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d\nbody: %x", resp.Status().Code, body)
+			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %x", resp.Status().Code, body)
 		}
 
 		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
