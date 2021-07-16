@@ -73,13 +73,13 @@ func (s *server) StartNonBlocking() {
 	}
 
 	go func() {
-		log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
+		log.Fatal(customServer.ListenAndServe(fmt.Sprintf("%s:%v", s.config.APIListenAddress, s.config.Port)))
 	}()
 
 	if s.config.EnableProfiling {
 		go func() {
 			log.Infof("starting profiling server on port %v", s.config.ProfilePort)
-			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.ProfilePort), pprofhandler.PprofHandler))
+			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf("%s:%v", s.config.APIListenAddress, s.config.ProfilePort), pprofhandler.PprofHandler))
 		}()
 	}
 }
