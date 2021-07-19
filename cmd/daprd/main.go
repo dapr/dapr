@@ -21,7 +21,7 @@ import (
 
 	// Secret stores.
 	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/components-contrib/secretstores/aws/parameterstore"
+	// "github.com/dapr/components-contrib/secretstores/aws/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
@@ -100,7 +100,8 @@ import (
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
-	"github.com/dapr/components-contrib/bindings/graphql"
+
+	// "github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
@@ -162,9 +163,9 @@ func main() {
 			secretstores_loader.New("aws.secretmanager", func() secretstores.SecretStore {
 				return secretmanager.NewSecretManager(logContrib)
 			}),
-			secretstores_loader.New("aws.parameterstore", func() secretstores.SecretStore {
-				return parameterstore.NewParameterStore(logContrib)
-			}),
+			// secretstores_loader.New("aws.parameterstore", func() secretstores.SecretStore {
+			// 	return parameterstore.NewParameterStore(logContrib)
+			// }),
 			secretstores_loader.New("gcp.secretmanager", func() secretstores.SecretStore {
 				return gcp_secretmanager.NewSecreteManager(logContrib)
 			}),
@@ -428,9 +429,9 @@ func main() {
 			bindings_loader.NewOutput("zeebe.command", func() bindings.OutputBinding {
 				return bindings_zeebe_command.NewZeebeCommand(logContrib)
 			}),
-			bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
-				return graphql.NewGraphQL(logContrib)
-			}),
+			// bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
+			// 	return graphql.NewGraphQL(logContrib)
+			// }),
 		),
 		runtime.WithHTTPMiddleware(
 			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
