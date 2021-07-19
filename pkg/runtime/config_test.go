@@ -13,7 +13,7 @@ import (
 
 func TestNewConfig(t *testing.T) {
 	c := NewRuntimeConfig("app1", []string{"localhost:5050"}, "localhost:5051", "*", "config", "components", "http", "kubernetes",
-		3500, 50002, 50001, 8080, 7070, true, 1, true, "localhost:5052", true, 4)
+		3500, 50002, 50001, "1.2.3.4", 8080, 7070, true, 1, true, "localhost:5052", true, 4)
 
 	assert.Equal(t, "app1", c.ID)
 	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
@@ -26,6 +26,7 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, 3500, c.HTTPPort)
 	assert.Equal(t, 50002, c.InternalGRPCPort)
 	assert.Equal(t, 50001, c.APIGRPCPort)
+	assert.Equal(t, "1.2.3.4", c.APIListenAddress)
 	assert.Equal(t, 8080, c.ApplicationPort)
 	assert.Equal(t, 7070, c.ProfilePort)
 	assert.Equal(t, true, c.EnableProfiling)
