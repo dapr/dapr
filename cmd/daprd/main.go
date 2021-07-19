@@ -21,7 +21,6 @@ import (
 
 	// Secret stores.
 	"github.com/dapr/components-contrib/secretstores"
-	// "github.com/dapr/components-contrib/secretstores/aws/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
@@ -100,8 +99,6 @@ import (
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
-
-	// "github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
