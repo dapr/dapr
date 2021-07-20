@@ -266,6 +266,20 @@ func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
 	return err
 }
 
+// SetAppEnv sets the container environment variable.
+func (c *KubeTestPlatform) SetAppEnv(name, key, value string) error {
+	app := c.AppResources.FindActiveResource(name)
+	appManager := app.(*kube.AppManager)
+
+	if err := appManager.SetAppEnv(key, value); err != nil {
+		return err
+	}
+
+	_, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone)
+
+	return err
+}
+
 // Restart restarts all instances for the app.
 func (c *KubeTestPlatform) Restart(name string) error {
 	// To minic the restart behavior, scale to 0 and then scale to the original replicas.

@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/dapr/components-contrib v1.2.1-0.20210703031752-ff6517240743
+	github.com/dapr/components-contrib v1.3.0-rc1
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
@@ -25,7 +25,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/raft v1.2.0
 	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea
-	github.com/json-iterator/go v1.1.10
+	github.com/json-iterator/go v1.1.11
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.4.1
@@ -37,7 +37,7 @@ require (
 	github.com/prometheus/common v0.14.0
 	github.com/stretchr/testify v1.7.0
 	github.com/trusch/grpc-proxy v0.0.0-20190529073533-02b64529f274
-	github.com/valyala/fasthttp v1.21.0
+	github.com/valyala/fasthttp v1.28.0
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.8.0

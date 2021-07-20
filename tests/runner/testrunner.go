@@ -33,6 +33,7 @@ type PlatformInterface interface {
 	Restart(name string) error
 	Scale(name string, replicas int32) error
 	PortForwardToApp(appName string, targetPort ...int) ([]int, error)
+	SetAppEnv(appName, key, value string) error
 	GetAppUsage(appName string) (*AppUsage, error)
 	GetSidecarUsage(appName string) (*AppUsage, error)
 	GetTotalRestarts(appname string) (int, error)

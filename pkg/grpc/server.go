@@ -105,7 +105,7 @@ func getDefaultMaxAgeDuration() *time.Duration {
 
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", s.config.Port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%v", s.config.APIListenAddress, s.config.Port))
 	if err != nil {
 		return err
 	}
