@@ -683,7 +683,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		if err != nil {
 			body := resp.Data
-			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %x", body))
+			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(body)))
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
@@ -742,7 +742,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		if resp.Status().Code != nethttp.StatusOK {
 			_, body := resp.RawData()
-			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %x", resp.Status().Code, body)
+			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
 
 		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
