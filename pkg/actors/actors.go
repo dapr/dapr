@@ -387,14 +387,16 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// Reentrancy to determine how we lock.
 	var reentrancyID *string
-	if headerValue, ok := req.Metadata()["Dapr-Reentrancy-Id"]; a.reentrancyEnabled && ok {
-		reentrancyID = &headerValue.GetValues()[0]
-	} else {
-		reentrancyHeader := fasthttp.RequestHeader{}
-		uuid := uuid.New().String()
-		reentrancyHeader.Add("Dapr-Reentrancy-Id", uuid)
-		req.AddHeaders(&reentrancyHeader)
-		reentrancyID = &uuid
+	if a.reentrancyEnabled {
+		if headerValue, ok := req.Metadata()["Dapr-Reentrancy-Id"]; ok {
+			reentrancyID = &headerValue.GetValues()[0]
+		} else {
+			reentrancyHeader := fasthttp.RequestHeader{}
+			uuid := uuid.New().String()
+			reentrancyHeader.Add("Dapr-Reentrancy-Id", uuid)
+			req.AddHeaders(&reentrancyHeader)
+			reentrancyID = &uuid
+		}
 	}
 
 	err := act.lock(reentrancyID)
