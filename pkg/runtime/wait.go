@@ -19,7 +19,7 @@ var (
 	urlFormat            string = "http://localhost:%s/v1.0/healthz/outbound"
 )
 
-func waitUntilDaprOutboundReady(daprHTTPPort string) error {
+func waitUntilDaprOutboundReady(daprHTTPPort string) {
 	outboundReadyHealthURL := fmt.Sprintf(urlFormat, daprHTTPPort)
 	client := &http.Client{
 		Timeout: time.Duration(requestTimeoutMillis) * time.Millisecond,
@@ -33,7 +33,7 @@ func waitUntilDaprOutboundReady(daprHTTPPort string) error {
 		err = checkIfOutboundReady(client, outboundReadyHealthURL)
 		if err == nil {
 			println("Dapr is outbound ready!")
-			return nil
+			return
 		}
 
 		if time.Now().After(lastPrintErrorTime) {
@@ -46,7 +46,6 @@ func waitUntilDaprOutboundReady(daprHTTPPort string) error {
 	}
 
 	println(fmt.Sprintf("timeout waiting for Dapr to become outbound ready. Last error: %v", err))
-	return err
 }
 
 func checkIfOutboundReady(client *http.Client, outboundReadyHealthURL string) error {
