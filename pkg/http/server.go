@@ -13,19 +13,17 @@ import (
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
-	"github.com/dapr/kit/logger"
-
-	"github.com/dapr/dapr/pkg/config"
-	cors_dapr "github.com/dapr/dapr/pkg/cors"
-
 	routing "github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 
+	"github.com/dapr/dapr/pkg/config"
+	cors_dapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.http")
