@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package job_e2e
+package job
 
 import (
 	"encoding/json"
@@ -29,7 +29,7 @@ type callSubscriberMethodRequest struct {
 	Method    string `json:"method"`
 }
 
-// data returned from the subscriber app
+// data returned from the subscriber app.
 type receivedMessagesResponse struct {
 	ReceivedByTopicJob []string `json:"pubsub-job-topic"`
 }
