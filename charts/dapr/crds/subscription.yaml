@@ -35,6 +35,10 @@ spec:
                 type: string
               topic:
                 type: string
+              metadata:
+                additionalProperties:
+                  type: string
+                type: object
             required:
             - pubsubname
             - route

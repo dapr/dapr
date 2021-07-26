@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package pubsubapp_e2e
+package pubsubapp
 
 import (
 	"encoding/json"
@@ -42,7 +42,7 @@ const (
 	subscriberAppNameGRPC = "pubsub-subscriber-grpc"
 )
 
-// sent to the publisher app, which will publish data to dapr
+// sent to the publisher app, which will publish data to dapr.
 type publishCommand struct {
 	Topic    string            `json:"topic"`
 	Data     string            `json:"data"`
@@ -56,7 +56,7 @@ type callSubscriberMethodRequest struct {
 	Method    string `json:"method"`
 }
 
-// data returned from the subscriber app
+// data returned from the subscriber app.
 type receivedMessagesResponse struct {
 	ReceivedByTopicA   []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
@@ -64,7 +64,7 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
 }
 
-// sends messages to the publisher app.  The publisher app does the actual publish
+// sends messages to the publisher app.  The publisher app does the actual publish.
 func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string, metadata map[string]string) ([]string, error) {
 	var sentMessages []string
 	commandBody := publishCommand{
@@ -72,6 +72,8 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 		Protocol: protocol,
 		Metadata: metadata,
 	}
+
+	//nolint: gosec
 	offset := rand.Intn(randomOffsetMax)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
 		// create and marshal message
@@ -168,6 +170,7 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 	return subscriberExternalURL
 }
 
+//nolint:staticcheck
 func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
 	if subscriberResponse == "empty-json" {
@@ -371,7 +374,7 @@ func TestPubSubGRPC(t *testing.T) {
 	protocol := "grpc"
 	for _, tc := range pubsubTests {
 		t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
-			subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppNameGRPC, protocol)
+			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppNameGRPC, protocol)
 		})
 	}
 }
