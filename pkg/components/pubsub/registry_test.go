@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dapr/components-contrib/pubsub"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/components-contrib/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
