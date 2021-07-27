@@ -127,11 +127,11 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
-	require.NoError(t, err)
+	require.NoError(t, err, string(daprResp))
 
 	var baselineResult perf.TestResult
 	err = json.Unmarshal(baselineResp, &baselineResult)
-	require.NoError(t, err)
+	require.NoError(t, err, string(baselineResp))
 
 	percentiles := map[int]string{1: "75th", 2: "90th"}
 
