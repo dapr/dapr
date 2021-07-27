@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package actor_features_e2e
+package reentrancy
 
 import (
 	"encoding/json"
@@ -33,23 +33,6 @@ type actorLogEntry struct {
 	ActorID        string `json:"actorId,omitempty"`
 	StartTimestamp int    `json:"startTimestamp,omitempty"`
 	EndTimestamp   int    `json:"endTimestamp,omitempty"`
-}
-
-type activeActorsCount struct {
-	Type  string `json:"type"`
-	Count int    `json:"count"`
-}
-
-type metadata struct {
-	ID     string              `json:"id"`
-	Actors []activeActorsCount `json:"actors"`
-}
-
-type actorReminderOrTimer struct {
-	Data     string `json:"data,omitempty"`
-	DueTime  string `json:"dueTime,omitempty"`
-	Period   string `json:"period,omitempty"`
-	Callback string `json:"callback,omitempty"`
 }
 
 type reentrantRequest struct {
@@ -107,8 +90,8 @@ func TestActorReentrancy(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(reentrantURL, numHealthChecks)
 	require.NoError(t, err)
 
-	firstActorId := "1"
-	secondActorId := "2"
+	firstActorID := "1"
+	secondActorID := "2"
 	actorType := "reentrantActor"
 
 	logsURL := fmt.Sprintf(actorlogsURLFormat, reentrantURL)
@@ -117,17 +100,17 @@ func TestActorReentrancy(t *testing.T) {
 		utils.HTTPDelete(logsURL)
 		req := reentrantRequest{
 			Calls: []actorCall{
-				{ActorID: firstActorId, ActorType: actorType, Method: "reentrantMethod"},
-				{ActorID: firstActorId, ActorType: actorType, Method: "standardMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "reentrantMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "standardMethod"},
 			},
 		}
 
 		reqBody, _ := json.Marshal(req)
-		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorId, "method", "reentrantMethod"), reqBody)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
 		require.NoError(t, err)
 
-		resp, err := utils.HTTPGet(logsURL)
-		require.NoError(t, err)
+		resp, httpErr := utils.HTTPGet(logsURL)
+		require.NoError(t, httpErr)
 		require.NotNil(t, resp)
 
 		logs := parseLogEntries(resp)
@@ -153,18 +136,18 @@ func TestActorReentrancy(t *testing.T) {
 		utils.HTTPDelete(logsURL)
 		req := reentrantRequest{
 			Calls: []actorCall{
-				{ActorID: firstActorId, ActorType: actorType, Method: "reentrantMethod"},
-				{ActorID: secondActorId, ActorType: actorType, Method: "reentrantMethod"},
-				{ActorID: firstActorId, ActorType: actorType, Method: "standardMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "reentrantMethod"},
+				{ActorID: secondActorID, ActorType: actorType, Method: "reentrantMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "standardMethod"},
 			},
 		}
 
 		reqBody, _ := json.Marshal(req)
-		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorId, "method", "reentrantMethod"), reqBody)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
 		require.NoError(t, err)
 
-		resp, err := utils.HTTPGet(logsURL)
-		require.NoError(t, err)
+		resp, httpErr := utils.HTTPGet(logsURL)
+		require.NoError(t, httpErr)
 		require.NotNil(t, resp)
 
 		logs := parseLogEntries(resp)
@@ -192,17 +175,17 @@ func TestActorReentrancy(t *testing.T) {
 		// Limit is set to 5
 		req := reentrantRequest{
 			Calls: []actorCall{
-				{ActorID: firstActorId, ActorType: actorType, Method: "reentrantMethod"},
-				{ActorID: firstActorId, ActorType: actorType, Method: "reentrantMethod"},
-				{ActorID: firstActorId, ActorType: actorType, Method: "reentrantMethod"},
-				{ActorID: firstActorId, ActorType: actorType, Method: "reentrantMethod"},
-				{ActorID: firstActorId, ActorType: actorType, Method: "reentrantMethod"},
-				{ActorID: firstActorId, ActorType: actorType, Method: "standardMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "reentrantMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "reentrantMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "reentrantMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "reentrantMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "reentrantMethod"},
+				{ActorID: firstActorID, ActorType: actorType, Method: "standardMethod"},
 			},
 		}
 
 		reqBody, _ := json.Marshal(req)
-		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorId, "method", "reentrantMethod"), reqBody)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
 		require.NoError(t, err)
 
 		resp, err := utils.HTTPGet(logsURL)

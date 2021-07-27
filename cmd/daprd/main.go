@@ -11,15 +11,17 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/dapr/kit/logger"
+	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/kit/logger"
 
 	// Included components in compiled daprd.
 
 	// Secret stores.
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/secretstores/aws/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
@@ -98,6 +100,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
+	"github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
@@ -120,6 +123,7 @@ import (
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware.
+
 	middleware "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
@@ -127,7 +131,6 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/opa"
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
-	"github.com/valyala/fasthttp"
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -158,6 +161,9 @@ func main() {
 			}),
 			secretstores_loader.New("aws.secretmanager", func() secretstores.SecretStore {
 				return secretmanager.NewSecretManager(logContrib)
+			}),
+			secretstores_loader.New("aws.parameterstore", func() secretstores.SecretStore {
+				return parameterstore.NewParameterStore(logContrib)
 			}),
 			secretstores_loader.New("gcp.secretmanager", func() secretstores.SecretStore {
 				return gcp_secretmanager.NewSecreteManager(logContrib)
@@ -421,6 +427,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("zeebe.command", func() bindings.OutputBinding {
 				return bindings_zeebe_command.NewZeebeCommand(logContrib)
+			}),
+			bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
+				return graphql.NewGraphQL(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
