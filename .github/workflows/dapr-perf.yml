@@ -28,6 +28,10 @@ jobs:
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
     steps:
+      - name: Setup test output
+        run: |
+          export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
+          echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
       - name: Set up container log path
         run: |
           echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/perf_tests" >> $GITHUB_ENV
@@ -203,3 +207,9 @@ jobs:
       - name: Clean up ${{ env.TEST_CLUSTER }} cluster
         if: always() && env.TEST_CLUSTER != ''
         run: make clean-test-env
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: test_perf.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf.json

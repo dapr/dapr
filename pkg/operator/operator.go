@@ -8,7 +8,6 @@ package operator
 import (
 	"context"
 
-	"github.com/dapr/kit/logger"
 	"k8s.io/apimachinery/pkg/runtime"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -24,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.operator")
