@@ -61,6 +61,11 @@ func (m *MockPlatform) Scale(name string, replicas int32) error {
 	return args.Error(0)
 }
 
+func (m *MockPlatform) SetAppEnv(name, key, value string) error {
+	args := m.Called(key)
+	return args.Error(0)
+}
+
 func (m *MockPlatform) Restart(name string) error {
 	args := m.Called(name)
 	return args.Error(0)
