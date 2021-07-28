@@ -735,10 +735,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
 		}
-		if diag.DefaultHTTPMonitoring.IsEnabled() {
-			// ::TODO
-		}
-
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code != nethttp.StatusOK {
 			_, body := resp.RawData()
