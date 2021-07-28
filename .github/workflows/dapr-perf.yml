@@ -212,4 +212,4 @@ jobs:
         uses: actions/upload-artifact@master
         with:
           name: test_perf.json
-          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.json
