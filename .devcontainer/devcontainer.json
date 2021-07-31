@@ -16,7 +16,7 @@
 	},
 	"extensions": [
 		"davidanson.vscode-markdownlint",
-		"ms-vscode.go",
+		"golang.go",
 		"ms-azuretools.vscode-dapr",
 		"ms-azuretools.vscode-docker",
 		"ms-kubernetes-tools.vscode-kubernetes-tools"
