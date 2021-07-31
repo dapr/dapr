@@ -34,7 +34,14 @@ type (
 )
 
 // New creates a NameResolution.
-func New(name string, factoryMethod func() nr.Resolver) NameResolution {
+func New(name string, resolver nr.Resolver) NameResolution {
+	return NewWithFactory(name, func() nr.Resolver {
+		return resolver
+	})
+}
+
+// New creates a NameResolution whit factory method.
+func NewWithFactory(name string, factoryMethod func() nr.Resolver) NameResolution {
 	return NameResolution{
 		Name:          name,
 		FactoryMethod: factoryMethod,

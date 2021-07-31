@@ -34,7 +34,14 @@ type (
 )
 
 // New creates a PubSub.
-func New(name string, factoryMethod func() pubsub.PubSub) PubSub {
+func New(name string, ps pubsub.PubSub) PubSub {
+	return NewWithFactory(name, func() pubsub.PubSub {
+		return ps
+	})
+}
+
+// New creates a PubSub with factory method.
+func NewWithFactory(name string, factoryMethod func() pubsub.PubSub) PubSub {
 	return PubSub{
 		Name:          name,
 		FactoryMethod: factoryMethod,

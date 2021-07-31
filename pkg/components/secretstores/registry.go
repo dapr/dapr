@@ -34,7 +34,14 @@ type (
 )
 
 // New creates a SecretStore.
-func New(name string, factoryMethod func() secretstores.SecretStore) SecretStore {
+func New(name string, secretStore secretstores.SecretStore) SecretStore {
+	return NewWithFactory(name, func() secretstores.SecretStore {
+		return secretStore
+	})
+}
+
+// New creates a SecretStore with factory method
+func NewWithFactory(name string, factoryMethod func() secretstores.SecretStore) SecretStore {
 	return SecretStore{
 		Name:          name,
 		FactoryMethod: factoryMethod,

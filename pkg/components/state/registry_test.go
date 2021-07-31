@@ -36,10 +36,12 @@ func TestRegistry(t *testing.T) {
 		mockV2 := &mockState{}
 
 		// act
-		testRegistry.Register(state.New(stateName, func() s.Store {
+		testRegistry.Register(state.New(stateName, mock))
+		testRegistry.Register(state.New(stateNameV2, mockV2))
+		testRegistry.Register(state.NewWithFactory(stateName, func() s.Store {
 			return mock
 		}))
-		testRegistry.Register(state.New(stateNameV2, func() s.Store {
+		testRegistry.Register(state.NewWithFactory(stateNameV2, func() s.Store {
 			return mockV2
 		}))
 

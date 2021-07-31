@@ -35,10 +35,12 @@ func TestRegistry(t *testing.T) {
 		mockV2 := &mockResolver{}
 
 		// act
-		testRegistry.Register(nameresolution.New(resolverName, func() nr.Resolver {
+		testRegistry.Register(nameresolution.New(resolverName, mock))
+		testRegistry.Register(nameresolution.New(resolverNameV2, mockV2))
+		testRegistry.Register(nameresolution.NewWithFactory(resolverName, func() nr.Resolver {
 			return mock
 		}))
-		testRegistry.Register(nameresolution.New(resolverNameV2, func() nr.Resolver {
+		testRegistry.Register(nameresolution.NewWithFactory(resolverNameV2, func() nr.Resolver {
 			return mockV2
 		}))
 

@@ -19,7 +19,13 @@ type State struct {
 	FactoryMethod func() state.Store
 }
 
-func New(name string, factoryMethod func() state.Store) State {
+func New(name string, store state.Store) State {
+	return NewWithFactory(name, func() state.Store {
+		return store
+	})
+}
+
+func NewWithFactory(name string, factoryMethod func() state.Store) State {
 	return State{
 		Name:          name,
 		FactoryMethod: factoryMethod,

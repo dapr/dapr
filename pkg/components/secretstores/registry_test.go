@@ -36,10 +36,14 @@ func TestRegistry(t *testing.T) {
 		mockV2 := &mockSecretStore{}
 
 		// act
-		testRegistry.Register(secretstores.New(secretStoreName, func() ss.SecretStore {
+		testRegistry.Register(secretstores.New(secretStoreName, mock))
+		testRegistry.Register(secretstores.New(secretStoreNameV2, mockV2))
+
+		// test with factory
+		testRegistry.Register(secretstores.NewWithFactory(secretStoreName, func() ss.SecretStore {
 			return mock
 		}))
-		testRegistry.Register(secretstores.New(secretStoreNameV2, func() ss.SecretStore {
+		testRegistry.Register(secretstores.NewWithFactory(secretStoreNameV2, func() ss.SecretStore {
 			return mockV2
 		}))
 

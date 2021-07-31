@@ -45,7 +45,14 @@ type (
 )
 
 // NewInput creates a InputBinding.
-func NewInput(name string, factoryMethod func() bindings.InputBinding) InputBinding {
+func NewInput(name string, inputBinding bindings.InputBinding) InputBinding {
+	return NewInputWithFactory(name, func() bindings.InputBinding {
+		return inputBinding
+	})
+}
+
+// NewInputWithFactory creates a InputBinding with factory method.
+func NewInputWithFactory(name string, factoryMethod func() bindings.InputBinding) InputBinding {
 	return InputBinding{
 		Name:          name,
 		FactoryMethod: factoryMethod,
@@ -53,7 +60,14 @@ func NewInput(name string, factoryMethod func() bindings.InputBinding) InputBind
 }
 
 // NewOutput creates a OutputBinding.
-func NewOutput(name string, factoryMethod func() bindings.OutputBinding) OutputBinding {
+func NewOutput(name string, outputBinding bindings.OutputBinding) OutputBinding {
+	return NewOutputWithFactory(name, func() bindings.OutputBinding {
+		return outputBinding
+	})
+}
+
+// NewOutputWithFactory creates a OutputBinding with factory method.
+func NewOutputWithFactory(name string, factoryMethod func() bindings.OutputBinding) OutputBinding {
 	return OutputBinding{
 		Name:          name,
 		FactoryMethod: factoryMethod,
