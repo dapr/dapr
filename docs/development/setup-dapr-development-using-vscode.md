@@ -37,7 +37,7 @@ The Dapr dev container is configured by default to support [GitHub Codespaces](h
 
 ### Personalizing user settings in a dev container
 
-VSCode supports applying your user settings, such as your `.gitconfig`, to a dev container through the use of [dotfiles respositories](https://code.visualstudio.com/docs/remote/containers#_personalizing-with-dotfile-repositories). This can be done through your own VSCode `settings.json` file without changing the dev container image or configuration.
+VSCode supports applying your user settings, such as your `.gitconfig`, to a dev container through the use of [dotfiles repositories](https://code.visualstudio.com/docs/remote/containers#_personalizing-with-dotfile-repositories). This can be done through your own VSCode `settings.json` file without changing the dev container image or configuration.
 ### Using a custom dev container image
 
 The Dapr [devcontainer.json](../../.devcontainer/devcontainer.json) uses the latest image from the [daprio dockerhub](https://hub.docker.com/r/daprio/dapr-dev), but you may need to modify the image destination to suit your host environment. For example, if you are using the devcontainer on a Linux host with a user whose UID is not 1000, you many need to remap the UID of the `dapr` user in the dev container to match your UID on the host.

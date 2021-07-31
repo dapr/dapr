@@ -51,7 +51,6 @@ const (
 	daprMemoryLimitKey                = "dapr.io/sidecar-memory-limit"
 	daprCPURequestKey                 = "dapr.io/sidecar-cpu-request"
 	daprMemoryRequestKey              = "dapr.io/sidecar-memory-request"
-	daprListenAddress                 = "dapr.io/sidecar-listen-address"
 	daprLivenessProbeDelayKey         = "dapr.io/sidecar-liveness-probe-delay-seconds"
 	daprLivenessProbeTimeoutKey       = "dapr.io/sidecar-liveness-probe-timeout-seconds"
 	daprLivenessProbePeriodKey        = "dapr.io/sidecar-liveness-probe-period-seconds"
@@ -88,7 +87,6 @@ const (
 	defaultMetricsPort                = 9090
 	defaultSidecarDebug               = false
 	defaultSidecarDebugPort           = 40000
-	defaultSidecarListenAddress       = "localhost"
 	sidecarHealthzPath                = "healthz"
 	defaultHealthzProbeDelaySeconds   = 3
 	defaultHealthzProbeTimeoutSeconds = 3
@@ -345,10 +343,6 @@ func getMaxRequestBodySize(annotations map[string]string) (int32, error) {
 	return getInt32Annotation(annotations, daprMaxRequestBodySize)
 }
 
-func getListenAddress(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprListenAddress, defaultSidecarListenAddress)
-}
-
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
 	enabled, ok := annotations[key]
 	if !ok {
@@ -399,19 +393,6 @@ func getProbeHTTPHandler(port int32, pathElements ...string) corev1.Handler {
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: formatProbePath(pathElements...),
 			Port: intstr.IntOrString{IntVal: port},
-		},
-	}
-}
-
-func getProbeExecHandler(port int32) corev1.Handler {
-	return corev1.Handler{
-		Exec: &corev1.ExecAction{
-			Command: []string{
-				"/daprd",
-				"--wait",
-				"--dapr-http-port",
-				fmt.Sprintf("%v", port),
-			},
 		},
 	}
 }
@@ -511,7 +492,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	metricsEnabled := getEnableMetrics(annotations)
 	metricsPort := getMetricsPort(annotations)
 	maxConcurrency, err := getMaxConcurrency(annotations)
-	sidecarListenAddress := getListenAddress(annotations)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -520,14 +500,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	pullPolicy := getPullPolicy(imagePullPolicy)
 
-	var probeHandler corev1.Handler
-
-	if sidecarListenAddress == "localhost" {
-		// kubelet healthcheck cannot talk to localhost for a pod, so we use daprd --wait to run the healthcheck instead
-		probeHandler = getProbeExecHandler(sidecarHTTPPort)
-	} else {
-		probeHandler = getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
-	}
+	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
 
 	allowPrivilegeEscalation := false
 
@@ -562,7 +535,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort),
 		"--dapr-grpc-port", fmt.Sprintf("%v", sidecarAPIGRPCPort),
 		"--dapr-internal-grpc-port", fmt.Sprintf("%v", sidecarInternalGRPCPort),
-		"--dapr-listen-address", sidecarListenAddress,
 		"--app-port", appPortStr,
 		"--app-id", id,
 		"--control-plane-address", controlPlaneAddress,
@@ -616,14 +588,14 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		},
 		Args: args,
 		ReadinessProbe: &corev1.Probe{
-			Handler:             probeHandler,
+			Handler:             httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
 			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprReadinessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprReadinessProbePeriodKey, defaultHealthzProbePeriodSeconds),
 			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprReadinessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
 		LivenessProbe: &corev1.Probe{
-			Handler:             probeHandler,
+			Handler:             httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprLivenessProbeDelayKey, defaultHealthzProbeDelaySeconds),
 			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprLivenessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprLivenessProbePeriodKey, defaultHealthzProbePeriodSeconds),

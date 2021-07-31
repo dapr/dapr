@@ -76,10 +76,10 @@ The Helm chart has the follow configuration options that can be supplied:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Docker image registry                                                   | `docker.io/daprio`      |
-| `global.tag`                              | Docker image version tag                                                | `1.2.1`                 |
+| `global.tag`                              | Docker image version tag                                                | `1.3.0`                 |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
-| `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
+| `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry            | `""`                    |
 | `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`             |
 | `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
 | `global.ha.disruption.minimumAvailable`   | Minimum amount of available instances for control plane. This can either be effective count or %. | ``             |
@@ -100,7 +100,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.replicaCount`             | Number of replicas                                 | `1`                     |
 | `dapr_dashboard.logLevel`                 | service Log level                                        | `info`                  |
 | `dapr_dashboard.image.registry`           | docker registry                                          | `docker.io/daprio`      |
-| `dapr_dashboard.image.imagePullSecret`    | docker image pull secret for docker registry                                          | `docker.io/daprio`      |
+| `dapr_dashboard.image.imagePullSecrets`   | docker images pull secrets for docker registry           | `docker.io/daprio`      |
 | `dapr_dashboard.image.name`               | docker image name                                        | `dashboard`             |
 | `dapr_dashboard.image.tag`                | docker image tag                                         | `"0.6.0"`               |
 | `dapr_dashboard.serviceType`              | Type of [Kubernetes service](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types) to use for the Dapr Dashboard service | `ClusterIP` |
@@ -159,7 +159,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.runAsNonRoot`      | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_sidecar_injector.resources`         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
-
+| `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |
 
 
 
