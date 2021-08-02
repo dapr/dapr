@@ -40,7 +40,7 @@ func New(name string, secretStore secretstores.SecretStore) SecretStore {
 	})
 }
 
-// New creates a SecretStore with factory method
+// NewWithFactory creates a SecretStore with factory method
 func NewWithFactory(name string, factoryMethod func() secretstores.SecretStore) SecretStore {
 	return SecretStore{
 		Name:          name,

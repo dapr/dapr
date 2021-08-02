@@ -40,7 +40,7 @@ func New(name string, resolver nr.Resolver) NameResolution {
 	})
 }
 
-// New creates a NameResolution whit factory method.
+// NewWithFactory creates a NameResolution whit factory method.
 func NewWithFactory(name string, factoryMethod func() nr.Resolver) NameResolution {
 	return NameResolution{
 		Name:          name,

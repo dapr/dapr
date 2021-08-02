@@ -40,7 +40,7 @@ func New(name string, ps pubsub.PubSub) PubSub {
 	})
 }
 
-// New creates a PubSub with factory method.
+// NewWithFactory creates a PubSub with factory method.
 func NewWithFactory(name string, factoryMethod func() pubsub.PubSub) PubSub {
 	return PubSub{
 		Name:          name,
