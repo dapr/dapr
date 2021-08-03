@@ -30,7 +30,7 @@ type Channel struct {
 	ch                 chan int
 	tracingSpec        config.TracingSpec
 	appMetadataToken   string
-	timeout          time.Duration
+	timeout            time.Duration
 	maxRequestBodySize int
 }
 
@@ -41,7 +41,7 @@ func CreateLocalChannel(port, maxConcurrency int, timeout time.Duration, conn *g
 		baseAddress:        fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, port),
 		tracingSpec:        spec,
 		appMetadataToken:   auth.GetAppToken(),
-		timeout:          timeout,
+		timeout:            timeout,
 		maxRequestBodySize: maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {

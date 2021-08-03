@@ -376,7 +376,7 @@ func TestAppToken(t *testing.T) {
 
 func TestCreateChannel(t *testing.T) {
 	t.Run("ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, 120,config.TracingSpec{}, true, 4)
+		ch, err := CreateLocalChannel(3000, 0, 120, config.TracingSpec{}, true, 4)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()
