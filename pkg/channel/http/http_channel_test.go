@@ -75,7 +75,7 @@ func (th *testHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, r.URL.RawQuery)
 }
 
-// testTimeoutHandler is used for timeout test
+// testTimeoutHandler is used for timeout test.
 type testTimeoutHandler struct {
 	serverURL string
 

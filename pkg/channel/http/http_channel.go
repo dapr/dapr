@@ -153,7 +153,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	startRequest := time.Now()
 
 	// Send request to user application
-	var resp = fasthttp.AcquireResponse()
+	resp := fasthttp.AcquireResponse()
 	err := h.client.DoTimeout(channelReq, resp, h.client.ReadTimeout)
 	defer func() {
 		fasthttp.ReleaseRequest(channelReq)
