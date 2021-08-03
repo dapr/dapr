@@ -51,6 +51,8 @@ func TestInvokeMethod(t *testing.T) {
 		contentType, body := response.RawData()
 		grpcServer.Stop()
 
+		assert.Equal(t, "application/json", contentType)
+
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)
 
