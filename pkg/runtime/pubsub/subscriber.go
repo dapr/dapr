@@ -30,7 +30,7 @@ type SubscribedMessage struct {
 	Metadata   map[string]string
 }
 
-type SubscriptionHandler func(ctx context.Context, msg *SubscribedMessage) error
+type SubscriptionHandler func(routePath string, ctx context.Context, msg *SubscribedMessage) error
 
 var log = logger.NewLogger("dapr.runtime.subscriberService")
 
@@ -107,7 +107,7 @@ func (service *SubscriberService) beginPubSub(name string, ps pubsub.PubSub) err
 				}
 			}
 
-			return service.PublishMessageFunc(ctx, &SubscribedMessage{
+			return service.PublishMessageFunc(route.path, ctx, &SubscribedMessage{
 				cloudEvent,
 				data,
 				msg.Topic,

@@ -673,7 +673,6 @@ func TestInitPubSub(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
-		rt.topicRoutes = nil
 		rt.pubSubs = make(map[string]pubsub.PubSub)
 
 		return mockPubSub, mockPubSub2
@@ -788,14 +787,6 @@ func TestInitPubSub(t *testing.T) {
 		rts.pubSubs[TestPubsubName], _ = initMockPubSubForRuntime(rts)
 		a := rts.getPublishAdapter()
 		assert.NotNil(t, a)
-	})
-
-	t.Run("get topic routes but app channel is nil", func(t *testing.T) {
-		rts := NewTestDaprRuntime(modes.StandaloneMode)
-		rts.appChannel = nil
-		routes, err := rts.getTopicRoutes()
-		assert.Nil(t, err)
-		assert.Equal(t, 0, len(routes))
 	})
 
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
@@ -1631,22 +1622,19 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	topic := "topic1"
 
-	testPubSubMessage := &pubsubSubscribedMessage{
-		cloudEvent: map[string]interface{}{},
-		topic:      topic,
-		data:       []byte("testing"),
-		metadata:   map[string]string{pubsubName: TestPubsubName},
+	testPubSubMessage := &runtime_pubsub.SubscribedMessage{
+		CloudEvent: map[string]interface{}{},
+		Topic:      topic,
+		Data:       []byte("testing"),
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
 	}
 
-	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
+	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
+	fakeReq.WithRawData(testPubSubMessage.Data, contenttype.CloudEventContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
 
 	t.Run("ok without result body", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1659,7 +1647,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.NoError(t, err)
@@ -1677,7 +1665,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		fakeResp.WithRawData([]byte("{ \"status\": \"RETRY\"}"), "application/json")
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Error(t, err)
@@ -1695,7 +1683,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		fakeResp.WithRawData([]byte("{ \"status\": \"DROP\"}"), "application/json")
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.NoError(t, err)
@@ -1713,7 +1701,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		fakeResp.WithRawData([]byte("{ \"status\": \"UNKNOWN\"}"), "application/json")
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Error(t, err)
@@ -1730,7 +1718,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.NoError(t, err)
@@ -1740,22 +1728,19 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 	topic := "topic1"
 
-	testPubSubMessage := &pubsubSubscribedMessage{
-		cloudEvent: map[string]interface{}{},
-		topic:      topic,
-		data:       []byte("testing"),
-		metadata:   map[string]string{pubsubName: TestPubsubName},
+	testPubSubMessage := &runtime_pubsub.SubscribedMessage{
+		CloudEvent: map[string]interface{}{},
+		Topic:      topic,
+		Data:       []byte("testing"),
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
 	}
 
-	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
+	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
+	fakeReq.WithRawData(testPubSubMessage.Data, contenttype.CloudEventContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
 
 	testcases := []struct {
 		Name        string
@@ -1808,7 +1793,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 			}
 			rt.grpc.AppClient = &mockClientConn
 
-			err := rt.publishMessageGRPC(context.Background(), testPubSubMessage)
+			err := rt.publishMessageGRPC(topic, context.Background(), testPubSubMessage)
 			if tc.ExpectError {
 				assert.Error(t, err)
 			} else {
@@ -1825,22 +1810,19 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
-	testPubSubMessage := &pubsubSubscribedMessage{
-		cloudEvent: envelope,
-		topic:      topic,
-		data:       b,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
+	testPubSubMessage := &runtime_pubsub.SubscribedMessage{
+		CloudEvent: envelope,
+		Topic:      topic,
+		Data:       b,
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
 	}
 
-	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
+	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
+	fakeReq.WithRawData(testPubSubMessage.Data, contenttype.CloudEventContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1852,7 +1834,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1873,20 +1855,20 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
 		assert.Nil(t, err)
 
-		message := &pubsubSubscribedMessage{
-			cloudEvent: envelopeNoTraceID,
-			topic:      topic,
-			data:       bNoTraceID,
-			metadata:   map[string]string{pubsubName: TestPubsubName},
+		message := &runtime_pubsub.SubscribedMessage{
+			CloudEvent: envelopeNoTraceID,
+			Topic:      topic,
+			Data:       bNoTraceID,
+			Metadata:   map[string]string{pubsubName: TestPubsubName},
 		}
 
-		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.topic)
+		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.Topic)
 		fakeReqNoTraceID.WithHTTPExtension(http.MethodPost, "")
-		fakeReqNoTraceID.WithRawData(message.data, contenttype.CloudEventContentType)
+		fakeReqNoTraceID.WithRawData(message.Data, contenttype.CloudEventContentType)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReqNoTraceID).Return(fakeResp, nil)
 
 		// act
-		err = rt.publishMessageHTTP(context.Background(), message)
+		err = rt.publishMessageHTTP(topic, context.Background(), message)
 
 		// assert
 		assert.Nil(t, err)
@@ -1904,7 +1886,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1922,7 +1904,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1940,12 +1922,12 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
-		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
+		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
 		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
@@ -1962,7 +1944,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1980,7 +1962,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Error(t, err, "expected error on unknown status")
@@ -1998,7 +1980,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.NoError(t, err, "expected no error on empty status")
@@ -2016,7 +1998,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err, "expected no error on unknown status")
@@ -2031,7 +2013,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(nil, invokeError)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		expectedError := errors.Wrap(invokeError, "error from app channel while sending pub/sub event to app")
@@ -2050,7 +2032,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err, "expected error to be nil")
@@ -2068,12 +2050,12 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := rt.publishMessageHTTP(topic, context.Background(), testPubSubMessage)
 
 		// assert
 		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
-		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
+		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
 		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
@@ -2087,27 +2069,27 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
-	testPubSubMessage := &pubsubSubscribedMessage{
-		cloudEvent: envelope,
-		topic:      topic,
-		data:       b,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
+	testPubSubMessage := &runtime_pubsub.SubscribedMessage{
+		CloudEvent: envelope,
+		Topic:      topic,
+		Data:       b,
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
 	}
 
 	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "")
 	base64, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
-	testPubSubMessageBase64 := &pubsubSubscribedMessage{
-		cloudEvent: envelope,
-		topic:      topic,
-		data:       base64,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
+	testPubSubMessageBase64 := &runtime_pubsub.SubscribedMessage{
+		CloudEvent: envelope,
+		Topic:      topic,
+		Data:       base64,
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
 	}
 
 	testCases := []struct {
 		name             string
-		message          *pubsubSubscribedMessage
+		message          *runtime_pubsub.SubscribedMessage
 		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
 		errorExpected    bool
 		noResponseStatus bool
@@ -2167,12 +2149,6 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
-			rt.topicRoutes = map[string]TopicRoute{}
-			rt.topicRoutes[TestPubsubName] = TopicRoute{
-				routes: map[string]Route{
-					topic: {path: topic},
-				},
-			}
 			var grpcServer *grpc.Server
 
 			// create mock application server first
@@ -2197,7 +2173,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			defer rt.grpc.AppClient.Close()
 
 			// act
-			err = rt.publishMessageGRPC(context.Background(), tc.message)
+			err = rt.publishMessageGRPC(topic, context.Background(), tc.message)
 
 			// assert
 			if tc.errorExpected {

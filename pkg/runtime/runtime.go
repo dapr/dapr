@@ -1090,86 +1090,82 @@ func (a *DaprRuntime) initNameResolution() error {
 	return nil
 }
 
-func publishMessageHTTP(topicRoutes map[string]runtime_pubsub.TopicRoute) func(ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error {
-
-	return func(ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error {
-		cloudEvent := msg.CloudEvent
-		if pubsub.HasExpired(cloudEvent) {
-			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-			return nil
-		}
-
-		var span *trace.Span
-
-		route := topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
-		req := invokev1.NewInvokeMethodRequest(route.path)
-		req.WithHTTPExtension(nethttp.MethodPost, "")
-		req.WithRawData(msg.Data, contenttype.CloudEventContentType)
-
-		if cloudEvent[pubsub.TraceIDField] != nil {
-			traceID := cloudEvent[pubsub.TraceIDField].(string)
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-		}
-
-		resp, err := a.appChannel.InvokeMethod(ctx, req)
-		if err != nil {
-			return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
-		}
-
-		statusCode := int(resp.Status().Code)
-
-		if span != nil {
-			m := diag.ConstructSubscriptionSpanAttributes(msg.Topic)
-			diag.AddAttributesToSpan(span, m)
-			diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
-			span.End()
-		}
-
-		_, body := resp.RawData()
-
-		if (statusCode >= 200) && (statusCode <= 299) {
-			// Any 2xx is considered a success.
-			var appResponse pubsub.AppResponse
-			err := a.json.Unmarshal(body, &appResponse)
-			if err != nil {
-				log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
-				// Return no error so message does not get reprocessed.
-				return nil
-			}
-
-			switch appResponse.Status {
-			case "":
-				// Consider empty status field as success
-				fallthrough
-			case pubsub.Success:
-				return nil
-			case pubsub.Retry:
-				return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-			case pubsub.Drop:
-				log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-				return nil
-			}
-			// Consider unknown status field as error and retry
-			return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
-		}
-
-		if statusCode == nethttp.StatusNotFound {
-			// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
-			// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
-			// https://cloud.google.com/apis/design/errors#handling_errors
-			log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
-			return nil
-		}
-
-		// Every error from now on is a retriable error.
-		log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
-		return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
+func (a *DaprRuntime) publishMessageHTTP(routePath string, ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error {
+	cloudEvent := msg.CloudEvent
+	if pubsub.HasExpired(cloudEvent) {
+		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
+		return nil
 	}
+
+	var span *trace.Span
+
+	req := invokev1.NewInvokeMethodRequest(routePath)
+	req.WithHTTPExtension(nethttp.MethodPost, "")
+	req.WithRawData(msg.Data, contenttype.CloudEventContentType)
+
+	if cloudEvent[pubsub.TraceIDField] != nil {
+		traceID := cloudEvent[pubsub.TraceIDField].(string)
+		sc, _ := diag.SpanContextFromW3CString(traceID)
+		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+	}
+
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	if err != nil {
+		return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
+	}
+
+	statusCode := int(resp.Status().Code)
+
+	if span != nil {
+		m := diag.ConstructSubscriptionSpanAttributes(msg.Topic)
+		diag.AddAttributesToSpan(span, m)
+		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
+		span.End()
+	}
+
+	_, body := resp.RawData()
+
+	if (statusCode >= 200) && (statusCode <= 299) {
+		// Any 2xx is considered a success.
+		var appResponse pubsub.AppResponse
+		err := a.json.Unmarshal(body, &appResponse)
+		if err != nil {
+			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
+			// Return no error so message does not get reprocessed.
+			return nil
+		}
+
+		switch appResponse.Status {
+		case "":
+			// Consider empty status field as success
+			fallthrough
+		case pubsub.Success:
+			return nil
+		case pubsub.Retry:
+			return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
+		case pubsub.Drop:
+			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
+			return nil
+		}
+		// Consider unknown status field as error and retry
+		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
+	}
+
+	if statusCode == nethttp.StatusNotFound {
+		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
+		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
+		// https://cloud.google.com/apis/design/errors#handling_errors
+		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
+		return nil
+	}
+
+	// Every error from now on is a retriable error.
+	log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
+	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
 }
 
-func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error {
+func (a *DaprRuntime) publishMessageGRPC(routePath string, ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error {
 	cloudEvent := msg.CloudEvent
 
 	if pubsub.HasExpired(cloudEvent) {
@@ -1820,7 +1816,7 @@ func (a *DaprRuntime) startSubscribing() {
 		log.Warnf("failed to build publish pipeline: %s", err)
 	}
 
-	var publishFunc func(ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error
+	var publishFunc runtime_pubsub.SubscriptionHandler
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
 		publishFunc = a.publishMessageHTTP

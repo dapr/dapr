@@ -15,7 +15,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.test")
+var log_test = logger.NewLogger("dapr.test")
 
 func TestFilterSubscriptions(t *testing.T) {
 	subs := []Subscription{
@@ -32,7 +32,7 @@ func TestFilterSubscriptions(t *testing.T) {
 		},
 	}
 
-	subs = filterSubscriptions(subs, log)
+	subs = filterSubscriptions(subs, log_test)
 	assert.Len(t, subs, 2)
 	assert.Equal(t, "topic0", subs[0].Topic)
 	assert.Equal(t, "topic1", subs[1].Topic)
@@ -72,7 +72,7 @@ func TestDeclarativeSubscriptions(t *testing.T) {
 		filePath := filepath.Join(".", "components", "sub.yaml")
 		writeSubscriptionToDisk(s, filePath)
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeSelfHosted(dir, log_test)
 		assert.Len(t, subs, 1)
 		assert.Equal(t, "topic1", subs[0].Topic)
 		assert.Equal(t, "myroute", subs[0].Route)
@@ -95,7 +95,7 @@ func TestDeclarativeSubscriptions(t *testing.T) {
 			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v", dir, i))
 		}
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeSelfHosted(dir, log_test)
 		assert.Len(t, subs, 2)
 
 		for i := 0; i < 1; i++ {
@@ -115,7 +115,7 @@ func TestDeclarativeSubscriptions(t *testing.T) {
 
 		writeSubscriptionToDisk(s, dir)
 
-		subs := DeclarativeSelfHosted(dir, log)
+		subs := DeclarativeSelfHosted(dir, log_test)
 		assert.Len(t, subs, 0)
 	})
 }
