@@ -42,14 +42,14 @@ func TestInvokeMethod(t *testing.T) {
 	defer close(t, conn)
 	assert.NoError(t, err)
 
-
-	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1",timeout: 120 * time.Second, maxRequestBodySize: 4}
-	req := invokev1.NewInvokeMethodRequest("method")
-	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
-	response, err := c.InvokeMethod(context.Background(), req)
-	assert.NoError(t, err)
-	contentType, body := response.RawData()
-	grpcServer.Stop()
+	t.Run("invoke method", func(t *testing.T) {
+		c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", timeout: 120 * time.Second, maxRequestBodySize: 4}
+		req := invokev1.NewInvokeMethodRequest("method")
+		req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		response, err := c.InvokeMethod(context.Background(), req)
+		assert.NoError(t, err)
+		contentType, body := response.RawData()
+		grpcServer.Stop()
 
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)

@@ -12,8 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/dapr/kit/logger"
 
@@ -158,7 +159,7 @@ func FromFlags() (*DaprRuntime, error) {
 		appPrtcl = *appProtocol
 	}
 
-	runtimeConfig := NewRuntimeConfig(*appID, placementAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
+	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
 		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, timeout, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize)
 
 	// set environment variables
