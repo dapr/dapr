@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	pubsub_middleware "github.com/dapr/dapr/pkg/middleware/pubsub"
 	"io"
 	"net"
 	nethttp "net/http"
@@ -36,7 +37,6 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
-	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/middleware"
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
+	pubsub_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/pubsub"
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -108,15 +109,6 @@ var log = logger.NewLogger("dapr.runtime")
 // was encountered when processing a cloud event's data property.
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
 
-type Route struct {
-	path     string
-	metadata map[string]string
-}
-
-type TopicRoute struct {
-	routes map[string]Route
-}
-
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
 	runtimeConfig          *Config
@@ -142,19 +134,21 @@ type DaprRuntime struct {
 	pubSubs                map[string]pubsub.PubSub
 	nameResolver           nr.Resolver
 	json                   jsoniter.API
-	httpMiddlewareRegistry http_middleware_loader.Registry
-	hostAddress            string
-	actorStateStoreName    string
-	actorStateStoreCount   int
-	authenticator          security.Authenticator
-	namespace              string
-	scopedSubscriptions    map[string][]string
-	scopedPublishings      map[string][]string
-	allowedTopics          map[string][]string
-	daprHTTPAPI            http.API
-	operatorClient         operatorv1pb.OperatorClient
-	topicRoutes            map[string]TopicRoute
 
+	httpMiddlewareRegistry         http_middleware_loader.Registry
+	subscriptionMiddlewareRegistry pubsub_middleware_loader.Registry
+	publishMiddlewareRegistry      pubsub_middleware_loader.Registry
+
+	hostAddress          string
+	actorStateStoreName  string
+	actorStateStoreCount int
+	authenticator        security.Authenticator
+	namespace            string
+	scopedSubscriptions  map[string][]string
+	scopedPublishings    map[string][]string
+	allowedTopics        map[string][]string
+	daprHTTPAPI          http.API
+	operatorClient       operatorv1pb.OperatorClient
 	secretsConfiguration map[string]config.SecretsScope
 
 	pendingComponents          chan components_v1alpha1.Component
@@ -167,34 +161,30 @@ type componentPreprocessRes struct {
 	unreadyDependency string
 }
 
-type pubsubSubscribedMessage struct {
-	cloudEvent map[string]interface{}
-	data       []byte
-	topic      string
-	metadata   map[string]string
-}
-
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList) *DaprRuntime {
 	return &DaprRuntime{
-		runtimeConfig:          runtimeConfig,
-		globalConfig:           globalConfig,
-		accessControlList:      accessControlList,
-		componentsLock:         &sync.RWMutex{},
-		components:             make([]components_v1alpha1.Component, 0),
-		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
-		json:                   jsoniter.ConfigFastest,
-		inputBindings:          map[string]bindings.InputBinding{},
-		outputBindings:         map[string]bindings.OutputBinding{},
-		secretStores:           map[string]secretstores.SecretStore{},
-		stateStores:            map[string]state.Store{},
-		pubSubs:                map[string]pubsub.PubSub{},
-		stateStoreRegistry:     state_loader.NewRegistry(),
-		bindingsRegistry:       bindings_loader.NewRegistry(),
-		pubSubRegistry:         pubsub_loader.NewRegistry(),
-		secretStoresRegistry:   secretstores_loader.NewRegistry(),
-		nameResolutionRegistry: nr_loader.NewRegistry(),
-		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
+		runtimeConfig:     runtimeConfig,
+		globalConfig:      globalConfig,
+		accessControlList: accessControlList,
+		componentsLock:    &sync.RWMutex{},
+		components:        make([]components_v1alpha1.Component, 0),
+		grpc:              grpc.NewGRPCManager(runtimeConfig.Mode),
+		json:              jsoniter.ConfigFastest,
+		inputBindings:     map[string]bindings.InputBinding{},
+		outputBindings:    map[string]bindings.OutputBinding{},
+		secretStores:      map[string]secretstores.SecretStore{},
+		stateStores:       map[string]state.Store{},
+		pubSubs:           map[string]pubsub.PubSub{},
+
+		stateStoreRegistry:             state_loader.NewRegistry(),
+		bindingsRegistry:               bindings_loader.NewRegistry(),
+		pubSubRegistry:                 pubsub_loader.NewRegistry(),
+		secretStoresRegistry:           secretstores_loader.NewRegistry(),
+		nameResolutionRegistry:         nr_loader.NewRegistry(),
+		httpMiddlewareRegistry:         http_middleware_loader.NewRegistry(),
+		subscriptionMiddlewareRegistry: pubsub_middleware_loader.NewRegistry(),
+		publishMiddlewareRegistry:      pubsub_middleware_loader.NewRegistry(),
 
 		scopedSubscriptions: map[string][]string{},
 		scopedPublishings:   map[string][]string{},
@@ -307,6 +297,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
+	a.publishMiddlewareRegistry.Register(opts.pubsubMiddleware...)
+	a.subscriptionMiddlewareRegistry.Register(opts.pubsubMiddleware...)
 
 	go a.processComponents()
 	err = a.beginComponentsUpdates()
@@ -420,6 +412,31 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 	return http_middleware.Pipeline{Handlers: handlers}, nil
 }
 
+func (a *DaprRuntime) buildPubsubPipeline(handlerSpecs []config.HandlerSpec, registry pubsub_middleware_loader.Registry) (pubsub_middleware.Pipeline, error) {
+	var handlers []pubsub_middleware.Middleware
+
+	if a.globalConfig != nil {
+		for i := 0; i < len(handlerSpecs); i++ {
+			middlewareSpec := handlerSpecs[i]
+			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
+			if !exists {
+				return pubsub_middleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
+					middlewareSpec.Name,
+					middlewareSpec.Type,
+					middlewareSpec.Version)
+			}
+			handler, err := registry.Create(middlewareSpec.Type, middlewareSpec.Version,
+				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
+			if err != nil {
+				return pubsub_middleware.Pipeline{}, err
+			}
+			log.Infof("enabled %s/%s pubsub middleware", middlewareSpec.Type, middlewareSpec.Version)
+			handlers = append(handlers, handler)
+		}
+	}
+	return pubsub_middleware.Pipeline{Middlewares: handlers}, nil
+}
+
 func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initOutputBinding(c); err != nil {
@@ -434,79 +451,6 @@ func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 			return err
 		}
 	}
-	return nil
-}
-
-func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
-	var publishFunc func(ctx context.Context, msg *pubsubSubscribedMessage) error
-	switch a.runtimeConfig.ApplicationProtocol {
-	case HTTPProtocol:
-		publishFunc = a.publishMessageHTTP
-	case GRPCProtocol:
-		publishFunc = a.publishMessageGRPC
-	}
-	topicRoutes, err := a.getTopicRoutes()
-	if err != nil {
-		return err
-	}
-	v, ok := topicRoutes[name]
-	if !ok {
-		return nil
-	}
-	for topic, route := range v.routes {
-		allowed := a.isPubSubOperationAllowed(name, topic, a.scopedSubscriptions[name])
-		if !allowed {
-			log.Warnf("subscription to topic %s on pubsub %s is not allowed", topic, name)
-			continue
-		}
-
-		log.Debugf("subscribing to topic=%s on pubsub=%s", topic, name)
-
-		routeMetadata := route.metadata
-		if err := ps.Subscribe(pubsub.SubscribeRequest{
-			Topic:    topic,
-			Metadata: route.metadata,
-		}, func(ctx context.Context, msg *pubsub.NewMessage) error {
-			if msg.Metadata == nil {
-				msg.Metadata = make(map[string]string, 1)
-			}
-
-			msg.Metadata[pubsubName] = name
-
-			rawPayload, err := contrib_metadata.IsRawPayload(routeMetadata)
-			if err != nil {
-				log.Errorf("error deserializing pubsub metadata: %s", err)
-				return err
-			}
-
-			var cloudEvent map[string]interface{}
-			data := msg.Data
-			if rawPayload {
-				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
-				data, err = a.json.Marshal(cloudEvent)
-				if err != nil {
-					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-					return err
-				}
-			} else {
-				err = a.json.Unmarshal(msg.Data, &cloudEvent)
-				if err != nil {
-					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-					return err
-				}
-			}
-
-			return publishFunc(ctx, &pubsubSubscribedMessage{
-				cloudEvent: cloudEvent,
-				data:       data,
-				topic:      msg.Topic,
-				metadata:   msg.Metadata,
-			})
-		}); err != nil {
-			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
-		}
-	}
-
 	return nil
 }
 
@@ -986,67 +930,21 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 	return subs
 }
 
-func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
-	if a.topicRoutes != nil {
-		return a.topicRoutes, nil
-	}
-
-	topicRoutes := make(map[string]TopicRoute)
-
-	if a.appChannel == nil {
-		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
-		return topicRoutes, nil
-	}
-
+func (a *DaprRuntime) getSubscriptions() []runtime_pubsub.Subscription {
 	var subscriptions []runtime_pubsub.Subscription
 
-	// handle app subscriptions
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+		if a.appChannel == nil {
+			log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
+			return subscriptions
+		}
 		subscriptions = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		subscriptions = runtime_pubsub.GetSubscriptionsGRPC(client, log)
 	}
 
-	// handle declarative subscriptions
-	ds := a.getDeclarativeSubscriptions()
-	for _, s := range ds {
-		skip := false
-
-		// don't register duplicate subscriptions
-		for _, sub := range subscriptions {
-			if sub.Route == s.Route && sub.PubsubName == s.PubsubName && sub.Topic == s.Topic {
-				log.Warnf("two identical subscriptions found (sources: declarative, app endpoint). topic: %s, route: %s, pubsubname: %s",
-					s.Topic, s.Route, s.PubsubName)
-				skip = true
-				break
-			}
-		}
-
-		if !skip {
-			subscriptions = append(subscriptions, s)
-		}
-	}
-
-	for _, s := range subscriptions {
-		if _, ok := topicRoutes[s.PubsubName]; !ok {
-			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]Route)}
-		}
-
-		topicRoutes[s.PubsubName].routes[s.Topic] = Route{path: s.Route, metadata: s.Metadata}
-	}
-
-	if len(topicRoutes) > 0 {
-		for pubsubName, v := range topicRoutes {
-			topics := []string{}
-			for topic := range v.routes {
-				topics = append(topics, topic)
-			}
-			log.Infof("app is subscribed to the following topics: %v through pubsub=%s", topics, pubsubName)
-		}
-	}
-	a.topicRoutes = topicRoutes
-	return topicRoutes, nil
+	return subscriptions
 }
 
 func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
@@ -1103,6 +1001,10 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 // GetPubSub is an adapter method to find a pubsub by name.
 func (a *DaprRuntime) GetPubSub(pubsubName string) pubsub.PubSub {
 	return a.pubSubs[pubsubName]
+}
+
+func (a *DaprRuntime) isSubOperationAllowed(pubsubName string, topic string) bool {
+	return a.isPubSubOperationAllowed(pubsubName, topic, a.scopedSubscriptions[pubsubName])
 }
 
 func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
@@ -1188,85 +1090,87 @@ func (a *DaprRuntime) initNameResolution() error {
 	return nil
 }
 
-func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscribedMessage) error {
-	cloudEvent := msg.cloudEvent
+func publishMessageHTTP(topicRoutes map[string]runtime_pubsub.TopicRoute) func(ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error {
 
-	if pubsub.HasExpired(cloudEvent) {
-		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-		return nil
-	}
+	return func(ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error {
+		cloudEvent := msg.CloudEvent
+		if pubsub.HasExpired(cloudEvent) {
+			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
+			return nil
+		}
 
-	var span *trace.Span
+		var span *trace.Span
 
-	route := a.topicRoutes[msg.metadata[pubsubName]].routes[msg.topic]
-	req := invokev1.NewInvokeMethodRequest(route.path)
-	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.data, contenttype.CloudEventContentType)
+		route := topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
+		req := invokev1.NewInvokeMethodRequest(route.path)
+		req.WithHTTPExtension(nethttp.MethodPost, "")
+		req.WithRawData(msg.Data, contenttype.CloudEventContentType)
 
-	if cloudEvent[pubsub.TraceIDField] != nil {
-		traceID := cloudEvent[pubsub.TraceIDField].(string)
-		sc, _ := diag.SpanContextFromW3CString(traceID)
-		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
-		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-	}
+		if cloudEvent[pubsub.TraceIDField] != nil {
+			traceID := cloudEvent[pubsub.TraceIDField].(string)
+			sc, _ := diag.SpanContextFromW3CString(traceID)
+			spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+		}
 
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	if err != nil {
-		return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
-	}
-
-	statusCode := int(resp.Status().Code)
-
-	if span != nil {
-		m := diag.ConstructSubscriptionSpanAttributes(msg.topic)
-		diag.AddAttributesToSpan(span, m)
-		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
-		span.End()
-	}
-
-	_, body := resp.RawData()
-
-	if (statusCode >= 200) && (statusCode <= 299) {
-		// Any 2xx is considered a success.
-		var appResponse pubsub.AppResponse
-		err := a.json.Unmarshal(body, &appResponse)
+		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
-			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
-			// Return no error so message does not get reprocessed.
+			return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
+		}
+
+		statusCode := int(resp.Status().Code)
+
+		if span != nil {
+			m := diag.ConstructSubscriptionSpanAttributes(msg.Topic)
+			diag.AddAttributesToSpan(span, m)
+			diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
+			span.End()
+		}
+
+		_, body := resp.RawData()
+
+		if (statusCode >= 200) && (statusCode <= 299) {
+			// Any 2xx is considered a success.
+			var appResponse pubsub.AppResponse
+			err := a.json.Unmarshal(body, &appResponse)
+			if err != nil {
+				log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
+				// Return no error so message does not get reprocessed.
+				return nil
+			}
+
+			switch appResponse.Status {
+			case "":
+				// Consider empty status field as success
+				fallthrough
+			case pubsub.Success:
+				return nil
+			case pubsub.Retry:
+				return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
+			case pubsub.Drop:
+				log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
+				return nil
+			}
+			// Consider unknown status field as error and retry
+			return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
+		}
+
+		if statusCode == nethttp.StatusNotFound {
+			// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
+			// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
+			// https://cloud.google.com/apis/design/errors#handling_errors
+			log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
 			return nil
 		}
 
-		switch appResponse.Status {
-		case "":
-			// Consider empty status field as success
-			fallthrough
-		case pubsub.Success:
-			return nil
-		case pubsub.Retry:
-			return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-		case pubsub.Drop:
-			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-			return nil
-		}
-		// Consider unknown status field as error and retry
-		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
+		// Every error from now on is a retriable error.
+		log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
+		return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
 	}
-
-	if statusCode == nethttp.StatusNotFound {
-		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
-		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
-		// https://cloud.google.com/apis/design/errors#handling_errors
-		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
-		return nil
-	}
-
-	// Every error from now on is a retriable error.
-	log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
-	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
 }
 
-func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
-	cloudEvent := msg.cloudEvent
+func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error {
+	cloudEvent := msg.CloudEvent
 
 	if pubsub.HasExpired(cloudEvent) {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
@@ -1280,8 +1184,8 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		DataContentType: extractCloudEventProperty(cloudEvent, pubsub.DataContentTypeField),
 		Type:            extractCloudEventProperty(cloudEvent, pubsub.TypeField),
 		SpecVersion:     extractCloudEventProperty(cloudEvent, pubsub.SpecVersionField),
-		Topic:           msg.topic,
-		PubsubName:      msg.metadata[pubsubName],
+		Topic:           msg.Topic,
+		PubsubName:      msg.Metadata[pubsubName],
 	}
 
 	if data, ok := cloudEvent[pubsub.DataBase64Field]; ok && data != nil {
@@ -1318,7 +1222,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
+			spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
 
 			// no ops if trace is off
 			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
@@ -1911,11 +1815,29 @@ func componentDependency(compCategory ComponentCategory, name string) string {
 }
 
 func (a *DaprRuntime) startSubscribing() {
-	for name, pubsub := range a.pubSubs {
-		if err := a.beginPubSub(name, pubsub); err != nil {
-			log.Errorf("error occurred while beginning pubsub %s: %s", name, err)
-		}
+	pipeline, err := a.buildPubsubPipeline(a.globalConfig.Spec.SubscriptionPipelineSpec.Handlers, a.subscriptionMiddlewareRegistry)
+	if err != nil {
+		log.Warnf("failed to build publish pipeline: %s", err)
 	}
+
+	var publishFunc func(ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error
+	switch a.runtimeConfig.ApplicationProtocol {
+	case HTTPProtocol:
+		publishFunc = a.publishMessageHTTP
+	case GRPCProtocol:
+		publishFunc = a.publishMessageGRPC
+	}
+
+	subscriberService := runtime_pubsub.SubscriberService{
+		Pipeline:                        pipeline,
+		PublishMessageFunc:              publishFunc,
+		OperationAccessValidatorFunc:    a.isSubOperationAllowed,
+		Json:                            a.json,
+		GetSubscriptionsFunc:            a.getSubscriptions,
+		GetDeclarativeSubscriptionsFunc: a.getDeclarativeSubscriptions,
+		TracingFunc:                     tracingFunc(a.globalConfig.Spec.TracingSpec),
+	}
+	subscriberService.StartSubscribing(a.pubSubs)
 }
 
 func (a *DaprRuntime) startReadingFromBindings() error {
@@ -1936,4 +1858,11 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 		}(name, binding)
 	}
 	return nil
+}
+
+func tracingFunc(spec config.TracingSpec) func(ctx context.Context, traceID string, spanName string) (context.Context, *trace.Span) {
+	return func(ctx context.Context, traceID string, spanName string) (context.Context, *trace.Span) {
+		sc, _ := diag.SpanContextFromW3CString(traceID)
+		return diag.StartInternalCallbackSpan(ctx, spanName, sc, spec)
+	}
 }

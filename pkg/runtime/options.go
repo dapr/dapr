@@ -3,6 +3,7 @@ package runtime
 import (
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
+	pubsub_middleware "github.com/dapr/dapr/pkg/components/middleware/pubsub"
 	"github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/components/secretstores"
@@ -12,13 +13,14 @@ import (
 type (
 	// runtimeOpts encapsulates the components to include in the runtime.
 	runtimeOpts struct {
-		secretStores    []secretstores.SecretStore
-		states          []state.State
-		pubsubs         []pubsub.PubSub
-		nameResolutions []nameresolution.NameResolution
-		inputBindings   []bindings.InputBinding
-		outputBindings  []bindings.OutputBinding
-		httpMiddleware  []http.Middleware
+		secretStores     []secretstores.SecretStore
+		states           []state.State
+		pubsubs          []pubsub.PubSub
+		nameResolutions  []nameresolution.NameResolution
+		inputBindings    []bindings.InputBinding
+		outputBindings   []bindings.OutputBinding
+		httpMiddleware   []http.Middleware
+		pubsubMiddleware []pubsub_middleware.Middleware
 	}
 
 	// Option is a function that customizes the runtime.
@@ -71,5 +73,12 @@ func WithOutputBindings(outputBindings ...bindings.OutputBinding) Option {
 func WithHTTPMiddleware(httpMiddleware ...http.Middleware) Option {
 	return func(o *runtimeOpts) {
 		o.httpMiddleware = append(o.httpMiddleware, httpMiddleware...)
+	}
+}
+
+// WithPubsubMiddleware adds Pubsub middleware components to the runtime.
+func WithPubsubMiddleware(middleware ...pubsub_middleware.Middleware) Option {
+	return func(o *runtimeOpts) {
+		o.pubsubMiddleware = append(o.pubsubMiddleware, middleware...)
 	}
 }
