@@ -11,8 +11,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 )
 
-type FakeSecretStore struct {
-}
+type FakeSecretStore struct{}
 
 func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	if req.Name == "good-key" {

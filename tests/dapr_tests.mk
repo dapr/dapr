@@ -14,6 +14,8 @@ stateapp \
 secretapp \
 service_invocation \
 service_invocation_grpc \
+service_invocation_grpc_proxy_client \
+service_invocation_grpc_proxy_server \
 binding_input \
 binding_input_grpc \
 binding_output \
@@ -24,12 +26,13 @@ actorapp \
 actorclientapp \
 actorfeatures \
 actorinvocationapp \
+actorreentrancy \
 runtime \
 runtime_init \
 middleware \
-job-publisher
+job-publisher \
 
-# PERFORMACE test app list
+# PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
 
 # E2E test app root directory
@@ -158,7 +161,7 @@ test-deps:
 	# In golang >=1.16 there is a new way to do this with `go install gotest.tools/gotestsum@latest`
 	# But this doesn't work with <=1.15, so we do it the old way for now 
 	# (see: https://golang.org/ref/mod#go-install)
-	GO111MODULE=off go get gotest.tools/gotestsum
+	command -v gotestsum || GO111MODULE=off go get gotest.tools/gotestsum
 
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
@@ -172,8 +175,8 @@ test-e2e-all: check-e2e-env test-deps
 
 define genPerfTestRun
 .PHONY: test-perf-$(1)
-test-perf-$(1): check-e2e-env
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
+test-perf-$(1): check-e2e-env test-deps
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json --format standard-quiet -- -timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
 endef
 
 # Generate perf app image build targets
@@ -182,8 +185,8 @@ $(foreach ITEM,$(PERF_TESTS),$(eval $(call genPerfTestRun,$(ITEM))))
 TEST_PERF_TARGETS:=$(foreach ITEM,$(PERF_TESTS),test-perf-$(ITEM))
 
 # start all perf tests
-test-perf-all: check-e2e-env
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 1 -count=1 -v -tags=perf ./tests/perf/...
+test-perf-all: check-e2e-env test-deps
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json --format standard-quiet -- -p 1 -count=1 -v -tags=perf ./tests/perf/...
 
 # add required helm repo
 setup-helm-init:
@@ -239,9 +242,15 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_reentrant_actor.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_actor_type_metadata.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_grpc_proxy_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
+
+	# Show the installed configurations
+	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
 
 # Clean up test environment
 clean-test-env:

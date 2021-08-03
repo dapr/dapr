@@ -11,24 +11,25 @@ import (
 	"strings"
 	"time"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // To track the metrics for fasthttp using opencensus, this implementation is inspired by
 // https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ochttp
 
-// Tag key definitions for http requests
+// Tag key definitions for http requests.
 var (
 	httpStatusCodeKey = tag.MustNewKey("status")
 	httpPathKey       = tag.MustNewKey("path")
 	httpMethodKey     = tag.MustNewKey("method")
 )
 
-// Default distributions
+// Default distributions.
 var (
 	defaultSizeDistribution    = view.Distribution(1024, 2048, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824, 4294967296)
 	defaultLatencyDistribution = view.Distribution(1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1000, 2000, 5000, 10000, 20000, 50000, 100000)
@@ -159,16 +160,16 @@ func (h *httpMetrics) Init(appID string) error {
 		diag_utils.NewMeasureView(h.serverRequestCount, []tag.Key{appIDKey, httpPathKey, httpMethodKey}, view.Count()),
 		diag_utils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
 		diag_utils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
-		diag_utils.NewMeasureView(h.serverLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.serverLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultLatencyDistribution),
 		diag_utils.NewMeasureView(h.serverResponseCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
 		diag_utils.NewMeasureView(h.clientSentBytes, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultSizeDistribution),
 		diag_utils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
-		diag_utils.NewMeasureView(h.clientRoundtripLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.clientRoundtripLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultLatencyDistribution),
 		diag_utils.NewMeasureView(h.clientCompletedCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
 	)
 }
 
-// FastHTTPMiddleware is the middleware to track http server-side requests
+// FastHTTPMiddleware is the middleware to track http server-side requests.
 func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		reqContentSize := ctx.Request.Header.ContentLength()
@@ -193,7 +194,7 @@ func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.
 }
 
 // convertPathToMetricLabel removes the variant parameters in URL path for low cardinality label space
-// For example, it removes {keys} param from /v1/state/statestore/{keys}
+// For example, it removes {keys} param from /v1/state/statestore/{keys}.
 func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 	if path == "" {
 		return path
@@ -205,7 +206,7 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 	}
 
 	// Split up to 6 delimiters in 'v1/actors/DemoActor/1/timer/name'
-	var parsedPath = strings.SplitN(p, "/", 6)
+	parsedPath := strings.SplitN(p, "/", 6)
 
 	if len(parsedPath) < 3 {
 		return path

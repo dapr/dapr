@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/sentry/certs"
 )
 
 func getTestCert() *x509.Certificate {

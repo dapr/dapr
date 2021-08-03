@@ -36,7 +36,7 @@ For more details on initializing Helm, [read the Helm docs](https://helm.sh/docs
 2. Install the Dapr chart on your cluster in the dapr-system namespace:
     ```
     helm install dapr dapr/dapr --namespace dapr-system --wait
-    ``` 
+    ```
 
 ## Verify installation
 
@@ -76,12 +76,14 @@ The Helm chart has the follow configuration options that can be supplied:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Docker image registry                                                   | `docker.io/daprio`      |
-| `global.tag`                              | Docker image version tag                                                | `1.1.2`                 |
+| `global.tag`                              | Docker image version tag                                                | `1.3.0`                 |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
-| `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
+| `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry            | `""`                    |
 | `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`             |
 | `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
+| `global.ha.disruption.minimumAvailable`   | Minimum amount of available instances for control plane. This can either be effective count or %. | ``             |
+| `global.ha.disruption.maximumUnavailable`   | Maximum amount of instances that are allowed to be unavailable for control plane. This can either be effective count or %. | `25%`             |
 | `global.prometheus.enabled`               | Prometheus metrics enablement for control plane services                | `true`                  |
 | `global.prometheus.port`                  | Prometheus scrape http endpoint port                                    | `9090`                  |
 | `global.mtls.enabled`                     | Mutual TLS enablement                                                   | `true`                  |
@@ -90,6 +92,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
+| `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector | `{}`                 |
 
 ### Dapr Dashboard options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -97,7 +100,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.replicaCount`             | Number of replicas                                 | `1`                     |
 | `dapr_dashboard.logLevel`                 | service Log level                                        | `info`                  |
 | `dapr_dashboard.image.registry`           | docker registry                                          | `docker.io/daprio`      |
-| `dapr_dashboard.image.imagePullSecret`    | docker image pull secret for docker registry                                          | `docker.io/daprio`      |
+| `dapr_dashboard.image.imagePullSecrets`   | docker images pull secrets for docker registry           | `docker.io/daprio`      |
 | `dapr_dashboard.image.name`               | docker image name                                        | `dashboard`             |
 | `dapr_dashboard.image.tag`                | docker image tag                                         | `"0.6.0"`               |
 | `dapr_dashboard.serviceType`              | Type of [Kubernetes service](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types) to use for the Dapr Dashboard service | `ClusterIP` |
@@ -150,12 +153,13 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                                | `IfNotPresent`                     |
 | `dapr_sidecar_injector.replicaCount`      | Number of replicas                                                      | `1`                     |
 | `dapr_sidecar_injector.logLevel`          | Log level                                                               | `info`                  |
-| `dapr_sidecar_injector.image.name`        | Dapr runtime sidecar image name injecting to application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`|
+| `dapr_sidecar_injector.image.name`        | Docker image name for Dapr runtime sidecar to inject into an application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`|
+| `dapr_sidecar_injector.injectorImage.name` | Docker image name for sidecar injector service (`global.registry/dapr_sidecar_injector.injectorImage.name`) | `dapr`|
 | `dapr_sidecar_injector.webhookFailurePolicy` | Failure policy for the sidecar injector                              | `Ignore`                |
 | `dapr_sidecar_injector.runAsNonRoot`      | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_sidecar_injector.resources`         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
-
+| `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |
 
 
 
@@ -172,7 +176,7 @@ helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true
 
 ## Example of installing edge version of Dapr
 
-This command deploys the latest `edge` version of Dapr to `dapr-system` namespace. This is useful if you want to deploy the latest version of Dapr to test a feature or some capability in your Kubernetes cluster. 
+This command deploys the latest `edge` version of Dapr to `dapr-system` namespace. This is useful if you want to deploy the latest version of Dapr to test a feature or some capability in your Kubernetes cluster.
 
 ```
 helm install dapr dapr/dapr --namespace dapr-system --set-string global.tag=edge --wait
@@ -232,10 +236,14 @@ helm install dapr charts/dapr --namespace dapr-system --values values.yml --wait
 
 Find the target dapr-operator pod:
 ```bash
-kubectl get pods -n dapr-system -o wide 
+kubectl get pods -n dapr-system -o wide
 ```
 
 Port forward the debugging port so that it's visible to your IDE:
 ```bash
 kubectl port-forward dapr-operator-5c99475ffc-m9z9f 40000:40000 -n dapr-system
+```
+## Example of using nodeSelector option
+```
+helm install dapr dapr/dapr --namespace dapr-system --set global.nodeSelector.myLabel=myValue --wait
 ```

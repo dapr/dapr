@@ -64,16 +64,19 @@ spec:
           {{- end }}
           periodSeconds: 3
           failureThreshold: 5
-{{- if contains "/" .Values.image.name }}
-        image: "{{ .Values.image.name }}"
+{{- if contains "/" .Values.injectorImage.name }}
+        image: "{{ .Values.injectorImage.name }}"
 {{- else }}
         image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsUser: 1000
+  {{- if eq .Values.runAsNonRoot true }}
           runAsNonRoot: {{ .Values.runAsNonRoot }}
+  {{- else }}
+          runAsUser: 1000
+  {{- end }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add:
@@ -114,6 +117,10 @@ spec:
           value: /dapr/cert/tls.crt
         - name: TLS_KEY_FILE
           value: /dapr/cert/tls.key
+{{- if .Values.kubeClusterDomain }}
+        - name: KUBE_CLUSTER_DOMAIN
+          value: "{{ .Values.kubeClusterDomain }}"
+{{- end }}
         - name: SIDECAR_IMAGE
 {{- if contains "/" .Values.image.name }}
           value: "{{ .Values.image.name }}"
@@ -165,7 +172,24 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
+{{- if .Values.global.ha.enabled }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-sidecar-injector
+              topologyKey: topology.kubernetes.io/zone
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
 {{- end }}

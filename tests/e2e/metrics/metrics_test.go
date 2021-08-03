@@ -141,6 +141,8 @@ func TestMetrics(t *testing.T) {
 
 			// Evaluate the metrics are as expected
 			tt.evaluate(t, tt.app, res)
+
+			res.Body.Close()
 		})
 	}
 }
@@ -214,7 +216,11 @@ func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) 
 						foundPath = true
 
 						if strings.Contains(l.GetValue(), "healthz") {
-							require.Equal(t, "/v1.0/healthz", l.GetValue())
+							if strings.Contains(l.GetValue(), "outbound") {
+								require.Equal(t, "/v1.0/healthz/outbound", l.GetValue())
+							} else {
+								require.Equal(t, "/v1.0/healthz", l.GetValue())
+							}
 						} else {
 							require.Equal(t, fmt.Sprintf("/v1.0/invoke/%s/method/tests/green", app), l.GetValue())
 						}

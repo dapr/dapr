@@ -21,13 +21,16 @@ We have reviewed multi storage API design for completeness and consistency.
 
 *  New state store API is v1.0/state/`<store-name>`/
 *  If user is using actors and like to persist the state then user must provide actorStateStore: true in the configuration yaml.
+
    If the attribute is not specified or multiple actor state stores are configured, Dapr runtime will log warning.
+   
    The actor API to save the state will fail in both these scenarios where actorStore is not specified or multiple actor stores
 are specified.
-*  It is noted that after this breaking change, actor state store has to be specifed unlike earlier where first state store is picked up by default.
+*  It is noted that after this breaking change, actor state store has to be specified unlike earlier where first state store is picked up by default.
 * It is noted that this breaking change will also require a CLI change to generate the state store YAML for redis with actorStateStore.
 
 * To provide multiple stores, user has to provide separate YAML for each store and giving unique name for the store.
+* It is noted that the param's keyPrefix represents state key prefix, it's value included ${appid} is the microservice appid, ${name} is the CRDs component's unique name, ${none} is non key prefix and the custom key prefix
 
   For example, below are the 2 sample yaml files in which redis store is used as actor state store while mongodb store is not used as actor state store.
 
@@ -39,6 +42,7 @@ metadata:
 spec:
   type: state.redis
   metadata:
+  - keyPrefix: none # Optional. default appid. such as: appid, none, name and custom key prefix
   - name: <KEY>
     value: <VALUE>
   - name: <KEY>
@@ -55,6 +59,7 @@ metadata:
 spec:
   type: state.mongodb
   metadata:
+  - keyPrefix: none # Optional. default appid. such as: appid, none, name and custom key prefix
   - name: <KEY>
     value: <VALUE>
   - name: <KEY>

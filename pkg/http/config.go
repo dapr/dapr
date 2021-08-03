@@ -5,7 +5,7 @@
 
 package http
 
-// ServerConfig holds config values for an HTTP server
+// ServerConfig holds config values for an HTTP server.
 type ServerConfig struct {
 	AllowedOrigins     string
 	AppID              string
@@ -16,7 +16,7 @@ type ServerConfig struct {
 	MaxRequestBodySize int
 }
 
-// NewServerConfig returns a new HTTP server config
+// NewServerConfig returns a new HTTP server config.
 func NewServerConfig(appID string, hostAddress string, port int, profilePort int, allowedOrigins string, enableProfiling bool, maxRequestBodySize int) ServerConfig {
 	return ServerConfig{
 		AllowedOrigins:     allowedOrigins,

@@ -33,6 +33,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/logger"
+
 	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
@@ -46,22 +48,20 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
-	"github.com/dapr/kit/logger"
 )
 
 const maxGRPCServerUptime = 100 * time.Millisecond
 
-type mockGRPCAPI struct {
-}
+type mockGRPCAPI struct{}
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	var resp = invokev1.NewInvokeMethodResponse(0, "", nil)
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
 	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
 	return resp.Proto(), nil
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	var resp = invokev1.NewInvokeMethodResponse(0, "", nil)
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
 	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
 	return resp.Proto(), nil
 }
@@ -111,7 +111,7 @@ func ExtractSpanContext(ctx context.Context) []byte {
 	return []byte(SerializeSpanContext(span.SpanContext()))
 }
 
-// SerializeSpanContext serializes a span context into a simple string
+// SerializeSpanContext serializes a span context into a simple string.
 func SerializeSpanContext(ctx trace.SpanContext) string {
 	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
 }
@@ -124,7 +124,7 @@ func configureTestTraceExporter(buffer *string) {
 func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	var buffer = ""
+	buffer := ""
 	configureTestTraceExporter(&buffer)
 
 	spec := config.TracingSpec{SamplingRate: "1"}
@@ -468,7 +468,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 		directMessaging: mockDirectMessaging,
 	}
 
-	var httpResponseTests = []struct {
+	httpResponseTests := []struct {
 		status         int
 		statusMessage  string
 		grpcStatusCode codes.Code
@@ -1493,6 +1493,7 @@ func TestGetMetadata(t *testing.T) {
 	assert.Contains(t, response.ExtendedMetadata, "testKey")
 	assert.Equal(t, response.ExtendedMetadata["testKey"], "testValue")
 }
+
 func TestSetMetadata(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	fakeComponent := components_v1alpha.Component{}
@@ -1598,64 +1599,6 @@ func TestExtractEtag(t *testing.T) {
 		})
 		assert.True(t, ok)
 		assert.Equal(t, "a", etag)
-	})
-}
-
-func TestNormalizeOperation(t *testing.T) {
-	t.Run("normal path no slash", func(t *testing.T) {
-		p := "path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "path", p)
-	})
-
-	t.Run("normal path caps", func(t *testing.T) {
-		p := "Path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "Path", p)
-	})
-
-	t.Run("single slash", func(t *testing.T) {
-		p := "/path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "/path", p)
-	})
-
-	t.Run("multiple slashes", func(t *testing.T) {
-		p := "///path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "/path", p)
-	})
-
-	t.Run("prefix", func(t *testing.T) {
-		p := "../path"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "path", p)
-	})
-
-	t.Run("encoded", func(t *testing.T) {
-		p := "path%72"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "pathr", p)
-	})
-
-	t.Run("normal multiple paths", func(t *testing.T) {
-		p := "path1/path2/path3"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "path1/path2/path3", p)
-	})
-
-	t.Run("normal multiple paths leading slash", func(t *testing.T) {
-		p := "/path1/path2/path3"
-		p, _ = normalizeOperation(p)
-
-		assert.Equal(t, "/path1/path2/path3", p)
 	})
 }
 

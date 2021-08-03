@@ -5,9 +5,13 @@
 
 package actors
 
-import "time"
+import (
+	"time"
 
-// Config is the actor runtime configuration
+	app_config "github.com/dapr/dapr/pkg/config"
+)
+
+// Config is the actor runtime configuration.
 type Config struct {
 	HostAddress                   string
 	AppID                         string
@@ -20,18 +24,22 @@ type Config struct {
 	DrainOngoingCallTimeout       time.Duration
 	DrainRebalancedActors         bool
 	Namespace                     string
+	Reentrancy                    app_config.ReentrancyConfig
+	RemindersStoragePartitions    int
 }
 
 const (
-	defaultActorIdleTimeout   = time.Minute * 60
-	defaultHeartbeatInterval  = time.Second * 1
-	defaultActorScanInterval  = time.Second * 30
-	defaultOngoingCallTimeout = time.Second * 60
+	defaultActorIdleTimeout     = time.Minute * 60
+	defaultHeartbeatInterval    = time.Second * 1
+	defaultActorScanInterval    = time.Second * 30
+	defaultOngoingCallTimeout   = time.Second * 60
+	defaultReentrancyStackLimit = 32
 )
 
-// NewConfig returns the actor runtime configuration
+// NewConfig returns the actor runtime configuration.
 func NewConfig(hostAddress, appID string, placementAddresses []string, hostedActors []string, port int,
-	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string, drainRebalancedActors bool, namespace string) Config {
+	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string, drainRebalancedActors bool, namespace string,
+	reentrancy app_config.ReentrancyConfig, remindersStoragePartitions int) Config {
 	c := Config{
 		HostAddress:                   hostAddress,
 		AppID:                         appID,
@@ -44,6 +52,8 @@ func NewConfig(hostAddress, appID string, placementAddresses []string, hostedAct
 		DrainOngoingCallTimeout:       defaultOngoingCallTimeout,
 		DrainRebalancedActors:         drainRebalancedActors,
 		Namespace:                     namespace,
+		Reentrancy:                    reentrancy,
+		RemindersStoragePartitions:    remindersStoragePartitions,
 	}
 
 	scanDuration, err := time.ParseDuration(actorScanInterval)
@@ -59,6 +69,11 @@ func NewConfig(hostAddress, appID string, placementAddresses []string, hostedAct
 	drainCallDuration, err := time.ParseDuration(ongoingCallTimeout)
 	if err == nil {
 		c.DrainOngoingCallTimeout = drainCallDuration
+	}
+
+	if reentrancy.MaxStackDepth == nil {
+		reentrancyLimit := defaultReentrancyStackLimit
+		c.Reentrancy.MaxStackDepth = &reentrancyLimit
 	}
 
 	return c

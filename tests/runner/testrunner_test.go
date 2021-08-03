@@ -9,9 +9,10 @@ import (
 	"fmt"
 	"testing"
 
-	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
 type fakeTestingM struct{}
@@ -20,7 +21,7 @@ func (f *fakeTestingM) Run() int {
 	return 0
 }
 
-// MockPlatform is the mock of Disposable interface
+// MockPlatform is the mock of Disposable interface.
 type MockPlatform struct {
 	mock.Mock
 }
@@ -57,6 +58,11 @@ func (m *MockPlatform) addApps(apps []kube.AppDescription) error {
 
 func (m *MockPlatform) Scale(name string, replicas int32) error {
 	args := m.Called(replicas)
+	return args.Error(0)
+}
+
+func (m *MockPlatform) SetAppEnv(name, key, value string) error {
+	args := m.Called(key)
 	return args.Error(0)
 }
 

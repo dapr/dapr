@@ -155,9 +155,33 @@ func TestMaxConcurrency(t *testing.T) {
 	})
 }
 
-func TestKubernetesDNS(t *testing.T) {
-	dns := getKubernetesDNS("a", "b")
-	assert.Equal(t, "a.b.svc.cluster.local", dns)
+func TestGetServiceAddress(t *testing.T) {
+	testCases := []struct {
+		name          string
+		namespace     string
+		clusterDomain string
+		port          int
+		expect        string
+	}{
+		{
+			port:          80,
+			name:          "a",
+			namespace:     "b",
+			clusterDomain: "cluster.local",
+			expect:        "a.b.svc.cluster.local:80",
+		},
+		{
+			port:          50001,
+			name:          "app",
+			namespace:     "default",
+			clusterDomain: "selfdefine.domain",
+			expect:        "app.default.svc.selfdefine.domain:50001",
+		},
+	}
+	for _, tc := range testCases {
+		dns := getServiceAddress(tc.name, tc.namespace, tc.clusterDomain, tc.port)
+		assert.Equal(t, tc.expect, dns)
+	}
 }
 
 func TestGetMetricsPort(t *testing.T) {

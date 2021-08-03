@@ -6,24 +6,30 @@ labels: kind/bug
 assignees: ''
 
 ---
-<!-- If you need to report a security issue with Dapr, send an email to daprct@microsoft.com. -->
+
+<!-- If you need to report a security issue please visit https://docs.dapr.io/operations/support/support-security-issues -->
+
 ## In what area(s)?
 
 <!-- Remove the '> ' to select -->
 
 > /area runtime
+
 > /area operator
+
 > /area placement
+
 > /area docs
+
 > /area test-and-release
 
 ## What version of Dapr?
 
 <!-- Delete all but your choice -->
 
-> 0.1.x
-> 0.2.x
-> Output of git describe --dirty
+> 1.1.x
+> 1.0.x
+> edge: output of `git describe --dirty`
 
 ## Expected Behavior
 

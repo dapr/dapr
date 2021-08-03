@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package service_invocation_e2e
+package serviceinvocation_tests
 
 import (
 	"encoding/base64"
@@ -111,6 +111,26 @@ func TestMain(m *testing.M) {
 			Namespace:      &secondaryNamespace,
 			AppProtocol:    "grpc",
 		},
+		{
+			AppName:        "grpcproxyclient",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_client",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
+			Config:         "grpcproxyconfig",
+		},
+		{
+			AppName:        "grpcproxyserver",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_server",
+			Replicas:       1,
+			IngressEnabled: false,
+			MetricsEnabled: true,
+			AppProtocol:    "grpc",
+			Config:         "grpcproxyconfig",
+			AppPort:        50051,
+		},
 	}
 
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
@@ -209,6 +229,20 @@ var crossNamespaceTests = []struct {
 	},
 }
 
+var grpcProxyTests = []struct {
+	in               string
+	remoteApp        string
+	appMethod        string
+	expectedResponse string
+}{
+	{
+		"Test grpc proxy",
+		"grpcproxyclient",
+		"",
+		"success",
+	},
+}
+
 func TestServiceInvocation(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
@@ -256,6 +290,39 @@ func TestServiceInvocation(t *testing.T) {
 				url,
 				body)
 
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
+}
+
+func TestGRPCProxy(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("grpcproxyclient")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+	var err error
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	for _, tt := range grpcProxyTests {
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			resp, err := utils.HTTPPost(
+				fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
 			t.Log("checking err...")
 			require.NoError(t, err)
 
@@ -691,7 +758,7 @@ func TestHeaders(t *testing.T) {
 				t.Logf("received response grpc header..%s\n", traceContext)
 				assert.Equal(t, expectedEncodedTraceID, traceContext)
 				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-				gotSc, ok := propagation.FromBinary([]byte(decoded))
+				gotSc, ok := propagation.FromBinary(decoded)
 
 				assert.True(t, ok)
 				assert.NotNil(t, gotSc)
@@ -804,15 +871,15 @@ func TestNegativeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+		resp, status, _ := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
 
 		var testResults negativeTestResult
 		json.Unmarshal(resp, &testResults)
 
 		require.False(t, testResults.MainCallSuccessful)
 		require.Equal(t, 500, status)
-		require.Contains(t, string(testResults.RawError), "Client.Timeout exceeded while awaiting headers")
-		require.NotContains(t, string(testResults.RawError), "Client waited longer than it should have.")
+		require.Contains(t, testResults.RawError, "Client.Timeout exceeded while awaiting headers")
+		require.NotContains(t, testResults.RawError, "Client waited longer than it should have.")
 	})
 
 	t.Run("service_timeout_grpc", func(t *testing.T) {
@@ -823,15 +890,15 @@ func TestNegativeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
+		resp, status, _ := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
 
 		var testResults negativeTestResult
 		json.Unmarshal(resp, &testResults)
 
 		require.False(t, testResults.MainCallSuccessful)
 		require.Equal(t, 500, status)
-		require.Contains(t, string(testResults.RawError), "rpc error: code = DeadlineExceeded desc = context deadline exceeded")
-		require.NotContains(t, string(testResults.RawError), "Client waited longer than it should have.")
+		require.Contains(t, testResults.RawError, "rpc error: code = DeadlineExceeded desc = context deadline exceeded")
+		require.NotContains(t, testResults.RawError, "Client waited longer than it should have.")
 	})
 
 	t.Run("service_parse_error_http", func(t *testing.T) {
@@ -870,7 +937,7 @@ func TestNegativeCases(t *testing.T) {
 		require.Equal(t, 500, status)
 		require.Nil(t, err)
 		require.Nil(t, testResults.RawBody)
-		require.Contains(t, string(testResults.RawError), "rpc error: code = Unknown desc = Internal Server Error")
+		require.Contains(t, testResults.RawError, "rpc error: code = Unknown desc = Internal Server Error")
 	})
 
 	t.Run("service_large_data_http", func(t *testing.T) {

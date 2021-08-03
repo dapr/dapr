@@ -8,11 +8,19 @@ package actors
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	jsoniter "github.com/json-iterator/go"
+	"github.com/stretchr/testify/assert"
+	"github.com/valyala/fasthttp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
@@ -20,18 +28,15 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	jsoniter "github.com/json-iterator/go"
-	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
-	TestAppID   = "fakeAppID"
-	TestKeyName = "key0"
+	TestAppID                       = "fakeAppID"
+	TestKeyName                     = "key0"
+	TestActorMetadataPartitionCount = 3
 )
 
-// testRequest is the request object that encapsulates the `data` field of a request
+// testRequest is the request object that encapsulates the `data` field of a request.
 type testRequest struct {
 	Data interface{} `json:"data"`
 }
@@ -56,12 +61,62 @@ func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeM
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
 }
 
+type reentrantAppChannel struct {
+	channel.AppChannel
+	nextCall []*invokev1.InvokeMethodRequest
+	callLog  []string
+	a        *actorsRuntime
+}
+
+func (r *reentrantAppChannel) GetBaseAddress() string {
+	return "http://127.0.0.1"
+}
+
+func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	r.callLog = append(r.callLog, fmt.Sprintf("Entering %s", req.Message().Method))
+	if len(r.nextCall) > 0 {
+		nextReq := r.nextCall[0]
+		r.nextCall = r.nextCall[1:]
+
+		if val, ok := req.Metadata()["Dapr-Reentrancy-Id"]; ok {
+			header := fasthttp.RequestHeader{}
+			header.Add("Dapr-Reentrancy-Id", val.Values[0])
+			nextReq.AddHeaders(&header)
+		}
+		_, err := r.a.callLocalActor(context.Background(), nextReq)
+		if err != nil {
+			return nil, err
+		}
+	}
+	r.callLog = append(r.callLog, fmt.Sprintf("Exiting %s", req.Message().Method))
+
+	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
+}
+
+type fakeStateStoreItem struct {
+	data []byte
+	etag *string
+}
+
 type fakeStateStore struct {
-	items map[string][]byte
+	items map[string]*fakeStateStoreItem
 	lock  *sync.RWMutex
 }
 
+func (f *fakeStateStore) newItem(data []byte) *fakeStateStoreItem {
+	etag, _ := uuid.NewRandom()
+	etagString := etag.String()
+	return &fakeStateStoreItem{
+		data: data,
+		etag: &etagString,
+	}
+}
+
 func (f *fakeStateStore) Init(metadata state.Metadata) error {
+	return nil
+}
+
+func (f *fakeStateStore) Ping() error {
 	return nil
 }
 
@@ -86,18 +141,40 @@ func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) 
 	defer f.lock.RUnlock()
 	item := f.items[req.Key]
 
-	return &state.GetResponse{Data: item}, nil
+	if item == nil {
+		return &state.GetResponse{Data: nil, ETag: nil}, nil
+	}
+
+	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
 }
 
 func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
-	return false, nil, nil
+	res := []state.BulkGetResponse{}
+	for _, oneRequest := range req {
+		oneResponse, err := f.Get(&state.GetRequest{
+			Key:      oneRequest.Key,
+			Metadata: oneRequest.Metadata,
+			Options:  oneRequest.Options,
+		})
+		if err != nil {
+			return false, nil, err
+		}
+
+		res = append(res, state.BulkGetResponse{
+			Key:  oneRequest.Key,
+			Data: oneResponse.Data,
+			ETag: oneResponse.ETag,
+		})
+	}
+
+	return true, res, nil
 }
 
 func (f *fakeStateStore) Set(req *state.SetRequest) error {
 	b, _ := json.Marshal(&req.Value)
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	f.items[req.Key] = b
+	f.items[req.Key] = f.newItem(b)
 
 	return nil
 }
@@ -107,11 +184,36 @@ func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 }
 
 func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	// First we check all eTags
+	for _, o := range request.Operations {
+		var eTag *string
+		key := ""
+		if o.Operation == state.Upsert {
+			key = o.Request.(state.SetRequest).Key
+			eTag = o.Request.(state.SetRequest).ETag
+		} else if o.Operation == state.Delete {
+			key = o.Request.(state.DeleteRequest).Key
+			eTag = o.Request.(state.DeleteRequest).ETag
+		}
+		item := f.items[key]
+		if eTag != nil && item != nil {
+			if *eTag != *item.etag {
+				return fmt.Errorf("etag does not match for key %v", key)
+			}
+		}
+		if eTag != nil && item == nil {
+			return fmt.Errorf("etag does not match for key not found %v", key)
+		}
+	}
+
+	// Now we can perform the operation.
 	for _, o := range request.Operations {
 		if o.Operation == state.Upsert {
 			req := o.Request.(state.SetRequest)
 			b, _ := json.Marshal(req.Value)
-			f.items[req.Key] = b
+			f.items[req.Key] = f.newItem(b)
 		} else if o.Operation == state.Delete {
 			req := o.Request.(state.DeleteRequest)
 			delete(f.items, req.Key)
@@ -121,11 +223,54 @@ func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	return nil
 }
 
+type runtimeBuilder struct {
+	appChannel  channel.AppChannel
+	config      *Config
+	featureSpec []config.FeatureSpec
+}
+
+func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
+	if b.appChannel == nil {
+		b.appChannel = new(mockAppChannel)
+	}
+
+	if b.config == nil {
+		config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
+		b.config = &config
+	}
+
+	if b.featureSpec == nil {
+		b.featureSpec = []config.FeatureSpec{}
+	}
+
+	tracingSpec := config.TracingSpec{SamplingRate: "1"}
+	store := fakeStore()
+
+	a := NewActors(store, b.appChannel, nil, *b.config, nil, tracingSpec, b.featureSpec)
+
+	return a.(*actorsRuntime)
+}
+
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "")
-	a := NewActors(store, appChannel, nil, config, nil, spec)
+	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
+	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
+
+	return a.(*actorsRuntime)
+}
+
+func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.AppChannel) *actorsRuntime {
+	spec := config.TracingSpec{SamplingRate: "1"}
+	store := fakeStore()
+	c := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{},
+		TestActorMetadataPartitionCount)
+	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{
+		{
+			Name:    config.ActorTypeMetadata,
+			Enabled: true,
+		},
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -142,14 +287,14 @@ func getTestActorTypeAndID() (string, string) {
 
 func fakeStore() state.Store {
 	return &fakeStateStore{
-		items: map[string][]byte{},
+		items: map[string]*fakeStateStoreItem{},
 		lock:  &sync.RWMutex{},
 	}
 }
 
 func fakeCallAndActivateActor(actors *actorsRuntime, actorType, actorID string) {
-	actorKey := actors.constructCompositeKey(actorType, actorID)
-	actors.actorsTable.LoadOrStore(actorKey, newActor(actorType, actorID))
+	actorKey := constructCompositeKey(actorType, actorID)
+	actors.actorsTable.LoadOrStore(actorKey, newActor(actorType, actorID, &reentrancyStackDepth))
 }
 
 func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorType, actorID string, actorIdleTimeout time.Duration) {
@@ -185,7 +330,7 @@ func TestActorIsDeactivated(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	idleTimeout := time.Second * 2
 	actorType, actorID := getTestActorTypeAndID()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 
 	deactivateActorWithDuration(testActorsRuntime, actorType, actorID, idleTimeout)
 	time.Sleep(time.Second * 3)
@@ -199,7 +344,7 @@ func TestActorIsNotDeactivated(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	idleTimeout := time.Second * 5
 	actorType, actorID := getTestActorTypeAndID()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 
 	deactivateActorWithDuration(testActorsRuntime, actorType, actorID, idleTimeout)
 	time.Sleep(time.Second * 3)
@@ -207,6 +352,39 @@ func TestActorIsNotDeactivated(t *testing.T) {
 	_, exists := testActorsRuntime.actorsTable.Load(actorKey)
 
 	assert.True(t, exists)
+}
+
+func TestStoreIsNotInited(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	testActorsRuntime.store = nil
+
+	t.Run("getReminderTrack", func(t *testing.T) {
+		r, e := testActorsRuntime.getReminderTrack("foo", "bar")
+		assert.NotNil(t, e)
+		assert.Nil(t, r)
+	})
+
+	t.Run("updateReminderTrack", func(t *testing.T) {
+		e := testActorsRuntime.updateReminderTrack("foo", "bar", 1)
+		assert.NotNil(t, e)
+	})
+
+	t.Run("CreateReminder", func(t *testing.T) {
+		e := testActorsRuntime.CreateReminder(context.Background(), &CreateReminderRequest{})
+		assert.NotNil(t, e)
+	})
+
+	t.Run("getRemindersForActorType", func(t *testing.T) {
+		r1, r2, e := testActorsRuntime.getRemindersForActorType("foo", false)
+		assert.Nil(t, r1)
+		assert.Nil(t, r2)
+		assert.NotNil(t, e)
+	})
+
+	t.Run("DeleteReminder", func(t *testing.T) {
+		e := testActorsRuntime.DeleteReminder(context.Background(), &DeleteReminderRequest{})
+		assert.NotNil(t, e)
+	})
 }
 
 func TestTimerExecution(t *testing.T) {
@@ -231,8 +409,8 @@ func TestReminderExecution(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
-
-	err := testActorsRuntime.executeReminder(actorType, actorID, "2s", "2s", "reminder1", "data")
+	noRepetition := newActorRepetition(-1)
+	err := testActorsRuntime.executeReminder(actorType, actorID, "2s", "2s", "reminder1", noRepetition, "data")
 	assert.Nil(t, err)
 }
 
@@ -240,15 +418,16 @@ func TestReminderExecutionZeroDuration(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
-
-	err := testActorsRuntime.executeReminder(actorType, actorID, "0ms", "0ms", "reminder0", "data")
+	noRepetition := newActorRepetition(-1)
+	err := testActorsRuntime.executeReminder(actorType, actorID, "0ms", "0ms", "reminder0", noRepetition, "data")
 	assert.Nil(t, err)
 }
 
 func TestSetReminderTrack(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	err := testActorsRuntime.updateReminderTrack(actorType, actorID)
+	noRepetition := -1
+	err := testActorsRuntime.updateReminderTrack(actorType, actorID, noRepetition)
 	assert.Nil(t, err)
 }
 
@@ -263,25 +442,62 @@ func TestGetReminderTrack(t *testing.T) {
 	t.Run("reminder exists", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
-		testActorsRuntime.updateReminderTrack(actorType, actorID)
+		repetition := 10
+		testActorsRuntime.updateReminderTrack(actorType, actorID, repetition)
 		r, _ := testActorsRuntime.getReminderTrack(actorType, actorID)
 		assert.NotEmpty(t, r.LastFiredTime)
+		assert.Equal(t, repetition, r.RepetitionLeft)
 	})
 }
 
 func TestCreateReminder(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime()
+	numReminders := 100
+	appChannel := new(mockAppChannel)
+	testActorsRuntime := newTestActorsRuntimeWithMock(appChannel)
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
 	err := testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Name:      "reminder1",
+		Name:      "reminder0",
 		Period:    "1s",
 		DueTime:   "1s",
 		Data:      nil,
 	})
 	assert.Nil(t, err)
+
+	// Now creates new reminders and migrates the previous one.
+	testActorsRuntimeWithPartition := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
+	testActorsRuntimeWithPartition.store = testActorsRuntime.store
+	testActorsRuntimeWithPartition.transactionalStore = testActorsRuntime.transactionalStore
+	for i := 1; i < numReminders; i++ {
+		err = testActorsRuntimeWithPartition.CreateReminder(ctx, &CreateReminderRequest{
+			ActorID:   actorID,
+			ActorType: actorType,
+			Name:      "reminder" + strconv.Itoa(i),
+			Period:    "1s",
+			DueTime:   "1s",
+			Data:      nil,
+		})
+		assert.Nil(t, err)
+	}
+
+	reminderReferences, actorTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(actorType, false)
+	assert.Nil(t, err)
+	assert.True(t, len(actorTypeMetadata.ID) > 0)
+	assert.Equal(t, TestActorMetadataPartitionCount, actorTypeMetadata.RemindersMetadata.PartitionCount)
+
+	partitions := map[uint32]bool{}
+	reminders := map[string]bool{}
+	for _, reminderRef := range reminderReferences {
+		partition := reminderRef.actorRemindersPartitionID
+		partitions[partition] = true
+		reminders[reminderRef.reminder.Name] = true
+		assert.Equal(t, actorTypeMetadata.ID, reminderRef.actorMetadataID)
+	}
+	assert.Equal(t, TestActorMetadataPartitionCount, len(partitions))
+	assert.Equal(t, numReminders, len(reminderReferences))
+	assert.Equal(t, numReminders, len(reminders))
 }
 
 func TestOverrideReminder(t *testing.T) {
@@ -295,9 +511,9 @@ func TestOverrideReminder(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
-		assert.Equal(t, "b", reminders[0].Data)
+		assert.Equal(t, "b", reminders[0].reminder.Data)
 	})
 
 	t.Run("override dueTime", func(t *testing.T) {
@@ -309,9 +525,9 @@ func TestOverrideReminder(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "2s", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
-		assert.Equal(t, "2s", reminders[0].DueTime)
+		assert.Equal(t, "2s", reminders[0].reminder.DueTime)
 	})
 
 	t.Run("override period", func(t *testing.T) {
@@ -323,9 +539,9 @@ func TestOverrideReminder(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
-		assert.Equal(t, "2s", reminders[0].Period)
+		assert.Equal(t, "2s", reminders[0].reminder.Period)
 	})
 }
 
@@ -346,26 +562,26 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		// Check reminder is updated
-		assert.Equal(t, "9s", reminders[0].Period)
-		assert.Equal(t, "1s", reminders[0].DueTime)
-		assert.Equal(t, "b", reminders[0].Data)
+		assert.Equal(t, "9s", reminders[0].reminder.Period)
+		assert.Equal(t, "1s", reminders[0].reminder.DueTime)
+		assert.Equal(t, "b", reminders[0].reminder.Data)
 
 		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "2s", "c")
 		testActorsRuntime.CreateReminder(ctx, &reminder3)
-		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		// Check reminder is updated
-		assert.Equal(t, "8s", reminders[0].Period)
-		assert.Equal(t, "2s", reminders[0].DueTime)
-		assert.Equal(t, "c", reminders[0].Data)
+		assert.Equal(t, "8s", reminders[0].reminder.Period)
+		assert.Equal(t, "2s", reminders[0].reminder.DueTime)
+		assert.Equal(t, "c", reminders[0].reminder.Data)
 
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, reminders[0].Data, request.Data)
+			assert.Equal(t, reminders[0].reminder.Data, request.Data)
 		case <-time.After(15 * time.Second):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -397,29 +613,29 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		// Check reminder is updated
-		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		// The statestore could have either reminder2 or reminder3 based on the timing.
 		// Therefore, not verifying data field
-		assert.Equal(t, "8s", reminders[0].Period)
-		assert.Equal(t, "4s", reminders[0].DueTime)
+		assert.Equal(t, "8s", reminders[0].reminder.Period)
+		assert.Equal(t, "4s", reminders[0].reminder.DueTime)
 
 		time.Sleep(50 * time.Millisecond)
 
 		reminder4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "d")
 		testActorsRuntime.CreateReminder(ctx, &reminder4)
-		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 
 		select {
 		case request := <-requestC:
 			// Test that the last reminder update fired
-			assert.Equal(t, reminders[0].Data, request.Data)
+			assert.Equal(t, reminders[0].reminder.Data, request.Data)
 
 			// Check reminder is updated
-			assert.Equal(t, "7s", reminders[0].Period)
-			assert.Equal(t, "2s", reminders[0].DueTime)
-			assert.Equal(t, "d", reminders[0].Data)
+			assert.Equal(t, "7s", reminders[0].reminder.Period)
+			assert.Equal(t, "2s", reminders[0].reminder.DueTime)
+			assert.Equal(t, "d", reminders[0].reminder.Data)
 		case <-time.After(15 * time.Second):
 			assert.Fail(t, "request channel timed out")
 		}
@@ -427,6 +643,23 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 }
 
 func TestDeleteReminder(t *testing.T) {
+	appChannel := new(mockAppChannel)
+	testActorsRuntime := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
+	reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "")
+	testActorsRuntime.CreateReminder(ctx, &reminder)
+	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+	err := testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+		Name:      "reminder1",
+		ActorID:   actorID,
+		ActorType: actorType,
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+}
+
+func TestDeleteReminderWithPartitions(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
@@ -464,14 +697,14 @@ func TestDeleteTimer(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
 
 	timer := createTimerData(actorID, actorType, "timer1", "100ms", "100ms", "callback", "")
 	err := testActorsRuntime.CreateTimer(ctx, &timer)
 	assert.Nil(t, err)
 
-	timerKey := testActorsRuntime.constructCompositeKey(actorKey, timer.Name)
+	timerKey := constructCompositeKey(actorKey, timer.Name)
 
 	_, ok := testActorsRuntime.activeTimers.Load(timerKey)
 	assert.True(t, ok)
@@ -566,7 +799,7 @@ func TestReminderFires(t *testing.T) {
 	assert.Nil(t, err)
 
 	time.Sleep(time.Millisecond * 250)
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	track, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.Nil(t, err)
 	assert.NotNil(t, track)
@@ -577,7 +810,7 @@ func TestReminderDueDate(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	reminder := createReminderData(actorID, actorType, "reminder1", "100ms", "500ms", "a")
 	err := testActorsRuntime.CreateReminder(ctx, &reminder)
 	assert.Nil(t, err)
@@ -597,7 +830,7 @@ func TestReminderPeriod(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	reminder := createReminderData(actorID, actorType, "reminder1", "100ms", "100ms", "a")
 	err := testActorsRuntime.CreateReminder(ctx, &reminder)
 	assert.Nil(t, err)
@@ -620,7 +853,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+	actorKey := constructCompositeKey(actorType, actorID)
 	reminder := createReminderData(actorID, actorType, "reminder1", "", "100ms", "a")
 	err := testActorsRuntime.CreateReminder(ctx, &reminder)
 	assert.Nil(t, err)
@@ -771,12 +1004,12 @@ func TestCallLocalActor(t *testing.T) {
 	t.Run("actor is already disposed", func(t *testing.T) {
 		// arrange
 		testActorRuntime := newTestActorsRuntime()
-		actorKey := testActorRuntime.constructCompositeKey(testActorType, testActorID)
-		act := newActor(testActorType, testActorID)
+		actorKey := constructCompositeKey(testActorType, testActorID)
+		act := newActor(testActorType, testActorID, &reentrancyStackDepth)
 
 		// add test actor
 		testActorRuntime.actorsTable.LoadOrStore(actorKey, act)
-		act.lock()
+		act.lock(nil)
 		assert.True(t, act.isBusy())
 
 		// get dispose channel for test actor
@@ -939,7 +1172,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 		health.WithRequestTimeout(100*time.Millisecond))
 
 	time.Sleep(time.Second * 2)
-	assert.False(t, testActorRuntime.appHealthy)
+	assert.False(t, testActorRuntime.appHealthy.Load())
 }
 
 func TestShutdown(t *testing.T) {
@@ -957,14 +1190,14 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 	actorType := "TestActor"
 	actorID := "abc123"
 
-	actorsRuntime := newTestActorsRuntime()
-	actorKey := actorsRuntime.constructCompositeKey(appID, actorType, actorID)
+	actorKey := constructCompositeKey(appID, actorType, actorID)
 
 	assert.Equal(t, "myapp||TestActor||abc123", actorKey)
 }
 
 func TestConfig(t *testing.T) {
-	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default")
+	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500,
+		"1s", "2s", "3s", true, "default", config.ReentrancyConfig{}, 0)
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
 	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
@@ -975,6 +1208,33 @@ func TestConfig(t *testing.T) {
 	assert.Equal(t, "3s", c.DrainOngoingCallTimeout.String())
 	assert.Equal(t, true, c.DrainRebalancedActors)
 	assert.Equal(t, "default", c.Namespace)
+}
+
+func TestReentrancyConfig(t *testing.T) {
+	t.Run("Test empty reentrancy values", func(t *testing.T) {
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
+			config.ReentrancyConfig{}, 0)
+		assert.False(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
+	})
+
+	t.Run("Test minimum reentrancy values", func(t *testing.T) {
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
+			config.ReentrancyConfig{Enabled: true}, 0)
+		assert.True(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
+	})
+
+	t.Run("Test full reentrancy values", func(t *testing.T) {
+		reentrancyLimit := 64
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
+			config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}, 0)
+		assert.True(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 64, *c.Reentrancy.MaxStackDepth)
+	})
 }
 
 func TestHostValidation(t *testing.T) {
@@ -1002,4 +1262,92 @@ func TestHostValidation(t *testing.T) {
 		err := ValidateHostEnvironment(false, modes.StandaloneMode, "")
 		assert.NoError(t, err)
 	})
+}
+
+func TestParseDuration(t *testing.T) {
+	t.Run("parse existing duration", func(t *testing.T) {
+		duration, repetition, err := parseDuration("0h30m0s")
+		assert.Equal(t, time.Minute*30, duration)
+		assert.Equal(t, -1, repetition)
+		assert.Nil(t, err)
+	})
+	t.Run("parse ISO 8601 duration", func(t *testing.T) {
+		duration, repetition, err := parseDuration("R5/PT30M")
+		assert.Equal(t, time.Minute*30, duration)
+		assert.Equal(t, 5, repetition)
+		assert.Nil(t, err)
+	})
+}
+
+func TestBasicReentrantActorLocking(t *testing.T) {
+	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
+	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrant", "1")
+
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true}, 0)
+	reentrantAppChannel := new(reentrantAppChannel)
+	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
+	reentrantAppChannel.callLog = []string{}
+	builder := runtimeBuilder{
+		appChannel:  reentrantAppChannel,
+		config:      &reentrantConfig,
+		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+	}
+	testActorRuntime := builder.buildActorRuntime()
+	reentrantAppChannel.a = testActorRuntime
+
+	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, []string{
+		"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
+		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first",
+	}, reentrantAppChannel.callLog)
+}
+
+func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
+	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
+	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("other", "1")
+	req3 := invokev1.NewInvokeMethodRequest("third").WithActor("reentrant", "1")
+
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true}, 0)
+	reentrantAppChannel := new(reentrantAppChannel)
+	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
+	reentrantAppChannel.callLog = []string{}
+	builder := runtimeBuilder{
+		appChannel:  reentrantAppChannel,
+		config:      &reentrantConfig,
+		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+	}
+	testActorRuntime := builder.buildActorRuntime()
+	reentrantAppChannel.a = testActorRuntime
+
+	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, []string{
+		"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
+		"Entering actors/reentrant/1/method/third", "Exiting actors/reentrant/1/method/third",
+		"Exiting actors/other/1/method/second", "Exiting actors/reentrant/1/method/first",
+	}, reentrantAppChannel.callLog)
+}
+
+func TestReentrancyStackLimit(t *testing.T) {
+	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
+
+	stackDepth := 0
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}, 0)
+	reentrantAppChannel := new(reentrantAppChannel)
+	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
+	reentrantAppChannel.callLog = []string{}
+	builder := runtimeBuilder{
+		appChannel:  reentrantAppChannel,
+		config:      &reentrantConfig,
+		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+	}
+	testActorRuntime := builder.buildActorRuntime()
+	reentrantAppChannel.a = testActorRuntime
+
+	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
 }

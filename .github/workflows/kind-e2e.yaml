@@ -43,29 +43,29 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.17.11
-        - v1.18.8
-        - v1.19.1
+        - v1.19.11
+        - v1.20.7
+        - v1.21.1
         mode:
         - ha
         - non-ha
         # Map between K8s and KinD versions.
         # This is attempting to make it a bit clearer what's being tested.
-        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.9.0
+        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.0
         include:
-        - k8s-version: v1.17.11
-          kind-version: v0.9.0
-          kind-image-sha: sha256:5240a7a2c34bf241afb54ac05669f8a46661912eab05705d660971eeb12f6555
-        - k8s-version: v1.18.8
-          kind-version: v0.9.0
-          kind-image-sha: sha256:f4bcc97a0ad6e7abaf3f643d890add7efe6ee4ab90baeb374b4f41a4c95567eb
-        - k8s-version: v1.19.1
-          kind-version: v0.9.0
-          kind-image-sha: sha256:98cf5288864662e37115e362b23e4369c8c4a408f99cbc06e58ac30ddc721600
+        - k8s-version: v1.19.11
+          kind-version: v0.11.0
+          kind-image-sha: sha256:07db187ae84b4b7de440a73886f008cf903fcf5764ba8106a9fd5243d6f32729
+        - k8s-version: v1.20.7
+          kind-version: v0.11.0
+          kind-image-sha: sha256:cbeaf907fc78ac97ce7b625e4bf0de16e3ea725daf6b04f930bd14c67c671ff9
+        - k8s-version: v1.21.1
+          kind-version: v0.11.0
+          kind-image-sha: sha256:69860bda5563ac81e3c0057d654b5253219618a22ec3a346306239bba8cfa1a6
         exclude:
-        - k8s-version: v1.17.11
+        - k8s-version: v1.19.11
           mode: non-ha
-        - k8s-version: v1.18.8
+        - k8s-version: v1.20.7
           mode: non-ha
     steps:
     - name: Set up Go ${{ env.GOVER }}
@@ -76,7 +76,6 @@ jobs:
       uses: actions/checkout@v2
       with:
         path: ./src/github.com/dapr/dapr
-
     - name: Configure KinD
       # Generate a KinD configuration file that uses:
       # (a) a couple of worker nodes: this is needed to run both

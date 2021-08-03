@@ -6,15 +6,19 @@ labels: kind/proposal
 assignees: ''
 
 ---
-<!-- If you need to report a security issue with Dapr, send an email to daprct@microsoft.com. -->
+<!-- If you need to report a security issue please visit https://docs.dapr.io/operations/support/support-security-issues -->
 ## In what area(s)?
 
 <!-- Remove the '> ' to select -->
 
 > /area runtime
+
 > /area operator
+
 > /area placement
+
 > /area docs
+
 > /area test-and-release
 ## Describe the proposal
 <!-- Please use this for a concrete design proposal for functionality. -->

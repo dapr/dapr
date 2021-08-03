@@ -67,6 +67,25 @@ jobs:
         uses: actions/checkout@v2
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
+      - name: Check white space in .md files
+        if: matrix.target_os == 'linux' && github.event_name == 'pull_request'
+        run: |
+          TRAILING_WHITESPACE=0
+          # only check changed docs in pr
+          for file in $(git diff --cached --name-only --diff-filter=ACRMTU $GITHUB_BASE_REF | grep "\.md"); do
+            if grep -r '[[:blank:]]$' "$1" > /dev/null; then
+              echo "trailing whitespace: ${1}" >&2
+              ERRORS=yes
+              ((TRAILING_WHITESPACE=TRAILING_WHITESPACE+1))
+            fi
+          done
+          if [[ -n "$ERRORS" ]]; then
+            echo >&2
+            echo "ERRORS found" >&2
+            echo "${TRAILING_WHITESPACE} files with trailing whitespace" >&2
+            echo >&2
+            exit 1
+          fi
       - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         uses: golangci/golangci-lint-action@v2.2.1
@@ -75,6 +94,18 @@ jobs:
       - name: Run go mod tidy check diff
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: make modtidy check-diff
+      - name: Run gen-proto check diff
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        run: |
+          wget https://github.com/protocolbuffers/protobuf/releases/download/v3.14.0/protoc-3.14.0-linux-x86_64.zip
+          unzip protoc-3.14.0-linux-x86_64.zip -d protoc
+          sudo cp -r protoc/include/google/ /usr/local/include/
+          sudo chmod -R 755 /usr/local/include/google
+          sudo cp protoc/bin/protoc /usr/local/bin/
+          sudo chmod +x /usr/local/bin/protoc
+          rm -r protoc protoc-3.14.0-linux-x86_64.zip
+          make init-proto
+          make gen-proto check-proto-diff
       - name: Run make test
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"

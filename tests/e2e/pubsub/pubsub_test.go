@@ -41,11 +41,12 @@ const (
 	subscriberAppName = "pubsub-subscriber"
 )
 
-// sent to the publisher app, which will publish data to dapr
+// sent to the publisher app, which will publish data to dapr.
 type publishCommand struct {
-	Topic    string `json:"topic"`
-	Data     string `json:"data"`
-	Protocol string `json:"protocol"`
+	Topic    string            `json:"topic"`
+	Data     string            `json:"data"`
+	Protocol string            `json:"protocol"`
+	Metadata map[string]string `json:"metadata"`
 }
 
 type callSubscriberMethodRequest struct {
@@ -54,20 +55,23 @@ type callSubscriberMethodRequest struct {
 	Method    string `json:"method"`
 }
 
-// data returned from the subscriber app
+// data returned from the subscriber app.
 type receivedMessagesResponse struct {
-	ReceivedByTopicA []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC []string `json:"pubsub-c-topic"`
+	ReceivedByTopicA   []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
+	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
 }
 
-// sends messages to the publisher app.  The publisher app does the actual publish
-func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string) ([]string, error) {
+// sends messages to the publisher app.  The publisher app does the actual publish.
+func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string, metadata map[string]string) ([]string, error) {
 	var sentMessages []string
 	commandBody := publishCommand{
 		Topic:    fmt.Sprintf("%s-%s", topic, protocol),
 		Protocol: protocol,
+		Metadata: metadata,
 	}
+	//nolint: gosec
 	offset := rand.Intn(randomOffsetMax)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
 		// create and marshal message
@@ -98,19 +102,26 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 
 func testPublish(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
 	var err error
-	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol)
+	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil)
 	require.NoError(t, err)
 
-	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol)
+	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol, nil)
 	require.NoError(t, err)
 
-	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol)
+	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, nil)
+	require.NoError(t, err)
+
+	metadata := map[string]string{
+		"rawPayload": "true",
+	}
+	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata)
 	require.NoError(t, err)
 
 	return receivedMessagesResponse{
-		ReceivedByTopicA: sentTopicAMessages,
-		ReceivedByTopicB: sentTopicBMessages,
-		ReceivedByTopicC: sentTopicCMessages,
+		ReceivedByTopicA:   sentTopicAMessages,
+		ReceivedByTopicB:   sentTopicBMessages,
+		ReceivedByTopicC:   sentTopicCMessages,
+		ReceivedByTopicRaw: sentTopicRawMessages,
 	}
 }
 
@@ -188,9 +199,10 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
 			// empty string slices
-			ReceivedByTopicA: []string{},
-			ReceivedByTopicB: []string{},
-			ReceivedByTopicC: []string{},
+			ReceivedByTopicA:   []string{},
+			ReceivedByTopicB:   []string{},
+			ReceivedByTopicC:   []string{},
+			ReceivedByTopicRaw: []string{},
 		})
 	} else {
 		// validate redelivery of messages
@@ -249,12 +261,13 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		err = json.Unmarshal(resp, &appResp)
 		require.NoError(t, err)
 
-		log.Printf("subscriber receieved %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic",
-			len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC))
+		log.Printf("subscriber receieved %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic and %d on pubsub-raw-topic",
+			len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC), len(appResp.ReceivedByTopicRaw))
 
 		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
 			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
-			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) {
+			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
+			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(1 * time.Second)
 		} else {
@@ -269,10 +282,13 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	sort.Strings(appResp.ReceivedByTopicB)
 	sort.Strings(sentMessages.ReceivedByTopicC)
 	sort.Strings(appResp.ReceivedByTopicC)
+	sort.Strings(sentMessages.ReceivedByTopicRaw)
+	sort.Strings(appResp.ReceivedByTopicRaw)
 
 	require.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA)
 	require.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB)
 	require.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC)
+	require.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw)
 }
 
 func TestMain(m *testing.M) {

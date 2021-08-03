@@ -67,3 +67,7 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.image.imagePullSecrets }}
 {{- end }}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}

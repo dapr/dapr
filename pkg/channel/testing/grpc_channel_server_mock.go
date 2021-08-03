@@ -12,14 +12,15 @@ import (
 	"strconv"
 	"time"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-// MockServer implementation of fake user app server
+// MockServer implementation of fake user app server.
 type MockServer struct {
 	Error                    error
 	Subscriptions            []*runtimev1pb.TopicSubscription

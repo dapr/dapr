@@ -15,12 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
+
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc"
 )
 
 // TODO: Add APIVersion testing
@@ -41,16 +42,14 @@ func TestInvokeMethod(t *testing.T) {
 	defer close(t, conn)
 	assert.NoError(t, err)
 
-	t.Run("invoke method", func(t *testing.T) {
-		c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", timeout: 120 * time.Second}
-		assert.Equal(t, 120*time.Second, c.timeout)
-		req := invokev1.NewInvokeMethodRequest("method")
-		req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
-		response, err := c.InvokeMethod(context.Background(), req)
-		assert.NoError(t, err)
-		contentType, body := response.RawData()
 
-		assert.Equal(t, "application/json", contentType)
+	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1",timeout: 120 * time.Second, maxRequestBodySize: 4}
+	req := invokev1.NewInvokeMethodRequest("method")
+	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+	response, err := c.InvokeMethod(context.Background(), req)
+	assert.NoError(t, err)
+	contentType, body := response.RawData()
+	grpcServer.Stop()
 
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)
