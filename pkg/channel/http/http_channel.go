@@ -53,7 +53,7 @@ type Channel struct {
 // CreateLocalChannel creates an HTTP AppChannel
 // nolint:gosec
 
-func CreateLocalChannel(port, maxConcurrency int,timeout time.Duration, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, timeout time.Duration, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int) (channel.AppChannel, error) {
 	scheme := httpScheme
 	if sslEnabled {
 		scheme = httpsScheme
@@ -155,8 +155,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	// Send request to user application
 	var resp = fasthttp.AcquireResponse()
 	err := h.client.DoTimeout(channelReq, resp, h.client.ReadTimeout)
-	resp := fasthttp.AcquireResponse()
-	err := h.client.Do(channelReq, resp)
 	defer func() {
 		fasthttp.ReleaseRequest(channelReq)
 		fasthttp.ReleaseResponse(resp)
