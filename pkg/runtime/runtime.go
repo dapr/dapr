@@ -773,6 +773,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
+			go a.suspendInboundTrafficUntilAppAvailable()
 			return nil, errors.Wrap(err, "error invoking app")
 		}
 
