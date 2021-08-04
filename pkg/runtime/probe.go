@@ -21,25 +21,7 @@ type PodInfo struct {
 const portScanTimeout = 100 * time.Millisecond
 
 func (rt *DaprRuntime) ProbeApplicationAvailability() (bool, error) {
-	pod, err := getPod(rt.namespace, rt.podInfo.podName)
-	if err != nil {
-		return true, err // assume app is available when error occurs
-	}
-
-	if pod != nil {
-		podStatus := pod.Status
-
-		appContainerName := getAppContainer(pod).Name
-		appContainerStatus := getContainerStatusByName(&podStatus, appContainerName)
-		if appContainerName == "" {
-			return true, fmt.Errorf("cannot identify app container in pod %v", pod.Name) // assume app is available when error occurs
-		} else if !appContainerStatus.Ready {
-			log.Debugf("app container status: %+v", appContainerStatus)
-			return false, nil
-		}
-	}
-
-	if rt.podInfo.ApplicationProbingPort != 0 {
+	if rt.podInfo.ApplicationProbingPort != -1 {
 		return scanLocalPort(rt.podInfo.ApplicationProbingPort, portScanTimeout), nil
 	} else { // if no container info is found and no port is found, return true by default
 		return true, nil
