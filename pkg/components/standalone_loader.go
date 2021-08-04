@@ -38,8 +38,7 @@ func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneC
 
 // LoadComponents loads dapr components from a given directory.
 func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
-	dir := s.config.ComponentsPath
-	files, err := ioutil.ReadDir(dir)
+	files, err := ioutil.ReadDir(s.config.ComponentsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -48,20 +47,32 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 
 	for _, file := range files {
 		if !file.IsDir() && s.isYaml(file.Name()) {
-			path := filepath.Join(dir, file.Name())
-
-			b, err := ioutil.ReadFile(path)
-			if err != nil {
-				log.Warnf("error reading file %s : %s", path, err)
-				continue
+			components := s.loadComponentsFromFile(file.Name())
+			if len(components) > 0 {
+				list = append(list, components...)
 			}
-
-			components, _ := s.decodeYaml(path, b)
-			list = append(list, components...)
 		}
 	}
 
 	return list, nil
+}
+
+func (s *StandaloneComponents) loadComponentsFromFile(filename string) []components_v1alpha1.Component {
+	var errors []error
+
+	components := []components_v1alpha1.Component{}
+	path := filepath.Join(s.config.ComponentsPath, filename)
+
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Warnf("daprd load components error when reading file %s : %s", path, err)
+		return components
+	}
+	components, errors = s.decodeYaml(b)
+	for _, err := range errors {
+		log.Warnf("daprd load components error when parsing components yaml resource in %s : %s", path, err)
+	}
+	return components
 }
 
 // isYaml checks whether the file is yaml or not.
@@ -74,7 +85,7 @@ func (s *StandaloneComponents) isYaml(fileName string) bool {
 }
 
 // decodeYaml decodes the yaml document.
-func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]components_v1alpha1.Component, []error) {
+func (s *StandaloneComponents) decodeYaml(b []byte) ([]components_v1alpha1.Component, []error) {
 	list := []components_v1alpha1.Component{}
 	errors := []error{}
 	scanner := bufio.NewScanner(bytes.NewReader(b))
@@ -86,6 +97,11 @@ func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]componen
 		err := s.decode(scanner, &comp)
 		if err == io.EOF {
 			break
+		}
+
+		if err != nil {
+			errors = append(errors, err)
+			continue
 		}
 
 		if comp.Kind != componentKind {
