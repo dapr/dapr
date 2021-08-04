@@ -64,7 +64,7 @@ func testDeclarativeSubscriptionV1() subscriptionsapi_v1alpha1.Subscription {
 	return subscriptionsapi_v1alpha1.Subscription{
 		TypeMeta: v1.TypeMeta{
 			Kind:       "Subscription",
-			APIVersion: subscriptions.APIVersionV1alpha1,
+			APIVersion: APIVersionV1alpha1,
 		},
 		Spec: subscriptionsapi_v1alpha1.SubscriptionSpec{
 			Pubsubname: "pubsub",
@@ -81,7 +81,7 @@ func testDeclarativeSubscriptionV2() subscriptionsapi_v2alpha1.Subscription {
 	return subscriptionsapi_v2alpha1.Subscription{
 		TypeMeta: v1.TypeMeta{
 			Kind:       "Subscription",
-			APIVersion: subscriptions.APIVersionV2alpha1,
+			APIVersion: APIVersionV2alpha1,
 		},
 		Spec: subscriptionsapi_v2alpha1.SubscriptionSpec{
 			Pubsubname: "pubsub",
