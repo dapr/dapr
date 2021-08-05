@@ -10,6 +10,7 @@ package bindings_e2e
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"testing"
@@ -52,8 +53,9 @@ var testMessages = []string{
 const (
 	// Number of times to call the endpoint to check for health.
 	numHealthChecks = 60
-	// Number of seconds to wait for binding travelling throughout the cluster.
-	bindingPropagationDelay = 10
+
+	receiveMessageRetries = 20
+	receiveMessageSleep   = 1 * time.Second
 )
 
 var tr *runner.TestRunner
@@ -118,15 +120,31 @@ func TestBindings(t *testing.T) {
 	// act for http
 	httpPostWithAssert(t, fmt.Sprintf("%s/tests/send", outputExternalURL), body, http.StatusOK)
 
-	// This delay allows all the messages to reach corresponding input bindings.
-	time.Sleep(bindingPropagationDelay * time.Second)
-
-	// assert for HTTP
-	resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil, http.StatusOK)
-
 	var decodedResponse receivedTopicsResponse
-	err = json.Unmarshal(resp, &decodedResponse)
-	require.NoError(t, err)
+
+	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
+		if retryCount > 0 {
+			log.Printf("Differing lengths in received vs. sent HTTP messages, retrying.")
+		}
+
+		// This delay allows all the messages to reach corresponding input bindings.
+		time.Sleep(receiveMessageSleep)
+
+		// assert for HTTP
+		resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil, http.StatusOK)
+		err = json.Unmarshal(resp, &decodedResponse)
+		require.NoError(t, err)
+
+		numReceivedMessages := len(decodedResponse.ReceivedMessages)
+		numFailedMessages := len(decodedResponse.FailedMessage)
+		totalReceived := numReceivedMessages + numFailedMessages
+
+		log.Printf("binding HTTP messages: received %d, failed %d", numReceivedMessages, numFailedMessages)
+
+		if totalReceived == len(testMessages) {
+			break
+		}
+	}
 
 	// Only the first message fails, all other messages are successfully consumed.
 	// nine messages succeed.
@@ -137,15 +155,29 @@ func TestBindings(t *testing.T) {
 	// act for gRPC
 	httpPostWithAssert(t, fmt.Sprintf("%s/tests/sendGRPC", outputExternalURL), body, http.StatusOK)
 
-	// This delay allows all the messages to reach corresponding input bindings.
-	time.Sleep(bindingPropagationDelay * time.Second)
+	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
+		if retryCount > 0 {
+			log.Printf("Differing lengths in received vs. sent gRPC messages, retrying.")
+		}
 
-	// assert for gRPC
-	resp = httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics_grpc", outputExternalURL), nil, http.StatusOK)
+		// This delay allows all the messages to reach corresponding input bindings.
+		time.Sleep(receiveMessageSleep)
 
-	// assert for gRPC
-	err = json.Unmarshal(resp, &decodedResponse)
-	require.NoError(t, err)
+		// assert for HTTP
+		resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics_grpc", outputExternalURL), nil, http.StatusOK)
+		err = json.Unmarshal(resp, &decodedResponse)
+		require.NoError(t, err)
+
+		numReceivedMessages := len(decodedResponse.ReceivedMessages)
+		numFailedMessages := len(decodedResponse.FailedMessage)
+		totalReceived := numReceivedMessages + numFailedMessages
+
+		log.Printf("binding gRPC messages: received %d, failed %d", numReceivedMessages, numFailedMessages)
+
+		if totalReceived == len(testMessages) {
+			break
+		}
+	}
 
 	// Only the first message fails, all other messages are successfully consumed.
 	// nine messages succeed.
