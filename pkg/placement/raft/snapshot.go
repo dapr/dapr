@@ -18,15 +18,8 @@ type snapshot struct {
 
 // Persist saves the FSM snapshot out to the given sink.
 func (s *snapshot) Persist(sink raft.SnapshotSink) error {
-	b, err := marshalMsgPack(s.state)
-	if err != nil {
+	if err := s.state.persist(sink); err != nil {
 		sink.Cancel()
-		return err
-	}
-
-	if _, err := sink.Write(b); err != nil {
-		sink.Cancel()
-		return err
 	}
 
 	return sink.Close()
