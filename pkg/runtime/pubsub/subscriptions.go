@@ -10,14 +10,14 @@ import (
 
 	"github.com/ghodss/yaml"
 	"google.golang.org/protobuf/types/known/emptypb"
-
-	"github.com/dapr/kit/logger"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -126,20 +126,33 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 }
 
 func marshalSubscription(b []byte) (*Subscription, error) {
-	var sub subscriptionsapi.Subscription
-	err := yaml.Unmarshal(b, &sub)
+	// Parse only the type metadata first in order
+	// to filter out non-Subscriptions without other errors.
+	type typeInfo struct {
+		metav1.TypeMeta `json:",inline"`
+	}
+
+	var ti typeInfo
+	err := yaml.Unmarshal(b, &ti)
 	if err != nil {
 		return nil, err
 	}
 
-	if sub.Kind != subscriptionKind {
+	if ti.Kind != subscriptionKind {
 		return nil, nil
+	}
+
+	var sub subscriptionsapi.Subscription
+	err = yaml.Unmarshal(b, &sub)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Subscription{
 		Topic:      sub.Spec.Topic,
 		PubsubName: sub.Spec.Pubsubname,
 		Route:      sub.Spec.Route,
+		Metadata:   sub.Spec.Metadata,
 		Scopes:     sub.Scopes,
 	}, nil
 }

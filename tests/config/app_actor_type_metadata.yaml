@@ -1,0 +1,8 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: actortypemetadata
+spec:
+  features:
+    - name: Actor.TypeMetadata
+      enabled: true

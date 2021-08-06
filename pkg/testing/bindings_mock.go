@@ -1,8 +1,9 @@
 package testing
 
 import (
-	"github.com/dapr/components-contrib/bindings"
 	mock "github.com/stretchr/testify/mock"
+
+	"github.com/dapr/components-contrib/bindings"
 )
 
 // MockBinding is a mock input/output component object.
