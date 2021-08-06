@@ -671,6 +671,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			Data:     data,
 			Metadata: metadata,
 		}
+		start := time.Now()
 		resp, err := client.OnBindingEvent(ctx, req)
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
@@ -679,6 +680,12 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.AddAttributesToSpan(span, m)
 			diag.UpdateSpanStatusFromGRPCError(span, err)
 			span.End()
+		}
+		if diag.DefaultGRPCMonitoring.IsEnabled() {
+			diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
+				"OnBindingEvent",
+				status.Code(err).String(),
+				int64(len(resp.GetData())), start)
 		}
 
 		if err != nil {
@@ -702,17 +709,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				if err == nil {
 					response.Data = d
 				}
-			}
-
-			// TODO: THIS SHOULD BE DEPRECATED FOR v1.3
-			for _, s := range resp.States {
-				var i interface{}
-				a.json.Unmarshal(s.Value, &i)
-
-				response.State = append(response.State, state.SetRequest{
-					Key:   s.Key,
-					Value: i,
-				})
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
@@ -739,7 +735,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
 		}
-
+		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code != nethttp.StatusOK {
 			_, body := resp.RawData()
 			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
@@ -747,11 +743,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
 			appResponseBody = resp.Message().Data.Value
-		}
-
-		// TODO: THIS SHOULD BE DEPRECATED FOR v1.3
-		if err := a.json.Unmarshal(resp.Message().Data.Value, &response); err != nil {
-			log.Debugf("error deserializing app response: %s", err)
 		}
 	}
 

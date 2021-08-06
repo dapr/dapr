@@ -314,13 +314,14 @@ func createReminderData(actorID, actorType, name, period, dueTime, data string) 
 	}
 }
 
-func createTimerData(actorID, actorType, name, period, dueTime, callback, data string) CreateTimerRequest {
+func createTimerData(actorID, actorType, name, period, dueTime, ttl, callback, data string) CreateTimerRequest {
 	return CreateTimerRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Name:      name,
 		Period:    period,
 		DueTime:   dueTime,
+		TTL:       ttl,
 		Data:      data,
 		Callback:  callback,
 	}
@@ -700,7 +701,7 @@ func TestDeleteTimer(t *testing.T) {
 	actorKey := constructCompositeKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
 
-	timer := createTimerData(actorID, actorType, "timer1", "100ms", "100ms", "callback", "")
+	timer := createTimerData(actorID, actorType, "timer1", "100ms", "100ms", "", "callback", "")
 	err := testActorsRuntime.CreateTimer(ctx, &timer)
 	assert.Nil(t, err)
 
@@ -732,14 +733,14 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
 		timerName := "timer1"
 
-		timer := createTimerData(actorID, actorType, timerName, "10s", "1s", "callback1", "a")
+		timer := createTimerData(actorID, actorType, timerName, "10s", "1s", "0s", "callback1", "a")
 		err := testActorsRuntime.CreateTimer(ctx, &timer)
 		assert.Nil(t, err)
 
-		timer2 := createTimerData(actorID, actorType, timerName, "9s", "1s", "callback2", "b")
+		timer2 := createTimerData(actorID, actorType, timerName, "PT9S", "PT1S", "PT0S", "callback2", "b")
 		testActorsRuntime.CreateTimer(ctx, &timer2)
 
-		timer3 := createTimerData(actorID, actorType, timerName, "8s", "2s", "callback3", "c")
+		timer3 := createTimerData(actorID, actorType, timerName, "8s", "2s", "", "callback3", "c")
 		testActorsRuntime.CreateTimer(ctx, &timer3)
 
 		select {
@@ -764,20 +765,20 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 		timerName := "timer1"
 		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
 
-		timer := createTimerData(actorID, actorType, timerName, "10s", "3s", "callback1", "a")
+		timer := createTimerData(actorID, actorType, timerName, "10s", "3s", "", "callback1", "a")
 		err := testActorsRuntime.CreateTimer(ctx, &timer)
 		assert.Nil(t, err)
 
 		time.Sleep(50 * time.Millisecond)
 
-		timer2 := createTimerData(actorID, actorType, timerName, "8s", "4s", "callback2", "b")
-		timer3 := createTimerData(actorID, actorType, timerName, "8s", "4s", "callback3", "c")
+		timer2 := createTimerData(actorID, actorType, timerName, "8s", "4s", "", "callback2", "b")
+		timer3 := createTimerData(actorID, actorType, timerName, "8s", "4s", "", "callback3", "c")
 		go testActorsRuntime.CreateTimer(ctx, &timer2)
 		go testActorsRuntime.CreateTimer(ctx, &timer3)
 
 		time.Sleep(2 * time.Second)
 
-		timer4 := createTimerData(actorID, actorType, timerName, "7s", "2s", "callback4", "d")
+		timer4 := createTimerData(actorID, actorType, timerName, "7s", "2s", "", "callback4", "d")
 		testActorsRuntime.CreateTimer(ctx, &timer4)
 
 		select {
@@ -787,6 +788,203 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 		case <-time.After(15 * time.Second):
 			assert.Fail(t, "request channel timed out")
 		}
+	})
+}
+
+func timerRepeats(ctx context.Context, t *testing.T, dueTimeInSec, repeats int) {
+	requestC := make(chan testRequest, 10)
+	appChannel := mockAppChannel{
+		requestC: requestC,
+	}
+	testActorsRuntime := newTestActorsRuntimeWithMock(&appChannel)
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+
+	var period, dueTime string
+	if repeats == -1 {
+		// if period is not set, fire once
+		period = ""
+		repeats = 1
+	} else {
+		period = fmt.Sprintf("R%d/PT2S", repeats)
+	}
+	if dueTimeInSec > 0 {
+		dueTime = fmt.Sprintf("%ds", dueTimeInSec)
+	}
+
+	timer := createTimerData(actorID, actorType, "timer", period, dueTime, "", "callback", "data")
+	err := testActorsRuntime.CreateTimer(ctx, &timer)
+	if repeats == 0 {
+		assert.NotNil(t, err)
+		assert.Equal(t, "timer cat||e485d5de-de48-45ab-816e-6cc700d18ace||timer has zero repetitions", err.Error())
+		return
+	}
+	assert.Nil(t, err)
+
+	cnt := 0
+	// timeout the test after 2s + repeats * 2s + 4s
+	tm := time.NewTimer(time.Duration(dueTimeInSec)*time.Second + time.Duration((repeats+2)*2)*time.Second)
+	defer func() {
+		if tm.Stop() {
+			<-tm.C
+		}
+	}()
+L:
+	for {
+		select {
+		case request := <-requestC:
+			assert.Equal(t, timer.Data, request.Data)
+			cnt++
+			if cnt > repeats {
+				break L
+			}
+		case <-tm.C:
+			break L
+		}
+	}
+	assert.Equal(t, repeats, cnt)
+}
+
+func TestTimerRepeats(t *testing.T) {
+	ctx := context.Background()
+	t.Run("timer with dueTime is ignored", func(t *testing.T) {
+		timerRepeats(ctx, t, 2, 0)
+	})
+	t.Run("timer without dueTime is ignored", func(t *testing.T) {
+		timerRepeats(ctx, t, 0, 0)
+	})
+	t.Run("timer with dueTime repeats once", func(t *testing.T) {
+		timerRepeats(ctx, t, 2, 1)
+	})
+	t.Run("timer without dueTime repeats once", func(t *testing.T) {
+		timerRepeats(ctx, t, 0, 1)
+	})
+	t.Run("timer with dueTime repeats not set", func(t *testing.T) {
+		timerRepeats(ctx, t, 2, -1)
+	})
+	t.Run("timer without dueTime repeats not set", func(t *testing.T) {
+		timerRepeats(ctx, t, 0, -1)
+	})
+	t.Run("timer with dueTime repeats 3 times", func(t *testing.T) {
+		timerRepeats(ctx, t, 2, 3)
+	})
+	t.Run("timer without dueTime repeats 3 times", func(t *testing.T) {
+		timerRepeats(ctx, t, 0, 3)
+	})
+}
+
+func timerTTL(ctx context.Context, t *testing.T, iso bool) {
+	requestC := make(chan testRequest, 10)
+	appChannel := mockAppChannel{
+		requestC: requestC,
+	}
+	testActorsRuntime := newTestActorsRuntimeWithMock(&appChannel)
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+
+	ttl := "7s"
+	if iso {
+		ttl = "PT7S"
+	}
+	timer := createTimerData(actorID, actorType, "timer", "R5/PT2S", "2s", ttl, "callback", "data")
+	err := testActorsRuntime.CreateTimer(ctx, &timer)
+	assert.Nil(t, err)
+
+	cnt := 0
+	tm := time.NewTimer(10 * time.Second)
+	defer func() {
+		if tm.Stop() {
+			<-tm.C
+		}
+	}()
+L:
+	for {
+		select {
+		case request := <-requestC:
+			assert.Equal(t, timer.Data, request.Data)
+			cnt++
+			if cnt > 4 {
+				break L
+			}
+		case <-tm.C:
+			break L
+		}
+	}
+	assert.Equal(t, 4, cnt)
+}
+
+func TestTimerTTL(t *testing.T) {
+	ctx := context.Background()
+	t.Run("timer ttl", func(t *testing.T) {
+		timerTTL(ctx, t, false)
+	})
+	t.Run("timer ttl with ISO 8601", func(t *testing.T) {
+		timerTTL(ctx, t, true)
+	})
+}
+
+func timerExpiredTTL(ctx context.Context, t *testing.T, dueTimeInSec, repeats int, ttl string, valid bool) {
+	requestC := make(chan testRequest, 10)
+	appChannel := mockAppChannel{
+		requestC: requestC,
+	}
+	testActorsRuntime := newTestActorsRuntimeWithMock(&appChannel)
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+
+	var period, dueTime string
+	if repeats == -1 {
+		period = ""
+	} else {
+		period = fmt.Sprintf("R%d/PT2S", repeats)
+	}
+	if dueTimeInSec > 0 {
+		dueTime = fmt.Sprintf("%ds", dueTimeInSec)
+	}
+
+	timer := createTimerData(actorID, actorType, "timer", period, dueTime, ttl, "callback", "data")
+	err := testActorsRuntime.CreateTimer(ctx, &timer)
+	if !valid {
+		assert.NotNil(t, err)
+		assert.Equal(t, fmt.Sprintf("unsupported time/duration format %q", ttl), err.Error())
+		return
+	}
+	assert.Nil(t, err)
+
+	// timeout the test after dueTime + 3s
+	tm := time.NewTimer(time.Duration(dueTimeInSec+3) * time.Second)
+	defer func() {
+		if tm.Stop() {
+			<-tm.C
+		}
+	}()
+
+	select {
+	case <-requestC:
+		assert.Error(t, fmt.Errorf("unexpected request"))
+	case <-tm.C:
+	}
+}
+
+func TestTimerExpiredTTL(t *testing.T) {
+	ctx := context.Background()
+	t.Run("timer with dueTime ttl invalid", func(t *testing.T) {
+		timerExpiredTTL(ctx, t, 2, -1, "invalid", false)
+	})
+	t.Run("timer without dueTime ttl invalid", func(t *testing.T) {
+		timerExpiredTTL(ctx, t, 0, 1, "invalid", false)
+	})
+	t.Run("timer with dueTime ttl duration", func(t *testing.T) {
+		timerExpiredTTL(ctx, t, 2, -1, "-2h", true)
+	})
+	t.Run("timer without dueTime ttl duration", func(t *testing.T) {
+		timerExpiredTTL(ctx, t, 0, 2, "-2h", true)
+	})
+	t.Run("timer with dueTime ttl datetime", func(t *testing.T) {
+		timerExpiredTTL(ctx, t, 2, -1, time.Now().Add(-2*time.Minute).Format(time.RFC3339), true)
+	})
+	t.Run("timer without dueTime ttl datetime", func(t *testing.T) {
+		timerExpiredTTL(ctx, t, 0, -1, time.Now().Add(-2*time.Minute).Format(time.RFC3339), true)
 	})
 }
 
@@ -1271,11 +1469,27 @@ func TestParseDuration(t *testing.T) {
 		assert.Equal(t, -1, repetition)
 		assert.Nil(t, err)
 	})
-	t.Run("parse ISO 8601 duration", func(t *testing.T) {
+	t.Run("parse ISO 8601 duration with repetition", func(t *testing.T) {
 		duration, repetition, err := parseDuration("R5/PT30M")
 		assert.Equal(t, time.Minute*30, duration)
 		assert.Equal(t, 5, repetition)
 		assert.Nil(t, err)
+	})
+	t.Run("parse ISO 8601 duration without repetition", func(t *testing.T) {
+		duration, repetition, err := parseDuration("P1MT2H10M3S")
+		assert.Equal(t, time.Hour*24*30+time.Hour*2+time.Minute*10+time.Second*3, duration)
+		assert.Equal(t, -1, repetition)
+		assert.Nil(t, err)
+	})
+	t.Run("parse RFC3339 datetime", func(t *testing.T) {
+		duration, repetition, err := parseDuration(time.Now().Add(time.Minute).Format(time.RFC3339))
+		assert.LessOrEqual(t, time.Minute-duration, time.Second*2)
+		assert.Equal(t, -1, repetition)
+		assert.Nil(t, err)
+	})
+	t.Run("parse empty string", func(t *testing.T) {
+		_, _, err := parseDuration("")
+		assert.NotNil(t, err)
 	})
 }
 
