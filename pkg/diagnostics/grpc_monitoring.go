@@ -145,7 +145,7 @@ func (g *grpcMetrics) ClientRequestSent(ctx context.Context, method string, cont
 	return time.Now()
 }
 
-func (g *grpcMetrics) ClientRequestRecieved(ctx context.Context, method, status string, contentSize int64, start time.Time) {
+func (g *grpcMetrics) ClientRequestReceived(ctx context.Context, method, status string, contentSize int64, start time.Time) {
 	if g.enabled {
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
@@ -189,7 +189,7 @@ func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method 
 		if err == nil {
 			size = g.getPayloadSize(reply)
 		}
-		g.ClientRequestRecieved(ctx, method, status.Code(err).String(), int64(size), start)
+		g.ClientRequestReceived(ctx, method, status.Code(err).String(), int64(size), start)
 		return err
 	}
 }
