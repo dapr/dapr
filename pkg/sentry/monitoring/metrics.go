@@ -43,8 +43,8 @@ var (
 	noKeys          = []tag.Key{}
 )
 
-// CertSignRequestRecieved counts when CSR received.
-func CertSignRequestRecieved() {
+// CertSignRequestReceived counts when CSR received.
+func CertSignRequestReceived() {
 	stats.Record(context.Background(), csrReceivedTotal.M(1))
 }
 
