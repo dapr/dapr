@@ -35,6 +35,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # Set the below environment variables if you want to use the different registry and tag for test apps
     # export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
     # export DARP_TEST_TAG=dev
+    # export DAPR_TEST_REGISTRY_SECRET=yourself_private_image_secret
     ```
 
 ### Option 1: Build, deploy, and run Dapr and e2e tests
