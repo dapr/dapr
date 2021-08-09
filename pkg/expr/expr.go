@@ -9,6 +9,8 @@ import (
 	expr_proto "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 )
 
+const missingVariableMessage = "undeclared reference to '"
+
 type Expr struct {
 	expr    string
 	program cel.Program
@@ -18,8 +20,7 @@ func (e *Expr) DecodeString(value string) (err error) {
 	var ast *cel.Ast
 	var env *cel.Env
 
-	_variables := [10]*expr_proto.Decl{}
-	variables := _variables[:0]
+	variables := make([]*expr_proto.Decl, 0, 10)
 
 	for {
 		env, err = cel.NewEnv(cel.Declarations(variables...))
@@ -30,8 +31,8 @@ func (e *Expr) DecodeString(value string) (err error) {
 		ast, iss = env.Compile(value)
 		if iss.Err() != nil {
 			for _, e := range iss.Errors() {
-				if strings.HasPrefix(e.Message, "undeclared reference to '") {
-					msg := e.Message[25:]
+				if strings.HasPrefix(e.Message, missingVariableMessage) {
+					msg := e.Message[len(missingVariableMessage):]
 					msg = msg[0:strings.IndexRune(msg, '\'')]
 					variables = append(variables, decls.NewVar(msg, decls.Any))
 				} else {

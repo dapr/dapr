@@ -37,9 +37,8 @@ const (
 
 	receiveMessageRetries = 5
 
-	publisherAppName         = "pubsub-publisher"
-	subscriberAppName        = "pubsub-subscriber"
-	subscriberRoutingAppName = "pubsub-subscriber-routing"
+	publisherAppName  = "pubsub-publisher"
+	subscriberAppName = "pubsub-subscriber"
 )
 
 // sent to the publisher app, which will publish data to dapr.
@@ -63,16 +62,6 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
 	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
 	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
-}
-
-// data returned from the subscriber-routing app.
-type routedMessagesResponse struct {
-	RouteA []string `json:"route-a"`
-	RouteB []string `json:"route-b"`
-	RouteC []string `json:"route-c"`
-	RouteD []string `json:"route-d"`
-	RouteE []string `json:"route-e"`
-	RouteF []string `json:"route-f"`
 }
 
 type cloudEvent struct {
@@ -325,106 +314,6 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	require.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw)
 }
 
-func testPublishSubscribeRouting(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberAppName, protocol string) string {
-	log.Printf("Test publish subscribe routing flow\n")
-	callInitialize(t, publisherExternalURL, protocol)
-	sentMessages := testPublishRouting(t, publisherExternalURL, protocol)
-
-	time.Sleep(5 * time.Second)
-	validateMessagesRouted(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
-	return subscriberExternalURL
-}
-
-func testPublishRouting(t *testing.T, publisherExternalURL string, protocol string) routedMessagesResponse {
-	// set to respond with success
-	sentRouteAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.A")
-	require.NoError(t, err)
-
-	sentRouteBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.B")
-	require.NoError(t, err)
-
-	sentRouteCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.C")
-	require.NoError(t, err)
-
-	sentRouteDMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing-crd", protocol, nil, "myevent.D")
-	require.NoError(t, err)
-
-	sentRouteEMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing-crd", protocol, nil, "myevent.E")
-	require.NoError(t, err)
-
-	sentRouteFMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing-crd", protocol, nil, "myevent.F")
-	require.NoError(t, err)
-
-	return routedMessagesResponse{
-		RouteA: sentRouteAMessages,
-		RouteB: sentRouteBMessages,
-		RouteC: sentRouteCMessages,
-		RouteD: sentRouteDMessages,
-		RouteE: sentRouteEMessages,
-		RouteF: sentRouteFMessages,
-	}
-}
-
-func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages routedMessagesResponse) {
-	// this is the subscribe app's endpoint, not a dapr endpoint
-	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
-	log.Printf("Getting messages received by subscriber using url %s", url)
-
-	request := callSubscriberMethodRequest{
-		RemoteApp: subscriberApp,
-		Protocol:  protocol,
-		Method:    "getMessages",
-	}
-
-	rawReq, _ := json.Marshal(request)
-
-	var appResp routedMessagesResponse
-	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
-		resp, err := utils.HTTPPost(url, rawReq)
-		require.NoError(t, err)
-
-		err = json.Unmarshal(resp, &appResp)
-		require.NoError(t, err)
-
-		log.Printf("subscriber received messages: route-a %d, route-b %d, route-c %d, route-d %d, route-e %d, route-f %d",
-			len(appResp.RouteA), len(appResp.RouteB), len(appResp.RouteC),
-			len(appResp.RouteD), len(appResp.RouteE), len(appResp.RouteF))
-
-		if len(appResp.RouteA) != len(sentMessages.RouteA) ||
-			len(appResp.RouteB) != len(sentMessages.RouteB) ||
-			len(appResp.RouteD) != len(sentMessages.RouteC) ||
-			len(appResp.RouteD) != len(sentMessages.RouteD) ||
-			len(appResp.RouteE) != len(sentMessages.RouteE) ||
-			len(appResp.RouteF) != len(sentMessages.RouteF) {
-			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(1 * time.Second)
-		} else {
-			break
-		}
-	}
-
-	// Sort messages first because the delivered messages cannot be ordered.
-	sort.Strings(sentMessages.RouteA)
-	sort.Strings(appResp.RouteA)
-	sort.Strings(sentMessages.RouteB)
-	sort.Strings(appResp.RouteB)
-	sort.Strings(sentMessages.RouteC)
-	sort.Strings(appResp.RouteC)
-	sort.Strings(sentMessages.RouteD)
-	sort.Strings(appResp.RouteD)
-	sort.Strings(sentMessages.RouteE)
-	sort.Strings(appResp.RouteE)
-	sort.Strings(sentMessages.RouteF)
-	sort.Strings(appResp.RouteF)
-
-	require.Equal(t, sentMessages.RouteA, appResp.RouteA)
-	require.Equal(t, sentMessages.RouteB, appResp.RouteB)
-	require.Equal(t, sentMessages.RouteC, appResp.RouteC)
-	require.Equal(t, sentMessages.RouteD, appResp.RouteD)
-	require.Equal(t, sentMessages.RouteE, appResp.RouteE)
-	require.Equal(t, sentMessages.RouteF, appResp.RouteF)
-}
-
 func TestMain(m *testing.M) {
 	fmt.Println("Enter TestMain")
 	// These apps will be deployed before starting actual test
@@ -449,17 +338,6 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:   true,
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
-		},
-		{
-			AppName:          subscriberRoutingAppName,
-			DaprEnabled:      true,
-			ImageName:        "e2e-pubsub-subscriber-routing",
-			Replicas:         1,
-			IngressEnabled:   true,
-			MetricsEnabled:   true,
-			AppMemoryLimit:   "200Mi",
-			AppMemoryRequest: "100Mi",
-			Config:           "pubsubroutingconfig",
 		},
 	}
 
@@ -526,19 +404,4 @@ func TestPubSubHTTP(t *testing.T) {
 			subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol)
 		})
 	}
-}
-
-func TestPubSubHTTPRouting(t *testing.T) {
-	t.Log("Enter TestPubSubHTTPRouting")
-
-	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
-	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
-
-	subscriberRoutingExternalURL := tr.Platform.AcquireAppExternalURL(subscriberRoutingAppName)
-	require.NotEmpty(t, subscriberRoutingExternalURL, "subscriberRoutingExternalURL must not be empty!")
-
-	_, err := utils.HTTPGetNTimes(subscriberRoutingExternalURL, numHealthChecks)
-	require.NoError(t, err)
-
-	testPublishSubscribeRouting(t, publisherExternalURL, subscriberRoutingExternalURL, subscriberRoutingAppName, "http")
 }
