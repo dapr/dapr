@@ -168,7 +168,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 			// If UpdatedAt is outdated, we can mark the host as faulty node.
 			// This faulty host will be removed from membership in the next dissemination period.
 			if len(p.membershipCh) == 0 {
-				m := p.raftNode.FSM().State().Members
+				m := p.raftNode.FSM().State().Members()
 				for _, v := range m {
 					// Earlier stop when leadership is lost.
 					if !p.hasLeadership {
@@ -259,7 +259,7 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 
 func (p *Service) performTableDissemination() {
 	nStreamConnPool := len(p.streamConnPool)
-	nTargetConns := len(p.raftNode.FSM().State().Members)
+	nTargetConns := len(p.raftNode.FSM().State().Members())
 
 	monitoring.RecordRuntimesCount(nStreamConnPool)
 	monitoring.RecordActorRuntimesCount(nTargetConns)
