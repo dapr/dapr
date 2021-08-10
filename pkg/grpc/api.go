@@ -802,6 +802,7 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 		ActorType: in.ActorType,
 		DueTime:   in.DueTime,
 		Period:    in.Period,
+		TTL:       in.Ttl,
 		Callback:  in.Callback,
 	}
 
