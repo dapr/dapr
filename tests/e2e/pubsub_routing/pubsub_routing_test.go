@@ -280,7 +280,7 @@ func TestMain(m *testing.M) {
 	}
 
 	log.Printf("Creating TestRunner\n")
-	tr = runner.NewTestRunner("pubsubroutingtest", testApps, nil, nil)
+	tr = runner.NewTestRunner("pubsubtest", testApps, nil, nil)
 	log.Printf("Starting TestRunner\n")
 	os.Exit(tr.Start(m))
 }
