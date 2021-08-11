@@ -69,7 +69,7 @@ import (
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
-
+    	pubsub_rocketmq "github.com/dapr/components-contrib/pubsub/rocketmq"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
 	// Name resolutions.
@@ -266,6 +266,9 @@ func main() {
 			pubsub_loader.New("snssqs", func() pubs.PubSub {
 				return pubsub_snssqs.NewSnsSqs(logContrib)
 			}),
+			pubsub_loader.New("rocketmq", func() pubs.PubSub {
+            			return pubsub_rocketmq.NewRocketMQ(logContrib)
+            		}),
 		),
 		runtime.WithNameResolutions(
 			nr_loader.New("mdns", func() nr.Resolver {
