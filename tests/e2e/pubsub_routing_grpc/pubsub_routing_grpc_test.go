@@ -37,8 +37,8 @@ const (
 
 	receiveMessageRetries = 5
 
-	publisherAppName         = "pubsub-publisher-grpc"
-	subscriberRoutingAppName = "pubsub-subscriber-routing-grpc"
+	publisherAppName  = "pubsub-publisher-routing-grpc"
+	subscriberAppName = "pubsub-subscriber-routing-grpc"
 )
 
 // sent to the publisher app, which will publish data to dapr.
@@ -251,7 +251,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
-			AppName:        subscriberRoutingAppName,
+			AppName:        subscriberAppName,
 			DaprEnabled:    true,
 			ImageName:      "e2e-pubsub-subscriber-routing_grpc",
 			Replicas:       1,
@@ -274,11 +274,11 @@ func TestPubSubGRPCRouting(t *testing.T) {
 	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
 	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 
-	subscriberRoutingExternalURL := tr.Platform.AcquireAppExternalURL(subscriberRoutingAppName)
+	subscriberRoutingExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberRoutingExternalURL, "subscriberRoutingExternalURL must not be empty!")
 
 	_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	testPublishSubscribeRouting(t, publisherExternalURL, subscriberRoutingExternalURL, subscriberRoutingAppName, "grpc")
+	testPublishSubscribeRouting(t, publisherExternalURL, subscriberRoutingExternalURL, subscriberAppName, "grpc")
 }

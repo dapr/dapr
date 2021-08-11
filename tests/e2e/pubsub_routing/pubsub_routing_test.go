@@ -37,8 +37,8 @@ const (
 
 	receiveMessageRetries = 5
 
-	publisherAppName         = "pubsub-publisher"
-	subscriberRoutingAppName = "pubsub-subscriber-routing"
+	publisherAppName  = "pubsub-publisher-routing"
+	subscriberAppName = "pubsub-subscriber-routing"
 )
 
 // sent to the publisher app, which will publish data to dapr.
@@ -140,7 +140,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 
 func callInitialize(t *testing.T, publisherExternalURL string, protocol string) {
 	req := callSubscriberMethodRequest{
-		RemoteApp: subscriberRoutingAppName,
+		RemoteApp: subscriberAppName,
 		Method:    "initialize",
 		Protocol:  protocol,
 	}
@@ -267,7 +267,7 @@ func TestMain(m *testing.M) {
 			AppMemoryRequest: "100Mi",
 		},
 		{
-			AppName:          subscriberRoutingAppName,
+			AppName:          subscriberAppName,
 			DaprEnabled:      true,
 			ImageName:        "e2e-pubsub-subscriber-routing",
 			Replicas:         1,
@@ -291,11 +291,11 @@ func TestPubSubHTTPRouting(t *testing.T) {
 	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
 	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 
-	subscriberRoutingExternalURL := tr.Platform.AcquireAppExternalURL(subscriberRoutingAppName)
+	subscriberRoutingExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberRoutingExternalURL, "subscriberRoutingExternalURL must not be empty!")
 
 	_, err := utils.HTTPGetNTimes(subscriberRoutingExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	testPublishSubscribeRouting(t, publisherExternalURL, subscriberRoutingExternalURL, subscriberRoutingAppName, "http")
+	testPublishSubscribeRouting(t, publisherExternalURL, subscriberRoutingExternalURL, subscriberAppName, "http")
 }
