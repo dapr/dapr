@@ -124,6 +124,19 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 	return sentMessages, nil
 }
 
+func callInitialize(t *testing.T, publisherExternalURL string, protocol string) {
+	req := callSubscriberMethodRequest{
+		RemoteApp: subscriberAppName,
+		Method:    "initialize",
+		Protocol:  protocol,
+	}
+	// only for the empty-json scenario, initialize empty sets in the subscriber app
+	reqBytes, _ := json.Marshal(req)
+	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, code)
+}
+
 func testPublish(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
 	var err error
 	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
@@ -197,16 +210,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
 	if subscriberResponse == "empty-json" {
 		log.Println("Initialize the sets again in the subscriber application for this scenario ...")
-		req := callSubscriberMethodRequest{
-			RemoteApp: subscriberAppName,
-			Method:    "initialize",
-			Protocol:  protocol,
-		}
-		// only for the empty-json scenario, initialize empty sets in the subscriber app
-		reqBytes, _ := json.Marshal(req)
-		_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, code)
+		callInitialize(t, publisherExternalURL, protocol)
 	}
 
 	// set to respond with specified subscriber response
@@ -394,6 +398,7 @@ func TestPubSubGRPC(t *testing.T) {
 	require.NoError(t, err)
 
 	protocol := "grpc"
+	callInitialize(t, publisherExternalURL, protocol)
 	for _, tc := range pubsubTests {
 		t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
 			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol)

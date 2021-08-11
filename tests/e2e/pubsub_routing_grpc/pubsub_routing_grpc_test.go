@@ -125,6 +125,19 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 	return sentMessages, nil
 }
 
+func callInitialize(t *testing.T, publisherExternalURL string, protocol string) {
+	req := callSubscriberMethodRequest{
+		RemoteApp: subscriberAppName,
+		Method:    "initialize",
+		Protocol:  protocol,
+	}
+	// only for the empty-json scenario, initialize empty sets in the subscriber app
+	reqBytes, _ := json.Marshal(req)
+	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, code)
+}
+
 func postSingleMessage(url string, data []byte) (int, error) {
 	// HTTPPostWithStatus by default sends with content-type application/json
 	_, statusCode, err := utils.HTTPPostWithStatus(url, data)
@@ -140,6 +153,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 
 func testPublishSubscribeRouting(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberAppName, protocol string) string {
 	log.Printf("Test publish subscribe routing flow\n")
+	callInitialize(t, publisherExternalURL, protocol)
 	sentMessages := testPublishRouting(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
