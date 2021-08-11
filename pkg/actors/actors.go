@@ -1044,9 +1044,10 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
 	var (
-		err             error
-		repeats         int
-		dueTime, period time.Duration
+		err          error
+		repeats      int
+		dueTime, ttl time.Time
+		period       time.Duration
 	)
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
@@ -1063,27 +1064,29 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		close(stopChan.(chan bool))
 	}
 
-	repeats = -1 // set to default
-	if len(req.Period) != 0 {
-		if period, repeats, err = parseDuration(req.Period); err != nil {
-			return err
+	if len(req.DueTime) > 0 {
+		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
+			return errors.Wrap(err, "error parsing timer due time")
 		}
 	}
 
-	// error on timers with zero repetitions
-	if repeats == 0 {
-		return errors.Errorf("timer %s has zero repetitions", timerKey)
-	}
-
-	if len(req.DueTime) > 0 {
-		if dueTime, _, err = parseDuration(req.DueTime); err != nil {
-			return err
+	repeats = -1 // set to default
+	if len(req.Period) != 0 {
+		if period, repeats, err = parseDuration(req.Period); err != nil {
+			return errors.Wrap(err, "error parsing timer period")
+		}
+		// error on timers with zero repetitions
+		if repeats == 0 {
+			return errors.Errorf("timer %s has zero repetitions", timerKey)
 		}
 	}
 
 	if len(req.TTL) > 0 {
-		if _, _, err = parseDuration(req.TTL); err != nil {
-			return err
+		if ttl, err = parseTime(req.TTL, &dueTime); err != nil {
+			return errors.Wrap(err, "error parsing timer TTL")
+		}
+		if time.Now().After(ttl) || dueTime.After(ttl) {
+			return errors.Errorf("timer %s has already expired: dueTime: %s TTL: %s", timerKey, req.DueTime, req.TTL)
 		}
 	}
 
@@ -1091,96 +1094,68 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	a.activeTimers.Store(timerKey, stop)
 
 	go func(stop chan bool, req *CreateTimerRequest) {
-		// check if timer is still active
-		select {
-		case <-time.After(dueTime):
-			log.Debugf("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been overdue.", timerKey, req.DueTime, req.Period, req.Data)
-			break
-		case <-stop:
-			log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
-			return
-		}
-
-		// dueTime (if set) has passed. Calculating remaining TTL.
-
 		var (
-			ttl       time.Duration
-			ttlTimer  *time.Timer
-			ttlTimerC <-chan time.Time
+			ttlTimer, nextTimer *time.Timer
+			ttlTimerC           <-chan time.Time
+			err                 error
 		)
-		if len(req.TTL) > 0 {
-			if ttl, _, err = parseDuration(req.TTL); err != nil {
-				log.Errorf(err.Error())
-				return
-			}
-			// exit if TTL has already passed
-			if ttl <= 0 {
-				log.Warnf("timer %s has expired ttl %s", timerKey, ttl.String())
-				return
-			}
-		}
-
-		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
-			req.Period, req.Callback, req.Data)
-		if err != nil {
-			log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
-		}
-
-		// for a single repeat we don't need the ticker.
-		if period == 0 || repeats == 1 {
-			a.DeleteTimer(ctx, &DeleteTimerRequest{
-				Name:      req.Name,
-				ActorID:   req.ActorID,
-				ActorType: req.ActorType,
-			})
-			return
-		}
-
-		ticker := a.configureTicker(period)
-		cnt := 1
-
-		// Set TTL timer (if specified)
-		if ttl > 0 {
-			ttlTimer = time.NewTimer(ttl)
+		if !ttl.IsZero() {
+			ttlTimer = time.NewTimer(time.Until(ttl))
 			ttlTimerC = ttlTimer.C
 		}
-
+		nextInvocationTime := dueTime
+		nextTimer = time.NewTimer(time.Until(nextInvocationTime))
+		defer func() {
+			if nextTimer.Stop() {
+				<-nextTimer.C
+			}
+			if ttlTimer != nil && ttlTimer.Stop() {
+				<-ttlTimerC
+			}
+		}()
+	L:
 		for {
 			select {
-			case <-ticker.C:
-				_, exists := a.actorsTable.Load(actorKey)
-				if exists {
-					err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
-						req.Period, req.Callback, req.Data)
-					if err != nil {
-						log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
-					}
-					if repeats > 0 {
-						cnt++
-					}
-				}
-				if !exists || (repeats > 0 && cnt >= repeats) {
-					a.DeleteTimer(ctx, &DeleteTimerRequest{
-						Name:      req.Name,
-						ActorID:   req.ActorID,
-						ActorType: req.ActorType,
-					})
-				}
+			case <-nextTimer.C:
+				// noop
 			case <-ttlTimerC:
-				a.DeleteTimer(ctx, &DeleteTimerRequest{
-					Name:      req.Name,
-					ActorID:   req.ActorID,
-					ActorType: req.ActorType,
-				})
+				// timer has expired; proceed with deletion
+				log.Infof("timer %s with parameters: dueTime: %s, period: %s, TTL: %s, data: %v has expired.", timerKey, req.DueTime, req.Period, req.TTL, req.Data)
+				break L
 			case <-stop:
-				if ttlTimer != nil {
-					if ttlTimer.Stop() {
-						<-ttlTimerC
-					}
-				}
-				ticker.Stop()
+				// timer has been already deleted
+				log.Infof("timer %s with parameters: dueTime: %s, period: %s, TTL: %s, data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.TTL, req.Data)
 				return
 			}
+
+			if _, exists := a.actorsTable.Load(actorKey); exists {
+				if err = a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data); err != nil {
+					log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
+				}
+				if repeats > 0 {
+					repeats--
+				}
+			} else {
+				log.Errorf("could not find active timer %s", timerKey)
+				return
+			}
+			if repeats == 0 || period == 0 {
+				log.Infof("timer %s has been completed", timerKey)
+				break L
+			}
+			nextInvocationTime = nextInvocationTime.Add(period)
+			if nextTimer.Stop() {
+				<-nextTimer.C
+			}
+			nextTimer.Reset(time.Until(nextInvocationTime))
+		}
+		err = a.DeleteTimer(ctx, &DeleteTimerRequest{
+			Name:      req.Name,
+			ActorID:   req.ActorID,
+			ActorType: req.ActorType,
+		})
+		if err != nil {
+			log.Errorf("error deleting timer %s: %v", timerKey, err)
 		}
 	}(stop, req)
 	return nil
@@ -1635,22 +1610,10 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	return nil
 }
 
-// parseDuration creates time.Duration from either:
-// - ISO8601 duration format,
-// - RFC3339 datetime format,
-// - time.Duration string format.
-func parseDuration(from string) (time.Duration, int, error) {
-	var match []string
-	if pattern.MatchString(from) {
-		match = pattern.FindStringSubmatch(from)
-	} else {
-		if d, err := time.ParseDuration(from); err == nil {
-			return d, -1, nil
-		}
-		if t, err := time.Parse(time.RFC3339, from); err == nil {
-			return time.Until(t), -1, nil
-		}
-		return time.Duration(0), 0, errors.Errorf("unsupported time/duration format %q", from)
+func parseISO8601Duration(from string) (time.Duration, int, error) {
+	match := pattern.FindStringSubmatch(from)
+	if match == nil {
+		return 0, 0, errors.Errorf("unsupported ISO8601 duration format %q", from)
 	}
 	duration := time.Duration(0)
 	// -1 signifies infinite repetition
@@ -1660,10 +1623,9 @@ func parseDuration(from string) (time.Duration, int, error) {
 		if i == 0 || name == "" || part == "" {
 			continue
 		}
-
 		val, err := strconv.Atoi(part)
 		if err != nil {
-			return time.Duration(0), 0, err
+			return 0, 0, err
 		}
 		switch name {
 		case "year":
@@ -1683,11 +1645,53 @@ func parseDuration(from string) (time.Duration, int, error) {
 		case "repetition":
 			repetition = val
 		default:
-			return time.Duration(0), -1, fmt.Errorf("unknown field %s", name)
+			return 0, 0, fmt.Errorf("unsupported ISO8601 duration field %s", name)
 		}
 	}
-
 	return duration, repetition, nil
+}
+
+// parseDuration creates time.Duration from either:
+// - ISO8601 duration format,
+// - time.Duration string format.
+func parseDuration(from string) (time.Duration, int, error) {
+	d, r, err := parseISO8601Duration(from)
+	if err == nil {
+		return d, r, nil
+	}
+	d, err = time.ParseDuration(from)
+	if err == nil {
+		return d, -1, nil
+	}
+	return 0, 0, errors.Errorf("unsupported duration format %q", from)
+}
+
+// parseTime creates time.Duration from either:
+// - ISO8601 duration format,
+// - time.Duration string format,
+// - RFC3339 datetime format.
+// For duration formats, an offset is added.
+func parseTime(from string, offset *time.Time) (time.Time, error) {
+	var start time.Time
+	if offset != nil {
+		start = *offset
+	} else {
+		start = time.Now()
+	}
+	d, r, err := parseISO8601Duration(from)
+	if err == nil {
+		if r != -1 {
+			return time.Time{}, errors.Errorf("repetitions are not allowed")
+		}
+		return start.Add(d), nil
+	}
+	if d, err = time.ParseDuration(from); err == nil {
+		return start.Add(d), nil
+	}
+	if t, err := time.Parse(time.RFC3339, from); err == nil {
+		return t, nil
+	}
+	return time.Time{}, errors.Errorf("unsupported time/duration format %q", from)
 }
 
 func (a *actorsRuntime) stopReminderIfRepetitionsOver(name, actorID, actorType string, repetitionLeft int) (bool, error) {
