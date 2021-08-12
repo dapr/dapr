@@ -18,3 +18,4 @@ ports:
 runAsNonRoot: true
 serviceType: ClusterIP
 resources: {}
+serviceAnnotations: {}
