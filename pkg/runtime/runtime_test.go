@@ -2379,6 +2379,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+
 			var grpcServer *grpc.Server
 
 			// create mock application server first

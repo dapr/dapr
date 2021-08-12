@@ -17,6 +17,7 @@ const (
 type Route struct {
 	path     string
 	metadata map[string]string
+	pipeline pubsub_middleware.Pipeline
 }
 
 type TopicRoute struct {
@@ -35,10 +36,10 @@ type SubscriptionHandler func(routePath string, ctx context.Context, msg *Subscr
 var log = logger.NewLogger("dapr.runtime.subscriberService")
 
 type SubscriberService struct {
-	Pipeline    pubsub_middleware.Pipeline
 	topicRoutes map[string]TopicRoute
 	Json        jsoniter.API
 
+	BuildPipelineFunc               func(handlerSpecs []HandlerSpec) (pubsub_middleware.Pipeline, error)
 	PublishMessageFunc              SubscriptionHandler
 	GetSubscriptionsFunc            func() []Subscription
 	GetDeclarativeSubscriptionsFunc func() []Subscription
@@ -117,7 +118,6 @@ func (service *SubscriberService) beginPubSub(name string, ps pubsub.PubSub) err
 			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
 		}
 	}
-
 	return nil
 }
 
@@ -156,9 +156,21 @@ func (service *SubscriberService) getTopicRoutes() (map[string]TopicRoute, error
 			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]Route)}
 		}
 
-		topicRoutes[s.PubsubName].routes[s.Topic] = Route{path: s.Route, metadata: s.Metadata}
+		rt := Route{path: s.Route, metadata: s.Metadata}
+		pp, err := service.BuildPipelineFunc(s.PipelineSpec.Handlers)
+		if err != nil {
+			log.Warnf("failed to build subscription pipeline: %s", err)
+		}
+		rt.pipeline = pp
+		topicRoutes[s.PubsubName].routes[s.Topic] = rt
 	}
 
+	logRoutes(topicRoutes)
+	service.topicRoutes = topicRoutes
+	return topicRoutes, nil
+}
+
+func logRoutes(topicRoutes map[string]TopicRoute) {
 	if len(topicRoutes) > 0 {
 		for pubsubName, v := range topicRoutes {
 			topics := []string{}
@@ -168,6 +180,4 @@ func (service *SubscriberService) getTopicRoutes() (map[string]TopicRoute, error
 			log.Infof("app is subscribed to the following topics: %v through pubsub=%s", topics, pubsubName)
 		}
 	}
-	service.topicRoutes = topicRoutes
-	return topicRoutes, nil
 }

@@ -51,8 +51,10 @@ import (
 	http_channel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
+
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	pubsub_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/pubsub"
+
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -64,6 +66,7 @@ import (
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -138,7 +141,6 @@ type DaprRuntime struct {
 
 	httpMiddlewareRegistry         http_middleware_loader.Registry
 	subscriptionMiddlewareRegistry pubsub_middleware_loader.Registry
-	publishMiddlewareRegistry      pubsub_middleware_loader.Registry
 
 	hostAddress          string
 	actorStateStoreName  string
@@ -150,6 +152,7 @@ type DaprRuntime struct {
 	allowedTopics        map[string][]string
 	daprHTTPAPI          http.API
 	operatorClient       operatorv1pb.OperatorClient
+
 	secretsConfiguration map[string]config.SecretsScope
 
 	pendingComponents          chan components_v1alpha1.Component
@@ -165,27 +168,26 @@ type componentPreprocessRes struct {
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList) *DaprRuntime {
 	return &DaprRuntime{
-		runtimeConfig:     runtimeConfig,
-		globalConfig:      globalConfig,
-		accessControlList: accessControlList,
-		componentsLock:    &sync.RWMutex{},
-		components:        make([]components_v1alpha1.Component, 0),
-		grpc:              grpc.NewGRPCManager(runtimeConfig.Mode),
-		json:              jsoniter.ConfigFastest,
-		inputBindings:     map[string]bindings.InputBinding{},
-		outputBindings:    map[string]bindings.OutputBinding{},
-		secretStores:      map[string]secretstores.SecretStore{},
-		stateStores:       map[string]state.Store{},
-		pubSubs:           map[string]pubsub.PubSub{},
+		runtimeConfig:          runtimeConfig,
+		globalConfig:           globalConfig,
+		accessControlList:      accessControlList,
+		componentsLock:         &sync.RWMutex{},
+		components:             make([]components_v1alpha1.Component, 0),
+		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
+		json:                   jsoniter.ConfigFastest,
+		inputBindings:          map[string]bindings.InputBinding{},
+		outputBindings:         map[string]bindings.OutputBinding{},
+		secretStores:           map[string]secretstores.SecretStore{},
+		stateStores:            map[string]state.Store{},
+		pubSubs:                map[string]pubsub.PubSub{},
+		stateStoreRegistry:     state_loader.NewRegistry(),
+		bindingsRegistry:       bindings_loader.NewRegistry(),
+		pubSubRegistry:         pubsub_loader.NewRegistry(),
+		secretStoresRegistry:   secretstores_loader.NewRegistry(),
+		nameResolutionRegistry: nr_loader.NewRegistry(),
 
-		stateStoreRegistry:             state_loader.NewRegistry(),
-		bindingsRegistry:               bindings_loader.NewRegistry(),
-		pubSubRegistry:                 pubsub_loader.NewRegistry(),
-		secretStoresRegistry:           secretstores_loader.NewRegistry(),
-		nameResolutionRegistry:         nr_loader.NewRegistry(),
 		httpMiddlewareRegistry:         http_middleware_loader.NewRegistry(),
 		subscriptionMiddlewareRegistry: pubsub_middleware_loader.NewRegistry(),
-		publishMiddlewareRegistry:      pubsub_middleware_loader.NewRegistry(),
 
 		scopedSubscriptions: map[string][]string{},
 		scopedPublishings:   map[string][]string{},
@@ -298,7 +300,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
-	a.publishMiddlewareRegistry.Register(opts.pubsubMiddleware...)
 	a.subscriptionMiddlewareRegistry.Register(opts.pubsubMiddleware...)
 
 	go a.processComponents()
@@ -413,29 +414,31 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 	return http_middleware.Pipeline{Handlers: handlers}, nil
 }
 
-func (a *DaprRuntime) buildPubsubPipeline(handlerSpecs []config.HandlerSpec, registry pubsub_middleware_loader.Registry) (pubsub_middleware.Pipeline, error) {
-	var handlers []pubsub_middleware.Middleware
+func (a *DaprRuntime) buildPubsubPipeline(registry pubsub_middleware_loader.Registry) func(handlerSpecs []runtime_pubsub.HandlerSpec) (pubsub_middleware.Pipeline, error) {
+	return func(handlerSpecs []runtime_pubsub.HandlerSpec) (pubsub_middleware.Pipeline, error) {
+		var handlers []pubsub_middleware.Middleware
 
-	if a.globalConfig != nil {
-		for i := 0; i < len(handlerSpecs); i++ {
-			middlewareSpec := handlerSpecs[i]
-			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
-			if !exists {
-				return pubsub_middleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
-					middlewareSpec.Name,
-					middlewareSpec.Type,
-					middlewareSpec.Version)
+		if a.globalConfig != nil {
+			for i := 0; i < len(handlerSpecs); i++ {
+				middlewareSpec := handlerSpecs[i]
+				component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
+				if !exists {
+					return pubsub_middleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
+						middlewareSpec.Name,
+						middlewareSpec.Type,
+						middlewareSpec.Version)
+				}
+				handler, err := registry.Create(middlewareSpec.Type, middlewareSpec.Version,
+					middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
+				if err != nil {
+					return pubsub_middleware.Pipeline{}, err
+				}
+				log.Infof("enabled %s/%s pubsub middleware", middlewareSpec.Type, middlewareSpec.Version)
+				handlers = append(handlers, handler)
 			}
-			handler, err := registry.Create(middlewareSpec.Type, middlewareSpec.Version,
-				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
-			if err != nil {
-				return pubsub_middleware.Pipeline{}, err
-			}
-			log.Infof("enabled %s/%s pubsub middleware", middlewareSpec.Type, middlewareSpec.Version)
-			handlers = append(handlers, handler)
 		}
+		return pubsub_middleware.Pipeline{Middlewares: handlers}, nil
 	}
-	return pubsub_middleware.Pipeline{Middlewares: handlers}, nil
 }
 
 func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
@@ -1117,6 +1120,7 @@ func (a *DaprRuntime) initNameResolution() error {
 
 func (a *DaprRuntime) publishMessageHTTP(routePath string, ctx context.Context, msg *runtime_pubsub.SubscribedMessage) error {
 	cloudEvent := msg.CloudEvent
+
 	if pubsub.HasExpired(cloudEvent) {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 		return nil
@@ -1836,10 +1840,6 @@ func componentDependency(compCategory ComponentCategory, name string) string {
 }
 
 func (a *DaprRuntime) startSubscribing() {
-	pipeline, err := a.buildPubsubPipeline(a.globalConfig.Spec.SubscriptionPipelineSpec.Handlers, a.subscriptionMiddlewareRegistry)
-	if err != nil {
-		log.Warnf("failed to build publish pipeline: %s", err)
-	}
 
 	var publishFunc runtime_pubsub.SubscriptionHandler
 	switch a.runtimeConfig.ApplicationProtocol {
@@ -1850,7 +1850,7 @@ func (a *DaprRuntime) startSubscribing() {
 	}
 
 	subscriberService := runtime_pubsub.SubscriberService{
-		Pipeline:                        pipeline,
+		BuildPipelineFunc:               a.buildPubsubPipeline(a.subscriptionMiddlewareRegistry),
 		PublishMessageFunc:              publishFunc,
 		OperationAccessValidatorFunc:    a.isSubOperationAllowed,
 		Json:                            a.json,

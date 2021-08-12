@@ -22,7 +22,9 @@ const (
 func NewTestSubscriberService(mode modes.DaprMode) SubscriberService {
 
 	subscriberService := SubscriberService{
-		Pipeline: pubsub_middleware.Pipeline{},
+		BuildPipelineFunc: func(handlerSpecs []HandlerSpec) (pubsub_middleware.Pipeline, error) {
+			return pubsub_middleware.Pipeline{}, nil
+		},
 		OperationAccessValidatorFunc: func(pubsubName string, topic string) bool {
 			return true
 		},

@@ -39,6 +39,25 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
+              pipeline:
+                description: PipelineSpec defines the middleware pipeline
+                properties:
+                  handlers:
+                    items:
+                      description: HandlerSpec defines a request handlers
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                      required:
+                        - name
+                        - type
+                      type: object
+                    type: array
+                required:
+                  - handlers
+                type: object
             required:
             - pubsubname
             - route

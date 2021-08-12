@@ -74,17 +74,15 @@ type AccessControlListOperationAction struct {
 }
 
 type ConfigurationSpec struct {
-	HTTPPipelineSpec         PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
-	PublishPipelineSpec      PipelineSpec       `json:"publishPipeline,omitempty" yaml:"publishPipeline,omitempty"`
-	SubscriptionPipelineSpec PipelineSpec       `json:"subscriptionPipeline,omitempty" yaml:"subscriptionPipeline,omitempty"`
-	TracingSpec              TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MTLSSpec                 MTLSSpec           `json:"mtls,omitempty"`
-	MetricSpec               MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
-	Secrets                  SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
-	AccessControlSpec        AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
-	NameResolutionSpec       NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
-	Features                 []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
-	APISpec                  APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
+	HTTPPipelineSpec   PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	TracingSpec        TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	MTLSSpec           MTLSSpec           `json:"mtls,omitempty"`
+	MetricSpec         MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
+	Secrets            SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
+	AccessControlSpec  AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
+	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
+	Features           []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
+	APISpec            APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
 }
 
 type SecretsSpec struct {

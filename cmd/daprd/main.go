@@ -70,6 +70,7 @@ import (
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
+
 	pubsub_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/pubsub"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	pubsub_middleware "github.com/dapr/dapr/pkg/middleware/pubsub"
