@@ -159,7 +159,7 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedService types.NamespacedName, deployment *appsv1.Deployment, appID string) *corev1.Service {
 	enableMetrics := h.getEnableMetrics(deployment)
 	metricsPort := h.getMetricsPort(deployment)
-	fmt.Println("enableMetrics", enableMetrics)
+	log.Debugf("enableMetrics: %v", enableMetrics)
 
 	annotations := map[string]string{
 		appIDAnnotationKey: appID,
@@ -237,7 +237,6 @@ func (h *DaprHandler) getEnableMetrics(deployment *appsv1.Deployment) bool {
 	annotations := deployment.Spec.Template.ObjectMeta.Annotations
 	enableMetrics := defaultMetricsEnabled
 	if val, ok := annotations[daprEnableMetricsKey]; ok {
-		fmt.Println(val)
 		if v, err := strconv.ParseBool(val); err == nil {
 			enableMetrics = v
 		}
