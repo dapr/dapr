@@ -84,6 +84,7 @@ OUT_DIR := ./dist
 HELM:=helm
 RELEASE_NAME?=dapr
 DAPR_NAMESPACE?=dapr-system
+DAPR_MTLS_ENABLED ?= true
 HELM_CHART_ROOT:=./charts
 HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
@@ -212,6 +213,7 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
 		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=Always \
 		--set global.imagePullPolicy=Always --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
+		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) $(HELM_CHART_DIR)
 
 ################################################################################
