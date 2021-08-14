@@ -101,6 +101,54 @@ Specify the package that you want to test when running the `dlv test`. For examp
 dlv test ./pkg/actors
 ```
 
+If you want to combine VS Code + dlv for debugging so you can set breakpoints in the IDE create a debug launch configuration as follows:
+
+```json
+    {
+        "name": "Launch test function",
+        "type": "go",
+        "request": "launch",
+        "mode": "test",
+        "program": "${workspaceFolder}/pkg/actors",
+        "buildFlags": "-v"
+    },
+```
+
+### Debug conformance tests
+
+To run all conformance tests
+
+```bash
+ dlv test --build-flags '-v -tags=conftests' ./tests/conformance
+```
+
+To run a specific conformance test
+
+```bash
+ dlv test --build-flags '-v -tags=conftests' ./tests/conformance -- -test.run "TestStateConformance/redis"
+ ```
+ 
+ If you want to combine VS Code + dlv for debugging so you can set breakpoints in the IDE create a debug launch configuration as follows:
+
+```json
+    {
+        "name": "Launch test function",
+        "type": "go",
+        "request": "launch",
+        "mode": "test",
+        "program": "${workspaceFolder}/tests/conformance",
+        "buildFlags": "-v -tags=conftests",
+        "env": {
+            "SOMETHING_REQUIRED_BY_THE_TEST": "<somevalue>"
+        },
+        "args": [
+            "-test.run",
+            "TestStateConformance/redis",
+        ]
+    },
+```
+
+
 ## Developing on Kubernetes environment
 
 ### Setting environment variable
