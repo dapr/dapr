@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -56,6 +58,7 @@ import (
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
@@ -264,6 +267,233 @@ func TestDoProcessComponent(t *testing.T) {
 		// assert
 		assert.NoError(t, err, "no error expected")
 	})
+}
+
+// mockOperatorClient is a mock implementation of operator.OperatorClient.
+// It is used to test `beginComponentsUpdates`.
+type mockOperatorClient struct {
+	operator.OperatorClient
+
+	lock                      sync.RWMutex
+	compsByName               map[string]*components_v1alpha1.Component
+	clientStreams             []*mockOperatorComponentUpdateClientStream
+	clientStreamCreateWait    chan struct{}
+	clientStreamCreatedNotify chan struct{}
+}
+
+func newMockOperatorClient() *mockOperatorClient {
+	mockOpCli := &mockOperatorClient{
+		compsByName:               make(map[string]*components_v1alpha1.Component),
+		clientStreams:             make([]*mockOperatorComponentUpdateClientStream, 0, 1),
+		clientStreamCreateWait:    make(chan struct{}, 1),
+		clientStreamCreatedNotify: make(chan struct{}, 1),
+	}
+	return mockOpCli
+}
+
+func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (operator.Operator_ComponentUpdateClient, error) {
+	// Used to block stream creation.
+	<-c.clientStreamCreateWait
+
+	cs := &mockOperatorComponentUpdateClientStream{
+		updateCh: make(chan *operator.ComponentUpdateEvent, 1),
+	}
+
+	c.lock.Lock()
+	c.clientStreams = append(c.clientStreams, cs)
+	c.lock.Unlock()
+
+	c.clientStreamCreatedNotify <- struct{}{}
+
+	return cs, nil
+}
+
+func (c *mockOperatorClient) ListComponents(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*operator.ListComponentResponse, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	resp := &operator.ListComponentResponse{
+		Components: [][]byte{},
+	}
+	for _, comp := range c.compsByName {
+		b, err := json.Marshal(comp)
+		if err != nil {
+			continue
+		}
+		resp.Components = append(resp.Components, b)
+	}
+	return resp, nil
+}
+
+func (c *mockOperatorClient) ClientStreamCount() int {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	return len(c.clientStreams)
+}
+
+func (c *mockOperatorClient) AllowOneNewClientStreamCreate() {
+	c.clientStreamCreateWait <- struct{}{}
+}
+
+func (c *mockOperatorClient) WaitOneNewClientStreamCreated(ctx context.Context) error {
+	select {
+	case <-c.clientStreamCreatedNotify:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (c *mockOperatorClient) CloseAllClientStreams() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	for _, cs := range c.clientStreams {
+		close(cs.updateCh)
+	}
+	c.clientStreams = []*mockOperatorComponentUpdateClientStream{}
+}
+
+func (c *mockOperatorClient) UpdateComponent(comp *components_v1alpha1.Component) {
+	b, err := json.Marshal(comp)
+	if err != nil {
+		return
+	}
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.compsByName[comp.Name] = comp
+	for _, cs := range c.clientStreams {
+		cs.updateCh <- &operator.ComponentUpdateEvent{Component: b}
+	}
+}
+
+type mockOperatorComponentUpdateClientStream struct {
+	operator.Operator_ComponentUpdateClient
+
+	updateCh chan *operator.ComponentUpdateEvent
+}
+
+func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operator.ComponentUpdateEvent, error) {
+	e, ok := <-cs.updateCh
+	if !ok {
+		return nil, fmt.Errorf("stream closed")
+	}
+	return e, nil
+}
+
+func TestComponentsUpdate(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.KubernetesMode)
+	defer stopRuntime(t, rt)
+
+	mockOpCli := newMockOperatorClient()
+	rt.operatorClient = mockOpCli
+
+	processedCh := make(chan struct{}, 1)
+	mockProcessComponents := func() {
+		for comp := range rt.pendingComponents {
+			if comp.Name == "" {
+				continue
+			}
+			rt.appendOrReplaceComponents(comp)
+			processedCh <- struct{}{}
+		}
+	}
+	go mockProcessComponents()
+
+	go rt.beginComponentsUpdates()
+
+	comp1 := &components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockPubSub1",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:    "pubsub.mockPubSub1",
+			Version: "v1",
+		},
+	}
+	comp2 := &components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockPubSub2",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:    "pubsub.mockPubSub2",
+			Version: "v1",
+		},
+	}
+	comp3 := &components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockPubSub3",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:    "pubsub.mockPubSub3",
+			Version: "v1",
+		},
+	}
+
+	// Allow a new stream to create.
+	mockOpCli.AllowOneNewClientStreamCreate()
+	// Wait a new stream created.
+	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	if err := mockOpCli.WaitOneNewClientStreamCreated(waitCtx); err != nil {
+		t.Errorf("Wait new stream err: %s", err.Error())
+		t.FailNow()
+	}
+
+	// Wait comp1 received and processed.
+	mockOpCli.UpdateComponent(comp1)
+	select {
+	case <-processedCh:
+	case <-time.After(time.Second * 10):
+		t.Errorf("Expect component [comp1] processed.")
+		t.FailNow()
+	}
+	_, exists := rt.getComponent(comp1.Spec.Type, comp1.Name)
+	assert.True(t, exists, fmt.Sprintf("expect component, type: %s, name: %s", comp1.Spec.Type, comp1.Name))
+
+	// Close all client streams to trigger an stream error in `beginComponentsUpdates`
+	mockOpCli.CloseAllClientStreams()
+
+	// Update during stream error.
+	mockOpCli.UpdateComponent(comp2)
+
+	// Assert no client stream created.
+	assert.Equal(t, mockOpCli.ClientStreamCount(), 0, "Expect 0 client stream")
+
+	// Allow a new stream to create.
+	mockOpCli.AllowOneNewClientStreamCreate()
+	// Wait a new stream created.
+	waitCtx, cancel = context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	if err := mockOpCli.WaitOneNewClientStreamCreated(waitCtx); err != nil {
+		t.Errorf("Wait new stream err: %s", err.Error())
+		t.FailNow()
+	}
+
+	// Wait comp2 received and processed.
+	select {
+	case <-processedCh:
+	case <-time.After(time.Second * 10):
+		t.Errorf("Expect component [comp2] processed.")
+		t.FailNow()
+	}
+	_, exists = rt.getComponent(comp2.Spec.Type, comp2.Name)
+	assert.True(t, exists, fmt.Sprintf("Expect component, type: %s, name: %s", comp2.Spec.Type, comp2.Name))
+
+	mockOpCli.UpdateComponent(comp3)
+
+	// Wait comp3 received and processed.
+	select {
+	case <-processedCh:
+	case <-time.After(time.Second * 10):
+		t.Errorf("Expect component [comp3] processed.")
+		t.FailNow()
+	}
+	_, exists = rt.getComponent(comp3.Spec.Type, comp3.Name)
+	assert.True(t, exists, fmt.Sprintf("Expect component, type: %s, name: %s", comp3.Spec.Type, comp3.Name))
 }
 
 func TestInitState(t *testing.T) {
@@ -2340,7 +2570,6 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		DefaultDaprHTTPPort,
 		0,
 		DefaultDaprAPIGRPCPort,
-		DefaultAPIListenAddress,
 		appPort,
 		DefaultProfilePort,
 		false,

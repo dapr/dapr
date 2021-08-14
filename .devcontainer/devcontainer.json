@@ -15,7 +15,8 @@
 		// "BIND_LOCALHOST_DOCKER": "true"
 	},
 	"extensions": [
-		"ms-vscode.go",
+		"davidanson.vscode-markdownlint",
+		"golang.go",
 		"ms-azuretools.vscode-dapr",
 		"ms-azuretools.vscode-docker",
 		"ms-kubernetes-tools.vscode-kubernetes-tools"

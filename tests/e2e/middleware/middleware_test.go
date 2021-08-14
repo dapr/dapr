@@ -82,7 +82,6 @@ func TestSimpleMiddleware(t *testing.T) {
 	t.Logf("noMiddlewareURL is '%s'\n", noMiddlewareURL)
 
 	t.Run("test_basic_middleware", func(t *testing.T) {
-
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", middlewareURL, appName), []byte{})
 
 		require.Nil(t, err)
@@ -97,7 +96,6 @@ func TestSimpleMiddleware(t *testing.T) {
 	})
 
 	t.Run("test_no_middleware", func(t *testing.T) {
-
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", noMiddlewareURL, "no-middleware"), []byte{})
 
 		require.Nil(t, err)
