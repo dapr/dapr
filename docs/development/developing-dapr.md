@@ -104,6 +104,9 @@ dlv test ./pkg/actors
 If you want to combine VS Code + dlv for debugging so you can set breakpoints in the IDE create a debug launch configuration as follows:
 
 ```json
+{
+    "version": "0.2.0",
+    "configurations": [
     {
         "name": "Launch test function",
         "type": "go",
@@ -112,6 +115,8 @@ If you want to combine VS Code + dlv for debugging so you can set breakpoints in
         "program": "${workspaceFolder}/pkg/actors",
         "buildFlags": "-v"
     },
+]
+}
 ```
 
 ### Debug conformance tests
@@ -131,6 +136,9 @@ To run a specific conformance test
  If you want to combine VS Code + dlv for debugging so you can set breakpoints in the IDE create a debug launch configuration as follows:
 
 ```json
+{
+    "version": "0.2.0",
+    "configurations": [
     {
         "name": "Launch test function",
         "type": "go",
@@ -146,6 +154,8 @@ To run a specific conformance test
             "TestStateConformance/redis",
         ]
     },
+]
+}
 ```
 
 
