@@ -168,7 +168,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	clientStreams := []v1pb.Placement_ReportDaprStatusClient{}
 	clientRecvDataLock := &sync.RWMutex{}
 	clientRecvData := []map[string]int64{}
-	clientRecvNotifyCh := make(chan struct{}, testClients)
+	clientUpToDateCh := make(chan struct{}, testClients)
 
 	for i := 0; i < testClients; i++ {
 		conn, stream, err := newTestClient(serverAddress)
@@ -178,6 +178,7 @@ func TestPerformTableUpdate(t *testing.T) {
 		clientRecvData = append(clientRecvData, map[string]int64{})
 
 		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {
+			upToDate := false
 			for {
 				placementOrder, streamErr := clientStream.Recv()
 				if streamErr != nil {
@@ -187,9 +188,23 @@ func TestPerformTableUpdate(t *testing.T) {
 					clientRecvDataLock.Lock()
 					clientRecvData[clientID][placementOrder.Operation] = time.Now().UnixNano()
 					clientRecvDataLock.Unlock()
+					// Check if the table is up to date.
+					if placementOrder.Operation == "update" {
+						if placementOrder.Tables != nil {
+							upToDate = true
+							for _, entries := range placementOrder.Tables.Entries {
+								// Check if all clients are in load map.
+								if len(entries.LoadMap) != testClients {
+									upToDate = false
+								}
+							}
+						}
+					}
 					if placementOrder.Operation == "unlock" {
-						clientRecvNotifyCh <- struct{}{}
-						return
+						if upToDate {
+							clientUpToDateCh <- struct{}{}
+							return
+						}
 					}
 				}
 			}
@@ -216,7 +231,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	for {
 		end := false
 		select {
-		case <-clientRecvNotifyCh:
+		case <-clientUpToDateCh:
 			waitCnt--
 			if waitCnt == 0 {
 				end = true
