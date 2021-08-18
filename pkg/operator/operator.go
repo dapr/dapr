@@ -142,7 +142,7 @@ func (o *operator) Run(ctx context.Context) {
 	o.prepareConfig()
 
 	var certChain *credentials.CertChain
-	log.Info("mTLS enabled, getting tls certificates")
+	log.Info("getting tls certificates")
 	// try to load certs from disk, if not yet there, start a watch on the local filesystem
 	chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
 	if err != nil {

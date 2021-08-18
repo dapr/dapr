@@ -132,7 +132,9 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
+{{- if eq .Values.global.mtls.enabled true }}
         - "--tls-enabled"
+{{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
 {{- if eq .Values.cluster.forceInMemoryLog true }}
