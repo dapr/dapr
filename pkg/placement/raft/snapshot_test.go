@@ -56,13 +56,13 @@ func TestPersist(t *testing.T) {
 	snap.Persist(fakeSink)
 
 	// assert
-	restoredState := &DaprHostMemberState{}
-	err = unmarshalMsgPack(buf.Bytes(), restoredState)
+	restoredState := newDaprHostMemberState()
+	err = restoredState.restore(buf)
 	assert.NoError(t, err)
 
-	expectedMember := fsm.State().Members[testMember.Name]
-	restoredMember := restoredState.Members[testMember.Name]
-	assert.Equal(t, fsm.State().Index, restoredState.Index)
+	expectedMember := fsm.State().Members()[testMember.Name]
+	restoredMember := restoredState.Members()[testMember.Name]
+	assert.Equal(t, fsm.State().Index(), restoredState.Index())
 	assert.Equal(t, expectedMember.Name, restoredMember.Name)
 	assert.Equal(t, expectedMember.AppID, restoredMember.AppID)
 	assert.EqualValues(t, expectedMember.Entities, restoredMember.Entities)

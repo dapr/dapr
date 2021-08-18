@@ -41,6 +41,7 @@ var allowedControllersServiceAccounts = []string{
 	"cronjob-controller",
 	"job-controller",
 	"statefulset-controller",
+	"daemon-set-controller",
 }
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
@@ -203,10 +204,10 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
 		if !utils.StringSliceContains(ar.Request.UserInfo.UID, i.authUIDs) {
-			err = errors.Wrapf(err, "unauthorized request")
+			err = errors.New(fmt.Sprintf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username))
 			log.Error(err)
 		} else if ar.Request.Kind.Kind != "Pod" {
-			err = errors.Wrapf(err, "invalid kind for review: %s", ar.Kind)
+			err = errors.New(fmt.Sprintf("invalid kind for review: %s", ar.Kind))
 			log.Error(err)
 		} else {
 			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.config.SidecarImagePullPolicy, i.kubeClient, i.daprClient)

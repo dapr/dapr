@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"contrib.go.opencensus.io/exporter/zipkin"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 	jsoniter "github.com/json-iterator/go"
@@ -540,33 +541,66 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 	}
 
 	go func() {
-		stream, err := a.operatorClient.ComponentUpdate(context.Background(), &emptypb.Empty{})
-		if err != nil {
-			log.Fatalf("error from operator stream: %s", err)
-			return
-		}
-		for {
-			c, err := stream.Recv()
-			if err != nil {
-				log.Fatalf("error from operator stream: %s", err)
+		parseAndUpdate := func(compRaw []byte) {
+			var component components_v1alpha1.Component
+			if err := json.Unmarshal(compRaw, &component); err != nil {
+				log.Warnf("error deserializing component: %s", err)
 				return
 			}
 
-			var component components_v1alpha1.Component
-			err = json.Unmarshal(c.GetComponent(), &component)
-			if err != nil {
-				log.Warnf("error deserializing component: %s", err)
-				continue
-			}
-
-			authorized := a.isComponentAuthorized(component)
-			if !authorized {
+			if !a.isComponentAuthorized(component) {
 				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
-				continue
+				return
 			}
 
 			log.Debugf("received component update. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
 			a.onComponentUpdated(component)
+		}
+
+		needList := false
+		for {
+			var stream operatorv1pb.Operator_ComponentUpdateClient
+
+			// Retry on stream error.
+			backoff.Retry(func() error {
+				var err error
+				stream, err = a.operatorClient.ComponentUpdate(context.Background(), &emptypb.Empty{})
+				if err != nil {
+					log.Errorf("error from operator stream: %s", err)
+					return err
+				}
+				return nil
+			}, backoff.NewExponentialBackOff())
+
+			if needList {
+				// We should get all components again to avoid missing any updates during the failure time.
+				backoff.Retry(func() error {
+					resp, err := a.operatorClient.ListComponents(context.Background(), &emptypb.Empty{})
+					if err != nil {
+						log.Errorf("error listing components: %s", err)
+						return err
+					}
+
+					comps := resp.GetComponents()
+					for _, c := range comps {
+						parseAndUpdate(c)
+					}
+
+					return nil
+				}, backoff.NewExponentialBackOff())
+			}
+
+			for {
+				c, err := stream.Recv()
+				if err != nil {
+					// Retry on stream error.
+					needList = true
+					log.Errorf("error from operator stream: %s", err)
+					break
+				}
+
+				parseAndUpdate(c.GetComponent())
+			}
 		}
 	}()
 	return nil
@@ -671,6 +705,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			Data:     data,
 			Metadata: metadata,
 		}
+		start := time.Now()
 		resp, err := client.OnBindingEvent(ctx, req)
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
@@ -680,9 +715,16 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.UpdateSpanStatusFromGRPCError(span, err)
 			span.End()
 		}
+		if diag.DefaultGRPCMonitoring.IsEnabled() {
+			diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
+				"OnBindingEvent",
+				status.Code(err).String(),
+				int64(len(resp.GetData())), start)
+		}
 
 		if err != nil {
-			return nil, errors.Wrap(err, "error invoking app")
+			body := resp.Data
+			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(body)))
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
@@ -701,17 +743,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				if err == nil {
 					response.Data = d
 				}
-			}
-
-			// TODO: THIS SHOULD BE DEPRECATED FOR v1.3
-			for _, s := range resp.States {
-				var i interface{}
-				a.json.Unmarshal(s.Value, &i)
-
-				response.State = append(response.State, state.SetRequest{
-					Key:   s.Key,
-					Value: i,
-				})
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
@@ -738,18 +769,14 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
 		}
-
+		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code != nethttp.StatusOK {
-			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
+			_, body := resp.RawData()
+			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
 
 		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
 			appResponseBody = resp.Message().Data.Value
-		}
-
-		// TODO: THIS SHOULD BE DEPRECATED FOR v1.3
-		if err := a.json.Unmarshal(resp.Message().Data.Value, &response); err != nil {
-			log.Debugf("error deserializing app response: %s", err)
 		}
 	}
 

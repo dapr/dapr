@@ -12,6 +12,7 @@ type CreateTimerRequest struct {
 	ActorID   string
 	DueTime   string      `json:"dueTime"`
 	Period    string      `json:"period"`
+	TTL       string      `json:"ttl"`
 	Callback  string      `json:"callback"`
 	Data      interface{} `json:"data"`
 }

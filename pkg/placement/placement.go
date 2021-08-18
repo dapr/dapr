@@ -203,7 +203,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// the member will be marked as faulty node and removed.
 			p.lastHeartBeat.Store(req.Name, time.Now().UnixNano())
 
-			members := p.raftNode.FSM().State().Members
+			members := p.raftNode.FSM().State().Members()
 
 			// Upsert incoming member only if it is an actor service (not actor client) and
 			// the existing member info is unmatched with the incoming member info.

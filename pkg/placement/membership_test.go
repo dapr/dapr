@@ -18,7 +18,7 @@ import (
 )
 
 func cleanupStates() {
-	for k := range testRaftServer.FSM().State().Members {
+	for k := range testRaftServer.FSM().State().Members() {
 		testRaftServer.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
 			Name: k,
 		})
@@ -32,7 +32,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 	var stopCh chan struct{}
 	setupEach := func(t *testing.T) {
 		cleanupStates()
-		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members))
+		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members()))
 
 		stopCh = make(chan struct{})
 		go testServer.membershipChangeWorker(stopCh)
@@ -52,7 +52,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		// wait until all host member change requests are flushed
 		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
-		assert.Equal(t, 3, len(testServer.raftNode.FSM().State().Members))
+		assert.Equal(t, 3, len(testServer.raftNode.FSM().State().Members()))
 	}
 
 	tearDownEach := func() {
@@ -100,7 +100,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		<-done
 
 		assert.Equal(t, 1, len(testServer.streamConnPool))
-		assert.Equal(t, len(testServer.streamConnPool), len(testServer.raftNode.FSM().State().Members))
+		assert.Equal(t, len(testServer.streamConnPool), len(testServer.raftNode.FSM().State().Members()))
 
 		// wait until table dissemination.
 		time.Sleep(disseminateTimerInterval * 2)
@@ -121,7 +121,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		// faulty host detector removes all members if heartbeat does not happen
 		time.Sleep(faultyHostDetectInitialDuration + 10*time.Millisecond)
-		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members))
+		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members()))
 
 		tearDownEach()
 	})
