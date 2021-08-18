@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-FROM golang:1.16-nanoserver
+FROM golang:1.17-nanoserver
 
 WORKDIR /app
 COPY . .
