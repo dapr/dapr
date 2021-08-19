@@ -155,6 +155,7 @@ type DaprRuntime struct {
 	daprHTTPAPI            http.API
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
+	inputBindingRoutes     map[string]string
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -200,6 +201,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		scopedSubscriptions: map[string][]string{},
 		scopedPublishings:   map[string][]string{},
 		allowedTopics:       map[string][]string{},
+		inputBindingRoutes:  map[string]string{},
 
 		secretsConfiguration: map[string]config.SecretsScope{},
 
@@ -746,7 +748,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		req := invokev1.NewInvokeMethodRequest(bindingName)
+		name := a.inputBindingRoutes[bindingName]
+
+		req := invokev1.NewInvokeMethodRequest(name)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
 
@@ -902,6 +906,13 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 		log.Errorf("failed to init input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
 		return err
+	}
+
+	a.inputBindingRoutes[c.Name] = c.Name
+	for _, item := range c.Spec.Metadata {
+		if item.Name == "route" {
+			a.inputBindingRoutes[c.ObjectMeta.Name] = item.Value.String()
+		}
 	}
 
 	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
