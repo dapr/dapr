@@ -114,14 +114,15 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
 			"--log-as-json",
+			"--enable-mtls",
 		}
 
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[1].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[2].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
@@ -163,15 +164,16 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
 			"--log-as-json",
+			"--enable-mtls",
 		}
 
 		assert.Equal(t, "/dlv", container.Command[0])
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[1].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[2].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})

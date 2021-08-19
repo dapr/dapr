@@ -22,6 +22,8 @@ binding_output \
 pubsub-publisher \
 pubsub-subscriber \
 pubsub-subscriber_grpc \
+pubsub-subscriber-routing \
+pubsub-subscriber-routing_grpc \
 actorapp \
 actorclientapp \
 actorfeatures \
@@ -244,6 +246,9 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_reentrant_actor.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_actor_type_metadata.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_pubsub_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_grpc_proxy_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
@@ -255,6 +260,7 @@ setup-test-components: setup-app-configurations
 # Clean up test environment
 clean-test-env:
 	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)
+	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)-2
 
 # Setup kind
 setup-kind:
@@ -270,8 +276,8 @@ describe-kind-env:
 	export MINIKUBE_NODE_IP=`kubectl get nodes \
 	    -lkubernetes.io/hostname!=kind-control-plane \
         -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'`\n\
-	export DAPR_REGISTRY=localhost:5000/dapr\n\
-	export DAPR_TEST_REGISTRY=localhost:5000/dapr\n\
+	export DAPR_REGISTRY=$${DAPR_REGISTRY:-localhost:5000/dapr}\n\
+	export DAPR_TEST_REGISTRY=$${DAPR_TEST_REGISTRY:-localhost:5000/dapr}\n\
 	export DAPR_TAG=dev\n\
 	export DAPR_NAMESPACE=dapr-tests"
 	
