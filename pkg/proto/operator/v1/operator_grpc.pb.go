@@ -97,7 +97,7 @@ func (c *operatorClient) ListSubscriptions(ctx context.Context, in *empty.Empty,
 }
 
 // OperatorServer is the server API for Operator service.
-// All implementations must embed UnimplementedOperatorServer
+// All implementations should embed UnimplementedOperatorServer
 // for forward compatibility
 type OperatorServer interface {
 	// Sends events to Dapr sidecars upon component changes.
@@ -108,10 +108,9 @@ type OperatorServer interface {
 	GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
 	ListSubscriptions(context.Context, *empty.Empty) (*ListSubscriptionsResponse, error)
-	mustEmbedUnimplementedOperatorServer()
 }
 
-// UnimplementedOperatorServer must be embedded to have forward compatible implementations.
+// UnimplementedOperatorServer should be embedded to have forward compatible implementations.
 type UnimplementedOperatorServer struct {
 }
 
@@ -127,7 +126,6 @@ func (UnimplementedOperatorServer) GetConfiguration(context.Context, *GetConfigu
 func (UnimplementedOperatorServer) ListSubscriptions(context.Context, *empty.Empty) (*ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
 }
-func (UnimplementedOperatorServer) mustEmbedUnimplementedOperatorServer() {}
 
 // UnsafeOperatorServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to OperatorServer will
