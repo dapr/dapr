@@ -1159,6 +1159,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
 		temp[key] = value
+
 		return true
 	})
 
@@ -1219,6 +1220,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1227,6 +1229,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1235,6 +1238,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1243,6 +1247,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1255,6 +1260,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1264,6 +1270,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 
 	data := body
+
 	if !rawPayload {
 		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
 			ID:              a.id,
@@ -1278,6 +1285,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
+
 			return
 		}
 
@@ -1291,6 +1299,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 				fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
+
 			return
 		}
 	}
@@ -1334,6 +1343,7 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 			return statusCode
 		}
 	}
+
 	return fasthttp.StatusOK
 }
 
