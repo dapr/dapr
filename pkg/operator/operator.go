@@ -17,7 +17,8 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
@@ -57,7 +58,8 @@ func init() {
 
 	_ = componentsapi.AddToScheme(scheme)
 	_ = configurationapi.AddToScheme(scheme)
-	_ = subscriptionsapi.AddToScheme(scheme)
+	_ = subscriptionsapi_v1alpha1.AddToScheme(scheme)
+	_ = subscriptionsapi_v2alpha1.AddToScheme(scheme)
 }
 
 // NewOperator returns a new Dapr Operator.
@@ -142,32 +144,30 @@ func (o *operator) Run(ctx context.Context) {
 	o.prepareConfig()
 
 	var certChain *credentials.CertChain
-	if o.config.MTLSEnabled {
-		log.Info("mTLS enabled, getting tls certificates")
-		// try to load certs from disk, if not yet there, start a watch on the local filesystem
-		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
-		if err != nil {
-			fsevent := make(chan struct{})
+	log.Info("getting tls certificates")
+	// try to load certs from disk, if not yet there, start a watch on the local filesystem
+	chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
+	if err != nil {
+		fsevent := make(chan struct{})
 
-			go func() {
-				log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
-				err = fswatcher.Watch(ctx, o.config.Credentials.Path(), fsevent)
-				if err != nil {
-					log.Fatal("error starting watch on filesystem: %s", err)
-				}
-			}()
-
-			<-fsevent
-			log.Info("certificates detected")
-
-			chain, err = credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
+		go func() {
+			log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
+			err = fswatcher.Watch(ctx, o.config.Credentials.Path(), fsevent)
 			if err != nil {
-				log.Fatal("failed to load cert chain from disk: %s", err)
+				log.Fatal("error starting watch on filesystem: %s", err)
 			}
+		}()
+
+		<-fsevent
+		log.Info("certificates detected")
+
+		chain, err = credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
+		if err != nil {
+			log.Fatal("failed to load cert chain from disk: %s", err)
 		}
-		certChain = chain
-		log.Info("tls certificates loaded successfully")
 	}
+	certChain = chain
+	log.Info("tls certificates loaded successfully")
 
 	go func() {
 		healthzServer := health.NewServer(log)

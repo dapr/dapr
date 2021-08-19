@@ -139,10 +139,8 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	var identity string
 
 	mtlsEnabled := mTLSEnabled(daprClient)
-	if mtlsEnabled {
-		trustAnchors, certChain, certKey = getTrustAnchorsAndCertChain(kubeClient, namespace)
-		identity = fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName)
-	}
+	trustAnchors, certChain, certKey = getTrustAnchorsAndCertChain(kubeClient, namespace)
+	identity = fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName)
 
 	tokenMount := getTokenVolumeMount(pod)
 	sidecarContainer, err := getSidecarContainer(pod.Annotations, id, image, imagePullPolicy, req.Namespace, apiSvcAddress, placementAddress, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity)
@@ -619,24 +617,25 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		c.Args = append(c.Args, "--enable-profiling")
 	}
 
-	if mtlsEnabled && trustAnchors != "" {
-		c.Args = append(c.Args, "--enable-mtls")
-		c.Env = append(c.Env, corev1.EnvVar{
-			Name:  certs.TrustAnchorsEnvVar,
-			Value: trustAnchors,
+	c.Env = append(c.Env, corev1.EnvVar{
+		Name:  certs.TrustAnchorsEnvVar,
+		Value: trustAnchors,
+	},
+		corev1.EnvVar{
+			Name:  certs.CertChainEnvVar,
+			Value: certChain,
 		},
-			corev1.EnvVar{
-				Name:  certs.CertChainEnvVar,
-				Value: certChain,
-			},
-			corev1.EnvVar{
-				Name:  certs.CertKeyEnvVar,
-				Value: certKey,
-			},
-			corev1.EnvVar{
-				Name:  "SENTRY_LOCAL_IDENTITY",
-				Value: identity,
-			})
+		corev1.EnvVar{
+			Name:  certs.CertKeyEnvVar,
+			Value: certKey,
+		},
+		corev1.EnvVar{
+			Name:  "SENTRY_LOCAL_IDENTITY",
+			Value: identity,
+		})
+
+	if mtlsEnabled {
+		c.Args = append(c.Args, "--enable-mtls")
 	}
 
 	if sslEnabled {
