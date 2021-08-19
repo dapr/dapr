@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	openssl "github.com/libp2p/go-openssl"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -158,7 +159,7 @@ func (i *injector) Run(ctx context.Context) {
 	}()
 
 	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
-	err := i.server.ListenAndServeTLS(i.config.TLSCertFile, i.config.TLSKeyFile)
+	err := openssl.ListenAndServeTLS(i.server.Addr, i.config.TLSCertFile, i.config.TLSKeyFile, i.server.Handler)
 	if err != http.ErrServerClosed {
 		log.Errorf("Sidecar injector error: %s", err)
 	}
