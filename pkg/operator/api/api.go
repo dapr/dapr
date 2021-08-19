@@ -21,14 +21,15 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
 const serverPort = 6500
@@ -155,7 +156,7 @@ func processComponentSecrets(component *componentsapi.Component, namespace strin
 
 			val, ok := secret.Data[key]
 			if ok {
-				val, err := json.Marshal(string(val))
+				val, err = json.Marshal(string(val))
 				if err != nil {
 					return err
 				}

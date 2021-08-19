@@ -58,7 +58,6 @@ import (
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/proto/operator/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -277,10 +276,10 @@ func TestDoProcessComponent(t *testing.T) {
 	})
 }
 
-// mockOperatorClient is a mock implementation of operator.OperatorClient.
+// mockOperatorClient is a mock implementation of operatorv1pb.OperatorClient.
 // It is used to test `beginComponentsUpdates`.
 type mockOperatorClient struct {
-	operator.OperatorClient
+	operatorv1pb.OperatorClient
 
 	lock                      sync.RWMutex
 	compsByName               map[string]*components_v1alpha1.Component
@@ -299,12 +298,12 @@ func newMockOperatorClient() *mockOperatorClient {
 	return mockOpCli
 }
 
-func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *operatorv1pb.ComponentUpdateRequest, opts ...grpc.CallOption) (operator.Operator_ComponentUpdateClient, error) {
+func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *operatorv1pb.ComponentUpdateRequest, opts ...grpc.CallOption) (operatorv1pb.Operator_ComponentUpdateClient, error) {
 	// Used to block stream creation.
 	<-c.clientStreamCreateWait
 
 	cs := &mockOperatorComponentUpdateClientStream{
-		updateCh: make(chan *operator.ComponentUpdateEvent, 1),
+		updateCh: make(chan *operatorv1pb.ComponentUpdateEvent, 1),
 	}
 
 	c.lock.Lock()
@@ -316,11 +315,11 @@ func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *operatorv1
 	return cs, nil
 }
 
-func (c *mockOperatorClient) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest, opts ...grpc.CallOption) (*operator.ListComponentResponse, error) {
+func (c *mockOperatorClient) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListComponentResponse, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	resp := &operator.ListComponentResponse{
+	resp := &operatorv1pb.ListComponentResponse{
 		Components: [][]byte{},
 	}
 	for _, comp := range c.compsByName {
@@ -374,17 +373,17 @@ func (c *mockOperatorClient) UpdateComponent(comp *components_v1alpha1.Component
 
 	c.compsByName[comp.Name] = comp
 	for _, cs := range c.clientStreams {
-		cs.updateCh <- &operator.ComponentUpdateEvent{Component: b}
+		cs.updateCh <- &operatorv1pb.ComponentUpdateEvent{Component: b}
 	}
 }
 
 type mockOperatorComponentUpdateClientStream struct {
-	operator.Operator_ComponentUpdateClient
+	operatorv1pb.Operator_ComponentUpdateClient
 
-	updateCh chan *operator.ComponentUpdateEvent
+	updateCh chan *operatorv1pb.ComponentUpdateEvent
 }
 
-func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operator.ComponentUpdateEvent, error) {
+func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operatorv1pb.ComponentUpdateEvent, error) {
 	e, ok := <-cs.updateCh
 	if !ok {
 		return nil, fmt.Errorf("stream closed")
