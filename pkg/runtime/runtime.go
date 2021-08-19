@@ -93,6 +93,7 @@ const (
 	middlewareComponent             ComponentCategory = "middleware"
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
+	kubernetesSecretStore                             = "kubernetes"
 )
 
 var componentCategoriesNeedProcess = []ComponentCategory{
@@ -564,7 +565,9 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 			// Retry on stream error.
 			backoff.Retry(func() error {
 				var err error
-				stream, err = a.operatorClient.ComponentUpdate(context.Background(), &emptypb.Empty{})
+				stream, err = a.operatorClient.ComponentUpdate(context.Background(), &operatorv1pb.ComponentUpdateRequest{
+					Namespace: a.namespace,
+				})
 				if err != nil {
 					log.Errorf("error from operator stream: %s", err)
 					return err
@@ -575,7 +578,9 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 			if needList {
 				// We should get all components again to avoid missing any updates during the failure time.
 				backoff.Retry(func() error {
-					resp, err := a.operatorClient.ListComponents(context.Background(), &emptypb.Empty{})
+					resp, err := a.operatorClient.ListComponents(context.Background(), &operatorv1pb.ListComponentsRequest{
+						Namespace: a.namespace,
+					})
 					if err != nil {
 						log.Errorf("error listing components: %s", err)
 						return err
@@ -1462,13 +1467,14 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.operatorClient)
+		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.namespace, a.operatorClient)
 	case modes.StandaloneMode:
 		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	default:
 		return errors.Errorf("components loader for mode %s not found", a.runtimeConfig.Mode)
 	}
 
+	log.Info("loading components")
 	comps, err := loader.LoadComponents()
 	if err != nil {
 		return err
@@ -1714,6 +1720,11 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 		if secretStore == nil {
 			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
 			return component, secretStoreName
+		}
+
+		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator
+		if a.runtimeConfig.Mode == modes.KubernetesMode && secretStoreName == kubernetesSecretStore {
+			return component, ""
 		}
 
 		resp, ok := cache[m.SecretKeyRef.Name]

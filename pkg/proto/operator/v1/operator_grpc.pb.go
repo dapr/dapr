@@ -4,10 +4,10 @@ package operator
 
 import (
 	context "context"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -20,13 +20,13 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type OperatorClient interface {
 	// Sends events to Dapr sidecars upon component changes.
-	ComponentUpdate(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Operator_ComponentUpdateClient, error)
+	ComponentUpdate(ctx context.Context, in *ComponentUpdateRequest, opts ...grpc.CallOption) (Operator_ComponentUpdateClient, error)
 	// Returns a list of available components
-	ListComponents(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListComponentResponse, error)
+	ListComponents(ctx context.Context, in *ListComponentsRequest, opts ...grpc.CallOption) (*ListComponentResponse, error)
 	// Returns a given configuration by name
 	GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
-	ListSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	ListSubscriptions(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
 }
 
 type operatorClient struct {
@@ -37,7 +37,7 @@ func NewOperatorClient(cc grpc.ClientConnInterface) OperatorClient {
 	return &operatorClient{cc}
 }
 
-func (c *operatorClient) ComponentUpdate(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Operator_ComponentUpdateClient, error) {
+func (c *operatorClient) ComponentUpdate(ctx context.Context, in *ComponentUpdateRequest, opts ...grpc.CallOption) (Operator_ComponentUpdateClient, error) {
 	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[0], "/dapr.proto.operator.v1.Operator/ComponentUpdate", opts...)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (x *operatorComponentUpdateClient) Recv() (*ComponentUpdateEvent, error) {
 	return m, nil
 }
 
-func (c *operatorClient) ListComponents(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListComponentResponse, error) {
+func (c *operatorClient) ListComponents(ctx context.Context, in *ListComponentsRequest, opts ...grpc.CallOption) (*ListComponentResponse, error) {
 	out := new(ListComponentResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListComponents", in, out, opts...)
 	if err != nil {
@@ -87,7 +87,7 @@ func (c *operatorClient) GetConfiguration(ctx context.Context, in *GetConfigurat
 	return out, nil
 }
 
-func (c *operatorClient) ListSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
+func (c *operatorClient) ListSubscriptions(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
 	out := new(ListSubscriptionsResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListSubscriptions", in, out, opts...)
 	if err != nil {
@@ -97,35 +97,37 @@ func (c *operatorClient) ListSubscriptions(ctx context.Context, in *emptypb.Empt
 }
 
 // OperatorServer is the server API for Operator service.
-// All implementations should embed UnimplementedOperatorServer
+// All implementations must embed UnimplementedOperatorServer
 // for forward compatibility
 type OperatorServer interface {
 	// Sends events to Dapr sidecars upon component changes.
-	ComponentUpdate(*emptypb.Empty, Operator_ComponentUpdateServer) error
+	ComponentUpdate(*ComponentUpdateRequest, Operator_ComponentUpdateServer) error
 	// Returns a list of available components
-	ListComponents(context.Context, *emptypb.Empty) (*ListComponentResponse, error)
+	ListComponents(context.Context, *ListComponentsRequest) (*ListComponentResponse, error)
 	// Returns a given configuration by name
 	GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
-	ListSubscriptions(context.Context, *emptypb.Empty) (*ListSubscriptionsResponse, error)
+	ListSubscriptions(context.Context, *empty.Empty) (*ListSubscriptionsResponse, error)
+	mustEmbedUnimplementedOperatorServer()
 }
 
-// UnimplementedOperatorServer should be embedded to have forward compatible implementations.
+// UnimplementedOperatorServer must be embedded to have forward compatible implementations.
 type UnimplementedOperatorServer struct {
 }
 
-func (UnimplementedOperatorServer) ComponentUpdate(*emptypb.Empty, Operator_ComponentUpdateServer) error {
+func (UnimplementedOperatorServer) ComponentUpdate(*ComponentUpdateRequest, Operator_ComponentUpdateServer) error {
 	return status.Errorf(codes.Unimplemented, "method ComponentUpdate not implemented")
 }
-func (UnimplementedOperatorServer) ListComponents(context.Context, *emptypb.Empty) (*ListComponentResponse, error) {
+func (UnimplementedOperatorServer) ListComponents(context.Context, *ListComponentsRequest) (*ListComponentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListComponents not implemented")
 }
 func (UnimplementedOperatorServer) GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfiguration not implemented")
 }
-func (UnimplementedOperatorServer) ListSubscriptions(context.Context, *emptypb.Empty) (*ListSubscriptionsResponse, error) {
+func (UnimplementedOperatorServer) ListSubscriptions(context.Context, *empty.Empty) (*ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
 }
+func (UnimplementedOperatorServer) mustEmbedUnimplementedOperatorServer() {}
 
 // UnsafeOperatorServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to OperatorServer will
@@ -139,7 +141,7 @@ func RegisterOperatorServer(s grpc.ServiceRegistrar, srv OperatorServer) {
 }
 
 func _Operator_ComponentUpdate_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(emptypb.Empty)
+	m := new(ComponentUpdateRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
@@ -160,7 +162,7 @@ func (x *operatorComponentUpdateServer) Send(m *ComponentUpdateEvent) error {
 }
 
 func _Operator_ListComponents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
+	in := new(ListComponentsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -172,7 +174,7 @@ func _Operator_ListComponents_Handler(srv interface{}, ctx context.Context, dec 
 		FullMethod: "/dapr.proto.operator.v1.Operator/ListComponents",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OperatorServer).ListComponents(ctx, req.(*emptypb.Empty))
+		return srv.(OperatorServer).ListComponents(ctx, req.(*ListComponentsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -196,7 +198,7 @@ func _Operator_GetConfiguration_Handler(srv interface{}, ctx context.Context, de
 }
 
 func _Operator_ListSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -208,7 +210,7 @@ func _Operator_ListSubscriptions_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: "/dapr.proto.operator.v1.Operator/ListSubscriptions",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OperatorServer).ListSubscriptions(ctx, req.(*emptypb.Empty))
+		return srv.(OperatorServer).ListSubscriptions(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
