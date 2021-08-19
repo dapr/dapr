@@ -2630,6 +2630,14 @@ func TestMTLS(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Nil(t, rt.authenticator)
 	})
+
+	t.Run("mTLS disabled, operator fails without TLS certs", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
+
+		_, err := rt.getOperatorClient()
+		assert.Error(t, err)
+	})
 }
 
 type mockBinding struct {
