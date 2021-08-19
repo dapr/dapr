@@ -908,14 +908,13 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 		return err
 	}
 
+	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 	a.inputBindingRoutes[c.Name] = c.Name
 	for _, item := range c.Spec.Metadata {
 		if item.Name == "route" {
 			a.inputBindingRoutes[c.ObjectMeta.Name] = item.Value.String()
 		}
 	}
-
-	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 	a.inputBindings[c.Name] = binding
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	return nil
