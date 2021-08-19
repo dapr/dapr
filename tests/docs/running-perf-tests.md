@@ -32,6 +32,7 @@ Performance tests are designed to let you evaluate the latency, resource usage a
     # Set the below environment variables if you want to use the different registry and tag for test apps
     # export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
     # export DARP_TEST_TAG=dev
+    # export DAPR_TEST_REGISTRY_SECRET=yourself_private_image_secret
 
     # Set the below environment variables to configure test specific settings.
     # DAPR_PERF_QPS sets the desired number of requests per second. Default is 1.

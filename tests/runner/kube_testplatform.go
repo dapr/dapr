@@ -94,6 +94,11 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		if app.RegistryName == "" {
 			app.RegistryName = c.imageRegistry()
 		}
+
+		if app.ImageSecret == "" {
+			app.ImageSecret = c.imageSecret()
+		}
+
 		if app.ImageName == "" {
 			return fmt.Errorf("%s app doesn't have imagename property", app.AppName)
 		}
@@ -148,6 +153,14 @@ func (c *KubeTestPlatform) imageRegistry() string {
 		return defaultImageRegistry
 	}
 	return reg
+}
+
+func (c *KubeTestPlatform) imageSecret() string {
+	secret := os.Getenv("DAPR_TEST_REGISTRY_SECRET")
+	if secret == "" {
+		return ""
+	}
+	return secret
 }
 
 func (c *KubeTestPlatform) imageTag() string {
