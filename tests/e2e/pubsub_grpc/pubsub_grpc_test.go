@@ -38,16 +38,17 @@ const (
 
 	receiveMessageRetries = 5
 
-	publisherAppName      = "pubsub-publisher-grpc"
-	subscriberAppNameGRPC = "pubsub-subscriber-grpc"
+	publisherAppName  = "pubsub-publisher-grpc"
+	subscriberAppName = "pubsub-subscriber-grpc"
 )
 
 // sent to the publisher app, which will publish data to dapr.
 type publishCommand struct {
-	Topic    string            `json:"topic"`
-	Data     string            `json:"data"`
-	Protocol string            `json:"protocol"`
-	Metadata map[string]string `json:"metadata"`
+	ContentType string            `json:"contentType"`
+	Topic       string            `json:"topic"`
+	Data        interface{}       `json:"data"`
+	Protocol    string            `json:"protocol"`
+	Metadata    map[string]string `json:"metadata"`
 }
 
 type callSubscriberMethodRequest struct {
@@ -64,20 +65,41 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
 }
 
-// sends messages to the publisher app.  The publisher app does the actual publish.
-func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string, metadata map[string]string) ([]string, error) {
-	var sentMessages []string
-	commandBody := publishCommand{
-		Topic:    fmt.Sprintf("%s-%s", topic, protocol),
-		Protocol: protocol,
-		Metadata: metadata,
-	}
+type cloudEvent struct {
+	ID              string      `json:"id"`
+	Type            string      `json:"type"`
+	DataContentType string      `json:"datacontenttype"`
+	Data            interface{} `json:"data"`
+}
 
+// sends messages to the publisher app.  The publisher app does the actual publish.
+func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string, metadata map[string]string, cloudEventType string) ([]string, error) {
+	var sentMessages []string
+	contentType := "application/json"
+	if cloudEventType != "" {
+		contentType = "application/cloudevents+json"
+	}
+	commandBody := publishCommand{
+		ContentType: contentType,
+		Topic:       fmt.Sprintf("%s-%s", topic, protocol),
+		Protocol:    protocol,
+		Metadata:    metadata,
+	}
 	//nolint: gosec
 	offset := rand.Intn(randomOffsetMax)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
 		// create and marshal message
-		commandBody.Data = fmt.Sprintf("message-%s-%d", protocol, i)
+		messageID := fmt.Sprintf("message-%s-%03d", protocol, i)
+		var messageData interface{} = messageID
+		if cloudEventType != "" {
+			messageData = &cloudEvent{
+				ID:              messageID,
+				Type:            cloudEventType,
+				DataContentType: "text/plain",
+				Data:            messageID,
+			}
+		}
+		commandBody.Data = messageData
 		jsonValue, err := json.Marshal(commandBody)
 		require.NoError(t, err)
 
@@ -96,27 +118,40 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 		}
 
 		// save successful message
-		sentMessages = append(sentMessages, commandBody.Data)
+		sentMessages = append(sentMessages, messageID)
 	}
 
 	return sentMessages, nil
 }
 
+func callInitialize(t *testing.T, publisherExternalURL string, protocol string) {
+	req := callSubscriberMethodRequest{
+		RemoteApp: subscriberAppName,
+		Method:    "initialize",
+		Protocol:  protocol,
+	}
+	// only for the empty-json scenario, initialize empty sets in the subscriber app
+	reqBytes, _ := json.Marshal(req)
+	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, code)
+}
+
 func testPublish(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
 	var err error
-	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil)
+	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
 	require.NoError(t, err)
 
-	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol, nil)
+	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol, nil, "")
 	require.NoError(t, err)
 
-	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, nil)
+	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, nil, "")
 	require.NoError(t, err)
 
 	metadata := map[string]string{
 		"rawPayload": "true",
 	}
-	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata)
+	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
 	require.NoError(t, err)
 
 	return receivedMessagesResponse{
@@ -175,16 +210,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
 	if subscriberResponse == "empty-json" {
 		log.Println("Initialize the sets again in the subscriber application for this scenario ...")
-		req := callSubscriberMethodRequest{
-			RemoteApp: subscriberAppName,
-			Method:    "initialize",
-			Protocol:  protocol,
-		}
-		// only for the empty-json scenario, initialize empty sets in the subscriber app
-		reqBytes, _ := json.Marshal(req)
-		_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, code)
+		callInitialize(t, publisherExternalURL, protocol)
 	}
 
 	// set to respond with specified subscriber response
@@ -263,7 +289,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		err = json.Unmarshal(resp, &appResp)
 		require.NoError(t, err)
 
-		log.Printf("subscriber receieved %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic and %d on pubsub-raw-topic",
+		log.Printf("subscriber received %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic and %d on pubsub-raw-topic",
 			len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC), len(appResp.ReceivedByTopicRaw))
 
 		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
@@ -307,7 +333,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
-			AppName:        subscriberAppNameGRPC,
+			AppName:        subscriberAppName,
 			DaprEnabled:    true,
 			ImageName:      "e2e-pubsub-subscriber_grpc",
 			Replicas:       1,
@@ -363,8 +389,8 @@ func TestPubSubGRPC(t *testing.T) {
 	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
 	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 
-	subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppNameGRPC)
-	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURLHTTP must not be empty!")
+	subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
+	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
@@ -372,9 +398,10 @@ func TestPubSubGRPC(t *testing.T) {
 	require.NoError(t, err)
 
 	protocol := "grpc"
+	callInitialize(t, publisherExternalURL, protocol)
 	for _, tc := range pubsubTests {
 		t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
-			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppNameGRPC, protocol)
+			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol)
 		})
 	}
 }

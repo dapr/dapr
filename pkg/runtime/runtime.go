@@ -110,8 +110,8 @@ var log = logger.NewLogger("dapr.runtime")
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
 
 type Route struct {
-	path     string
 	metadata map[string]string
+	rules    []*runtime_pubsub.Rule
 }
 
 type TopicRoute struct {
@@ -163,6 +163,9 @@ type DaprRuntime struct {
 	pendingComponentDependents map[string][]components_v1alpha1.Component
 
 	proxy messaging.Proxy
+
+	// TODO: Remove feature flag once feature is ratified
+	featureRoutingEnabled bool
 }
 
 type componentPreprocessRes struct {
@@ -174,6 +177,7 @@ type pubsubSubscribedMessage struct {
 	data       []byte
 	topic      string
 	metadata   map[string]string
+	path       string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
@@ -383,6 +387,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetActorRuntime(a.actor)
 	grpcAPI.SetActorRuntime(a.actor)
 
+	// TODO: Remove feature flag once feature is ratified
+	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
+
 	a.startSubscribing()
 	err = a.startReadingFromBindings()
 	if err != nil {
@@ -499,11 +506,29 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				}
 			}
 
+			if pubsub.HasExpired(cloudEvent) {
+				log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
+
+				return nil
+			}
+
+			route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
+			routePath, shouldProcess, err := findMatchingRoute(&route, cloudEvent, a.featureRoutingEnabled)
+			if err != nil {
+				return err
+			}
+			if !shouldProcess {
+				// The event does not match any route specified so ignore it.
+				log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msg.Topic)
+				return nil
+			}
+
 			return publishFunc(ctx, &pubsubSubscribedMessage{
 				cloudEvent: cloudEvent,
 				data:       data,
 				topic:      msg.Topic,
 				metadata:   msg.Metadata,
+				path:       routePath,
 			})
 		}); err != nil {
 			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
@@ -511,6 +536,52 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 	}
 
 	return nil
+}
+
+// findMatchingRoute selects the path based on routing rules. If there are
+// no matching rules, the route-level path is used.
+func findMatchingRoute(route *Route, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess bool, err error) {
+	hasRules := len(route.rules) > 0
+	if hasRules {
+		data := map[string]interface{}{
+			"event": cloudEvent,
+		}
+		rule, err := matchRoutingRule(route, data, routingEnabled)
+		if err != nil {
+			return "", false, err
+		}
+		if rule != nil {
+			return rule.Path, true, nil
+		}
+	}
+
+	return "", false, nil
+}
+
+func matchRoutingRule(route *Route, data map[string]interface{}, routingEnabled bool) (*runtime_pubsub.Rule, error) {
+	for _, rule := range route.rules {
+		if rule.Match == nil {
+			return rule, nil
+		}
+		// If routing is not enabled, skip match evaluation.
+		if !routingEnabled {
+			continue
+		}
+		iResult, err := rule.Match.Eval(data)
+		if err != nil {
+			return nil, err
+		}
+		result, ok := iResult.(bool)
+		if !ok {
+			return nil, errors.Errorf("the result of match expression %s was not a boolean", rule.Match)
+		}
+
+		if result {
+			return rule, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
@@ -1034,13 +1105,17 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	}
 
 	var subscriptions []runtime_pubsub.Subscription
+	var err error
 
 	// handle app subscriptions
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		subscriptions = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
+		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-		subscriptions = runtime_pubsub.GetSubscriptionsGRPC(client, log)
+		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	// handle declarative subscriptions
@@ -1050,9 +1125,9 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 
 		// don't register duplicate subscriptions
 		for _, sub := range subscriptions {
-			if sub.Route == s.Route && sub.PubsubName == s.PubsubName && sub.Topic == s.Topic {
-				log.Warnf("two identical subscriptions found (sources: declarative, app endpoint). topic: %s, route: %s, pubsubname: %s",
-					s.Topic, s.Route, s.PubsubName)
+			if sub.PubsubName == s.PubsubName && sub.Topic == s.Topic {
+				log.Warnf("two identical subscriptions found (sources: declarative, app endpoint). pubsubname: %s, topic: %s",
+					s.PubsubName, s.Topic)
 				skip = true
 				break
 			}
@@ -1068,7 +1143,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]Route)}
 		}
 
-		topicRoutes[s.PubsubName].routes[s.Topic] = Route{path: s.Route, metadata: s.Metadata}
+		topicRoutes[s.PubsubName].routes[s.Topic] = Route{metadata: s.Metadata, rules: s.Rules}
 	}
 
 	if len(topicRoutes) > 0 {
@@ -1226,15 +1301,9 @@ func (a *DaprRuntime) initNameResolution() error {
 func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscribedMessage) error {
 	cloudEvent := msg.cloudEvent
 
-	if pubsub.HasExpired(cloudEvent) {
-		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-		return nil
-	}
-
 	var span *trace.Span
 
-	route := a.topicRoutes[msg.metadata[pubsubName]].routes[msg.topic]
-	req := invokev1.NewInvokeMethodRequest(route.path)
+	req := invokev1.NewInvokeMethodRequest(msg.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.data, contenttype.CloudEventContentType)
 
@@ -1268,7 +1337,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
 			// Return no error so message does not get reprocessed.
-			return nil
+			return nil // nolint:nilerr
 		}
 
 		switch appResponse.Status {
@@ -1303,12 +1372,6 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
 	cloudEvent := msg.cloudEvent
 
-	if pubsub.HasExpired(cloudEvent) {
-		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-
-		return nil
-	}
-
 	envelope := &runtimev1pb.TopicEventRequest{
 		Id:              extractCloudEventProperty(cloudEvent, pubsub.IDField),
 		Source:          extractCloudEventProperty(cloudEvent, pubsub.SourceField),
@@ -1317,6 +1380,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		SpecVersion:     extractCloudEventProperty(cloudEvent, pubsub.SpecVersionField),
 		Topic:           msg.topic,
 		PubsubName:      msg.metadata[pubsubName],
+		Path:            msg.path,
 	}
 
 	if data, ok := cloudEvent[pubsub.DataBase64Field]; ok && data != nil {
