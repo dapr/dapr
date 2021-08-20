@@ -4,10 +4,10 @@ package operator
 
 import (
 	context "context"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -26,7 +26,7 @@ type OperatorClient interface {
 	// Returns a given configuration by name
 	GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
-	ListSubscriptions(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	ListSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
 }
 
 type operatorClient struct {
@@ -87,7 +87,7 @@ func (c *operatorClient) GetConfiguration(ctx context.Context, in *GetConfigurat
 	return out, nil
 }
 
-func (c *operatorClient) ListSubscriptions(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
+func (c *operatorClient) ListSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
 	out := new(ListSubscriptionsResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListSubscriptions", in, out, opts...)
 	if err != nil {
@@ -107,7 +107,7 @@ type OperatorServer interface {
 	// Returns a given configuration by name
 	GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
-	ListSubscriptions(context.Context, *empty.Empty) (*ListSubscriptionsResponse, error)
+	ListSubscriptions(context.Context, *emptypb.Empty) (*ListSubscriptionsResponse, error)
 }
 
 // UnimplementedOperatorServer should be embedded to have forward compatible implementations.
@@ -123,7 +123,7 @@ func (UnimplementedOperatorServer) ListComponents(context.Context, *ListComponen
 func (UnimplementedOperatorServer) GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfiguration not implemented")
 }
-func (UnimplementedOperatorServer) ListSubscriptions(context.Context, *empty.Empty) (*ListSubscriptionsResponse, error) {
+func (UnimplementedOperatorServer) ListSubscriptions(context.Context, *emptypb.Empty) (*ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
 }
 
@@ -196,7 +196,7 @@ func _Operator_GetConfiguration_Handler(srv interface{}, ctx context.Context, de
 }
 
 func _Operator_ListSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func _Operator_ListSubscriptions_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: "/dapr.proto.operator.v1.Operator/ListSubscriptions",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OperatorServer).ListSubscriptions(ctx, req.(*empty.Empty))
+		return srv.(OperatorServer).ListSubscriptions(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
