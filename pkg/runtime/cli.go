@@ -182,9 +182,11 @@ func FromFlags() (*DaprRuntime, error) {
 	var globalConfig *global_config.Configuration
 	var configErr error
 
-	runtimeConfig.CertChain, err = security.GetCertChain()
-	if err != nil {
-		return nil, err
+	if *enableMTLS || *mode == string(modes.KubernetesMode) {
+		runtimeConfig.CertChain, err = security.GetCertChain()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var accessControlList *global_config.AccessControlList
