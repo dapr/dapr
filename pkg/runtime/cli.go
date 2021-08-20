@@ -182,11 +182,9 @@ func FromFlags() (*DaprRuntime, error) {
 	var globalConfig *global_config.Configuration
 	var configErr error
 
-	if *enableMTLS {
-		runtimeConfig.CertChain, err = security.GetCertChain()
-		if err != nil {
-			return nil, err
-		}
+	runtimeConfig.CertChain, err = security.GetCertChain()
+	if err != nil {
+		return nil, err
 	}
 
 	var accessControlList *global_config.AccessControlList

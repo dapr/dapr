@@ -88,6 +88,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
+	"github.com/dapr/components-contrib/bindings/aws/ses"
 	"github.com/dapr/components-contrib/bindings/aws/sns"
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
@@ -340,6 +341,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("aws.s3", func() bindings.OutputBinding {
 				return s3.NewAWSS3(logContrib)
+			}),
+			bindings_loader.NewOutput("aws.ses", func() bindings.OutputBinding {
+				return ses.NewAWSSES(logContrib)
 			}),
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
 				return sqs.NewAWSSQS(logContrib)

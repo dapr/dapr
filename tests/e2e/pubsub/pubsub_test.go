@@ -43,10 +43,11 @@ const (
 
 // sent to the publisher app, which will publish data to dapr.
 type publishCommand struct {
-	Topic    string            `json:"topic"`
-	Data     string            `json:"data"`
-	Protocol string            `json:"protocol"`
-	Metadata map[string]string `json:"metadata"`
+	ContentType string            `json:"contentType"`
+	Topic       string            `json:"topic"`
+	Data        interface{}       `json:"data"`
+	Protocol    string            `json:"protocol"`
+	Metadata    map[string]string `json:"metadata"`
 }
 
 type callSubscriberMethodRequest struct {
@@ -63,19 +64,41 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
 }
 
+type cloudEvent struct {
+	ID              string `json:"id"`
+	Type            string `json:"type"`
+	DataContentType string `json:"datacontenttype"`
+	Data            string `json:"data"`
+}
+
 // sends messages to the publisher app.  The publisher app does the actual publish.
-func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string, metadata map[string]string) ([]string, error) {
+func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string, metadata map[string]string, cloudEventType string) ([]string, error) {
 	var sentMessages []string
+	contentType := "application/json"
+	if cloudEventType != "" {
+		contentType = "application/cloudevents+json"
+	}
 	commandBody := publishCommand{
-		Topic:    fmt.Sprintf("%s-%s", topic, protocol),
-		Protocol: protocol,
-		Metadata: metadata,
+		ContentType: contentType,
+		Topic:       fmt.Sprintf("%s-%s", topic, protocol),
+		Protocol:    protocol,
+		Metadata:    metadata,
 	}
 	//nolint: gosec
 	offset := rand.Intn(randomOffsetMax)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
 		// create and marshal message
-		commandBody.Data = fmt.Sprintf("message-%s-%03d", protocol, i)
+		messageID := fmt.Sprintf("message-%s-%03d", protocol, i)
+		var messageData interface{} = messageID
+		if cloudEventType != "" {
+			messageData = &cloudEvent{
+				ID:              messageID,
+				Type:            cloudEventType,
+				DataContentType: "text/plain",
+				Data:            messageID,
+			}
+		}
+		commandBody.Data = messageData
 		jsonValue, err := json.Marshal(commandBody)
 		require.NoError(t, err)
 
@@ -94,7 +117,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 		}
 
 		// save successful message
-		sentMessages = append(sentMessages, commandBody.Data)
+		sentMessages = append(sentMessages, messageID)
 	}
 
 	return sentMessages, nil
@@ -102,19 +125,19 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 
 func testPublish(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
 	var err error
-	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil)
+	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
 	require.NoError(t, err)
 
-	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol, nil)
+	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol, nil, "")
 	require.NoError(t, err)
 
-	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, nil)
+	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, nil, "")
 	require.NoError(t, err)
 
 	metadata := map[string]string{
 		"rawPayload": "true",
 	}
-	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata)
+	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
 	require.NoError(t, err)
 
 	return receivedMessagesResponse{
@@ -360,7 +383,7 @@ var pubsubTests = []struct {
 }
 
 func TestPubSubHTTP(t *testing.T) {
-	t.Log("Enter TestPubSub")
+	t.Log("Enter TestPubSubHTTP")
 	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
 	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 
