@@ -1064,10 +1064,12 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		close(stopChan.(chan bool))
 	}
 
-	if len(req.DueTime) > 0 {
+	if len(req.DueTime) != 0 {
 		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
 			return errors.Wrap(err, "error parsing timer due time")
 		}
+	} else {
+		dueTime = time.Now()
 	}
 
 	repeats = -1 // set to default

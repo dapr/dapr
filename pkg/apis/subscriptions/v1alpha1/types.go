@@ -26,10 +26,10 @@ type Subscription struct {
 // SubscriptionSpec is the spec for an event subscription.
 type SubscriptionSpec struct {
 	Topic      string `json:"topic"`
-	Route      string `json:"route"`
 	Pubsubname string `json:"pubsubname"`
 	// +optional
 	Metadata map[string]string `json:"metadata,omitempty"`
+	Route    string            `json:"route"`
 }
 
 // +kubebuilder:object:root=true
