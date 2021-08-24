@@ -103,6 +103,15 @@ endef
 # Generate test app image push targets
 $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImagePush,$(ITEM))))
 
+define genTestAppImageKindPush
+.PHONY: push-kind-e2e-app-$(1)
+push-kind-e2e-app-$(1): check-e2e-env
+	kind load docker-image $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+endef
+
+# Generate test app image push targets
+$(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageKindPush,$(ITEM))))
+
 define genPerfTestAppImageBuild
 .PHONY: build-perf-app-$(1)
 build-perf-app-$(1): check-e2e-env
@@ -116,6 +125,12 @@ define genPerfAppImagePush
 .PHONY: push-perf-app-$(1)
 push-perf-app-$(1): check-e2e-env
 	$(DOCKER) push $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
+endef
+
+define genPerfAppImageKindPush
+.PHONY: push-kind-perf-app-$(1)
+push-kind-perf-app-$(1): check-e2e-env
+	kind load docker-image $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
 endef
 
 create-test-namespace:
@@ -134,16 +149,22 @@ perf-build-deploy-run: create-test-namespace setup-3rd-party build docker-push d
 
 # Generate perf app image push targets
 $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))
+# Generate perf app image kind push targets
+$(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImageKindPush,$(ITEM))))
 
 # Enumerate test app build targets
 BUILD_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),build-e2e-app-$(ITEM))
 # Enumerate test app push targets
 PUSH_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),push-e2e-app-$(ITEM))
+# Enumerate test app push targets
+PUSH_KIND_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),push-kind-e2e-app-$(ITEM))
 
 # Enumerate test app build targets
 BUILD_PERF_APPS_TARGETS:=$(foreach ITEM,$(PERF_TEST_APPS),build-perf-app-$(ITEM))
-# Enumerate test app push targets
+# Enumerate perf app push targets
 PUSH_PERF_APPS_TARGETS:=$(foreach ITEM,$(PERF_TEST_APPS),push-perf-app-$(ITEM))
+# Enumerate perf app kind push targets
+PUSH_KIND_PERF_APPS_TARGETS:=$(foreach ITEM,$(PERF_TEST_APPS),push-kind-perf-app-$(ITEM))
 
 # build test app image
 build-e2e-app-all: $(BUILD_E2E_APPS_TARGETS)
@@ -151,11 +172,17 @@ build-e2e-app-all: $(BUILD_E2E_APPS_TARGETS)
 # push test app image to the registry
 push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 
+# push test app image to kind cluster
+push-kind-e2e-app-all: $(PUSH_KIND_E2E_APPS_TARGETS)
+
 # build perf app image
 build-perf-app-all: $(BUILD_PERF_APPS_TARGETS)
 
 # push perf app image to the registry
 push-perf-app-all: $(PUSH_PERF_APPS_TARGETS)
+
+# push perf app image to kind cluster
+push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 
 .PHONY: test-deps
 test-deps:
