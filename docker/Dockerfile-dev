@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-FROM golang:1.16-buster
+FROM golang:1.17-buster
 
 # Optionally install zsh shell.
 ARG INSTALL_ZSH="false"
