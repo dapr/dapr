@@ -72,6 +72,7 @@ type timerReminderRequest struct {
 	Data     string `json:"data,omitempty"`
 	DueTime  string `json:"dueTime,omitempty"`
 	Period   string `json:"period,omitempty"`
+	TTL      string `json:"ttl,omitempty"`
 	Callback string `json:"callback,omitempty"`
 }
 
