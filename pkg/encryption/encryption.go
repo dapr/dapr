@@ -55,7 +55,7 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 			if len(m.Value.Raw) > 0 {
 				// encryption key is already extracted by the Operator
 				cek.Primary = Key{
-					Key:  string(m.Value.String()),
+					Key:  m.Value.String(),
 					Name: m.SecretKeyRef.Name,
 				}
 
@@ -66,7 +66,7 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 		} else if m.Name == secondaryEncryptionKey {
 			if len(m.Value.Raw) > 0 {
 				cek.Secondary = Key{
-					Key:  string(m.Value.String()),
+					Key:  m.Value.String(),
 					Name: m.SecretKeyRef.Name,
 				}
 
