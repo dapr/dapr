@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/hashicorp/go-msgpack/codec"
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 
@@ -61,7 +60,7 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 	defer c.stateLock.RUnlock()
 
 	newTable := &v1pb.PlacementTables{
-		Version: strconv.FormatUint(c.state.TableGeneration, 10),
+		Version: strconv.FormatUint(c.state.TableGeneration(), 10),
 		Entries: make(map[string]*v1pb.PlacementTable),
 	}
 
@@ -69,7 +68,7 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 	totalSortedSet := 0
 	totalLoadMap := 0
 
-	entries := c.state.hashingTableMap
+	entries := c.state.hashingTableMap()
 	for k, v := range entries {
 		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
 		table := v1pb.PlacementTable{
@@ -107,25 +106,25 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 }
 
 func (c *FSM) upsertMember(cmdData []byte) (bool, error) {
-	c.stateLock.Lock()
-	defer c.stateLock.Unlock()
-
 	var host DaprHostMember
 	if err := unmarshalMsgPack(cmdData, &host); err != nil {
 		return false, err
 	}
+
+	c.stateLock.RLock()
+	defer c.stateLock.RUnlock()
 
 	return c.state.upsertMember(&host), nil
 }
 
 func (c *FSM) removeMember(cmdData []byte) (bool, error) {
-	c.stateLock.Lock()
-	defer c.stateLock.Unlock()
-
 	var host DaprHostMember
 	if err := unmarshalMsgPack(cmdData, &host); err != nil {
 		return false, err
 	}
+
+	c.stateLock.RLock()
+	defer c.stateLock.RUnlock()
 
 	return c.state.removeMember(&host), nil
 }
@@ -137,7 +136,7 @@ func (c *FSM) Apply(log *raft.Log) interface{} {
 		updated bool
 	)
 
-	if log.Index < c.state.Index {
+	if log.Index < c.state.Index() {
 		logging.Warnf("old: %d, new index: %d. skip apply", c.state.Index, log.Index)
 		return false
 	}
@@ -174,15 +173,13 @@ func (c *FSM) Snapshot() (raft.FSMSnapshot, error) {
 func (c *FSM) Restore(old io.ReadCloser) error {
 	defer old.Close()
 
-	dec := codec.NewDecoder(old, &codec.MsgpackHandle{})
-	var members DaprHostMemberState
-	if err := dec.Decode(&members); err != nil {
+	members := newDaprHostMemberState()
+	if err := members.restore(old); err != nil {
 		return err
 	}
 
 	c.stateLock.Lock()
-	c.state = &members
-	c.state.restoreHashingTables()
+	c.state = members
 	c.stateLock.Unlock()
 
 	return nil
