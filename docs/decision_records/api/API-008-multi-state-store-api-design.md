@@ -42,7 +42,8 @@ metadata:
 spec:
   type: state.redis
   metadata:
-  - keyPrefix: none # Optional. default appid. such as: appid, none, name and custom key prefix
+  - name: keyPrefix
+    value: none # Optional. default appid. such as: appid, none, name and custom key prefix
   - name: <KEY>
     value: <VALUE>
   - name: <KEY>
@@ -59,7 +60,8 @@ metadata:
 spec:
   type: state.mongodb
   metadata:
-  - keyPrefix: none # Optional. default appid. such as: appid, none, name and custom key prefix
+  - name: keyPrefix
+    value: none # Optional. default appid. such as: appid, none, name and custom key prefix
   - name: <KEY>
     value: <VALUE>
   - name: <KEY>

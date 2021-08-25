@@ -34,7 +34,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -59,7 +58,7 @@ import (
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/proto/operator/v1"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
@@ -277,10 +276,10 @@ func TestDoProcessComponent(t *testing.T) {
 	})
 }
 
-// mockOperatorClient is a mock implementation of operator.OperatorClient.
+// mockOperatorClient is a mock implementation of operatorv1pb.OperatorClient.
 // It is used to test `beginComponentsUpdates`.
 type mockOperatorClient struct {
-	operator.OperatorClient
+	operatorv1pb.OperatorClient
 
 	lock                      sync.RWMutex
 	compsByName               map[string]*components_v1alpha1.Component
@@ -299,12 +298,12 @@ func newMockOperatorClient() *mockOperatorClient {
 	return mockOpCli
 }
 
-func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (operator.Operator_ComponentUpdateClient, error) {
+func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *operatorv1pb.ComponentUpdateRequest, opts ...grpc.CallOption) (operatorv1pb.Operator_ComponentUpdateClient, error) {
 	// Used to block stream creation.
 	<-c.clientStreamCreateWait
 
 	cs := &mockOperatorComponentUpdateClientStream{
-		updateCh: make(chan *operator.ComponentUpdateEvent, 1),
+		updateCh: make(chan *operatorv1pb.ComponentUpdateEvent, 1),
 	}
 
 	c.lock.Lock()
@@ -316,11 +315,11 @@ func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *emptypb.Em
 	return cs, nil
 }
 
-func (c *mockOperatorClient) ListComponents(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*operator.ListComponentResponse, error) {
+func (c *mockOperatorClient) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListComponentResponse, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	resp := &operator.ListComponentResponse{
+	resp := &operatorv1pb.ListComponentResponse{
 		Components: [][]byte{},
 	}
 	for _, comp := range c.compsByName {
@@ -374,17 +373,17 @@ func (c *mockOperatorClient) UpdateComponent(comp *components_v1alpha1.Component
 
 	c.compsByName[comp.Name] = comp
 	for _, cs := range c.clientStreams {
-		cs.updateCh <- &operator.ComponentUpdateEvent{Component: b}
+		cs.updateCh <- &operatorv1pb.ComponentUpdateEvent{Component: b}
 	}
 }
 
 type mockOperatorComponentUpdateClientStream struct {
-	operator.Operator_ComponentUpdateClient
+	operatorv1pb.Operator_ComponentUpdateClient
 
-	updateCh chan *operator.ComponentUpdateEvent
+	updateCh chan *operatorv1pb.ComponentUpdateEvent
 }
 
-func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operator.ComponentUpdateEvent, error) {
+func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operatorv1pb.ComponentUpdateEvent, error) {
 	e, ok := <-cs.updateCh
 	if !ok {
 		return nil, fmt.Errorf("stream closed")
@@ -1597,7 +1596,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		assert.Empty(t, unready)
 	})
 
-	t.Run("Kubernetes Mode", func(t *testing.T) {
+	t.Run("Kubernetes Mode - no value without operator", func(t *testing.T) {
 		mockBinding.Spec.Metadata[0].Value = components_v1alpha1.DynamicValue{
 			JSON: v1.JSON{Raw: []byte("")},
 		}
@@ -1622,7 +1621,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		}
 
 		mod, unready := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value.String())
+		assert.Equal(t, "", mod.Spec.Metadata[0].Value.String())
 		assert.Empty(t, unready)
 	})
 
@@ -1633,21 +1632,28 @@ func TestProcessComponentSecrets(t *testing.T) {
 		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
 			Name: "name1",
 		}
+		mockBinding.Auth.SecretStore = "mock"
 
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		defer stopRuntime(t, rt)
-		m := NewMockKubernetesStore()
+
 		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
-				return m
+			secretstores_loader.New("mock", func() secretstores.SecretStore {
+				return &mockSecretStore{}
 			}),
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		for _, comp := range rt.builtinSecretStore() {
-			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
-		}
+		err := rt.processComponentAndDependents(components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "mock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:    "secretstores.mock",
+				Version: "v1",
+			},
+		})
+		assert.NoError(t, err)
 
 		mod, unready := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value.String())
@@ -1826,34 +1832,6 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 // Test InitSecretStore if secretstore.* refers to Kubernetes secret store.
 func TestInitSecretStoresInKubernetesMode(t *testing.T) {
-	fakeSecretStoreWithAuth := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: "fakeSecretStore",
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type:    "secretstores.fake.secretstore",
-			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
-				{
-					Name: "a",
-					SecretKeyRef: components_v1alpha1.SecretKeyRef{
-						Key:  "key1",
-						Name: "name1",
-					},
-				},
-				{
-					Name: "b",
-					Value: components_v1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("value2")},
-					},
-				},
-			},
-		},
-		Auth: components_v1alpha1.Auth{
-			SecretStore: "kubernetes",
-		},
-	}
-
 	rt := NewTestDaprRuntime(modes.KubernetesMode)
 	defer stopRuntime(t, rt)
 
@@ -1867,9 +1845,6 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		err := rt.processComponentAndDependents(comp)
 		assert.Nil(t, err)
 	}
-	fakeSecretStoreWithAuth, _ = rt.processComponentSecrets(fakeSecretStoreWithAuth)
-	// initSecretStore appends Kubernetes component even if kubernetes component is not added
-	assert.Equal(t, "value1", string(fakeSecretStoreWithAuth.Spec.Metadata[0].Value.Raw))
 }
 
 func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
@@ -2596,7 +2571,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		-1,
 		false,
 		"",
-		false, 4)
+		false, 4, false)
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 }
@@ -3164,6 +3139,16 @@ func (s *mockStateStore) Close() error {
 type mockSecretStore struct {
 	secretstores.SecretStore
 	closeErr error
+}
+
+func (s *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{
+			"key1":   "value1",
+			"_value": "_value_data",
+			"name1":  "value1",
+		},
+	}, nil
 }
 
 func (s *mockSecretStore) Init(metadata secretstores.Metadata) error {

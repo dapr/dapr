@@ -13,4 +13,5 @@ type CreateReminderRequest struct {
 	Data      interface{} `json:"data"`
 	DueTime   string      `json:"dueTime"`
 	Period    string      `json:"period"`
+	TTL       string      `json:"ttl"`
 }

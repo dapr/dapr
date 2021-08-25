@@ -13,13 +13,23 @@ option go_package = "github.com/dapr/dapr/pkg/proto/operator/v1;operator";
 
 service Operator {
   // Sends events to Dapr sidecars upon component changes.
-  rpc ComponentUpdate (google.protobuf.Empty) returns (stream ComponentUpdateEvent) {}
+  rpc ComponentUpdate (ComponentUpdateRequest) returns (stream ComponentUpdateEvent) {}
   // Returns a list of available components
-  rpc ListComponents (google.protobuf.Empty) returns (ListComponentResponse) {}
+  rpc ListComponents (ListComponentsRequest) returns (ListComponentResponse) {}
   // Returns a given configuration by name
   rpc GetConfiguration (GetConfigurationRequest) returns (GetConfigurationResponse) {}
   // Returns a list of pub/sub subscriptions
   rpc ListSubscriptions (google.protobuf.Empty) returns (ListSubscriptionsResponse) {}
+}
+
+// ListComponentsRequest is the request to get components for a sidecar in namespace.
+message ListComponentsRequest {
+  string namespace = 1;
+}
+
+// ComponentUpdateRequest is the request to get updates about new components for a given namespace.
+message ComponentUpdateRequest {
+  string namespace = 1;
 }
 
 // ComponentUpdateEvent includes the updated component event.
