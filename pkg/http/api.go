@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -500,6 +501,19 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		limiter.Wait()
 	}
 
+	if encryption.EncryptedStateStore(storeName) {
+		for i := range bulkResp {
+			val, err := encryption.TryDecryptValue(storeName, bulkResp[i].Data)
+			if err != nil {
+				log.Debugf("bulk get error: %s", err)
+				bulkResp[i].Error = err.Error()
+				continue
+			}
+
+			bulkResp[i].Data = val
+		}
+	}
+
 	b, _ := a.json.Marshal(bulkResp)
 	respond(reqCtx, withJSON(fasthttp.StatusOK, b))
 }
@@ -560,6 +574,18 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	if resp == nil || resp.Data == nil {
 		respond(reqCtx, withEmpty())
 		return
+	}
+
+	if encryption.EncryptedStateStore(storeName) {
+		val, err := encryption.TryDecryptValue(storeName, resp.Data)
+		if err != nil {
+			msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+
+		resp.Data = val
 	}
 
 	respond(reqCtx, withJSON(fasthttp.StatusOK, resp.Data), withEtag(resp.ETag), withMetadata(resp.Metadata))
@@ -749,6 +775,21 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 			log.Debug(err)
 			return
+		}
+
+		if encryption.EncryptedStateStore(storeName) {
+			data := []byte(fmt.Sprintf("%v", r.Value))
+			val, err := encryption.TryEncryptValue(storeName, data)
+			if err != nil {
+				statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
+
+				respond(reqCtx, withError(statusCode, resp))
+				log.Debug(resp.Message)
+				return
+			}
+
+			reqs[i].Value = val
 		}
 	}
 
@@ -1470,6 +1511,27 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 			log.Debug(msg)
 			return
+		}
+	}
+
+	if encryption.EncryptedStateStore(storeName) {
+		for i, op := range operations {
+			if op.Operation == state.Upsert {
+				req := op.Request.(*state.SetRequest)
+				data := []byte(fmt.Sprintf("%v", req.Value))
+				val, err := encryption.TryEncryptValue(storeName, data)
+				if err != nil {
+					msg := NewErrorResponse(
+						"ERR_SAVE_STATE",
+						fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()))
+					respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+					log.Debug(msg)
+					return
+				}
+
+				req.Value = val
+				operations[i].Request = req
+			}
 		}
 	}
 
