@@ -43,7 +43,7 @@ spec:
    - name: prop2
      value: value2
 `
-	components, errs := request.decodeYaml("components/messagebus.yaml", []byte(yaml))
+	components, errs := request.decodeYaml([]byte(yaml))
 	assert.Len(t, components, 1)
 	assert.Empty(t, errs)
 	assert.Equal(t, "statestore", components[0].Name)
@@ -71,7 +71,7 @@ spec:
    - name: prop2
      value: value2
 `
-	components, errs := request.decodeYaml("components/messagebus.yaml", []byte(yaml))
+	components, errs := request.decodeYaml([]byte(yaml))
 	assert.Len(t, components, 0)
 	assert.Len(t, errs, 0)
 }
@@ -83,9 +83,9 @@ func TestStandaloneDecodeUnsuspectingFile(t *testing.T) {
 		},
 	}
 
-	components, errs := request.decodeYaml("components/messagebus.yaml", []byte("hey there"))
+	components, errs := request.decodeYaml([]byte("hey there"))
 	assert.Len(t, components, 0)
-	assert.Len(t, errs, 0)
+	assert.Len(t, errs, 1)
 }
 
 func TestStandaloneDecodeInvalidYaml(t *testing.T) {
@@ -100,9 +100,9 @@ apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
 name: statestore`
-	components, errs := request.decodeYaml("components/messagebus.yaml", []byte(yaml))
+	components, errs := request.decodeYaml([]byte(yaml))
 	assert.Len(t, components, 0)
-	assert.Len(t, errs, 0)
+	assert.Len(t, errs, 1)
 }
 
 func TestStandaloneDecodeValidMultiYaml(t *testing.T) {
@@ -134,7 +134,7 @@ spec:
     - name: prop3
       value: value3
 `
-	components, errs := request.decodeYaml("components/messagebus.yaml", []byte(yaml))
+	components, errs := request.decodeYaml([]byte(yaml))
 	assert.Len(t, components, 2)
 	assert.Empty(t, errs)
 	assert.Equal(t, "statestore1", components[0].Name)
@@ -187,9 +187,9 @@ spec:
     - name: prop3
       value: value3
 `
-	components, errs := request.decodeYaml("components/messagebus.yaml", []byte(yaml))
+	components, errs := request.decodeYaml([]byte(yaml))
 	assert.Len(t, components, 2)
-	assert.Len(t, errs, 0)
+	assert.Len(t, errs, 1)
 
 	assert.Equal(t, "statestore1", components[0].Name)
 	assert.Equal(t, "state.couchbase", components[0].Spec.Type)

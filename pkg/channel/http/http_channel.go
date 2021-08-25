@@ -77,6 +77,7 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)
 	}
+
 	return c, nil
 }
 
