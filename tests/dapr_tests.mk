@@ -271,6 +271,8 @@ setup-kind:
 	docker run -d --restart=always -p 5000:5000 --name kind-registry registry:2
 	# Connect the registry to the KinD network.
 	docker network connect "kind" kind-registry
+	# Setup metrics-server
+	helm install ms stable/metrics-server -n kube-system --set=args={--kubelet-insecure-tls}
 
 describe-kind-env:
 	@echo "\

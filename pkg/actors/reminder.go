@@ -14,4 +14,5 @@ type Reminder struct {
 	Period         string      `json:"period"`
 	DueTime        string      `json:"dueTime"`
 	RegisteredTime string      `json:"registeredTime,omitempty"`
+	ExpirationTime string      `json:"expirationTime,omitempty"`
 }
