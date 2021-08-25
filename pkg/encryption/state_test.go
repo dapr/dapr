@@ -17,7 +17,7 @@ func TestAddEncryptedStateStore(t *testing.T) {
 	t.Run("state store doesn't exist", func(t *testing.T) {
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		r := AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Primary: EncryptionKey{
+			Primary: Key{
 				Name: "primary",
 				Key:  "123",
 			},
@@ -29,7 +29,7 @@ func TestAddEncryptedStateStore(t *testing.T) {
 	t.Run("state store exists", func(t *testing.T) {
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		r := AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Primary: EncryptionKey{
+			Primary: Key{
 				Name: "primary",
 				Key:  "123",
 			},
@@ -39,7 +39,7 @@ func TestAddEncryptedStateStore(t *testing.T) {
 		assert.Equal(t, "primary", encryptedStateStores["test"].Primary.Name)
 
 		r = AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Primary: EncryptionKey{
+			Primary: Key{
 				Name: "primary",
 				Key:  "123",
 			},
@@ -61,7 +61,7 @@ func TestTryEncryptValue(t *testing.T) {
 	t.Run("state store with non AES256 primary key, error returned", func(t *testing.T) {
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Primary: EncryptionKey{
+			Primary: Key{
 				Name: "primary",
 				Key:  "123",
 			},
@@ -82,7 +82,7 @@ func TestTryEncryptValue(t *testing.T) {
 		key := hex.EncodeToString(bytes)
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Primary: EncryptionKey{
+			Primary: Key{
 				Name: "primary",
 				Key:  key,
 			},
@@ -109,7 +109,7 @@ func TestTryEncryptValue(t *testing.T) {
 
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Primary: EncryptionKey{
+			Primary: Key{
 				Name: "primary",
 				Key:  primaryKey,
 			},
@@ -123,7 +123,7 @@ func TestTryEncryptValue(t *testing.T) {
 
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Secondary: EncryptionKey{
+			Secondary: Key{
 				Name: "primary",
 				Key:  primaryKey,
 			},

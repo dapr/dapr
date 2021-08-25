@@ -27,14 +27,14 @@ const (
 	AES256Algorithm        = "AES256"
 )
 
-// ComponentEncryptionKeys holds the encryption keys set for a component
+// ComponentEncryptionKeys holds the encryption keys set for a component.
 type ComponentEncryptionKeys struct {
-	Primary   EncryptionKey
-	Secondary EncryptionKey
+	Primary   Key
+	Secondary Key
 }
 
 // EncryptionKey holds the key to encrypt an arbitrary object.
-type EncryptionKey struct {
+type Key struct {
 	Key  string
 	Name string
 }
@@ -54,7 +54,7 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 		if m.Name == primaryEncryptionKey {
 			if len(m.Value.Raw) > 0 {
 				// encryption key is already extracted by the Operator
-				cek.Primary = EncryptionKey{
+				cek.Primary = Key{
 					Key:  string(m.Value.String()),
 					Name: m.SecretKeyRef.Name,
 				}
@@ -65,7 +65,7 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 			valid = true
 		} else if m.Name == secondaryEncryptionKey {
 			if len(m.Value.Raw) > 0 {
-				cek.Secondary = EncryptionKey{
+				cek.Secondary = Key{
 					Key:  string(m.Value.String()),
 					Name: m.SecretKeyRef.Name,
 				}
@@ -95,9 +95,9 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 	return cek, nil
 }
 
-func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.MetadataItem, secretStore secretstores.SecretStore) (EncryptionKey, error) {
+func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.MetadataItem, secretStore secretstores.SecretStore) (Key, error) {
 	if item.SecretKeyRef.Name == "" {
-		return EncryptionKey{}, errors.Errorf("%s: secretKeyRef cannot be empty", errPrefix)
+		return Key{}, errors.Errorf("%s: secretKeyRef cannot be empty", errPrefix)
 	}
 
 	r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
@@ -107,7 +107,7 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.Metadat
 		},
 	})
 	if err != nil {
-		return EncryptionKey{}, errors.Wrap(err, errPrefix)
+		return Key{}, errors.Wrap(err, errPrefix)
 	}
 
 	key := item.SecretKeyRef.Key
@@ -117,20 +117,20 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.Metadat
 
 	if val, ok := r.Data[key]; ok {
 		if val == "" {
-			return EncryptionKey{}, errors.Errorf("%s: encryption key cannot be empty", errPrefix)
+			return Key{}, errors.Errorf("%s: encryption key cannot be empty", errPrefix)
 		}
 
-		return EncryptionKey{
+		return Key{
 			Key:  r.Data[key],
 			Name: item.SecretKeyRef.Name,
 		}, nil
 	}
 
-	return EncryptionKey{}, nil
+	return Key{}, nil
 }
 
-// Encrypt takes a byte array and encrypts it using a supplied encryption key and algorithm
-func encrypt(value []byte, key EncryptionKey, algorithm Algorithm) ([]byte, error) {
+// Encrypt takes a byte array and encrypts it using a supplied encryption key and algorithm.
+func encrypt(value []byte, key Key, algorithm Algorithm) ([]byte, error) {
 	keyBytes, err := hex.DecodeString(key.Key)
 	if err != nil {
 		return value, err
@@ -154,8 +154,8 @@ func encrypt(value []byte, key EncryptionKey, algorithm Algorithm) ([]byte, erro
 	return gcm.Seal(nsize, nsize, value, nil), nil
 }
 
-// Decrypt takes a byte array and decrypts it using a supplied encryption key and algorithm
-func decrypt(value []byte, key EncryptionKey, algorithm Algorithm) ([]byte, error) {
+// Decrypt takes a byte array and decrypts it using a supplied encryption key and algorithm.
+func decrypt(value []byte, key Key, algorithm Algorithm) ([]byte, error) {
 	keyBytes, err := hex.DecodeString(key.Key)
 	if err != nil {
 		return value, err

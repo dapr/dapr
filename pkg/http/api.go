@@ -565,7 +565,6 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	resp, err := store.Get(&req)
 	if err != nil {
-		storeName := a.getStateStoreName(reqCtx)
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -779,9 +778,9 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 		if encryption.EncryptedStateStore(storeName) {
 			data := []byte(fmt.Sprintf("%v", r.Value))
-			val, err := encryption.TryEncryptValue(storeName, data)
-			if err != nil {
-				statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+			val, encErr := encryption.TryEncryptValue(storeName, data)
+			if encErr != nil {
+				statusCode, errMsg, resp := a.stateErrorResponse(encErr, "ERR_STATE_SAVE")
 				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
 				respond(reqCtx, withError(statusCode, resp))

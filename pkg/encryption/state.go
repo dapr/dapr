@@ -28,7 +28,7 @@ func AddEncryptedStateStore(storeName string, keys ComponentEncryptionKeys) bool
 	return true
 }
 
-// EncryptedStateStore returns a bool that indicates if a state stores supports encryption
+// EncryptedStateStore returns a bool that indicates if a state stores supports encryption.
 func EncryptedStateStore(storeName string) bool {
 	_, ok := encryptedStateStores[storeName]
 	return ok
@@ -63,7 +63,7 @@ func TryDecryptValue(storeName string, value []byte) ([]byte, error) {
 			return value, errors.Errorf("could not decrypt data for state store %s: encryption key name not found on record", storeName)
 		}
 
-		var key EncryptionKey
+		var key Key
 
 		if keys.Primary.Name == keyName {
 			key = keys.Primary

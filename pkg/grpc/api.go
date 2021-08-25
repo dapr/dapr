@@ -526,10 +526,10 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			}
 		}
 		if encryption.EncryptedStateStore(in.StoreName) {
-			val, err := encryption.TryEncryptValue(in.StoreName, s.Value)
-			if err != nil {
-				apiServerLogger.Debug(err)
-				return &emptypb.Empty{}, err
+			val, encErr := encryption.TryEncryptValue(in.StoreName, s.Value)
+			if encErr != nil {
+				apiServerLogger.Debug(encErr)
+				return &emptypb.Empty{}, encErr
 			}
 
 			req.Value = val
