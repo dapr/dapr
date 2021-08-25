@@ -833,7 +833,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		path := a.inputBindingRoutes[bindingName]
-
 		req := invokev1.NewInvokeMethodRequest(path)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
