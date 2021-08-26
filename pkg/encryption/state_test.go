@@ -7,6 +7,7 @@ package encryption
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"testing"
 
@@ -125,6 +126,39 @@ func TestTryEncryptValue(t *testing.T) {
 		dr, err := TryDecryptValue("test", r)
 		assert.NoError(t, err)
 		assert.Equal(t, v, dr)
+	})
+
+	t.Run("state store with AES256 primary key, base64 string value encrypted and decrypted successfully", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 32)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		gcm, _ := createCipher(pr, AES256Algorithm)
+		pr.gcm = gcm
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		v := []byte("hello")
+		s := base64.StdEncoding.EncodeToString(v)
+		r, err := TryEncryptValue("test", []byte(s))
+
+		assert.NoError(t, err)
+		assert.NotEqual(t, v, r)
+
+		dr, err := TryDecryptValue("test", r)
+		assert.NoError(t, err)
+		assert.Equal(t, []byte(s), dr)
 	})
 }
 

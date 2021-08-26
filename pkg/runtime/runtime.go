@@ -1033,7 +1033,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		secretStore := a.getSecretStore(secretStoreName)
 		encKeys, err := encryption.ComponentEncryptionKey(s, secretStore)
 		if err != nil {
-			log.Warnf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+			log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
 			return err
 		}
