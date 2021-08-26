@@ -58,21 +58,6 @@ func TestTryEncryptValue(t *testing.T) {
 		assert.Equal(t, v, r)
 	})
 
-	t.Run("state store with non AES256 primary key, error returned", func(t *testing.T) {
-		encryptedStateStores = map[string]ComponentEncryptionKeys{}
-		AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Primary: Key{
-				Name: "primary",
-				Key:  "123",
-			},
-		})
-
-		v := []byte("hello")
-		r, err := TryEncryptValue("test", v)
-		assert.Error(t, err)
-		assert.Equal(t, v, r)
-	})
-
 	t.Run("state store with AES256 primary key, value encrypted and decrypted successfully", func(t *testing.T) {
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 
@@ -80,12 +65,18 @@ func TestTryEncryptValue(t *testing.T) {
 		rand.Read(bytes)
 
 		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		gcm, _ := createCipher(pr, AES256Algorithm)
+		pr.gcm = gcm
+
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Primary: Key{
-				Name: "primary",
-				Key:  key,
-			},
+			Primary: pr,
 		})
 
 		v := []byte("hello")
@@ -107,12 +98,17 @@ func TestTryEncryptValue(t *testing.T) {
 
 		primaryKey := hex.EncodeToString(bytes)
 
+		pr := Key{
+			Name: "primary",
+			Key:  primaryKey,
+		}
+
+		gcm, _ := createCipher(pr, AES256Algorithm)
+		pr.gcm = gcm
+
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Primary: Key{
-				Name: "primary",
-				Key:  primaryKey,
-			},
+			Primary: pr,
 		})
 
 		v := []byte("hello")
@@ -123,10 +119,7 @@ func TestTryEncryptValue(t *testing.T) {
 
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
-			Secondary: Key{
-				Name: "primary",
-				Key:  primaryKey,
-			},
+			Secondary: pr,
 		})
 
 		dr, err := TryDecryptValue("test", r)

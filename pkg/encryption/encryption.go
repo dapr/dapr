@@ -37,6 +37,7 @@ type ComponentEncryptionKeys struct {
 type Key struct {
 	Key  string
 	Name string
+	gcm  cipher.AEAD
 }
 
 // ComponentEncryptionKey checks if a component definition contains an encryption key and extracts it using the supplied secret store.
@@ -92,6 +93,23 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 		}
 	}
 
+	if cek.Primary.Key != "" {
+		gcm, err := createCipher(cek.Primary, AES256Algorithm)
+		if err != nil {
+			return ComponentEncryptionKeys{}, err
+		}
+
+		cek.Primary.gcm = gcm
+	}
+	if cek.Secondary.Key != "" {
+		gcm, err := createCipher(cek.Secondary, AES256Algorithm)
+		if err != nil {
+			return ComponentEncryptionKeys{}, err
+		}
+
+		cek.Secondary.gcm = gcm
+	}
+
 	return cek, nil
 }
 
@@ -131,53 +149,37 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.Metadat
 
 // Encrypt takes a byte array and encrypts it using a supplied encryption key and algorithm.
 func encrypt(value []byte, key Key, algorithm Algorithm) ([]byte, error) {
-	keyBytes, err := hex.DecodeString(key.Key)
-	if err != nil {
+	nsize := make([]byte, key.gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nsize); err != nil {
 		return value, err
 	}
 
-	block, err := aes.NewCipher(keyBytes)
-	if err != nil {
-		return value, err
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return value, err
-	}
-
-	nsize := make([]byte, gcm.NonceSize())
-	if _, err = io.ReadFull(rand.Reader, nsize); err != nil {
-		return value, err
-	}
-
-	return gcm.Seal(nsize, nsize, value, nil), nil
+	return key.gcm.Seal(nsize, nsize, value, nil), nil
 }
 
 // Decrypt takes a byte array and decrypts it using a supplied encryption key and algorithm.
 func decrypt(value []byte, key Key, algorithm Algorithm) ([]byte, error) {
-	keyBytes, err := hex.DecodeString(key.Key)
-	if err != nil {
-		return value, err
-	}
-
 	enc, err := hex.DecodeString(string(value))
 	if err != nil {
 		return value, err
 	}
 
-	block, err := aes.NewCipher(keyBytes)
-	if err != nil {
-		return value, err
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return value, err
-	}
-
-	nsize := gcm.NonceSize()
+	nsize := key.gcm.NonceSize()
 	nonce, ciphertext := enc[:nsize], enc[nsize:]
 
-	return gcm.Open(nil, nonce, ciphertext, nil)
+	return key.gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {
+	keyBytes, err := hex.DecodeString(key.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	block, err := aes.NewCipher(keyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return cipher.NewGCM(block)
 }
