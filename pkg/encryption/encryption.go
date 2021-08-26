@@ -9,6 +9,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	b64 "encoding/base64"
 	"encoding/hex"
 	"io"
 
@@ -159,7 +160,7 @@ func encrypt(value []byte, key Key, algorithm Algorithm) ([]byte, error) {
 
 // Decrypt takes a byte array and decrypts it using a supplied encryption key and algorithm.
 func decrypt(value []byte, key Key, algorithm Algorithm) ([]byte, error) {
-	enc, err := hex.DecodeString(string(value))
+	enc, err := b64.StdEncoding.DecodeString(string(value))
 	if err != nil {
 		return value, err
 	}

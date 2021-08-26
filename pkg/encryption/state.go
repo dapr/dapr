@@ -7,7 +7,7 @@ package encryption
 
 import (
 	"bytes"
-	"fmt"
+	b64 "encoding/base64"
 
 	"github.com/pkg/errors"
 )
@@ -44,8 +44,8 @@ func TryEncryptValue(storeName string, value []byte) ([]byte, error) {
 			return value, err
 		}
 
-		plain := fmt.Sprintf("%x%s", enc, separator+keys.Primary.Name)
-		return []byte(plain), nil
+		sEnc := b64.StdEncoding.EncodeToString(enc) + separator + keys.Primary.Name
+		return []byte(sEnc), nil
 	}
 
 	return value, nil
