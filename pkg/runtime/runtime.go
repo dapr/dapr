@@ -833,7 +833,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		path := a.inputBindingRoutes[bindingName]
-
 		req := invokev1.NewInvokeMethodRequest(path)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
@@ -951,7 +950,6 @@ func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
 }
 
 func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
-
 	// if gRPC, looks for the binding in the list of bindings returned from the app
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		if a.subscribeBindingList == nil {
