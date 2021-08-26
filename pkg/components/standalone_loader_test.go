@@ -1,12 +1,72 @@
 package components
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	config "github.com/dapr/dapr/pkg/config/modes"
 )
+
+const configPrefix = "."
+
+func writeTempConfig(path, content string) error {
+	return os.WriteFile(filepath.Join(configPrefix, path), []byte(content), fs.FileMode(0644))
+}
+
+func TestLoadComponentsFromFile(t *testing.T) {
+	request := &StandaloneComponents{
+		config: config.StandaloneConfig{
+			ComponentsPath: configPrefix,
+		},
+	}
+	t.Run("valid yaml content", func(t *testing.T) {
+		filename := "test-component-valid.yaml"
+		yaml := `
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.couchbase
+  metadata:
+  - name: prop1
+    value: value1
+  - name: prop2
+    value: value2
+`
+		err := writeTempConfig(filename, yaml)
+		// defer os.Remove(filename)
+		assert.Nil(t, err)
+		components := request.loadComponentsFromFile(filename)
+		assert.Len(t, components, 1)
+	})
+
+	t.Run("invalid yaml head", func(t *testing.T) {
+		filename := "test-component-invalid.yaml"
+		yaml := `
+INVALID_YAML_HERE
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+name: statestore`
+		err := writeTempConfig(filename, yaml)
+		defer os.Remove(filename)
+		assert.Nil(t, err)
+		components := request.loadComponentsFromFile(filename)
+		assert.Len(t, components, 0)
+	})
+
+	t.Run("load components file not exist", func(t *testing.T) {
+		filename := "test-component-no-exist.yaml"
+
+		components := request.loadComponentsFromFile(filename)
+		assert.Len(t, components, 0)
+	})
+}
 
 func TestIsYaml(t *testing.T) {
 	request := &StandaloneComponents{
