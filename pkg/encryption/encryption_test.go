@@ -157,3 +157,28 @@ func TestTryGetEncryptionKeyFromMetadataItem(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestCreateCipher(t *testing.T) {
+	t.Run("invalid key", func(t *testing.T) {
+		gcm, err := createCipher(Key{
+			Key: "123",
+		}, AES256Algorithm)
+
+		assert.Nil(t, gcm)
+		assert.Error(t, err)
+	})
+
+	t.Run("valid key", func(t *testing.T) {
+		bytes := make([]byte, 32)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		gcm, err := createCipher(Key{
+			Key: key,
+		}, AES256Algorithm)
+
+		assert.NotNil(t, gcm)
+		assert.NoError(t, err)
+	})
+}
