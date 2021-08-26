@@ -74,6 +74,9 @@ message TopicEventRequest {
   // The matching path from TopicSubscription/routes (if specified) for this event.
   // This value is used by OnTopicEvent to "switch" inside the handler.
   string path = 9;
+
+  // The metadata set by the topic event request.
+  map<string,string> metadata = 10;
 }
 
 // TopicEventResponse is response from app on published message

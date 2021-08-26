@@ -1419,6 +1419,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		Topic:           msg.topic,
 		PubsubName:      msg.metadata[pubsubName],
 		Path:            msg.path,
+		Metadata:        msg.metadata,
 	}
 
 	if data, ok := cloudEvent[pubsub.DataBase64Field]; ok && data != nil {
