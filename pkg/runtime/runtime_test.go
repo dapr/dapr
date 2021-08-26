@@ -2721,6 +2721,8 @@ func TestReadInputBindings(t *testing.T) {
 
 		rt.appChannel = mockAppChannel
 
+		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
+
 		b := mockBinding{}
 		rt.readFromBinding(testInputBindingName, &b)
 
@@ -2752,6 +2754,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
+		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
 		rt.readFromBinding(testInputBindingName, &b)
@@ -2784,6 +2787,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
+		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
 		rt.readFromBinding(testInputBindingName, &b)
