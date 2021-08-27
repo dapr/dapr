@@ -207,5 +207,6 @@ jobs:
       if: always()
       uses: actions/upload-artifact@master
       with:
+        #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
         name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
-        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.json
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
