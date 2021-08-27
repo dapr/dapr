@@ -100,6 +100,7 @@ const (
 	pubsubnameparam      = "pubsubname"
 	traceparentHeader    = "traceparent"
 	tracestateHeader     = "tracestate"
+	daprAppID            = "dapr-app-id"
 )
 
 // NewAPI returns a new API.
@@ -247,6 +248,11 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 			Methods: []string{router.MethodWild},
 			Route:   "invoke/{id}/method/{method:*}",
 			Version: apiVersionV1,
+			Handler: a.onDirectMessage,
+		},
+		{
+			Methods: []string{router.MethodWild},
+			Alias:   "{method:*}",
 			Handler: a.onDirectMessage,
 		},
 	}
@@ -807,7 +813,21 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
-	targetID := reqCtx.UserValue(idParam).(string)
+	var targetID string
+	if id := reqCtx.UserValue(idParam); id == nil {
+		if appId := reqCtx.Request.Header.Peek(daprAppID); appId != nil {
+			targetID = string(appId)
+		}
+	} else {
+		targetID = id.(string)
+	}
+
+	if targetID == "" {
+		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
+		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
+		return
+	}
+
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	invokeMethodName := reqCtx.UserValue(methodParam).(string)
 

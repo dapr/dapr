@@ -189,6 +189,10 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 		}
 
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
+		if e.Alias != "" {
+			path = fmt.Sprintf("/%s", e.Alias)
+		}
+
 		for _, m := range e.Methods {
 			pathIncludesParameters := parameterFinder.MatchString(path)
 			if pathIncludesParameters {
