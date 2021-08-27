@@ -373,7 +373,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
 
-	a.blockUntilAppIsReady()
+	a.blockUntilAppPortIsReady()
 
 	err = a.createAppChannel()
 	if err != nil {
@@ -385,6 +385,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.loadAppConfiguration()
 
 	a.initDirectMessaging(a.nameResolver)
+
+	a.blockUntilAppIsReady()
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	grpcAPI.SetDirectMessaging(a.directMessaging)
@@ -1890,7 +1892,7 @@ func (a *DaprRuntime) getSecretStore(storeName string) secretstores.SecretStore 
 	return a.secretStores[storeName]
 }
 
-func (a *DaprRuntime) blockUntilAppIsReady() {
+func (a *DaprRuntime) blockUntilAppPortIsReady() {
 	if a.runtimeConfig.ApplicationPort <= 0 {
 		return
 	}
@@ -1908,6 +1910,35 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 	}
 
 	log.Infof("application discovered on port %v", a.runtimeConfig.ApplicationPort)
+}
+
+func (a *DaprRuntime) blockUntilAppIsReady() {
+
+	readinessAddress := a.runtimeConfig.ReadinessAddress
+
+	if readinessAddress == "" {
+		// get readiness address from k8s env
+	}
+
+	if readinessAddress == "" {
+		return
+	}
+
+	for {
+		req := invokev1.NewInvokeMethodRequest(a.runtimeConfig.ReadinessAddress)
+		req.WithHTTPExtension(nethttp.MethodGet, "")
+		req.WithRawData(nil, invokev1.JSONContentType)
+
+		ctx := context.Background()
+		resp, err := a.appChannel.InvokeMethod(ctx, req)
+
+		if err == nil && resp.Status().Code == nethttp.StatusOK {
+			log.Infof("application discovered on readiness address %s", a.runtimeConfig.ReadinessAddress)
+			break
+		}
+
+		time.Sleep(time.Millisecond * 50)
+	}
 }
 
 func (a *DaprRuntime) loadAppConfiguration() {

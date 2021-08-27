@@ -54,6 +54,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
 	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
 	enableDomainSocket := flag.Bool("enable-domain-socket", false, "Enable connect to Dapr with domain socket")
+	readinessAddress := flag.String("app-readiness-address", "", "address for check app ready")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -156,7 +157,8 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *enableDomainSocket)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency,
+		*enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *enableDomainSocket, *readinessAddress)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
