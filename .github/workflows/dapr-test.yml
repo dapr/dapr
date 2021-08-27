@@ -172,8 +172,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@master
         with:
+          #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
-          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
         env:
