@@ -26,6 +26,7 @@ const (
 	secondaryEncryptionKey = "secondaryEncryptionKey"
 	errPrefix              = "failed to extract encryption key"
 	AES256Algorithm        = "AES256"
+	FeatureName            = "encryption"
 )
 
 // ComponentEncryptionKeys holds the encryption keys set for a component.
@@ -34,7 +35,7 @@ type ComponentEncryptionKeys struct {
 	Secondary Key
 }
 
-// EncryptionKey holds the key to encrypt an arbitrary object.
+// Key holds the key to encrypt an arbitrary object.
 type Key struct {
 	Key  string
 	Name string

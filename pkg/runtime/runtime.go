@@ -1030,18 +1030,21 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 	}
 	if store != nil {
 		secretStoreName := a.authSecretStoreOrDefault(s)
-		secretStore := a.getSecretStore(secretStoreName)
-		encKeys, err := encryption.ComponentEncryptionKey(s, secretStore)
-		if err != nil {
-			log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-			return err
-		}
 
-		if encKeys.Primary.Key != "" {
-			ok := encryption.AddEncryptedStateStore(s.ObjectMeta.Name, encKeys)
-			if ok {
-				log.Infof("automatic encryption enabled for state store %s", s.ObjectMeta.Name)
+		if config.IsFeatureEnabled(a.globalConfig.Spec.Features, encryption.FeatureName) {
+			secretStore := a.getSecretStore(secretStoreName)
+			encKeys, err := encryption.ComponentEncryptionKey(s, secretStore)
+			if err != nil {
+				log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+				diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
+				return err
+			}
+
+			if encKeys.Primary.Key != "" {
+				ok := encryption.AddEncryptedStateStore(s.ObjectMeta.Name, encKeys)
+				if ok {
+					log.Infof("automatic encryption enabled for state store %s", s.ObjectMeta.Name)
+				}
 			}
 		}
 

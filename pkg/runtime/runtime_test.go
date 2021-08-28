@@ -7,6 +7,8 @@ package runtime
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -55,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
@@ -507,6 +510,11 @@ func TestInitState(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+
+	primaryKey := hex.EncodeToString(bytes)
+
 	mockStateComponent := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
@@ -521,7 +529,16 @@ func TestInitState(t *testing.T) {
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
+				{
+					Name: "primaryEncryptionKey",
+					Value: components_v1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte(primaryKey)},
+					},
+				},
 			},
+		},
+		Auth: components_v1alpha1.Auth{
+			SecretStore: "mockSecretStore",
 		},
 	}
 
@@ -536,7 +553,8 @@ func TestInitState(t *testing.T) {
 
 		expectedMetadata := state.Metadata{
 			Properties: map[string]string{
-				actorStateStore: "true",
+				actorStateStore:        "true",
+				"primaryEncryptionKey": primaryKey,
 			},
 		}
 
@@ -566,6 +584,39 @@ func TestInitState(t *testing.T) {
 		// assert
 		assert.Error(t, err, "expected error")
 		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+	})
+
+	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
+		// setup
+		initMockStateStoreForRuntime(rt, nil)
+
+		// act
+		err := rt.initState(mockStateComponent)
+		ok := encryption.EncryptedStateStore("mockState")
+
+		// assert
+		assert.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("test init state store, encryption enabled", func(t *testing.T) {
+		// setup
+		initMockStateStoreForRuntime(rt, nil)
+
+		// act
+		rt.globalConfig.Spec.Features = append(rt.globalConfig.Spec.Features, config.FeatureSpec{
+			Name:    encryption.FeatureName,
+			Enabled: true,
+		})
+
+		rt.secretStores["mockSecretStore"] = &mockSecretStore{}
+
+		err := rt.initState(mockStateComponent)
+		ok := encryption.EncryptedStateStore("testpubsub")
+
+		// assert
+		assert.NoError(t, err)
+		assert.True(t, ok)
 	})
 }
 

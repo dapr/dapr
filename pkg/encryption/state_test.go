@@ -51,12 +51,10 @@ func TestAddEncryptedStateStore(t *testing.T) {
 }
 
 func TestTryEncryptValue(t *testing.T) {
-	t.Run("state store without keys, value not encrypted", func(t *testing.T) {
+	t.Run("state store without keys", func(t *testing.T) {
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
-		v := []byte("hello")
-		r, err := TryEncryptValue("test", v)
-		assert.NoError(t, err)
-		assert.Equal(t, v, r)
+		ok := EncryptedStateStore("test")
+		assert.False(t, ok)
 	})
 
 	t.Run("state store with AES256 primary key, value encrypted and decrypted successfully", func(t *testing.T) {
