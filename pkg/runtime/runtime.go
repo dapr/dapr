@@ -1033,11 +1033,11 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 
 		if config.IsFeatureEnabled(a.globalConfig.Spec.Features, encryption.FeatureName) {
 			secretStore := a.getSecretStore(secretStoreName)
-			encKeys, err := encryption.ComponentEncryptionKey(s, secretStore)
-			if err != nil {
-				log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+			encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
+			if encErr != nil {
+				log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, encErr)
 				diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-				return err
+				return encErr
 			}
 
 			if encKeys.Primary.Key != "" {
