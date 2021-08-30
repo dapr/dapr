@@ -815,8 +815,8 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	var targetID string
 	if id := reqCtx.UserValue(idParam); id == nil {
-		if appId := reqCtx.Request.Header.Peek(daprAppID); appId != nil {
-			targetID = string(appId)
+		if appID := reqCtx.Request.Header.Peek(daprAppID); appID != nil {
+			targetID = string(appID)
 		}
 	} else {
 		targetID = id.(string)
