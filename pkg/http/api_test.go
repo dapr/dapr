@@ -479,6 +479,30 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
+	t.Run("Invoke direct messaging with dapr-app-id - 200 OK", func(t *testing.T) {
+		apiPath := "fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "dapr-app-id", "fakeAppID")
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
 	t.Run("Invoke direct messaging with InvalidArgument Response - 400 Bad request", func(t *testing.T) {
 		d := &epb.ErrorInfo{
 			Reason: "fakeReason",
@@ -741,6 +765,29 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	t.Run("Invoke direct messaging with dapr-app-id - 200 OK", func(t *testing.T) {
+		buffer = ""
+		apiPath := "fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "dapr-app-id", "fakeAppID")
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
@@ -2066,6 +2113,12 @@ func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 		for _, m := range e.Methods {
 			router.Handle(m, path, e.Handler)
 		}
+		if e.Alias != "" {
+			path = fmt.Sprintf("/%s", e.Alias)
+			for _, m := range e.Methods {
+				router.Handle(m, path, e.Handler)
+			}
+		}
 	}
 	return router
 }
@@ -2104,9 +2157,11 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 	}
 	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
-	if len(headers) == 1 {
-		r.Header.Set("If-Match", headers[0])
+
+	for i := 0; i < len(headers); i += 2 {
+		r.Header.Set(headers[i], headers[i+1])
 	}
+
 	res, err := f.client.Do(r)
 	if err != nil {
 		panic(fmt.Errorf("failed to request: %v", err))
@@ -2306,7 +2361,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Delete state - Matching ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, etag)
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "If-Match", etag)
 		// assert
 		assert.Equal(t, 204, resp.StatusCode, "updating existing key with matching etag should succeed")
 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
@@ -2315,7 +2370,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Delete state - Bad ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "BAD ETAG")
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "If-Match", "BAD ETAG")
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
