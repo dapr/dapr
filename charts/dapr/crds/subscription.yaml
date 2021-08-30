@@ -110,6 +110,25 @@ spec:
               topic:
                 description: The topic name to subscribe to.
                 type: string
+              pipeline:
+                description: PipelineSpec defines the middleware pipeline
+                properties:
+                  handlers:
+                    items:
+                      description: HandlerSpec defines a request handlers
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                      required:
+                        - name
+                        - type
+                      type: object
+                    type: array
+                required:
+                  - handlers
+                type: object
             required:
             - pubsubname
             - routes

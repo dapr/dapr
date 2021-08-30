@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"strings"
@@ -70,7 +71,9 @@ import (
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 
+	pubsub_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/pubsub"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
+	pubsub_middleware "github.com/dapr/dapr/pkg/middleware/pubsub"
 
 	// Name resolutions.
 	nr "github.com/dapr/components-contrib/nameresolution"
@@ -469,6 +472,17 @@ func main() {
 			http_middleware_loader.New("sentinel", func(metadata middleware.Metadata) http_middleware.Middleware {
 				handler, _ := sentinel.NewMiddleware(log).GetHandler(metadata)
 				return handler
+			}),
+		),
+		runtime.WithPubsubMiddleware(
+			pubsub_middleware_loader.New("uppercase", func(metadata middleware.Metadata) pubsub_middleware.Middleware {
+				return func(next pubsub_middleware.RequestHandler) pubsub_middleware.RequestHandler {
+					return func(ctx context.Context, msg *pubs.NewMessage) {
+						body := string(msg.Data)
+						msg.Data = []byte(strings.ToUpper(body))
+						next(ctx, msg)
+					}
+				}
 			}),
 		),
 	)
