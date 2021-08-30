@@ -59,6 +59,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -1028,8 +1029,27 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		return err
 	}
 	if store != nil {
+		secretStoreName := a.authSecretStoreOrDefault(s)
+
+		if config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.StateEncryption) {
+			secretStore := a.getSecretStore(secretStoreName)
+			encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
+			if encErr != nil {
+				log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, encErr)
+				diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
+				return encErr
+			}
+
+			if encKeys.Primary.Key != "" {
+				ok := encryption.AddEncryptedStateStore(s.ObjectMeta.Name, encKeys)
+				if ok {
+					log.Infof("automatic encryption enabled for state store %s", s.ObjectMeta.Name)
+				}
+			}
+		}
+
 		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-		err := store.Init(state.Metadata{
+		err = store.Init(state.Metadata{
 			Properties: props,
 		})
 		if err != nil {
