@@ -35,6 +35,7 @@ type SubscriptionSpec struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 	// The Routes configuration for this topic.
 	Routes Routes `json:"routes"`
+	DLQ    dlq    `json:"dlq,omitempty"`
 }
 
 // Routes encapsulates the rules and optional default path for a topic.
@@ -69,4 +70,10 @@ type SubscriptionList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []Subscription `json:"items"`
+}
+
+type dlq struct {
+	IsBrokerSpecific bool   `json:"isbrokerspecific,omitempty"`
+	Pubsubname       string `json:"pubsubname,omitempty"`
+	Topic            string `json:"topic,omitempty"`
 }

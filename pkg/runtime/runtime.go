@@ -515,13 +515,27 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				}
 			}
 
-			if pubsub.HasExpired(cloudEvent) {
-				log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
+			route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
+			isdlq, _ := strconv.ParseBool(route.metadata["IsDLQ"])
 
-				return nil
+			if pubsub.HasExpired(cloudEvent) && !isdlq {
+				log.Warnf("(BEGIN-PUB-SUB) dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
+				log.Warnf("Came from: %v", msg.Topic)
+				if route.metadata["DLQTopic"] != "" && route.metadata["DLQPubsubName"] != "" {
+					log.Warnf("(BEGIN-PUB-SUB) pub/sub message %v being sent to dlq topic %v", cloudEvent[pubsub.IDField], route.metadata["DLQTopic"])
+					if err := a.Publish(&pubsub.PublishRequest{
+						Data:       msg.Data,
+						PubsubName: route.metadata["DLQPubsubName"],
+						Topic:      route.metadata["DLQTopic"],
+						Metadata:   msg.Metadata,
+					}); err != nil {
+						log.Warnf("expired message %v failed to go to DLQ", cloudEvent[pubsub.IDField])
+					}
+				} else {
+					return nil
+				}
 			}
 
-			route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
 			routePath, shouldProcess, err := findMatchingRoute(&route, cloudEvent, a.featureRoutingEnabled)
 			if err != nil {
 				return err
@@ -1142,7 +1156,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 			subscriptions = append(subscriptions, s)
 		}
 	}
-
+	deadLetters := make(map[string]bool)
 	for _, s := range subscriptions {
 		if _, ok := topicRoutes[s.PubsubName]; !ok {
 			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]Route)}
@@ -1150,23 +1164,22 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 		if s.Metadata == nil {
 			s.Metadata = make(map[string]string)
 		}
+		log.Warnf("Subscription: %v", s)
+		log.Warnf("DLQ: %v", s.DLQ)
 		log.Debugf("DLQ Pubsub Name: %s for base topic %s", s.DLQ.Pubsubname, s.Topic)
 		log.Debugf("DLQ Topic Name: %s for base topic %s", s.DLQ.Topic, s.Topic)
 
 		// Configure dead letter queue properties in subscription metadata
-		if s.DLQ.Pubsubname != "" {
+		if s.DLQ.Pubsubname != "" && s.DLQ.Topic != "" {
 			s.Metadata["DLQPubsubName"] = s.DLQ.Pubsubname
-		} else {
-			s.Metadata["DLQPubsubName"] = s.PubsubName
-		}
-
-		if s.DLQ.Topic != "" {
 			s.Metadata["DLQTopic"] = s.DLQ.Topic
-		} else {
-			s.Metadata["DLQTopic"] = s.Topic
+			deadLetters[s.DLQ.Topic] = true
 		}
 		if s.DLQ.IsBrokerSpecific {
 			s.Metadata["IsBrokerSpecific"] = "true"
+		}
+		if deadLetters[s.Topic] {
+			s.Metadata["IsDLQ"] = "true"
 		}
 		topicRoutes[s.PubsubName].routes[s.Topic] = Route{metadata: s.Metadata, rules: s.Rules}
 	}
@@ -1329,19 +1342,23 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	var span *trace.Span
 
 	route := a.topicRoutes[msg.metadata[pubsubName]].routes[msg.topic]
+	isdlq, _ := strconv.ParseBool(route.metadata["IsDLQ"])
 
-	if pubsub.HasExpired(cloudEvent) && msg.topic != route.metadata["DLQTopic"] {
+	if pubsub.HasExpired(cloudEvent) && !isdlq {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-		log.Warnf("pub/sub message %v being sent to dlq topic %v", cloudEvent[pubsub.IDField], route.metadata["DLQTopic"])
-		if err := a.Publish(&pubsub.PublishRequest{
-			Data:       msg.data,
-			PubsubName: route.metadata["DLQPubsubName"],
-			Topic:      route.metadata["DLQTopic"],
-			Metadata:   msg.metadata,
-		}); err != nil {
-			log.Warnf("expired message %v failed to go to DLQ", cloudEvent[pubsub.IDField])
+		if route.metadata["DLQTopic"] != "" && route.metadata["DLQPubsubName"] != "" {
+			log.Warnf("pub/sub message %v being sent to dlq topic %v", cloudEvent[pubsub.IDField], route.metadata["DLQTopic"])
+			if err := a.Publish(&pubsub.PublishRequest{
+				Data:       msg.data,
+				PubsubName: route.metadata["DLQPubsubName"],
+				Topic:      route.metadata["DLQTopic"],
+				Metadata:   msg.metadata,
+			}); err != nil {
+				log.Warnf("expired message %v failed to go to DLQ", cloudEvent[pubsub.IDField])
+			}
+		} else {
+			return nil
 		}
-		return nil
 	}
 
 	req := invokev1.NewInvokeMethodRequest(msg.path)
@@ -1394,16 +1411,14 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 
 			// Check if DLQ is specified and send to proper topic
 			if route.metadata["DLQPubsubName"] != "" && route.metadata["DLQTopic"] != "" {
-				if route.metadata["DLQTopic"] != msg.topic {
-					log.Debugf("dead lettered message sending to pubsub: %s, and topic: %s", route.metadata["DLQPubsubName"], route.metadata["DLQTopic"])
-					if err := a.Publish(&pubsub.PublishRequest{
-						Data:       msg.data,
-						PubsubName: route.metadata["DLQPubsubName"],
-						Topic:      route.metadata["DLQTopic"],
-						Metadata:   msg.metadata,
-					}); err != nil {
-						log.Warnf("Dropped message failed to go to DLQ. pub/sub event %v", cloudEvent[pubsub.IDField])
-					}
+				log.Debugf("dead lettered message sending to pubsub: %s, and topic: %s", route.metadata["DLQPubsubName"], route.metadata["DLQTopic"])
+				if err := a.Publish(&pubsub.PublishRequest{
+					Data:       msg.data,
+					PubsubName: route.metadata["DLQPubsubName"],
+					Topic:      route.metadata["DLQTopic"],
+					Metadata:   msg.metadata,
+				}); err != nil {
+					log.Warnf("Dropped message failed to go to DLQ. pub/sub event %v", cloudEvent[pubsub.IDField])
 				}
 			}
 			return nil

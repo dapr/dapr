@@ -39,6 +39,17 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
+              dlq:
+                description: Dead letter queue properties for the specified subscription
+                properties:
+                  pubsubname:
+                    type: string
+                  topic: 
+                    type: string
+                  isbrokerspecific:
+                    description: Specifies if the user wants to use the broker's dead letter queue or not.
+                    type: boolean
+                type: object
             required:
             - pubsubname
             - route
@@ -110,6 +121,17 @@ spec:
               topic:
                 description: The topic name to subscribe to.
                 type: string
+              dlq:
+                description: Dead letter queue properties for the specified subscription
+                properties:
+                  pubsubname:
+                    type: string
+                  topic: 
+                    type: string
+                  isbrokerspecific:
+                    description: T/F if the user wants to use the broker's native dead letter queue
+                    type: boolean
+                type: object
             required:
             - pubsubname
             - routes

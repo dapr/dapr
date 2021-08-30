@@ -30,6 +30,7 @@ type SubscriptionSpec struct {
 	// +optional
 	Metadata map[string]string `json:"metadata,omitempty"`
 	Route    string            `json:"route"`
+	DLQ      dlq               `json:"dlq,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -40,4 +41,10 @@ type SubscriptionList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []Subscription `json:"items"`
+}
+
+type dlq struct {
+	IsBrokerSpecific bool   `json:"isbrokerspecific,omitempty"`
+	Pubsubname       string `json:"pubsubname,omitempty"`
+	Topic            string `json:"topic,omitempty"`
 }
