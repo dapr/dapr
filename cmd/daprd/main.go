@@ -6,7 +6,6 @@
 package main
 
 import (
-	"context"
 	"os"
 	"os/signal"
 	"strings"
@@ -71,9 +70,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 
-	pubsub_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/pubsub"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
-	pubsub_middleware "github.com/dapr/dapr/pkg/middleware/pubsub"
 
 	// Name resolutions.
 	nr "github.com/dapr/components-contrib/nameresolution"
@@ -91,6 +88,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
+	"github.com/dapr/components-contrib/bindings/aws/ses"
 	"github.com/dapr/components-contrib/bindings/aws/sns"
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
@@ -341,6 +339,9 @@ func main() {
 			bindings_loader.NewOutput("aws.s3", func() bindings.OutputBinding {
 				return s3.NewAWSS3(logContrib)
 			}),
+			bindings_loader.NewOutput("aws.ses", func() bindings.OutputBinding {
+				return ses.NewAWSSES(logContrib)
+			}),
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
 				return sqs.NewAWSSQS(logContrib)
 			}),
@@ -468,17 +469,6 @@ func main() {
 			http_middleware_loader.New("sentinel", func(metadata middleware.Metadata) http_middleware.Middleware {
 				handler, _ := sentinel.NewMiddleware(log).GetHandler(metadata)
 				return handler
-			}),
-		),
-		runtime.WithPubsubMiddleware(
-			pubsub_middleware_loader.New("uppercase", func(metadata middleware.Metadata) pubsub_middleware.Middleware {
-				return func(next pubsub_middleware.RequestHandler) pubsub_middleware.RequestHandler {
-					return func(ctx context.Context, msg *pubs.NewMessage) {
-						body := string(msg.Data)
-						msg.Data = []byte(strings.ToUpper(body))
-						next(ctx, msg)
-					}
-				}
 			}),
 		),
 	)

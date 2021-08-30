@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 
@@ -73,7 +74,12 @@ func (s *server) StartNonBlocking() {
 	}
 
 	go func() {
-		log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
+		if s.config.EnableDomainSocket {
+			socket := fmt.Sprintf("/tmp/dapr-%s-http.socket", s.config.AppID)
+			log.Fatal(customServer.ListenAndServeUNIX(socket, os.FileMode(0600)))
+		} else {
+			log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
+		}
 	}()
 
 	if s.config.EnableProfiling {
