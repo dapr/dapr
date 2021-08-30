@@ -605,7 +605,7 @@ func TestInitState(t *testing.T) {
 
 		// act
 		rt.globalConfig.Spec.Features = append(rt.globalConfig.Spec.Features, config.FeatureSpec{
-			Name:    encryption.FeatureName,
+			Name:    config.StateEncryption,
 			Enabled: true,
 		})
 

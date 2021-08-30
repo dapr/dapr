@@ -26,7 +26,6 @@ const (
 	secondaryEncryptionKey = "secondaryEncryptionKey"
 	errPrefix              = "failed to extract encryption key"
 	AES256Algorithm        = "AES256"
-	FeatureName            = "encryption"
 )
 
 // ComponentEncryptionKeys holds the encryption keys set for a component.

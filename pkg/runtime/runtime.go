@@ -1031,7 +1031,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 	if store != nil {
 		secretStoreName := a.authSecretStoreOrDefault(s)
 
-		if config.IsFeatureEnabled(a.globalConfig.Spec.Features, encryption.FeatureName) {
+		if config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.StateEncryption) {
 			secretStore := a.getSecretStore(secretStoreName)
 			encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
 			if encErr != nil {
