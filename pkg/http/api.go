@@ -247,12 +247,8 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 		{
 			Methods: []string{router.MethodWild},
 			Route:   "invoke/{id}/method/{method:*}",
-			Version: apiVersionV1,
-			Handler: a.onDirectMessage,
-		},
-		{
-			Methods: []string{router.MethodWild},
 			Alias:   "{method:*}",
+			Version: apiVersionV1,
 			Handler: a.onDirectMessage,
 		},
 	}
