@@ -77,10 +77,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if *waitCommand {
-		err := waitUntilDaprOutboundReady(*daprHTTPPort)
-		if err != nil {
-			os.Exit(1)
-		}
+		waitUntilDaprOutboundReady(*daprHTTPPort)
 		os.Exit(0)
 	}
 

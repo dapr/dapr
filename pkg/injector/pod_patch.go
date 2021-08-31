@@ -402,19 +402,6 @@ func getProbeHTTPHandler(port int32, pathElements ...string) corev1.Handler {
 	}
 }
 
-func getProbeExecHandler(port int32) corev1.Handler {
-	return corev1.Handler{
-		Exec: &corev1.ExecAction{
-			Command: []string{
-				"/daprd",
-				"--wait",
-				"--dapr-http-port",
-				fmt.Sprintf("%v", port),
-			},
-		},
-	}
-}
-
 func formatProbePath(elements ...string) string {
 	pathStr := path.Join(elements...)
 	if !strings.HasPrefix(pathStr, "/") {
@@ -519,14 +506,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	pullPolicy := getPullPolicy(imagePullPolicy)
 
-	var probeHandler corev1.Handler
-
-	if sidecarListenAddress == "localhost" {
-		// kubelet healthcheck cannot talk to localhost for a pod, so we use daprd --wait to run the healthcheck instead
-		probeHandler = getProbeExecHandler(sidecarHTTPPort)
-	} else {
-		probeHandler = getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
-	}
+	httpHandler := getProbeHTTPHandler(sidecarPublicPort, apiVersionV1, sidecarHealthzPath)
 
 	allowPrivilegeEscalation := false
 
@@ -616,14 +596,14 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		},
 		Args: args,
 		ReadinessProbe: &corev1.Probe{
-			Handler:             probeHandler,
+			Handler:             httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
 			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprReadinessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprReadinessProbePeriodKey, defaultHealthzProbePeriodSeconds),
 			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprReadinessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
 		LivenessProbe: &corev1.Probe{
-			Handler:             probeHandler,
+			Handler:             httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprLivenessProbeDelayKey, defaultHealthzProbeDelaySeconds),
 			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprLivenessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprLivenessProbePeriodKey, defaultHealthzProbePeriodSeconds),
