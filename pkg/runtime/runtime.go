@@ -157,6 +157,7 @@ type DaprRuntime struct {
 	daprHTTPAPI            http.API
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
+	inputBindingRoutes     map[string]string
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -206,6 +207,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		scopedSubscriptions: map[string][]string{},
 		scopedPublishings:   map[string][]string{},
 		allowedTopics:       map[string][]string{},
+		inputBindingRoutes:  map[string]string{},
 
 		secretsConfiguration: map[string]config.SecretsScope{},
 
@@ -831,7 +833,8 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		req := invokev1.NewInvokeMethodRequest(bindingName)
+		path := a.inputBindingRoutes[bindingName]
+		req := invokev1.NewInvokeMethodRequest(path)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
 
@@ -960,7 +963,8 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		// if HTTP, check if there's an endpoint listening for that binding
-		req := invokev1.NewInvokeMethodRequest(binding)
+		path := a.inputBindingRoutes[binding]
+		req := invokev1.NewInvokeMethodRequest(path)
 		req.WithHTTPExtension(nethttp.MethodOptions, "")
 		req.WithRawData(nil, invokev1.JSONContentType)
 
@@ -990,6 +994,12 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	}
 
 	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+	a.inputBindingRoutes[c.Name] = c.Name
+	for _, item := range c.Spec.Metadata {
+		if item.Name == "route" {
+			a.inputBindingRoutes[c.ObjectMeta.Name] = item.Value.String()
+		}
+	}
 	a.inputBindings[c.Name] = binding
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	return nil
