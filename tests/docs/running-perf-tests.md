@@ -117,3 +117,8 @@ make push-perf-app-all
 # start perf tests
 make test-perf-all
 ```
+
+## Run perf tests through GitHub Actions
+To keep the build infrastructure simple, Dapr uses dapr-test GitHub Actions Workflow to run e2e tests using one of AKS clusters. A separate workflow also runs E2E in KinD clusters.
+
+Once a contributor creates a pull request, E2E tests on KinD clusters are automatically executed for faster feedback. In order to run the E2E tests on AKS, ask a maintainer or approver to add /ok-to-perf comment to the Pull Request.
