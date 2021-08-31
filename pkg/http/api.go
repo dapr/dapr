@@ -905,7 +905,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, with(statusCode, body))
 }
 
-// findTargetID tries to find ID of the target service from the following three places:
+// findTargetID tries to find ID of the target service from the following three places.
 // 1. {id} in the URL's path
 // 2. Basic authentication, http://dapr-app-id:<service-id>@localhost:3500/path
 // 3. HTTP header: 'dapr-app-id'
