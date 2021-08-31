@@ -14,10 +14,11 @@ type ServerConfig struct {
 	ProfilePort        int
 	EnableProfiling    bool
 	MaxRequestBodySize int
+	EnableDomainSocket bool
 }
 
 // NewServerConfig returns a new HTTP server config.
-func NewServerConfig(appID string, hostAddress string, port int, profilePort int, allowedOrigins string, enableProfiling bool, maxRequestBodySize int) ServerConfig {
+func NewServerConfig(appID string, hostAddress string, port int, profilePort int, allowedOrigins string, enableProfiling bool, maxRequestBodySize int, enableDomainSocket bool) ServerConfig {
 	return ServerConfig{
 		AllowedOrigins:     allowedOrigins,
 		AppID:              appID,
@@ -26,5 +27,6 @@ func NewServerConfig(appID string, hostAddress string, port int, profilePort int
 		ProfilePort:        profilePort,
 		EnableProfiling:    enableProfiling,
 		MaxRequestBodySize: maxRequestBodySize,
+		EnableDomainSocket: enableDomainSocket,
 	}
 }

@@ -1,67 +1,68 @@
 package components
 
 import (
-	"fmt"
-	"io/ioutil"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
 
-	"bou.ke/monkey"
 	"github.com/stretchr/testify/assert"
 
 	config "github.com/dapr/dapr/pkg/config/modes"
 )
 
+const configPrefix = "."
+
+func writeTempConfig(path, content string) error {
+	return os.WriteFile(filepath.Join(configPrefix, path), []byte(content), fs.FileMode(0644))
+}
+
 func TestLoadComponentsFromFile(t *testing.T) {
 	request := &StandaloneComponents{
 		config: config.StandaloneConfig{
-			ComponentsPath: "test_component_path",
+			ComponentsPath: configPrefix,
 		},
 	}
 	t.Run("valid yaml content", func(t *testing.T) {
-		filename := "test-component.yaml"
+		filename := "test-component-valid.yaml"
 		yaml := `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-   name: statestore
+  name: statestore
 spec:
-   type: state.couchbase
-   metadata:
-   - name: prop1
-     value: value1
-   - name: prop2
-     value: value2
+  type: state.couchbase
+  metadata:
+  - name: prop1
+    value: value1
+  - name: prop2
+    value: value2
 `
-		monkey.Patch(ioutil.ReadFile, func(_ string) ([]byte, error) {
-			return []byte(yaml), nil
-		})
-		defer monkey.UnpatchAll()
+		err := writeTempConfig(filename, yaml)
+		// defer os.Remove(filename)
+		assert.Nil(t, err)
 		components := request.loadComponentsFromFile(filename)
 		assert.Len(t, components, 1)
 	})
 
 	t.Run("invalid yaml head", func(t *testing.T) {
-		filename := "test-component.yaml"
+		filename := "test-component-invalid.yaml"
 		yaml := `
 INVALID_YAML_HERE
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
 name: statestore`
-		monkey.Patch(ioutil.ReadFile, func(_ string) ([]byte, error) {
-			return []byte(yaml), nil
-		})
-		defer monkey.UnpatchAll()
+		err := writeTempConfig(filename, yaml)
+		defer os.Remove(filename)
+		assert.Nil(t, err)
 		components := request.loadComponentsFromFile(filename)
 		assert.Len(t, components, 0)
 	})
 
 	t.Run("load components file not exist", func(t *testing.T) {
-		filename := "test-component.yaml"
-		monkey.Patch(ioutil.ReadFile, func(_ string) ([]byte, error) {
-			return nil, fmt.Errorf("no such file or directory")
-		})
-		defer monkey.UnpatchAll()
+		filename := "test-component-no-exist.yaml"
+
 		components := request.loadComponentsFromFile(filename)
 		assert.Len(t, components, 0)
 	})
