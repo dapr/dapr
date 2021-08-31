@@ -627,7 +627,7 @@ func TestAliasRoute(t *testing.T) {
 		assert.Equal(t, 2, len(routes[router.MethodWild]))
 	})
 
-	t.Run("When direct messaging doesn't have alias defined", func(t *testing.T){
+	t.Run("When direct messaging doesn't have alias defined", func(t *testing.T) {
 		s := &server{}
 		a := &api{}
 		eps := a.constructDirectMessagingEndpoints()
