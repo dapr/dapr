@@ -479,7 +479,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
-	t.Run("Invoke direct messaging with dapr-app-id - 200 OK", func(t *testing.T) {
+	t.Run("Invoke direct messaging with dapr-app-id in header - 200 OK", func(t *testing.T) {
 		apiPath := "fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -496,6 +496,30 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "dapr-app-id", "fakeAppID")
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
+	t.Run("Invoke direct messaging with dapr-app-id in basic auth - 200 OK", func(t *testing.T) {
+		apiPath := "fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.doRequest("dapr-app-id:fakeAppID", "POST", apiPath, fakeData, nil)
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
@@ -2146,8 +2170,12 @@ func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body 
 	return response
 }
 
-func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
+func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
 	url := fmt.Sprintf("http://localhost/%s", path)
+	if basicAuth != "" {
+		url = fmt.Sprintf("http://%s@localhost/%s", basicAuth, path)
+	}
+
 	if params != nil {
 		url += "?"
 		for k, v := range params {
@@ -2185,6 +2213,10 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 	}
 
 	return response
+}
+
+func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
+	return f.doRequest("", method, path, body, params, headers...)
 }
 
 func TestV1StateEndpoints(t *testing.T) {
