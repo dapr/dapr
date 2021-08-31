@@ -132,9 +132,9 @@ func FromFlags() (*DaprRuntime, error) {
 
 	var publicPort *int
 	if *daprPublicPort != "" {
-		port, err := strconv.Atoi(*daprPublicPort)
-		if err != nil {
-			return nil, errors.Wrap(err, "error parsing app-port")
+		port, cerr := strconv.Atoi(*daprPublicPort)
+		if cerr != nil {
+			return nil, errors.Wrap(cerr, "error parsing dapr-public-port")
 		}
 		publicPort = &port
 	}
