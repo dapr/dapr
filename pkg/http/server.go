@@ -189,17 +189,26 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 		}
 
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-		for _, m := range e.Methods {
-			pathIncludesParameters := parameterFinder.MatchString(path)
-			if pathIncludesParameters {
-				router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
-			} else {
-				router.Handle(m, path, e.Handler)
-			}
+		s.handle(e, parameterFinder, path, router)
+
+		if e.Alias != "" {
+			path = fmt.Sprintf("/%s", e.Alias)
+			s.handle(e, parameterFinder, path, router)
 		}
 	}
 
 	return router
+}
+
+func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
+	for _, m := range e.Methods {
+		pathIncludesParameters := parameterFinder.MatchString(path)
+		if pathIncludesParameters {
+			router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
+		} else {
+			router.Handle(m, path, e.Handler)
+		}
+	}
 }
 
 func (s *server) endpointAllowed(endpoint Endpoint) bool {

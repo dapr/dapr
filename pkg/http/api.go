@@ -6,6 +6,7 @@
 package http
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -101,6 +102,7 @@ const (
 	pubsubnameparam      = "pubsubname"
 	traceparentHeader    = "traceparent"
 	tracestateHeader     = "tracestate"
+	daprAppID            = "dapr-app-id"
 )
 
 // NewAPI returns a new API.
@@ -247,6 +249,7 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 		{
 			Methods: []string{router.MethodWild},
 			Route:   "invoke/{id}/method/{method:*}",
+			Alias:   "{method:*}",
 			Version: apiVersionV1,
 			Handler: a.onDirectMessage,
 		},
@@ -847,7 +850,13 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
-	targetID := reqCtx.UserValue(idParam).(string)
+	targetID := a.findTargetID(reqCtx)
+	if targetID == "" {
+		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
+		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
+		return
+	}
+
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	invokeMethodName := reqCtx.UserValue(methodParam).(string)
 
@@ -894,6 +903,32 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 	respond(reqCtx, with(statusCode, body))
+}
+
+// findTargetID tries to find ID of the target service from the following three places:
+// 1. {id} in the URL's path.
+// 2. Basic authentication, http://dapr-app-id:<service-id>@localhost:3500/path.
+// 3. HTTP header: 'dapr-app-id'.
+func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
+	if id := reqCtx.UserValue(idParam); id == nil {
+		if appID := reqCtx.Request.Header.Peek(daprAppID); appID == nil {
+			if auth := reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization); auth != nil &&
+				strings.HasPrefix(string(auth), "Basic ") {
+				if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(auth), "Basic ")); err == nil {
+					pair := strings.Split(string(s), ":")
+					if len(pair) == 2 && pair[0] == daprAppID {
+						return pair[1]
+					}
+				}
+			}
+		} else {
+			return string(appID)
+		}
+	} else {
+		return id.(string)
+	}
+
+	return ""
 }
 
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
