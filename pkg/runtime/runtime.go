@@ -151,6 +151,7 @@ type DaprRuntime struct {
 	actorStateStoreCount   int
 	authenticator          security.Authenticator
 	namespace              string
+	podName                string
 	scopedSubscriptions    map[string][]string
 	scopedPublishings      map[string][]string
 	allowedTopics          map[string][]string
@@ -247,6 +248,12 @@ func (a *DaprRuntime) getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
 
+func (a *DaprRuntime) getPodName() string {
+	podName := os.Getenv("POD_NAME")
+	log.Infof("got pod name %s", podName)
+	return podName
+}
+
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
@@ -292,6 +299,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 	a.namespace = a.getNamespace()
+	a.podName = a.getPodName()
 	a.operatorClient, err = a.getOperatorClient()
 	if err != nil {
 		return err
@@ -373,7 +381,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
 
-	a.blockUntilAppPortIsReady()
+	a.blockUntilAppPortOpen()
 
 	err = a.createAppChannel()
 	if err != nil {
@@ -1892,7 +1900,7 @@ func (a *DaprRuntime) getSecretStore(storeName string) secretstores.SecretStore 
 	return a.secretStores[storeName]
 }
 
-func (a *DaprRuntime) blockUntilAppPortIsReady() {
+func (a *DaprRuntime) blockUntilAppPortOpen() {
 	if a.runtimeConfig.ApplicationPort <= 0 {
 		return
 	}
@@ -1914,12 +1922,35 @@ func (a *DaprRuntime) blockUntilAppPortIsReady() {
 
 func (a *DaprRuntime) blockUntilAppIsReady() {
 
-	readinessAddress := a.runtimeConfig.ReadinessAddress
+	if a.runtimeConfig.Mode == modes.KubernetesMode {
+		log.Infof("going to get containers status : namespace = %s, podName = %s", a.namespace, a.podName)
+	out:
+		for {
+			// check readiness from k8s env
+			resp, err := a.operatorClient.GetContainersStatus(context.Background(), &operatorv1pb.GetContainersStatusRequest{
+				Namespace: a.namespace,
+				Name:      a.podName,
+			})
 
-	if readinessAddress == "" {
-		// get readiness address from k8s env
+			if err != nil {
+				log.Errorf("get containers status error : namespace = %s, podName = %s, err = %s", a.namespace, a.podName, err)
+				return
+			}
+
+			for name, ready := range resp.Statuses {
+				if name != "daprd" && !ready {
+					log.Infof("container[%s] not ready", name)
+					time.Sleep(time.Millisecond * 1000)
+					continue out
+				}
+			}
+
+			log.Infof("all containers are ready")
+			break
+		}
 	}
 
+	readinessAddress := a.runtimeConfig.ReadinessAddress
 	if readinessAddress == "" {
 		return
 	}
@@ -1937,8 +1968,10 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 			break
 		}
 
-		time.Sleep(time.Millisecond * 50)
+		time.Sleep(time.Millisecond * 200)
 	}
+
+	log.Infof("wait applicatoin ready, continue init")
 }
 
 func (a *DaprRuntime) loadAppConfiguration() {

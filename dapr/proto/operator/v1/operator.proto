@@ -20,6 +20,8 @@ service Operator {
   rpc GetConfiguration (GetConfigurationRequest) returns (GetConfigurationResponse) {}
   // Returns a list of pub/sub subscriptions
   rpc ListSubscriptions (google.protobuf.Empty) returns (ListSubscriptionsResponse) {}
+  // Retusns labels of app container
+  rpc GetContainersStatus(GetContainersStatusRequest) returns (GetContainersStatusResponse) {}
 }
 
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
@@ -56,4 +58,13 @@ message GetConfigurationResponse {
 // ListSubscriptionsResponse includes pub/sub subscriptions.
 message ListSubscriptionsResponse {
   repeated bytes subscriptions = 1;
+}
+
+message GetContainersStatusRequest {
+  string namespace = 1;
+  string name = 2;
+}
+
+message GetContainersStatusResponse {
+  map<string,bool> statuses = 1;
 }

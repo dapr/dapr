@@ -250,3 +250,25 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	}
 	return nil
 }
+
+// GetContainersStatus returns a list of Dapr containers status.
+func (a *apiServer) GetContainersStatus(ctx context.Context, in *operatorv1pb.GetContainersStatusRequest) (*operatorv1pb.GetContainersStatusResponse, error) {
+	var pod corev1.Pod
+
+	if err := a.Client.Get(ctx, client.ObjectKey{
+		Namespace: in.Namespace,
+		Name:      in.Name,
+	}, &pod); err != nil {
+		return nil, errors.Wrap(err, "error getting pod")
+	}
+
+	resp := &operatorv1pb.GetContainersStatusResponse{
+		Statuses: make(map[string]bool),
+	}
+
+	for _, container := range pod.Status.ContainerStatuses {
+		resp.Statuses[container.Name] = container.Ready
+	}
+
+	return resp, nil
+}

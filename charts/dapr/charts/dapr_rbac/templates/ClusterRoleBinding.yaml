@@ -30,13 +30,13 @@ metadata:
   name: dapr-operator-admin
 rules:
 - apiGroups: ["*"]
-  resources: ["serviceaccounts", "deployments", "services", "configmaps", "secrets", "components", "configurations", "leases"]
+  resources: ["serviceaccounts", "deployments", "services", "configmaps", "secrets", "components", "configurations", "leases", "pods"]
   verbs: ["get"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
+  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases", "secrets", "pods"]
   verbs: ["list"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
+  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases", "secrets", "pods"]
   verbs: ["watch"]
 - apiGroups: ["*"]
   resources: ["services", "secrets", "configmaps", "leases", "services/finalizers", "deployments/finalizers"]
