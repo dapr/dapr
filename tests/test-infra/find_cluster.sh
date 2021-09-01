@@ -45,9 +45,12 @@ for clustername in `cat $1 | sed 's/\r//g' | sort -R | xargs`; do
     kubectl create namespace ${DAPR_TEST_NAMESPACE}
     if [ $? -eq 0 ]; then
         echo "Created ${DAPR_TEST_NAMESPACE} successfully and use $clustername cluster"
-        echo "TEST_CLUSTER=$clustername" >> $GITHUB_ENV
-        echo "DAPR_TAG=$clustername" >> $GITHUB_ENV
-        echo "DAPR_TEST_TAG=$clustername" >> $GITHUB_ENV
+       # echo "TEST_CLUSTER=$clustername" >> $GITHUB_ENV
+       # echo "DAPR_TAG=$clustername" >> $GITHUB_ENV
+       # echo "DAPR_TEST_TAG=$clustername" >> $GITHUB_ENV
+        echo "TEST_CLUSTER=Dapr-longhaulnightly"
+        echo "DAPR_TAG=Dapr-longhaulnightly"
+        echo "DAPR_TEST_TAG=Dapr-longhaulnightly"
         echo "TARGET_OS=$GOOS" >> $GITHUB_ENV
         echo "TARGET_ARCH=$GOARCH" >> $GITHUB_ENV
         exit 0
