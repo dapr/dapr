@@ -7,6 +7,7 @@ package placement
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func cleanupStates() {
 
 func TestMembershipChangeWorker(t *testing.T) {
 	serverAddress, testServer, cleanupServer := newTestPlacementServer(testRaftServer)
-	testServer.hasLeadership = true
+	testServer.hasLeadership.Store(true)
 
 	var stopCh chan struct{}
 	setupEach := func(t *testing.T) {
@@ -62,7 +63,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 	t.Run("successful dissemination", func(t *testing.T) {
 		setupEach(t)
 		// arrange
-		testServer.faultyHostDetectDuration = faultyHostDetectInitialDuration
+		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
 
 		conn, stream, err := newTestClient(serverAddress)
 		assert.NoError(t, err)
@@ -95,18 +96,21 @@ func TestMembershipChangeWorker(t *testing.T) {
 		time.Sleep(disseminateTimerInterval)
 
 		// ignore disseminateTimeout.
-		testServer.disseminateNextTime = 0
+		testServer.disseminateNextTime.Store(0)
 
 		<-done
 
-		assert.Equal(t, 1, len(testServer.streamConnPool))
-		assert.Equal(t, len(testServer.streamConnPool), len(testServer.raftNode.FSM().State().Members()))
+		testServer.streamConnPoolLock.RLock()
+		nStreamConnPool := len(testServer.streamConnPool)
+		testServer.streamConnPoolLock.RUnlock()
+		assert.Equal(t, 1, nStreamConnPool)
+		assert.Equal(t, nStreamConnPool, len(testServer.raftNode.FSM().State().Members()))
 
 		// wait until table dissemination.
 		time.Sleep(disseminateTimerInterval * 2)
 		assert.Equal(t, uint32(0), testServer.memberUpdateCount.Load(),
 			"flushed all member updates")
-		assert.Equal(t, faultyHostDetectDefaultDuration, testServer.faultyHostDetectDuration,
+		assert.Equal(t, int64(faultyHostDetectDefaultDuration), testServer.faultyHostDetectDuration.Load(),
 			"faultyHostDetectDuration must be faultyHostDetectDuration")
 
 		conn.Close()
@@ -131,7 +135,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 func TestCleanupHeartBeats(t *testing.T) {
 	_, testServer, cleanup := newTestPlacementServer(testRaftServer)
-	testServer.hasLeadership = true
+	testServer.hasLeadership.Store(true)
 	maxClients := 3
 
 	for i := 0; i < maxClients; i++ {
@@ -157,12 +161,14 @@ func TestCleanupHeartBeats(t *testing.T) {
 func TestPerformTableUpdate(t *testing.T) {
 	const testClients = 10
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
-	testServer.hasLeadership = true
+	testServer.hasLeadership.Store(true)
 
 	// arrange
 	clientConns := []*grpc.ClientConn{}
 	clientStreams := []v1pb.Placement_ReportDaprStatusClient{}
+	clientRecvDataLock := &sync.RWMutex{}
 	clientRecvData := []map[string]int64{}
+	clientUpToDateCh := make(chan struct{}, testClients)
 
 	for i := 0; i < testClients; i++ {
 		conn, stream, err := newTestClient(serverAddress)
@@ -171,17 +177,38 @@ func TestPerformTableUpdate(t *testing.T) {
 		clientStreams = append(clientStreams, stream)
 		clientRecvData = append(clientRecvData, map[string]int64{})
 
-		go func(clientID int) {
+		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {
+			upToDate := false
 			for {
-				placementOrder, streamErr := clientStreams[clientID].Recv()
+				placementOrder, streamErr := clientStream.Recv()
 				if streamErr != nil {
 					return
 				}
 				if placementOrder != nil {
+					clientRecvDataLock.Lock()
 					clientRecvData[clientID][placementOrder.Operation] = time.Now().UnixNano()
+					clientRecvDataLock.Unlock()
+					// Check if the table is up to date.
+					if placementOrder.Operation == "update" {
+						if placementOrder.Tables != nil {
+							upToDate = true
+							for _, entries := range placementOrder.Tables.Entries {
+								// Check if all clients are in load map.
+								if len(entries.LoadMap) != testClients {
+									upToDate = false
+								}
+							}
+						}
+					}
+					if placementOrder.Operation == "unlock" {
+						if upToDate {
+							clientUpToDateCh <- struct{}{}
+							return
+						}
+					}
 				}
 			}
-		}(i)
+		}(i, stream)
 	}
 
 	// act
@@ -199,18 +226,44 @@ func TestPerformTableUpdate(t *testing.T) {
 	}
 
 	// Wait until clientStreams[clientID].Recv() in client go routine received new table
-	time.Sleep(10 * time.Millisecond)
+	waitCnt := testClients
+	timeoutC := time.After(time.Second * 10)
+	for {
+		end := false
+		select {
+		case <-clientUpToDateCh:
+			waitCnt--
+			if waitCnt == 0 {
+				end = true
+			}
+		case <-timeoutC:
+			end = true
+		}
+		if end {
+			break
+		}
+	}
 
 	// Call performTableUpdate directly, not by MembershipChangeWorker loop.
-	testServer.performTablesUpdate(testServer.streamConnPool, nil)
+	testServer.streamConnPoolLock.RLock()
+	streamConnPool := make([]placementGRPCStream, len(testServer.streamConnPool))
+	copy(streamConnPool, testServer.streamConnPool)
+	testServer.streamConnPoolLock.RUnlock()
+	testServer.performTablesUpdate(streamConnPool, nil)
 
 	// assert
 	for i := 0; i < testClients; i++ {
+		clientRecvDataLock.RLock()
 		lockTime, ok := clientRecvData[i]["lock"]
+		clientRecvDataLock.RUnlock()
 		assert.True(t, ok)
+		clientRecvDataLock.RLock()
 		updateTime, ok := clientRecvData[i]["update"]
+		clientRecvDataLock.RUnlock()
 		assert.True(t, ok)
+		clientRecvDataLock.RLock()
 		unlockTime, ok := clientRecvData[i]["unlock"]
+		clientRecvDataLock.RUnlock()
 		assert.True(t, ok)
 
 		// check if lock, update, and unlock operations are received in the right order.

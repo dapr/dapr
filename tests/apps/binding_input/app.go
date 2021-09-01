@@ -20,15 +20,28 @@ const appPort = 3000
 type messageBuffer struct {
 	lock            *sync.RWMutex
 	successMessages []string
+	routedMessages  []string
 	// errorOnce is used to make sure that message is failed only once.
 	errorOnce     bool
 	failedMessage string
+}
+
+func (m *messageBuffer) addRouted(message string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.routedMessages = append(m.routedMessages, message)
 }
 
 func (m *messageBuffer) add(message string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.successMessages = append(m.successMessages, message)
+}
+
+func (m *messageBuffer) getAllRouted() []string {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	return m.routedMessages
 }
 
 func (m *messageBuffer) getAllSuccessful() []string {
@@ -68,6 +81,7 @@ type testHandlerResponse struct {
 	ReceivedMessages []string `json:"received_messages,omitempty"`
 	Message          string   `json:"message,omitempty"`
 	FailedMessage    string   `json:"failed_message,omitempty"`
+	RoutedMessages   []string `json:"routeed_messages,omitempty"`
 }
 
 // indexHandler is the handler for root path
@@ -107,12 +121,35 @@ func testTopicHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func testRoutedTopicHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("testRoutedTopicHandler called")
+	if r.Method == http.MethodOptions {
+		log.Println("test-topic routed binding input has been accepted")
+		// Sending StatusOK back to the topic, so it will not attempt to redeliver on session restart.
+		// Consumer marking successfully consumed offset.
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	var message string
+	err := json.NewDecoder(r.Body).Decode(&message)
+	log.Printf("Got message: %s", message)
+	if err != nil {
+		log.Printf("error parsing test-topic input binding payload: %s", err)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	messages.addRouted(message)
+	w.WriteHeader(http.StatusOK)
+}
+
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	failedMessage := messages.getFailed()
 	log.Printf("failed message %s", failedMessage)
 	if err := json.NewEncoder(w).Encode(testHandlerResponse{
 		ReceivedMessages: messages.getAllSuccessful(),
 		FailedMessage:    failedMessage,
+		RoutedMessages:   messages.getAllRouted(),
 	}); err != nil {
 		log.Printf("error encoding saved messages: %s", err)
 
@@ -130,6 +167,7 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test-topic", testTopicHandler).Methods("POST", "OPTIONS")
+	router.HandleFunc("/custom-path", testRoutedTopicHandler).Methods("POST", "OPTIONS")
 	router.HandleFunc("/tests/get_received_topics", testHandler).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))

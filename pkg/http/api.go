@@ -6,6 +6,7 @@
 package http
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -33,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -100,6 +102,7 @@ const (
 	pubsubnameparam      = "pubsubname"
 	traceparentHeader    = "traceparent"
 	tracestateHeader     = "tracestate"
+	daprAppID            = "dapr-app-id"
 )
 
 // NewAPI returns a new API.
@@ -246,6 +249,7 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 		{
 			Methods: []string{router.MethodWild},
 			Route:   "invoke/{id}/method/{method:*}",
+			Alias:   "{method:*}",
 			Version: apiVersionV1,
 			Handler: a.onDirectMessage,
 		},
@@ -500,6 +504,19 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		limiter.Wait()
 	}
 
+	if encryption.EncryptedStateStore(storeName) {
+		for i := range bulkResp {
+			val, err := encryption.TryDecryptValue(storeName, bulkResp[i].Data)
+			if err != nil {
+				log.Debugf("bulk get error: %s", err)
+				bulkResp[i].Error = err.Error()
+				continue
+			}
+
+			bulkResp[i].Data = val
+		}
+	}
+
 	b, _ := a.json.Marshal(bulkResp)
 	respond(reqCtx, withJSON(fasthttp.StatusOK, b))
 }
@@ -551,7 +568,6 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	resp, err := store.Get(&req)
 	if err != nil {
-		storeName := a.getStateStoreName(reqCtx)
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -560,6 +576,18 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	if resp == nil || resp.Data == nil {
 		respond(reqCtx, withEmpty())
 		return
+	}
+
+	if encryption.EncryptedStateStore(storeName) {
+		val, err := encryption.TryDecryptValue(storeName, resp.Data)
+		if err != nil {
+			msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+
+		resp.Data = val
 	}
 
 	respond(reqCtx, withJSON(fasthttp.StatusOK, resp.Data), withEtag(resp.ETag), withMetadata(resp.Metadata))
@@ -750,6 +778,21 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			log.Debug(err)
 			return
 		}
+
+		if encryption.EncryptedStateStore(storeName) {
+			data := []byte(fmt.Sprintf("%v", r.Value))
+			val, encErr := encryption.TryEncryptValue(storeName, data)
+			if encErr != nil {
+				statusCode, errMsg, resp := a.stateErrorResponse(encErr, "ERR_STATE_SAVE")
+				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
+
+				respond(reqCtx, withError(statusCode, resp))
+				log.Debug(resp.Message)
+				return
+			}
+
+			reqs[i].Value = val
+		}
 	}
 
 	err = store.BulkSet(reqs)
@@ -807,7 +850,13 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
-	targetID := reqCtx.UserValue(idParam).(string)
+	targetID := a.findTargetID(reqCtx)
+	if targetID == "" {
+		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
+		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
+		return
+	}
+
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	invokeMethodName := reqCtx.UserValue(methodParam).(string)
 
@@ -854,6 +903,32 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 	respond(reqCtx, with(statusCode, body))
+}
+
+// findTargetID tries to find ID of the target service from the following three places:
+// 1. {id} in the URL's path.
+// 2. Basic authentication, http://dapr-app-id:<service-id>@localhost:3500/path.
+// 3. HTTP header: 'dapr-app-id'.
+func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
+	if id := reqCtx.UserValue(idParam); id == nil {
+		if appID := reqCtx.Request.Header.Peek(daprAppID); appID == nil {
+			if auth := reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization); auth != nil &&
+				strings.HasPrefix(string(auth), "Basic ") {
+				if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(auth), "Basic ")); err == nil {
+					pair := strings.Split(string(s), ":")
+					if len(pair) == 2 && pair[0] == daprAppID {
+						return pair[1]
+					}
+				}
+			}
+		} else {
+			return string(appID)
+		}
+	} else {
+		return id.(string)
+	}
+
+	return ""
 }
 
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
@@ -1159,6 +1234,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
 		temp[key] = value
+
 		return true
 	})
 
@@ -1219,6 +1295,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1227,6 +1304,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1235,6 +1313,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1243,6 +1322,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1255,6 +1335,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
+
 		return
 	}
 
@@ -1264,6 +1345,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 
 	data := body
+
 	if !rawPayload {
 		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
 			ID:              a.id,
@@ -1278,6 +1360,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
+
 			return
 		}
 
@@ -1291,6 +1374,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 				fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
+
 			return
 		}
 	}
@@ -1334,6 +1418,7 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 			return statusCode
 		}
 	}
+
 	return fasthttp.StatusOK
 }
 
@@ -1460,6 +1545,27 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 			log.Debug(msg)
 			return
+		}
+	}
+
+	if encryption.EncryptedStateStore(storeName) {
+		for i, op := range operations {
+			if op.Operation == state.Upsert {
+				req := op.Request.(*state.SetRequest)
+				data := []byte(fmt.Sprintf("%v", req.Value))
+				val, err := encryption.TryEncryptValue(storeName, data)
+				if err != nil {
+					msg := NewErrorResponse(
+						"ERR_SAVE_STATE",
+						fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()))
+					respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+					log.Debug(msg)
+					return
+				}
+
+				req.Value = val
+				operations[i].Request = req
+			}
 		}
 	}
 

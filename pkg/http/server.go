@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 
@@ -73,7 +74,12 @@ func (s *server) StartNonBlocking() {
 	}
 
 	go func() {
-		log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
+		if s.config.EnableDomainSocket {
+			socket := fmt.Sprintf("/tmp/dapr-%s-http.socket", s.config.AppID)
+			log.Fatal(customServer.ListenAndServeUNIX(socket, os.FileMode(0600)))
+		} else {
+			log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
+		}
 	}()
 
 	if s.config.EnableProfiling {
@@ -183,17 +189,26 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 		}
 
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-		for _, m := range e.Methods {
-			pathIncludesParameters := parameterFinder.MatchString(path)
-			if pathIncludesParameters {
-				router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
-			} else {
-				router.Handle(m, path, e.Handler)
-			}
+		s.handle(e, parameterFinder, path, router)
+
+		if e.Alias != "" {
+			path = fmt.Sprintf("/%s", e.Alias)
+			s.handle(e, parameterFinder, path, router)
 		}
 	}
 
 	return router
+}
+
+func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
+	for _, m := range e.Methods {
+		pathIncludesParameters := parameterFinder.MatchString(path)
+		if pathIncludesParameters {
+			router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
+		} else {
+			router.Handle(m, path, e.Handler)
+		}
+	}
 }
 
 func (s *server) endpointAllowed(endpoint Endpoint) bool {
