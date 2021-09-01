@@ -442,3 +442,12 @@ func ProtobufToJSON(message protoreflect.ProtoMessage) ([]byte, error) {
 	}
 	return marshaler.Marshal(message)
 }
+
+func WithCustomGRPCMetadata(ctx context.Context, md map[string]string) context.Context {
+	// ToLower the keys to keep consistent with HTTP metadata
+	for k, v := range md {
+		ctx = metadata.AppendToOutgoingContext(ctx, strings.ToLower(k), v)
+	}
+
+	return ctx
+}
