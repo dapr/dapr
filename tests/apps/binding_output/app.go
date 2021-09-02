@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"fmt"
 	"log"
 	"net/http"
@@ -71,7 +72,16 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 
 		/* #nosec */
 		resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+		resp_body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+
+		if !(resp.StatusCode == 200 || resp.StatusCode == 204) {
+			log.Printf("Received non 2xx status code: %d body: %v", resp.StatusCode, resp_body)
+
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("error: " + string(resp_body)))
+			return
+		}
 
 		if err != nil {
 			log.Printf("error sending request to output binding: %s", err)
@@ -80,6 +90,8 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("error: " + err.Error()))
 			return
 		}
+
+		log.Printf("Successfully sent message via HTTP '%v' Status code %d", body, resp.StatusCode)
 	}
 
 	w.WriteHeader(http.StatusOK)
