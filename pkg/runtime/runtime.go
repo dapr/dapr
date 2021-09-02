@@ -1971,7 +1971,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		time.Sleep(time.Millisecond * 200)
 	}
 
-	log.Infof("wait applicatoin ready, continue init")
+	log.Infof("wait application ready, continue init")
 }
 
 func (a *DaprRuntime) loadAppConfiguration() {
