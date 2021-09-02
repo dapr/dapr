@@ -55,6 +55,7 @@ type Config struct {
 	MaxRequestBodySize   int
 	EnableDomainSocket   bool
 	ReadinessAddress     string
+	EnableWaitAppReady   bool
 }
 
 // NewRuntimeConfig returns a new runtime config.
@@ -63,7 +64,7 @@ func NewRuntimeConfig(
 	controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string,
 	httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int,
 	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int,
-	enableDomainSocket bool, readinessAddress string) *Config {
+	enableDomainSocket bool, readinessAddress string, enableWaitAppReady bool) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
@@ -90,5 +91,6 @@ func NewRuntimeConfig(
 		MaxRequestBodySize:   maxRequestBodySize,
 		EnableDomainSocket:   enableDomainSocket,
 		ReadinessAddress:     readinessAddress,
+		EnableWaitAppReady:   enableWaitAppReady,
 	}
 }

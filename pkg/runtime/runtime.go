@@ -1922,6 +1922,10 @@ func (a *DaprRuntime) blockUntilAppPortOpen() {
 
 func (a *DaprRuntime) blockUntilAppIsReady() {
 
+	if !a.runtimeConfig.EnableWaitAppReady {
+		return
+	}
+
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		log.Infof("going to get containers status : namespace = %s, podName = %s", a.namespace, a.podName)
 	out:
