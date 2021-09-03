@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -41,7 +42,7 @@ type (
 		Metadata   map[string]string `json:"metadata,omitempty"`
 		Route      string            `json:"route"`  // Single route from v1alpha1
 		Routes     RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
-		DLQ        dlq               `json:"dlq"`
+		DLQ        DLQ               `json:"dlq"`
 	}
 
 	RoutesJSON struct {
@@ -191,7 +192,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 				log.Errorf("failed to read file %s: %s", filePath, err)
 				continue
 			}
-
+			log.Warnf("Sub status: %v", string(b))
 			subs, err = appendSubscription(subs, b)
 			if err != nil {
 				log.Warnf("failed to add subscription from file %s: %s", filePath, err)
@@ -238,6 +239,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			Rules:      rules,
 			Metadata:   sub.Spec.Metadata,
 			Scopes:     sub.Scopes,
+			DLQ:        DLQ(sub.Spec.DLQ),
 		}, nil
 
 	default:
@@ -247,7 +249,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 		if err := yaml.Unmarshal(b, &sub); err != nil {
 			return nil, err
 		}
-
+		fmt.Printf("DLQ Marshalling: %v", DLQ(sub.Spec.DLQ))
 		return &Subscription{
 			Topic:      sub.Spec.Topic,
 			PubsubName: sub.Spec.Pubsubname,
@@ -258,6 +260,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			},
 			Metadata: sub.Spec.Metadata,
 			Scopes:   sub.Scopes,
+			DLQ:      DLQ(sub.Spec.DLQ),
 		}, nil
 	}
 }
@@ -363,7 +366,7 @@ func appendSubscription(list []Subscription, subBytes []byte) ([]Subscription, e
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Printf("DLQ append sub: %v", sub.DLQ)
 	if sub != nil {
 		list = append(list, *sub)
 	}

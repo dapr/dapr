@@ -6,7 +6,7 @@ type Subscription struct {
 	Metadata   map[string]string `json:"metadata"`
 	Rules      []*Rule           `json:"rules,omitempty"`
 	Scopes     []string          `json:"scopes"`
-	DLQ        dlq               `json:"dlq"`
+	DLQ        DLQ               `json:"dlq,omitempty"`
 }
 
 type Rule struct {
@@ -18,7 +18,7 @@ type Expr interface {
 	Eval(variables map[string]interface{}) (interface{}, error)
 }
 
-type dlq struct {
+type DLQ struct {
 	IsBrokerSpecific bool   `json:"isbrokerspecific,omitempty"`
 	Pubsubname       string `json:"pubsubname,omitempty"`
 	Topic            string `json:"topic,omitempty"`

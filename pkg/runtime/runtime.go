@@ -519,10 +519,9 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			isdlq, _ := strconv.ParseBool(route.metadata["IsDLQ"])
 
 			if pubsub.HasExpired(cloudEvent) && !isdlq {
-				log.Warnf("(BEGIN-PUB-SUB) dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-				log.Warnf("Came from: %v", msg.Topic)
+				log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 				if route.metadata["DLQTopic"] != "" && route.metadata["DLQPubsubName"] != "" {
-					log.Warnf("(BEGIN-PUB-SUB) pub/sub message %v being sent to dlq topic %v", cloudEvent[pubsub.IDField], route.metadata["DLQTopic"])
+					log.Warnf("pub/sub message %v being sent to dlq topic %v", cloudEvent[pubsub.IDField], route.metadata["DLQTopic"])
 					if err := a.Publish(&pubsub.PublishRequest{
 						Data:       msg.Data,
 						PubsubName: route.metadata["DLQPubsubName"],
@@ -1108,6 +1107,11 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 			subs = append(subs[:i], subs[i+1:]...)
 		}
 	}
+
+	for i := 0; i < len(subs); i++ {
+		fmt.Printf("getDeclarativeSubscriptions #%v DLQ: %v", i, subs[i].DLQ)
+	}
+
 	return subs
 }
 
@@ -1139,6 +1143,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 
 	// handle declarative subscriptions
 	ds := a.getDeclarativeSubscriptions()
+	deadLetters := make(map[string]bool)
 	for _, s := range ds {
 		skip := false
 
@@ -1152,11 +1157,23 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 			}
 		}
 
+		if s.DLQ.Pubsubname != "" && s.DLQ.Topic != "" {
+			s.Metadata["DLQPubsubName"] = s.DLQ.Pubsubname
+			s.Metadata["DLQTopic"] = s.DLQ.Topic
+			deadLetters[s.DLQ.Topic] = true
+		}
+		if s.DLQ.IsBrokerSpecific {
+			s.Metadata["IsBrokerSpecific"] = "true"
+		}
+		if deadLetters[s.Topic] {
+			s.Metadata["IsDLQ"] = "true"
+		}
+
 		if !skip {
 			subscriptions = append(subscriptions, s)
 		}
 	}
-	deadLetters := make(map[string]bool)
+
 	for _, s := range subscriptions {
 		if _, ok := topicRoutes[s.PubsubName]; !ok {
 			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]Route)}
@@ -1164,13 +1181,11 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 		if s.Metadata == nil {
 			s.Metadata = make(map[string]string)
 		}
-		log.Warnf("Subscription: %v", s)
-		log.Warnf("DLQ: %v", s.DLQ)
-		log.Debugf("DLQ Pubsub Name: %s for base topic %s", s.DLQ.Pubsubname, s.Topic)
-		log.Debugf("DLQ Topic Name: %s for base topic %s", s.DLQ.Topic, s.Topic)
 
 		// Configure dead letter queue properties in subscription metadata
 		if s.DLQ.Pubsubname != "" && s.DLQ.Topic != "" {
+			log.Debugf("DLQ Pubsub Name: %s for base topic %s", s.DLQ.Pubsubname, s.Topic)
+			log.Debugf("DLQ Topic Name: %s for base topic %s", s.DLQ.Topic, s.Topic)
 			s.Metadata["DLQPubsubName"] = s.DLQ.Pubsubname
 			s.Metadata["DLQTopic"] = s.DLQ.Topic
 			deadLetters[s.DLQ.Topic] = true

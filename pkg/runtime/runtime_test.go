@@ -200,6 +200,25 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	}
 }
 
+func testDeclarativeSubscriptionWithDLQ() subscriptionsapi.Subscription {
+	return subscriptionsapi.Subscription{
+		TypeMeta: meta_v1.TypeMeta{
+			Kind:       "Subscription",
+			APIVersion: "v1alpha1",
+		},
+		Spec: subscriptionsapi.SubscriptionSpec{
+			Topic:      "topic1",
+			Route:      "myroute",
+			Pubsubname: "pubsub",
+			DLQ: subscriptionsapi.DLQ{
+				IsBrokerSpecific: false,
+				Pubsubname:       "pubsub",
+				Topic:            "topic1_dlq",
+			},
+		},
+	}
+}
+
 func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
 	b, _ := yaml.Marshal(subscription)
 	ioutil.WriteFile(filePath, b, 0600)
@@ -1057,6 +1076,35 @@ func TestInitPubSub(t *testing.T) {
 				assert.Equal(t, "myroute", subs[0].Rules[0].Path)
 			}
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
+		}
+	})
+
+	t.Run("load declarative subscription and check for dlq properties", func(t *testing.T) {
+		log.Warnf("=========  DLQ TEST =========")
+		dir := "./components"
+
+		rts := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rts)
+
+		require.NoError(t, os.Mkdir(dir, 0777))
+		defer os.RemoveAll(dir)
+
+		s := testDeclarativeSubscriptionWithDLQ()
+
+		filePath := "./components/sub.yaml"
+		writeSubscriptionToDisk(s, filePath)
+
+		rts.runtimeConfig.Standalone.ComponentsPath = dir
+		subs := rts.getDeclarativeSubscriptions()
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 1) {
+				assert.Equal(t, "myroute", subs[0].Rules[0].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, "pubsub", subs[0].DLQ.Pubsubname)
+			assert.Equal(t, "topic1_dlq", subs[0].DLQ.Topic)
+			assert.Equal(t, false, subs[0].DLQ.IsBrokerSpecific)
 		}
 	})
 

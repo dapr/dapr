@@ -119,7 +119,7 @@ func testDeclarativeSubscriptionV1WithDLQ() subscriptionsapi_v1alpha1.Subscripti
 				"testName": "testValue",
 			},
 			Route: "myroute",
-			DLQ: subscriptionsapi_v1alpha1.dlq{
+			DLQ: subscriptionsapi_v1alpha1.DLQ{
 				IsBrokerSpecific: false,
 				Pubsubname:       "pubsub",
 				Topic:            "topic1_dlq",
@@ -153,7 +153,7 @@ func testDeclarativeSubscriptionV2WithDLQ() subscriptionsapi_v2alpha1.Subscripti
 				},
 				Default: "myroute",
 			},
-			DLQ: subscriptionsapi_v2alpha1.dlq{
+			DLQ: subscriptionsapi_v2alpha1.DLQ{
 				IsBrokerSpecific: false,
 				Pubsubname:       "pubsub",
 				Topic:            "topic1_dlq",
@@ -191,6 +191,28 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		}
 	})
 
+	t.Run("load single valid subscription with dlq", func(t *testing.T) {
+		s := testDeclarativeSubscriptionV1WithDLQ()
+		s.Scopes = []string{"scope1"}
+
+		filePath := filepath.Join(dir, "sub.yaml")
+		writeSubscriptionToDisk(s, filePath)
+
+		subs := DeclarativeSelfHosted(dir, log)
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 1) {
+				assert.Equal(t, "myroute", subs[0].Rules[0].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, "scope1", subs[0].Scopes[0])
+			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
+			assert.Equal(t, false, subs[0].DLQ.IsBrokerSpecific)
+			assert.Equal(t, "pubsub", subs[0].DLQ.Pubsubname)
+			assert.Equal(t, "topic1_dlq", subs[0].DLQ.Topic)
+		}
+	})
+
 	t.Run("load multiple subscriptions", func(t *testing.T) {
 		for i := 0; i < 1; i++ {
 			s := testDeclarativeSubscriptionV1()
@@ -216,28 +238,6 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Scopes[0])
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Metadata["testName"])
 			}
-		}
-	})
-
-	t.Run("load single valid subscription with dlq", func(t *testing.T) {
-		s := testDeclarativeSubscriptionV1WithDLQ()
-		s.Scopes = []string{"scope1"}
-
-		filePath := filepath.Join(dir, "sub.yaml")
-		writeSubscriptionToDisk(s, filePath)
-
-		subs := DeclarativeSelfHosted(dir, log)
-		if assert.Len(t, subs, 1) {
-			assert.Equal(t, "topic1", subs[0].Topic)
-			if assert.Len(t, subs[0].Rules, 1) {
-				assert.Equal(t, "myroute", subs[0].Rules[0].Path)
-			}
-			assert.Equal(t, "pubsub", subs[0].PubsubName)
-			assert.Equal(t, "scope1", subs[0].Scopes[0])
-			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
-			assert.Equal(t, "false", subs[0].Metadata["IsBrokerSpecific"])
-			assert.Equal(t, "pubsub", subs[0].Metadata["DLQPubsubName"])
-			assert.Equal(t, "topic1_dlq", subs[0].Metadata["DLQTopic"])
 		}
 	})
 
@@ -280,6 +280,30 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 		}
 	})
 
+	t.Run("load single valid subscription with dlq", func(t *testing.T) {
+		s := testDeclarativeSubscriptionV2WithDLQ()
+		s.Scopes = []string{"scope1"}
+
+		filePath := filepath.Join(dir, "sub.yaml")
+		writeSubscriptionToDisk(s, filePath)
+
+		subs := DeclarativeSelfHosted(dir, log)
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 3) {
+				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, "scope1", subs[0].Scopes[0])
+			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
+			assert.Equal(t, false, subs[0].DLQ.IsBrokerSpecific)
+			assert.Equal(t, "pubsub", subs[0].DLQ.Pubsubname)
+			assert.Equal(t, "topic1_dlq", subs[0].DLQ.Topic)
+		}
+	})
+
 	t.Run("load multiple subscriptions", func(t *testing.T) {
 		for i := 0; i < 1; i++ {
 			iStr := fmt.Sprintf("%v", i)
@@ -310,30 +334,6 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 				assert.Equal(t, iStr, subs[i].Scopes[0])
 				assert.Equal(t, iStr, subs[i].Metadata["testName"])
 			}
-		}
-	})
-
-	t.Run("load single valid subscription with dlq", func(t *testing.T) {
-		s := testDeclarativeSubscriptionV2WithDLQ()
-		s.Scopes = []string{"scope1"}
-
-		filePath := filepath.Join(dir, "sub.yaml")
-		writeSubscriptionToDisk(s, filePath)
-
-		subs := DeclarativeSelfHosted(dir, log)
-		if assert.Len(t, subs, 1) {
-			assert.Equal(t, "topic1", subs[0].Topic)
-			if assert.Len(t, subs[0].Rules, 3) {
-				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
-				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
-				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
-			}
-			assert.Equal(t, "pubsub", subs[0].PubsubName)
-			assert.Equal(t, "scope1", subs[0].Scopes[0])
-			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
-			assert.Equal(t, "false", subs[0].Metadata["IsBrokerSpecific"])
-			assert.Equal(t, "pubsub", subs[0].Metadata["DLQPubsubName"])
-			assert.Equal(t, "topic1_dlq", subs[0].Metadata["DLQTopic"])
 		}
 	})
 
