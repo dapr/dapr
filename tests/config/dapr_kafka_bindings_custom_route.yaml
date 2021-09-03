@@ -28,3 +28,5 @@ spec:
     # set specify route
   - name: route
     value: /custom-path
+  - name: initialOffset
+    value: oldest
