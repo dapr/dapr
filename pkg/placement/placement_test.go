@@ -65,7 +65,7 @@ func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) 
 	time.Sleep(100 * time.Millisecond)
 
 	cleanUpFn := func() {
-		testServer.hasLeadership = false
+		testServer.hasLeadership.Store(false)
 		testServer.Shutdown()
 	}
 
@@ -91,7 +91,7 @@ func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_Repor
 func TestMemberRegistration_NoLeadership(t *testing.T) {
 	// set up
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
-	testServer.hasLeadership = false
+	testServer.hasLeadership.Store(false)
 
 	// arrange
 	conn, stream, err := newTestClient(serverAddress)
@@ -122,7 +122,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 
 func TestMemberRegistration_Leadership(t *testing.T) {
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
-	testServer.hasLeadership = true
+	testServer.hasLeadership.Store(true)
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
@@ -210,7 +210,10 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			require.True(t, false, "should not have any member change message because faulty host detector time will clean up")
 
 		case <-time.After(testStreamSendLatency):
-			assert.Equal(t, 0, len(testServer.streamConnPool))
+			testServer.streamConnPoolLock.RLock()
+			streamConnCount := len(testServer.streamConnPool)
+			testServer.streamConnPoolLock.RUnlock()
+			assert.Equal(t, 0, streamConnCount)
 		}
 	})
 

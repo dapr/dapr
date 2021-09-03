@@ -69,12 +69,14 @@ type hostMemberChange struct {
 type Service struct {
 	// serverListener is the TCP listener for placement gRPC server.
 	serverListener net.Listener
+	// grpcServerLock is the lock fro grpcServer
+	grpcServerLock *sync.Mutex
 	// grpcServer is the gRPC server for placement service.
 	grpcServer *grpc.Server
 	// streamConnPool has the stream connections established between placement gRPC server and Dapr runtime.
 	streamConnPool []placementGRPCStream
 	// streamConnPoolLock is the lock for streamConnPool change.
-	streamConnPoolLock *sync.Mutex
+	streamConnPoolLock *sync.RWMutex
 
 	// raftNode is the raft server instance.
 	raftNode *raft.Server
@@ -86,16 +88,16 @@ type Service struct {
 	// disseminateLock is the lock for hashing table dissemination.
 	disseminateLock *sync.Mutex
 	// disseminateNextTime is the time when the hashing tables are disseminated.
-	disseminateNextTime int64
+	disseminateNextTime atomic.Int64
 	// memberUpdateCount represents how many dapr runtimes needs to change.
 	// consistent hashing table. Only actor runtime's heartbeat will increase this.
 	memberUpdateCount atomic.Uint32
 
 	// faultyHostDetectDuration
-	faultyHostDetectDuration time.Duration
+	faultyHostDetectDuration *atomic.Int64
 
 	// hasLeadership indicates the state for leadership.
-	hasLeadership bool
+	hasLeadership atomic.Bool
 
 	// streamConnGroup represents the number of stream connections.
 	// This waits until all stream connections are drained when revoking leadership.
@@ -112,12 +114,12 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
 		disseminateLock:          &sync.Mutex{},
 		streamConnPool:           []placementGRPCStream{},
-		streamConnPoolLock:       &sync.Mutex{},
+		streamConnPoolLock:       &sync.RWMutex{},
 		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
-		hasLeadership:            false,
-		faultyHostDetectDuration: faultyHostDetectInitialDuration,
+		faultyHostDetectDuration: atomic.NewInt64(int64(faultyHostDetectInitialDuration)),
 		raftNode:                 raftNode,
 		shutdownCh:               make(chan struct{}),
+		grpcServerLock:           &sync.Mutex{},
 		shutdownLock:             &sync.Mutex{},
 		lastHeartBeat:            &sync.Map{},
 	}
@@ -135,10 +137,13 @@ func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
 	if err != nil {
 		log.Fatalf("error creating gRPC options: %s", err)
 	}
-	p.grpcServer = grpc.NewServer(opts...)
-	placementv1pb.RegisterPlacementServer(p.grpcServer, p)
+	grpcServer := grpc.NewServer(opts...)
+	placementv1pb.RegisterPlacementServer(grpcServer, p)
+	p.grpcServerLock.Lock()
+	p.grpcServer = grpcServer
+	p.grpcServerLock.Unlock()
 
-	if err := p.grpcServer.Serve(p.serverListener); err != nil {
+	if err := grpcServer.Serve(p.serverListener); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
@@ -151,7 +156,7 @@ func (p *Service) Shutdown() {
 	close(p.shutdownCh)
 
 	// wait until hasLeadership is false by revokeLeadership()
-	for p.hasLeadership {
+	for p.hasLeadership.Load() {
 		select {
 		case <-time.After(5 * time.Second):
 			goto TIMEOUT
@@ -161,9 +166,12 @@ func (p *Service) Shutdown() {
 	}
 
 TIMEOUT:
+	p.grpcServerLock.Lock()
 	if p.grpcServer != nil {
 		p.grpcServer.Stop()
+		p.grpcServer = nil
 	}
+	p.grpcServerLock.Unlock()
 	p.serverListener.Close()
 }
 
@@ -178,7 +186,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		p.deleteStreamConn(stream)
 	}()
 
-	for p.hasLeadership {
+	for p.hasLeadership.Load() {
 		req, err := stream.Recv()
 		switch err {
 		case nil:
@@ -203,7 +211,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// the member will be marked as faulty node and removed.
 			p.lastHeartBeat.Store(req.Name, time.Now().UnixNano())
 
-			members := p.raftNode.FSM().State().Members
+			members := p.raftNode.FSM().State().Members()
 
 			// Upsert incoming member only if it is an actor service (not actor client) and
 			// the existing member info is unmatched with the incoming member info.

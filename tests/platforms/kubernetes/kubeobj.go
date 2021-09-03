@@ -143,6 +143,11 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 					},
 				},
 			},
+			ImagePullSecrets: []apiv1.LocalObjectReference{
+				{
+					Name: appDesc.ImageSecret,
+				},
+			},
 		},
 	}
 }

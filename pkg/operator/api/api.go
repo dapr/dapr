@@ -21,14 +21,23 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
 const serverPort = 6500
+
+const (
+	APIVersionV1alpha1 = "dapr.io/v1alpha1"
+	APIVersionV2alpha1 = "dapr.io/v2alpha1"
+)
 
 var log = logger.NewLogger("dapr.operator.api")
 
@@ -39,6 +48,7 @@ type Server interface {
 }
 
 type apiServer struct {
+	operatorv1pb.UnimplementedOperatorServer
 	Client client.Client
 	// notify all dapr runtime
 	connLock          sync.Mutex
@@ -98,9 +108,11 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 }
 
 // ListComponents returns a list of Dapr components.
-func (a *apiServer) ListComponents(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListComponentResponse, error) {
+func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
 	var components componentsapi.ComponentList
-	if err := a.Client.List(ctx, &components); err != nil {
+	if err := a.Client.List(ctx, &components, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
 		return nil, errors.Wrap(err, "error getting components")
 	}
 	resp := &operatorv1pb.ListComponentResponse{
@@ -108,9 +120,15 @@ func (a *apiServer) ListComponents(ctx context.Context, in *emptypb.Empty) (*ope
 	}
 	for i := range components.Items {
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
+		err := processComponentSecrets(&c, in.Namespace, a.Client)
+		if err != nil {
+			log.Warnf("error processing component %s secrets: %s", c.Name, err)
+			return &operatorv1pb.ListComponentResponse{}, err
+		}
+
 		b, err := json.Marshal(&c)
 		if err != nil {
-			log.Warnf("error marshalling component: %s", err)
+			log.Warnf("error marshalling component %s : %s", c.Name, err)
 			continue
 		}
 		resp.Components = append(resp.Components, b)
@@ -118,17 +136,58 @@ func (a *apiServer) ListComponents(ctx context.Context, in *emptypb.Empty) (*ope
 	return resp, nil
 }
 
+func processComponentSecrets(component *componentsapi.Component, namespace string, kubeClient client.Client) error {
+	for i, m := range component.Spec.Metadata {
+		if m.SecretKeyRef.Name != "" {
+			var secret corev1.Secret
+
+			err := kubeClient.Get(context.TODO(), types.NamespacedName{
+				Name:      m.SecretKeyRef.Name,
+				Namespace: namespace,
+			}, &secret)
+			if err != nil {
+				return err
+			}
+
+			key := m.SecretKeyRef.Key
+			if key == "" {
+				key = m.SecretKeyRef.Name
+			}
+
+			val, ok := secret.Data[key]
+			if ok {
+				val, err = json.Marshal(string(val))
+				if err != nil {
+					return err
+				}
+
+				component.Spec.Metadata[i].Value = componentsapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: val,
+					},
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // ListSubscriptions returns a list of Dapr pub/sub subscriptions.
 func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
-	var subs subscriptionsapi.SubscriptionList
-	if err := a.Client.List(ctx, &subs); err != nil {
-		return nil, errors.Wrap(err, "error getting subscriptions")
-	}
 	resp := &operatorv1pb.ListSubscriptionsResponse{
 		Subscriptions: [][]byte{},
 	}
-	for i := range subs.Items {
-		s := subs.Items[i] // Make a copy since we will refer to this as a reference in this loop.
+
+	var subsV2alpha1 subscriptionsapi_v2alpha1.SubscriptionList
+	if err := a.Client.List(ctx, &subsV2alpha1); err != nil {
+		return nil, errors.Wrap(err, "error getting subscriptions")
+	}
+	for i := range subsV2alpha1.Items {
+		s := subsV2alpha1.Items[i] // Make a copy since we will refer to this as a reference in this loop.
+		if s.APIVersion != APIVersionV2alpha1 {
+			continue
+		}
 		b, err := json.Marshal(&s)
 		if err != nil {
 			log.Warnf("error marshalling subscription: %s", err)
@@ -136,11 +195,29 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 		}
 		resp.Subscriptions = append(resp.Subscriptions, b)
 	}
+
+	var subsV1alpha1 subscriptionsapi_v1alpha1.SubscriptionList
+	if err := a.Client.List(ctx, &subsV1alpha1); err != nil {
+		return nil, errors.Wrap(err, "error getting subscriptions")
+	}
+	for i := range subsV1alpha1.Items {
+		s := subsV1alpha1.Items[i] // Make a copy since we will refer to this as a reference in this loop.
+		if s.APIVersion != APIVersionV1alpha1 {
+			continue
+		}
+		b, err := json.Marshal(&s)
+		if err != nil {
+			log.Warnf("error marshalling subscription: %s", err)
+			continue
+		}
+		resp.Subscriptions = append(resp.Subscriptions, b)
+	}
+
 	return resp, nil
 }
 
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified.
-func (a *apiServer) ComponentUpdate(in *emptypb.Empty, srv operatorv1pb.Operator_ComponentUpdateServer) error {
+func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error {
 	log.Info("sidecar connected for component updates")
 	key := uuid.New().String()
 	a.connLock.Lock()

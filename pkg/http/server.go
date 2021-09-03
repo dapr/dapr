@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 
@@ -73,13 +74,33 @@ func (s *server) StartNonBlocking() {
 	}
 
 	go func() {
-		log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
+		if s.config.EnableDomainSocket {
+			socket := fmt.Sprintf("/tmp/dapr-%s-http.socket", s.config.AppID)
+			log.Fatal(customServer.ListenAndServeUNIX(socket, os.FileMode(0600)))
+		} else {
+			log.Fatal(customServer.ListenAndServe(fmt.Sprintf("%s:%v", s.config.APIListenAddress, s.config.Port)))
+		}
 	}()
+
+	if s.config.PublicPort != nil {
+		publicHandler := s.usePublicRouter()
+		publicHandler = s.useMetrics(publicHandler)
+		publicHandler = s.useTracing(publicHandler)
+
+		healthServer := &fasthttp.Server{
+			Handler:            publicHandler,
+			MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+		}
+
+		go func() {
+			log.Fatal(healthServer.ListenAndServe(fmt.Sprintf(":%d", *s.config.PublicPort)))
+		}()
+	}
 
 	if s.config.EnableProfiling {
 		go func() {
 			log.Infof("starting profiling server on port %v", s.config.ProfilePort)
-			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.ProfilePort), pprofhandler.PprofHandler))
+			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf("%s:%v", s.config.APIListenAddress, s.config.ProfilePort), pprofhandler.PprofHandler))
 		}()
 	}
 }
@@ -95,14 +116,24 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	if s.metricSpec.Enabled {
 		log.Infof("enabled metrics http middleware")
+
 		return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
 	}
+
 	return next
 }
 
 func (s *server) useRouter() fasthttp.RequestHandler {
 	endpoints := s.api.APIEndpoints()
 	router := s.getRouter(endpoints)
+
+	return router.Handler
+}
+
+func (s *server) usePublicRouter() fasthttp.RequestHandler {
+	endpoints := s.api.PublicEndpoints()
+	router := s.getRouter(endpoints)
+
 	return router.Handler
 }
 
@@ -183,17 +214,26 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 		}
 
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-		for _, m := range e.Methods {
-			pathIncludesParameters := parameterFinder.MatchString(path)
-			if pathIncludesParameters {
-				router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
-			} else {
-				router.Handle(m, path, e.Handler)
-			}
+		s.handle(e, parameterFinder, path, router)
+
+		if e.Alias != "" {
+			path = fmt.Sprintf("/%s", e.Alias)
+			s.handle(e, parameterFinder, path, router)
 		}
 	}
 
 	return router
+}
+
+func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
+	for _, m := range e.Methods {
+		pathIncludesParameters := parameterFinder.MatchString(path)
+		if pathIncludesParameters {
+			router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
+		} else {
+			router.Handle(m, path, e.Handler)
+		}
+	}
 }
 
 func (s *server) endpointAllowed(endpoint Endpoint) bool {
