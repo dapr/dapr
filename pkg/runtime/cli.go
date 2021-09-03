@@ -33,6 +33,8 @@ import (
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
+	daprAPIListenAddress := flag.String("dapr-listen-address", DefaultAPIListenAddress, "Address for the Dapr API to listen on")
+	daprPublicPort := flag.String("dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
 	daprAPIGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
@@ -127,6 +129,15 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
+	var publicPort *int
+	if *daprPublicPort != "" {
+		port, cerr := strconv.Atoi(*daprPublicPort)
+		if cerr != nil {
+			return nil, errors.Wrap(cerr, "error parsing dapr-public-port")
+		}
+		publicPort = &port
+	}
+
 	var applicationPort int
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
@@ -158,8 +169,9 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency,
-		*enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *enableDomainSocket, *readinessAddress, *enableWaitAppReady)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, *daprAPIListenAddress, publicPort, applicationPort, profPort,
+		*enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *enableDomainSocket,
+		*readinessAddress, *enableWaitAppReady)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package

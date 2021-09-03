@@ -44,6 +44,7 @@ import (
 // API returns a list of HTTP endpoints for Dapr.
 type API interface {
 	APIEndpoints() []Endpoint
+	PublicEndpoints() []Endpoint
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
 	SetAppChannel(appChannel channel.AppChannel)
@@ -53,6 +54,7 @@ type API interface {
 
 type api struct {
 	endpoints                []Endpoint
+	publicEndpoints          []Endpoint
 	directMessaging          messaging.DirectMessaging
 	appChannel               channel.AppChannel
 	getComponentsFn          func() []components_v1alpha1.Component
@@ -142,15 +144,21 @@ func NewAPI(
 		shutdown:                 shutdown,
 	}
 
+	metadataEndpoints := api.constructMetadataEndpoints()
+	healthEndpoints := api.constructHealthzEndpoints()
+
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructActorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
-	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
+	api.endpoints = append(api.endpoints, metadataEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
-	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
+	api.endpoints = append(api.endpoints, healthEndpoints...)
+
+	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
+	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
 
 	return api
 }
@@ -158,6 +166,11 @@ func NewAPI(
 // APIEndpoints returns the list of registered endpoints.
 func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
+}
+
+// PublicEndpoints returns the list of registered endpoints.
+func (a *api) PublicEndpoints() []Endpoint {
+	return a.publicEndpoints
 }
 
 // MarkStatusAsReady marks the ready status of dapr.
