@@ -94,6 +94,7 @@ const (
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
 	kubernetesSecretStore                             = "kubernetes"
+	trueString                                        = "true"
 )
 
 var componentCategoriesNeedProcess = []ComponentCategory{
@@ -1163,10 +1164,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 			deadLetters[s.DLQ.Topic] = true
 		}
 		if s.DLQ.IsBrokerSpecific {
-			s.Metadata["IsBrokerSpecific"] = "true"
+			s.Metadata["IsBrokerSpecific"] = trueString
 		}
 		if deadLetters[s.Topic] {
-			s.Metadata["IsDLQ"] = "true"
+			s.Metadata["IsDLQ"] = trueString
 		}
 
 		if !skip {
@@ -1191,10 +1192,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 			deadLetters[s.DLQ.Topic] = true
 		}
 		if s.DLQ.IsBrokerSpecific {
-			s.Metadata["IsBrokerSpecific"] = "true"
+			s.Metadata["IsBrokerSpecific"] = trueString
 		}
 		if deadLetters[s.Topic] {
-			s.Metadata["IsDLQ"] = "true"
+			s.Metadata["IsDLQ"] = trueString
 		}
 		topicRoutes[s.PubsubName].routes[s.Topic] = Route{metadata: s.Metadata, rules: s.Rules}
 	}
