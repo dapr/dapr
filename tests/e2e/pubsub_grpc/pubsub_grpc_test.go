@@ -224,23 +224,25 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		Protocol:  protocol,
 	}
 	reqBytes, _ := json.Marshal(req)
-	callSubscriberMethod := false
+	var lastRetryError error
 	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
 		if retryCount > 0 {
 			time.Sleep(10 * time.Second)
 		}
+		lastRetryError = nil
 		_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
-		if !assert.NoError(t, err) {
+		if err != nil {
+			lastRetryError = err
 			continue
 		}
-		if !assert.Equal(t, http.StatusOK, code) {
+		if code != http.StatusOK {
+			lastRetryError = fmt.Errorf("unexpected http code: %v", code)
 			continue
 		}
 
-		callSubscriberMethod = true
 		break
 	}
-	require.True(t, callSubscriberMethod, "error calling /tests/callSubscriberMethod")
+	require.Nil(t, lastRetryError, "error calling /tests/callSubscriberMethod: %v", lastRetryError)
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
