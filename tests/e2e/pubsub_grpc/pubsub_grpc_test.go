@@ -294,7 +294,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		}
 
 		err = validateMessagesReceivedBySubscriberOrError(t, publisherExternalURL, subscriberApp, protocol, sentMessages)
-		if err != nil {
+		if err == nil {
 			// Success.
 			return
 		}
