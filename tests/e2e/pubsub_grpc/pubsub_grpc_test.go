@@ -353,7 +353,7 @@ func validateMessagesReceivedBySubscriberOrError(
 	}
 
 	if !assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB) {
-		return fmt.Errorf("different messages received in Topic C")
+		return fmt.Errorf("different messages received in Topic B")
 	}
 
 	if !assert.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC) {
