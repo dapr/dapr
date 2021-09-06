@@ -111,7 +111,7 @@ type ActorMetadata struct {
 // ActorRemindersMetadata represents information about actor's reminders.
 type ActorRemindersMetadata struct {
 	PartitionCount int                `json:"partitionCount"`
-	partitionsEtag map[uint32]*string `json:"-"`
+	PartitionsEtag map[uint32]*string `json:"-"`
 }
 
 type actorReminderReference struct {
@@ -873,7 +873,7 @@ func (m *ActorMetadata) calculateRemindersStateKey(actorType string, remindersPa
 }
 
 func (m *ActorMetadata) calculateEtag(partitionID uint32) *string {
-	return m.RemindersMetadata.partitionsEtag[partitionID]
+	return m.RemindersMetadata.PartitionsEtag[partitionID]
 }
 
 func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminderReference, actorType, actorID, reminderName string) ([]Reminder, string, *string) {
@@ -1205,7 +1205,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 		return &ActorMetadata{
 			ID: uuid.NewString(),
 			RemindersMetadata: ActorRemindersMetadata{
-				partitionsEtag: nil,
+				PartitionsEtag: nil,
 				PartitionCount: 0,
 			},
 			Etag: nil,
@@ -1222,7 +1222,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 		actorMetadata := ActorMetadata{
 			ID: uuid.NewString(),
 			RemindersMetadata: ActorRemindersMetadata{
-				partitionsEtag: nil,
+				PartitionsEtag: nil,
 				PartitionCount: 0,
 			},
 			Etag: nil,
@@ -1347,7 +1347,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
-		actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{}
+		actorMetadata.RemindersMetadata.PartitionsEtag = map[uint32]*string{}
 		reminders := []actorReminderReference{}
 
 		keyPartitionMap := map[string]uint32{}
@@ -1394,7 +1394,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 
 		for _, resp := range bulkResponse {
 			partition := keyPartitionMap[resp.Key]
-			actorMetadata.RemindersMetadata.partitionsEtag[partition] = resp.ETag
+			actorMetadata.RemindersMetadata.PartitionsEtag[partition] = resp.ETag
 			if resp.Error != "" {
 				return nil, nil, fmt.Errorf("could not get reminders partition %v: %v", resp.Key, resp.Error)
 			}
@@ -1444,7 +1444,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		}
 	}
 
-	actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{
+	actorMetadata.RemindersMetadata.PartitionsEtag = map[uint32]*string{
 		0: resp.ETag,
 	}
 	return reminderRefs, actorMetadata, nil
