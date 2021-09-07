@@ -89,7 +89,7 @@ const (
 	defaultMetricsPort                = 9090
 	defaultSidecarDebug               = false
 	defaultSidecarDebugPort           = 40000
-defaultSidecarListenAddresses = "[::1],127.0.0.1"
+	defaultSidecarListenAddresses     = "[::1],127.0.0.1"
 	sidecarHealthzPath                = "healthz"
 	defaultHealthzProbeDelaySeconds   = 3
 	defaultHealthzProbeTimeoutSeconds = 3
