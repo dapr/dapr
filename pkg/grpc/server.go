@@ -109,8 +109,8 @@ func (s *server) StartNonBlocking() error {
 		lis net.Listener
 		err error
 	)
-	if s.config.EnableDomainSocket && s.kind == apiServer {
-		socket := fmt.Sprintf("/tmp/dapr-%s-grpc.socket", s.config.AppID)
+	if s.config.UnixDomainSocket != "" && s.kind == apiServer {
+		socket := fmt.Sprintf("/%s/dapr-%s-grpc.socket", s.config.UnixDomainSocket, s.config.AppID)
 		lis, err = net.Listen("unix", socket)
 	} else {
 		lis, err = net.Listen("tcp", fmt.Sprintf("%s:%v", s.config.APIListenAddress, s.config.Port))
