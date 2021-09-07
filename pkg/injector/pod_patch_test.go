@@ -101,7 +101,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
 			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-address", "localhost",
+			"--dapr-listen-addresses", "localhost",
 			"--dapr-public-port", "3501",
 			"--app-port", "5000",
 			"--app-id", "app_id",
@@ -153,7 +153,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
 			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-address", "localhost",
+			"--dapr-listen-addresses", "localhost",
 			"--dapr-public-port", "3501",
 			"--app-port", "5000",
 			"--app-id", "app_id",
@@ -184,7 +184,7 @@ func TestGetSideCarContainer(t *testing.T) {
 	t.Run("get sidecar container override listen address", func(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = "config"
-		annotations[daprListenAddress] = "1.2.3.4"
+		annotations[daprListenAddresses] = "1.2.3.4,::1"
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
@@ -192,7 +192,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
 			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-address", "1.2.3.4",
+			"--dapr-listen-addresses", "1.2.3.4,::1",
 			"--dapr-public-port", "3501",
 			"--app-port", "",
 			"--app-id", "app_id",
