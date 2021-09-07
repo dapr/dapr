@@ -113,7 +113,7 @@ func (s *server) StartNonBlocking() error {
 		socket := fmt.Sprintf("/tmp/dapr-%s-grpc.socket", s.config.AppID)
 		lis, err = net.Listen("unix", socket)
 	} else {
-		lis, err = net.Listen("tcp", fmt.Sprintf(":%v", s.config.Port))
+		lis, err = net.Listen("tcp", fmt.Sprintf("%s:%v", s.config.APIListenAddress, s.config.Port))
 	}
 	if err != nil {
 		return err
