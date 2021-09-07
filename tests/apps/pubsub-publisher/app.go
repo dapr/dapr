@@ -50,6 +50,11 @@ type callSubscriberMethodRequest struct {
 	Method    string `json:"method"`
 }
 
+var (
+	grpcConn   *grpc.ClientConn
+	grpcClient runtimev1pb.DaprClient
+)
+
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("indexHandler is called\n")
@@ -164,23 +169,6 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
 	log.Printf("Connecting to dapr using url %s", url)
 
-	start := time.Now()
-	conn, err := grpc.Dial(url, grpc.WithInsecure(), grpc.WithBlock())
-	if err != nil {
-		log.Printf("Could not connect to dapr: %s", err.Error())
-		return http.StatusInternalServerError, err
-	}
-	defer conn.Close()
-	elapsed := time.Since(start)
-
-	log.Printf("Dial elapsed: %v", elapsed)
-
-	start = time.Now()
-	client := runtimev1pb.NewDaprClient(conn)
-	elapsed = time.Since(start)
-	log.Printf("NewDaprClient elapsed: %v", elapsed)
-	start = time.Now()
-
 	req := &runtimev1pb.PublishEventRequest{
 		PubsubName:      pubsubName,
 		Topic:           topic,
@@ -188,10 +176,7 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 		DataContentType: contentType,
 		Metadata:        metadata,
 	}
-	_, err = client.PublishEvent(context.Background(), req)
-
-	elapsed = time.Since(start)
-	log.Printf("PublishEvent elapsed: %v", elapsed)
+	_, err := grpcClient.PublishEvent(context.Background(), req)
 
 	if err != nil {
 		log.Printf("Publish failed: %s", err.Error())
@@ -236,18 +221,6 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 }
 
 func callMethodGRPC(appName, method string) ([]byte, error) {
-	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
-	log.Printf("Connecting to dapr using url %s", url)
-
-	conn, err := grpc.Dial(url, grpc.WithInsecure())
-	if err != nil {
-		log.Printf("Could not connect to dapr: %s", err.Error())
-		return nil, err
-	}
-	defer conn.Close()
-
-	client := runtimev1pb.NewDaprClient(conn)
-
 	invokeReq := &commonv1pb.InvokeRequest{
 		Method: method,
 	}
@@ -259,7 +232,7 @@ func callMethodGRPC(appName, method string) ([]byte, error) {
 		Id:      appName,
 	}
 
-	resp, err := client.InvokeService(context.Background(), req)
+	resp, err := grpcClient.InvokeService(context.Background(), req)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +277,33 @@ func appRouter() *mux.Router {
 	return router
 }
 
+func initGRPCClient() {
+	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
+	log.Printf("Connecting to dapr using url %s", url)
+
+	start := time.Now()
+	for retries := 10; retries > 0; retries-- {
+		var err error
+		if grpcConn, err = grpc.Dial(url, grpc.WithInsecure(), grpc.WithBlock()); err == nil {
+			break
+		}
+
+		if retries == 0 {
+			log.Printf("Could not connect to dapr: %v", err)
+			log.Panic(err)
+		}
+
+		log.Printf("Could not connect to dapr: %v, retrying...", err)
+		time.Sleep(5 * time.Second)
+	}
+	elapsed := time.Since(start)
+	log.Printf("gRPC connect elapsed: %v", elapsed)
+	grpcClient = runtimev1pb.NewDaprClient(grpcConn)
+}
+
 func main() {
+	initGRPCClient()
+
 	log.Printf("Hello Dapr v2 - listening on http://localhost:%d", appPort)
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))

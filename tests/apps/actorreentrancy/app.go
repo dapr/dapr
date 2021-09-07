@@ -11,8 +11,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/valyala/fasthttp"
@@ -58,6 +60,8 @@ type actorCall struct {
 	ActorType string `json:"type"`
 	Method    string `json:"method"`
 }
+
+var httpClient = newHTTPClient()
 
 var (
 	actorLogs      = []actorLogEntry{}
@@ -150,8 +154,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 	nextCall, nextBody := advanceCallStackForNextRequest(reentrantReq)
 	req, _ := http.NewRequest("PUT", fmt.Sprintf(actorMethodURLFormat, nextCall.ActorType, nextCall.ActorID, nextCall.Method), bytes.NewReader(nextBody))
 
-	client := http.Client{}
-	res, err := client.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		w.Write([]byte(err.Error()))
 		w.WriteHeader(fasthttp.StatusInternalServerError)
@@ -213,8 +216,7 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 	reentrancyID := r.Header.Get("Dapr-Reentrancy-Id")
 	req.Header.Add("Dapr-Reentrancy-Id", reentrancyID)
 
-	client := http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 
 	log.Printf("Call status: %d\n", resp.StatusCode)
 	if err != nil || resp.StatusCode == fasthttp.StatusInternalServerError {
@@ -258,6 +260,21 @@ func appRouter() *mux.Router {
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
+}
+
+func newHTTPClient() *http.Client {
+	dialer := &net.Dialer{ //nolint:exhaustivestruct
+		Timeout: 5 * time.Second,
+	}
+	netTransport := &http.Transport{ //nolint:exhaustivestruct
+		DialContext:         dialer.DialContext,
+		TLSHandshakeTimeout: 5 * time.Second,
+	}
+
+	return &http.Client{ //nolint:exhaustivestruct
+		Timeout:   30 * time.Second,
+		Transport: netTransport,
+	}
 }
 
 func main() {
