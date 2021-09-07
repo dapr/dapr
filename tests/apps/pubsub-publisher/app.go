@@ -50,6 +50,11 @@ type callSubscriberMethodRequest struct {
 	Method    string `json:"method"`
 }
 
+var (
+	grpcConn *grpc.ClientConn
+	client   runtimev1pb.DaprClient
+)
+
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("indexHandler is called\n")
@@ -164,15 +169,6 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
 	log.Printf("Connecting to dapr using url %s", url)
 
-	conn, err := grpc.Dial(url, grpc.WithInsecure())
-	if err != nil {
-		log.Printf("Could not connect to dapr: %s", err.Error())
-		return http.StatusInternalServerError, err
-	}
-	defer conn.Close()
-
-	client := runtimev1pb.NewDaprClient(conn)
-
 	req := &runtimev1pb.PublishEventRequest{
 		PubsubName:      pubsubName,
 		Topic:           topic,
@@ -180,7 +176,7 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 		DataContentType: contentType,
 		Metadata:        metadata,
 	}
-	_, err = client.PublishEvent(context.Background(), req)
+	_, err := client.PublishEvent(context.Background(), req)
 
 	if err != nil {
 		log.Printf("Publish failed: %s", err.Error())
@@ -225,18 +221,6 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 }
 
 func callMethodGRPC(appName, method string) ([]byte, error) {
-	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
-	log.Printf("Connecting to dapr using url %s", url)
-
-	conn, err := grpc.Dial(url, grpc.WithInsecure())
-	if err != nil {
-		log.Printf("Could not connect to dapr: %s", err.Error())
-		return nil, err
-	}
-	defer conn.Close()
-
-	client := runtimev1pb.NewDaprClient(conn)
-
 	invokeReq := &commonv1pb.InvokeRequest{
 		Method: method,
 	}
@@ -294,6 +278,27 @@ func appRouter() *mux.Router {
 }
 
 func main() {
+	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
+	log.Printf("Connecting to dapr using url %s", url)
+
+	for retries := 10; retries > 0; retries-- {
+		var err error
+		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		if err == nil {
+			break
+		}
+
+		if retries == 0 {
+			log.Printf("Could not connect to dapr: %v", err)
+			log.Panic(err)
+		}
+
+		log.Printf("Could not connect to dapr: %v, retrying...", err)
+		time.Sleep(5 * time.Second)
+	}
+
+	client = runtimev1pb.NewDaprClient(grpcConn)
+
 	log.Printf("Hello Dapr v2 - listening on http://localhost:%d", appPort)
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
