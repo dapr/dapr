@@ -59,7 +59,7 @@ type Config struct {
 	CertChain            *credentials.CertChain
 	AppSSL               bool
 	MaxRequestBodySize   int
-	EnableDomainSocket   bool
+	UnixDomainSocket     string
 }
 
 // NewRuntimeConfig returns a new runtime config.
@@ -67,7 +67,7 @@ func NewRuntimeConfig(
 	id string, placementAddresses []string,
 	controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string,
 	httpPort, internalGRPCPort, apiGRPCPort int, apiListenAddress string, publicPort *int, appPort, profilePort int,
-	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int, enableDomainSocket bool) *Config {
+	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int, unixDomainSocket string) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
@@ -94,6 +94,6 @@ func NewRuntimeConfig(
 		SentryServiceAddress: sentryAddress,
 		AppSSL:               appSSL,
 		MaxRequestBodySize:   maxRequestBodySize,
-		EnableDomainSocket:   enableDomainSocket,
+		UnixDomainSocket:     unixDomainSocket,
 	}
 }
