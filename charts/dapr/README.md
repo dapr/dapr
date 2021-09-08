@@ -76,11 +76,11 @@ The Helm chart has the follow configuration options that can be supplied:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Docker image registry                                                   | `docker.io/daprio`      |
-| `global.tag`                              | Docker image version tag                                                | `1.4.0-rc.1`                 |
+| `global.tag`                              | Docker image version tag                                                | `1.4.0-rc.2`            |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
-| `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry            | `""`                    |
-| `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`             |
+| `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry            | `""`                   |
+| `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`        |
 | `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
 | `global.ha.disruption.minimumAvailable`   | Minimum amount of available instances for control plane. This can either be effective count or %. | ``             |
 | `global.ha.disruption.maximumUnavailable`   | Maximum amount of instances that are allowed to be unavailable for control plane. This can either be effective count or %. | `25%`             |
