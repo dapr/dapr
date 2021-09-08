@@ -117,11 +117,15 @@ func (s *server) StartNonBlocking() error {
 		for _, apiListenAddress := range s.config.APIListenAddresses {
 			l, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.Port))
 			if err != nil {
-				return err
+				s.logger.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.Port, err)
+			} else {
+				listeners = append(listeners, l)
 			}
-
-			listeners = append(listeners, l)
 		}
+	}
+
+	if len(listeners) == 0 {
+		return errors.Errorf("could not listen on any endpoint")
 	}
 	s.listeners = listeners
 
