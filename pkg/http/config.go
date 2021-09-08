@@ -11,7 +11,7 @@ type ServerConfig struct {
 	AppID              string
 	HostAddress        string
 	Port               int
-	APIListenAddresses []string
+	APIListenAddress   string
 	PublicPort         *int
 	ProfilePort        int
 	EnableProfiling    bool
@@ -20,13 +20,13 @@ type ServerConfig struct {
 }
 
 // NewServerConfig returns a new HTTP server config.
-func NewServerConfig(appID string, hostAddress string, port int, apiListenAddresses []string, publicPort *int, profilePort int, allowedOrigins string, enableProfiling bool, maxRequestBodySize int, unixDomainSocket string) ServerConfig {
+func NewServerConfig(appID string, hostAddress string, port int, apiListenAddress string, publicPort *int, profilePort int, allowedOrigins string, enableProfiling bool, maxRequestBodySize int, unixDomainSocket string) ServerConfig {
 	return ServerConfig{
 		AllowedOrigins:     allowedOrigins,
 		AppID:              appID,
 		HostAddress:        hostAddress,
 		Port:               port,
-		APIListenAddresses: apiListenAddresses,
+		APIListenAddress:   apiListenAddress,
 		PublicPort:         publicPort,
 		ProfilePort:        profilePort,
 		EnableProfiling:    enableProfiling,

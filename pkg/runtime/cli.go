@@ -33,7 +33,7 @@ import (
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
-	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
+	daprAPIListenAddress := flag.String("dapr-listen-address", DefaultAPIListenAddress, "Address for the Dapr API to listen on")
 	daprPublicPort := flag.String("dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
 	daprAPIGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
@@ -166,12 +166,8 @@ func FromFlags() (*DaprRuntime, error) {
 		appPrtcl = *appProtocol
 	}
 
-	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
-	if len(daprAPIListenAddressList) == 0 {
-		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
-	}
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, *daprAPIListenAddress, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
