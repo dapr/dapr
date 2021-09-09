@@ -33,7 +33,7 @@ import (
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
-	daprAPIListenAddress := flag.String("dapr-listen-address", DefaultAPIListenAddress, "Address for the Dapr API to listen on")
+	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
 	daprPublicPort := flag.String("dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
 	daprAPIGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
@@ -55,9 +55,9 @@ func FromFlags() (*DaprRuntime, error) {
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
 	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
-	enableDomainSocket := flag.Bool("enable-domain-socket", false, "Enable connect to Dapr with domain socket")
 	readinessAddress := flag.String("app-readiness-address", "", "address for check app ready")
 	enableWaitAppReady := flag.Bool("daprd-wait-app-ready", false, "Enable daprd bolck until app is ready")
+	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -168,10 +168,13 @@ func FromFlags() (*DaprRuntime, error) {
 		appPrtcl = *appProtocol
 	}
 
+	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
+	if len(daprAPIListenAddressList) == 0 {
+		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
+	}
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, *daprAPIListenAddress, publicPort, applicationPort, profPort,
-		*enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *enableDomainSocket,
-		*readinessAddress, *enableWaitAppReady)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort,
+		*enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, *readinessAddress, *enableWaitAppReady)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package

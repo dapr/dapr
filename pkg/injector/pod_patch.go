@@ -51,7 +51,7 @@ const (
 	daprMemoryLimitKey                = "dapr.io/sidecar-memory-limit"
 	daprCPURequestKey                 = "dapr.io/sidecar-cpu-request"
 	daprMemoryRequestKey              = "dapr.io/sidecar-memory-request"
-	daprListenAddress                 = "dapr.io/sidecar-listen-address"
+	daprListenAddresses               = "dapr.io/sidecar-listen-addresses"
 	daprLivenessProbeDelayKey         = "dapr.io/sidecar-liveness-probe-delay-seconds"
 	daprLivenessProbeTimeoutKey       = "dapr.io/sidecar-liveness-probe-timeout-seconds"
 	daprLivenessProbePeriodKey        = "dapr.io/sidecar-liveness-probe-period-seconds"
@@ -89,7 +89,7 @@ const (
 	defaultMetricsPort                = 9090
 	defaultSidecarDebug               = false
 	defaultSidecarDebugPort           = 40000
-	defaultSidecarListenAddress       = "localhost"
+	defaultSidecarListenAddresses     = "[::1],127.0.0.1"
 	sidecarHealthzPath                = "healthz"
 	defaultHealthzProbeDelaySeconds   = 3
 	defaultHealthzProbeTimeoutSeconds = 3
@@ -344,8 +344,8 @@ func getMaxRequestBodySize(annotations map[string]string) (int32, error) {
 	return getInt32Annotation(annotations, daprMaxRequestBodySize)
 }
 
-func getListenAddress(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprListenAddress, defaultSidecarListenAddress)
+func getListenAddresses(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprListenAddresses, defaultSidecarListenAddresses)
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
@@ -497,7 +497,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	metricsEnabled := getEnableMetrics(annotations)
 	metricsPort := getMetricsPort(annotations)
 	maxConcurrency, err := getMaxConcurrency(annotations)
-	sidecarListenAddress := getListenAddress(annotations)
+	sidecarListenAddresses := getListenAddresses(annotations)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -541,7 +541,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort),
 		"--dapr-grpc-port", fmt.Sprintf("%v", sidecarAPIGRPCPort),
 		"--dapr-internal-grpc-port", fmt.Sprintf("%v", sidecarInternalGRPCPort),
-		"--dapr-listen-address", sidecarListenAddress,
+		"--dapr-listen-addresses", sidecarListenAddresses,
 		"--dapr-public-port", fmt.Sprintf("%v", sidecarPublicPort),
 		"--app-port", appPortStr,
 		"--app-id", id,

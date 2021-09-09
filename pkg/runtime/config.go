@@ -45,7 +45,7 @@ type Config struct {
 	APIGRPCPort          int
 	InternalGRPCPort     int
 	ApplicationPort      int
-	APIListenAddress     string
+	APIListenAddresses   []string
 	ApplicationProtocol  Protocol
 	Mode                 modes.DaprMode
 	PlacementAddresses   []string
@@ -59,7 +59,7 @@ type Config struct {
 	CertChain            *credentials.CertChain
 	AppSSL               bool
 	MaxRequestBodySize   int
-	EnableDomainSocket   bool
+	UnixDomainSocket     string
 	ReadinessAddress     string
 	EnableWaitAppReady   bool
 }
@@ -68,9 +68,9 @@ type Config struct {
 func NewRuntimeConfig(
 	id string, placementAddresses []string,
 	controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string,
-	httpPort, internalGRPCPort, apiGRPCPort int, apiListenAddress string, publicPort *int, appPort, profilePort int,
+	httpPort, internalGRPCPort, apiGRPCPort int, apiListenAddresses []string, publicPort *int, appPort, profilePort int,
 	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int,
-	enableDomainSocket bool, readinessAddress string, enableWaitAppReady bool) *Config {
+	unixDomainSocket string, readinessAddress string, enableWaitAppReady bool) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
@@ -79,7 +79,7 @@ func NewRuntimeConfig(
 		APIGRPCPort:         apiGRPCPort,
 		ApplicationPort:     appPort,
 		ProfilePort:         profilePort,
-		APIListenAddress:    apiListenAddress,
+		APIListenAddresses:  apiListenAddresses,
 		ApplicationProtocol: Protocol(appProtocol),
 		Mode:                modes.DaprMode(mode),
 		PlacementAddresses:  placementAddresses,
@@ -97,7 +97,7 @@ func NewRuntimeConfig(
 		SentryServiceAddress: sentryAddress,
 		AppSSL:               appSSL,
 		MaxRequestBodySize:   maxRequestBodySize,
-		EnableDomainSocket:   enableDomainSocket,
+		UnixDomainSocket:     unixDomainSocket,
 		ReadinessAddress:     readinessAddress,
 		EnableWaitAppReady:   enableWaitAppReady,
 	}
