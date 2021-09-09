@@ -35,8 +35,9 @@ import (
 const serverPort = 6500
 
 const (
-	APIVersionV1alpha1 = "dapr.io/v1alpha1"
-	APIVersionV2alpha1 = "dapr.io/v2alpha1"
+	APIVersionV1alpha1    = "dapr.io/v1alpha1"
+	APIVersionV2alpha1    = "dapr.io/v2alpha1"
+	kubernetesSecretStore = "kubernetes"
 )
 
 var log = logger.NewLogger("dapr.operator.api")
@@ -138,7 +139,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 
 func processComponentSecrets(component *componentsapi.Component, namespace string, kubeClient client.Client) error {
 	for i, m := range component.Spec.Metadata {
-		if m.SecretKeyRef.Name != "" {
+		if m.SecretKeyRef.Name != "" && component.Auth.SecretStore == kubernetesSecretStore {
 			var secret corev1.Secret
 
 			err := kubeClient.Get(context.TODO(), types.NamespacedName{
