@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -571,13 +572,14 @@ func TestOverrideReminder(t *testing.T) {
 		err := testActorsRuntime.CreateReminder(ctx, &reminder)
 		assert.Nil(t, err)
 
-		ttl := "2021-09-01T00:00:00Z"
+		ttl := "9999-09-01T00:00:00Z"
 		origTime, err := time.Parse(time.RFC3339, ttl)
 		assert.Nil(t, err)
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", ttl, "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
+		require.NotEmpty(t, reminders)
 		newTime, err := time.Parse(time.RFC3339, reminders[0].reminder.ExpirationTime)
 		assert.Nil(t, err)
 		assert.LessOrEqual(t, newTime.Sub(origTime), 2*time.Second)

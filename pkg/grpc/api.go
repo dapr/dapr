@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -377,6 +378,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		reqs[i] = r
 	}
 	bulkGet, responses, err := store.BulkGet(reqs)
+
 	// if store supports bulk get
 	if bulkGet {
 		if err != nil {
@@ -422,6 +424,19 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	resultLen := len(resultCh)
 	for i := 0; i < resultLen; i++ {
 		item := <-resultCh
+
+		if encryption.EncryptedStateStore(in.StoreName) {
+			val, err := encryption.TryDecryptValue(in.StoreName, item.Data)
+			if err != nil {
+				item.Error = err.Error()
+				apiServerLogger.Debug(err)
+
+				continue
+			}
+
+			item.Data = val
+		}
+
 		bulkResp.Items = append(bulkResp.Items, item)
 	}
 	return bulkResp, nil
@@ -463,6 +478,17 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		return &runtimev1pb.GetStateResponse{}, err
 	}
 
+	if encryption.EncryptedStateStore(in.StoreName) {
+		val, err := encryption.TryDecryptValue(in.StoreName, getResponse.Data)
+		if err != nil {
+			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
+			apiServerLogger.Debug(err)
+			return &runtimev1pb.GetStateResponse{}, err
+		}
+
+		getResponse.Data = val
+	}
+
 	response := &runtimev1pb.GetStateResponse{}
 	if getResponse != nil {
 		response.Etag = stringValueOrEmpty(getResponse.ETag)
@@ -499,6 +525,16 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 				Concurrency: stateConcurrencyToString(s.Options.Concurrency),
 			}
 		}
+		if encryption.EncryptedStateStore(in.StoreName) {
+			val, encErr := encryption.TryEncryptValue(in.StoreName, s.Value)
+			if encErr != nil {
+				apiServerLogger.Debug(encErr)
+				return &emptypb.Empty{}, encErr
+			}
+
+			req.Value = val
+		}
+
 		reqs = append(reqs, req)
 	}
 
@@ -775,6 +811,24 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		}
 
 		operations = append(operations, operation)
+	}
+
+	if encryption.EncryptedStateStore(storeName) {
+		for i, op := range operations {
+			if op.Operation == state.Upsert {
+				req := op.Request.(*state.SetRequest)
+				data := []byte(fmt.Sprintf("%v", req.Value))
+				val, err := encryption.TryEncryptValue(storeName, data)
+				if err != nil {
+					err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
+					apiServerLogger.Debug(err)
+					return &emptypb.Empty{}, err
+				}
+
+				req.Value = val
+				operations[i].Request = req
+			}
+		}
 	}
 
 	err := transactionalStore.Multi(&state.TransactionalStateRequest{

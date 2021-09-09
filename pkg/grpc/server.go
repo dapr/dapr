@@ -48,7 +48,7 @@ type server struct {
 	tracingSpec        config.TracingSpec
 	metricSpec         config.MetricSpec
 	authenticator      auth.Authenticator
-	listener           net.Listener
+	listeners          []net.Listener
 	srv                *grpc_go.Server
 	renewMutex         *sync.Mutex
 	signedCert         *auth.SignedCertificate
@@ -105,20 +105,25 @@ func getDefaultMaxAgeDuration() *time.Duration {
 
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
-	var (
-		lis net.Listener
-		err error
-	)
-	if s.config.EnableDomainSocket && s.kind == apiServer {
-		socket := fmt.Sprintf("/tmp/dapr-%s-grpc.socket", s.config.AppID)
-		lis, err = net.Listen("unix", socket)
+	var listeners []net.Listener
+	if s.config.UnixDomainSocket != "" && s.kind == apiServer {
+		socket := fmt.Sprintf("/%s/dapr-%s-grpc.socket", s.config.UnixDomainSocket, s.config.AppID)
+		l, err := net.Listen("unix", socket)
+		if err != nil {
+			return err
+		}
+		listeners = append(listeners, l)
 	} else {
-		lis, err = net.Listen("tcp", fmt.Sprintf(":%v", s.config.Port))
+		for _, apiListenAddress := range s.config.APIListenAddresses {
+			l, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.Port))
+			if err != nil {
+				return err
+			}
+
+			listeners = append(listeners, l)
+		}
 	}
-	if err != nil {
-		return err
-	}
-	s.listener = lis
+	s.listeners = listeners
 
 	server, err := s.getGRPCServer()
 	if err != nil {
@@ -132,11 +137,13 @@ func (s *server) StartNonBlocking() error {
 		runtimev1pb.RegisterDaprServer(server, s.api)
 	}
 
-	go func() {
-		if err := server.Serve(lis); err != nil {
-			s.logger.Fatalf("gRPC serve error: %v", err)
-		}
-	}()
+	for _, listener := range listeners {
+		go func(l net.Listener) {
+			if err := server.Serve(l); err != nil {
+				s.logger.Fatalf("gRPC serve error: %v", err)
+			}
+		}(listener)
+	}
 	return nil
 }
 
