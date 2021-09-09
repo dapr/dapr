@@ -8,14 +8,15 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"net/http"
 	nethttp "net/http"
+	"time"
+
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"io/ioutil"
-	"net/http"
-	"time"
 )
 
 var (
@@ -75,7 +76,6 @@ func checkIfOutboundReady(client *http.Client, outboundReadyHealthURL string) er
 
 	return nil
 }
-
 
 func (a *DaprRuntime) blockUntilAppPortOpen() {
 	if a.runtimeConfig.ApplicationPort <= 0 {
