@@ -8,13 +8,14 @@ package api
 import (
 	"testing"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
 )
 
 func TestProcessComponentSecrets(t *testing.T) {
