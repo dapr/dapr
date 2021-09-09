@@ -121,6 +121,8 @@ func TestGetSideCarContainer(t *testing.T) {
 
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
+		// POD_NAME
+		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
 		// DAPR_API_TOKEN
 		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
@@ -174,6 +176,8 @@ func TestGetSideCarContainer(t *testing.T) {
 		assert.Equal(t, "/dlv", container.Command[0])
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
+		// POD_NAME
+		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
 		// DAPR_API_TOKEN
 		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
