@@ -139,7 +139,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 
 func processComponentSecrets(component *componentsapi.Component, namespace string, kubeClient client.Client) error {
 	for i, m := range component.Spec.Metadata {
-		if m.SecretKeyRef.Name != "" && component.Auth.SecretStore == kubernetesSecretStore {
+		if m.SecretKeyRef.Name != "" && (component.Auth.SecretStore == kubernetesSecretStore || component.Auth.SecretStore == "") {
 			var secret corev1.Secret
 
 			err := kubeClient.Get(context.TODO(), types.NamespacedName{

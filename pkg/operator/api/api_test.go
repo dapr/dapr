@@ -84,4 +84,48 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 		assert.Equal(t, "value1", c.Spec.Metadata[0].Value.String())
 	})
+
+	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
+		c := componentsapi.Component{
+			Spec: componentsapi.ComponentSpec{
+				Metadata: []componentsapi.MetadataItem{
+					{
+						Name: "test1",
+						SecretKeyRef: componentsapi.SecretKeyRef{
+							Name: "secret1",
+							Key:  "key1",
+						},
+					},
+				},
+			},
+			Auth: componentsapi.Auth{
+				SecretStore: "",
+			},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		assert.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "secret1",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"key1": []byte("value1"),
+				},
+			}).
+			Build()
+
+		err = processComponentSecrets(&c, "default", client)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "value1", c.Spec.Metadata[0].Value.String())
+	})
 }
