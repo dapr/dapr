@@ -11,7 +11,6 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	nethttp "net/http"
 	"time"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -98,7 +97,6 @@ func (a *DaprRuntime) blockUntilAppPortOpen() {
 }
 
 func (a *DaprRuntime) blockUntilAppIsReady() {
-
 	if !a.runtimeConfig.EnableWaitAppReady {
 		return
 	}
@@ -112,7 +110,6 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 				Namespace: a.namespace,
 				Name:      a.podName,
 			})
-
 			if err != nil {
 				log.Errorf("get containers status error : namespace = %s, podName = %s, err = %s", a.namespace, a.podName, err)
 				return
@@ -138,13 +135,13 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 
 	for {
 		req := invokev1.NewInvokeMethodRequest(a.runtimeConfig.ReadinessAddress)
-		req.WithHTTPExtension(nethttp.MethodGet, "")
+		req.WithHTTPExtension(http.MethodGet, "")
 		req.WithRawData(nil, invokev1.JSONContentType)
 
 		ctx := context.Background()
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 
-		if err == nil && resp.Status().Code == nethttp.StatusOK {
+		if err == nil && resp.Status().Code == http.StatusOK {
 			log.Infof("application discovered on readiness address %s", a.runtimeConfig.ReadinessAddress)
 			break
 		}
