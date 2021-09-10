@@ -12,6 +12,8 @@ import (
 	"net"
 	"sync"
 
+	b64 "encoding/base64"
+
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -156,15 +158,16 @@ func processComponentSecrets(component *componentsapi.Component, namespace strin
 			}
 
 			val, ok := secret.Data[key]
-			if ok {
-				val, err = json.Marshal(string(val))
-				if err != nil {
-					return err
-				}
+			enc := b64.StdEncoding.EncodeToString(val)
+			jsonEnc, err := json.Marshal(enc)
+			if err != nil {
+				return err
+			}
 
+			if ok {
 				component.Spec.Metadata[i].Value = componentsapi.DynamicValue{
 					JSON: v1.JSON{
-						Raw: val,
+						Raw: jsonEnc,
 					},
 				}
 			}
