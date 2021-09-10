@@ -261,7 +261,7 @@ func setEnvVariables(variables map[string]string) error {
 }
 
 func parseStringArray(val string) []string {
-	var parsed []string
+	parsed := []string{}
 	p := strings.Split(val, ",")
 	for _, addr := range p {
 		parsed = append(parsed, strings.TrimSpace(addr))
