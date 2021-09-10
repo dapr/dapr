@@ -3445,16 +3445,15 @@ func TestWaiting(t *testing.T) {
 			Return(func(ctx context.Context, req *invokev1.InvokeMethodRequest) *invokev1.InvokeMethodResponse {
 				if count < 5 {
 					return nil
-				} else {
-					resp := invokev1.NewInvokeMethodResponse(200, "", nil)
-					return resp
 				}
+
+				resp := invokev1.NewInvokeMethodResponse(200, "", nil)
+				return resp
 			}, func(ctx context.Context, req *invokev1.InvokeMethodRequest) error {
-				if count < 5 {
-					return status.Error(codes.Unknown, "unknown error")
-				} else {
+				if count > 5 {
 					return nil
 				}
+				return status.Error(codes.Unknown, "unknown error")
 			})
 		r.appChannel = mockAppChannel
 
