@@ -290,8 +290,8 @@ github.com/cyphar/filepath-securejoin v0.2.2 h1:jCwT2GTP+PY5nBz3c/YL5PAIbusElVrP
 github.com/cyphar/filepath-securejoin v0.2.2/go.mod h1:FpkQEhXnPnOthhzymB7CGsFk2G9VLXONKD9G7QGMM+4=
 github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjmUv0qGF43aKCIKVE9A=
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
-github.com/dapr/components-contrib v1.4.0-rc1 h1:kT3Y9s0xFp2Le0AKQqQZAmcBX+2/aH0X6K9d/P9UfAc=
-github.com/dapr/components-contrib v1.4.0-rc1/go.mod h1:Y386wgK4Z/jRS0ciLrOKsY7xED7e2vpuaGnn9h5/Zi4=
+github.com/dapr/components-contrib v1.4.0-rc2 h1:EifSlBkMWNNPNekoF5+aiQ6wNfzDn6Li3sQUM1TEcF4=
+github.com/dapr/components-contrib v1.4.0-rc2/go.mod h1:Y386wgK4Z/jRS0ciLrOKsY7xED7e2vpuaGnn9h5/Zi4=
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233 h1:M0dWIG8kUxEFU57IqTWeqptNqlBsfosFgsA5Ov7rJ8g=
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233/go.mod h1:y8r0VqUNKyd6xBXp7gQjwA59wlCLGfKzL5J8iJsN09w=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
