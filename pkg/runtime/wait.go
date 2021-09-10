@@ -111,12 +111,27 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 				return
 			}
 
-			for name, ready := range resp.Statuses {
-				if name == "daprd" {
-					continue
+			if contains(a.runtimeConfig.WaitingContainers, "all") {
+				// all containers in pod should be ready
+				for name, ready := range resp.Statuses {
+					if name == "daprd" {
+						continue
+					}
+					if !ready {
+						log.Infof("container[%s] not ready, continue waiting", name)
+						time.Sleep(time.Millisecond * 1000)
+						continue out
+					}
 				}
-
-				if contains(a.runtimeConfig.WaitingContainers, "all") || contains(a.runtimeConfig.WaitingContainers, name) {
+			} else {
+				// all specified containers should be ready
+				for _, name := range a.runtimeConfig.WaitingContainers {
+					ready, ok := resp.Statuses[name]
+					if !ok {
+						log.Infof("container[%s] not found, continue waiting", name)
+						time.Sleep(time.Millisecond * 1000)
+						continue out
+					}
 					if !ready {
 						log.Infof("container[%s] not ready, continue waiting", name)
 						time.Sleep(time.Millisecond * 1000)
