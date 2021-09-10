@@ -289,6 +289,7 @@ type mockOperatorClient struct {
 	clientStreams             []*mockOperatorComponentUpdateClientStream
 	clientStreamCreateWait    chan struct{}
 	clientStreamCreatedNotify chan struct{}
+	containerStatue           map[string]bool
 }
 
 func newMockOperatorClient() *mockOperatorClient {
@@ -297,6 +298,7 @@ func newMockOperatorClient() *mockOperatorClient {
 		clientStreams:             make([]*mockOperatorComponentUpdateClientStream, 0, 1),
 		clientStreamCreateWait:    make(chan struct{}, 1),
 		clientStreamCreatedNotify: make(chan struct{}, 1),
+		containerStatue:           make(map[string]bool),
 	}
 	return mockOpCli
 }
@@ -333,6 +335,12 @@ func (c *mockOperatorClient) ListComponents(ctx context.Context, in *operatorv1p
 		resp.Components = append(resp.Components, b)
 	}
 	return resp, nil
+}
+
+func (c *mockOperatorClient) GetContainersStatus(ctx context.Context, in *operatorv1pb.GetContainersStatusRequest, opts ...grpc.CallOption) (*operatorv1pb.GetContainersStatusResponse, error) {
+	return &operatorv1pb.GetContainersStatusResponse{
+		Statuses: c.containerStatue,
+	}, nil
 }
 
 func (c *mockOperatorClient) ClientStreamCount() int {
@@ -2624,7 +2632,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		-1,
 		false,
 		"",
-		false, 4, "", "", false)
+		false, 4, "", "", []string{})
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 }
@@ -3394,4 +3402,92 @@ func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
 		Match: e,
 		Path:  path,
 	}, nil
+}
+
+func TestWaiting(t *testing.T) {
+	t.Run("no waiting test", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{
+			Mode:              modes.StandaloneMode,
+			WaitingProbe:      "",
+			WaitingContainers: []string{},
+		}, &config.Configuration{}, &config.AccessControlList{})
+
+		r.blockUntilAppIsReady()
+
+		assert.True(t, true)
+
+		r = NewDaprRuntime(&Config{
+			Mode:              modes.KubernetesMode,
+			WaitingProbe:      "",
+			WaitingContainers: []string{},
+		}, &config.Configuration{}, &config.AccessControlList{})
+
+		r.blockUntilAppIsReady()
+
+		assert.True(t, true)
+	})
+
+	t.Run("probe waiting test", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{
+			Mode:              modes.StandaloneMode,
+			WaitingProbe:      "http://address.not.exist",
+			WaitingContainers: []string{},
+		}, &config.Configuration{}, &config.AccessControlList{})
+
+		count := 0
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.
+			On("InvokeMethod", mock.Anything, mock.AnythingOfType("*v1.InvokeMethodRequest")).
+			Run(func(mock.Arguments) {
+				count++
+			}).
+			Return(func(ctx context.Context, req *invokev1.InvokeMethodRequest) *invokev1.InvokeMethodResponse {
+				if count < 5 {
+					return nil
+				} else {
+					resp := invokev1.NewInvokeMethodResponse(200, "", nil)
+					return resp
+				}
+			}, func(ctx context.Context, req *invokev1.InvokeMethodRequest) error {
+				if count < 5 {
+					return status.Error(codes.Unknown, "unknown error")
+				} else {
+					return nil
+				}
+			})
+		r.appChannel = mockAppChannel
+
+		r.blockUntilAppIsReady()
+
+		assert.True(t, count == 5)
+	})
+
+	t.Run("k8s waiting test", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{
+			Mode:              modes.KubernetesMode,
+			WaitingProbe:      "",
+			WaitingContainers: []string{"all"},
+		}, &config.Configuration{}, &config.AccessControlList{})
+
+		t1 := time.Now()
+		mockOperator := newMockOperatorClient()
+
+		mockOperator.containerStatue["app1"] = false
+		mockOperator.containerStatue["app2"] = false
+
+		go func() {
+			time.Sleep(time.Second * 5)
+			mockOperator.containerStatue["app1"] = true
+			mockOperator.containerStatue["app2"] = true
+		}()
+
+		r.operatorClient = mockOperator
+
+		r.blockUntilAppIsReady()
+
+		t2 := time.Now()
+
+		assert.True(t, t2.After(t1.Add(time.Second*5)))
+	})
 }

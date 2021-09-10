@@ -55,8 +55,8 @@ func FromFlags() (*DaprRuntime, error) {
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
 	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
-	readinessAddress := flag.String("app-readiness-address", "", "address for check app ready")
-	enableWaitAppReady := flag.Bool("daprd-wait-app-ready", false, "Enable daprd bolck until app is ready")
+	waitingProbe := flag.String("daprd-wait-probe", "", "address for check app ready. If empty, daprd will not check the probe at start time")
+	waitingContainers := flag.String("daprd-wait-containers", "", "The containers name in k8s which daprd waill waiting them ready. If empty, daprd will not check them at start time")
 	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
 
 	loggerOptions := logger.DefaultOptions()
@@ -155,7 +155,7 @@ func FromFlags() (*DaprRuntime, error) {
 
 	placementAddresses := []string{}
 	if *placementServiceHostAddr != "" {
-		placementAddresses = parsePlacementAddr(*placementServiceHostAddr)
+		placementAddresses = parseStringArray(*placementServiceHostAddr)
 	}
 
 	var concurrency int
@@ -172,9 +172,14 @@ func FromFlags() (*DaprRuntime, error) {
 	if len(daprAPIListenAddressList) == 0 {
 		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
 	}
+
+	var waitingContainerNames []string
+	if *waitingContainers != "" {
+		waitingContainerNames = parseStringArray(*waitingContainers)
+	}
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
 		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort,
-		*enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, *readinessAddress, *enableWaitAppReady)
+		*enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, *waitingProbe, waitingContainerNames)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
@@ -255,8 +260,8 @@ func setEnvVariables(variables map[string]string) error {
 	return nil
 }
 
-func parsePlacementAddr(val string) []string {
-	parsed := []string{}
+func parseStringArray(val string) []string {
+	var parsed []string
 	p := strings.Split(val, ",")
 	for _, addr := range p {
 		parsed = append(parsed, strings.TrimSpace(addr))

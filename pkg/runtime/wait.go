@@ -97,12 +97,8 @@ func (a *DaprRuntime) blockUntilAppPortOpen() {
 }
 
 func (a *DaprRuntime) blockUntilAppIsReady() {
-	if !a.runtimeConfig.EnableWaitAppReady {
-		return
-	}
-
-	if a.runtimeConfig.Mode == modes.KubernetesMode {
-		log.Infof("going to get containers status : namespace = %s, podName = %s", a.namespace, a.podName)
+	if a.runtimeConfig.Mode == modes.KubernetesMode && len(a.runtimeConfig.WaitingContainers) > 0 {
+		log.Infof("going to check containers ready : namespace = %s, podName = %s, containers = %v", a.namespace, a.podName, a.runtimeConfig.WaitingContainers)
 	out:
 		for {
 			// check readiness from k8s env
@@ -116,10 +112,16 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 			}
 
 			for name, ready := range resp.Statuses {
-				if name != "daprd" && !ready {
-					log.Infof("container[%s] not ready", name)
-					time.Sleep(time.Millisecond * 1000)
-					continue out
+				if name == "daprd" {
+					continue
+				}
+
+				if contains(a.runtimeConfig.WaitingContainers, "all") || contains(a.runtimeConfig.WaitingContainers, name) {
+					if !ready {
+						log.Infof("container[%s] not ready, continue waiting", name)
+						time.Sleep(time.Millisecond * 1000)
+						continue out
+					}
 				}
 			}
 
@@ -128,26 +130,38 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		}
 	}
 
-	readinessAddress := a.runtimeConfig.ReadinessAddress
-	if readinessAddress == "" {
-		return
-	}
+	if a.runtimeConfig.WaitingProbe != "" {
+		for {
+			req := invokev1.NewInvokeMethodRequest(a.runtimeConfig.WaitingProbe)
+			req.WithHTTPExtension(http.MethodGet, "")
+			req.WithRawData(nil, invokev1.JSONContentType)
 
-	for {
-		req := invokev1.NewInvokeMethodRequest(a.runtimeConfig.ReadinessAddress)
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+			ctx := context.Background()
+			resp, err := a.appChannel.InvokeMethod(ctx, req)
 
-		ctx := context.Background()
-		resp, err := a.appChannel.InvokeMethod(ctx, req)
+			if err == nil && resp.Status().Code == http.StatusOK {
+				log.Infof("application check pass on address %s", a.runtimeConfig.WaitingProbe)
+				break
+			} else {
+				log.Infof("probe[%s] not ready, continue waiting", a.runtimeConfig.WaitingProbe)
+			}
 
-		if err == nil && resp.Status().Code == http.StatusOK {
-			log.Infof("application discovered on readiness address %s", a.runtimeConfig.ReadinessAddress)
-			break
+			time.Sleep(time.Millisecond * 1000)
 		}
+	}
+	log.Infof("wait application ready, continue init")
+}
 
-		time.Sleep(time.Millisecond * 200)
+func contains(source []string, target string) bool {
+	if len(source) == 0 {
+		return false
 	}
 
-	log.Infof("wait application ready, continue init")
+	for _, item := range source {
+		if target == item {
+			return true
+		}
+	}
+
+	return false
 }

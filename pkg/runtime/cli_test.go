@@ -33,7 +33,7 @@ func TestParsePlacementAddr(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.addr, func(t *testing.T) {
-			assert.EqualValues(t, tc.out, parsePlacementAddr(tc.addr))
+			assert.EqualValues(t, tc.out, parseStringArray(tc.addr))
 		})
 	}
 }

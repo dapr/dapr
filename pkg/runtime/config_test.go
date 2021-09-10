@@ -14,7 +14,7 @@ import (
 func TestNewConfig(t *testing.T) {
 	publicPort := DefaultDaprPublicPort
 	c := NewRuntimeConfig("app1", []string{"localhost:5050"}, "localhost:5051", "*", "config", "components", "http", "kubernetes",
-		3500, 50002, 50001, []string{"1.2.3.4"}, &publicPort, 8080, 7070, true, 1, true, "localhost:5052", true, 4, "", "/rediness", true)
+		3500, 50002, 50001, []string{"1.2.3.4"}, &publicPort, 8080, 7070, true, 1, true, "localhost:5052", true, 4, "", "/rediness", []string{"testname1", "testname2"})
 
 	assert.Equal(t, "app1", c.ID)
 	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
@@ -38,6 +38,6 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, true, c.AppSSL)
 	assert.Equal(t, 4, c.MaxRequestBodySize)
 	assert.Equal(t, "", c.UnixDomainSocket)
-	assert.Equal(t, "/rediness", c.ReadinessAddress)
-	assert.Equal(t, true, c.EnableWaitAppReady)
+	assert.Equal(t, "/rediness", c.WaitingProbe)
+	assert.Equal(t, []string{"testname1", "testname2"}, c.WaitingContainers)
 }
