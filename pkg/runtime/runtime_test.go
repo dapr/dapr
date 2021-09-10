@@ -3435,6 +3435,7 @@ func TestWaiting(t *testing.T) {
 		}, &config.Configuration{}, &config.AccessControlList{})
 
 		count := 0
+		t1 := time.Now()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.
@@ -3458,8 +3459,10 @@ func TestWaiting(t *testing.T) {
 		r.appChannel = mockAppChannel
 
 		r.blockUntilAppIsReady()
+		t2 := time.Now()
 
-		assert.True(t, count == 5)
+		assert.True(t, count >= 5)
+		assert.True(t, t2.After(t1.Add(time.Second*5)))
 	})
 
 	t.Run("k8s waiting test", func(t *testing.T) {
