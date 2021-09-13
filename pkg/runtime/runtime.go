@@ -976,7 +976,12 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 		// TODO: Propagate Context
 		ctx := context.Background()
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
-		return err == nil && resp.Status().Code != nethttp.StatusNotFound
+		if err != nil {
+			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %w", path, err)
+		}
+		code := resp.Status().Code
+
+		return code/100 == 2 || code == nethttp.StatusMethodNotAllowed
 	}
 	return false
 }
