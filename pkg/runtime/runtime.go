@@ -976,7 +976,12 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 		// TODO: Propagate Context
 		ctx := context.Background()
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
-		return err == nil && resp.Status().Code != nethttp.StatusNotFound
+		if err != nil {
+			return false
+		}
+		code := resp.Status().Code
+
+		return code/100 == 2 || code == nethttp.StatusMethodNotAllowed
 	}
 	return false
 }
