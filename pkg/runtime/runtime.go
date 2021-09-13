@@ -977,7 +977,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 		ctx := context.Background()
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
-			return false
+			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %w", path, err)
 		}
 		code := resp.Status().Code
 
