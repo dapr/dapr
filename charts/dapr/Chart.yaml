@@ -20,5 +20,5 @@ dependencies:
     version: "1.4.0"
     repository: "file://dapr_sentry"
   - name: dapr_dashboard
-    version: "0.8.0-rc.1"
+    version: "0.8.0"
     repository: "file://dapr_dashboard"
