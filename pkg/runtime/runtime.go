@@ -542,13 +542,13 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 	go func() {
 		stream, err := a.operatorClient.ComponentUpdate(context.Background(), &emptypb.Empty{})
 		if err != nil {
-			log.Fatalf("error from operator stream: %s", err)
+			log.Errorf("error from operator stream: %s", err)
 			return
 		}
 		for {
 			c, err := stream.Recv()
 			if err != nil {
-				log.Fatalf("error from operator stream: %s", err)
+				log.Errorf("error from operator stream: %s", err)
 				return
 			}
 
