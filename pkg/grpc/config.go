@@ -10,21 +10,23 @@ type ServerConfig struct {
 	AppID              string
 	HostAddress        string
 	Port               int
+	APIListenAddresses []string
 	NameSpace          string
 	TrustDomain        string
 	MaxRequestBodySize int
-	EnableDomainSocket bool
+	UnixDomainSocket   string
 }
 
 // NewServerConfig returns a new grpc server config.
-func NewServerConfig(appID string, hostAddress string, port int, namespace string, trustDomain string, maxRequestBodySize int, enableDomainSocket bool) ServerConfig {
+func NewServerConfig(appID string, hostAddress string, port int, apiListenAddresses []string, namespace string, trustDomain string, maxRequestBodySize int, unixDomainSocket string) ServerConfig {
 	return ServerConfig{
 		AppID:              appID,
 		HostAddress:        hostAddress,
 		Port:               port,
+		APIListenAddresses: apiListenAddresses,
 		NameSpace:          namespace,
 		TrustDomain:        trustDomain,
 		MaxRequestBodySize: maxRequestBodySize,
-		EnableDomainSocket: enableDomainSocket,
+		UnixDomainSocket:   unixDomainSocket,
 	}
 }

@@ -226,6 +226,26 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 	return client.Do(req)
 }
 
+func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error) {
+	url := fmt.Sprintf("http://localhost:%s/%s", strconv.Itoa(daprPort), method)
+	fmt.Printf("invoke url is %s\n", url)
+
+	var t io.Reader = nil
+	if data != nil {
+		t = bytes.NewBuffer(data)
+	}
+
+	client := &http.Client{Timeout: time.Minute * 5}
+	/* #nosec */
+	req, _ := http.NewRequest("POST", url, t)
+	req.Header.Add("dapr-app-id", remoteApp)
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
+
+	return client.Do(req)
+}
+
 func constructRequest(id, method, httpVerb string, body []byte) *runtimev1pb.InvokeServiceRequest {
 	msg := &commonv1pb.InvokeRequest{Method: method}
 	msg.ContentType = jsonContentType
@@ -276,6 +296,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/badservicecalltestgrpc", badServiceCallTestGrpc).Methods("POST")
 
 	// service invocation v1 e2e tests
+	router.HandleFunc("/tests/dapr_id_httptohttptest", testDaprIDRequestHTTPToHTTP).Methods("POST")
 	router.HandleFunc("/tests/v1_httptohttptest", testV1RequestHTTPToHTTP).Methods("POST")
 	router.HandleFunc("/tests/v1_httptogrpctest", testV1RequestHTTPToGRPC).Methods("POST")
 	router.HandleFunc("/tests/v1_grpctogrpctest", testV1RequestGRPCToGRPC).Methods("POST")
@@ -308,9 +329,7 @@ func retrieveRequestObject(w http.ResponseWriter, r *http.Request) {
 	w.Write(serializedHeaders)
 }
 
-// testV1RequestHTTPToHTTP calls from http caller to http callee
-func testV1RequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Enter service invocation v1 - http -> http")
+func requestHTTPToHTTP(w http.ResponseWriter, r *http.Request, send func(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error)) {
 	var commandBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {
@@ -342,12 +361,7 @@ func testV1RequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
 		headers["Daprtest-Traceid"] = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 	}
 
-	resp, err := invokeServiceWithBodyHeader(
-		commandBody.RemoteApp,
-		"retrieve_request_object",
-		b,
-		headers,
-	)
+	resp, err := send(commandBody.RemoteApp, "retrieve_request_object", b, headers)
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
@@ -382,6 +396,18 @@ func testV1RequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("response was %s\n", respBody)
 
 	logAndSetResponse(w, http.StatusOK, string(respBody))
+}
+
+// testDaprIDRequestHTTPToHTTP calls from http caller to http callee without requiring the caller to use Dapr style URL.
+func testDaprIDRequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Enter service invocation with dapr-app-id header and shorter URL - http -> http")
+	requestHTTPToHTTP(w, r, invokeServiceWithDaprAppIDHeader)
+}
+
+// testV1RequestHTTPToHTTP calls from http caller to http callee
+func testV1RequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Enter service invocation v1 - http -> http")
+	requestHTTPToHTTP(w, r, invokeServiceWithBodyHeader)
 }
 
 // testV1RequestHTTPToGRPC calls from http caller to grpc callee
