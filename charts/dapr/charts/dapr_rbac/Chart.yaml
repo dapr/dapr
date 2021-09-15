@@ -3,3 +3,4 @@ appVersion: "1.0"
 description: A Helm chart for Dapr Kubernetes RBAC components
 name: dapr_rbac
 version: 1.4.0
+
