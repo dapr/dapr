@@ -6,6 +6,7 @@
 package http
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -43,6 +44,7 @@ import (
 // API returns a list of HTTP endpoints for Dapr.
 type API interface {
 	APIEndpoints() []Endpoint
+	PublicEndpoints() []Endpoint
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
 	SetAppChannel(appChannel channel.AppChannel)
@@ -52,6 +54,7 @@ type API interface {
 
 type api struct {
 	endpoints                []Endpoint
+	publicEndpoints          []Endpoint
 	directMessaging          messaging.DirectMessaging
 	appChannel               channel.AppChannel
 	getComponentsFn          func() []components_v1alpha1.Component
@@ -101,6 +104,7 @@ const (
 	pubsubnameparam      = "pubsubname"
 	traceparentHeader    = "traceparent"
 	tracestateHeader     = "tracestate"
+	daprAppID            = "dapr-app-id"
 )
 
 // NewAPI returns a new API.
@@ -140,15 +144,21 @@ func NewAPI(
 		shutdown:                 shutdown,
 	}
 
+	metadataEndpoints := api.constructMetadataEndpoints()
+	healthEndpoints := api.constructHealthzEndpoints()
+
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructActorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
-	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
+	api.endpoints = append(api.endpoints, metadataEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
-	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
+	api.endpoints = append(api.endpoints, healthEndpoints...)
+
+	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
+	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
 
 	return api
 }
@@ -156,6 +166,11 @@ func NewAPI(
 // APIEndpoints returns the list of registered endpoints.
 func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
+}
+
+// PublicEndpoints returns the list of registered endpoints.
+func (a *api) PublicEndpoints() []Endpoint {
+	return a.publicEndpoints
 }
 
 // MarkStatusAsReady marks the ready status of dapr.
@@ -247,6 +262,7 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 		{
 			Methods: []string{router.MethodWild},
 			Route:   "invoke/{id}/method/{method:*}",
+			Alias:   "{method:*}",
 			Version: apiVersionV1,
 			Handler: a.onDirectMessage,
 		},
@@ -326,7 +342,7 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 func (a *api) constructShutdownEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost},
 			Route:   "shutdown",
 			Version: apiVersionV1,
 			Handler: a.onShutdown,
@@ -847,7 +863,13 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
-	targetID := reqCtx.UserValue(idParam).(string)
+	targetID := a.findTargetID(reqCtx)
+	if targetID == "" {
+		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
+		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
+		return
+	}
+
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	invokeMethodName := reqCtx.UserValue(methodParam).(string)
 
@@ -894,6 +916,32 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 	respond(reqCtx, with(statusCode, body))
+}
+
+// findTargetID tries to find ID of the target service from the following three places:
+// 1. {id} in the URL's path.
+// 2. Basic authentication, http://dapr-app-id:<service-id>@localhost:3500/path.
+// 3. HTTP header: 'dapr-app-id'.
+func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
+	if id := reqCtx.UserValue(idParam); id == nil {
+		if appID := reqCtx.Request.Header.Peek(daprAppID); appID == nil {
+			if auth := reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization); auth != nil &&
+				strings.HasPrefix(string(auth), "Basic ") {
+				if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(auth), "Basic ")); err == nil {
+					pair := strings.Split(string(s), ":")
+					if len(pair) == 2 && pair[0] == daprAppID {
+						return pair[1]
+					}
+				}
+			}
+		} else {
+			return string(appID)
+		}
+	} else {
+		return id.(string)
+	}
+
+	return ""
 }
 
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {

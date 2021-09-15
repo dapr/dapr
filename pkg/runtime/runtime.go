@@ -348,16 +348,19 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
-	if a.runtimeConfig.EnableDomainSocket {
-		log.Info("API gRPC server is running on socket")
+	if a.runtimeConfig.UnixDomainSocket != "" {
+		log.Info("API gRPC server is running on a unix domain socket")
 	} else {
 		log.Infof("API gRPC server is running on port %v", a.runtimeConfig.APIGRPCPort)
 	}
 
 	// Start HTTP Server
-	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
-	if a.runtimeConfig.EnableDomainSocket {
-		log.Info("http server is running on socket")
+	err = a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.PublicPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
+	if err != nil {
+		log.Fatalf("failed to start HTTP server: %s", err)
+	}
+	if a.runtimeConfig.UnixDomainSocket != "" {
+		log.Info("http server is running on a unix domain socket")
 	} else {
 		log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 	}
@@ -892,37 +895,39 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 	return err
 }
 
-func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
+func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) error {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.stateStores, a.secretStores,
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.EnableDomainSocket)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.APIListenAddresses, publicPort, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
-	server.StartNonBlocking()
+	err := server.StartNonBlocking()
+	return err
 }
 
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
-	serverConf := a.getNewServerConfig(port)
+	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
+	serverConf := a.getNewServerConfig([]string{""}, port)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator, a.proxy)
 	err := server.StartNonBlocking()
 	return err
 }
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
-	serverConf := a.getNewServerConfig(port)
+	serverConf := a.getNewServerConfig(a.runtimeConfig.APIListenAddresses, port)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy)
 	err := server.StartNonBlocking()
 	return err
 }
 
-func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
+func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) grpc.ServerConfig {
 	// Use the trust domain value from the access control policy spec to generate the cert
 	// If no access control policy has been specified, use a default value
 	trustDomain := config.DefaultTrustDomain
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.EnableDomainSocket)
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket)
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
@@ -1803,9 +1808,9 @@ func (a *DaprRuntime) ShutdownWithWait() {
 }
 
 func (a *DaprRuntime) cleanSocket() {
-	if a.runtimeConfig.EnableDomainSocket {
+	if a.runtimeConfig.UnixDomainSocket != "" {
 		for _, s := range []string{"http", "grpc"} {
-			os.Remove(fmt.Sprintf("/tmp/dapr-%s-%s.socket", a.runtimeConfig.ID, s))
+			os.Remove(fmt.Sprintf("/%s/dapr-%s-%s.socket", a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ID, s))
 		}
 	}
 }
