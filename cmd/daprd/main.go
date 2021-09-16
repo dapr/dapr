@@ -86,6 +86,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	dingtalk_webhook "github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
 	"github.com/dapr/components-contrib/bindings/alicloud/oss"
+	"github.com/dapr/components-contrib/bindings/alicloud/tablestore"
 	"github.com/dapr/components-contrib/bindings/apns"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
@@ -340,6 +341,9 @@ func main() {
 		runtime.WithOutputBindings(
 			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
 				return oss.NewAliCloudOSS(logContrib)
+			}),
+			bindings_loader.NewOutput("alicloud.tablestore", func() bindings.OutputBinding {
+				return tablestore.NewAliCloudTableStore(log)
 			}),
 			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
 				return apns.NewAPNS(logContrib)
