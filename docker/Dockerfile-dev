@@ -19,6 +19,7 @@ ARG USER_GID=$USER_UID
 ARG KUBECTL_VERSION="latest"
 ARG HELM_VERSION="latest"
 ARG MINIKUBE_VERSION="latest"
+ARG DAPR_CLI_VERSION=""
 
 # Configure environment variables and pathing for dev tools.
 # Defaults to bash shell since the Dapr tutorials assume it, but zsh is optionally installed.
@@ -53,7 +54,7 @@ RUN apt-get update \
     && mv /tmp/staging/protoc/bin/* /usr/local/bin \
     #
     # Install Dapr CLI.
-    && wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash \
+    && wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s "${DAPR_CLI_VERSION}" \
     #
     # Copy devcontainer init, Docker bind-mount and GOPATH setup scripts
     && mv -f -t /usr/local/share/ /tmp/staging/docker-bind-mount.sh /tmp/staging/devcontainer-init.sh /tmp/staging/setup-gopath.sh \
