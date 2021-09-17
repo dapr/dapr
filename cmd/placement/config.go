@@ -7,6 +7,7 @@ package main
 
 import (
 	"flag"
+	"runtime"
 	"strings"
 
 	"github.com/dapr/kit/logger"
@@ -16,10 +17,11 @@ import (
 )
 
 const (
-	defaultCredentialsPath   = "/var/run/dapr/credentials"
-	defaultHealthzPort       = 8080
-	defaultPlacementPort     = 50005
-	defaultReplicationFactor = 100
+	defaultCredentialsPath    = "/var/run/dapr/credentials"
+	defaultHealthzPort        = 8080
+	defaultPlacementPort      = 50005
+	defaultPlacementPortOnWin = 6050
+	defaultReplicationFactor  = 100
 )
 
 type config struct {
@@ -56,6 +58,10 @@ func newConfig() *config {
 		healthzPort:   defaultHealthzPort,
 		certChainPath: defaultCredentialsPath,
 		tlsEnabled:    false,
+	}
+
+	if runtime.GOOS == "windows" {
+		cfg.placementPort = defaultPlacementPortOnWin
 	}
 
 	flag.StringVar(&cfg.raftID, "id", cfg.raftID, "Placement server ID.")
