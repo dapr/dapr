@@ -20,7 +20,7 @@ service Operator {
   rpc GetConfiguration (GetConfigurationRequest) returns (GetConfigurationResponse) {}
   // Returns a list of pub/sub subscriptions
   rpc ListSubscriptions (google.protobuf.Empty) returns (ListSubscriptionsResponse) {}
-  // Retusns labels of app container
+  // Returns ready status of containers
   rpc GetContainersStatus(GetContainersStatusRequest) returns (GetContainersStatusResponse) {}
 }
 

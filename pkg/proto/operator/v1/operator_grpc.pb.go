@@ -27,7 +27,7 @@ type OperatorClient interface {
 	GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
 	ListSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
-	// Retusns labels of app container
+	// Returns ready status of containers
 	GetContainersStatus(ctx context.Context, in *GetContainersStatusRequest, opts ...grpc.CallOption) (*GetContainersStatusResponse, error)
 }
 
@@ -119,7 +119,7 @@ type OperatorServer interface {
 	GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
 	ListSubscriptions(context.Context, *emptypb.Empty) (*ListSubscriptionsResponse, error)
-	// Retusns labels of app container
+	// Returns ready status of containers
 	GetContainersStatus(context.Context, *GetContainersStatusRequest) (*GetContainersStatusResponse, error)
 }
 
