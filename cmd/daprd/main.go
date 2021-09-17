@@ -63,6 +63,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
+	pubsub_inmemory "github.com/dapr/components-contrib/pubsub/in-memory"
+	pubsub_jetstream "github.com/dapr/components-contrib/pubsub/jetstream"
 	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
 	pubsub_mqtt "github.com/dapr/components-contrib/pubsub/mqtt"
 	"github.com/dapr/components-contrib/pubsub/natsstreaming"
@@ -88,6 +90,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
+	"github.com/dapr/components-contrib/bindings/aws/ses"
 	"github.com/dapr/components-contrib/bindings/aws/sns"
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
@@ -245,6 +248,9 @@ func main() {
 			pubsub_loader.New("hazelcast", func() pubs.PubSub {
 				return pubsub_hazelcast.NewHazelcastPubSub(logContrib)
 			}),
+			pubsub_loader.New("jetstream", func() pubs.PubSub {
+				return pubsub_jetstream.NewJetStream(logContrib)
+			}),
 			pubsub_loader.New("kafka", func() pubs.PubSub {
 				return pubsub_kafka.NewKafka(logContrib)
 			}),
@@ -265,6 +271,9 @@ func main() {
 			}),
 			pubsub_loader.New("snssqs", func() pubs.PubSub {
 				return pubsub_snssqs.NewSnsSqs(logContrib)
+			}),
+			pubsub_loader.New("in-memory", func() pubs.PubSub {
+				return pubsub_inmemory.New(logContrib)
 			}),
 		),
 		runtime.WithNameResolutions(
@@ -337,6 +346,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("aws.s3", func() bindings.OutputBinding {
 				return s3.NewAWSS3(logContrib)
+			}),
+			bindings_loader.NewOutput("aws.ses", func() bindings.OutputBinding {
+				return ses.NewAWSSES(logContrib)
 			}),
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
 				return sqs.NewAWSSQS(logContrib)
