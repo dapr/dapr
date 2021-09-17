@@ -401,7 +401,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetActorRuntime(a.actor)
 	grpcAPI.SetActorRuntime(a.actor)
 
-	// TODO: Remove feature flag once feature is l
+	// TODO: Remove feature flag once feature is ratified
 	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
 
 	a.startSubscribing()
