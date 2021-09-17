@@ -17,6 +17,7 @@ type ApplicationConfig struct {
 	DrainRebalancedActors      bool             `json:"drainRebalancedActors"`
 	Reentrancy                 ReentrancyConfig `json:"reentrancy,omitempty"`
 	RemindersStoragePartitions int              `json:"remindersStoragePartitions"`
+	Modules                    []string         `json:"modules"`
 }
 
 type ReentrancyConfig struct {

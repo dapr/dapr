@@ -317,7 +317,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
-	go a.processComponents()
 	err = a.beginComponentsUpdates()
 	if err != nil {
 		log.Warnf("failed to watch component updates: %s", err)
@@ -387,6 +386,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.loadAppConfiguration()
 
+	go a.processComponents()
+
 	a.initDirectMessaging(a.nameResolver)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
@@ -400,7 +401,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetActorRuntime(a.actor)
 	grpcAPI.SetActorRuntime(a.actor)
 
-	// TODO: Remove feature flag once feature is ratified
+	// TODO: Remove feature flag once feature is l
 	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
 
 	a.startSubscribing()
@@ -1637,6 +1638,12 @@ func (a *DaprRuntime) processComponents() {
 			continue
 		}
 
+		// Only process module which app determined
+		if !a.componentsAppDetermined(comp) {
+			log.Debugf("skip component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+			continue
+		}
+
 		err := a.processComponentAndDependents(comp)
 		if err != nil {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
@@ -1648,6 +1655,20 @@ func (a *DaprRuntime) processComponents() {
 			log.Errorf(e)
 		}
 	}
+}
+
+func (a *DaprRuntime) componentsAppDetermined(comp components_v1alpha1.Component) bool {
+	if len(a.appConfig.Modules) == 0 {
+		return true
+	}
+
+	for _, name := range a.appConfig.Modules {
+		if name == comp.Name {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (a *DaprRuntime) flushOutstandingComponents() {
