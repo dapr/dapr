@@ -12,6 +12,7 @@ on:
   pull_request:
     paths:
       - 'docker/Dockerfile-dev'
+  workflow_dispatch:
 
 jobs:
   build:
