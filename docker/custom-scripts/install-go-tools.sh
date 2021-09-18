@@ -42,6 +42,9 @@ mkdir -p /usr/local/etc/vscode-dev-containers ${TARGET_GOPATH}/bin
 # Install Go tools w/module support using v1.16 `go install`
 (echo "${GO_TOOLS}" | xargs -n 1 go install -v )2>&1 | tee -a /usr/local/etc/vscode-dev-containers/gotools.log
 
+# Set up `dlv` as `dlv-dap` for VSCode go debugging
+cp ${TARGET_GOPATH}/bin/dlv ${TARGET_GOPATH}/bin/dlv-dap
+
 # Install golangci-lint
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ${TARGET_GOPATH}/bin 2>&1
 
