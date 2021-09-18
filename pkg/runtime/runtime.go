@@ -317,18 +317,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
-	err = a.beginComponentsUpdates()
-	if err != nil {
-		log.Warnf("failed to watch component updates: %s", err)
-	}
-	a.appendBuiltinSecretStore()
-	err = a.loadComponents(opts)
-	if err != nil {
-		log.Warnf("failed to load components: %s", err)
-	}
-
-	a.flushOutstandingComponents()
-
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
@@ -386,7 +374,19 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.loadAppConfiguration()
 
+	// processComponents() should after app configuration loaded
+	// so that processComponents() could filter modules by app configuration
 	go a.processComponents()
+	err = a.beginComponentsUpdates()
+	if err != nil {
+		log.Warnf("failed to watch component updates: %s", err)
+	}
+	a.appendBuiltinSecretStore()
+	err = a.loadComponents(opts)
+	if err != nil {
+		log.Warnf("failed to load components: %s", err)
+	}
+	a.flushOutstandingComponents()
 
 	a.initDirectMessaging(a.nameResolver)
 
@@ -1658,6 +1658,7 @@ func (a *DaprRuntime) processComponents() {
 }
 
 func (a *DaprRuntime) componentsAppDetermined(comp components_v1alpha1.Component) bool {
+	// by default, do not stop any module, unless app determine which module it want to use obviously.
 	if len(a.appConfig.Modules) == 0 {
 		return true
 	}
