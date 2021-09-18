@@ -1638,7 +1638,7 @@ func (a *DaprRuntime) processComponents() {
 			continue
 		}
 
-		// Only process module which app determined
+		// Only process component which app determined
 		if !a.componentsAppDetermined(comp) {
 			log.Debugf("skip component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
 			continue
@@ -1658,13 +1658,13 @@ func (a *DaprRuntime) processComponents() {
 }
 
 func (a *DaprRuntime) componentsAppDetermined(comp components_v1alpha1.Component) bool {
-	// by default, do not stop any module, unless app determine which module it want to use obviously.
+	// by default, do not stop any components, unless app determine which component it want to use obviously.
 	if len(a.appConfig.Modules) == 0 {
 		return true
 	}
 
 	for _, name := range a.appConfig.Modules {
-		if name == comp.Name {
+		if name == comp.ObjectMeta.Name {
 			return true
 		}
 	}

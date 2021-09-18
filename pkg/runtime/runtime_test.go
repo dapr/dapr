@@ -3395,3 +3395,29 @@ func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
 		Path:  path,
 	}, nil
 }
+
+func TestModuleFilter(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	mockAppChannel := new(channelt.MockAppChannel)
+
+	configResp := config.ApplicationConfig{
+		Modules: []string{"binding"},
+	}
+
+	mockAppChannel.On("GetAppConfig").Return(&configResp, nil)
+
+	rt.appChannel = mockAppChannel
+
+	rt.loadAppConfiguration()
+
+	assert.Equal(t, rt.appConfig.Modules, configResp.Modules)
+
+	determined := rt.componentsAppDetermined(components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "binding",
+		},
+	})
+
+	assert.True(t, determined)
+}
