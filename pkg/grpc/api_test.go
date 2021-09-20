@@ -50,7 +50,10 @@ import (
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 )
 
-const maxGRPCServerUptime = 100 * time.Millisecond
+const (
+	maxGRPCServerUptime = 100 * time.Millisecond
+	reqGoodKey          = "fakeAPI||good-key"
+)
 
 type mockGRPCAPI struct{}
 
@@ -76,6 +79,10 @@ func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeS
 
 func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
 	return &runtimev1pb.InvokeBindingResponse{}, nil
+}
+
+func (m *mockGRPCAPI) CheckStoreHealth(ctx context.Context, in *runtimev1pb.CheckStoreHealthRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
 }
 
 func (m *mockGRPCAPI) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
@@ -853,13 +860,26 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
+func TestCheckStoreHealthWhenStoreNotConfigured(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err := client.CheckStoreHealth(context.Background(), &runtimev1pb.CheckStoreHealthRequest{})
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
 func TestSaveState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
-		return reqs[0].Key == "fakeAPI||good-key"
+		return reqs[0].Key == reqGoodKey
 	})).Return(nil)
 	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
@@ -941,7 +961,7 @@ func TestSaveState(t *testing.T) {
 func TestGetState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == "fakeAPI||good-key"
+		return req.Key == reqGoodKey
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
@@ -1023,10 +1043,73 @@ func TestGetState(t *testing.T) {
 	}
 }
 
+func TestCheckStoreHealth(t *testing.T) {
+	fakeStore := &daprt.MockStateStore{}
+
+	fakeStore.On("Ping", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == reqGoodKey
+	})).Return(
+		&state.GetResponse{
+			Data: []byte("test-data"),
+			ETag: ptr.String("test-etag"),
+		}, nil)
+
+	fakeAPI := &api{
+		id:          "fakeAPI",
+		stateStores: map[string]state.Store{"store1": fakeStore},
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	testCases := []struct {
+		testName      string
+		storeName     string
+		errorExcepted bool
+		expectedError codes.Code
+	}{
+		{
+			testName:      "success health check",
+			storeName:     "store1",
+			errorExcepted: false,
+			expectedError: codes.OK,
+		},
+		{
+			testName:      "not found store",
+			storeName:     "no-store",
+			errorExcepted: true,
+			expectedError: codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.CheckStoreHealthRequest{
+				StoreName: tt.storeName,
+			}
+
+			_, err := client.CheckStoreHealth(context.Background(), req)
+
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+				assert.Nil(t, err)
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
+			}
+		})
+	}
+}
+
 func TestGetBulkState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == "fakeAPI||good-key"
+		return req.Key == reqGoodKey
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
@@ -1143,7 +1226,7 @@ func TestGetBulkState(t *testing.T) {
 func TestDeleteState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
-		return req.Key == "fakeAPI||good-key"
+		return req.Key == reqGoodKey
 	})).Return(nil)
 	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
 		return req.Key == "fakeAPI||error-key"

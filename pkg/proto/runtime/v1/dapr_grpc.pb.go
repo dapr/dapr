@@ -22,6 +22,8 @@ const _ = grpc.SupportPackageIsVersion7
 type DaprClient interface {
 	// Invokes a method on a remote Dapr app.
 	InvokeService(ctx context.Context, in *InvokeServiceRequest, opts ...grpc.CallOption) (*v1.InvokeResponse, error)
+	// Check store status
+	CheckStoreHealth(ctx context.Context, in *CheckStoreHealthRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Gets the state for a specific key.
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 	// Gets a bulk of state items for a list of keys
@@ -75,6 +77,15 @@ func NewDaprClient(cc grpc.ClientConnInterface) DaprClient {
 func (c *daprClient) InvokeService(ctx context.Context, in *InvokeServiceRequest, opts ...grpc.CallOption) (*v1.InvokeResponse, error) {
 	out := new(v1.InvokeResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/InvokeService", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) CheckStoreHealth(ctx context.Context, in *CheckStoreHealthRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/CheckStoreHealth", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -267,6 +278,8 @@ func (c *daprClient) Shutdown(ctx context.Context, in *emptypb.Empty, opts ...gr
 type DaprServer interface {
 	// Invokes a method on a remote Dapr app.
 	InvokeService(context.Context, *InvokeServiceRequest) (*v1.InvokeResponse, error)
+	// Check store status
+	CheckStoreHealth(context.Context, *CheckStoreHealthRequest) (*emptypb.Empty, error)
 	// Gets the state for a specific key.
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	// Gets a bulk of state items for a list of keys
@@ -315,6 +328,9 @@ type UnimplementedDaprServer struct {
 
 func (UnimplementedDaprServer) InvokeService(context.Context, *InvokeServiceRequest) (*v1.InvokeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeService not implemented")
+}
+func (UnimplementedDaprServer) CheckStoreHealth(context.Context, *CheckStoreHealthRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckStoreHealth not implemented")
 }
 func (UnimplementedDaprServer) GetState(context.Context, *GetStateRequest) (*GetStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetState not implemented")
@@ -402,6 +418,24 @@ func _Dapr_InvokeService_Handler(srv interface{}, ctx context.Context, dec func(
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).InvokeService(ctx, req.(*InvokeServiceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_CheckStoreHealth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckStoreHealthRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).CheckStoreHealth(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/CheckStoreHealth",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).CheckStoreHealth(ctx, req.(*CheckStoreHealthRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -776,6 +810,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "InvokeService",
 			Handler:    _Dapr_InvokeService_Handler,
+		},
+		{
+			MethodName: "CheckStoreHealth",
+			Handler:    _Dapr_CheckStoreHealth_Handler,
 		},
 		{
 			MethodName: "GetState",

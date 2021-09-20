@@ -2487,11 +2487,16 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 }
 
+var throwError = false
+
 type fakeStateStore struct {
 	counter int
 }
 
 func (c fakeStateStore) Ping() error {
+	if throwError {
+		return errors.New("ping error")
+	}
 	return nil
 }
 
@@ -2717,10 +2722,17 @@ func TestV1SecretEndpoints(t *testing.T) {
 
 func TestV1HealthzEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
+	var fakeStore state.Store = fakeStateStore{}
+
+	storeName := "store1"
+	fakeStores := map[string]state.Store{
+		storeName: fakeStore,
+	}
 
 	testAPI := &api{
-		actor: nil,
-		json:  jsoniter.ConfigFastest,
+		actor:       nil,
+		json:        jsoniter.ConfigFastest,
+		stateStores: fakeStores,
 	}
 
 	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
@@ -2738,6 +2750,28 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
+	})
+
+	t.Run("StateStore healthz - 204 No Content", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/healthz/state/%s", storeName)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 204, resp.StatusCode)
+	})
+
+	t.Run("StateStore healthz - 400 Not Found", func(t *testing.T) {
+		apiPath := "v1.0/healthz/state/NotExists"
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 400, resp.StatusCode)
+	})
+
+	t.Run("StateStore healthz - 500 Internal Server Error", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/healthz/state/%s", storeName)
+		throwError = true
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 500, resp.StatusCode)
 	})
 
 	fakeServer.Shutdown()
