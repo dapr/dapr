@@ -221,6 +221,55 @@ func (x *GetStateRequest) GetMetadata() map[string]string {
 	return nil
 }
 
+// GetStateRequest is the message to get key-value states from specific state store.
+type CheckStoreHealthRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of state store.
+	StoreName string `protobuf:"bytes,1,opt,name=store_name,json=storeName,proto3" json:"store_name,omitempty"`
+}
+
+func (x *CheckStoreHealthRequest) Reset() {
+	*x = CheckStoreHealthRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CheckStoreHealthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckStoreHealthRequest) ProtoMessage() {}
+
+func (x *CheckStoreHealthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckStoreHealthRequest.ProtoReflect.Descriptor instead.
+func (*CheckStoreHealthRequest) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CheckStoreHealthRequest) GetStoreName() string {
+	if x != nil {
+		return x.StoreName
+	}
+	return ""
+}
+
 // GetBulkStateRequest is the message to get a list of key-value states from specific state store.
 type GetBulkStateRequest struct {
 	state         protoimpl.MessageState
@@ -240,7 +289,7 @@ type GetBulkStateRequest struct {
 func (x *GetBulkStateRequest) Reset() {
 	*x = GetBulkStateRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[2]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -253,7 +302,7 @@ func (x *GetBulkStateRequest) String() string {
 func (*GetBulkStateRequest) ProtoMessage() {}
 
 func (x *GetBulkStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[2]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -266,7 +315,7 @@ func (x *GetBulkStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBulkStateRequest.ProtoReflect.Descriptor instead.
 func (*GetBulkStateRequest) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{2}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetBulkStateRequest) GetStoreName() string {
@@ -310,7 +359,7 @@ type GetBulkStateResponse struct {
 func (x *GetBulkStateResponse) Reset() {
 	*x = GetBulkStateResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[3]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -323,7 +372,7 @@ func (x *GetBulkStateResponse) String() string {
 func (*GetBulkStateResponse) ProtoMessage() {}
 
 func (x *GetBulkStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[3]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -336,7 +385,7 @@ func (x *GetBulkStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBulkStateResponse.ProtoReflect.Descriptor instead.
 func (*GetBulkStateResponse) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{3}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetBulkStateResponse) GetItems() []*BulkStateItem {
@@ -369,7 +418,7 @@ type BulkStateItem struct {
 func (x *BulkStateItem) Reset() {
 	*x = BulkStateItem{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[4]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -382,7 +431,7 @@ func (x *BulkStateItem) String() string {
 func (*BulkStateItem) ProtoMessage() {}
 
 func (x *BulkStateItem) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[4]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -395,7 +444,7 @@ func (x *BulkStateItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BulkStateItem.ProtoReflect.Descriptor instead.
 func (*BulkStateItem) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{4}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *BulkStateItem) GetKey() string {
@@ -451,7 +500,7 @@ type GetStateResponse struct {
 func (x *GetStateResponse) Reset() {
 	*x = GetStateResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[5]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -464,7 +513,7 @@ func (x *GetStateResponse) String() string {
 func (*GetStateResponse) ProtoMessage() {}
 
 func (x *GetStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[5]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -477,7 +526,7 @@ func (x *GetStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStateResponse.ProtoReflect.Descriptor instead.
 func (*GetStateResponse) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{5}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetStateResponse) GetData() []byte {
@@ -524,7 +573,7 @@ type DeleteStateRequest struct {
 func (x *DeleteStateRequest) Reset() {
 	*x = DeleteStateRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[6]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -537,7 +586,7 @@ func (x *DeleteStateRequest) String() string {
 func (*DeleteStateRequest) ProtoMessage() {}
 
 func (x *DeleteStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[6]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -550,7 +599,7 @@ func (x *DeleteStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteStateRequest.ProtoReflect.Descriptor instead.
 func (*DeleteStateRequest) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{6}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DeleteStateRequest) GetStoreName() string {
@@ -603,7 +652,7 @@ type DeleteBulkStateRequest struct {
 func (x *DeleteBulkStateRequest) Reset() {
 	*x = DeleteBulkStateRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[7]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -616,7 +665,7 @@ func (x *DeleteBulkStateRequest) String() string {
 func (*DeleteBulkStateRequest) ProtoMessage() {}
 
 func (x *DeleteBulkStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[7]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -629,7 +678,7 @@ func (x *DeleteBulkStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBulkStateRequest.ProtoReflect.Descriptor instead.
 func (*DeleteBulkStateRequest) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{7}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DeleteBulkStateRequest) GetStoreName() string {
@@ -661,7 +710,7 @@ type SaveStateRequest struct {
 func (x *SaveStateRequest) Reset() {
 	*x = SaveStateRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[8]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -674,7 +723,7 @@ func (x *SaveStateRequest) String() string {
 func (*SaveStateRequest) ProtoMessage() {}
 
 func (x *SaveStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[8]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -687,7 +736,7 @@ func (x *SaveStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveStateRequest.ProtoReflect.Descriptor instead.
 func (*SaveStateRequest) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{8}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SaveStateRequest) GetStoreName() string {
@@ -1726,7 +1775,7 @@ type RegisterActorReminderRequest struct {
 func (x *RegisterActorReminderRequest) Reset() {
 	*x = RegisterActorReminderRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[24]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3814,38 +3863,19 @@ var file_dapr_proto_runtime_v1_dapr_proto_rawDesc = []byte{
 	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x60, 0x0a, 0x0d, 0x54, 0x72, 0x79, 0x4c,
 	0x6f, 0x63, 0x6b, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x25, 0x2e, 0x64, 0x61, 0x70, 0x72,
 	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x54, 0x72, 0x79, 0x4c, 0x6f, 0x63, 0x6b, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x26, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75,
-	0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x72, 0x79, 0x4c, 0x6f, 0x63, 0x6b,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x5d, 0x0a, 0x0c, 0x55, 0x6e,
-	0x6c, 0x6f, 0x63, 0x6b, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x24, 0x2e, 0x64, 0x61, 0x70,
-	0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e,
-	0x76, 0x31, 0x2e, 0x55, 0x6e, 0x6c, 0x6f, 0x63, 0x6b, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x25, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75,
-	0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x6c, 0x6f, 0x63, 0x6b, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x53, 0x0a, 0x0b, 0x47, 0x65, 0x74,
-	0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c,
-	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79,
-	0x1a, 0x2a, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75,
-	0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61,
-	0x64, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x52,
-	0x0a, 0x0b, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x12, 0x29, 0x2e,
-	0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69,
-	0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74,
-	0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c,
-	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79,
-	0x22, 0x00, 0x12, 0x3c, 0x0a, 0x08, 0x53, 0x68, 0x75, 0x74, 0x64, 0x6f, 0x77, 0x6e, 0x12, 0x16,
-	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
-	0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22, 0x00,
-	0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0a,
-	0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x31, 0x67, 0x69, 0x74, 0x68,
-	0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72,
-	0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72, 0x75, 0x6e, 0x74, 0x69,
-	0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0xaa, 0x02, 0x1b,
-	0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f,
-	0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x33,
+	0x31, 0x2e, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22, 0x00, 0x12, 0x3c,
+	0x0a, 0x08, 0x53, 0x68, 0x75, 0x74, 0x64, 0x6f, 0x77, 0x6e, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f,
+	0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70,
+	0x74, 0x79, 0x22, 0x00, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
+	0x76, 0x31, 0x42, 0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x31,
+	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f,
+	0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72,
+	0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d,
+	0x65, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e,
+	0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62,
+	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -4072,7 +4102,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetBulkStateRequest); i {
+			switch v := v.(*CheckStoreHealthRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4084,7 +4114,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetBulkStateResponse); i {
+			switch v := v.(*GetBulkStateRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4096,7 +4126,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BulkStateItem); i {
+			switch v := v.(*GetBulkStateResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4108,7 +4138,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetStateResponse); i {
+			switch v := v.(*BulkStateItem); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4120,7 +4150,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteStateRequest); i {
+			switch v := v.(*GetStateResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4132,7 +4162,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteBulkStateRequest); i {
+			switch v := v.(*DeleteStateRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4144,7 +4174,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SaveStateRequest); i {
+			switch v := v.(*DeleteBulkStateRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4479,7 +4509,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 				return nil
 			}
 		}
-		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[36].Exporter = func(v interface{}, i int) interface{} {
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[33].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetMetadataRequest); i {
 			case 0:
 				return &v.state

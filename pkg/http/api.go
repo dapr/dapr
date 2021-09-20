@@ -414,6 +414,12 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onGetOutboundHealthz,
 		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "healthz/state/{storeName}",
+			Version: apiVersionV1,
+			Handler: a.onGetStateHealthz,
+		},
 	}
 }
 
@@ -2022,6 +2028,23 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.outboundReadyStatus {
 		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+	} else {
+		respond(reqCtx, withEmpty())
+	}
+}
+
+func (a *api) onGetStateHealthz(reqCtx *fasthttp.RequestCtx) {
+	store, _, err := a.getStateStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	err = store.Ping()
+	if err != nil {
+		msg := NewErrorResponse("ERR_STATE_HEALTH_NOT_READY", messages.ErrStateHealthNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {

@@ -75,6 +75,7 @@ const (
 	goodKey             = "good-key"
 	goodKey2            = "good-key2"
 	mockSubscribeID     = "mockId"
+	reqGoodKey          = "fakeAPI||good-key"
 )
 
 var testResiliency = &v1alpha1.Resiliency{
@@ -164,6 +165,10 @@ func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeS
 
 func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
 	return &runtimev1pb.InvokeBindingResponse{}, nil
+}
+
+func (m *mockGRPCAPI) CheckStoreHealth(ctx context.Context, in *runtimev1pb.CheckStoreHealthRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
 }
 
 func (m *mockGRPCAPI) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
@@ -950,6 +955,19 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
+func TestCheckStoreHealthWhenStoreNotConfigured(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err := client.CheckStoreHealth(context.Background(), &runtimev1pb.CheckStoreHealthRequest{})
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
 func TestSaveState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
@@ -1418,6 +1436,68 @@ func TestSubscribeConfiguration(t *testing.T) {
 				}
 				assert.Equal(t, tt.expectedError, status.Code(err))
 				assert.Error(t, err, "Expected error")
+			}
+		})
+	}
+}
+func TestCheckStoreHealth(t *testing.T) {
+	fakeStore := &daprt.MockStateStore{}
+
+	fakeStore.On("Ping", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == reqGoodKey
+	})).Return(
+		&state.GetResponse{
+			Data: []byte("test-data"),
+			ETag: ptr.String("test-etag"),
+		}, nil)
+
+	fakeAPI := &api{
+		id:          "fakeAPI",
+		stateStores: map[string]state.Store{"store1": fakeStore},
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	testCases := []struct {
+		testName      string
+		storeName     string
+		errorExcepted bool
+		expectedError codes.Code
+	}{
+		{
+			testName:      "success health check",
+			storeName:     "store1",
+			errorExcepted: false,
+			expectedError: codes.OK,
+		},
+		{
+			testName:      "not found store",
+			storeName:     "no-store",
+			errorExcepted: true,
+			expectedError: codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.CheckStoreHealthRequest{
+				StoreName: tt.storeName,
+			}
+
+			_, err := client.CheckStoreHealth(context.Background(), req)
+
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+				assert.Nil(t, err)
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
 	}
