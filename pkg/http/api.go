@@ -342,7 +342,7 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 func (a *api) constructShutdownEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost},
 			Route:   "shutdown",
 			Version: apiVersionV1,
 			Handler: a.onShutdown,

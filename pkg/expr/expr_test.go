@@ -11,7 +11,7 @@ import (
 
 func TestEval(t *testing.T) {
 	var e expr.Expr
-	code := `has(input.test) && result.test == 5678`
+	code := `(has(input.test) && input.test == 1234) || (has(result.test) && result.test == 5678)`
 	err := e.DecodeString(code)
 	require.NoError(t, err)
 	assert.Equal(t, code, e.String())
@@ -29,10 +29,10 @@ func TestEval(t *testing.T) {
 
 func TestJSONMarshal(t *testing.T) {
 	var e expr.Expr
-	exprBytes := []byte(`"has(input.test) && result.test == 5678"`)
+	exprBytes := []byte(`"(has(input.test) && input.test == 1234) || (has(result.test) && result.test == 5678)"`)
 	err := e.UnmarshalJSON(exprBytes)
 	require.NoError(t, err)
-	assert.Equal(t, `has(input.test) && result.test == 5678`, e.Expr())
+	assert.Equal(t, `(has(input.test) && input.test == 1234) || (has(result.test) && result.test == 5678)`, e.Expr())
 	_, err = e.MarshalJSON()
 	require.NoError(t, err)
 }
@@ -41,7 +41,7 @@ var result interface{}
 
 func BenchmarkEval(b *testing.B) {
 	var e expr.Expr
-	err := e.DecodeString(`has(input.test) && result.test == 5678`)
+	err := e.DecodeString(`(has(input.test) && input.test == 1234) || (has(result.test) && result.test == 5678)`)
 	require.NoError(b, err)
 	data := map[string]interface{}{
 		"input": map[string]interface{}{

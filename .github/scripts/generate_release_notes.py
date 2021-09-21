@@ -227,6 +227,6 @@ with open(releaseNotePath, 'w') as file:
         dapr_changes=changesText,
         dapr_breaking_changes=breakingChangesText,
         warnings=warningsText,
-        dapr_contributors=", ".join(sorted(list(contributors))),
+        dapr_contributors=", ".join(sorted(list(contributors), key=str.casefold)),
         today=date.today().strftime("%Y-%m-%d")))
 print("Done.")
