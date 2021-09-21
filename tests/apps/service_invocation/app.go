@@ -63,6 +63,70 @@ type individualTestResult struct {
 	CallSuccessful bool   `json:"callSuccessful"`
 }
 
+type httpTestMethods struct {
+	Verb       string
+	Callback   string
+	SendBody   bool
+	ExpectBody bool
+}
+
+var testMethods []httpTestMethods = []httpTestMethods{
+	{
+		Verb:       "GET",
+		Callback:   "gethandler",
+		SendBody:   false,
+		ExpectBody: true,
+	},
+	{
+		Verb:       "HEAD",
+		Callback:   "headhandler",
+		SendBody:   false,
+		ExpectBody: false,
+	},
+	{
+		Verb:       "POST",
+		Callback:   "posthandler",
+		SendBody:   true,
+		ExpectBody: true,
+	},
+	{
+		Verb:       "PUT",
+		Callback:   "puthandler",
+		SendBody:   true,
+		ExpectBody: true,
+	},
+	{
+		Verb:       "DELETE",
+		Callback:   "deletehandler",
+		SendBody:   true,
+		ExpectBody: true,
+	},
+	{
+		Verb:       "CONNECT",
+		Callback:   "connecthandler",
+		SendBody:   true,
+		ExpectBody: true,
+	},
+	{
+		Verb:       "OPTIONS",
+		Callback:   "optionshandler",
+		SendBody:   true,
+		ExpectBody: true,
+	},
+	{
+		Verb:       "TRACE",
+		Callback:   "tracehandler",
+		SendBody:   true,
+		ExpectBody: true,
+	},
+	{
+		Verb:       "PATCH",
+		Callback:   "patchhandler",
+		SendBody:   true,
+		ExpectBody: true,
+	},
+}
+
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("indexHandler is called\n")
@@ -89,22 +153,7 @@ func multihopHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// Handles a post request.  Extracts s string from the input json and returns in it an appResponse.
-func postHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("postHandler called \n")
-	var s string
-	err := json.NewDecoder(r.Body).Decode(&s)
-	if err != nil {
-		onBadRequest(w, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-
-	json.NewEncoder(w).Encode(appResponse{Message: s})
-}
-
-// Handles a post request.  Extracts s string from the input json and returns in it an appResponse.
+// Handles a request with a JSON body.  Extracts s string from the input json and returns in it an appResponse.
 func withBodyHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("withBodyHandler called. HTTP Verb: %s\n", r.Method)
 	var s string
@@ -120,26 +169,12 @@ func withBodyHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(appResponse{Message: s})
 }
 
-// Handles a get request.  Returns an appResponse with appResponse.Message "ok", which caller validates.
+// Handles a request with no body.  Returns an appResponse with appResponse.Message "ok", which caller validates.
 func noBodyHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("noBodyHandler called \n")
+	fmt.Printf("noBodyHandler called. HTTP Verb: %s \n", r.Method)
 	w.Header().Add("x-dapr-tests-request-method", r.Method)
 
 	logAndSetResponse(w, http.StatusOK, "ok")
-}
-
-// Handles a put request.  Extracts s string from the input json and returns in it an appResponse.
-func putHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("putHandler called \n")
-	var s string
-	err := json.NewDecoder(r.Body).Decode(&s)
-	if err != nil {
-		onBadRequest(w, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(appResponse{Message: s})
 }
 
 func opAllowHandler(w http.ResponseWriter, r *http.Request) {
@@ -152,20 +187,6 @@ func opDenyHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	response := "opDeny is called"
 	json.NewEncoder(w).Encode(appResponse{Message: response})
-}
-
-// Handles a delete request.  Extracts s string from the input json and returns in it an appResponse.
-func deleteHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("deleteHandler called \n")
-	var s string
-	err := json.NewDecoder(r.Body).Decode(&s)
-	if err != nil {
-		onBadRequest(w, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(appResponse{Message: s})
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
@@ -293,14 +314,13 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/tests/invoke_test", testHandler)
 
 	// these are called through dapr service invocation
-	router.HandleFunc("/posthandler", withBodyHandler).Methods("POST")
-	router.HandleFunc("/gethandler", noBodyHandler).Methods("GET")
-	router.HandleFunc("/puthandler", withBodyHandler).Methods("PUT")
-	router.HandleFunc("/deletehandler", withBodyHandler).Methods("DELETE")
-	router.HandleFunc("/headhandler", noBodyHandler).Methods("HEAD")
-	router.HandleFunc("/connecthandler", withBodyHandler).Methods("CONNECT")
-	router.HandleFunc("/optionshandler", withBodyHandler).Methods("OPTIONS")
-	router.HandleFunc("/tracehandler", withBodyHandler).Methods("TRACE")
+	for _, test := range testMethods {
+		if test.SendBody {
+			router.HandleFunc("/"+test.Callback, withBodyHandler).Methods(test.Verb)
+		} else {
+			router.HandleFunc("/"+test.Callback, noBodyHandler).Methods(test.Verb)
+		}
+	}
 
 	// called through dapr service invocation and meant to cause error
 	router.HandleFunc("/timeouterror", timeoutServiceCall).Methods("POST")
@@ -835,64 +855,8 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("httpTohttpTest calling with message %s\n", testMessage)
 
-	testMethods := []struct {
-		Verb       string
-		Callback   string
-		SendBody   bool
-		ExpectBody bool
-	}{
-		{
-			Verb:       "GET",
-			Callback:   "gethandler",
-			SendBody:   false,
-			ExpectBody: true,
-		},
-		{
-			Verb:       "HEAD",
-			Callback:   "headhandler",
-			SendBody:   false,
-			ExpectBody: false,
-		},
-		{
-			Verb:       "POST",
-			Callback:   "posthandler",
-			SendBody:   true,
-			ExpectBody: true,
-		},
-		{
-			Verb:       "PUT",
-			Callback:   "puthandler",
-			SendBody:   true,
-			ExpectBody: true,
-		},
-		{
-			Verb:       "DELETE",
-			Callback:   "deletehandler",
-			SendBody:   true,
-			ExpectBody: true,
-		},
-		{
-			Verb:     "CONNECT",
-			Callback: "connecthandler",
-			SendBody: true,
-		},
-		{
-			Verb:       "OPTIONS",
-			Callback:   "optionshandler",
-			SendBody:   true,
-			ExpectBody: true,
-		},
-		{
-			Verb:       "TRACE",
-			Callback:   "tracehandler",
-			SendBody:   true,
-			ExpectBody: true,
-		},
-	}
-
 	for _, test := range testMethods {
 
-		// post
 		testMessage := "ok"
 		if test.SendBody {
 			testMessage = guuid.New().String()
