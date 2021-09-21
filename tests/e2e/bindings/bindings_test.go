@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -35,6 +36,7 @@ type messageData struct {
 type receivedTopicsResponse struct {
 	ReceivedMessages []string `json:"received_messages,omitempty"`
 	FailedMessage    string   `json:"failed_message,omitempty"`
+	RoutedMessages   []string `json:"routeed_messages,omitempty"`
 }
 
 var testMessages = []string{
@@ -151,6 +153,8 @@ func TestBindings(t *testing.T) {
 	require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
 	// one message fails.
 	require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
+	// routed binding will receive all messages
+	require.Equal(t, testMessages[0:], decodedResponse.RoutedMessages)
 
 	// act for gRPC
 	httpPostWithAssert(t, fmt.Sprintf("%s/tests/sendGRPC", outputExternalURL), body, http.StatusOK)

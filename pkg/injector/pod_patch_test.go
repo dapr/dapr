@@ -101,6 +101,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
 			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
 			"--app-port", "5000",
 			"--app-id", "app_id",
 			"--control-plane-address", "controlplane:9000",
@@ -114,14 +116,15 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
 			"--log-as-json",
+			"--enable-mtls",
 		}
 
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[1].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[2].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
@@ -150,6 +153,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
 			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
 			"--app-port", "5000",
 			"--app-id", "app_id",
 			"--control-plane-address", "controlplane:9000",
@@ -163,17 +168,48 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
 			"--log-as-json",
+			"--enable-mtls",
 		}
 
 		assert.Equal(t, "/dlv", container.Command[0])
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[1].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[2].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
+	})
+	t.Run("get sidecar container override listen address", func(t *testing.T) {
+		annotations := map[string]string{}
+		annotations[daprConfigKey] = "config"
+		annotations[daprListenAddresses] = "1.2.3.4,::1"
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+
+		expectedArgs := []string{
+			"--mode", "kubernetes",
+			"--dapr-http-port", "3500",
+			"--dapr-grpc-port", "50001",
+			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "1.2.3.4,::1",
+			"--dapr-public-port", "3501",
+			"--app-port", "",
+			"--app-id", "app_id",
+			"--control-plane-address", "controlplane:9000",
+			"--app-protocol", "http",
+			"--placement-host-address", "placement:50000",
+			"--config", "config",
+			"--log-level", "info",
+			"--app-max-concurrency", "-1",
+			"--sentry-address", "sentry:50000",
+			"--enable-metrics=true",
+			"--metrics-port", "9090",
+			"--dapr-http-max-request-size", "-1",
+			"--enable-mtls",
+		}
+
+		assert.EqualValues(t, expectedArgs, container.Args)
 	})
 }
 
