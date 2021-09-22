@@ -21,6 +21,7 @@ func (e *Expr) DecodeString(value string) (err error) {
 	var env *cel.Env
 
 	variables := make([]*expr_proto.Decl, 0, 10)
+	found := make(map[string]struct{}, 10)
 
 	for {
 		env, err = cel.NewEnv(cel.Declarations(variables...))
@@ -34,7 +35,11 @@ func (e *Expr) DecodeString(value string) (err error) {
 				if strings.HasPrefix(e.Message, missingVariableMessage) {
 					msg := e.Message[len(missingVariableMessage):]
 					msg = msg[0:strings.IndexRune(msg, '\'')]
+					if _, exists := found[msg]; exists {
+						continue
+					}
 					variables = append(variables, decls.NewVar(msg, decls.Any))
+					found[msg] = struct{}{}
 				} else {
 					return iss.Err()
 				}
