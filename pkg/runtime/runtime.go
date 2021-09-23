@@ -327,8 +327,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to load components: %s", err)
 	}
 
-	a.flushOutstandingComponents()
-
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
@@ -389,6 +387,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// processComponents() should after app configuration loaded
 	// so that processComponents() could filter modules by app configuration
 	go a.processComponents()
+	a.flushOutstandingComponents()
 
 	a.initDirectMessaging(a.nameResolver)
 
