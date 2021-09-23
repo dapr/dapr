@@ -10,25 +10,25 @@ import (
 func TestQueue(t *testing.T) {
 	queue := NewBlockQueue()
 
-	queue.Push(123)
+	queue.Offer(123)
 
-	assert.Equal(t, 123, queue.Pop())
+	assert.Equal(t, 123, queue.Poll())
 
 	go func() {
-		queue.Push(1)
-		queue.Push(2)
-		queue.Push(3)
+		queue.Offer(1)
+		queue.Offer(2)
+		queue.Offer(3)
 	}()
 
-	assert.Equal(t, 1, queue.Pop())
-	assert.Equal(t, 2, queue.Pop())
-	assert.Equal(t, 3, queue.Pop())
+	assert.Equal(t, 1, queue.Poll())
+	assert.Equal(t, 2, queue.Poll())
+	assert.Equal(t, 3, queue.Poll())
 
 	start := time.Now()
-	queue.Push(1)
+	queue.Offer(1)
 	go func() {
 		time.Sleep(time.Second * 3)
-		queue.Pop()
+		queue.Poll()
 	}()
 
 	queue.BlockUntilEmpty()

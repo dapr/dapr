@@ -704,7 +704,7 @@ func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component
 	if exists && reflect.DeepEqual(oldComp.Spec.Metadata, component.Spec.Metadata) {
 		return
 	}
-	a.pendingComponents.Push(component)
+	a.pendingComponents.Offer(component)
 }
 
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
@@ -1606,7 +1606,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	a.componentsLock.Unlock()
 
 	for _, comp := range authorizedComps {
-		a.pendingComponents.Push(comp)
+		a.pendingComponents.Offer(comp)
 	}
 
 	return nil
@@ -1641,7 +1641,7 @@ func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Com
 
 func (a *DaprRuntime) processComponents() {
 	for {
-		comp := a.pendingComponents.Pop().(components_v1alpha1.Component)
+		comp := a.pendingComponents.Poll().(components_v1alpha1.Component)
 		if comp.Name == "" {
 			continue
 		}
@@ -1684,7 +1684,7 @@ func (a *DaprRuntime) flushOutstandingComponents() {
 	log.Info("waiting for all outstanding components to be processed")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.pendingComponents.Push(components_v1alpha1.Component{})
+	a.pendingComponents.Offer(components_v1alpha1.Component{})
 	log.Info("all outstanding components processed")
 	a.pendingComponents.BlockUntilEmpty()
 }
@@ -2013,7 +2013,7 @@ func (a *DaprRuntime) createAppChannel() error {
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
 	for _, comp := range a.builtinSecretStore() {
-		a.pendingComponents.Push(comp)
+		a.pendingComponents.Offer(comp)
 	}
 }
 

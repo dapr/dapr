@@ -48,14 +48,17 @@ func (q *BlockQueue) process() {
 	}
 }
 
-func (q *BlockQueue) Push(val interface{}) {
+func (q *BlockQueue) Offer(val interface{}) {
 	q.input <- val
 }
 
-func (q *BlockQueue) Pop() interface{} {
+func (q *BlockQueue) Poll() interface{} {
 	return <-q.output
 }
 
+// BlockUntilEmpty will block current invlcation until the queue is empty.
+// If the queue has never been offered any value, this method will block unless
+// any value been offered and polled to empty.
 func (q *BlockQueue) BlockUntilEmpty() {
 	<-q.emptyWaiting
 }

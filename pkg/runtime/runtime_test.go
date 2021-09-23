@@ -404,7 +404,7 @@ func TestComponentsUpdate(t *testing.T) {
 	processedCh := make(chan struct{}, 1)
 	mockProcessComponents := func() {
 		for {
-			comp := rt.pendingComponents.Pop().(components_v1alpha1.Component)
+			comp := rt.pendingComponents.Poll().(components_v1alpha1.Component)
 			if comp.Name == "" {
 				continue
 			}
@@ -1761,7 +1761,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			}))
 
 		go rt.processComponents()
-		rt.pendingComponents.Push(components_v1alpha1.Component{
+		rt.pendingComponents.Offer(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -1780,7 +1780,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				return m
 			}))
 
-		rt.pendingComponents.Push(components_v1alpha1.Component{
+		rt.pendingComponents.Offer(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock2",
 			},
@@ -1824,7 +1824,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			}))
 
 		go rt.processComponents()
-		rt.pendingComponents.Push(components_v1alpha1.Component{
+		rt.pendingComponents.Offer(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMockGrandChild",
 			},
@@ -1845,7 +1845,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				SecretStore: "kubernetesMockChild",
 			},
 		})
-		rt.pendingComponents.Push(components_v1alpha1.Component{
+		rt.pendingComponents.Offer(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMockChild",
 			},
@@ -1866,7 +1866,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				SecretStore: "kubernetesMock",
 			},
 		})
-		rt.pendingComponents.Push(components_v1alpha1.Component{
+		rt.pendingComponents.Offer(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
