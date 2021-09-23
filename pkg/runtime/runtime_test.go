@@ -403,7 +403,8 @@ func TestComponentsUpdate(t *testing.T) {
 
 	processedCh := make(chan struct{}, 1)
 	mockProcessComponents := func() {
-		for comp := range rt.pendingComponents {
+		for {
+			comp := rt.pendingComponents.Pop().(components_v1alpha1.Component)
 			if comp.Name == "" {
 				continue
 			}
@@ -1760,7 +1761,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			}))
 
 		go rt.processComponents()
-		rt.pendingComponents <- components_v1alpha1.Component{
+		rt.pendingComponents.Push(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -1768,7 +1769,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
-		}
+		})
 		rt.flushOutstandingComponents()
 		assert.True(t, wasCalled)
 
@@ -1779,7 +1780,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				return m
 			}))
 
-		rt.pendingComponents <- components_v1alpha1.Component{
+		rt.pendingComponents.Push(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock2",
 			},
@@ -1787,7 +1788,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
-		}
+		})
 		rt.flushOutstandingComponents()
 		assert.True(t, wasCalled)
 	})
@@ -1823,7 +1824,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			}))
 
 		go rt.processComponents()
-		rt.pendingComponents <- components_v1alpha1.Component{
+		rt.pendingComponents.Push(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMockGrandChild",
 			},
@@ -1843,8 +1844,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			Auth: components_v1alpha1.Auth{
 				SecretStore: "kubernetesMockChild",
 			},
-		}
-		rt.pendingComponents <- components_v1alpha1.Component{
+		})
+		rt.pendingComponents.Push(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMockChild",
 			},
@@ -1864,8 +1865,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			Auth: components_v1alpha1.Auth{
 				SecretStore: "kubernetesMock",
 			},
-		}
-		rt.pendingComponents <- components_v1alpha1.Component{
+		})
+		rt.pendingComponents.Push(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -1873,7 +1874,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
-		}
+		})
 		rt.flushOutstandingComponents()
 		assert.True(t, wasCalled)
 		assert.True(t, wasCalledChild)

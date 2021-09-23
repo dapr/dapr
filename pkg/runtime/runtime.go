@@ -161,7 +161,7 @@ type DaprRuntime struct {
 
 	secretsConfiguration map[string]config.SecretsScope
 
-	pendingComponents          chan components_v1alpha1.Component
+	pendingComponents          *utils.BlockQueue
 	pendingComponentDependents map[string][]components_v1alpha1.Component
 
 	proxy messaging.Proxy
@@ -211,7 +211,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 
 		secretsConfiguration: map[string]config.SecretsScope{},
 
-		pendingComponents:          make(chan components_v1alpha1.Component),
+		pendingComponents:          utils.NewBlockQueue(),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 	}
 }
@@ -317,6 +317,18 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
+	err = a.beginComponentsUpdates()
+	if err != nil {
+		log.Warnf("failed to watch component updates: %s", err)
+	}
+	a.appendBuiltinSecretStore()
+	err = a.loadComponents(opts)
+	if err != nil {
+		log.Warnf("failed to load components: %s", err)
+	}
+
+	a.flushOutstandingComponents()
+
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
@@ -377,16 +389,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// processComponents() should after app configuration loaded
 	// so that processComponents() could filter modules by app configuration
 	go a.processComponents()
-	err = a.beginComponentsUpdates()
-	if err != nil {
-		log.Warnf("failed to watch component updates: %s", err)
-	}
-	a.appendBuiltinSecretStore()
-	err = a.loadComponents(opts)
-	if err != nil {
-		log.Warnf("failed to load components: %s", err)
-	}
-	a.flushOutstandingComponents()
 
 	a.initDirectMessaging(a.nameResolver)
 
@@ -702,7 +704,7 @@ func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component
 	if exists && reflect.DeepEqual(oldComp.Spec.Metadata, component.Spec.Metadata) {
 		return
 	}
-	a.pendingComponents <- component
+	a.pendingComponents.Push(component)
 }
 
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
@@ -1604,7 +1606,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	a.componentsLock.Unlock()
 
 	for _, comp := range authorizedComps {
-		a.pendingComponents <- comp
+		a.pendingComponents.Push(comp)
 	}
 
 	return nil
@@ -1638,7 +1640,8 @@ func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Com
 }
 
 func (a *DaprRuntime) processComponents() {
-	for comp := range a.pendingComponents {
+	for {
+		comp := a.pendingComponents.Pop().(components_v1alpha1.Component)
 		if comp.Name == "" {
 			continue
 		}
@@ -1681,8 +1684,9 @@ func (a *DaprRuntime) flushOutstandingComponents() {
 	log.Info("waiting for all outstanding components to be processed")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.pendingComponents <- components_v1alpha1.Component{}
+	a.pendingComponents.Push(components_v1alpha1.Component{})
 	log.Info("all outstanding components processed")
+	a.pendingComponents.BlockUntilEmpty()
 }
 
 func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Component) error {
@@ -2009,7 +2013,7 @@ func (a *DaprRuntime) createAppChannel() error {
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
 	for _, comp := range a.builtinSecretStore() {
-		a.pendingComponents <- comp
+		a.pendingComponents.Push(comp)
 	}
 }
 
