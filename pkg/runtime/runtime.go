@@ -2011,7 +2011,7 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed creating secret store %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
+		log.Warnf("failed to create secret store %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 		return err
 	}
@@ -2020,7 +2020,7 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 	})
 	if err != nil {
-		log.Warnf("failed to init state store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
+		log.Warnf("failed to init secret store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
 		return err
 	}
