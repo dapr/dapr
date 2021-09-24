@@ -4,7 +4,6 @@ FROM maven:3-openjdk-11 as build
 VOLUME /tmp
 WORKDIR /build
 
-ADD .m2 /root/.m2
 COPY pom.xml .
 RUN mvn dependency:go-offline
 
