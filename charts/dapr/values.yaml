@@ -1,6 +1,6 @@
 global:
   registry: docker.io/daprio
-  tag: "1.4.2-rc.1"
+  tag: "1.4.2"
   dnsSuffix: ".cluster.local"
   logAsJson: false
   imagePullPolicy: IfNotPresent
