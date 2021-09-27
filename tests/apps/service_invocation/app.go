@@ -1326,17 +1326,6 @@ func HTTPPut(url string, data []byte) ([]byte, error) {
 	return body, nil
 }
 
-func newHTTPClient() http.Client {
-	return http.Client{
-		Transport: &http.Transport{
-			// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
-			Dial: (&net.Dialer{
-				Timeout: 5 * time.Minute,
-			}).Dial,
-		},
-	}
-}
-
 func sanitizeHTTPURL(url string) string {
 	if !strings.Contains(url, "http") {
 		url = fmt.Sprintf("http://%s", url)
