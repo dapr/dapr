@@ -976,7 +976,12 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 		// TODO: Propagate Context
 		ctx := context.Background()
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
-		return err == nil && resp.Status().Code != nethttp.StatusNotFound
+		if err != nil {
+			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %w", path, err)
+		}
+		code := resp.Status().Code
+
+		return code/100 == 2 || code == nethttp.StatusMethodNotAllowed
 	}
 	return false
 }
@@ -1838,9 +1843,32 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 			return component, secretStoreName
 		}
 
-		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator
+		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
+		// Instead, base64 decode the secret values into their real self.
 		if a.runtimeConfig.Mode == modes.KubernetesMode && secretStoreName == kubernetesSecretStore {
-			return component, ""
+			val := m.Value.Raw
+
+			var jsonVal string
+			err := json.Unmarshal(val, &jsonVal)
+			if err != nil {
+				log.Errorf("error decoding secret: %s", err)
+				continue
+			}
+
+			dec, err := base64.StdEncoding.DecodeString(jsonVal)
+			if err != nil {
+				log.Errorf("error decoding secret: %s", err)
+				continue
+			}
+
+			m.Value = components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: dec,
+				},
+			}
+
+			component.Spec.Metadata[i] = m
+			continue
 		}
 
 		resp, ok := cache[m.SecretKeyRef.Name]
@@ -1983,7 +2011,7 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed creating secret store %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
+		log.Warnf("failed to create secret store %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 		return err
 	}
@@ -1992,7 +2020,7 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 	})
 	if err != nil {
-		log.Warnf("failed to init state store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
+		log.Warnf("failed to init secret store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
 		return err
 	}
