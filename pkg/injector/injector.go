@@ -31,6 +31,7 @@ import (
 const (
 	port                                      = 4000
 	getKubernetesServiceAccountTimeoutSeconds = 10
+	systemGroup                               = "system:masters"
 )
 
 var log = logger.NewLogger("dapr.injector")
@@ -203,7 +204,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
-		if !utils.StringSliceContains(ar.Request.UserInfo.UID, i.authUIDs) {
+		if !(utils.StringSliceContains(ar.Request.UserInfo.UID, i.authUIDs) || utils.StringSliceContains(systemGroup, ar.Request.UserInfo.Groups)) {
 			err = errors.New(fmt.Sprintf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username))
 			log.Error(err)
 		} else if ar.Request.Kind.Kind != "Pod" {
