@@ -15,7 +15,7 @@ func TestGetInectorConfig(t *testing.T) {
 		os.Setenv("SIDECAR_IMAGE_PULL_POLICY", "Always")
 		os.Setenv("NAMESPACE", "test-namespace")
 		os.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
-		defer os.Clearenv()
+		defer clearenv()
 
 		cfg, err := GetConfig()
 		assert.Nil(t, err)
@@ -34,7 +34,7 @@ func TestGetInectorConfig(t *testing.T) {
 		os.Setenv("SIDECAR_IMAGE_PULL_POLICY", "IfNotPresent")
 		os.Setenv("NAMESPACE", "test-namespace")
 		os.Setenv("KUBE_CLUSTER_DOMAIN", "")
-		defer os.Clearenv()
+		defer clearenv()
 
 		cfg, err := GetConfig()
 		assert.Nil(t, err)
@@ -45,4 +45,13 @@ func TestGetInectorConfig(t *testing.T) {
 		assert.Equal(t, "test-namespace", cfg.Namespace)
 		assert.NotEqual(t, "", cfg.KubeClusterDomain)
 	})
+}
+
+func clearenv() {
+	os.Unsetenv("TLS_CERT_FILE")
+	os.Unsetenv("TLS_KEY_FILE")
+	os.Unsetenv("SIDECAR_IMAGE")
+	os.Unsetenv("SIDECAR_IMAGE_PULL_POLICY")
+	os.Unsetenv("NAMESPACE")
+	os.Unsetenv("KUBE_CLUSTER_DOMAIN")
 }
