@@ -94,6 +94,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
 | `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector | `{}`                 |
 | `global.tolerations`                     | Pods will be allowed to schedule onto a node whose taints match the tolerations | `{}`                 |
+| `global.labels`                           | Custom pod levels                                                       | `{}`                 |
 
 ### Dapr Dashboard options:
 | Parameter                                 | Description                                                             | Default                 |
