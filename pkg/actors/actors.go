@@ -1030,7 +1030,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		reminders = append(reminders, reminderRef)
 
 		// Then, save the partition to the database.
-		err2 = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
+		err2 = a.saveRemindersInPartition(ctx, req.ActorType, stateKey, remindersInPartition, etag, databasePartitionKey)
 		if err2 != nil {
 			return err2
 		}
@@ -1467,9 +1467,13 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	return reminderRefs, actorMetadata, nil
 }
 
-func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string, databasePartitionKey string) error {
+func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, actorType, stateKey string, reminders []Reminder, etag *string, databasePartitionKey string) error {
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
+	if err := validateReminderDatabaseEntry(actorType, stateKey, databasePartitionKey); err != nil {
+		return err
+	}
+
 	return a.store.Set(&state.SetRequest{
 		Key:      stateKey,
 		Value:    reminders,
@@ -1522,7 +1526,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
 
 		// Then, save the partition to the database.
-		err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
+		err = a.saveRemindersInPartition(ctx, req.ActorType, stateKey, remindersInPartition, etag, databasePartitionKey)
 		if err != nil {
 			return err
 		}
@@ -1605,6 +1609,14 @@ func (a *actorsRuntime) Stop() {
 	if a.placement != nil {
 		a.placement.Stop()
 	}
+}
+
+func validateReminderDatabaseEntry(actorType, databaseKey, databasePartitionKey string) error {
+	if databaseKey == constructCompositeKey("actors", actorType) && databasePartitionKey != databaseKey {
+		return fmt.Errorf("invalid partitionKey %s for record %s", databasePartitionKey, databaseKey)
+	}
+
+	return nil
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters

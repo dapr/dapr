@@ -11,42 +11,37 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
 
 const (
-	appPort                 = 3000
-	daprV1URL               = "http://localhost:3500/v1.0"
-	actorMethodURLFormat    = daprV1URL + "/actors/%s/%s/%s/%s"
-	actorSaveStateURLFormat = daprV1URL + "/actors/%s/%s/state/"
-	actorGetStateURLFormat  = daprV1URL + "/actors/%s/%s/state/%s/"
-	defaultActorType        = "testactorfeatures"   // Actor type must be unique per test app.
-	actorTypeEnvName        = "TEST_APP_ACTOR_TYPE" // Env variable tests can set to change actor type.
-	actorIdleTimeout        = "1h"
-	actorScanInterval       = "30s"
-	drainOngoingCallTimeout = "30s"
-	drainRebalancedActors   = true
-	secondsToWaitInMethod   = 5
+	appPort                        = 3000
+	daprV1URL                      = "http://localhost:3500/v1.0"
+	actorMethodURLFormat           = daprV1URL + "/actors/%s/%s/%s/%s"
+	actorSaveStateURLFormat        = daprV1URL + "/actors/%s/%s/state/"
+	actorGetStateURLFormat         = daprV1URL + "/actors/%s/%s/state/%s/"
+	defaultActorType               = "testactorfeatures"                  // Actor type must be unique per test app.
+	actorTypeEnvName               = "TEST_APP_ACTOR_TYPE"                // Env variable tests can set to change actor type.
+	actorReminderPartitionsEnvName = "TEST_APP_ACTOR_REMINDER_PARTITIONS" // Env variable tests can set for reminder partition.
+	actorIdleTimeout               = "1h"
+	actorScanInterval              = "30s"
+	drainOngoingCallTimeout        = "30s"
+	drainRebalancedActors          = true
+	secondsToWaitInMethod          = 5
 )
 
 type daprConfig struct {
-	Entities                []string `json:"entities,omitempty"`
-	ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
-	ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
-	DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
-	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
+	Entities                   []string `json:"entities,omitempty"`
+	ActorIdleTimeout           string   `json:"actorIdleTimeout,omitempty"`
+	ActorScanInterval          string   `json:"actorScanInterval,omitempty"`
+	DrainOngoingCallTimeout    string   `json:"drainOngoingCallTimeout,omitempty"`
+	DrainRebalancedActors      bool     `json:"drainRebalancedActors,omitempty"`
+	RemindersStoragePartitions int      `json:"remindersStoragePartitions,omitempty"`
 }
 
 var registeredActorType = getActorType()
-
-var daprConfigResponse = daprConfig{
-	[]string{getActorType()},
-	actorIdleTimeout,
-	actorScanInterval,
-	drainOngoingCallTimeout,
-	drainRebalancedActors,
-}
 
 func getActorType() string {
 	actorType := os.Getenv(actorTypeEnvName)
@@ -57,6 +52,21 @@ func getActorType() string {
 	return actorType
 }
 
+func getActorReminderPartitions() int {
+	strValue := os.Getenv(actorReminderPartitionsEnvName)
+	if strValue == "" {
+		return 0
+	}
+
+	val, err := strconv.Atoi(strValue)
+	if err != nil {
+		log.Printf("Invalid number of reminder partitons: %s, %v", strValue, err)
+		return 0
+	}
+
+	return val
+}
+
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler is called")
@@ -64,6 +74,14 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
+	daprConfigResponse := daprConfig{
+		[]string{getActorType()},
+		actorIdleTimeout,
+		actorScanInterval,
+		drainOngoingCallTimeout,
+		drainRebalancedActors,
+		getActorReminderPartitions(),
+	}
 	log.Printf("Processing dapr request for %s, responding with %v", r.URL.RequestURI(), daprConfigResponse)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

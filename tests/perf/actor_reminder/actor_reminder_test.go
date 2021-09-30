@@ -1,3 +1,4 @@
+//go:build perf
 // +build perf
 
 // ------------------------------------------------------------
@@ -46,7 +47,8 @@ func TestMain(m *testing.M) {
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
 			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_TYPE": actorType,
+				"TEST_APP_ACTOR_TYPE":                actorType,
+				"TEST_APP_ACTOR_REMINDER_PARTITIONS": "53",
 			},
 		},
 		{
