@@ -255,7 +255,11 @@ func (p *ActorPlacement) Start() {
 				p.clientLock.RLock()
 				defer p.clientLock.RUnlock()
 
-				err = p.clientStream.Send(&host)
+				// p.clientStream is nil when the app is unhealthy and
+				// daprd is disconnected from the placement service.
+				if p.clientStream != nil {
+					err = p.clientStream.Send(&host)
+				}
 			}()
 
 			if err != nil {
