@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -198,6 +197,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	var admissionResponse *v1.AdmissionResponse
 	var patchOps []PatchOperation
 	var err error
+	patchedSuccessfully := false
 
 	ar := v1.AdmissionReview{}
 	_, gvk, err := i.deserializer.Decode(body, nil, &ar)
@@ -205,13 +205,14 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
 		if !(utils.StringSliceContains(ar.Request.UserInfo.UID, i.authUIDs) || utils.StringSliceContains(systemGroup, ar.Request.UserInfo.Groups)) {
-			err = errors.New(fmt.Sprintf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username))
-			log.Error(err)
+			log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)
 		} else if ar.Request.Kind.Kind != "Pod" {
-			err = errors.New(fmt.Sprintf("invalid kind for review: %s", ar.Kind))
-			log.Error(err)
+			log.Errorf("invalid kind for review: %s", ar.Kind)
 		} else {
 			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.config.SidecarImagePullPolicy, i.kubeClient, i.daprClient)
+			if err == nil {
+				patchedSuccessfully = true
+			}
 		}
 	}
 
@@ -267,7 +268,12 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(respBytes); err != nil {
 		log.Error(err)
 	} else {
-		log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
-		monitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
+		if patchedSuccessfully {
+			log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
+			monitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
+		} else {
+			log.Errorf("Admission succeeded, but pod was not patched. No sidecar injected for '%s'", diagAppID)
+			monitoring.RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
+		}
 	}
 }
