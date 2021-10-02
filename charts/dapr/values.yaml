@@ -6,6 +6,7 @@ global:
   imagePullPolicy: IfNotPresent
   imagePullSecrets: ""
   nodeSelector: {}
+  tolerations: []
   ha:
     enabled: false
     replicaCount: 3
