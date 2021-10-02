@@ -16,9 +16,9 @@ func TestNewDaprHostMemberState(t *testing.T) {
 	s := newDaprHostMemberState()
 
 	// assert
-	assert.Equal(t, uint64(0), s.Index)
-	assert.Equal(t, 0, len(s.Members))
-	assert.Equal(t, 0, len(s.hashingTableMap))
+	assert.Equal(t, uint64(0), s.Index())
+	assert.Equal(t, 0, len(s.Members()))
+	assert.Equal(t, 0, len(s.hashingTableMap()))
 }
 
 func TestClone(t *testing.T) {
@@ -35,9 +35,9 @@ func TestClone(t *testing.T) {
 
 	// assert
 	assert.NotSame(t, s, newState)
-	assert.Nil(t, newState.hashingTableMap)
-	assert.Equal(t, s.Index, newState.Index)
-	assert.EqualValues(t, s.Members, newState.Members)
+	assert.Nil(t, newState.hashingTableMap())
+	assert.Equal(t, s.Index(), newState.Index())
+	assert.EqualValues(t, s.Members(), newState.Members())
 }
 
 func TestUpsertMember(t *testing.T) {
@@ -54,8 +54,8 @@ func TestUpsertMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 1, len(s.Members))
-		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.Equal(t, 1, len(s.Members()))
+		assert.Equal(t, 2, len(s.hashingTableMap()))
 		assert.True(t, updated)
 	})
 
@@ -69,8 +69,8 @@ func TestUpsertMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 2, len(s.Members))
-		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.Equal(t, 2, len(s.Members()))
+		assert.Equal(t, 2, len(s.hashingTableMap()))
 		assert.True(t, updated)
 
 		// act
@@ -114,10 +114,10 @@ func TestUpsertMember(t *testing.T) {
 		updated := s.upsertMember(testMember)
 
 		// assert
-		assert.Equal(t, 2, len(s.Members))
+		assert.Equal(t, 2, len(s.Members()))
 		assert.True(t, updated)
-		assert.Equal(t, 1, len(s.Members[testMember.Name].Entities))
-		assert.Equal(t, 3, len(s.hashingTableMap), "this doesn't delete empty consistent hashing table")
+		assert.Equal(t, 1, len(s.Members()[testMember.Name].Entities))
+		assert.Equal(t, 3, len(s.hashingTableMap()), "this doesn't delete empty consistent hashing table")
 	})
 }
 
@@ -134,9 +134,9 @@ func TestRemoveMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 1, len(s.Members))
+		assert.Equal(t, 1, len(s.Members()))
 		assert.True(t, updated)
-		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.Equal(t, 2, len(s.hashingTableMap()))
 
 		// act
 		updated = s.removeMember(&DaprHostMember{
@@ -144,9 +144,9 @@ func TestRemoveMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 0, len(s.Members))
+		assert.Equal(t, 0, len(s.Members()))
 		assert.True(t, updated)
-		assert.Equal(t, 0, len(s.hashingTableMap))
+		assert.Equal(t, 0, len(s.hashingTableMap()))
 	})
 
 	t.Run("no table update required", func(t *testing.T) {
@@ -156,9 +156,9 @@ func TestRemoveMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 0, len(s.Members))
+		assert.Equal(t, 0, len(s.Members()))
 		assert.False(t, updated)
-		assert.Equal(t, 0, len(s.hashingTableMap))
+		assert.Equal(t, 0, len(s.hashingTableMap()))
 	})
 }
 
@@ -178,9 +178,9 @@ func TestUpdateHashingTable(t *testing.T) {
 		// act
 		s.updateHashingTables(testMember)
 
-		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.Equal(t, 2, len(s.hashingTableMap()))
 		for _, ent := range testMember.Entities {
-			assert.NotNil(t, s.hashingTableMap[ent])
+			assert.NotNil(t, s.hashingTableMap()[ent])
 		}
 	})
 
@@ -194,9 +194,9 @@ func TestUpdateHashingTable(t *testing.T) {
 		// act
 		s.updateHashingTables(testMember)
 
-		assert.Equal(t, 3, len(s.hashingTableMap))
+		assert.Equal(t, 3, len(s.hashingTableMap()))
 		for _, ent := range testMember.Entities {
-			assert.NotNil(t, s.hashingTableMap[ent])
+			assert.NotNil(t, s.hashingTableMap()[ent])
 		}
 	})
 }
@@ -231,7 +231,7 @@ func TestRemoveHashingTable(t *testing.T) {
 			testMember.Name = tc.name
 			s.removeHashingTables(testMember)
 
-			assert.Equal(t, tc.totalTable, len(s.hashingTableMap))
+			assert.Equal(t, tc.totalTable, len(s.hashingTableMap()))
 		})
 	}
 }
@@ -244,22 +244,26 @@ func TestRestoreHashingTables(t *testing.T) {
 	}
 
 	s := &DaprHostMemberState{
-		Index:           0,
-		Members:         map[string]*DaprHostMember{},
-		hashingTableMap: nil,
+		data: DaprHostMemberStateData{
+			Index:           0,
+			Members:         map[string]*DaprHostMember{},
+			hashingTableMap: nil,
+		},
 	}
 	for _, tn := range testnames {
-		s.Members[tn] = &DaprHostMember{
+		s.lock.Lock()
+		s.data.Members[tn] = &DaprHostMember{
 			Name:     tn,
 			AppID:    "fakeID",
 			Entities: []string{"actorTypeOne", "actorTypeTwo"},
 		}
+		s.lock.Unlock()
 	}
-	assert.Equal(t, 0, len(s.hashingTableMap))
+	assert.Equal(t, 0, len(s.hashingTableMap()))
 
 	// act
 	s.restoreHashingTables()
 
 	// assert
-	assert.Equal(t, 2, len(s.hashingTableMap))
+	assert.Equal(t, 2, len(s.hashingTableMap()))
 }

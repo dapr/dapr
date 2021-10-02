@@ -141,6 +141,8 @@ func TestMetrics(t *testing.T) {
 
 			// Evaluate the metrics are as expected
 			tt.evaluate(t, tt.app, res)
+
+			res.Body.Close()
 		})
 	}
 }

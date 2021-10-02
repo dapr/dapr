@@ -7,25 +7,25 @@ package http
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
-	"github.com/dapr/kit/logger"
-
-	"github.com/dapr/dapr/pkg/config"
-	cors_dapr "github.com/dapr/dapr/pkg/cors"
-
 	routing "github.com/fasthttp/router"
+	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 
+	"github.com/dapr/dapr/pkg/config"
+	cors_dapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.http")
@@ -34,16 +34,18 @@ const protocol = "http"
 
 // Server is an interface for the Dapr HTTP server.
 type Server interface {
-	StartNonBlocking()
+	StartNonBlocking() error
 }
 
 type server struct {
-	config      ServerConfig
-	tracingSpec config.TracingSpec
-	metricSpec  config.MetricSpec
-	pipeline    http_middleware.Pipeline
-	api         API
-	apiSpec     config.APISpec
+	config             ServerConfig
+	tracingSpec        config.TracingSpec
+	metricSpec         config.MetricSpec
+	pipeline           http_middleware.Pipeline
+	api                API
+	apiSpec            config.APISpec
+	listeners          []net.Listener
+	profilingListeners []net.Listener
 }
 
 // NewServer returns a new HTTP server.
@@ -59,7 +61,7 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, met
 }
 
 // StartNonBlocking starts a new server in a goroutine.
-func (s *server) StartNonBlocking() {
+func (s *server) StartNonBlocking() error {
 	handler :=
 		useAPIAuthentication(
 			s.useCors(
@@ -76,16 +78,75 @@ func (s *server) StartNonBlocking() {
 		StreamRequestBody:  s.config.StreamRequestBody,
 	}
 
-	go func() {
-		log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
-	}()
+	var listeners []net.Listener
+	var profilingListeners []net.Listener
+	if s.config.UnixDomainSocket != "" {
+		socket := fmt.Sprintf("/%s/dapr-%s-http.socket", s.config.UnixDomainSocket, s.config.AppID)
+		l, err := net.Listen("unix", socket)
+		if err != nil {
+			return err
+		}
+		listeners = append(listeners, l)
+	} else {
+		for _, apiListenAddress := range s.config.APIListenAddresses {
+			l, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.Port))
+			if err != nil {
+				log.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.Port, err)
+			} else {
+				listeners = append(listeners, l)
+			}
+		}
+	}
+	if len(listeners) == 0 {
+		return errors.Errorf("could not listen on any endpoint")
+	}
 
-	if s.config.EnableProfiling {
+	s.listeners = listeners
+	for _, listener := range listeners {
+		go func(l net.Listener) {
+			log.Fatal(customServer.Serve(l))
+		}(listener)
+	}
+
+	if s.config.PublicPort != nil {
+		publicHandler := s.usePublicRouter()
+		publicHandler = s.useMetrics(publicHandler)
+		publicHandler = s.useTracing(publicHandler)
+
+		healthServer := &fasthttp.Server{
+			Handler:            publicHandler,
+			MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+		}
+
 		go func() {
-			log.Infof("starting profiling server on port %v", s.config.ProfilePort)
-			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.ProfilePort), pprofhandler.PprofHandler))
+			log.Fatal(healthServer.ListenAndServe(fmt.Sprintf(":%d", *s.config.PublicPort)))
 		}()
 	}
+
+	if s.config.EnableProfiling {
+		for _, apiListenAddress := range s.config.APIListenAddresses {
+			log.Infof("starting profiling server on %v:%v", apiListenAddress, s.config.ProfilePort)
+			pl, err := net.Listen("tcp", fmt.Sprintf("%s:%v", apiListenAddress, s.config.ProfilePort))
+			if err != nil {
+				log.Warnf("Failed to listen on %v:%v with error: %v", apiListenAddress, s.config.ProfilePort, err)
+			} else {
+				profilingListeners = append(profilingListeners, pl)
+			}
+		}
+
+		if len(profilingListeners) == 0 {
+			return errors.Errorf("could not listen on any endpoint for profiling API")
+		}
+
+		s.profilingListeners = profilingListeners
+		for _, listener := range profilingListeners {
+			go func(l net.Listener) {
+				log.Fatal(fasthttp.Serve(l, pprofhandler.PprofHandler))
+			}(listener)
+		}
+	}
+
+	return nil
 }
 
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
@@ -99,14 +160,24 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	if s.metricSpec.Enabled {
 		log.Infof("enabled metrics http middleware")
+
 		return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
 	}
+
 	return next
 }
 
 func (s *server) useRouter() fasthttp.RequestHandler {
 	endpoints := s.api.APIEndpoints()
 	router := s.getRouter(endpoints)
+
+	return router.Handler
+}
+
+func (s *server) usePublicRouter() fasthttp.RequestHandler {
+	endpoints := s.api.PublicEndpoints()
+	router := s.getRouter(endpoints)
+
 	return router.Handler
 }
 
@@ -187,17 +258,26 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 		}
 
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-		for _, m := range e.Methods {
-			pathIncludesParameters := parameterFinder.MatchString(path)
-			if pathIncludesParameters {
-				router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
-			} else {
-				router.Handle(m, path, e.Handler)
-			}
+		s.handle(e, parameterFinder, path, router)
+
+		if e.Alias != "" {
+			path = fmt.Sprintf("/%s", e.Alias)
+			s.handle(e, parameterFinder, path, router)
 		}
 	}
 
 	return router
+}
+
+func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
+	for _, m := range e.Methods {
+		pathIncludesParameters := parameterFinder.MatchString(path)
+		if pathIncludesParameters {
+			router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
+		} else {
+			router.Handle(m, path, e.Handler)
+		}
+	}
 }
 
 func (s *server) endpointAllowed(endpoint Endpoint) bool {

@@ -1,0 +1,32 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: test-topic-custom-route
+spec:
+  type: bindings.kafka
+  initTimeout: 1m
+  version: v1
+  metadata:
+  # Kafka broker connection setting
+  - name: brokers
+    value: dapr-kafka:9092
+  # consumer configuration: topic and consumer group
+  - name: topics
+    value: dapr-test
+  - name: consumerGroup
+    value: group2
+  # publisher configuration: topic
+  - name: publishTopic
+    value: dapr-test
+  - name: authRequired
+    value: "false"
+    # set specify route
+  - name: route
+    value: /custom-path
+  - name: initialOffset
+    value: oldest

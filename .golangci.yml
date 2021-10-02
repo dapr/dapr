@@ -99,7 +99,7 @@ linters-settings:
   goimports:
     # put imports beginning with prefix after 3rd-party packages;
     # it's a comma-separated list of prefixes
-    local-prefixes: github.com/dapr/dapr, github.com/dapr/kit, github.com/dapr/components-contrib
+    local-prefixes: github.com/dapr/
   gocyclo:
     # minimal code complexity to report, 30 by default (but we recommend 10-20)
     min-complexity: 10
@@ -124,7 +124,7 @@ linters-settings:
       - github.com/Sirupsen/logrus
     packages-with-error-messages:
       # specify an error message to output when a blacklisted package is used
-      github.com/Sirupsen/logrus: "must use github.com/sirupsen/logrus"
+      github.com/Sirupsen/logrus: "must use github.com/dapr/kit/logger"
   misspell:
     # Correct spellings using locale preferences for US or UK.
     # Default is to use a neutral variety of English.

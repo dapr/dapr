@@ -71,7 +71,7 @@ func (p *Service) MonitorLeadership() {
 func (p *Service) leaderLoop(stopCh chan struct{}) {
 	// This loop is to ensure the FSM reflects all queued writes by applying Barrier
 	// and completes leadership establishment before becoming a leader.
-	for !p.hasLeadership {
+	for !p.hasLeadership.Load() {
 		// for earlier stop
 		select {
 		case <-stopCh:
@@ -87,7 +87,7 @@ func (p *Service) leaderLoop(stopCh chan struct{}) {
 			continue
 		}
 
-		if !p.hasLeadership {
+		if !p.hasLeadership.Load() {
 			p.establishLeadership()
 			log.Info("leader is established.")
 			// revoke leadership process must be done before leaderLoop() ends.
@@ -100,14 +100,14 @@ func (p *Service) leaderLoop(stopCh chan struct{}) {
 
 func (p *Service) establishLeadership() {
 	// Give more time to let each runtime to find the leader and connect to the leader.
-	p.faultyHostDetectDuration = faultyHostDetectInitialDuration
+	p.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
 
 	p.membershipCh = make(chan hostMemberChange, membershipChangeChSize)
-	p.hasLeadership = true
+	p.hasLeadership.Store(true)
 }
 
 func (p *Service) revokeLeadership() {
-	p.hasLeadership = false
+	p.hasLeadership.Store(false)
 
 	log.Info("Waiting until all connections are drained.")
 	p.streamConnGroup.Wait()
@@ -146,12 +146,12 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 
 		case t := <-disseminateTimer.C:
 			// Earlier stop when leadership is lost.
-			if !p.hasLeadership {
+			if !p.hasLeadership.Load() {
 				continue
 			}
 
 			// check if there is actor runtime member change.
-			if p.disseminateNextTime <= t.UnixNano() && len(p.membershipCh) == 0 {
+			if p.disseminateNextTime.Load() <= t.UnixNano() && len(p.membershipCh) == 0 {
 				if cnt := p.memberUpdateCount.Load(); cnt > 0 {
 					log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCount count: %d", cnt)
 					p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
@@ -160,7 +160,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 
 		case t := <-faultyHostDetectTimer.C:
 			// Earlier stop when leadership is lost.
-			if !p.hasLeadership {
+			if !p.hasLeadership.Load() {
 				continue
 			}
 
@@ -168,10 +168,10 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 			// If UpdatedAt is outdated, we can mark the host as faulty node.
 			// This faulty host will be removed from membership in the next dissemination period.
 			if len(p.membershipCh) == 0 {
-				m := p.raftNode.FSM().State().Members
+				m := p.raftNode.FSM().State().Members()
 				for _, v := range m {
 					// Earlier stop when leadership is lost.
-					if !p.hasLeadership {
+					if !p.hasLeadership.Load() {
 						break
 					}
 
@@ -184,7 +184,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 					heartbeat, _ := p.lastHeartBeat.LoadOrStore(v.Name, time.Now().UnixNano())
 
 					elapsed := t.UnixNano() - heartbeat.(int64)
-					if elapsed < int64(p.faultyHostDetectDuration) {
+					if elapsed < p.faultyHostDetectDuration.Load() {
 						continue
 					}
 					log.Debugf("Try to remove outdated host: %s, elapsed: %d ns", v.Name, elapsed)
@@ -224,6 +224,10 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 				// until the state is consistent.
 				logApplyConcurrency <- struct{}{}
 				go func() {
+					// We lock dissemination to ensure the updates can complete before the table is disseminated.
+					p.disseminateLock.Lock()
+					defer p.disseminateLock.Unlock()
+
 					updated, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
 					if raftErr != nil {
 						log.Errorf("fail to apply command: %v", raftErr)
@@ -238,7 +242,7 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 							// disseminateNextTime will be updated whenever apply is done, so that
 							// it will keep moving the time to disseminate the table, which will
 							// reduce the unnecessary table dissemination.
-							p.disseminateNextTime = time.Now().Add(disseminateTimeout).UnixNano()
+							p.disseminateNextTime.Store(time.Now().Add(disseminateTimeout).UnixNano())
 						}
 					}
 					<-logApplyConcurrency
@@ -247,29 +251,42 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 			case raft.TableDisseminate:
 				// TableDisseminate will be triggered by disseminateTimer.
 				// This disseminates the latest consistent hashing tables to Dapr runtime.
-				nStreamConnPool := len(p.streamConnPool)
-				nTargetConns := len(p.raftNode.FSM().State().Members)
-
-				monitoring.RecordRuntimesCount(nStreamConnPool)
-				monitoring.RecordActorRuntimesCount(nTargetConns)
-
-				// ignore dissemination if there is no member update.
-				if cnt := p.memberUpdateCount.Load(); cnt > 0 {
-					state := p.raftNode.FSM().PlacementState()
-					log.Infof(
-						"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-						cnt, nStreamConnPool, nTargetConns, state.Version)
-					p.performTablesUpdate(p.streamConnPool, state)
-					log.Infof(
-						"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-						cnt, nStreamConnPool, nTargetConns, state.Version)
-					p.memberUpdateCount.Store(0)
-
-					// set faultyHostDetectDuration to the default duration.
-					p.faultyHostDetectDuration = faultyHostDetectDefaultDuration
-				}
+				p.performTableDissemination()
 			}
 		}
+	}
+}
+
+func (p *Service) performTableDissemination() {
+	p.streamConnPoolLock.RLock()
+	nStreamConnPool := len(p.streamConnPool)
+	p.streamConnPoolLock.RUnlock()
+	nTargetConns := len(p.raftNode.FSM().State().Members())
+
+	monitoring.RecordRuntimesCount(nStreamConnPool)
+	monitoring.RecordActorRuntimesCount(nTargetConns)
+
+	// ignore dissemination if there is no member update.
+	if cnt := p.memberUpdateCount.Load(); cnt > 0 {
+		p.disseminateLock.Lock()
+		defer p.disseminateLock.Unlock()
+
+		state := p.raftNode.FSM().PlacementState()
+		log.Infof(
+			"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+			cnt, nStreamConnPool, nTargetConns, state.Version)
+		p.streamConnPoolLock.RLock()
+		streamConnPool := make([]placementGRPCStream, len(p.streamConnPool))
+		copy(streamConnPool, p.streamConnPool)
+		p.streamConnPoolLock.RUnlock()
+		p.performTablesUpdate(streamConnPool, state)
+		log.Infof(
+			"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+			cnt, nStreamConnPool, nTargetConns, state.Version)
+		p.memberUpdateCount.Store(0)
+
+		// set faultyHostDetectDuration to the default duration.
+		p.faultyHostDetectDuration.Store(int64(faultyHostDetectDefaultDuration))
 	}
 }
 
@@ -278,9 +295,6 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
 func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1pb.PlacementTables) {
-	p.disseminateLock.Lock()
-	defer p.disseminateLock.Unlock()
-
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	p.disseminateOperation(hosts, "lock", nil)

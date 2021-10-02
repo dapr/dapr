@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fasthttp/router"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 
@@ -613,5 +614,26 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 			assert.Equal(t, errorMessage, expectedErrorMessage)
 			assert.Equal(t, responseStatusCode, fasthttp.StatusBadRequest)
 		}
+	})
+}
+
+func TestAliasRoute(t *testing.T) {
+	t.Run("When direct messaging has alias endpoint", func(t *testing.T) {
+		s := &server{}
+		a := &api{}
+		eps := a.constructDirectMessagingEndpoints()
+		routes := s.getRouter(eps).List()
+		assert.Equal(t, 1, len(eps))
+		assert.Equal(t, 2, len(routes[router.MethodWild]))
+	})
+
+	t.Run("When direct messaging doesn't have alias defined", func(t *testing.T) {
+		s := &server{}
+		a := &api{}
+		eps := a.constructDirectMessagingEndpoints()
+		assert.Equal(t, 1, len(eps))
+		eps[0].Alias = ""
+		routes := s.getRouter(eps).List()
+		assert.Equal(t, 1, len(routes[router.MethodWild]))
 	})
 }

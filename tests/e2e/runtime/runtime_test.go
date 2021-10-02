@@ -29,14 +29,7 @@ const (
 	runtimeAppName     = "runtime"
 	runtimeInitAppName = "runtime-init"
 	numPubsubMessages  = 10
-	numBindingMessages = 10
 )
-
-type appResponse struct {
-	Message   string `json:"message,omitempty"`
-	StartTime int    `json:"start_time,omitempty"`
-	EndTime   int    `json:"end_time,omitempty"`
-}
 
 type daprAPIResponse struct {
 	DaprHTTPSuccess int `json:"dapr_http_success"`

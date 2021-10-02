@@ -38,34 +38,40 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      GOVER: 1.16
+      GOVER: 1.17
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.17.11
-        - v1.18.8
-        - v1.19.1
+        - v1.19.11
+        - v1.20.7
+        - v1.21.1
+        - v1.22.0
         mode:
         - ha
         - non-ha
         # Map between K8s and KinD versions.
         # This is attempting to make it a bit clearer what's being tested.
-        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.9.0
+        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
         include:
-        - k8s-version: v1.17.11
-          kind-version: v0.9.0
-          kind-image-sha: sha256:5240a7a2c34bf241afb54ac05669f8a46661912eab05705d660971eeb12f6555
-        - k8s-version: v1.18.8
-          kind-version: v0.9.0
-          kind-image-sha: sha256:f4bcc97a0ad6e7abaf3f643d890add7efe6ee4ab90baeb374b4f41a4c95567eb
-        - k8s-version: v1.19.1
-          kind-version: v0.9.0
-          kind-image-sha: sha256:98cf5288864662e37115e362b23e4369c8c4a408f99cbc06e58ac30ddc721600
+        - k8s-version: v1.19.11
+          kind-version: v0.11.1
+          kind-image-sha: sha256:07db187ae84b4b7de440a73886f008cf903fcf5764ba8106a9fd5243d6f32729
+        - k8s-version: v1.20.7
+          kind-version: v0.11.1
+          kind-image-sha: sha256:cbeaf907fc78ac97ce7b625e4bf0de16e3ea725daf6b04f930bd14c67c671ff9
+        - k8s-version: v1.21.1
+          kind-version: v0.11.1
+          kind-image-sha: sha256:69860bda5563ac81e3c0057d654b5253219618a22ec3a346306239bba8cfa1a6
+        - k8s-version: v1.22.0
+          kind-version: v0.11.1
+          kind-image-sha: sha256:b8bda84bb3a190e6e028b1760d277454a72267a5454b57db34437c34a588d047
         exclude:
-        - k8s-version: v1.17.11
+        - k8s-version: v1.19.11
           mode: non-ha
-        - k8s-version: v1.18.8
+        - k8s-version: v1.20.7
+          mode: non-ha
+        - k8s-version: v1.21.1
           mode: non-ha
     steps:
     - name: Set up Go ${{ env.GOVER }}
@@ -76,12 +82,6 @@ jobs:
       uses: actions/checkout@v2
       with:
         path: ./src/github.com/dapr/dapr
-    - name: Check if need skip
-      id: skip_check
-      uses: fkirc/skip-duplicate-actions@v3.4.0
-      with:
-        paths_ignore: '["**.md", ".codecov.yaml", ".github/**/**.yml"]'
-
     - name: Configure KinD
       # Generate a KinD configuration file that uses:
       # (a) a couple of worker nodes: this is needed to run both
@@ -91,7 +91,6 @@ jobs:
       #     a local repository speeds up the image pushes into KinD
       #     significantly.
       working-directory: ./
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         cat > kind.yaml <<EOF
         apiVersion: kind.x-k8s.io/v1alpha4
@@ -118,7 +117,6 @@ jobs:
         echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
 
     - name: Create KinD Cluster
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       uses: helm/kind-action@v1.0.0
       with:
         config: kind.yaml
@@ -126,7 +124,6 @@ jobs:
         version: ${{ matrix.kind-version }}
 
     - name: Get KinD info
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         kubectl cluster-info --context kind-kind
         NODE_IP=$(kubectl get nodes \
@@ -135,14 +132,12 @@ jobs:
         echo "MINIKUBE_NODE_IP=$NODE_IP" >> $GITHUB_ENV
 
     - name: Setup test output
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       shell: bash
       run: |
         export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
         echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
 
     - name: Setup local registry
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         # Run a registry.
         docker run -d --restart=always \
@@ -151,26 +146,22 @@ jobs:
         docker network connect "kind" $REGISTRY_NAME
 
     - name: Setup Helm
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       uses: azure/setup-helm@v1
       with:
         version: v3.3.4
 
     - name: Build and push Dapr
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         make build-linux
         make docker-build
         make docker-push
 
     - name: Build and push test apps
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         make build-e2e-app-all
         make push-e2e-app-all
 
     - name: Setup Dapr
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         make setup-helm-init
         make create-test-namespace
@@ -182,44 +173,40 @@ jobs:
         make docker-deploy-k8s
 
     - name: Setup Redis
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         make setup-test-env-redis
 
     - name: Setup Kafka
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         make setup-test-env-kafka
 
     - name: Setup test components
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         make setup-test-components
 
     - name: Free up some diskspace
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         docker image prune -a -f
 
     - name: Run tests
-      if: ${{ steps.skip_check.outputs.should_skip != 'true' }}
       run: |
         make test-e2e-all
 
     - name: Save control plane logs
-      if: steps.skip_check.outputs.should_skip != 'true' && always()
+      if: always()
       run: |
         make save-dapr-control-plane-k8s-logs
 
     - name: Upload container logs
-      if: steps.skip_check.outputs.should_skip != 'true' && always()
+      if: always()
       uses: actions/upload-artifact@master
       with:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_container_logs
         path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
     - name: Upload test results
-      if: steps.skip_check.outputs.should_skip != 'true' && always()
+      if: always()
       uses: actions/upload-artifact@master
       with:
+        #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
         name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
-        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.json
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*

@@ -1,7 +1,7 @@
 {
 	"name": "Dapr Dev Environment",
 	// Update the container version when you publish dev-container
-	"image": "docker.io/daprio/dapr-dev:0.1.3",
+	"image": "docker.io/daprio/dapr-dev:0.1.4",
 	// Replace with uncommented line below to build your own local copy of the image
 	// "dockerFile": "../docker/Dockerfile-dev",
 	"containerEnv": {
@@ -15,7 +15,8 @@
 		// "BIND_LOCALHOST_DOCKER": "true"
 	},
 	"extensions": [
-		"ms-vscode.go",
+		"davidanson.vscode-markdownlint",
+		"golang.go",
 		"ms-azuretools.vscode-dapr",
 		"ms-azuretools.vscode-docker",
 		"ms-kubernetes-tools.vscode-kubernetes-tools"

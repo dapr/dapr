@@ -1,9 +1,9 @@
 module app
 
-go 1.16
+go 1.17
 
 require (
-	github.com/gorilla/mux v1.7.3
+	github.com/gorilla/mux v1.8.0
 	k8s.io/apimachinery v0.20.0
 )
 

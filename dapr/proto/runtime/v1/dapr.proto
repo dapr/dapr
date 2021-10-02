@@ -319,6 +319,7 @@ message RegisterActorTimerRequest {
   string period = 5;
   string callback = 6;
   bytes  data = 7;
+  string ttl = 8;
 }
 
 // UnregisterActorTimerRequest is the message to unregister an actor timer
@@ -336,6 +337,7 @@ message RegisterActorReminderRequest {
   string due_time = 4;
   string period = 5;
   bytes  data = 6;
+  string ttl = 7;
 }
 
 // UnregisterActorReminderRequest is the message to unregister an actor reminder.

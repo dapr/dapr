@@ -36,6 +36,9 @@ const (
 	HTTPProtocol                = "http"
 	GRPCProtocol                = "grpc"
 	ActorRentrancy      Feature = "Actor.Reentrancy"
+	ActorTypeMetadata   Feature = "Actor.TypeMetadata"
+	PubSubRouting       Feature = "PubSub.Routing"
+	StateEncryption     Feature = "State.Encryption"
 )
 
 type Feature string

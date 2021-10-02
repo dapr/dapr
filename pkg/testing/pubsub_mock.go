@@ -1,8 +1,9 @@
 package testing
 
 import (
-	"github.com/dapr/components-contrib/pubsub"
 	mock "github.com/stretchr/testify/mock"
+
+	"github.com/dapr/components-contrib/pubsub"
 )
 
 // MockPubSub is a mock pub-sub component object.

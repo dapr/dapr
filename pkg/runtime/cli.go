@@ -33,6 +33,8 @@ import (
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
+	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
+	daprPublicPort := flag.String("dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
 	daprAPIGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
@@ -47,12 +49,14 @@ func FromFlags() (*DaprRuntime, error) {
 	allowedOrigins := flag.String("allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	enableProfiling := flag.Bool("enable-profiling", false, "Enable profiling")
 	runtimeVersion := flag.Bool("version", false, "Prints the runtime version")
+	buildInfo := flag.Bool("build-info", false, "Prints the build info")
 	waitCommand := flag.Bool("wait", false, "wait for Dapr outbound ready")
 	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
-	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB")
-	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in MB to handle sending multi-KB headers. By default 4 KB")
+	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
+	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
+	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in MB to handle sending multi-KB headers. By default 4 KB.")
 	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
 
 	loggerOptions := logger.DefaultOptions()
@@ -66,6 +70,11 @@ func FromFlags() (*DaprRuntime, error) {
 
 	if *runtimeVersion {
 		fmt.Println(version.Version())
+		os.Exit(0)
+	}
+
+	if *buildInfo {
+		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", version.Version(), version.Commit(), version.GitVersion())
 		os.Exit(0)
 	}
 
@@ -120,6 +129,15 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
+	var publicPort *int
+	if *daprPublicPort != "" {
+		port, cerr := strconv.Atoi(*daprPublicPort)
+		if cerr != nil {
+			return nil, errors.Wrap(cerr, "error parsing dapr-public-port")
+		}
+		publicPort = &port
+	}
+
 	var applicationPort int
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
@@ -157,8 +175,12 @@ func FromFlags() (*DaprRuntime, error) {
 		appPrtcl = *appProtocol
 	}
 
+	daprAPIListenAddressList := strings.Split(*daprAPIListenAddresses, ",")
+	if len(daprAPIListenAddressList) == 0 {
+		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
+	}
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, readBufferSize, *daprHTTPStreamRequestBody)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
@@ -185,7 +207,7 @@ func FromFlags() (*DaprRuntime, error) {
 	var globalConfig *global_config.Configuration
 	var configErr error
 
-	if *enableMTLS {
+	if *enableMTLS || *mode == string(modes.KubernetesMode) {
 		runtimeConfig.CertChain, err = security.GetCertChain()
 		if err != nil {
 			return nil, err

@@ -11,15 +11,17 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/dapr/kit/logger"
+	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/kit/logger"
 
 	// Included components in compiled daprd.
 
 	// Secret stores.
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/secretstores/aws/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
@@ -61,6 +63,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
+	pubsub_inmemory "github.com/dapr/components-contrib/pubsub/in-memory"
+	pubsub_jetstream "github.com/dapr/components-contrib/pubsub/jetstream"
 	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
 	pubsub_mqtt "github.com/dapr/components-contrib/pubsub/mqtt"
 	"github.com/dapr/components-contrib/pubsub/natsstreaming"
@@ -82,10 +86,12 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	dingtalk_webhook "github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
 	"github.com/dapr/components-contrib/bindings/alicloud/oss"
+	"github.com/dapr/components-contrib/bindings/alicloud/tablestore"
 	"github.com/dapr/components-contrib/bindings/apns"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
+	"github.com/dapr/components-contrib/bindings/aws/ses"
 	"github.com/dapr/components-contrib/bindings/aws/sns"
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
@@ -98,6 +104,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
+	"github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
@@ -120,6 +127,7 @@ import (
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware.
+
 	middleware "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
@@ -127,7 +135,6 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/opa"
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
-	"github.com/valyala/fasthttp"
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -158,6 +165,9 @@ func main() {
 			}),
 			secretstores_loader.New("aws.secretmanager", func() secretstores.SecretStore {
 				return secretmanager.NewSecretManager(logContrib)
+			}),
+			secretstores_loader.New("aws.parameterstore", func() secretstores.SecretStore {
+				return parameterstore.NewParameterStore(logContrib)
 			}),
 			secretstores_loader.New("gcp.secretmanager", func() secretstores.SecretStore {
 				return gcp_secretmanager.NewSecreteManager(logContrib)
@@ -239,6 +249,9 @@ func main() {
 			pubsub_loader.New("hazelcast", func() pubs.PubSub {
 				return pubsub_hazelcast.NewHazelcastPubSub(logContrib)
 			}),
+			pubsub_loader.New("jetstream", func() pubs.PubSub {
+				return pubsub_jetstream.NewJetStream(logContrib)
+			}),
 			pubsub_loader.New("kafka", func() pubs.PubSub {
 				return pubsub_kafka.NewKafka(logContrib)
 			}),
@@ -259,6 +272,9 @@ func main() {
 			}),
 			pubsub_loader.New("snssqs", func() pubs.PubSub {
 				return pubsub_snssqs.NewSnsSqs(logContrib)
+			}),
+			pubsub_loader.New("in-memory", func() pubs.PubSub {
+				return pubsub_inmemory.New(logContrib)
 			}),
 		),
 		runtime.WithNameResolutions(
@@ -326,11 +342,17 @@ func main() {
 			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
 				return oss.NewAliCloudOSS(logContrib)
 			}),
+			bindings_loader.NewOutput("alicloud.tablestore", func() bindings.OutputBinding {
+				return tablestore.NewAliCloudTableStore(log)
+			}),
 			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
 				return apns.NewAPNS(logContrib)
 			}),
 			bindings_loader.NewOutput("aws.s3", func() bindings.OutputBinding {
 				return s3.NewAWSS3(logContrib)
+			}),
+			bindings_loader.NewOutput("aws.ses", func() bindings.OutputBinding {
+				return ses.NewAWSSES(logContrib)
 			}),
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
 				return sqs.NewAWSSQS(logContrib)
@@ -421,6 +443,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("zeebe.command", func() bindings.OutputBinding {
 				return bindings_zeebe_command.NewZeebeCommand(logContrib)
+			}),
+			bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
+				return graphql.NewGraphQL(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

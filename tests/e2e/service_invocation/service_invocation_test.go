@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -5,7 +6,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package service_invocation_e2e
+package serviceinvocation_tests
 
 import (
 	"encoding/base64"
@@ -351,46 +352,14 @@ func TestHeaders(t *testing.T) {
 
 	t.Logf("externalURL is '%s'\n", externalURL)
 
-	t.Run("http-to-http", func(t *testing.T) {
-		body, err := json.Marshal(testCommandRequest{
-			RemoteApp: "serviceinvocation-callee-0",
-			Method:    "http-to-http",
-		})
-		require.NoError(t, err)
+	t.Run("http-to-http-v1", func(t *testing.T) {
+		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL)
+		verifyHTTPToHTTP(t, hostIP, hostname, url, expectedForwarded)
+	})
 
-		resp, err := utils.HTTPPost(
-			fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL), body)
-		t.Log("checking err...")
-		require.NoError(t, err)
-
-		var appResp appResponse
-		t.Logf("unmarshalling..%s\n", string(resp))
-		err = json.Unmarshal(resp, &appResp)
-
-		var actualHeaders = map[string]string{}
-		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
-		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
-		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
-
-		require.NoError(t, err)
-		assert.NotNil(t, requestHeaders["Accept-Encoding"][0])
-		assert.NotNil(t, requestHeaders["Content-Length"][0])
-		assert.Equal(t, "application/json", requestHeaders["Content-Type"][0])
-		assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
-		assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
-		assert.NotNil(t, requestHeaders["Traceparent"][0])
-		assert.NotNil(t, requestHeaders["User-Agent"][0])
-		assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
-		assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
-		assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
-
-		assert.NotNil(t, responseHeaders["Content-Length"][0])
-		assert.Equal(t, "application/json; utf-8", responseHeaders["Content-Type"][0])
-		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
-		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
-		assert.NotNil(t, responseHeaders["Traceparent"][0])
+	t.Run("http-to-http-dapr-app-id", func(t *testing.T) {
+		url := fmt.Sprintf("http://%s/tests/dapr_id_httptohttptest", externalURL)
+		verifyHTTPToHTTP(t, hostIP, hostname, url, expectedForwarded)
 	})
 
 	t.Run("grpc-to-grpc", func(t *testing.T) {
@@ -586,41 +555,14 @@ func TestHeaders(t *testing.T) {
 	expectedTraceID := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 	expectedEncodedTraceID := "AABL+S81d7NNpqPOkp0ODkc2AQDwZ6oLqQK3AgE="
 
-	t.Run("http-to-http-tracing", func(t *testing.T) {
-		body, err := json.Marshal(testCommandRequest{
-			RemoteApp:        "serviceinvocation-callee-0",
-			Method:           "http-to-http-tracing",
-			RemoteAppTracing: "true",
-		})
-		require.NoError(t, err)
+	t.Run("http-to-http-tracing-v1", func(t *testing.T) {
+		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL)
+		verifyHTTPToHTTPTracing(t, url, expectedTraceID)
+	})
 
-		resp, err := utils.HTTPPost(
-			fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL), body)
-		t.Log("checking err...")
-		require.NoError(t, err)
-
-		var appResp appResponse
-		t.Logf("unmarshalling..%s\n", string(resp))
-		err = json.Unmarshal(resp, &appResp)
-
-		var actualHeaders = map[string]string{}
-		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
-		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
-		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
-
-		require.NoError(t, err)
-
-		assert.NotNil(t, requestHeaders["Traceparent"][0])
-		assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
-
-		traceParentRs := responseHeaders["Traceparent"]
-		if assert.NotNil(t, traceParentRs, "Traceparent is missing from the response") {
-			if assert.Equal(t, 1, len(traceParentRs), "Traceparent is missing from the response") {
-				assert.Equal(t, expectedTraceID, traceParentRs[0], "Traceparent value was not expected")
-			}
-		}
+	t.Run("http-to-http-tracing-dapr-id", func(t *testing.T) {
+		url := fmt.Sprintf("http://%s/tests/dapr_id_httptohttptest", externalURL)
+		verifyHTTPToHTTPTracing(t, url, expectedTraceID)
 	})
 
 	t.Run("grpc-to-grpc-tracing", func(t *testing.T) {
@@ -758,7 +700,7 @@ func TestHeaders(t *testing.T) {
 				t.Logf("received response grpc header..%s\n", traceContext)
 				assert.Equal(t, expectedEncodedTraceID, traceContext)
 				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-				gotSc, ok := propagation.FromBinary([]byte(decoded))
+				gotSc, ok := propagation.FromBinary(decoded)
 
 				assert.True(t, ok)
 				assert.NotNil(t, gotSc)
@@ -766,6 +708,83 @@ func TestHeaders(t *testing.T) {
 			}
 		}
 	})
+}
+
+func verifyHTTPToHTTPTracing(t *testing.T, url string, expectedTraceID string) {
+	body, err := json.Marshal(testCommandRequest{
+		RemoteApp:        "serviceinvocation-callee-0",
+		Method:           "http-to-http-tracing",
+		RemoteAppTracing: "true",
+	})
+	require.NoError(t, err)
+
+	resp, err := utils.HTTPPost(url, body)
+	t.Log("checking err...")
+	require.NoError(t, err)
+
+	var appResp appResponse
+	t.Logf("unmarshalling..%s\n", string(resp))
+	err = json.Unmarshal(resp, &appResp)
+
+	var actualHeaders = map[string]string{}
+	json.Unmarshal([]byte(appResp.Message), &actualHeaders)
+	var requestHeaders = map[string][]string{}
+	var responseHeaders = map[string][]string{}
+	json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
+	json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
+
+	require.NoError(t, err)
+
+	assert.NotNil(t, requestHeaders["Traceparent"][0])
+	assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
+
+	traceParentRs := responseHeaders["Traceparent"]
+	if assert.NotNil(t, traceParentRs, "Traceparent is missing from the response") {
+		if assert.Equal(t, 1, len(traceParentRs), "Traceparent is missing from the response") {
+			assert.Equal(t, expectedTraceID, traceParentRs[0], "Traceparent value was not expected")
+		}
+	}
+}
+
+func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, expectedForwarded string) {
+	body, err := json.Marshal(testCommandRequest{
+		RemoteApp: "serviceinvocation-callee-0",
+		Method:    "http-to-http",
+	})
+	require.NoError(t, err)
+
+	resp, err := utils.HTTPPost(url, body)
+	t.Log("checking err...")
+	require.NoError(t, err)
+
+	var appResp appResponse
+	t.Logf("unmarshalling..%s\n", string(resp))
+	err = json.Unmarshal(resp, &appResp)
+
+	var actualHeaders = map[string]string{}
+	json.Unmarshal([]byte(appResp.Message), &actualHeaders)
+	var requestHeaders = map[string][]string{}
+	var responseHeaders = map[string][]string{}
+	json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
+	json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
+
+	require.NoError(t, err)
+	assert.NotNil(t, requestHeaders["Accept-Encoding"][0])
+	assert.NotNil(t, requestHeaders["Content-Length"][0])
+	assert.Equal(t, "application/json", requestHeaders["Content-Type"][0])
+	assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
+	assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
+	assert.NotNil(t, requestHeaders["Traceparent"][0])
+	assert.NotNil(t, requestHeaders["User-Agent"][0])
+	assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
+	assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
+	assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
+
+	assert.NotNil(t, responseHeaders["Content-Length"][0])
+	assert.Equal(t, "application/json; utf-8", responseHeaders["Content-Type"][0])
+	assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
+	assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
+	assert.NotNil(t, responseHeaders["Traceparent"][0])
 }
 
 func TestNegativeCases(t *testing.T) {
@@ -871,15 +890,15 @@ func TestNegativeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+		resp, status, _ := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
 
 		var testResults negativeTestResult
 		json.Unmarshal(resp, &testResults)
 
 		require.False(t, testResults.MainCallSuccessful)
 		require.Equal(t, 500, status)
-		require.Contains(t, string(testResults.RawError), "Client.Timeout exceeded while awaiting headers")
-		require.NotContains(t, string(testResults.RawError), "Client waited longer than it should have.")
+		require.Contains(t, testResults.RawError, "Client.Timeout exceeded while awaiting headers")
+		require.NotContains(t, testResults.RawError, "Client waited longer than it should have.")
 	})
 
 	t.Run("service_timeout_grpc", func(t *testing.T) {
@@ -890,15 +909,15 @@ func TestNegativeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
+		resp, status, _ := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
 
 		var testResults negativeTestResult
 		json.Unmarshal(resp, &testResults)
 
 		require.False(t, testResults.MainCallSuccessful)
 		require.Equal(t, 500, status)
-		require.Contains(t, string(testResults.RawError), "rpc error: code = DeadlineExceeded desc = context deadline exceeded")
-		require.NotContains(t, string(testResults.RawError), "Client waited longer than it should have.")
+		require.Contains(t, testResults.RawError, "rpc error: code = DeadlineExceeded desc = context deadline exceeded")
+		require.NotContains(t, testResults.RawError, "Client waited longer than it should have.")
 	})
 
 	t.Run("service_parse_error_http", func(t *testing.T) {
@@ -937,7 +956,7 @@ func TestNegativeCases(t *testing.T) {
 		require.Equal(t, 500, status)
 		require.Nil(t, err)
 		require.Nil(t, testResults.RawBody)
-		require.Contains(t, string(testResults.RawError), "rpc error: code = Unknown desc = Internal Server Error")
+		require.Contains(t, testResults.RawError, "rpc error: code = Unknown desc = Internal Server Error")
 	})
 
 	t.Run("service_large_data_http", func(t *testing.T) {
