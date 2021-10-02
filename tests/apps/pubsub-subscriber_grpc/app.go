@@ -84,6 +84,9 @@ func main() {
 }
 
 func initializeSets() {
+	lock.Lock()
+	defer lock.Unlock()
+
 	receivedMessagesA = sets.NewString()
 	receivedMessagesB = sets.NewString()
 	receivedMessagesC = sets.NewString()
@@ -115,6 +118,9 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 }
 
 func (s *server) getReceivedMessages() []byte {
+	lock.Lock()
+	defer lock.Unlock()
+
 	resp := receivedMessagesResponse{
 		ReceivedByTopicA:   receivedMessagesA.List(),
 		ReceivedByTopicB:   receivedMessagesB.List(),
