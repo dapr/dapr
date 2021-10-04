@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 			AppMemoryRequest:  "2500Mi",
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE":                actorType,
-				"TEST_APP_ACTOR_REMINDER_PARTITIONS": "53",
+				"TEST_APP_ACTOR_REMINDER_PARTITIONS": "5",
 			},
 			Config: "actortypemetadata",
 		},
@@ -67,6 +67,7 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Config:            "actortypemetadata",
 		},
 	}
 
