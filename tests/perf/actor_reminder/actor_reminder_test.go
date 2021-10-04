@@ -50,6 +50,7 @@ func TestMain(m *testing.M) {
 				"TEST_APP_ACTOR_TYPE":                actorType,
 				"TEST_APP_ACTOR_REMINDER_PARTITIONS": "53",
 			},
+			Config: "actortypemetadata",
 		},
 		{
 			AppName:           "tester",
