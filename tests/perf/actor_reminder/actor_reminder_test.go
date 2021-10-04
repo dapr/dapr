@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 			AppName:           "testapp",
 			DaprEnabled:       true,
 			ImageName:         "perf-actorfeatures",
-			Replicas:          1,
+			Replicas:          2,
 			IngressEnabled:    true,
 			AppPort:           3000,
 			DaprCPULimit:      "4.0",
