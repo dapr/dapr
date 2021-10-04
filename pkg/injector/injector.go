@@ -53,7 +53,7 @@ type injector struct {
 	config       Config
 	deserializer runtime.Decoder
 	server       *http.Server
-	kubeClient   *kubernetes.Clientset
+	kubeClient   kubernetes.Interface
 	daprClient   scheme.Interface
 	authUIDs     []string
 }
@@ -88,7 +88,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 }
 
 // NewInjector returns a new Injector instance with the given config.
-func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient *kubernetes.Clientset) Injector {
+func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) Injector {
 	mux := http.NewServeMux()
 
 	i := &injector{
@@ -110,7 +110,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
-func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient *kubernetes.Clientset) ([]string, error) {
+func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient kubernetes.Interface) ([]string, error) {
 	allowedUids := []string{}
 	for i, allowedControllersServiceAccount := range allowedControllersServiceAccounts {
 		saUUID, err := getServiceAccount(ctx, kubeClient, allowedControllersServiceAccount)
@@ -128,7 +128,7 @@ func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient *kubern
 	return allowedUids, nil
 }
 
-func getServiceAccount(ctx context.Context, kubeClient *kubernetes.Clientset, allowedControllersServiceAccount string) (string, error) {
+func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedControllersServiceAccount string) (string, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, getKubernetesServiceAccountTimeoutSeconds*time.Second)
 	defer cancel()
 

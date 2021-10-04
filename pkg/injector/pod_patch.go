@@ -101,7 +101,7 @@ const (
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
-	namespace, image, imagePullPolicy string, kubeClient *kubernetes.Clientset, daprClient scheme.Interface) ([]PatchOperation, error) {
+	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface) ([]PatchOperation, error) {
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
@@ -233,7 +233,7 @@ LoopEnv:
 	return patchOps
 }
 
-func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace string) (string, string, string) {
+func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace string) (string, string, string) {
 	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, meta_v1.GetOptions{})
 	if err != nil {
 		return "", "", ""
