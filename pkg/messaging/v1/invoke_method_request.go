@@ -106,7 +106,7 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 	return imr
 }
 
-// WithCustomMetdata applies a metadata map to a InvokeMethodRequest
+// WithCustomHTTPMetadata applies a metadata map to a InvokeMethodRequest.
 func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *InvokeMethodRequest {
 	for k, v := range md {
 		if imr.r.Metadata == nil {
