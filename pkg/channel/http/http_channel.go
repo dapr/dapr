@@ -77,6 +77,7 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)
 	}
+
 	return c, nil
 }
 
@@ -160,11 +161,16 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
+	if err != nil {
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(resp.Header.ContentLength()), elapsedMs)
+		return nil, err
+	}
+
 	if h.ch != nil {
 		<-h.ch
 	}
 
-	rsp := h.parseChannelResponse(req, resp, err)
+	rsp := h.parseChannelResponse(req, resp)
 	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(resp.Header.ContentLength()), elapsedMs)
 
 	return rsp, nil
@@ -203,20 +209,14 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	return channelReq
 }
 
-func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *fasthttp.Response, respErr error) *invokev1.InvokeMethodResponse {
+func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *fasthttp.Response) *invokev1.InvokeMethodResponse {
 	var statusCode int
 	var contentType string
 	var body []byte
 
-	if respErr != nil {
-		statusCode = fasthttp.StatusInternalServerError
-		contentType = string(invokev1.JSONContentType)
-		body = []byte(fmt.Sprintf("{\"error\": \"client error: %s\"}", respErr))
-	} else {
-		statusCode = resp.StatusCode()
-		contentType = (string)(resp.Header.ContentType())
-		body = resp.Body()
-	}
+	statusCode = resp.StatusCode()
+	contentType = (string)(resp.Header.ContentType())
+	body = resp.Body()
 
 	// Convert status code
 	rsp := invokev1.NewInvokeMethodResponse(int32(statusCode), "", nil)

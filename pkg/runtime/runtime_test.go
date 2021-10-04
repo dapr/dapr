@@ -7,6 +7,8 @@ package runtime
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -34,7 +36,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -56,9 +57,11 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/proto/operator/v1"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
@@ -147,20 +150,24 @@ func TestNewRuntime(t *testing.T) {
 // 'topics' are the topics for the first pubsub.
 // 'topics2' are the topics for the second pubsub.
 func getSubscriptionsJSONString(topics []string, topics2 []string) string {
-	s := []runtime_pubsub.Subscription{}
+	s := []runtime_pubsub.SubscriptionJSON{}
 	for _, t := range topics {
-		s = append(s, runtime_pubsub.Subscription{
+		s = append(s, runtime_pubsub.SubscriptionJSON{
 			PubsubName: TestPubsubName,
 			Topic:      t,
-			Route:      t,
+			Routes: runtime_pubsub.RoutesJSON{
+				Default: t,
+			},
 		})
 	}
 
 	for _, t := range topics2 {
-		s = append(s, runtime_pubsub.Subscription{
+		s = append(s, runtime_pubsub.SubscriptionJSON{
 			PubsubName: TestSecondPubsubName,
 			Topic:      t,
-			Route:      t,
+			Routes: runtime_pubsub.RoutesJSON{
+				Default: t,
+			},
 		})
 	}
 	b, _ := json.Marshal(&s)
@@ -168,12 +175,14 @@ func getSubscriptionsJSONString(topics []string, topics2 []string) string {
 	return string(b)
 }
 
-func getSubscriptionCustom(topic, route string) string {
-	s := []runtime_pubsub.Subscription{
+func getSubscriptionCustom(topic, path string) string {
+	s := []runtime_pubsub.SubscriptionJSON{
 		{
 			PubsubName: TestPubsubName,
 			Topic:      topic,
-			Route:      route,
+			Routes: runtime_pubsub.RoutesJSON{
+				Default: path,
+			},
 		},
 	}
 	b, _ := json.Marshal(&s)
@@ -183,7 +192,8 @@ func getSubscriptionCustom(topic, route string) string {
 func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
 		TypeMeta: meta_v1.TypeMeta{
-			Kind: "Subscription",
+			Kind:       "Subscription",
+			APIVersion: "v1alpha1",
 		},
 		Spec: subscriptionsapi.SubscriptionSpec{
 			Topic:      "topic1",
@@ -269,10 +279,10 @@ func TestDoProcessComponent(t *testing.T) {
 	})
 }
 
-// mockOperatorClient is a mock implementation of operator.OperatorClient.
+// mockOperatorClient is a mock implementation of operatorv1pb.OperatorClient.
 // It is used to test `beginComponentsUpdates`.
 type mockOperatorClient struct {
-	operator.OperatorClient
+	operatorv1pb.OperatorClient
 
 	lock                      sync.RWMutex
 	compsByName               map[string]*components_v1alpha1.Component
@@ -291,12 +301,12 @@ func newMockOperatorClient() *mockOperatorClient {
 	return mockOpCli
 }
 
-func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (operator.Operator_ComponentUpdateClient, error) {
+func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *operatorv1pb.ComponentUpdateRequest, opts ...grpc.CallOption) (operatorv1pb.Operator_ComponentUpdateClient, error) {
 	// Used to block stream creation.
 	<-c.clientStreamCreateWait
 
 	cs := &mockOperatorComponentUpdateClientStream{
-		updateCh: make(chan *operator.ComponentUpdateEvent, 1),
+		updateCh: make(chan *operatorv1pb.ComponentUpdateEvent, 1),
 	}
 
 	c.lock.Lock()
@@ -308,11 +318,11 @@ func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *emptypb.Em
 	return cs, nil
 }
 
-func (c *mockOperatorClient) ListComponents(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*operator.ListComponentResponse, error) {
+func (c *mockOperatorClient) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListComponentResponse, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	resp := &operator.ListComponentResponse{
+	resp := &operatorv1pb.ListComponentResponse{
 		Components: [][]byte{},
 	}
 	for _, comp := range c.compsByName {
@@ -366,17 +376,17 @@ func (c *mockOperatorClient) UpdateComponent(comp *components_v1alpha1.Component
 
 	c.compsByName[comp.Name] = comp
 	for _, cs := range c.clientStreams {
-		cs.updateCh <- &operator.ComponentUpdateEvent{Component: b}
+		cs.updateCh <- &operatorv1pb.ComponentUpdateEvent{Component: b}
 	}
 }
 
 type mockOperatorComponentUpdateClientStream struct {
-	operator.Operator_ComponentUpdateClient
+	operatorv1pb.Operator_ComponentUpdateClient
 
-	updateCh chan *operator.ComponentUpdateEvent
+	updateCh chan *operatorv1pb.ComponentUpdateEvent
 }
 
-func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operator.ComponentUpdateEvent, error) {
+func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operatorv1pb.ComponentUpdateEvent, error) {
 	e, ok := <-cs.updateCh
 	if !ok {
 		return nil, fmt.Errorf("stream closed")
@@ -500,6 +510,11 @@ func TestInitState(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+
+	primaryKey := hex.EncodeToString(bytes)
+
 	mockStateComponent := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
@@ -514,7 +529,16 @@ func TestInitState(t *testing.T) {
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
+				{
+					Name: "primaryEncryptionKey",
+					Value: components_v1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte(primaryKey)},
+					},
+				},
 			},
+		},
+		Auth: components_v1alpha1.Auth{
+			SecretStore: "mockSecretStore",
 		},
 	}
 
@@ -529,7 +553,8 @@ func TestInitState(t *testing.T) {
 
 		expectedMetadata := state.Metadata{
 			Properties: map[string]string{
-				actorStateStore: "true",
+				actorStateStore:        "true",
+				"primaryEncryptionKey": primaryKey,
 			},
 		}
 
@@ -559,6 +584,39 @@ func TestInitState(t *testing.T) {
 		// assert
 		assert.Error(t, err, "expected error")
 		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+	})
+
+	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
+		// setup
+		initMockStateStoreForRuntime(rt, nil)
+
+		// act
+		err := rt.initState(mockStateComponent)
+		ok := encryption.EncryptedStateStore("mockState")
+
+		// assert
+		assert.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("test init state store, encryption enabled", func(t *testing.T) {
+		// setup
+		initMockStateStoreForRuntime(rt, nil)
+
+		// act
+		rt.globalConfig.Spec.Features = append(rt.globalConfig.Spec.Features, config.FeatureSpec{
+			Name:    config.StateEncryption,
+			Enabled: true,
+		})
+
+		rt.secretStores["mockSecretStore"] = &mockSecretStore{}
+
+		err := rt.initState(mockStateComponent)
+		ok := encryption.EncryptedStateStore("testpubsub")
+
+		// assert
+		assert.NoError(t, err)
+		assert.True(t, ok)
 	})
 }
 
@@ -1044,10 +1102,13 @@ func TestInitPubSub(t *testing.T) {
 
 		rts.runtimeConfig.Standalone.ComponentsPath = dir
 		subs := rts.getDeclarativeSubscriptions()
-		assert.Len(t, subs, 1)
-		assert.Equal(t, "topic1", subs[0].Topic)
-		assert.Equal(t, "myroute", subs[0].Route)
-		assert.Equal(t, "pubsub", subs[0].PubsubName)
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 1) {
+				assert.Equal(t, "myroute", subs[0].Rules[0].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+		}
 	})
 
 	t.Run("load declarative subscription, in scopes", func(t *testing.T) {
@@ -1067,11 +1128,14 @@ func TestInitPubSub(t *testing.T) {
 
 		rts.runtimeConfig.Standalone.ComponentsPath = dir
 		subs := rts.getDeclarativeSubscriptions()
-		assert.Len(t, subs, 1)
-		assert.Equal(t, "topic1", subs[0].Topic)
-		assert.Equal(t, "myroute", subs[0].Route)
-		assert.Equal(t, "pubsub", subs[0].PubsubName)
-		assert.Equal(t, TestRuntimeConfigID, subs[0].Scopes[0])
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 1) {
+				assert.Equal(t, "myroute", subs[0].Rules[0].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, TestRuntimeConfigID, subs[0].Scopes[0])
+		}
 	})
 
 	t.Run("load declarative subscription, not in scopes", func(t *testing.T) {
@@ -1583,7 +1647,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		assert.Empty(t, unready)
 	})
 
-	t.Run("Kubernetes Mode", func(t *testing.T) {
+	t.Run("Kubernetes Mode - no value without operator", func(t *testing.T) {
 		mockBinding.Spec.Metadata[0].Value = components_v1alpha1.DynamicValue{
 			JSON: v1.JSON{Raw: []byte("")},
 		}
@@ -1608,7 +1672,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		}
 
 		mod, unready := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value.String())
+		assert.Equal(t, "", mod.Spec.Metadata[0].Value.String())
 		assert.Empty(t, unready)
 	})
 
@@ -1619,21 +1683,28 @@ func TestProcessComponentSecrets(t *testing.T) {
 		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
 			Name: "name1",
 		}
+		mockBinding.Auth.SecretStore = "mock"
 
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		defer stopRuntime(t, rt)
-		m := NewMockKubernetesStore()
+
 		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
-				return m
+			secretstores_loader.New("mock", func() secretstores.SecretStore {
+				return &mockSecretStore{}
 			}),
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		for _, comp := range rt.builtinSecretStore() {
-			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
-		}
+		err := rt.processComponentAndDependents(components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "mock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:    "secretstores.mock",
+				Version: "v1",
+			},
+		})
+		assert.NoError(t, err)
 
 		mod, unready := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value.String())
@@ -1812,34 +1883,6 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 // Test InitSecretStore if secretstore.* refers to Kubernetes secret store.
 func TestInitSecretStoresInKubernetesMode(t *testing.T) {
-	fakeSecretStoreWithAuth := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: "fakeSecretStore",
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type:    "secretstores.fake.secretstore",
-			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
-				{
-					Name: "a",
-					SecretKeyRef: components_v1alpha1.SecretKeyRef{
-						Key:  "key1",
-						Name: "name1",
-					},
-				},
-				{
-					Name: "b",
-					Value: components_v1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("value2")},
-					},
-				},
-			},
-		},
-		Auth: components_v1alpha1.Auth{
-			SecretStore: "kubernetes",
-		},
-	}
-
 	rt := NewTestDaprRuntime(modes.KubernetesMode)
 	defer stopRuntime(t, rt)
 
@@ -1853,9 +1896,6 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		err := rt.processComponentAndDependents(comp)
 		assert.Nil(t, err)
 	}
-	fakeSecretStoreWithAuth, _ = rt.processComponentSecrets(fakeSecretStoreWithAuth)
-	// initSecretStore appends Kubernetes component even if kubernetes component is not added
-	assert.Equal(t, "value1", string(fakeSecretStoreWithAuth.Spec.Metadata[0].Value.Raw))
 }
 
 func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
@@ -1866,6 +1906,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		topic:      topic,
 		data:       []byte("testing"),
 		metadata:   map[string]string{pubsubName: TestPubsubName},
+		path:       "topic1",
 	}
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
@@ -1876,7 +1917,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoute{}
 	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
 
 	t.Run("ok without result body", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1975,6 +2016,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 		topic:      topic,
 		data:       []byte("testing"),
 		metadata:   map[string]string{pubsubName: TestPubsubName},
+		path:       "topic1",
 	}
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
@@ -1985,7 +2027,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoute{}
 	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
 
 	testcases := []struct {
 		Name        string
@@ -2060,6 +2102,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		topic:      topic,
 		data:       b,
 		metadata:   map[string]string{pubsubName: TestPubsubName},
+		path:       "topic1",
 	}
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
@@ -2070,7 +2113,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoute{}
 	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -2108,6 +2151,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			topic:      topic,
 			data:       bNoTraceID,
 			metadata:   map[string]string{pubsubName: TestPubsubName},
+			path:       "topic1",
 		}
 
 		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.topic)
@@ -2304,7 +2348,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent["id"].(string))
+		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -2322,6 +2366,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		topic:      topic,
 		data:       b,
 		metadata:   map[string]string{pubsubName: TestPubsubName},
+		path:       "topic1",
 	}
 
 	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "")
@@ -2333,6 +2378,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		topic:      topic,
 		data:       base64,
 		metadata:   map[string]string{pubsubName: TestPubsubName},
+		path:       "topic1",
 	}
 
 	testCases := []struct {
@@ -2400,7 +2446,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt.topicRoutes = map[string]TopicRoute{}
 			rt.topicRoutes[TestPubsubName] = TopicRoute{
 				routes: map[string]Route{
-					topic: {path: topic},
+					topic: {rules: []*runtime_pubsub.Rule{{Path: topic}}},
 				},
 			}
 			var grpcServer *grpc.Server
@@ -2570,13 +2616,15 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		DefaultDaprHTTPPort,
 		0,
 		DefaultDaprAPIGRPCPort,
+		[]string{DefaultAPIListenAddress},
+		nil,
 		appPort,
 		DefaultProfilePort,
 		false,
 		-1,
 		false,
 		"",
-		false, 4)
+		false, 4, "")
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 }
@@ -2609,6 +2657,14 @@ func TestMTLS(t *testing.T) {
 		err := rt.establishSecurity(rt.runtimeConfig.SentryServiceAddress)
 		assert.Nil(t, err)
 		assert.Nil(t, rt.authenticator)
+	})
+
+	t.Run("mTLS disabled, operator fails without TLS certs", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
+
+		_, err := rt.getOperatorClient()
+		assert.Error(t, err)
 	})
 }
 
@@ -2718,6 +2774,8 @@ func TestReadInputBindings(t *testing.T) {
 
 		rt.appChannel = mockAppChannel
 
+		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
+
 		b := mockBinding{}
 		rt.readFromBinding(testInputBindingName, &b)
 
@@ -2749,6 +2807,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
+		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
 		rt.readFromBinding(testInputBindingName, &b)
@@ -2781,6 +2840,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
+		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
 		rt.readFromBinding(testInputBindingName, &b)
@@ -3138,6 +3198,16 @@ type mockSecretStore struct {
 	closeErr error
 }
 
+func (s *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{
+			"key1":   "value1",
+			"_value": "_value_data",
+			"name1":  "value1",
+		},
+	}, nil
+}
+
 func (s *mockSecretStore) Init(metadata secretstores.Metadata) error {
 	return nil
 }
@@ -3294,4 +3364,34 @@ func TestStopWithErrors(t *testing.T) {
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
 	rt.stopActor()
 	assert.NoError(t, rt.shutdownComponents())
+}
+
+func TestFindMatchingRoute(t *testing.T) {
+	r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath")
+	require.NoError(t, err)
+	route := Route{
+		rules: []*runtime_pubsub.Rule{r},
+	}
+	path, shouldProcess, err := findMatchingRoute(&route, map[string]interface{}{
+		"type": "MyEventType",
+	}, true)
+	require.NoError(t, err)
+	assert.Equal(t, "mypath", path)
+	assert.True(t, shouldProcess)
+}
+
+func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
+	var e *expr.Expr
+	matchTrimmed := strings.TrimSpace(match)
+	if matchTrimmed != "" {
+		e = &expr.Expr{}
+		if err := e.DecodeString(matchTrimmed); err != nil {
+			return nil, err
+		}
+	}
+
+	return &runtime_pubsub.Rule{
+		Match: e,
+		Path:  path,
+	}, nil
 }

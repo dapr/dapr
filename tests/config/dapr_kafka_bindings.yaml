@@ -25,3 +25,5 @@ spec:
     value: dapr-test
   - name: authRequired
     value: "false"
+  - name: initialOffset
+    value: oldest

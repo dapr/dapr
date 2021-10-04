@@ -132,9 +132,7 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
-{{- if eq .Values.global.mtls.enabled true }}
         - "--tls-enabled"
-{{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
 {{- if eq .Values.cluster.forceInMemoryLog true }}
@@ -197,6 +195,10 @@ spec:
 {{- if .Values.global.nodeSelector }}
       nodeSelector:
 {{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+{{- if .Values.global.tolerations }}
+      tolerations:
+{{ toYaml .Values.global.tolerations | indent 8 }}
 {{- end }}
 {{- if eq .Values.global.ha.enabled true }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}

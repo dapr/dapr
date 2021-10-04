@@ -101,11 +101,6 @@ type ActiveActorsCount struct {
 	Count int    `json:"count"`
 }
 
-type actorRepetition struct {
-	value int
-	mutex *sync.Mutex
-}
-
 // ActorMetadata represents information about the actor type.
 type ActorMetadata struct {
 	ID                string                 `json:"id"`
@@ -128,22 +123,6 @@ type actorReminderReference struct {
 const (
 	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
-
-func (repetition *actorRepetition) decrementAttempt() {
-	repetition.mutex.Lock()
-	defer repetition.mutex.Unlock()
-	if repetition.value != -1 {
-		repetition.value--
-	}
-}
-
-func (repetition *actorRepetition) getValue() int {
-	return repetition.value
-}
-
-func newActorRepetition(value int) *actorRepetition {
-	return &actorRepetition{value: value, mutex: &sync.Mutex{}}
-}
 
 // NewActors create a new actors runtime with given config.
 func NewActors(
@@ -670,13 +649,13 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 	return &track, nil
 }
 
-func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int) error {
+func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int, lastInvokeTime time.Time) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
 	track := ReminderTrack{
-		LastFiredTime:  time.Now().UTC().Format(time.RFC3339),
+		LastFiredTime:  lastInvokeTime.Format(time.RFC3339),
 		RepetitionLeft: repetition,
 	}
 
@@ -687,165 +666,151 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 	return err
 }
 
-func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.Time, error) {
-	var nextInvokeTime time.Time
-
-	registeredTime, err := time.Parse(time.RFC3339, reminder.RegisteredTime)
-	if err != nil {
-		return nextInvokeTime, errors.Wrap(err, "error parsing reminder registered time")
-	}
-
-	dueTime, err := time.ParseDuration(reminder.DueTime)
-	if err != nil {
-		return nextInvokeTime, errors.Wrap(err, "error parsing reminder due time")
-	}
-
-	key := constructCompositeKey(reminder.ActorType, reminder.ActorID)
-	track, err := a.getReminderTrack(key, reminder.Name)
-	if err != nil {
-		return nextInvokeTime, errors.Wrap(err, "error getting reminder track")
-	}
-
-	var lastFiredTime time.Time
-	if track != nil && track.LastFiredTime != "" {
-		lastFiredTime, err = time.Parse(time.RFC3339, track.LastFiredTime)
-		if err != nil {
-			return nextInvokeTime, errors.Wrap(err, "error parsing reminder last fired time")
-		}
-	}
-
-	// the first execution reminder task
-	if lastFiredTime.IsZero() {
-		nextInvokeTime = registeredTime.Add(dueTime)
-	} else {
-		period, _, err := parseDuration(reminder.Period)
-		if err != nil {
-			return nextInvokeTime, errors.Wrap(err, "error parsing reminder period")
-		}
-		nextInvokeTime = lastFiredTime.Add(period)
-	}
-
-	return nextInvokeTime, nil
-}
-
 func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool) error {
 	actorKey := constructCompositeKey(reminder.ActorType, reminder.ActorID)
 	reminderKey := constructCompositeKey(actorKey, reminder.Name)
-	nextInvokeTime, err := a.getUpcomingReminderInvokeTime(reminder)
+
+	var (
+		nextTime, ttl            time.Time
+		period                   time.Duration
+		repeats, repetitionsLeft int
+	)
+
+	registeredTime, err := time.Parse(time.RFC3339, reminder.RegisteredTime)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "error parsing reminder registered time")
+	}
+	if len(reminder.ExpirationTime) != 0 {
+		if ttl, err = time.Parse(time.RFC3339, reminder.ExpirationTime); err != nil {
+			return errors.Wrap(err, "error parsing reminder expiration time")
+		}
 	}
 
-	var period time.Duration
-	repetitionsLeft := -1
-	if reminder.Period != "" {
-		period, repetitionsLeft, err = parseDuration(reminder.Period)
-		if err != nil {
-			log.Errorf("error parsing reminder period %s: %s", reminder.Period, err)
-			return err
+	repeats = -1 // set to default
+	if len(reminder.Period) != 0 {
+		if period, repeats, err = parseDuration(reminder.Period); err != nil {
+			return errors.Wrap(err, "error parsing reminder period")
 		}
-		log.Debugf("repetitions allowed are %d", repetitionsLeft)
 	}
 
-	repetitions := newActorRepetition(repetitionsLeft)
-	go func(reminder *Reminder, period time.Duration, repetitions *actorRepetition, stop chan bool) {
-		now := time.Now().UTC()
-		initialDuration := nextInvokeTime.Sub(now)
-		time.Sleep(initialDuration)
+	track, err := a.getReminderTrack(actorKey, reminder.Name)
+	if err != nil {
+		return errors.Wrap(err, "error getting reminder track")
+	}
 
-		// Check if reminder is still active
-		select {
-		case <-stop:
-			log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, reminder.DueTime, reminder.Period, reminder.Data)
-			return
-		default:
-			break
-		}
-
-		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, repetitions, reminder.Data)
+	if track != nil && len(track.LastFiredTime) != 0 {
+		lastFiredTime, err := time.Parse(time.RFC3339, track.LastFiredTime)
 		if err != nil {
-			log.Errorf("error executing reminder: %s", err)
+			return errors.Wrap(err, "error parsing reminder last fired time")
 		}
+		repetitionsLeft = track.RepetitionLeft
+		nextTime = lastFiredTime.Add(period)
+	} else {
+		repetitionsLeft = repeats
+		nextTime = registeredTime
+	}
 
-		log.Debugf("repetitions left for actors with id %s are %d", reminder.ActorID, repetitions.getValue())
+	go func(reminder *Reminder, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, stop chan bool) {
+		var (
+			ttlTimer, nextTimer *time.Timer
+			ttlTimerC           <-chan time.Time
+			err                 error
+		)
+		if !ttl.IsZero() {
+			ttlTimer = time.NewTimer(time.Until(ttl))
+			ttlTimerC = ttlTimer.C
+		}
+		nextTimer = time.NewTimer(time.Until(nextTime))
+		defer func() {
+			if nextTimer.Stop() {
+				<-nextTimer.C
+			}
+			if ttlTimer != nil && ttlTimer.Stop() {
+				<-ttlTimerC
+			}
+		}()
+	L:
+		for {
+			select {
+			case <-nextTimer.C:
+				// noop
+			case <-ttlTimerC:
+				// proceed with reminder deletion
+				log.Infof("reminder %s has expired", reminder.Name)
+				break L
+			case <-stop:
+				// reminder has been already deleted
+				log.Infof("reminder %s with parameters: dueTime: %s, period: %s, data: %v has been deleted.", reminder.Name, reminder.RegisteredTime, reminder.Period, reminder.Data)
+				return
+			}
 
-		if reminder.Period != "" {
 			_, exists := a.activeReminders.Load(reminderKey)
 			if !exists {
 				log.Errorf("could not find active reminder with key: %s", reminderKey)
 				return
 			}
-
-			if quit, _ := a.stopReminderIfRepetitionsOver(reminder.Name, reminder.ActorID, reminder.ActorType, repetitions.getValue()); quit {
-				return
+			// if all repetitions are completed, proceed with reminder deletion
+			if repetitionsLeft == 0 {
+				log.Infof("reminder %q has completed %d repetitions", reminder.Name, repeats)
+				break L
 			}
-
-			t := a.configureTicker(period)
-			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, repetition *actorRepetition, data interface{}) {
-				for {
-					select {
-					case <-ticker.C:
-
-						err := a.executeReminder(actorType, actorID, dueTime, period, reminder, repetition, data)
-						if err != nil {
-							log.Errorf("error invoking reminder on actor %s: %s", constructCompositeKey(actorType, actorID), err)
-						} else {
-							log.Debugf("executing reminder on actor succedeed; reminders pending for actor %s:  %d", constructCompositeKey(actorType, actorID), *repetition)
-							if quit, _ := a.stopReminderIfRepetitionsOver(reminder, actorID, actorType, repetition.getValue()); quit {
-								return
-							}
-						}
-					case <-stop:
-						log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, dueTime, period, data)
-						return
-					}
-				}
-			}(t, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, repetitions, reminder.Data)
-		} else {
-			err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
-				Name:      reminder.Name,
-				ActorID:   reminder.ActorID,
-				ActorType: reminder.ActorType,
-			})
-			if err != nil {
-				log.Errorf("error deleting reminder: %s", err)
+			if err = a.executeReminder(reminder); err != nil {
+				log.Errorf("error execution of reminder %q for actor type %s with id %s: %v",
+					reminder.Name, reminder.ActorType, reminder.ActorID, err)
 			}
+			if repetitionsLeft > 0 {
+				repetitionsLeft--
+			}
+			if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime); err != nil {
+				log.Errorf("error updating reminder track: %v", err)
+			}
+			// if reminder is not repetitive, proceed with reminder deletion
+			if period == 0 {
+				break L
+			}
+			nextTime = nextTime.Add(period)
+			if nextTimer.Stop() {
+				<-nextTimer.C
+			}
+			nextTimer.Reset(time.Until(nextTime))
 		}
-	}(reminder, period, repetitions, stopChannel)
+		err = a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
+			Name:      reminder.Name,
+			ActorID:   reminder.ActorID,
+			ActorType: reminder.ActorType,
+		})
+		if err != nil {
+			log.Errorf("error deleting reminder: %s", err)
+		}
+	}(reminder, period, nextTime, ttl, repetitionsLeft, stopChannel)
 
 	return nil
 }
 
-func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, repetition *actorRepetition, data interface{}) error {
+func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	r := ReminderResponse{
-		DueTime: dueTime,
-		Period:  period,
-		Data:    data,
+		DueTime: reminder.DueTime,
+		Period:  reminder.Period,
+		Data:    reminder.Data,
 	}
 	b, err := json.Marshal(&r)
 	if err != nil {
 		return err
 	}
 
-	log.Debugf("executing reminder %s for actor type %s with id %s", reminder, actorType, actorID)
-	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder))
-	req.WithActor(actorType, actorID)
+	log.Debugf("executing reminder %s for actor type %s with id %s", reminder.Name, reminder.ActorType, reminder.ActorID)
+	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder.Name))
+	req.WithActor(reminder.ActorType, reminder.ActorID)
 	req.WithRawData(b, invokev1.JSONContentType)
 
 	_, err = a.callLocalActor(context.Background(), req)
-	if err == nil {
-		key := constructCompositeKey(actorType, actorID)
-		repetition.decrementAttempt()
-		err = a.updateReminderTrack(key, reminder, repetition.getValue())
-	} else {
-		log.Errorf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
-	}
 	return err
 }
 
 func (a *actorsRuntime) reminderRequiresUpdate(req *CreateReminderRequest, reminder *Reminder) bool {
 	if reminder.ActorID == req.ActorID && reminder.ActorType == req.ActorType && reminder.Name == req.Name &&
-		(reminder.Data != req.Data || reminder.DueTime != req.DueTime || reminder.Period != req.Period) {
+		(reminder.Data != req.Data || reminder.DueTime != req.DueTime || reminder.Period != req.Period ||
+			len(req.TTL) != 0 || (len(reminder.ExpirationTime) != 0 && len(req.TTL) == 0)) {
 		return true
 	}
 
@@ -955,6 +920,14 @@ func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderRe
 	return remindersInPartitionAfterInsertion, newReminderRef, stateKey, m.calculateEtag(newReminderRef.actorRemindersPartitionID)
 }
 
+func (m *ActorMetadata) calculateDatabasePartitionKey(stateKey string) string {
+	if m.RemindersMetadata.PartitionCount > 0 {
+		return m.ID
+	}
+
+	return stateKey
+}
+
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
@@ -962,8 +935,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 	a.activeRemindersLock.Lock()
 	defer a.activeRemindersLock.Unlock()
-	r, exists := a.getReminder(req)
-	if exists {
+	if r, exists := a.getReminder(req); exists {
 		if a.reminderRequiresUpdate(req, r) {
 			err := a.DeleteReminder(ctx, &DeleteReminderRequest{
 				ActorID:   req.ActorID,
@@ -981,8 +953,6 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	// Store the reminder in active reminders list
 	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
 	reminderKey := constructCompositeKey(actorKey, req.Name)
-	stop := make(chan bool)
-	a.activeReminders.Store(reminderKey, stop)
 
 	if a.evaluationBusy {
 		select {
@@ -993,32 +963,76 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		}
 	}
 
+	now := time.Now()
 	reminder := Reminder{
-		ActorID:        req.ActorID,
-		ActorType:      req.ActorType,
-		Name:           req.Name,
-		Data:           req.Data,
-		Period:         req.Period,
-		DueTime:        req.DueTime,
-		RegisteredTime: time.Now().UTC().Format(time.RFC3339),
+		ActorID:   req.ActorID,
+		ActorType: req.ActorType,
+		Name:      req.Name,
+		Data:      req.Data,
+		Period:    req.Period,
+		DueTime:   req.DueTime,
 	}
 
-	err := backoff.Retry(func() error {
-		reminders, actorMetadata, err := a.getRemindersForActorType(req.ActorType, true)
+	// check input correctness
+	var (
+		dueTime, ttl time.Time
+		repeats      int
+		err          error
+	)
+	if len(req.DueTime) != 0 {
+		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
+			return errors.Wrap(err, "error parsing reminder due time")
+		}
+	} else {
+		dueTime = now
+	}
+	reminder.RegisteredTime = dueTime.Format(time.RFC3339)
+
+	if len(req.Period) != 0 {
+		_, repeats, err = parseDuration(req.Period)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "error parsing reminder period")
+		}
+		// error on timers with zero repetitions
+		if repeats == 0 {
+			return errors.Errorf("reminder %s has zero repetitions", reminder.Name)
+		}
+	}
+	// set expiration time if configured
+	if len(req.TTL) > 0 {
+		if ttl, err = parseTime(req.TTL, &dueTime); err != nil {
+			return errors.Wrap(err, "error parsing reminder TTL")
+		}
+		// check if already expired
+		if now.After(ttl) || dueTime.After(ttl) {
+			return errors.Errorf("reminder %s has already expired: registeredTime: %s TTL:%s",
+				reminderKey, reminder.RegisteredTime, req.TTL)
+		}
+		reminder.ExpirationTime = ttl.UTC().Format(time.RFC3339)
+	}
+
+	stop := make(chan bool)
+	a.activeReminders.Store(reminderKey, stop)
+
+	err = backoff.Retry(func() error {
+		reminders, actorMetadata, err2 := a.getRemindersForActorType(req.ActorType, true)
+		if err2 != nil {
+			return err2
 		}
 
 		// First we add it to the partition list.
 		remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, &reminder)
 
+		// Get the database partiton key (needed for CosmosDB)
+		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
+
 		// Now we can add it to the "global" list.
 		reminders = append(reminders, reminderRef)
 
 		// Then, save the partition to the database.
-		err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag)
-		if err != nil {
-			return err
+		err2 = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
+		if err2 != nil {
+			return err2
 		}
 
 		// Finally, we must save metadata to get a new eTag.
@@ -1033,20 +1047,15 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	if err != nil {
 		return err
 	}
-
-	err = a.startReminder(&reminder, stop)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return a.startReminder(&reminder, stop)
 }
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
 	var (
-		err             error
-		repeats         int
-		dueTime, period time.Duration
+		err          error
+		repeats      int
+		dueTime, ttl time.Time
+		period       time.Duration
 	)
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
@@ -1063,27 +1072,31 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		close(stopChan.(chan bool))
 	}
 
+	if len(req.DueTime) != 0 {
+		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
+			return errors.Wrap(err, "error parsing timer due time")
+		}
+	} else {
+		dueTime = time.Now()
+	}
+
 	repeats = -1 // set to default
 	if len(req.Period) != 0 {
 		if period, repeats, err = parseDuration(req.Period); err != nil {
-			return err
+			return errors.Wrap(err, "error parsing timer period")
 		}
-	}
-
-	// error on timers with zero repetitions
-	if repeats == 0 {
-		return errors.Errorf("timer %s has zero repetitions", timerKey)
-	}
-
-	if len(req.DueTime) > 0 {
-		if dueTime, _, err = parseDuration(req.DueTime); err != nil {
-			return err
+		// error on timers with zero repetitions
+		if repeats == 0 {
+			return errors.Errorf("timer %s has zero repetitions", timerKey)
 		}
 	}
 
 	if len(req.TTL) > 0 {
-		if _, _, err = parseDuration(req.TTL); err != nil {
-			return err
+		if ttl, err = parseTime(req.TTL, &dueTime); err != nil {
+			return errors.Wrap(err, "error parsing timer TTL")
+		}
+		if time.Now().After(ttl) || dueTime.After(ttl) {
+			return errors.Errorf("timer %s has already expired: dueTime: %s TTL: %s", timerKey, req.DueTime, req.TTL)
 		}
 	}
 
@@ -1091,110 +1104,71 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	a.activeTimers.Store(timerKey, stop)
 
 	go func(stop chan bool, req *CreateTimerRequest) {
-		// check if timer is still active
-		select {
-		case <-time.After(dueTime):
-			log.Debugf("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been overdue.", timerKey, req.DueTime, req.Period, req.Data)
-			break
-		case <-stop:
-			log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
-			return
-		}
-
-		// dueTime (if set) has passed. Calculating remaining TTL.
-
 		var (
-			ttl       time.Duration
-			ttlTimer  *time.Timer
-			ttlTimerC <-chan time.Time
+			ttlTimer, nextTimer *time.Timer
+			ttlTimerC           <-chan time.Time
+			err                 error
 		)
-		if len(req.TTL) > 0 {
-			if ttl, _, err = parseDuration(req.TTL); err != nil {
-				log.Errorf(err.Error())
-				return
-			}
-			// exit if TTL has already passed
-			if ttl <= 0 {
-				log.Warnf("timer %s has expired ttl %s", timerKey, ttl.String())
-				return
-			}
-		}
-
-		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
-			req.Period, req.Callback, req.Data)
-		if err != nil {
-			log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
-		}
-
-		// for a single repeat we don't need the ticker.
-		if period == 0 || repeats == 1 {
-			a.DeleteTimer(ctx, &DeleteTimerRequest{
-				Name:      req.Name,
-				ActorID:   req.ActorID,
-				ActorType: req.ActorType,
-			})
-			return
-		}
-
-		ticker := a.configureTicker(period)
-		cnt := 1
-
-		// Set TTL timer (if specified)
-		if ttl > 0 {
-			ttlTimer = time.NewTimer(ttl)
+		if !ttl.IsZero() {
+			ttlTimer = time.NewTimer(time.Until(ttl))
 			ttlTimerC = ttlTimer.C
 		}
-
+		nextTime := dueTime
+		nextTimer = time.NewTimer(time.Until(nextTime))
+		defer func() {
+			if nextTimer.Stop() {
+				<-nextTimer.C
+			}
+			if ttlTimer != nil && ttlTimer.Stop() {
+				<-ttlTimerC
+			}
+		}()
+	L:
 		for {
 			select {
-			case <-ticker.C:
-				_, exists := a.actorsTable.Load(actorKey)
-				if exists {
-					err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
-						req.Period, req.Callback, req.Data)
-					if err != nil {
-						log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
-					}
-					if repeats > 0 {
-						cnt++
-					}
-				}
-				if !exists || (repeats > 0 && cnt >= repeats) {
-					a.DeleteTimer(ctx, &DeleteTimerRequest{
-						Name:      req.Name,
-						ActorID:   req.ActorID,
-						ActorType: req.ActorType,
-					})
-				}
+			case <-nextTimer.C:
+				// noop
 			case <-ttlTimerC:
-				a.DeleteTimer(ctx, &DeleteTimerRequest{
-					Name:      req.Name,
-					ActorID:   req.ActorID,
-					ActorType: req.ActorType,
-				})
+				// timer has expired; proceed with deletion
+				log.Infof("timer %s with parameters: dueTime: %s, period: %s, TTL: %s, data: %v has expired.", timerKey, req.DueTime, req.Period, req.TTL, req.Data)
+				break L
 			case <-stop:
-				if ttlTimer != nil {
-					if ttlTimer.Stop() {
-						<-ttlTimerC
-					}
-				}
-				ticker.Stop()
+				// timer has been already deleted
+				log.Infof("timer %s with parameters: dueTime: %s, period: %s, TTL: %s, data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.TTL, req.Data)
 				return
 			}
+
+			if _, exists := a.actorsTable.Load(actorKey); exists {
+				if err = a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data); err != nil {
+					log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
+				}
+				if repeats > 0 {
+					repeats--
+				}
+			} else {
+				log.Errorf("could not find active timer %s", timerKey)
+				return
+			}
+			if repeats == 0 || period == 0 {
+				log.Infof("timer %s has been completed", timerKey)
+				break L
+			}
+			nextTime = nextTime.Add(period)
+			if nextTimer.Stop() {
+				<-nextTimer.C
+			}
+			nextTimer.Reset(time.Until(nextTime))
+		}
+		err = a.DeleteTimer(ctx, &DeleteTimerRequest{
+			Name:      req.Name,
+			ActorID:   req.ActorID,
+			ActorType: req.ActorType,
+		})
+		if err != nil {
+			log.Errorf("error deleting timer %s: %v", timerKey, err)
 		}
 	}(stop, req)
 	return nil
-}
-
-func (a *actorsRuntime) configureTicker(d time.Duration) *time.Ticker {
-	if d == 0 {
-		// NewTicker cannot take in 0.  The ticker is not exact anyways since it fires
-		// after "at least" the duration passed in, so we just change 0 to a valid small duration.
-		d = 1 * time.Nanosecond
-	}
-
-	t := time.NewTicker(d)
-	return t
 }
 
 func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, callback string, data interface{}) error {
@@ -1344,7 +1318,10 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	}
 
 	// Save to database.
-	transaction := state.TransactionalStateRequest{}
+	metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
+	transaction := state.TransactionalStateRequest{
+		Metadata: metadata,
+	}
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		partitionID := i + 1
 		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(partitionID))
@@ -1352,8 +1329,9 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 		transaction.Operations = append(transaction.Operations, state.TransactionalStateOperation{
 			Operation: state.Upsert,
 			Request: state.SetRequest{
-				Key:   stateKey,
-				Value: stateValue,
+				Key:      stateKey,
+				Value:    stateValue,
+				Metadata: metadata,
 			},
 		})
 	}
@@ -1384,6 +1362,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
+		metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
 		actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{}
 		reminders := []actorReminderReference{}
 
@@ -1394,7 +1373,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			key := actorMetadata.calculateRemindersStateKey(actorType, partition)
 			keyPartitionMap[key] = partition
 			getRequests = append(getRequests, state.GetRequest{
-				Key: key,
+				Key:      key,
+				Metadata: metadata,
 			})
 		}
 
@@ -1487,13 +1467,14 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	return reminderRefs, actorMetadata, nil
 }
 
-func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string) error {
+func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string, databasePartitionKey string) error {
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
 	return a.store.Set(&state.SetRequest{
-		Key:   stateKey,
-		Value: reminders,
-		ETag:  etag,
+		Key:      stateKey,
+		Value:    reminders,
+		ETag:     etag,
+		Metadata: map[string]string{metadataPartitionKey: databasePartitionKey},
 	})
 }
 
@@ -1537,8 +1518,11 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 			}
 		}
 
+		// Get the database partiton key (needed for CosmosDB)
+		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
+
 		// Then, save the partition to the database.
-		err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag)
+		err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
 		if err != nil {
 			return err
 		}
@@ -1635,22 +1619,10 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	return nil
 }
 
-// parseDuration creates time.Duration from either:
-// - ISO8601 duration format,
-// - RFC3339 datetime format,
-// - time.Duration string format.
-func parseDuration(from string) (time.Duration, int, error) {
-	var match []string
-	if pattern.MatchString(from) {
-		match = pattern.FindStringSubmatch(from)
-	} else {
-		if d, err := time.ParseDuration(from); err == nil {
-			return d, -1, nil
-		}
-		if t, err := time.Parse(time.RFC3339, from); err == nil {
-			return time.Until(t), -1, nil
-		}
-		return time.Duration(0), 0, errors.Errorf("unsupported time/duration format %q", from)
+func parseISO8601Duration(from string) (time.Duration, int, error) {
+	match := pattern.FindStringSubmatch(from)
+	if match == nil {
+		return 0, 0, errors.Errorf("unsupported ISO8601 duration format %q", from)
 	}
 	duration := time.Duration(0)
 	// -1 signifies infinite repetition
@@ -1660,10 +1632,9 @@ func parseDuration(from string) (time.Duration, int, error) {
 		if i == 0 || name == "" || part == "" {
 			continue
 		}
-
 		val, err := strconv.Atoi(part)
 		if err != nil {
-			return time.Duration(0), 0, err
+			return 0, 0, err
 		}
 		switch name {
 		case "year":
@@ -1683,24 +1654,51 @@ func parseDuration(from string) (time.Duration, int, error) {
 		case "repetition":
 			repetition = val
 		default:
-			return time.Duration(0), -1, fmt.Errorf("unknown field %s", name)
+			return 0, 0, fmt.Errorf("unsupported ISO8601 duration field %s", name)
 		}
 	}
-
 	return duration, repetition, nil
 }
 
-func (a *actorsRuntime) stopReminderIfRepetitionsOver(name, actorID, actorType string, repetitionLeft int) (bool, error) {
-	if repetitionLeft == 0 {
-		err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
-			Name:      name,
-			ActorID:   actorID,
-			ActorType: actorType,
-		})
-		if err != nil {
-			log.Errorf("error deleting reminder: %s", err)
-		}
-		return true, nil
+// parseDuration creates time.Duration from either:
+// - ISO8601 duration format,
+// - time.Duration string format.
+func parseDuration(from string) (time.Duration, int, error) {
+	d, r, err := parseISO8601Duration(from)
+	if err == nil {
+		return d, r, nil
 	}
-	return false, nil
+	d, err = time.ParseDuration(from)
+	if err == nil {
+		return d, -1, nil
+	}
+	return 0, 0, errors.Errorf("unsupported duration format %q", from)
+}
+
+// parseTime creates time.Duration from either:
+// - ISO8601 duration format,
+// - time.Duration string format,
+// - RFC3339 datetime format.
+// For duration formats, an offset is added.
+func parseTime(from string, offset *time.Time) (time.Time, error) {
+	var start time.Time
+	if offset != nil {
+		start = *offset
+	} else {
+		start = time.Now()
+	}
+	d, r, err := parseISO8601Duration(from)
+	if err == nil {
+		if r != -1 {
+			return time.Time{}, errors.Errorf("repetitions are not allowed")
+		}
+		return start.Add(d), nil
+	}
+	if d, err = time.ParseDuration(from); err == nil {
+		return start.Add(d), nil
+	}
+	if t, err := time.Parse(time.RFC3339, from); err == nil {
+		return t, nil
+	}
+	return time.Time{}, errors.Errorf("unsupported time/duration format %q", from)
 }
