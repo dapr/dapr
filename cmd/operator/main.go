@@ -39,7 +39,10 @@ func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
-	operator.NewOperator(config, certChainPath, !disableLeaderElection).Run(ctx)
+	go operator.NewOperator(config, certChainPath, !disableLeaderElection).Run(ctx)
+	go operator.RunWebhooks(!disableLeaderElection)
+
+	<-ctx.Done()
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)

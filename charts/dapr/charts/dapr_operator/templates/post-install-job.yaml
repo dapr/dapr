@@ -1,0 +1,26 @@
+# This web hook updates the subscription CRD to in
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: patch-crd
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: patch-crd
+    spec:
+      serviceAccountName: dapr-operator # Needed for permissions to run the CRD patch below.
+      restartPolicy: Never
+      containers:
+      - name: sa
+        image: google/cloud-sdk
+        imagePullPolicy: IfNotPresent
+        # The patch below updates the namespace and caBundle for the subscription CRC conversion webhook.
+        command:
+        - "/bin/sh"
+        - "-c"
+        - |
+          export caBundle=`kubectl get secret -n {{ .Release.Namespace }} dapr-webhook-ca -o jsonpath="{.data.caBundle}"`
+          kubectl patch crd "subscriptions.dapr.io" --type='json' -p "[{'op': 'add', 'path': '/spec/conversion/webhook/clientConfig/service/namespace', 'value':'{{ .Release.Namespace }}'},{'op': 'add', 'path': '/spec/conversion/webhook/clientConfig/caBundle', 'value':'${caBundle}'}]"
