@@ -1912,6 +1912,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
 	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
+	fakeReq.WithCustomHTTPMetadata(testPubSubMessage.metadata)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
@@ -2108,6 +2109,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
 	fakeReq.WithRawData(testPubSubMessage.data, contenttype.CloudEventContentType)
+	fakeReq.WithCustomHTTPMetadata(testPubSubMessage.metadata)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
@@ -2157,6 +2159,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.topic)
 		fakeReqNoTraceID.WithHTTPExtension(http.MethodPost, "")
 		fakeReqNoTraceID.WithRawData(message.data, contenttype.CloudEventContentType)
+		fakeReqNoTraceID.WithCustomHTTPMetadata(testPubSubMessage.metadata)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReqNoTraceID).Return(fakeResp, nil)
 
 		// act
