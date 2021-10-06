@@ -1,4 +1,4 @@
-# This web hook updates the subscription CRD to in
+# This helm hook patches the subscription CRD to include the correct conversion webhook namespace and caBundle.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -17,7 +17,7 @@ spec:
       - name: sa
         image: google/cloud-sdk
         imagePullPolicy: IfNotPresent
-        # The patch below updates the namespace and caBundle for the subscription CRD conversion webhook.
+        # The `kubectl patch` below updates the namespace and caBundle for the subscription CRD conversion webhook.
         command:
         - "/bin/sh"
         - "-c"
