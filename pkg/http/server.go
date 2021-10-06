@@ -74,6 +74,8 @@ func (s *server) StartNonBlocking() error {
 	customServer := &fasthttp.Server{
 		Handler:            handler,
 		MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+		ReadBufferSize:     s.config.ReadBufferSize * 1024,
+		StreamRequestBody:  s.config.StreamRequestBody,
 	}
 
 	var listeners []net.Listener
