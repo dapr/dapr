@@ -107,11 +107,6 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 		},
 		// pubsub-c-topic is loaded from the YAML/CRD
 		// tests/config/app_topic_subscription_pubsub.yaml.
-		// {
-		// 	PubsubName: pubsubName,
-		// 	Topic:      pubsubC,
-		// 	Route:      pubsubC,
-		// },
 		{
 			PubsubName: pubsubName,
 			Topic:      pubsubJob,

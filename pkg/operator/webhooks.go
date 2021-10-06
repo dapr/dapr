@@ -2,6 +2,7 @@ package operator
 
 import (
 	"os"
+	"strings"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Register the k8s client auth
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,7 +33,7 @@ func RunWebhooks(enableLeaderElection bool) {
 	/*
 		Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
 	*/
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+	if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
 		if err = ctrl.NewWebhookManagedBy(mgr).
 			For(&subscriptionsapi_v1alpha1.Subscription{}).
 			Complete(); err != nil {

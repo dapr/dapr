@@ -15,7 +15,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: sa
-        image: google/cloud-sdk
+        image: google/cloud-sdk:360.0.0
         imagePullPolicy: IfNotPresent
         # The `kubectl patch` below updates the namespace and caBundle for the subscription CRD conversion webhook.
         command:

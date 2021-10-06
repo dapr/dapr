@@ -40,9 +40,10 @@ func main() {
 
 	ctx := signals.Context()
 	go operator.NewOperator(config, certChainPath, !disableLeaderElection).Run(ctx)
+	// The webhooks use their own controller context and stops on SIGTERM and SIGINT.
 	go operator.RunWebhooks(!disableLeaderElection)
 
-	<-ctx.Done()
+	<-ctx.Done() // Wait for SIGTERM and SIGINT.
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)

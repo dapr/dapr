@@ -170,10 +170,6 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 			},
 			// pubsub-c-topic-grpc is loaded from the YAML/CRD
 			// tests/config/app_topic_subscription_pubsub_grpc.yaml.
-			// {
-			// 	PubsubName: "messagebus",
-			// 	Topic:      pubsubC,
-			// },
 			{
 				PubsubName: "messagebus",
 				Topic:      pubsubRaw,
