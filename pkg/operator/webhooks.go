@@ -90,7 +90,7 @@ func patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) {
 	crdClient := clientSet.ApiextensionsV1().CustomResourceDefinitions()
 	namespace := os.Getenv("NAMESPACE")
 	if namespace == "" {
-		log.Error("Could not get current namespace")
+		log.Error("Could not get dapr namespace")
 
 		return
 	}
@@ -98,7 +98,7 @@ func patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) {
 	si, err := client.CoreV1().Secrets(namespace).Get(ctx, webhookCAName, v1.GetOptions{})
 	if err != nil {
 		log.Debugf("Could not get webhook CA: %v", err)
-		log.Info("The webhook CA secret. Assuming conversion webhook caBundles are managed manually.")
+		log.Info("The webhook CA secret was not found. Assuming conversion webhook caBundles are managed manually.")
 
 		return
 	}
