@@ -17,7 +17,7 @@ spec:
       - name: sa
         image: google/cloud-sdk
         imagePullPolicy: IfNotPresent
-        # The patch below updates the namespace and caBundle for the subscription CRC conversion webhook.
+        # The patch below updates the namespace and caBundle for the subscription CRD conversion webhook.
         command:
         - "/bin/sh"
         - "-c"
