@@ -20,6 +20,8 @@ import (
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 )
 
+const webhookCAName = "dapr-webhook-ca"
+
 func RunWebhooks(enableLeaderElection bool) {
 	conf, err := ctrl.GetConfig()
 	if err != nil {
@@ -88,14 +90,15 @@ func patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) {
 	crdClient := clientSet.ApiextensionsV1().CustomResourceDefinitions()
 	namespace := os.Getenv("NAMESPACE")
 	if namespace == "" {
-		log.Errorf("Could not get current namespace: %v", err)
+		log.Error("Could not get current namespace")
 
 		return
 	}
 
-	si, err := client.CoreV1().Secrets(namespace).Get(ctx, "dapr-webhook-ca", v1.GetOptions{})
+	si, err := client.CoreV1().Secrets(namespace).Get(ctx, webhookCAName, v1.GetOptions{})
 	if err != nil {
-		log.Infof("The webhook CA secret. Assuming conversion webhook caBundles are managed manually.")
+		log.Debugf("Could not get webhook CA: %v", err)
+		log.Info("The webhook CA secret. Assuming conversion webhook caBundles are managed manually.")
 
 		return
 	}
@@ -130,12 +133,13 @@ func patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) {
 			continue
 		}
 
+		// This code mimics:
+		// kubectl patch crd "subscriptions.dapr.io" --type='json' -p [{'op': 'replace', 'path': '/spec/conversion/webhook/clientConfig/service/namespace', 'value':'${namespace}'},{'op': 'add', 'path': '/spec/conversion/webhook/clientConfig/caBundle', 'value':'${caBundle}'}]"
 		type patchValue struct {
 			Op    string      `json:"op"`
 			Path  string      `json:"path"`
 			Value interface{} `json:"value"`
 		}
-		// kubectl patch crd "subscriptions.dapr.io" --type='json' -p [{'op': 'replace', 'path': '/spec/conversion/webhook/clientConfig/service/namespace', 'value':'${namespace}'},{'op': 'add', 'path': '/spec/conversion/webhook/clientConfig/caBundle', 'value':'${caBundle}'}]"
 		payload := []patchValue{{
 			Op:    "replace",
 			Path:  "/spec/conversion/webhook/clientConfig/service/namespace",
