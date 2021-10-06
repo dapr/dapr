@@ -1,10 +1,18 @@
 package operator
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"os"
 	"strings"
 
+	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Register the k8s client auth
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
@@ -53,8 +61,106 @@ func RunWebhooks(enableLeaderElection bool) {
 		log.Fatalf("unable to set up ready check: %v", err)
 	}
 
+	ctx := ctrl.SetupSignalHandler()
+
+	go patchCRDs(ctx, conf, "subscriptions.dapr.io")
+
 	log.Info("starting webhooks")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		log.Fatalf("problem running webhooks: %v", err)
+	}
+}
+
+func patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) {
+	client, err := kubernetes.NewForConfig(conf)
+	if err != nil {
+		log.Errorf("Could not get Kubernetes API client: %v", err)
+
+		return
+	}
+	clientSet, err := apiextensionsclient.NewForConfig(conf)
+	if err != nil {
+		log.Errorf("Could not get API extention client: %v", err)
+
+		return
+	}
+
+	crdClient := clientSet.ApiextensionsV1().CustomResourceDefinitions()
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		log.Errorf("Could not get current namespace: %v", err)
+
+		return
+	}
+
+	si, err := client.CoreV1().Secrets(namespace).Get(ctx, "dapr-webhook-ca", v1.GetOptions{})
+	if err != nil {
+		log.Infof("The webhook CA secret. Assuming conversion webhook caBundles are managed manually.")
+
+		return
+	}
+
+	caBundle, ok := si.Data["caBundle"]
+	if !ok {
+		log.Error("Webhook CA secret did not contain 'caBundle'")
+
+		return
+	}
+
+	for _, crdName := range crdNames {
+		crd, err := crdClient.
+			Get(ctx, crdName, v1.GetOptions{})
+
+		if err != nil {
+			log.Errorf("Could not get CRD %q: %v", crdName, err)
+
+			continue
+		}
+
+		if crd.Spec.Conversion.Webhook.ClientConfig == nil {
+			log.Errorf("CRD %q does not have an existing webhook client config", crdName)
+
+			continue
+		}
+
+		if crd.Spec.Conversion.Webhook.ClientConfig.Service != nil &&
+			crd.Spec.Conversion.Webhook.ClientConfig.Service.Namespace == namespace &&
+			crd.Spec.Conversion.Webhook.ClientConfig.CABundle != nil &&
+			bytes.Equal(crd.Spec.Conversion.Webhook.ClientConfig.CABundle, caBundle) {
+			log.Infof("Conversion webhook for %q is up to date", crdName)
+
+			continue
+		}
+
+		type patchValue struct {
+			Op    string      `json:"op"`
+			Path  string      `json:"path"`
+			Value interface{} `json:"value"`
+		}
+		// kubectl patch crd "subscriptions.dapr.io" --type='json' -p [{'op': 'replace', 'path': '/spec/conversion/webhook/clientConfig/service/namespace', 'value':'${namespace}'},{'op': 'add', 'path': '/spec/conversion/webhook/clientConfig/caBundle', 'value':'${caBundle}'}]"
+		payload := []patchValue{{
+			Op:    "replace",
+			Path:  "/spec/conversion/webhook/clientConfig/service/namespace",
+			Value: namespace,
+		}, {
+			Op:    "replace",
+			Path:  "/spec/conversion/webhook/clientConfig/caBundle",
+			Value: caBundle,
+		}}
+
+		payloadJSON, err := json.Marshal(payload)
+		if err != nil {
+			log.Errorf("Could not marshal webhook spec: %v", err)
+
+			continue
+		}
+		_, err = crdClient.Patch(ctx, crdName, types.JSONPatchType, payloadJSON, v1.PatchOptions{})
+		if err != nil {
+			log.Errorf("Failed to patch webhook in CRD %q: %v", crdName, err)
+
+			continue
+		}
+
+		log.Infof("Successfully patched webhook in CRD %q", crdName)
 	}
 }
