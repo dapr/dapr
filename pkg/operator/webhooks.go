@@ -108,9 +108,7 @@ func patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) {
 	}
 
 	for _, crdName := range crdNames {
-		crd, err := crdClient.
-			Get(ctx, crdName, v1.GetOptions{})
-
+		crd, err := crdClient.Get(ctx, crdName, v1.GetOptions{})
 		if err != nil {
 			log.Errorf("Could not get CRD %q: %v", crdName, err)
 
