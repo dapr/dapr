@@ -15,7 +15,11 @@ spec:
       restartPolicy: Never
       containers:
       - name: sa
-        image: google/cloud-sdk:360.0.0
+        {{ if eq .Values.global.daprControlPlaneOs "windows" }}
+        image: codefresh/kubectl:windows-20H2
+        {{ else }}
+        image: codefresh/kubectl:1.18.2
+        {{ end }}
         imagePullPolicy: IfNotPresent
         # The `kubectl patch` below updates the namespace and caBundle for the subscription CRD conversion webhook.
         command:
