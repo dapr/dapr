@@ -80,7 +80,7 @@ func patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) {
 	}
 	clientSet, err := apiextensionsclient.NewForConfig(conf)
 	if err != nil {
-		log.Errorf("Could not get API extention client: %v", err)
+		log.Errorf("Could not get API extension client: %v", err)
 
 		return
 	}
