@@ -1,3 +1,38 @@
+{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-webhook-cert"}}
+{{- $existingCA := lookup "v1" "Secret" .Release.Namespace "dapr-webhook-ca"}}
+{{- $ca := genCA "dapr-webhook-ca" 3650 }}
+{{- $cn := printf "dapr-webhook" }}
+{{- $altName1 := printf "dapr-webhook.%s" .Release.Namespace }}
+{{- $altName2 := printf "dapr-webhook.%s.svc" .Release.Namespace }}
+{{- $altName3 := printf "dapr-webhook.%s.svc.cluster" .Release.Namespace }}
+{{- $altName4 := printf "dapr-webhook.%s.svc.cluster.local" .Release.Namespace }}
+{{- $cert := genSignedCert $cn nil (list $altName1 $altName2 $altName3 $altName4) 3650 $ca }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dapr-webhook-cert
+  labels:
+    app: dapr-operator
+data:
+  {{ if $existingSecret }}tls.crt: {{ index $existingSecret.data "tls.crt" }}
+  {{ else }}tls.crt: {{ b64enc $cert.Cert }}
+  {{ end }}
+
+  {{ if $existingSecret }}tls.key: {{ index $existingSecret.data "tls.key" }}
+  {{ else }}tls.key: {{ b64enc $cert.Key }}
+  {{ end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dapr-webhook-ca
+  labels:
+    app: dapr-operator
+data:
+  {{ if $existingCA }}caBundle: {{ index $existingCA.data "caBundle" }}
+  {{ else }}caBundle: {{ b64enc $ca.Cert }}
+  {{ end }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -103,6 +138,13 @@ spec:
           - name: credentials
             mountPath: /var/run/dapr/credentials
             readOnly: true
+          - name: webhook-creds
+            {{- if eq .Values.global.daprControlPlaneOs "windows" }}
+            mountPath: "C:\\Windows\\TEMP\\k8s-webhook-server\\serving-certs"
+            {{- else }}
+            mountPath: /tmp/k8s-webhook-server/serving-certs
+            {{- end }}
+            readOnly: true
         command:
 {{- if eq .Values.debug.enabled false }}
         - "/operator"
@@ -137,6 +179,9 @@ spec:
         - name: credentials
           secret:
             secretName: dapr-trust-bundle
+        - name: webhook-creds
+          secret:
+            secretName: dapr-webhook-cert
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

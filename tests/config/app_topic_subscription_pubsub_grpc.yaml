@@ -1,0 +1,10 @@
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: c-topic-subscription-grpc
+spec:
+  pubsubname: messagebus
+  topic: pubsub-c-topic-grpc
+  route: /pubsub-c-topic-grpc
+scopes:
+- pubsub-subscriber-grpc
