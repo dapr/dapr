@@ -928,14 +928,6 @@ func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderRe
 	return remindersInPartitionAfterInsertion, newReminderRef, stateKey, m.calculateEtag(newReminderRef.actorRemindersPartitionID)
 }
 
-func (m *ActorMetadata) calculateDatabasePartitionKey(stateKey string) string {
-	if m.RemindersMetadata.PartitionCount > 0 {
-		return m.ID
-	}
-
-	return stateKey
-}
-
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
@@ -1031,14 +1023,11 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		// First we add it to the partition list.
 		remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, &reminder)
 
-		// Get the database partiton key (needed for CosmosDB)
-		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
-
 		// Now we can add it to the "global" list.
 		reminders = append(reminders, reminderRef)
 
 		// Then, save the partition to the database.
-		err2 = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
+		err2 = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag)
 		if err2 != nil {
 			return err2
 		}
@@ -1328,24 +1317,17 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	}
 
 	// Save to database.
-	metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
-	transaction := state.TransactionalStateRequest{
-		Metadata: metadata,
-	}
+	requests := make([]state.SetRequest, actorMetadata.RemindersMetadata.PartitionCount)
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		partitionID := i + 1
 		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(partitionID))
 		stateValue := actorRemindersPartitions[i]
-		transaction.Operations = append(transaction.Operations, state.TransactionalStateOperation{
-			Operation: state.Upsert,
-			Request: state.SetRequest{
-				Key:      stateKey,
-				Value:    stateValue,
-				Metadata: metadata,
-			},
+		requests = append(requests, state.SetRequest{
+			Key:   stateKey,
+			Value: stateValue,
 		})
 	}
-	err = a.transactionalStore.Multi(&transaction)
+	err = a.store.BulkSet(requests)
 	if err != nil {
 		return nil, err
 	}
@@ -1372,7 +1354,6 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
-		metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
 		actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{}
 		reminders := []actorReminderReference{}
 
@@ -1383,8 +1364,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			key := actorMetadata.calculateRemindersStateKey(actorType, partition)
 			keyPartitionMap[key] = partition
 			getRequests = append(getRequests, state.GetRequest{
-				Key:      key,
-				Metadata: metadata,
+				Key: key,
 			})
 		}
 
@@ -1477,14 +1457,13 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	return reminderRefs, actorMetadata, nil
 }
 
-func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string, databasePartitionKey string) error {
+func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string) error {
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
 	return a.store.Set(&state.SetRequest{
-		Key:      stateKey,
-		Value:    reminders,
-		ETag:     etag,
-		Metadata: map[string]string{metadataPartitionKey: databasePartitionKey},
+		Key:   stateKey,
+		Value: reminders,
+		ETag:  etag,
 	})
 }
 
@@ -1528,11 +1507,8 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 			}
 		}
 
-		// Get the database partiton key (needed for CosmosDB)
-		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
-
 		// Then, save the partition to the database.
-		err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
+		err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag)
 		if err != nil {
 			return err
 		}
