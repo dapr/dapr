@@ -42,6 +42,7 @@ require (
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.8.0
+	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
 	google.golang.org/genproto v0.0.0-20201204160425-06b3db808446
 	google.golang.org/grpc v1.38.0
@@ -57,8 +58,6 @@ require (
 	k8s.io/metrics v0.20.0
 	sigs.k8s.io/controller-runtime v0.7.0
 )
-
-require golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
 
 replace (
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
