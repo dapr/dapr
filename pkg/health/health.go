@@ -19,7 +19,7 @@ const (
 	successStatusCode = 200
 )
 
-// Option is an a function that applies a health check option.
+// Option is a function that applies a health check option.
 type Option func(o *healthCheckOptions)
 
 type healthCheckOptions struct {
