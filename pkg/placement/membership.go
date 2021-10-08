@@ -14,6 +14,8 @@ import (
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+
+	"github.com/dapr/kit/retry"
 )
 
 const (
@@ -310,19 +312,28 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 
 	var err error
 	for _, s := range targets {
-		err = s.Send(o)
+		config := retry.DefaultConfig()
+		config.MaxRetries = 3
+		backoff := config.NewBackOff()
 
-		if err != nil {
-			remoteAddr := "n/a"
-			if peer, ok := peer.FromContext(s.Context()); ok {
-				remoteAddr = peer.Addr.String()
-			}
+		retry.NotifyRecover(
+			func() error {
+				err = s.Send(o)
 
-			log.Errorf("error updating runtime host (%q) on %q operation: %s", remoteAddr, operation, err)
-			// TODO: the error should not be ignored. By handing error or retrying dissemination,
-			// this logic needs to be improved. Otherwise, the runtimes throwing the exception
-			// will have the inconsistent hashing tables.
-		}
+				if err != nil {
+					remoteAddr := "n/a"
+					if peer, ok := peer.FromContext(s.Context()); ok {
+						remoteAddr = peer.Addr.String()
+					}
+
+					log.Errorf("error updating runtime host (%q) on %q operation: %s", remoteAddr, operation, err)
+					return err
+				}
+				return nil
+			},
+			backoff,
+			func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
+			func() { log.Debug("Dissemination successful.") })
 	}
 
 	return err
