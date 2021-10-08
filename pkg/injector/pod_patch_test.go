@@ -115,6 +115,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-metrics=true",
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -167,6 +168,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-metrics=true",
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -206,6 +208,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-metrics=true",
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
 			"--enable-mtls",
 		}
 

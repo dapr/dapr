@@ -2348,7 +2348,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent["id"].(string))
+		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -2624,7 +2624,11 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		-1,
 		false,
 		"",
-		false, 4, "")
+		false,
+		4,
+		"",
+		4,
+		false)
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 }

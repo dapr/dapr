@@ -12,6 +12,8 @@ import (
 	"net"
 	"sync"
 
+	b64 "encoding/base64"
+
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -35,8 +37,9 @@ import (
 const serverPort = 6500
 
 const (
-	APIVersionV1alpha1 = "dapr.io/v1alpha1"
-	APIVersionV2alpha1 = "dapr.io/v2alpha1"
+	APIVersionV1alpha1    = "dapr.io/v1alpha1"
+	APIVersionV2alpha1    = "dapr.io/v2alpha1"
+	kubernetesSecretStore = "kubernetes"
 )
 
 var log = logger.NewLogger("dapr.operator.api")
@@ -138,7 +141,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 
 func processComponentSecrets(component *componentsapi.Component, namespace string, kubeClient client.Client) error {
 	for i, m := range component.Spec.Metadata {
-		if m.SecretKeyRef.Name != "" {
+		if m.SecretKeyRef.Name != "" && (component.Auth.SecretStore == kubernetesSecretStore || component.Auth.SecretStore == "") {
 			var secret corev1.Secret
 
 			err := kubeClient.Get(context.TODO(), types.NamespacedName{
@@ -155,15 +158,16 @@ func processComponentSecrets(component *componentsapi.Component, namespace strin
 			}
 
 			val, ok := secret.Data[key]
-			if ok {
-				val, err = json.Marshal(string(val))
-				if err != nil {
-					return err
-				}
+			enc := b64.StdEncoding.EncodeToString(val)
+			jsonEnc, err := json.Marshal(enc)
+			if err != nil {
+				return err
+			}
 
+			if ok {
 				component.Spec.Metadata[i].Value = componentsapi.DynamicValue{
 					JSON: v1.JSON{
-						Raw: val,
+						Raw: jsonEnc,
 					},
 				}
 			}
@@ -233,6 +237,12 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 	for c := range updateChan {
 		go func(c *componentsapi.Component) {
+			err := processComponentSecrets(c, in.Namespace, a.Client)
+			if err != nil {
+				log.Warnf("error processing component %s secrets: %s", c.Name, err)
+				return
+			}
+
 			b, err := json.Marshal(&c)
 			if err != nil {
 				log.Warnf("error serializing component %s (%s): %s", c.GetName(), c.Spec.Type, err)
