@@ -126,6 +126,8 @@ func TestGetSideCarContainer(t *testing.T) {
 		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
 		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		// default image
+		assert.Equal(t, "darpio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
@@ -213,6 +215,17 @@ func TestGetSideCarContainer(t *testing.T) {
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
+	})
+
+	t.Run("get sidecar container override image", func(t *testing.T) {
+		image := "daprio/overvide"
+		annotations := map[string]string{
+			daprImage: image,
+		}
+
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+
+		assert.Equal(t, image, container.Image)
 	})
 }
 
