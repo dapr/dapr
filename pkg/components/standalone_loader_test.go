@@ -102,6 +102,16 @@ spec:
      value: value1
    - name: prop2
      value: value2
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+   name: pubsub
+spec:
+   type: pubsub.in-memory
+   metadata:
+   - name: rawPayload
+     value: "true"
 `
 	components, errs := request.decodeYaml([]byte(yaml))
 	assert.Len(t, components, 1)
@@ -130,10 +140,18 @@ spec:
      value: value1
    - name: prop2
      value: value2
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+   name: state.couchbase
+spec:
+	metadata:
+		badStructure: "So please ignore me"
 `
 	components, errs := request.decodeYaml([]byte(yaml))
 	assert.Len(t, components, 0)
-	assert.Len(t, errs, 0)
+	assert.Len(t, errs, 1)
 }
 
 func TestStandaloneDecodeUnsuspectingFile(t *testing.T) {
