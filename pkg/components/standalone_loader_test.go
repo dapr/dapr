@@ -146,8 +146,8 @@ kind: Component
 metadata:
    name: state.couchbase
 spec:
-	metadata:
-		badStructure: "So please ignore me"
+   metadata:
+      badStructure: "So please ignore me"
 `
 	components, errs := request.decodeYaml([]byte(yaml))
 	assert.Len(t, components, 0)
