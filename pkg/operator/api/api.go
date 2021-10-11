@@ -266,7 +266,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	return nil
 }
 
-// chanGracefully control channel to close gracefully in multi-goroutines
+// chanGracefully control channel to close gracefully in multi-goroutines.
 type chanGracefully struct {
 	ch       chan *componentsapi.Component
 	isClosed bool
