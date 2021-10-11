@@ -281,7 +281,7 @@ func initChanGracefully(ch chan *componentsapi.Component) (
 	}
 }
 
-// Close chan be closed non-reentrantly
+// Close chan be closed non-reentrantly.
 func (c *chanGracefully) Close() {
 	c.Lock()
 	if !c.isClosed {
