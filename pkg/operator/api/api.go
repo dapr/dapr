@@ -254,7 +254,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 				Component: b,
 			})
 			if err != nil {
-				log.Errorf("error updating sidecar with component %s (%s): %s", c.GetName(), c.Spec.Type, err)
+				log.Warnf("error updating sidecar with component %s (%s): %s", c.GetName(), c.Spec.Type, err)
 				if status.Code(err) == codes.Unavailable {
 					chWrapper.Close()
 				}
