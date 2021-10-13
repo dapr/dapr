@@ -254,7 +254,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 				Component: b,
 			})
 			if err != nil {
-				log.Errorf("error updating sidecar with component %s (%s): %s", c.GetName(), c.Spec.Type, err)
+				log.Warnf("error updating sidecar with component %s (%s): %s", c.GetName(), c.Spec.Type, err)
 				if status.Code(err) == codes.Unavailable {
 					chWrapper.Close()
 				}
@@ -266,7 +266,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	return nil
 }
 
-// chanGracefully control channel to close gracefully in multi-goroutines
+// chanGracefully control channel to close gracefully in multi-goroutines.
 type chanGracefully struct {
 	ch       chan *componentsapi.Component
 	isClosed bool
@@ -281,7 +281,7 @@ func initChanGracefully(ch chan *componentsapi.Component) (
 	}
 }
 
-// Close chan be closed non-reentrantly
+// Close chan be closed non-reentrantly.
 func (c *chanGracefully) Close() {
 	c.Lock()
 	if !c.isClosed {
