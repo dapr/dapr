@@ -105,11 +105,8 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			Topic:      pubsubB,
 			Route:      pubsubB,
 		},
-		{
-			PubsubName: pubsubName,
-			Topic:      pubsubC,
-			Route:      pubsubC,
-		},
+		// pubsub-c-topic is loaded from the YAML/CRD
+		// tests/config/app_topic_subscription_pubsub.yaml.
 		{
 			PubsubName: pubsubName,
 			Topic:      pubsubJob,
