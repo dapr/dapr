@@ -1818,7 +1818,7 @@ func (a *DaprRuntime) ShutdownWithWait() {
 func (a *DaprRuntime) cleanSocket() {
 	if a.runtimeConfig.UnixDomainSocket != "" {
 		for _, s := range []string{"http", "grpc"} {
-			os.Remove(fmt.Sprintf("/%s/dapr-%s-%s.socket", a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ID, s))
+			os.Remove(fmt.Sprintf("%s/dapr-%s-%s.socket", a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ID, s))
 		}
 	}
 }
