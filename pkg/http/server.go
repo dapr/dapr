@@ -81,7 +81,7 @@ func (s *server) StartNonBlocking() error {
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
 	if s.config.UnixDomainSocket != "" {
-		socket := fmt.Sprintf("/%s/dapr-%s-http.socket", s.config.UnixDomainSocket, s.config.AppID)
+		socket := fmt.Sprintf("%s/dapr-%s-http.socket", s.config.UnixDomainSocket, s.config.AppID)
 		l, err := net.Listen("unix", socket)
 		if err != nil {
 			return err
