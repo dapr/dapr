@@ -167,8 +167,6 @@ type DaprRuntime struct {
 
 	proxy messaging.Proxy
 
-	componentsCallback ComponentsCallback
-
 	// TODO: Remove feature flag once feature is ratified
 	featureRoutingEnabled bool
 }
@@ -332,7 +330,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
-	a.componentsCallback = opts.componentsCallback
 
 	go a.processComponents()
 	err = a.beginComponentsUpdates()
@@ -420,8 +417,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// TODO: Remove feature flag once feature is ratified
 	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
 
-	if a.componentsCallback != nil {
-		if err = a.componentsCallback(ComponentRegistry{
+	if opts.componentsCallback != nil {
+		if err = opts.componentsCallback(ComponentRegistry{
 			Actors:          a.actor,
 			DirectMessaging: a.directMessaging,
 			StateStores:     a.stateStores,
