@@ -54,7 +54,7 @@ type Frame struct {
 // ProtoMessage tags a frame as valid proto message.
 func (f *Frame) ProtoMessage() {}
 
-// Marshal implents the encoding.Codec interface method.
+// Marshal implements the encoding.Codec interface method.
 func (p *Proxy) Marshal(v interface{}) ([]byte, error) {
 	out, ok := v.(*Frame)
 	if !ok {
@@ -64,7 +64,7 @@ func (p *Proxy) Marshal(v interface{}) ([]byte, error) {
 	return out.payload, nil
 }
 
-// Unmarshal implents the encoding.Codec interface method.
+// Unmarshal implements the encoding.Codec interface method.
 func (p *Proxy) Unmarshal(data []byte, v interface{}) error {
 	dst, ok := v.(*Frame)
 	if !ok {
@@ -74,7 +74,7 @@ func (p *Proxy) Unmarshal(data []byte, v interface{}) error {
 	return nil
 }
 
-// Name implents the encoding.Codec interface method.
+// Name implements the encoding.Codec interface method.
 func (*Proxy) Name() string {
 	return Name
 }
