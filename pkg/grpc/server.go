@@ -107,7 +107,7 @@ func getDefaultMaxAgeDuration() *time.Duration {
 func (s *server) StartNonBlocking() error {
 	var listeners []net.Listener
 	if s.config.UnixDomainSocket != "" && s.kind == apiServer {
-		socket := fmt.Sprintf("/%s/dapr-%s-grpc.socket", s.config.UnixDomainSocket, s.config.AppID)
+		socket := fmt.Sprintf("%s/dapr-%s-grpc.socket", s.config.UnixDomainSocket, s.config.AppID)
 		l, err := net.Listen("unix", socket)
 		if err != nil {
 			return err
