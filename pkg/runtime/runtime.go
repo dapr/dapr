@@ -675,8 +675,11 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 					}
 
 					comps := resp.GetComponents()
-					for _, c := range comps {
-						parseAndUpdate(c)
+					for i := 0; i < len(comps); i++ {
+						// avoid missing any updates during the init component time.
+						go func(comp []byte) {
+							parseAndUpdate(comp)
+						}(comps[i])
 					}
 
 					return nil
