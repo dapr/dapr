@@ -838,7 +838,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
-				"OnBindingEvent",
+				"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent",
 				status.Code(err).String(),
 				int64(len(resp.GetData())), start)
 		}
