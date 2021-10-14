@@ -17,6 +17,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,7 +30,6 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -183,6 +184,7 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 		Subscriptions: [][]byte{},
 	}
 
+	// Only the latest/storage version needs to be returned.
 	var subsV2alpha1 subscriptionsapi_v2alpha1.SubscriptionList
 	if err := a.Client.List(ctx, &subsV2alpha1); err != nil {
 		return nil, errors.Wrap(err, "error getting subscriptions")
@@ -190,23 +192,6 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 	for i := range subsV2alpha1.Items {
 		s := subsV2alpha1.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		if s.APIVersion != APIVersionV2alpha1 {
-			continue
-		}
-		b, err := json.Marshal(&s)
-		if err != nil {
-			log.Warnf("error marshalling subscription: %s", err)
-			continue
-		}
-		resp.Subscriptions = append(resp.Subscriptions, b)
-	}
-
-	var subsV1alpha1 subscriptionsapi_v1alpha1.SubscriptionList
-	if err := a.Client.List(ctx, &subsV1alpha1); err != nil {
-		return nil, errors.Wrap(err, "error getting subscriptions")
-	}
-	for i := range subsV1alpha1.Items {
-		s := subsV1alpha1.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		if s.APIVersion != APIVersionV1alpha1 {
 			continue
 		}
 		b, err := json.Marshal(&s)
@@ -229,11 +214,11 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	updateChan := a.allConnUpdateChan[key]
 	a.connLock.Unlock()
 	defer func() {
-		close(updateChan)
 		a.connLock.Lock()
 		delete(a.allConnUpdateChan, key)
 		a.connLock.Unlock()
 	}()
+	chWrapper := initChanGracefully(updateChan)
 
 	for c := range updateChan {
 		go func(c *componentsapi.Component) {
@@ -253,10 +238,38 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			})
 			if err != nil {
 				log.Warnf("error updating sidecar with component %s (%s): %s", c.GetName(), c.Spec.Type, err)
+				if status.Code(err) == codes.Unavailable {
+					chWrapper.Close()
+				}
 				return
 			}
 			log.Infof("updated sidecar with component %s (%s)", c.GetName(), c.Spec.Type)
 		}(c)
 	}
 	return nil
+}
+
+// chanGracefully control channel to close gracefully in multi-goroutines.
+type chanGracefully struct {
+	ch       chan *componentsapi.Component
+	isClosed bool
+	sync.Mutex
+}
+
+func initChanGracefully(ch chan *componentsapi.Component) (
+	c *chanGracefully) {
+	return &chanGracefully{
+		ch:       ch,
+		isClosed: false,
+	}
+}
+
+// Close chan be closed non-reentrantly.
+func (c *chanGracefully) Close() {
+	c.Lock()
+	if !c.isClosed {
+		c.isClosed = true
+		close(c.ch)
+	}
+	c.Unlock()
 }
