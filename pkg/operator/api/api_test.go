@@ -137,3 +137,12 @@ func TestProcessComponentSecrets(t *testing.T) {
 		assert.Equal(t, jsonEnc, c.Spec.Metadata[0].Value.Raw)
 	})
 }
+
+func TestChanGracefullyClose(t *testing.T) {
+	t.Run("close updateChan", func(t *testing.T) {
+		ch := make(chan *componentsapi.Component)
+		instance := initChanGracefully(ch)
+		instance.Close()
+		assert.Equal(t, true, instance.isClosed)
+	})
+}
