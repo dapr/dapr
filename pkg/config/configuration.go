@@ -35,7 +35,7 @@ const (
 	SpiffeIDPrefix              = "spiffe://"
 	HTTPProtocol                = "http"
 	GRPCProtocol                = "grpc"
-	ActorRentrancy      Feature = "Actor.Reentrancy"
+	ActorReentrancy     Feature = "Actor.Reentrancy"
 	ActorTypeMetadata   Feature = "Actor.TypeMetadata"
 	PubSubRouting       Feature = "PubSub.Routing"
 	StateEncryption     Feature = "State.Encryption"
@@ -267,7 +267,7 @@ func LoadKubernetesConfiguration(config, namespace string, operatorClient operat
 	return conf, nil
 }
 
-// Validate the secrets configuration and sort the allow and deny lists if present.
+// Validate the secrets configuration and sort to the allowed and denied lists if present.
 func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 	scopes := conf.Spec.Secrets.Scopes
 	set := sets.NewString()
@@ -291,10 +291,10 @@ func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 	return nil
 }
 
-// Check if the secret is allowed to be accessed.
+// IsSecretAllowed Check if the secret is allowed to be accessed.
 func (c SecretsScope) IsSecretAllowed(key string) bool {
-	// By default set allow access for the secret store.
-	var access string = AllowAccess
+	// By default, set allow access for the secret store.
+	var access = AllowAccess
 	// Check and set deny access.
 	if strings.EqualFold(c.DefaultAccess, DenyAccess) {
 		access = DenyAccess
