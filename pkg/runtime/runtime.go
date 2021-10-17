@@ -331,7 +331,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
-	go a.processComponents()
 	err = a.beginComponentsUpdates()
 	if err != nil {
 		log.Warnf("failed to watch component updates: %s", err)
@@ -341,8 +340,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
 	}
-
-	a.flushOutstandingComponents()
 
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
@@ -402,9 +399,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.loadAppConfiguration()
 
 	// processComponents() should after app configuration loaded
-	// so that processComponents() could filter modules by app configuration
-	// go a.processComponents()
-	// a.flushOutstandingComponents()
+	// so that processComponents() could filter components by app configuration
+	go a.processComponents()
+	a.flushOutstandingComponents()
 
 	a.initDirectMessaging(a.nameResolver)
 

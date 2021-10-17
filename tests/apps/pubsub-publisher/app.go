@@ -148,6 +148,8 @@ func performPublishHTTP(topic string, jsonValue []byte, contentType string, meta
 
 	resp, err := http.Post(url, contentType, bytes.NewBuffer(jsonValue))
 
+	log.Printf("Pushing result = %+v, err = %s", resp, err)
+
 	if err != nil {
 		if resp != nil {
 			return resp.StatusCode, err
