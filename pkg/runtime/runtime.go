@@ -158,6 +158,7 @@ type DaprRuntime struct {
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
 	inputBindingRoutes     map[string]string
+	shutdownC              chan error
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -168,6 +169,18 @@ type DaprRuntime struct {
 
 	// TODO: Remove feature flag once feature is ratified
 	featureRoutingEnabled bool
+}
+
+type ComponentsCallback func(components ComponentRegistry) error
+
+type ComponentRegistry struct {
+	Actors          actors.Actors
+	DirectMessaging messaging.DirectMessaging
+	StateStores     map[string]state.Store
+	InputBindings   map[string]bindings.InputBinding
+	OutputBindings  map[string]bindings.OutputBinding
+	SecretStores    map[string]secretstores.SecretStore
+	PubSubs         map[string]pubsub.PubSub
 }
 
 type componentPreprocessRes struct {
@@ -213,6 +226,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
+		shutdownC:                  make(chan error, 1),
 	}
 }
 
@@ -402,6 +416,20 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// TODO: Remove feature flag once feature is ratified
 	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
+
+	if opts.componentsCallback != nil {
+		if err = opts.componentsCallback(ComponentRegistry{
+			Actors:          a.actor,
+			DirectMessaging: a.directMessaging,
+			StateStores:     a.stateStores,
+			InputBindings:   a.inputBindings,
+			OutputBindings:  a.outputBindings,
+			SecretStores:    a.secretStores,
+			PubSubs:         a.pubSubs,
+		}); err != nil {
+			log.Fatalf("failed to register components with callback: %s", err)
+		}
+	}
 
 	a.startSubscribing()
 	err = a.startReadingFromBindings()
@@ -810,7 +838,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
-				"OnBindingEvent",
+				"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent",
 				status.Code(err).String(),
 				int64(len(resp.GetData())), start)
 		}
@@ -1650,7 +1678,7 @@ func (a *DaprRuntime) processComponents() {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
 			if !comp.Spec.IgnoreErrors {
 				log.Warnf("process component error daprd process will exited, gracefully to stop")
-				a.shutdownRuntime(defaultGracefulShutdownDuration)
+				a.Shutdown(defaultGracefulShutdownDuration)
 				log.Fatalf(e)
 			}
 			log.Errorf(e)
@@ -1811,24 +1839,29 @@ func (a *DaprRuntime) shutdownComponents() error {
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
-	a.shutdownRuntime(defaultGracefulShutdownDuration)
+	a.Shutdown(defaultGracefulShutdownDuration)
 	os.Exit(0)
 }
 
 func (a *DaprRuntime) cleanSocket() {
 	if a.runtimeConfig.UnixDomainSocket != "" {
 		for _, s := range []string{"http", "grpc"} {
-			os.Remove(fmt.Sprintf("/%s/dapr-%s-%s.socket", a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ID, s))
+			os.Remove(fmt.Sprintf("%s/dapr-%s-%s.socket", a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ID, s))
 		}
 	}
 }
 
-func (a *DaprRuntime) shutdownRuntime(duration time.Duration) {
+func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	a.stopActor()
 	log.Infof("dapr shutting down. Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
 	a.shutdownComponents()
 	a.cleanSocket()
+	a.shutdownC <- nil
+}
+
+func (a *DaprRuntime) WaitUntilShutdown() error {
+	return <-a.shutdownC
 }
 
 func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {
