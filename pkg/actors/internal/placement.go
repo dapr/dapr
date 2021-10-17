@@ -345,7 +345,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 		}
 
 		conn, err := grpc.Dial(serverAddr, opts...)
-	NextServer:
+	NEXT_SERVER:
 		if err != nil {
 			log.Debugf("error connecting to placement service: %v", err)
 			if conn != nil {
@@ -359,7 +359,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 		client := v1pb.NewPlacementClient(conn)
 		stream, err := client.ReportDaprStatus(context.Background())
 		if err != nil {
-			goto NextServer
+			goto NEXT_SERVER
 		}
 
 		log.Debugf("established connection to placement service at %s", conn.Target())
