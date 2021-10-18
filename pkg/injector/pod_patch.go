@@ -60,6 +60,7 @@ const (
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
 	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
+	daprImage                         = "dapr.io/sidecar-image"
 	daprAppSSLKey                     = "dapr.io/app-ssl"
 	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
@@ -596,6 +597,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			"/daprd",
 			"--",
 		}, args...)
+	}
+
+	if image := getStringAnnotation(annotations, daprImage); image != "" {
+		daprSidecarImage = image
 	}
 
 	c := &corev1.Container{
