@@ -60,8 +60,11 @@ const (
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
 	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
-	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
+	daprImage                         = "dapr.io/sidecar-image"
 	daprAppSSLKey                     = "dapr.io/app-ssl"
+	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
+	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
+	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -98,10 +101,11 @@ const (
 	apiVersionV1                      = "v1.0"
 	defaultMtlsEnabled                = true
 	trueString                        = "true"
+	defaultDaprHTTPStreamRequestBody  = false
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
-	namespace, image, imagePullPolicy string, kubeClient *kubernetes.Clientset, daprClient scheme.Interface) ([]PatchOperation, error) {
+	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface) ([]PatchOperation, error) {
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
@@ -233,7 +237,7 @@ LoopEnv:
 	return patchOps
 }
 
-func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace string) (string, string, string) {
+func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace string) (string, string, string) {
 	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, meta_v1.GetOptions{})
 	if err != nil {
 		return "", "", ""
@@ -346,6 +350,14 @@ func getMaxRequestBodySize(annotations map[string]string) (int32, error) {
 
 func getListenAddresses(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprListenAddresses, defaultSidecarListenAddresses)
+}
+
+func getReadBufferSize(annotations map[string]string) (int32, error) {
+	return getInt32Annotation(annotations, daprReadBufferSize)
+}
+
+func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprHTTPStreamRequestBody, defaultDaprHTTPStreamRequestBody)
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
@@ -515,6 +527,13 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		log.Warn(err)
 	}
 
+	readBufferSize, err := getReadBufferSize(annotations)
+	if err != nil {
+		log.Warn(err)
+	}
+
+	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
+
 	ports := []corev1.ContainerPort{
 		{
 			ContainerPort: int32(sidecarHTTPPort),
@@ -555,6 +574,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		fmt.Sprintf("--enable-metrics=%t", metricsEnabled),
 		"--metrics-port", fmt.Sprintf("%v", metricsPort),
 		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
+		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
 	}
 
 	debugEnabled := getEnableDebug(annotations)
@@ -577,6 +597,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			"/daprd",
 			"--",
 		}, args...)
+	}
+
+	if image := getStringAnnotation(annotations, daprImage); image != "" {
+		daprSidecarImage = image
 	}
 
 	c := &corev1.Container{
@@ -658,6 +682,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	if sslEnabled {
 		c.Args = append(c.Args, "--app-ssl")
+	}
+
+	if HTTPStreamRequestBodyEnabled {
+		c.Args = append(c.Args, "--http-stream-request-body")
 	}
 
 	secret := getAPITokenSecret(annotations)

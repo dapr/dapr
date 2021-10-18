@@ -17,10 +17,12 @@ type ServerConfig struct {
 	EnableProfiling    bool
 	MaxRequestBodySize int
 	UnixDomainSocket   string
+	ReadBufferSize     int
+	StreamRequestBody  bool
 }
 
 // NewServerConfig returns a new HTTP server config.
-func NewServerConfig(appID string, hostAddress string, port int, apiListenAddresses []string, publicPort *int, profilePort int, allowedOrigins string, enableProfiling bool, maxRequestBodySize int, unixDomainSocket string) ServerConfig {
+func NewServerConfig(appID string, hostAddress string, port int, apiListenAddresses []string, publicPort *int, profilePort int, allowedOrigins string, enableProfiling bool, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, streamRequestBody bool) ServerConfig {
 	return ServerConfig{
 		AllowedOrigins:     allowedOrigins,
 		AppID:              appID,
@@ -32,5 +34,7 @@ func NewServerConfig(appID string, hostAddress string, port int, apiListenAddres
 		EnableProfiling:    enableProfiling,
 		MaxRequestBodySize: maxRequestBodySize,
 		UnixDomainSocket:   unixDomainSocket,
+		ReadBufferSize:     readBufferSize,
+		StreamRequestBody:  streamRequestBody,
 	}
 }

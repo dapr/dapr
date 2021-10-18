@@ -33,6 +33,8 @@ const (
 	DefaultMaxRequestBodySize = 4
 	// DefaultAPIListenAddress is which address to listen for the Dapr HTTP and GRPC APIs. Empty string is all addresses.
 	DefaultAPIListenAddress = ""
+	// DefaultReadBufferSize is the default option for the maximum header size in KB for Dapr HTTP servers.
+	DefaultReadBufferSize = 4
 )
 
 // Config holds the Dapr Runtime configuration.
@@ -60,6 +62,8 @@ type Config struct {
 	AppSSL               bool
 	MaxRequestBodySize   int
 	UnixDomainSocket     string
+	ReadBufferSize       int
+	StreamRequestBody    bool
 	WaitingProbe         string
 	WaitingContainers    []string
 }
@@ -69,8 +73,7 @@ func NewRuntimeConfig(
 	id string, placementAddresses []string,
 	controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string,
 	httpPort, internalGRPCPort, apiGRPCPort int, apiListenAddresses []string, publicPort *int, appPort, profilePort int,
-	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int,
-	unixDomainSocket string, waitingProbe string, waitingContainers []string) *Config {
+	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, streamRequestBody bool, waitingProbe string, waitingContainers []string) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
@@ -98,6 +101,8 @@ func NewRuntimeConfig(
 		AppSSL:               appSSL,
 		MaxRequestBodySize:   maxRequestBodySize,
 		UnixDomainSocket:     unixDomainSocket,
+		ReadBufferSize:       readBufferSize,
+		StreamRequestBody:    streamRequestBody,
 		WaitingProbe:         waitingProbe,
 		WaitingContainers:    waitingContainers,
 	}

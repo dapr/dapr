@@ -55,9 +55,11 @@ func FromFlags() (*DaprRuntime, error) {
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
 	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
+	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
+	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in KB to handle sending multi-KB headers. By default 4 KB.")
+	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
 	waitingProbe := flag.String("daprd-wait-probe", "", "address for check app ready. If empty, daprd will not check the probe at start time")
 	waitingContainers := flag.String("daprd-wait-containers", "", "The containers name in k8s which daprd waill waiting them ready. If empty, daprd will not check them at start time")
-	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -153,6 +155,13 @@ func FromFlags() (*DaprRuntime, error) {
 		maxRequestBodySize = DefaultMaxRequestBodySize
 	}
 
+	var readBufferSize int
+	if *daprHTTPReadBufferSize != -1 {
+		readBufferSize = *daprHTTPReadBufferSize
+	} else {
+		readBufferSize = DefaultReadBufferSize
+	}
+
 	placementAddresses := []string{}
 	if *placementServiceHostAddr != "" {
 		placementAddresses = parseStringArray(*placementServiceHostAddr)
@@ -178,8 +187,7 @@ func FromFlags() (*DaprRuntime, error) {
 		waitingContainerNames = parseStringArray(*waitingContainers)
 	}
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort,
-		*enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, *waitingProbe, waitingContainerNames)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, *waitingProbe, waitingContainerNames)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package

@@ -56,6 +56,7 @@ type directMessaging struct {
 	hostName            string
 	maxRequestBodySize  int
 	proxy               Proxy
+	readBufferSize      int
 }
 
 type remoteApp struct {
@@ -71,7 +72,7 @@ func NewDirectMessaging(
 	appChannel channel.AppChannel,
 	clientConnFn messageClientConnection,
 	resolver nr.Resolver,
-	tracingSpec config.TracingSpec, maxRequestBodySize int, proxy Proxy) DirectMessaging {
+	tracingSpec config.TracingSpec, maxRequestBodySize int, proxy Proxy, readBufferSize int, streamRequestBody bool) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 
@@ -88,6 +89,7 @@ func NewDirectMessaging(
 		hostName:            hName,
 		maxRequestBodySize:  maxRequestBodySize,
 		proxy:               proxy,
+		readBufferSize:      readBufferSize,
 	}
 
 	if proxy != nil {
