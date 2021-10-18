@@ -341,6 +341,20 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to load components: %s", err)
 	}
 
+	a.blockUntilAppIsReady()
+
+	err = a.createAppChannel()
+	if err != nil {
+		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+	}
+
+	a.loadAppConfiguration()
+
+	// processComponents() should after app configuration loaded
+	// so that processComponents() could filter components by app configuration
+	go a.processComponents()
+	a.flushOutstandingComponents()
+
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
@@ -387,21 +401,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
 
-	a.blockUntilAppIsReady()
-
-	err = a.createAppChannel()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
-	}
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	grpcAPI.SetAppChannel(a.appChannel)
-
-	a.loadAppConfiguration()
-
-	// processComponents() should after app configuration loaded
-	// so that processComponents() could filter components by app configuration
-	go a.processComponents()
-	a.flushOutstandingComponents()
 
 	a.initDirectMessaging(a.nameResolver)
 

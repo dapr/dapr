@@ -3427,7 +3427,7 @@ func TestComponentsCallback(t *testing.T) {
 
 	select {
 	case <-c:
-	case <-time.After(10 * time.Second):
+	case <-time.After(20 * time.Second):
 	}
 
 	assert.True(t, callbackInvoked, "component callback was not invoked")
