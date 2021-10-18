@@ -113,6 +113,14 @@ else
 	$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push
 endif
 
+# push docker image to kind cluster
+docker-push-kind: docker-build
+	$(info Pushing $(DOCKER_IMAGE_TAG) docker image to kind cluster...)
+	kind load docker-image $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	kind load docker-image $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	kind load docker-image $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	kind load docker-image $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+
 # publish muti-arch docker image to the registry
 docker-manifest-create: check-docker-env
 	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)

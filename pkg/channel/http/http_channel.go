@@ -52,7 +52,7 @@ type Channel struct {
 
 // CreateLocalChannel creates an HTTP AppChannel
 // nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
 	scheme := httpScheme
 	if sslEnabled {
 		scheme = httpsScheme
@@ -62,6 +62,8 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 		client: &fasthttp.Client{
 			MaxConnsPerHost:           1000000,
 			MaxIdemponentCallAttempts: 0,
+			MaxResponseBodySize:       maxRequestBodySize * 1024 * 1024,
+			ReadBufferSize:            readBufferSize * 1024,
 		},
 		baseAddress:         fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
 		tracingSpec:         spec,
@@ -161,11 +163,16 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
+	if err != nil {
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(resp.Header.ContentLength()), elapsedMs)
+		return nil, err
+	}
+
 	if h.ch != nil {
 		<-h.ch
 	}
 
-	rsp := h.parseChannelResponse(req, resp, err)
+	rsp := h.parseChannelResponse(req, resp)
 	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(resp.Header.ContentLength()), elapsedMs)
 
 	return rsp, nil
@@ -204,20 +211,14 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	return channelReq
 }
 
-func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *fasthttp.Response, respErr error) *invokev1.InvokeMethodResponse {
+func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *fasthttp.Response) *invokev1.InvokeMethodResponse {
 	var statusCode int
 	var contentType string
 	var body []byte
 
-	if respErr != nil {
-		statusCode = fasthttp.StatusInternalServerError
-		contentType = string(invokev1.JSONContentType)
-		body = []byte(fmt.Sprintf("{\"error\": \"client error: %s\"}", respErr))
-	} else {
-		statusCode = resp.StatusCode()
-		contentType = (string)(resp.Header.ContentType())
-		body = resp.Body()
-	}
+	statusCode = resp.StatusCode()
+	contentType = (string)(resp.Header.ContentType())
+	body = resp.Body()
 
 	// Convert status code
 	rsp := invokev1.NewInvokeMethodResponse(int32(statusCode), "", nil)

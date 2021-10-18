@@ -87,6 +87,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	dingtalk_webhook "github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
 	"github.com/dapr/components-contrib/bindings/alicloud/oss"
+	"github.com/dapr/components-contrib/bindings/alicloud/tablestore"
 	"github.com/dapr/components-contrib/bindings/apns"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
@@ -96,6 +97,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
 	bindings_cosmosdb "github.com/dapr/components-contrib/bindings/azure/cosmosdb"
+	bindings_cosmosgraphdb "github.com/dapr/components-contrib/bindings/azure/cosmosgraphdb"
 	"github.com/dapr/components-contrib/bindings/azure/eventgrid"
 	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
@@ -345,6 +347,9 @@ func main() {
 			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
 				return oss.NewAliCloudOSS(logContrib)
 			}),
+			bindings_loader.NewOutput("alicloud.tablestore", func() bindings.OutputBinding {
+				return tablestore.NewAliCloudTableStore(log)
+			}),
 			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
 				return apns.NewAPNS(logContrib)
 			}),
@@ -371,6 +376,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("azure.cosmosdb", func() bindings.OutputBinding {
 				return bindings_cosmosdb.NewCosmosDB(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.cosmosgraphdb", func() bindings.OutputBinding {
+				return bindings_cosmosgraphdb.NewCosmosGraphDB(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
 				return eventgrid.NewAzureEventGrid(logContrib)

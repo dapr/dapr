@@ -9,13 +9,13 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/dapr/components-contrib v1.4.0-rc1
+	github.com/dapr/components-contrib v1.4.0-rc2
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
 	github.com/gogo/protobuf v1.3.2
-	github.com/golang/protobuf v1.5.2
+	github.com/golang/protobuf v1.4.3
 	github.com/google/cel-go v0.7.3
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.2.0
@@ -43,9 +43,9 @@ require (
 	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.8.0
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
-	google.golang.org/genproto v0.0.0-20210524171403-669157292da3
+	google.golang.org/genproto v0.0.0-20201204160425-06b3db808446
 	google.golang.org/grpc v1.38.0
-	google.golang.org/protobuf v1.26.0
+	google.golang.org/protobuf v1.25.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.20.0
 	k8s.io/apiextensions-apiserver v0.20.0
@@ -92,6 +92,7 @@ require (
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/alibaba/sentinel-golang v1.0.3 // indirect
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.7+incompatible // indirect
+	github.com/aliyun/aliyun-tablestore-go-sdk v1.6.0 // indirect
 	github.com/andybalholm/brotli v1.0.2 // indirect
 	github.com/antlr/antlr4 v0.0.0-20200503195918-621b933c7a7f // indirect
 	github.com/apache/pulsar-client-go v0.1.0 // indirect
@@ -140,6 +141,7 @@ require (
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gocql/gocql v0.0.0-20210515062232-b7ef815b4556 // indirect
+	github.com/gofrs/uuid v3.2.0+incompatible // indirect
 	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
 	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
@@ -208,6 +210,7 @@ require (
 	github.com/prometheus/statsd_exporter v0.15.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/rs/zerolog v1.18.0 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20210217112953-d4a072536008 // indirect
@@ -216,11 +219,13 @@ require (
 	github.com/shirou/gopsutil/v3 v3.21.6 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
+	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/cobra v1.1.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
 	github.com/streadway/amqp v0.0.0-20190827072141-edfb9018d271 // indirect
 	github.com/stretchr/objx v0.2.0 // indirect
+	github.com/supplyon/gremcos v0.1.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.6 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect

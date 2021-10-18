@@ -14,6 +14,8 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"reflect"
 	"strconv"
@@ -2348,7 +2350,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent["id"].(string))
+		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -2624,7 +2626,11 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		-1,
 		false,
 		"",
-		false, 4, "")
+		false,
+		4,
+		"",
+		4,
+		false)
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 }
@@ -3394,4 +3400,34 @@ func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
 		Match: e,
 		Path:  path,
 	}, nil
+}
+
+func TestComponentsCallback(t *testing.T) {
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "OK")
+	}))
+	defer svr.Close()
+
+	u, err := url.Parse(svr.URL)
+	require.NoError(t, err)
+	port, _ := strconv.Atoi(u.Port())
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", port)
+	defer stopRuntime(t, rt)
+
+	c := make(chan struct{})
+	callbackInvoked := false
+
+	rt.Run(WithComponentsCallback(func(components ComponentRegistry) error {
+		close(c)
+		callbackInvoked = true
+
+		return nil
+	}))
+
+	select {
+	case <-c:
+	case <-time.After(10 * time.Second):
+	}
+
+	assert.True(t, callbackInvoked, "component callback was not invoked")
 }
