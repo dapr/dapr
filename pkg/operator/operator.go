@@ -90,10 +90,10 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 		certChainPath: certChainPath,
 	}
 	o.apiServer = api.NewAPIServer(o.client)
-	if componentInfomer, err := mgr.GetCache().GetInformer(context.TODO(), &componentsapi.Component{}); err != nil {
+	if componentInformer, err := mgr.GetCache().GetInformer(context.TODO(), &componentsapi.Component{}); err != nil {
 		log.Fatalf("unable to get setup components informer, err: %s", err)
 	} else {
-		componentInfomer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: o.syncComponent,
 			UpdateFunc: func(_, newObj interface{}) {
 				o.syncComponent(newObj)
