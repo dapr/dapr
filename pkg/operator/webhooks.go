@@ -118,8 +118,11 @@ func patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) {
 			continue
 		}
 
-		if crd.Spec.Conversion.Webhook.ClientConfig == nil {
-			log.Errorf("CRD %q does not have an existing webhook client config", crdName)
+		if crd == nil ||
+			crd.Spec.Conversion == nil ||
+			crd.Spec.Conversion.Webhook == nil ||
+			crd.Spec.Conversion.Webhook.ClientConfig == nil {
+			log.Errorf("CRD %q does not have an existing webhook client config. Applying resources of this type will fail.", crdName)
 
 			continue
 		}
