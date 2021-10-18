@@ -166,6 +166,7 @@ type DaprRuntime struct {
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
 	inputBindingRoutes     map[string]string
+	shutdownC              chan error
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -177,6 +178,18 @@ type DaprRuntime struct {
 	podInfo PodInfo
 	// TODO: Remove feature flag once feature is ratified
 	featureRoutingEnabled bool
+}
+
+type ComponentsCallback func(components ComponentRegistry) error
+
+type ComponentRegistry struct {
+	Actors          actors.Actors
+	DirectMessaging messaging.DirectMessaging
+	StateStores     map[string]state.Store
+	InputBindings   map[string]bindings.InputBinding
+	OutputBindings  map[string]bindings.OutputBinding
+	SecretStores    map[string]secretstores.SecretStore
+	PubSubs         map[string]pubsub.PubSub
 }
 
 type componentPreprocessRes struct {
@@ -222,6 +235,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
+		shutdownC:                  make(chan error, 1),
 	}
 }
 
@@ -445,6 +459,20 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// TODO: Remove feature flag once feature is ratified
 	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
 
+	if opts.componentsCallback != nil {
+		if err = opts.componentsCallback(ComponentRegistry{
+			Actors:          a.actor,
+			DirectMessaging: a.directMessaging,
+			StateStores:     a.stateStores,
+			InputBindings:   a.inputBindings,
+			OutputBindings:  a.outputBindings,
+			SecretStores:    a.secretStores,
+			PubSubs:         a.pubSubs,
+		}); err != nil {
+			log.Fatalf("failed to register components with callback: %s", err)
+		}
+	}
+
 	a.startSubscribing()
 	err = a.startReadingFromBindings()
 	if err != nil {
@@ -651,7 +679,10 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		resolver,
 		a.globalConfig.Spec.TracingSpec,
 		a.runtimeConfig.MaxRequestBodySize,
-		a.proxy)
+		a.proxy,
+		a.runtimeConfig.ReadBufferSize,
+		a.runtimeConfig.StreamRequestBody,
+	)
 }
 
 func (a *DaprRuntime) initProxy() {
@@ -850,7 +881,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
-				"OnBindingEvent",
+				"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent",
 				status.Code(err).String(),
 				int64(len(resp.GetData())), start)
 		}
@@ -943,7 +974,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) error {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.stateStores, a.secretStores,
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.APIListenAddresses, publicPort, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.APIListenAddresses, publicPort, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.StreamRequestBody)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
 	err := server.StartNonBlocking()
@@ -972,7 +1003,7 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket)
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize)
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
@@ -1454,8 +1485,8 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	}
 
 	// Every error from now on is a retriable error.
-	log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
-	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
+	log.Warnf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	return errors.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
 }
 
 func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
@@ -1695,7 +1726,7 @@ func (a *DaprRuntime) processComponents() {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
 			if !comp.Spec.IgnoreErrors {
 				log.Warnf("process component error daprd process will exited, gracefully to stop")
-				a.shutdownRuntime(defaultGracefulShutdownDuration)
+				a.Shutdown(defaultGracefulShutdownDuration)
 				log.Fatalf(e)
 			}
 			log.Errorf(e)
@@ -1856,24 +1887,29 @@ func (a *DaprRuntime) shutdownComponents() error {
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
-	a.shutdownRuntime(defaultGracefulShutdownDuration)
+	a.Shutdown(defaultGracefulShutdownDuration)
 	os.Exit(0)
 }
 
 func (a *DaprRuntime) cleanSocket() {
 	if a.runtimeConfig.UnixDomainSocket != "" {
 		for _, s := range []string{"http", "grpc"} {
-			os.Remove(fmt.Sprintf("/%s/dapr-%s-%s.socket", a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ID, s))
+			os.Remove(fmt.Sprintf("%s/dapr-%s-%s.socket", a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ID, s))
 		}
 	}
 }
 
-func (a *DaprRuntime) shutdownRuntime(duration time.Duration) {
+func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	a.stopActor()
 	log.Infof("dapr shutting down. Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
 	a.shutdownComponents()
 	a.cleanSocket()
+	a.shutdownC <- nil
+}
+
+func (a *DaprRuntime) WaitUntilShutdown() error {
+	return <-a.shutdownC
 }
 
 func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {
@@ -2009,7 +2045,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int) (channel.AppChannel, error)
+		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
@@ -2020,11 +2056,8 @@ func (a *DaprRuntime) createAppChannel() error {
 			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize)
+		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 		if err != nil {
-			return err
-		}
-		if a.runtimeConfig.MaxConcurrency > 0 {
 			log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
 		}
 		a.appChannel = ch
