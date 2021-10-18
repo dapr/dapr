@@ -3438,8 +3438,9 @@ func TestModuleFilter(t *testing.T) {
 
 	mockAppChannel := new(channelt.MockAppChannel)
 
+	// default not specified any module
 	configResp := config.ApplicationConfig{
-		Modules: []string{"binding"},
+		Modules: []string{},
 	}
 
 	mockAppChannel.On("GetAppConfig").Return(&configResp, nil)
@@ -3457,4 +3458,33 @@ func TestModuleFilter(t *testing.T) {
 	})
 
 	assert.True(t, determined)
+
+	determined = rt.componentsAppDetermined(components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "state",
+		},
+	})
+
+	assert.True(t, determined)
+
+	// use specified module
+	configResp.Modules = append(configResp.Modules, "binding")
+
+	rt.loadAppConfiguration()
+
+	determined = rt.componentsAppDetermined(components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "binding",
+		},
+	})
+
+	assert.True(t, determined)
+
+	determined = rt.componentsAppDetermined(components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "state",
+		},
+	})
+
+	assert.False(t, determined)
 }
