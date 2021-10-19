@@ -6,14 +6,15 @@
 package http
 
 import (
-	cl "actorload/pkg/actor/client"
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"time"
+
+	cl "actorload/pkg/actor/client"
 )
 
 const (
@@ -74,7 +75,7 @@ func (c *httpClient) InvokeMethod(actorType, actorID, method string, contentType
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +100,7 @@ func (c *httpClient) SaveStateTransactionally(actorType, actorID string, data []
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -124,7 +125,7 @@ func (c *httpClient) GetState(actorType, actorID, name string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

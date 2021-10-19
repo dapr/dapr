@@ -10,7 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -119,7 +119,7 @@ func get(key, statestore string) (*appState, error) {
 	}
 
 	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
@@ -206,7 +206,7 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 	}
 	defer res.Body.Close()
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("could not load values for bulk get from Dapr: %s", err.Error())
 	}
