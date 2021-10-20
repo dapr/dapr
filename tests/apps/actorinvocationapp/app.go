@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 
@@ -53,7 +53,7 @@ var daprConfigResponse = daprConfig{
 
 func parseCallRequest(r *http.Request) (callRequest, []byte, error) {
 	defer r.Body.Close()
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Could not read request body: %s\n", err.Error())
 		return callRequest{}, body, err
@@ -94,7 +94,7 @@ func callActorMethod(w http.ResponseWriter, r *http.Request) {
 	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer(body)) // nolint:gosec
 	if resp != nil {
 		defer resp.Body.Close()
-		respBody, _ := ioutil.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(resp.Body)
 		log.Printf("Resp: %s", string(respBody))
 		w.WriteHeader(resp.StatusCode)
 		w.Write(respBody)
@@ -133,7 +133,7 @@ func callDifferentActor(w http.ResponseWriter, r *http.Request) {
 	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer([]byte{})) // nolint:gosec
 	if resp != nil {
 		defer resp.Body.Close()
-		respBody, _ := ioutil.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(resp.Body)
 		log.Printf("Resp: %s", string(respBody))
 		w.WriteHeader(resp.StatusCode)
 		w.Write(respBody)
