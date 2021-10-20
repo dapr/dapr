@@ -3,7 +3,7 @@ package utils
 import (
 	"bufio"
 	"bytes"
-	"io/ioutil"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -40,7 +40,7 @@ func getClusterDomain(resolvConf []byte) (string, error) {
 }
 
 func getResolvContent(resolvPath string) ([]byte, error) {
-	return ioutil.ReadFile(resolvPath)
+	return os.ReadFile(resolvPath)
 }
 
 func getResolvSearchDomains(resolvConf []byte) []string {

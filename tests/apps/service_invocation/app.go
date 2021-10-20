@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -223,7 +222,7 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 		return appResponse{}, resp.StatusCode, err
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	defer resp.Body.Close()
 	if err != nil {
 		return appResponse{}, resp.StatusCode, err
@@ -416,7 +415,7 @@ func requestHTTPToHTTP(w http.ResponseWriter, r *http.Request, send func(remoteA
 	}
 	respHeaderString, _ := json.Marshal(respHeaders)
 
-	reqHeadersString, err := ioutil.ReadAll(resp.Body)
+	reqHeadersString, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		onBadRequest(w, err)
@@ -503,7 +502,7 @@ func testV1RequestHTTPToGRPC(w http.ResponseWriter, r *http.Request) {
 	}
 	respHeaderString, _ := json.Marshal(respHeaders)
 
-	reqHeadersString, err := ioutil.ReadAll(resp.Body)
+	reqHeadersString, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		onBadRequest(w, err)
@@ -1331,7 +1330,7 @@ func extractBody(r io.ReadCloser) ([]byte, error) {
 		defer r.Close()
 	}
 
-	body, err := ioutil.ReadAll(r)
+	body, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}

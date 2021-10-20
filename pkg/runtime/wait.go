@@ -7,7 +7,7 @@ package runtime
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 )
@@ -59,7 +59,7 @@ func checkIfOutboundReady(client *http.Client, outboundReadyHealthURL string) er
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, err = ioutil.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}

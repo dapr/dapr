@@ -8,7 +8,6 @@ package config
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"sort"
 	"strings"
@@ -220,7 +219,7 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 		return nil, "", err
 	}
 
-	b, err := ioutil.ReadFile(config)
+	b, err := os.ReadFile(config)
 	if err != nil {
 		return nil, "", err
 	}

@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 
@@ -53,7 +53,7 @@ func testLogCall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer resp.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 
 	results := testResponse{
 		input, string(body),
@@ -68,7 +68,7 @@ func logCall(w http.ResponseWriter, r *http.Request) {
 	log.Printf("logCall is called")
 
 	defer r.Body.Close()
-	body, _ := ioutil.ReadAll(r.Body)
+	body, _ := io.ReadAll(r.Body)
 
 	log.Printf("Got: %s", string(body))
 	w.Write(body)
