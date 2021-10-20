@@ -8,7 +8,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -65,7 +65,7 @@ func get(key, store string) (*map[string]string, int, error) {
 	}
 	defer res.Body.Close()
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
