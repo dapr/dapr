@@ -1,7 +1,7 @@
 package credentials
 
 import (
-	"io/ioutil"
+	"os"
 )
 
 const (
@@ -22,15 +22,15 @@ type CertChain struct {
 
 // LoadFromDisk retruns a CertChain from a given directory.
 func LoadFromDisk(rootCertPath, issuerCertPath, issuerKeyPath string) (*CertChain, error) {
-	rootCert, err := ioutil.ReadFile(rootCertPath)
+	rootCert, err := os.ReadFile(rootCertPath)
 	if err != nil {
 		return nil, err
 	}
-	cert, err := ioutil.ReadFile(issuerCertPath)
+	cert, err := os.ReadFile(issuerCertPath)
 	if err != nil {
 		return nil, err
 	}
-	key, err := ioutil.ReadFile(issuerKeyPath)
+	key, err := os.ReadFile(issuerKeyPath)
 	if err != nil {
 		return nil, err
 	}

@@ -8,7 +8,7 @@ package injector
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -615,7 +615,7 @@ func TestHandleRequest(t *testing.T) {
 			assert.Equal(t, tc.expectStatusCode, resp.StatusCode)
 
 			if resp.StatusCode == http.StatusOK {
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				assert.NoError(t, err)
 
 				var ar v1.AdmissionReview

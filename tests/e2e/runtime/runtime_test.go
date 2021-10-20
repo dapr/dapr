@@ -9,7 +9,7 @@ package runtime_e2e
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -47,7 +47,7 @@ func getAPIResponse(t *testing.T, testName, runtimeExternalURL string) (*daprAPI
 	require.Equal(t, resp.StatusCode, http.StatusOK)
 
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
