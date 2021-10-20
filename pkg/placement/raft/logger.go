@@ -7,7 +7,6 @@ package raft
 
 import (
 	"io"
-	"io/ioutil"
 	"log"
 
 	"github.com/hashicorp/go-hclog"
@@ -84,5 +83,5 @@ func (l *loggerAdapter) StandardLogger(opts *hclog.StandardLoggerOptions) *log.L
 }
 
 func (l *loggerAdapter) StandardWriter(opts *hclog.StandardLoggerOptions) io.Writer {
-	return ioutil.Discard
+	return io.Discard
 }
