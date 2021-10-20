@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,7 +107,7 @@ func testDeclarativeSubscriptionV2() subscriptionsapi_v2alpha1.Subscription {
 
 func writeSubscriptionToDisk(subscription interface{}, filePath string) {
 	b, _ := yaml.Marshal(subscription)
-	ioutil.WriteFile(filePath, b, 0600)
+	os.WriteFile(filePath, b, 0600)
 }
 
 func TestDeclarativeSubscriptionsV1(t *testing.T) {

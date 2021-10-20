@@ -11,7 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	gohttp "net/http"
 	"os"
@@ -2185,7 +2185,7 @@ func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, 
 		panic(fmt.Errorf("failed to request: %v", err))
 	}
 
-	bodyBytes, _ := ioutil.ReadAll(res.Body)
+	bodyBytes, _ := io.ReadAll(res.Body)
 	defer res.Body.Close()
 	response := fakeHTTPResponse{
 		StatusCode:  res.StatusCode,
