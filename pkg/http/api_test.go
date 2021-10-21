@@ -11,7 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	gohttp "net/http"
 	"os"
@@ -233,16 +233,6 @@ func TestShutdownEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructShutdownEndpoints())
 
 	t.Run("Shutdown successfully - 204", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
-		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
-			<-time.After(200 * time.Millisecond)
-		}
-		m.AssertCalled(t, "shutdown")
-	})
-
-	t.Run("Shutdown supports POST - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
@@ -2195,7 +2185,7 @@ func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, 
 		panic(fmt.Errorf("failed to request: %v", err))
 	}
 
-	bodyBytes, _ := ioutil.ReadAll(res.Body)
+	bodyBytes, _ := io.ReadAll(res.Body)
 	defer res.Body.Close()
 	response := fakeHTTPResponse{
 		StatusCode:  res.StatusCode,

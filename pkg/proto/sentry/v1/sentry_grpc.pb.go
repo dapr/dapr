@@ -4,6 +4,7 @@ package sentry
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -54,8 +55,7 @@ type CAServer interface {
 }
 
 // UnimplementedCAServer should be embedded to have forward compatible implementations.
-type UnimplementedCAServer struct {
-}
+type UnimplementedCAServer struct{}
 
 func (UnimplementedCAServer) SignCertificate(context.Context, *SignCertificateRequest) (*SignCertificateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SignCertificate not implemented")

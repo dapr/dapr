@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -15,11 +16,12 @@ import (
 	"strings"
 	"testing"
 
+	guuid "github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	guuid "github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -265,17 +267,11 @@ func generateTestCases(isHTTP bool) []testCase {
 		},
 		{
 			// No comma since this will become the name of the test without spaces.
-			"Test data size edges (default 4MB) " + protocol,
+			"Test data size edges (1MB < limit < 4MB) " + protocol,
 			[]testStep{
 				{
 					"save",
 					generateSpecificLengthSample(1024 * 1024), // Less than limit
-					emptyResponse,
-					204,
-				},
-				{
-					"save",
-					generateSpecificLengthSample(1024*1024*3 - 55), // Exact limit
 					emptyResponse,
 					204,
 				},
@@ -309,9 +305,16 @@ func generateStateTransactionCases(protocolType string) testStateTransactionCase
 	testStateTransactionCase := testStateTransactionCase{
 		[]stateTransactionTestStep{
 			{
+				// Transaction order should be tested in conformance tests: https://github.com/dapr/components-contrib/issues/1210
 				"transact",
 				newStateTransactionRequestResponse(
 					utils.StateTransactionKeyValue{testCase1Key, testCase1Value, "upsert"},
+				),
+				emptyResponse,
+			},
+			{
+				"transact",
+				newStateTransactionRequestResponse(
 					utils.StateTransactionKeyValue{testCase1Key, "", "delete"},
 					utils.StateTransactionKeyValue{testCase2Key, testCase2Value, "upsert"},
 				),
@@ -444,7 +447,7 @@ func TestStateTransactionApps(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	var transactionTests = []struct {
+	transactionTests := []struct {
 		protocol string
 		in       testStateTransactionCase
 	}{
@@ -477,6 +480,7 @@ func TestStateTransactionApps(t *testing.T) {
 					for _, ri := range appResp.States {
 						if er.Key == ri.Key {
 							require.Equal(t, er.Key, ri.Key)
+							require.Equal(t, er.Value != nil, ri.Value != nil)
 							if er.Value != nil {
 								require.True(t, reflect.DeepEqual(er.Value.Data, ri.Value.Data))
 							}

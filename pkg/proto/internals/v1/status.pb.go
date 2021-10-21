@@ -12,12 +12,13 @@
 package internals
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	anypb "google.golang.org/protobuf/types/known/anypb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -132,11 +133,14 @@ func file_dapr_proto_internals_v1_status_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_internals_v1_status_proto_rawDescData
 }
 
-var file_dapr_proto_internals_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_dapr_proto_internals_v1_status_proto_goTypes = []interface{}{
-	(*Status)(nil),    // 0: dapr.proto.internals.v1.Status
-	(*anypb.Any)(nil), // 1: google.protobuf.Any
-}
+var (
+	file_dapr_proto_internals_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+	file_dapr_proto_internals_v1_status_proto_goTypes  = []interface{}{
+		(*Status)(nil),    // 0: dapr.proto.internals.v1.Status
+		(*anypb.Any)(nil), // 1: google.protobuf.Any
+	}
+)
+
 var file_dapr_proto_internals_v1_status_proto_depIdxs = []int32{
 	1, // 0: dapr.proto.internals.v1.Status.details:type_name -> google.protobuf.Any
 	1, // [1:1] is the sub-list for method output_type

@@ -12,12 +12,14 @@
 package internals
 
 import (
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	reflect "reflect"
+	sync "sync"
+
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	reflect "reflect"
-	sync "sync"
+
+	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 const (
@@ -407,20 +409,23 @@ func file_dapr_proto_internals_v1_service_invocation_proto_rawDescGZIP() []byte 
 	return file_dapr_proto_internals_v1_service_invocation_proto_rawDescData
 }
 
-var file_dapr_proto_internals_v1_service_invocation_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_dapr_proto_internals_v1_service_invocation_proto_goTypes = []interface{}{
-	(*Actor)(nil),                  // 0: dapr.proto.internals.v1.Actor
-	(*InternalInvokeRequest)(nil),  // 1: dapr.proto.internals.v1.InternalInvokeRequest
-	(*InternalInvokeResponse)(nil), // 2: dapr.proto.internals.v1.InternalInvokeResponse
-	(*ListStringValue)(nil),        // 3: dapr.proto.internals.v1.ListStringValue
-	nil,                            // 4: dapr.proto.internals.v1.InternalInvokeRequest.MetadataEntry
-	nil,                            // 5: dapr.proto.internals.v1.InternalInvokeResponse.HeadersEntry
-	nil,                            // 6: dapr.proto.internals.v1.InternalInvokeResponse.TrailersEntry
-	(APIVersion)(0),                // 7: dapr.proto.internals.v1.APIVersion
-	(*v1.InvokeRequest)(nil),       // 8: dapr.proto.common.v1.InvokeRequest
-	(*Status)(nil),                 // 9: dapr.proto.internals.v1.Status
-	(*v1.InvokeResponse)(nil),      // 10: dapr.proto.common.v1.InvokeResponse
-}
+var (
+	file_dapr_proto_internals_v1_service_invocation_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+	file_dapr_proto_internals_v1_service_invocation_proto_goTypes  = []interface{}{
+		(*Actor)(nil),                  // 0: dapr.proto.internals.v1.Actor
+		(*InternalInvokeRequest)(nil),  // 1: dapr.proto.internals.v1.InternalInvokeRequest
+		(*InternalInvokeResponse)(nil), // 2: dapr.proto.internals.v1.InternalInvokeResponse
+		(*ListStringValue)(nil),        // 3: dapr.proto.internals.v1.ListStringValue
+		nil,                            // 4: dapr.proto.internals.v1.InternalInvokeRequest.MetadataEntry
+		nil,                            // 5: dapr.proto.internals.v1.InternalInvokeResponse.HeadersEntry
+		nil,                            // 6: dapr.proto.internals.v1.InternalInvokeResponse.TrailersEntry
+		(APIVersion)(0),                // 7: dapr.proto.internals.v1.APIVersion
+		(*v1.InvokeRequest)(nil),       // 8: dapr.proto.common.v1.InvokeRequest
+		(*Status)(nil),                 // 9: dapr.proto.internals.v1.Status
+		(*v1.InvokeResponse)(nil),      // 10: dapr.proto.common.v1.InvokeResponse
+	}
+)
+
 var file_dapr_proto_internals_v1_service_invocation_proto_depIdxs = []int32{
 	7,  // 0: dapr.proto.internals.v1.InternalInvokeRequest.ver:type_name -> dapr.proto.internals.v1.APIVersion
 	4,  // 1: dapr.proto.internals.v1.InternalInvokeRequest.metadata:type_name -> dapr.proto.internals.v1.InternalInvokeRequest.MetadataEntry

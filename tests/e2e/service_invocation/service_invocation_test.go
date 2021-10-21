@@ -16,13 +16,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opencensus.io/trace/propagation"
+
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.opencensus.io/trace/propagation"
 )
 
 type testCommandRequest struct {
@@ -378,11 +379,11 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
-		var trailerHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
+		trailerHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 		json.Unmarshal([]byte(actualHeaders["trailers"]), &trailerHeaders)
@@ -445,10 +446,10 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 
@@ -495,10 +496,10 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 
@@ -582,11 +583,11 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
-		var trailerHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
+		trailerHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 		json.Unmarshal([]byte(actualHeaders["trailers"]), &trailerHeaders)
@@ -645,10 +646,10 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 
@@ -679,10 +680,10 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 
@@ -726,10 +727,10 @@ func verifyHTTPToHTTPTracing(t *testing.T, url string, expectedTraceID string) {
 	t.Logf("unmarshalling..%s\n", string(resp))
 	err = json.Unmarshal(resp, &appResp)
 
-	var actualHeaders = map[string]string{}
+	actualHeaders := map[string]string{}
 	json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-	var requestHeaders = map[string][]string{}
-	var responseHeaders = map[string][]string{}
+	requestHeaders := map[string][]string{}
+	responseHeaders := map[string][]string{}
 	json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 	json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 
@@ -761,10 +762,10 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 	t.Logf("unmarshalling..%s\n", string(resp))
 	err = json.Unmarshal(resp, &appResp)
 
-	var actualHeaders = map[string]string{}
+	actualHeaders := map[string]string{}
 	json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-	var requestHeaders = map[string][]string{}
-	var responseHeaders = map[string][]string{}
+	requestHeaders := map[string][]string{}
+	responseHeaders := map[string][]string{}
 	json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 	json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 

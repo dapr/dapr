@@ -18,11 +18,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 var tr *runner.TestRunner
@@ -179,7 +181,6 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	log.Printf("Test publish subscribe success flow\n")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
-	time.Sleep(30 * time.Second)
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	return subscriberExternalURL
 }
@@ -207,6 +208,10 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 
 //nolint:staticcheck
 func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
+	log.Printf("Validating publisher health...\n")
+	_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
+	require.NoError(t, err)
+
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
 	if subscriberResponse == "empty-json" {
 		log.Println("Initialize the sets again in the subscriber application for this scenario ...")
@@ -220,14 +225,29 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		Protocol:  protocol,
 	}
 	reqBytes, _ := json.Marshal(req)
-	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, code)
+	var lastRetryError error
+	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
+		if retryCount > 0 {
+			time.Sleep(10 * time.Second)
+		}
+		lastRetryError = nil
+		_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+		if err != nil {
+			lastRetryError = err
+			continue
+		}
+		if code != http.StatusOK {
+			lastRetryError = fmt.Errorf("unexpected http code: %v", code)
+			continue
+		}
+
+		break
+	}
+	require.Nil(t, lastRetryError, "error calling /tests/callSubscriberMethod: %v", lastRetryError)
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
-		time.Sleep(5 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	}
 
@@ -251,7 +271,6 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
 		log.Printf("Validating no redelivered messages...")
-		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
 			// empty string slices
 			ReceivedByTopicA:   []string{},
@@ -262,13 +281,31 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	} else {
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
-		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	}
 	return subscriberExternalURL
 }
 
 func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) {
+	var err error
+	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
+		if retryCount > 0 {
+			log.Printf("Retrying due to error: %v", err)
+			time.Sleep(10 * time.Second)
+		}
+
+		err = validateMessagesReceivedBySubscriberOrError(t, publisherExternalURL, subscriberApp, protocol, sentMessages)
+		if err == nil {
+			// Success.
+			return
+		}
+	}
+
+	require.NoError(t, err)
+}
+
+func validateMessagesReceivedBySubscriberOrError(
+	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) error {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
@@ -282,28 +319,27 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	rawReq, _ := json.Marshal(request)
 
 	var appResp receivedMessagesResponse
-	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
-		resp, err := utils.HTTPPost(url, rawReq)
-		require.NoError(t, err)
-
-		err = json.Unmarshal(resp, &appResp)
-		require.NoError(t, err)
-
-		log.Printf("subscriber received %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic and %d on pubsub-raw-topic",
-			len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC), len(appResp.ReceivedByTopicRaw))
-
-		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
-			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
-			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
-			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) {
-			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(10 * time.Second)
-		} else {
-			break
-		}
+	resp, err := utils.HTTPPost(url, rawReq)
+	if err != nil {
+		return err
 	}
 
-	// Sort messages first because the delivered messages cannot be ordered.
+	err = json.Unmarshal(resp, &appResp)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("subscriber received %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic and %d on pubsub-raw-topic",
+		len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC), len(appResp.ReceivedByTopicRaw))
+
+	if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
+		len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
+		len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
+		len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) {
+		return fmt.Errorf("differing lengths in received vs sent messages")
+	}
+
+	// Sort messages first because the delivered messages might not be ordered.
 	sort.Strings(sentMessages.ReceivedByTopicA)
 	sort.Strings(appResp.ReceivedByTopicA)
 	sort.Strings(sentMessages.ReceivedByTopicB)
@@ -313,10 +349,23 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	sort.Strings(sentMessages.ReceivedByTopicRaw)
 	sort.Strings(appResp.ReceivedByTopicRaw)
 
-	require.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA)
-	require.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB)
-	require.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC)
-	require.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw)
+	if !assert.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA) {
+		return fmt.Errorf("different messages received in Topic A")
+	}
+
+	if !assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB) {
+		return fmt.Errorf("different messages received in Topic B")
+	}
+
+	if !assert.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC) {
+		return fmt.Errorf("different messages received in Topic C")
+	}
+
+	if !assert.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw) {
+		return fmt.Errorf("different messages received in Topic Raw")
+	}
+
+	return nil
 }
 
 func TestMain(m *testing.M) {

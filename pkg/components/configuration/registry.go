@@ -8,9 +8,10 @@ package configuration
 import (
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/pkg/errors"
 )
 
 type Configuration struct {
@@ -25,7 +26,7 @@ func New(name string, factoryMethod func() configuration.Store) Configuration {
 	}
 }
 
-// Registry is an interface for a component that returns registered configuration store implementations
+// Registry is an interface for a component that returns registered configuration store implementations.
 type Registry interface {
 	Register(components ...Configuration)
 	Create(name, version string) (configuration.Store, error)

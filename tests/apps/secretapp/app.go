@@ -8,7 +8,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -65,7 +65,7 @@ func get(key, store string) (*map[string]string, int, error) {
 	}
 	defer res.Body.Close()
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
@@ -77,7 +77,7 @@ func get(key, store string) (*map[string]string, int, error) {
 
 	log.Printf("Found secret for key %s: %s", key, body)
 
-	var state = map[string]string{}
+	state := map[string]string{}
 	if len(body) == 0 {
 		return nil, http.StatusOK, nil
 	}
@@ -95,7 +95,7 @@ func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
 	statusCode := http.StatusOK
 	log.Printf("Processing get request for %d states.", len(secrets))
 
-	var output = make([]daprSecret, 0, len(secrets))
+	output := make([]daprSecret, 0, len(secrets))
 	for _, secret := range secrets {
 		value, sc, err := get(secret.Key, secret.Store)
 		if err != nil {
@@ -132,8 +132,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var res = requestResponse{}
-	var uri = r.URL.RequestURI()
+	res := requestResponse{}
+	uri := r.URL.RequestURI()
 	var secrets []daprSecret
 	var statusCode int
 

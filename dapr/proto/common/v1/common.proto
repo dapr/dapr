@@ -24,6 +24,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/common/v1;common";
 message HTTPExtension {
   // Type of HTTP 1.1 Methods
   // RFC 7231: https://tools.ietf.org/html/rfc7231#page-24
+  // RFC 5789: https://datatracker.ietf.org/doc/html/rfc5789
   enum Verb {
     NONE = 0;
     GET = 1;
@@ -34,6 +35,7 @@ message HTTPExtension {
     CONNECT = 6;
     OPTIONS = 7;
     TRACE = 8;
+    PATCH = 9;
   }
 
   // Required. HTTP verb.

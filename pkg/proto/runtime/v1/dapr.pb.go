@@ -12,14 +12,16 @@
 package runtime
 
 import (
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	reflect "reflect"
+	sync "sync"
+
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-	reflect "reflect"
-	sync "sync"
+
+	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 const (
@@ -3022,72 +3024,75 @@ func file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescData
 }
 
-var file_dapr_proto_runtime_v1_dapr_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
-var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
-	(*InvokeServiceRequest)(nil),                // 0: dapr.proto.runtime.v1.InvokeServiceRequest
-	(*GetStateRequest)(nil),                     // 1: dapr.proto.runtime.v1.GetStateRequest
-	(*GetBulkStateRequest)(nil),                 // 2: dapr.proto.runtime.v1.GetBulkStateRequest
-	(*GetBulkStateResponse)(nil),                // 3: dapr.proto.runtime.v1.GetBulkStateResponse
-	(*BulkStateItem)(nil),                       // 4: dapr.proto.runtime.v1.BulkStateItem
-	(*GetStateResponse)(nil),                    // 5: dapr.proto.runtime.v1.GetStateResponse
-	(*DeleteStateRequest)(nil),                  // 6: dapr.proto.runtime.v1.DeleteStateRequest
-	(*DeleteBulkStateRequest)(nil),              // 7: dapr.proto.runtime.v1.DeleteBulkStateRequest
-	(*SaveStateRequest)(nil),                    // 8: dapr.proto.runtime.v1.SaveStateRequest
-	(*PublishEventRequest)(nil),                 // 9: dapr.proto.runtime.v1.PublishEventRequest
-	(*InvokeBindingRequest)(nil),                // 10: dapr.proto.runtime.v1.InvokeBindingRequest
-	(*InvokeBindingResponse)(nil),               // 11: dapr.proto.runtime.v1.InvokeBindingResponse
-	(*GetSecretRequest)(nil),                    // 12: dapr.proto.runtime.v1.GetSecretRequest
-	(*GetSecretResponse)(nil),                   // 13: dapr.proto.runtime.v1.GetSecretResponse
-	(*GetBulkSecretRequest)(nil),                // 14: dapr.proto.runtime.v1.GetBulkSecretRequest
-	(*SecretResponse)(nil),                      // 15: dapr.proto.runtime.v1.SecretResponse
-	(*GetBulkSecretResponse)(nil),               // 16: dapr.proto.runtime.v1.GetBulkSecretResponse
-	(*TransactionalStateOperation)(nil),         // 17: dapr.proto.runtime.v1.TransactionalStateOperation
-	(*ExecuteStateTransactionRequest)(nil),      // 18: dapr.proto.runtime.v1.ExecuteStateTransactionRequest
-	(*RegisterActorTimerRequest)(nil),           // 19: dapr.proto.runtime.v1.RegisterActorTimerRequest
-	(*UnregisterActorTimerRequest)(nil),         // 20: dapr.proto.runtime.v1.UnregisterActorTimerRequest
-	(*RegisterActorReminderRequest)(nil),        // 21: dapr.proto.runtime.v1.RegisterActorReminderRequest
-	(*UnregisterActorReminderRequest)(nil),      // 22: dapr.proto.runtime.v1.UnregisterActorReminderRequest
-	(*GetActorStateRequest)(nil),                // 23: dapr.proto.runtime.v1.GetActorStateRequest
-	(*GetActorStateResponse)(nil),               // 24: dapr.proto.runtime.v1.GetActorStateResponse
-	(*ExecuteActorStateTransactionRequest)(nil), // 25: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
-	(*TransactionalActorStateOperation)(nil),    // 26: dapr.proto.runtime.v1.TransactionalActorStateOperation
-	(*InvokeActorRequest)(nil),                  // 27: dapr.proto.runtime.v1.InvokeActorRequest
-	(*InvokeActorResponse)(nil),                 // 28: dapr.proto.runtime.v1.InvokeActorResponse
-	(*GetMetadataResponse)(nil),                 // 29: dapr.proto.runtime.v1.GetMetadataResponse
-	(*ActiveActorsCount)(nil),                   // 30: dapr.proto.runtime.v1.ActiveActorsCount
-	(*RegisteredComponents)(nil),                // 31: dapr.proto.runtime.v1.RegisteredComponents
-	(*SetMetadataRequest)(nil),                  // 32: dapr.proto.runtime.v1.SetMetadataRequest
-	(*GetConfigurationRequest)(nil),             // 33: dapr.proto.runtime.v1.GetConfigurationRequest
-	(*GetConfigurationResponse)(nil),            // 34: dapr.proto.runtime.v1.GetConfigurationResponse
-	(*SubscribeConfigurationRequest)(nil),       // 35: dapr.proto.runtime.v1.SubscribeConfigurationRequest
-	(*SubscribeConfigurationResponse)(nil),      // 36: dapr.proto.runtime.v1.SubscribeConfigurationResponse
-	nil,                                         // 37: dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
-	nil,                                         // 38: dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
-	nil,                                         // 39: dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
-	nil,                                         // 40: dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
-	nil,                                         // 41: dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
-	nil,                                         // 42: dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
-	nil,                                         // 43: dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
-	nil,                                         // 44: dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
-	nil,                                         // 45: dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
-	nil,                                         // 46: dapr.proto.runtime.v1.GetSecretResponse.DataEntry
-	nil,                                         // 47: dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
-	nil,                                         // 48: dapr.proto.runtime.v1.SecretResponse.SecretsEntry
-	nil,                                         // 49: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
-	nil,                                         // 50: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
-	nil,                                         // 51: dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
-	nil,                                         // 52: dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
-	nil,                                         // 53: dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
-	(*v1.InvokeRequest)(nil),                    // 54: dapr.proto.common.v1.InvokeRequest
-	(v1.StateOptions_StateConsistency)(0),       // 55: dapr.proto.common.v1.StateOptions.StateConsistency
-	(*v1.Etag)(nil),                             // 56: dapr.proto.common.v1.Etag
-	(*v1.StateOptions)(nil),                     // 57: dapr.proto.common.v1.StateOptions
-	(*v1.StateItem)(nil),                        // 58: dapr.proto.common.v1.StateItem
-	(*anypb.Any)(nil),                           // 59: google.protobuf.Any
-	(*v1.ConfigurationItem)(nil),                // 60: dapr.proto.common.v1.ConfigurationItem
-	(*emptypb.Empty)(nil),                       // 61: google.protobuf.Empty
-	(*v1.InvokeResponse)(nil),                   // 62: dapr.proto.common.v1.InvokeResponse
-}
+var (
+	file_dapr_proto_runtime_v1_dapr_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
+	file_dapr_proto_runtime_v1_dapr_proto_goTypes  = []interface{}{
+		(*InvokeServiceRequest)(nil),                // 0: dapr.proto.runtime.v1.InvokeServiceRequest
+		(*GetStateRequest)(nil),                     // 1: dapr.proto.runtime.v1.GetStateRequest
+		(*GetBulkStateRequest)(nil),                 // 2: dapr.proto.runtime.v1.GetBulkStateRequest
+		(*GetBulkStateResponse)(nil),                // 3: dapr.proto.runtime.v1.GetBulkStateResponse
+		(*BulkStateItem)(nil),                       // 4: dapr.proto.runtime.v1.BulkStateItem
+		(*GetStateResponse)(nil),                    // 5: dapr.proto.runtime.v1.GetStateResponse
+		(*DeleteStateRequest)(nil),                  // 6: dapr.proto.runtime.v1.DeleteStateRequest
+		(*DeleteBulkStateRequest)(nil),              // 7: dapr.proto.runtime.v1.DeleteBulkStateRequest
+		(*SaveStateRequest)(nil),                    // 8: dapr.proto.runtime.v1.SaveStateRequest
+		(*PublishEventRequest)(nil),                 // 9: dapr.proto.runtime.v1.PublishEventRequest
+		(*InvokeBindingRequest)(nil),                // 10: dapr.proto.runtime.v1.InvokeBindingRequest
+		(*InvokeBindingResponse)(nil),               // 11: dapr.proto.runtime.v1.InvokeBindingResponse
+		(*GetSecretRequest)(nil),                    // 12: dapr.proto.runtime.v1.GetSecretRequest
+		(*GetSecretResponse)(nil),                   // 13: dapr.proto.runtime.v1.GetSecretResponse
+		(*GetBulkSecretRequest)(nil),                // 14: dapr.proto.runtime.v1.GetBulkSecretRequest
+		(*SecretResponse)(nil),                      // 15: dapr.proto.runtime.v1.SecretResponse
+		(*GetBulkSecretResponse)(nil),               // 16: dapr.proto.runtime.v1.GetBulkSecretResponse
+		(*TransactionalStateOperation)(nil),         // 17: dapr.proto.runtime.v1.TransactionalStateOperation
+		(*ExecuteStateTransactionRequest)(nil),      // 18: dapr.proto.runtime.v1.ExecuteStateTransactionRequest
+		(*RegisterActorTimerRequest)(nil),           // 19: dapr.proto.runtime.v1.RegisterActorTimerRequest
+		(*UnregisterActorTimerRequest)(nil),         // 20: dapr.proto.runtime.v1.UnregisterActorTimerRequest
+		(*RegisterActorReminderRequest)(nil),        // 21: dapr.proto.runtime.v1.RegisterActorReminderRequest
+		(*UnregisterActorReminderRequest)(nil),      // 22: dapr.proto.runtime.v1.UnregisterActorReminderRequest
+		(*GetActorStateRequest)(nil),                // 23: dapr.proto.runtime.v1.GetActorStateRequest
+		(*GetActorStateResponse)(nil),               // 24: dapr.proto.runtime.v1.GetActorStateResponse
+		(*ExecuteActorStateTransactionRequest)(nil), // 25: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
+		(*TransactionalActorStateOperation)(nil),    // 26: dapr.proto.runtime.v1.TransactionalActorStateOperation
+		(*InvokeActorRequest)(nil),                  // 27: dapr.proto.runtime.v1.InvokeActorRequest
+		(*InvokeActorResponse)(nil),                 // 28: dapr.proto.runtime.v1.InvokeActorResponse
+		(*GetMetadataResponse)(nil),                 // 29: dapr.proto.runtime.v1.GetMetadataResponse
+		(*ActiveActorsCount)(nil),                   // 30: dapr.proto.runtime.v1.ActiveActorsCount
+		(*RegisteredComponents)(nil),                // 31: dapr.proto.runtime.v1.RegisteredComponents
+		(*SetMetadataRequest)(nil),                  // 32: dapr.proto.runtime.v1.SetMetadataRequest
+		(*GetConfigurationRequest)(nil),             // 33: dapr.proto.runtime.v1.GetConfigurationRequest
+		(*GetConfigurationResponse)(nil),            // 34: dapr.proto.runtime.v1.GetConfigurationResponse
+		(*SubscribeConfigurationRequest)(nil),       // 35: dapr.proto.runtime.v1.SubscribeConfigurationRequest
+		(*SubscribeConfigurationResponse)(nil),      // 36: dapr.proto.runtime.v1.SubscribeConfigurationResponse
+		nil,                                         // 37: dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
+		nil,                                         // 38: dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
+		nil,                                         // 39: dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
+		nil,                                         // 40: dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
+		nil,                                         // 41: dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
+		nil,                                         // 42: dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
+		nil,                                         // 43: dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
+		nil,                                         // 44: dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
+		nil,                                         // 45: dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
+		nil,                                         // 46: dapr.proto.runtime.v1.GetSecretResponse.DataEntry
+		nil,                                         // 47: dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
+		nil,                                         // 48: dapr.proto.runtime.v1.SecretResponse.SecretsEntry
+		nil,                                         // 49: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
+		nil,                                         // 50: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
+		nil,                                         // 51: dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
+		nil,                                         // 52: dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
+		nil,                                         // 53: dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
+		(*v1.InvokeRequest)(nil),                    // 54: dapr.proto.common.v1.InvokeRequest
+		(v1.StateOptions_StateConsistency)(0),       // 55: dapr.proto.common.v1.StateOptions.StateConsistency
+		(*v1.Etag)(nil),                             // 56: dapr.proto.common.v1.Etag
+		(*v1.StateOptions)(nil),                     // 57: dapr.proto.common.v1.StateOptions
+		(*v1.StateItem)(nil),                        // 58: dapr.proto.common.v1.StateItem
+		(*anypb.Any)(nil),                           // 59: google.protobuf.Any
+		(*v1.ConfigurationItem)(nil),                // 60: dapr.proto.common.v1.ConfigurationItem
+		(*emptypb.Empty)(nil),                       // 61: google.protobuf.Empty
+		(*v1.InvokeResponse)(nil),                   // 62: dapr.proto.common.v1.InvokeResponse
+	}
+)
+
 var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
 	54, // 0: dapr.proto.runtime.v1.InvokeServiceRequest.message:type_name -> dapr.proto.common.v1.InvokeRequest
 	55, // 1: dapr.proto.runtime.v1.GetStateRequest.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency

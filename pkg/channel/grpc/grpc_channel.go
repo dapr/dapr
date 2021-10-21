@@ -30,16 +30,18 @@ type Channel struct {
 	tracingSpec        config.TracingSpec
 	appMetadataToken   string
 	maxRequestBodySize int
+	readBufferSize     int
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int) *Channel {
+func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int) *Channel {
 	c := &Channel{
 		client:             conn,
 		baseAddress:        fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, port),
 		tracingSpec:        spec,
 		appMetadataToken:   auth.GetAppToken(),
 		maxRequestBodySize: maxRequestBodySize,
+		readBufferSize:     readBufferSize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)

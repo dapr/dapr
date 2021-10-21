@@ -12,11 +12,12 @@
 package internals
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -108,10 +109,13 @@ func file_dapr_proto_internals_v1_apiversion_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_internals_v1_apiversion_proto_rawDescData
 }
 
-var file_dapr_proto_internals_v1_apiversion_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_dapr_proto_internals_v1_apiversion_proto_goTypes = []interface{}{
-	(APIVersion)(0), // 0: dapr.proto.internals.v1.APIVersion
-}
+var (
+	file_dapr_proto_internals_v1_apiversion_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+	file_dapr_proto_internals_v1_apiversion_proto_goTypes   = []interface{}{
+		(APIVersion)(0), // 0: dapr.proto.internals.v1.APIVersion
+	}
+)
+
 var file_dapr_proto_internals_v1_apiversion_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type

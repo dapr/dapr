@@ -84,6 +84,9 @@ func main() {
 }
 
 func initializeSets() {
+	lock.Lock()
+	defer lock.Unlock()
+
 	receivedMessagesA = sets.NewString()
 	receivedMessagesB = sets.NewString()
 	receivedMessagesC = sets.NewString()
@@ -115,6 +118,9 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 }
 
 func (s *server) getReceivedMessages() []byte {
+	lock.Lock()
+	defer lock.Unlock()
+
 	resp := receivedMessagesResponse{
 		ReceivedByTopicA:   receivedMessagesA.List(),
 		ReceivedByTopicB:   receivedMessagesB.List(),
@@ -168,10 +174,8 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 				PubsubName: "messagebus",
 				Topic:      pubsubB,
 			},
-			{
-				PubsubName: "messagebus",
-				Topic:      pubsubC,
-			},
+			// pubsub-c-topic-grpc is loaded from the YAML/CRD
+			// tests/config/app_topic_subscription_pubsub_grpc.yaml.
 			{
 				PubsubName: "messagebus",
 				Topic:      pubsubRaw,

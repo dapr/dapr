@@ -10,17 +10,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	net_url "net/url"
 	"strings"
 	"time"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 const (
@@ -147,7 +148,6 @@ func performPublishHTTP(topic string, jsonValue []byte, contentType string, meta
 	log.Printf("Publishing using url %s and body '%s'", url, jsonValue)
 
 	resp, err := http.Post(url, contentType, bytes.NewBuffer(jsonValue))
-
 	if err != nil {
 		if resp != nil {
 			return resp.StatusCode, err
@@ -164,14 +164,22 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
 	log.Printf("Connecting to dapr using url %s", url)
 
-	conn, err := grpc.Dial(url, grpc.WithInsecure())
+	start := time.Now()
+	conn, err := grpc.Dial(url, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Printf("Could not connect to dapr: %s", err.Error())
 		return http.StatusInternalServerError, err
 	}
 	defer conn.Close()
+	elapsed := time.Since(start)
 
+	log.Printf("Dial elapsed: %v", elapsed)
+
+	start = time.Now()
 	client := runtimev1pb.NewDaprClient(conn)
+	elapsed = time.Since(start)
+	log.Printf("NewDaprClient elapsed: %v", elapsed)
+	start = time.Now()
 
 	req := &runtimev1pb.PublishEventRequest{
 		PubsubName:      pubsubName,
@@ -181,6 +189,9 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 		Metadata:        metadata,
 	}
 	_, err = client.PublishEvent(context.Background(), req)
+
+	elapsed = time.Since(start)
+	log.Printf("PublishEvent elapsed: %v", elapsed)
 
 	if err != nil {
 		log.Printf("Publish failed: %s", err.Error())
@@ -194,7 +205,7 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 }
 
 func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
 	if err != nil {
@@ -259,14 +270,12 @@ func callMethodGRPC(appName, method string) ([]byte, error) {
 func callMethodHTTP(appName, method string) ([]byte, error) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", daprPortHTTP, appName, method)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer([]byte{})) //nolint: gosec
-
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

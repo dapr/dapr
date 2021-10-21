@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -90,7 +90,7 @@ func (s *ActorService) onHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *ActorService) router() http.Handler {
-	var r = chi.NewRouter()
+	r := chi.NewRouter()
 	r.Get("/dapr/config", s.onConfig)
 	r.Get("/healthz", s.onHealthz)
 
@@ -144,7 +144,7 @@ func (s *ActorService) router() http.Handler {
 				return
 			}
 
-			data, err := ioutil.ReadAll(r.Body)
+			data, err := io.ReadAll(r.Body)
 			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				NewActorResponse(err.Error()).Encode(w)

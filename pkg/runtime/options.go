@@ -21,6 +21,8 @@ type (
 		inputBindings   []bindings.InputBinding
 		outputBindings  []bindings.OutputBinding
 		httpMiddleware  []http.Middleware
+
+		componentsCallback ComponentsCallback
 	}
 
 	// Option is a function that customizes the runtime.
@@ -80,5 +82,12 @@ func WithOutputBindings(outputBindings ...bindings.OutputBinding) Option {
 func WithHTTPMiddleware(httpMiddleware ...http.Middleware) Option {
 	return func(o *runtimeOpts) {
 		o.httpMiddleware = append(o.httpMiddleware, httpMiddleware...)
+	}
+}
+
+// WithComponentsCallback sets the components callback for applications that embed Dapr.
+func WithComponentsCallback(componentsCallback ComponentsCallback) Option {
+	return func(o *runtimeOpts) {
+		o.componentsCallback = componentsCallback
 	}
 }

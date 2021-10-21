@@ -9,9 +9,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/dapr/components-contrib/configuration"
 	"strconv"
 	"sync"
+
+	"github.com/dapr/components-contrib/configuration"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
@@ -1205,7 +1206,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 	}
 
 	// save to cache
-	//h.api.configurationCaches[fmt.Sprintf("%s||%s", h.storeName, h.appId)] = c
+	// h.api.configurationCaches[fmt.Sprintf("%s||%s", h.storeName, h.appId)] = c
 	if err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
 		Items: items,
 	}); err != nil {

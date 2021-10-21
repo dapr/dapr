@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -105,11 +105,8 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			Topic:      pubsubB,
 			Route:      pubsubB,
 		},
-		{
-			PubsubName: pubsubName,
-			Topic:      pubsubC,
-			Route:      pubsubC,
-		},
+		// pubsub-c-topic is loaded from the YAML/CRD
+		// tests/config/app_topic_subscription_pubsub.yaml.
 		{
 			PubsubName: pubsubName,
 			Topic:      pubsubJob,
@@ -168,7 +165,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	var data []byte
 	var body []byte
 	if r.Body != nil {
-		if data, err = ioutil.ReadAll(r.Body); err == nil {
+		if data, err = io.ReadAll(r.Body); err == nil {
 			body = data
 			log.Printf("assigned\n")
 		}

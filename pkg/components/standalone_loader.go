@@ -8,12 +8,12 @@ package components
 import (
 	"bufio"
 	"bytes"
-	"io"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/ghodss/yaml"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
@@ -38,7 +38,7 @@ func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneC
 
 // LoadComponents loads dapr components from a given directory.
 func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
-	files, err := ioutil.ReadDir(s.config.ComponentsPath)
+	files, err := os.ReadDir(s.config.ComponentsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func (s *StandaloneComponents) loadComponentsFromFile(filename string) []compone
 	components := []components_v1alpha1.Component{}
 	path := filepath.Join(s.config.ComponentsPath, filename)
 
-	b, err := ioutil.ReadFile(path)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		log.Warnf("daprd load components error when reading file %s : %s", path, err)
 		return components
@@ -91,20 +91,39 @@ func (s *StandaloneComponents) decodeYaml(b []byte) ([]components_v1alpha1.Compo
 	scanner := bufio.NewScanner(bytes.NewReader(b))
 	scanner.Split(s.splitYamlDoc)
 
+	type typeInfo struct {
+		metav1.TypeMeta `json:",inline"`
+	}
+
 	for {
-		var comp components_v1alpha1.Component
-		comp.Spec = components_v1alpha1.ComponentSpec{}
-		err := s.decode(scanner, &comp)
-		if err == io.EOF {
+		if !scanner.Scan() {
+			err := scanner.Err()
+			if err != nil {
+				errors = append(errors, err)
+
+				continue
+			}
+
 			break
 		}
 
-		if err != nil {
+		scannerBytes := scanner.Bytes()
+		var ti typeInfo
+		if err := yaml.Unmarshal(scannerBytes, &ti); err != nil {
 			errors = append(errors, err)
+
 			continue
 		}
 
-		if comp.Kind != componentKind {
+		if ti.Kind != componentKind {
+			continue
+		}
+
+		var comp components_v1alpha1.Component
+		comp.Spec = components_v1alpha1.ComponentSpec{}
+		if err := yaml.Unmarshal(scannerBytes, &comp); err != nil {
+			errors = append(errors, err)
+
 			continue
 		}
 
@@ -112,19 +131,6 @@ func (s *StandaloneComponents) decodeYaml(b []byte) ([]components_v1alpha1.Compo
 	}
 
 	return list, errors
-}
-
-// decode reads the YAML resource in document.
-func (s *StandaloneComponents) decode(scanner *bufio.Scanner, c interface{}) error {
-	if scanner.Scan() {
-		return yaml.Unmarshal(scanner.Bytes(), &c)
-	}
-
-	err := scanner.Err()
-	if err == nil {
-		err = io.EOF
-	}
-	return err
 }
 
 // splitYamlDoc - splits the yaml docs.
