@@ -52,6 +52,10 @@ DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
 
 DAPR_TEST_SECONDARY_NAMESPACE=dapr-tests-2
 
+ifeq ($(DAPR_TEST_STATE_STORE),)
+DAPR_TEST_STATE_STORE=redis
+endif
+
 ifeq ($(DAPR_TEST_NAMESPACE),)
 DAPR_TEST_NAMESPACE=$(DAPR_NAMESPACE)
 endif
@@ -261,7 +265,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_redis_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
