@@ -138,8 +138,7 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/dapr/components-contrib/configuration"
-	configuration_redis_native "github.com/dapr/components-contrib/configuration/redis-native"
-	//configuration_redis_single "github.com/dapr/components-contrib/configuration/redis-single"
+	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
 )
 
 var (
@@ -240,7 +239,7 @@ func main() {
 		),
 		runtime.WithConfigurations(
 			configuration_loader.New("redis.native", func() configuration.Store {
-				return configuration_redis_native.NewRedisConfigurationStore(logContrib)
+				return configuration_redis.NewRedisConfigurationStore(logContrib)
 			}),
 		),
 		runtime.WithPubSubs(

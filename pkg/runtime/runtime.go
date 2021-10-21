@@ -1050,7 +1050,6 @@ func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 	if store != nil {
 		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
 		err := store.Init(configuration.Metadata{
-			Name:       s.Name,
 			Properties: props,
 		})
 		if err != nil {
