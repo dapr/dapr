@@ -231,7 +231,7 @@ func (p *ActorPlacement) Start() {
 			}
 
 			// appHealthFn is the health status of actor service application. This allows placement to update
-			// member list and hashing table quickly.
+			// the member list and hashing table quickly.
 			if !p.appHealthFn() {
 				// app is unresponsive, close the stream and disconnect from the placement service.
 				// Then Placement will remove this host from the member list.
@@ -345,7 +345,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 		}
 
 		conn, err := grpc.Dial(serverAddr, opts...)
-	NextServer:
+	NEXT_SERVER:
 		if err != nil {
 			log.Debugf("error connecting to placement service: %v", err)
 			if conn != nil {
@@ -359,7 +359,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 		client := v1pb.NewPlacementClient(conn)
 		stream, err := client.ReportDaprStatus(context.Background())
 		if err != nil {
-			goto NextServer
+			goto NEXT_SERVER
 		}
 
 		log.Debugf("established connection to placement service at %s", conn.Target())
@@ -384,7 +384,7 @@ func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 		go func() {
 			// TODO: Use lock-free table update.
 			// current implementation is distributed two-phase locking algorithm.
-			// If placement experiences intermittently outage during update placement,
+			// If placement experiences intermittently outage during updateplacement,
 			// user application will face 5 second blocking even if it can avoid deadlock.
 			// It can impact the entire system.
 			time.Sleep(time.Second * 5)
