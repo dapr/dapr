@@ -4,7 +4,7 @@ ARG JAVA_VERSION=11.0.12
 
 FROM openjdk:${JAVA_VERSION}-nanoserver-$WINDOWS_VERSION as jdkbase
 
-FROM mcr.microsoft.com/powershell:nanoserver-1809 
+FROM mcr.microsoft.com/powershell:nanoserver-$WINDOWS_VERSION
 
 
 SHELL ["pwsh", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
