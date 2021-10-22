@@ -9,6 +9,16 @@
 
 # Usage: setup_cosmosdb.sh
 
+if [ $TARGET_OS == "windows" ]; then
+  # This is needed because bash on Windows (MinGW) messes up with the `partition-key-path` param by prefixing it with a Windows file path.
+  # So, we rewrote this script in PowerShell to avoid this problem on Windows.
+  # TODO(artursouza): delete this script and use PowerShell script only for Linux & Windows.
+  SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+  echo "Current script dir: $SCRIPT_DIR"
+  pwsh "$SCRIPT_DIR/setup_cosmosdb.ps1"
+  exit $?
+fi
+
 [ -z "$DAPR_NAMESPACE" ] && DAPR_NAMESPACE="default"
 
 [ -z "$DAPR_TEST_RESOURCE_GROUP" ] && DAPR_TEST_RESOURCE_GROUP="dapre2e"
@@ -44,7 +54,7 @@ fi
 
 
 echo "Deleting secret from Kubernetes cluster ..."
-kubectl delete secret cosmosdb-secret 
+kubectl delete secret cosmosdb-secret --namespace=$DAPR_NAMESPACE
 if [ $? -ne 0 ]; then
   echo "Failed to delete secret, skipping."
 else
@@ -57,5 +67,9 @@ kubectl create secret generic cosmosdb-secret \
   --from-literal=url=https://$DAPR_TEST_COSMOSDB_ACCOUNT.documents.azure.com:443/ \
   --from-literal=collection=$DAPR_TEST_COSMOSDB_COLLECTION \
   --from-literal=primaryMasterKey=$PRIMARY_KEY
+if [ $? -ne 0 ]; then
+  echo "Failed to create cosmosdb-secret."
+  exit 1
+fi
 
 echo "Setup completed."
