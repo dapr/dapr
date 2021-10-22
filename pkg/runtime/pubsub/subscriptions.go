@@ -3,7 +3,6 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -175,7 +174,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 		return subs
 	}
 
-	files, err := ioutil.ReadDir(componentsPath)
+	files, err := os.ReadDir(componentsPath)
 	if err != nil {
 		log.Errorf("failed to read subscriptions from path %s: %s", err)
 		return subs
@@ -184,7 +183,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 	for _, f := range files {
 		if !f.IsDir() {
 			filePath := filepath.Join(componentsPath, f.Name())
-			b, err := ioutil.ReadFile(filePath)
+			b, err := os.ReadFile(filePath)
 			if err != nil {
 				log.Errorf("failed to read file %s: %s", filePath, err)
 				continue

@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -307,7 +307,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	case "timers":
 		fallthrough
 	case "reminders":
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		defer r.Body.Close()
 		if err != nil {
 			log.Printf("Could not get reminder request: %s", err.Error())
@@ -518,7 +518,7 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 	defer res.Body.Close()
 
 	if res.StatusCode != expectedHTTPStatusCode {
-		errBody, err := ioutil.ReadAll(res.Body)
+		errBody, err := io.ReadAll(res.Body)
 		if err == nil {
 			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody))
 			return nil, t
@@ -528,7 +528,7 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 		return nil, t
 	}
 
-	resBody, err := ioutil.ReadAll(res.Body)
+	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}

@@ -1100,6 +1100,8 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		}
 	}
 
+	log.Debugf("create timer %q dueTime:%s period:%s repeats:%d ttl:%s",
+		req.Name, dueTime.String(), period.String(), repeats, ttl.String())
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 
