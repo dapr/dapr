@@ -222,17 +222,18 @@ func (x *GetStateRequest) GetMetadata() map[string]string {
 }
 
 // GetStateRequest is the message to get key-value states from specific state store.
-type CheckStoreHealthRequest struct {
+type CheckHealthRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	// The name of state store.
-	StoreName string `protobuf:"bytes,1,opt,name=store_name,json=storeName,proto3" json:"store_name,omitempty"`
+	ComponentName string `protobuf:"bytes,1,opt,name=component_name,json=componentName,proto3" json:"component_name,omitempty"`
+	ComponentKind string `protobuf:"bytes,2,opt,name=component_kind,json=componentKind,proto3" json:"component_kind,omitempty"`
 }
 
-func (x *CheckStoreHealthRequest) Reset() {
-	*x = CheckStoreHealthRequest{}
+func (x *CheckHealthRequest) Reset() {
+	*x = CheckHealthRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -240,13 +241,13 @@ func (x *CheckStoreHealthRequest) Reset() {
 	}
 }
 
-func (x *CheckStoreHealthRequest) String() string {
+func (x *CheckHealthRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CheckStoreHealthRequest) ProtoMessage() {}
+func (*CheckHealthRequest) ProtoMessage() {}
 
-func (x *CheckStoreHealthRequest) ProtoReflect() protoreflect.Message {
+func (x *CheckHealthRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -258,14 +259,21 @@ func (x *CheckStoreHealthRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CheckStoreHealthRequest.ProtoReflect.Descriptor instead.
-func (*CheckStoreHealthRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use CheckHealthRequest.ProtoReflect.Descriptor instead.
+func (*CheckHealthRequest) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *CheckStoreHealthRequest) GetStoreName() string {
+func (x *CheckHealthRequest) GetComponentName() string {
 	if x != nil {
-		return x.StoreName
+		return x.ComponentName
+	}
+	return ""
+}
+
+func (x *CheckHealthRequest) GetComponentKind() string {
+	if x != nil {
+		return x.ComponentKind
 	}
 	return ""
 }
@@ -1775,7 +1783,7 @@ type RegisterActorReminderRequest struct {
 func (x *RegisterActorReminderRequest) Reset() {
 	*x = RegisterActorReminderRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[22]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4102,7 +4110,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CheckStoreHealthRequest); i {
+			switch v := v.(*CheckHealthRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4509,7 +4517,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 				return nil
 			}
 		}
-		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[33].Exporter = func(v interface{}, i int) interface{} {
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[36].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetMetadataRequest); i {
 			case 0:
 				return &v.state

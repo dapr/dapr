@@ -74,3 +74,6 @@ func (f *FailingPubsub) Close() error {
 func (f *FailingPubsub) Features() []pubsub.Feature {
 	return nil
 }
+func (c *MockPubSub) Ping() error {
+	return nil
+}

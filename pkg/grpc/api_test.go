@@ -167,7 +167,7 @@ func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeB
 	return &runtimev1pb.InvokeBindingResponse{}, nil
 }
 
-func (m *mockGRPCAPI) CheckStoreHealth(ctx context.Context, in *runtimev1pb.CheckStoreHealthRequest) (*emptypb.Empty, error) {
+func (m *mockGRPCAPI) CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
 
@@ -955,19 +955,6 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
-func TestCheckStoreHealthWhenStoreNotConfigured(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := runtimev1pb.NewDaprClient(clientConn)
-	_, err := client.CheckStoreHealth(context.Background(), &runtimev1pb.CheckStoreHealthRequest{})
-	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
-}
-
 func TestSaveState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
@@ -1442,9 +1429,19 @@ func TestSubscribeConfiguration(t *testing.T) {
 }
 func TestCheckStoreHealth(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
+	fakeSecretStore := daprt.FakeSecretStore{}
+	fakeSecretStores := map[string]secretstores.SecretStore{
+		"secretstore1": fakeSecretStore,
+	}
+	secretsConfiguration := map[string]config.SecretsScope{
+		"secretstore1": {
+			DefaultAccess: config.AllowAccess,
+			DeniedSecrets: []string{"not-allowed"},
+		},
+	}
 
 	fakeStore.On("Ping", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == reqGoodKey
+		return req.Key == "fakeAPI||good-key"
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
@@ -1452,8 +1449,18 @@ func TestCheckStoreHealth(t *testing.T) {
 		}, nil)
 
 	fakeAPI := &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
+		id:                   "fakeAPI",
+		stateStores:          map[string]state.Store{"store1": fakeStore},
+		secretStores:         fakeSecretStores,
+		secretsConfiguration: secretsConfiguration,
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			PublishFn: func(req *pubsub.PublishRequest) error {
+				return nil
+			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				return &daprt.MockPubSub{}
+			},
+		},
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1466,31 +1473,49 @@ func TestCheckStoreHealth(t *testing.T) {
 
 	testCases := []struct {
 		testName      string
-		storeName     string
+		componentKind string
+		componentName string
 		errorExcepted bool
 		expectedError codes.Code
 	}{
 		{
-			testName:      "success health check",
-			storeName:     "store1",
+			testName:      "statestore success health check",
+			componentName: "store1",
+			componentKind: "statestore",
 			errorExcepted: false,
 			expectedError: codes.OK,
 		},
 		{
 			testName:      "not found store",
-			storeName:     "no-store",
+			componentName: "no-store",
+			componentKind: "statestore",
 			errorExcepted: true,
 			expectedError: codes.InvalidArgument,
+		},
+		{
+			testName:      "pubsub success health check",
+			componentName: "pubsubname",
+			componentKind: "pubsub",
+			errorExcepted: false,
+			expectedError: codes.OK,
+		},
+		{
+			testName:      "secretstore success health check",
+			componentName: "secretstore1",
+			componentKind: "secretstore",
+			errorExcepted: false,
+			expectedError: codes.OK,
 		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
-			req := &runtimev1pb.CheckStoreHealthRequest{
-				StoreName: tt.storeName,
+			req := &runtimev1pb.CheckHealthRequest{
+				ComponentName: tt.componentName,
+				ComponentKind: tt.componentKind,
 			}
 
-			_, err := client.CheckStoreHealth(context.Background(), req)
+			_, err := client.CheckHealth(context.Background(), req)
 
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")

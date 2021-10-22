@@ -37,6 +37,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
+	"github.com/dapr/components-contrib/health"
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -76,7 +77,7 @@ type API interface {
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
-	CheckStoreHealth(ctx context.Context, in *runtimev1pb.CheckStoreHealthRequest) (*emptypb.Empty, error)
+	CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
@@ -671,17 +672,45 @@ func (a *api) getStateStore(name string) (state.Store, error) {
 	return a.stateStores[name], nil
 }
 
-func (a *api) CheckStoreHealth(ctx context.Context, in *runtimev1pb.CheckStoreHealthRequest) (*emptypb.Empty, error) {
-	store, err := a.getStateStore(in.StoreName)
-	if err != nil {
+func (a *api) getComponent(componentKind string, componentName string) (component interface{}) {
+	switch componentKind {
+	case "statestore":
+		if statestore := a.stateStores[componentName]; statestore != nil {
+			component = statestore
+		}
+	case "pubsub":
+		if pubsub := a.pubsubAdapter.GetPubSub(componentName); pubsub != nil {
+			component = pubsub
+		}
+
+	case "secretstore":
+		if secretstore := a.secretStores[componentName]; secretstore != nil {
+			component = secretstore
+		}
+	}
+
+	return
+}
+
+func (a *api) CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
+	component := a.getComponent(in.ComponentKind, in.ComponentName)
+
+	if component == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound, in.ComponentKind, in.ComponentName)
 		apiServerLogger.Debug(err)
+
 		return &emptypb.Empty{}, err
 	}
 
-	err = store.Ping()
+	if pinger, ok := component.(health.Pinger); ok {
+		err := pinger.Ping()
+		if err != nil {
+			apiServerLogger.Debug(err)
 
-	if err != nil {
-		apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
+	} else {
+		err := status.Errorf(codes.Unimplemented, messages.ErrComponentNotImplemented, in.ComponentName)
 		return &emptypb.Empty{}, err
 	}
 

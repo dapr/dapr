@@ -3846,6 +3846,16 @@ func (l *fakeLockStore) Unlock(req *lock.UnlockRequest) (*lock.UnlockResponse, e
 func TestV1HealthzEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	var fakeStore state.Store = fakeStateStore{}
+	fakeSecretStore := daprt.FakeSecretStore{}
+	fakeSecretStores := map[string]secretstores.SecretStore{
+		"store1": fakeSecretStore,
+	}
+	secretsConfiguration := map[string]config.SecretsScope{
+		"store1": {
+			DefaultAccess: config.AllowAccess,
+			DeniedSecrets: []string{"not-allowed"},
+		},
+	}
 
 	storeName := "store1"
 	fakeStores := map[string]state.Store{
@@ -3854,12 +3864,32 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	testAPI := &api{
 <<<<<<< HEAD
+<<<<<<< HEAD
 		actor: nil,
 =======
 		actor:       nil,
 		json:        jsoniter.ConfigFastest,
 		stateStores: fakeStores,
 >>>>>>> 9eddf991 (add statestore health check endpoint.)
+=======
+		actor:                nil,
+		json:                 jsoniter.ConfigFastest,
+		secretsConfiguration: secretsConfiguration,
+		secretStores:         fakeSecretStores,
+		stateStores:          fakeStores,
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			PublishFn: func(req *pubsub.PublishRequest) error {
+				return nil
+			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				if pubsubName == "pubsubname" {
+					return &daprt.MockPubSub{}
+				} else {
+					return nil
+				}
+			},
+		},
+>>>>>>> b7b6e3d3 (Add health check api.)
 	}
 
 	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
@@ -3880,25 +3910,53 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	})
 
 	t.Run("StateStore healthz - 204 No Content", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/healthz/state/%s", storeName)
+		apiPath := fmt.Sprintf("v1.0/healthz/statestore/%s", storeName)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
 	t.Run("StateStore healthz - 400 Not Found", func(t *testing.T) {
-		apiPath := "v1.0/healthz/state/NotExists"
+		apiPath := "v1.0/healthz/statestore/NotExists"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
 	t.Run("StateStore healthz - 500 Internal Server Error", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/healthz/state/%s", storeName)
+		apiPath := fmt.Sprintf("v1.0/healthz/statestore/%s", storeName)
 		throwError = true
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
+	})
+
+	t.Run("Pubsub healthz - 204 No Content", func(t *testing.T) {
+		apiPath := "v1.0/healthz/pubsub/pubsubname"
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 204, resp.StatusCode)
+	})
+
+	t.Run("Pubsub healthz - 400 Not Found", func(t *testing.T) {
+		apiPath := "v1.0/healthz/pubsub/NotExists"
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 400, resp.StatusCode)
+	})
+
+	t.Run("SecretStore healthz - 204 No Content", func(t *testing.T) {
+		apiPath := "v1.0/healthz/secretstore/store1"
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 204, resp.StatusCode)
+	})
+
+	t.Run("SecretStore healthz - 400 Not Found", func(t *testing.T) {
+		apiPath := "v1.0/healthz/secretstore/NotExists"
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 400, resp.StatusCode)
 	})
 
 	fakeServer.Shutdown()
