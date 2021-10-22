@@ -36,3 +36,7 @@ func (m *MockPubSub) Close() error {
 func (m *MockPubSub) Features() []pubsub.Feature {
 	return nil
 }
+
+func (c *MockPubSub) Ping() error {
+	return nil
+}

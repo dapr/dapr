@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/health"
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -95,6 +96,8 @@ const (
 	actorTypeParam       = "actorType"
 	actorIDParam         = "actorId"
 	storeNameParam       = "storeName"
+	componentKindParam   = "components"
+	componentNameParam   = "componentName"
 	stateKeyParam        = "key"
 	secretStoreNameParam = "secretStoreName"
 	secretNameParam      = "key"
@@ -366,9 +369,9 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz/state/{storeName}",
+			Route:   "healthz/{components}/{componentName}",
 			Version: apiVersionV1,
-			Handler: a.onGetStateHealthz,
+			Handler: a.onGetComponentHealthz,
 		},
 	}
 }
@@ -1461,20 +1464,61 @@ func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) onGetStateHealthz(reqCtx *fasthttp.RequestCtx) {
-	store, _, err := a.getStateStoreWithRequestValidation(reqCtx)
-	if err != nil {
-		log.Debug(err)
+func (a *api) getComponent(reqCtx *fasthttp.RequestCtx) (component interface{}, componentKind string, componentName string) {
+	componentKind = reqCtx.UserValue(componentKindParam).(string)
+	componentName = reqCtx.UserValue(componentNameParam).(string)
+
+	switch componentKind {
+	case "statestore":
+		if statestore := a.stateStores[componentName]; statestore != nil {
+			component = statestore
+		}
+	case "pubsub":
+		if pubsub := a.pubsubAdapter.GetPubSub(componentName); pubsub != nil {
+			component = pubsub
+		}
+
+	case "secretstore":
+		if secretstore := a.secretStores[componentName]; secretstore != nil {
+			component = secretstore
+		}
+	}
+
+	return
+}
+
+func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
+	component, componentKind, componentName := a.getComponent(reqCtx)
+
+	if component == nil {
+		msg := NewErrorResponse(
+			fmt.Sprintf("ERR_%s_NOT_FOUND", componentKind),
+			fmt.Sprintf(messages.ErrComponentNotFound, componentKind, componentName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+
 		return
 	}
 
-	err = store.Ping()
-	if err != nil {
-		msg := NewErrorResponse("ERR_STATE_HEALTH_NOT_READY", messages.ErrStateHealthNotReady)
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if pinger, ok := component.(health.Pinger); ok {
+		err := pinger.Ping()
+
+		if err != nil {
+			msg := NewErrorResponse(
+				fmt.Sprintf("ERR_%s_HEALTH_NOT_READY", strings.ToUpper(componentKind)),
+				fmt.Sprintf(messages.ErrComponentHealthNotReady, componentName))
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+		} else {
+			respond(reqCtx, withEmpty())
+		}
 	} else {
-		respond(reqCtx, withEmpty())
+		msg := NewErrorResponse(
+			fmt.Sprintf("ERR_%s_NOT_IMPLEMENTED", componentName),
+			fmt.Sprintf(messages.ErrComponentNotImplemented, componentName))
+
+		respond(reqCtx, withError(fasthttp.StatusNotImplemented, msg))
+		log.Debug(msg)
 	}
 }
 

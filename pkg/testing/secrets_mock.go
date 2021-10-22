@@ -43,3 +43,7 @@ func (c FakeSecretStore) Init(metadata secretstores.Metadata) error {
 func (c FakeSecretStore) Close() error {
 	return nil
 }
+
+func (c FakeSecretStore) Ping() error {
+	return nil
+}
