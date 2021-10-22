@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -131,7 +131,7 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Handling actor test call")
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
 	if err != nil {
@@ -158,7 +158,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respBody, err := ioutil.ReadAll(res.Body)
+	respBody, err := io.ReadAll(res.Body)
 	defer res.Body.Close()
 
 	if err != nil {
@@ -187,7 +187,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Handling reentrant call")
 	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Enter %s", mux.Vars(r)["method"]))
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
 	if err != nil {

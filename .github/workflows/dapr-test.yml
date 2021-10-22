@@ -23,6 +23,7 @@ jobs:
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      DAPR_TEST_STATE_STORE: cosmosdb
       HELMVER: v3.4.0
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
@@ -122,6 +123,12 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: Setup CosmosDB
+        if: env.TEST_CLUSTER != ''
+        env:
+          DAPR_TEST_COSMOSDB_COLLECTION: ${{ env.TEST_CLUSTER }}
+        run: ./tests/test-infra/setup_cosmosdb.sh
+        shell: bash
       - name: Build dapr and its docker image and push them to test registry
         if: env.TEST_CLUSTER != ''
         run: |

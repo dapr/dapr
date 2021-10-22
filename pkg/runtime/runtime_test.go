@@ -11,9 +11,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"reflect"
 	"strconv"
@@ -209,7 +210,7 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 
 func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
 	b, _ := yaml.Marshal(subscription)
-	ioutil.WriteFile(filePath, b, 0600)
+	os.WriteFile(filePath, b, 0600)
 }
 
 func TestProcessComponentsAndDependents(t *testing.T) {
@@ -3406,4 +3407,34 @@ func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
 		Match: e,
 		Path:  path,
 	}, nil
+}
+
+func TestComponentsCallback(t *testing.T) {
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "OK")
+	}))
+	defer svr.Close()
+
+	u, err := url.Parse(svr.URL)
+	require.NoError(t, err)
+	port, _ := strconv.Atoi(u.Port())
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", port)
+	defer stopRuntime(t, rt)
+
+	c := make(chan struct{})
+	callbackInvoked := false
+
+	rt.Run(WithComponentsCallback(func(components ComponentRegistry) error {
+		close(c)
+		callbackInvoked = true
+
+		return nil
+	}))
+
+	select {
+	case <-c:
+	case <-time.After(10 * time.Second):
+	}
+
+	assert.True(t, callbackInvoked, "component callback was not invoked")
 }
