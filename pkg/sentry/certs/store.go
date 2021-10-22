@@ -2,7 +2,6 @@ package certs
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 
 	"github.com/pkg/errors"
@@ -82,17 +81,17 @@ func CredentialsExist(conf config.SentryConfig) (bool, error) {
 
 /* #nosec. */
 func storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem []byte, rootCertPath, issuerCertPath, issuerKeyPath string) error {
-	err := ioutil.WriteFile(rootCertPath, rootCertPem, 0644)
+	err := os.WriteFile(rootCertPath, rootCertPem, 0644)
 	if err != nil {
 		return errors.Wrapf(err, "failed saving file to %s", rootCertPath)
 	}
 
-	err = ioutil.WriteFile(issuerCertPath, issuerCertPem, 0644)
+	err = os.WriteFile(issuerCertPath, issuerCertPem, 0644)
 	if err != nil {
 		return errors.Wrapf(err, "failed saving file to %s", issuerCertPath)
 	}
 
-	err = ioutil.WriteFile(issuerKeyPath, issuerKeyPem, 0644)
+	err = os.WriteFile(issuerKeyPath, issuerKeyPem, 0644)
 	if err != nil {
 		return errors.Wrapf(err, "failed saving file to %s", issuerKeyPath)
 	}
