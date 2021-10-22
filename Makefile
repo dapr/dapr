@@ -1,5 +1,5 @@
 # ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation and Dapr Contributors.
+# Copyright (c) Microsoft Corporation and Dapr Contributors..
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
@@ -11,25 +11,23 @@ export GO111MODULE ?= on
 export GOPROXY ?= https://proxy.golang.org
 export GOSUMDB ?= sum.golang.org
 
-GIT_COMMIT  = $(shell git rev-list -1 HEAD)
-GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
+PROJECT_ROOT := infobloxopen/dapr
+REPO         := infoblox
+GITHUB_REPO  := git@github.com:infobloxopen
+WINDOWS_VERSION :=1809
+
+
+GIT_COMMIT  = $(shell git describe --tag --dirty=-unsupported --always || echo pre-commit)
+GIT_VERSION = $(shell git describe --always --abbrev=7 )
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
 BINARIES    ?= daprd placement operator injector sentry
-HA_MODE     ?= false
-# Force in-memory log for placement
-FORCE_INMEM ?= true
-
+GIT_COMMIT_NUMBER = $(shell git rev-parse --short HEAD)
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
 
-PROTOC ?=protoc
 
-ifdef REL_VERSION
-	DAPR_VERSION := $(REL_VERSION)
-else
-	DAPR_VERSION := edge
-endif
+DAPR_VERSION = v1.0.0-ib-$(GIT_COMMIT_NUMBER)
 
 LOCAL_ARCH := $(shell uname -m)
 ifeq ($(LOCAL_ARCH),x86_64)
@@ -59,17 +57,11 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-# Default docker container and e2e test targst.
-TARGET_OS ?= linux
-TARGET_ARCH ?= amd64
-
 ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
-GOLANGCI_LINT:=golangci-lint.exe
 export ARCHIVE_EXT = .zip
 else
 BINARY_EXT_LOCAL:=
-GOLANGCI_LINT:=golangci-lint
 export ARCHIVE_EXT = .tar.gz
 endif
 
@@ -77,16 +69,19 @@ export BINARY_EXT ?= $(BINARY_EXT_LOCAL)
 
 OUT_DIR := ./dist
 
+# Docker image build and push setting
+DOCKER:=docker
+DOCKERFILE_DIR?=./docker
+DOCKERFILE:=Dockerfile
+
 # Helm template and install setting
 HELM:=helm
 RELEASE_NAME?=dapr
-DAPR_NAMESPACE?=dapr-system
+HELM_NAMESPACE?=dapr-system
 HELM_CHART_ROOT:=./charts
 HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
-HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
-HELM_REGISTRY?=daprio.azurecr.io
-
+HELM_MANIFEST_FILE:=$(HELM_CHART_ROOT)/manifest/$(RELEASE_NAME).yaml
 
 ################################################################################
 # Go build details                                                             #
@@ -102,6 +97,7 @@ else ifeq ($(DEBUG),0)
   BUILDTYPE_DIR:=release
   LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
 else
+  DOCKERFILE:=Dockerfile-debug
   BUILDTYPE_DIR:=debug
   GCFLAGS:=-gcflags="all=-N -l"
   LDFLAGS:="$(DEFAULT_LDFLAGS)"
@@ -170,6 +166,96 @@ endef
 # Generate archive-*.[zip|tar.gz] targets
 $(foreach ITEM,$(BINARIES),$(eval $(call genArchiveBinary,$(ITEM),$(ARCHIVE_OUT_DIR))))
 
+################################################################################
+# Target: docker-build, docker-push                                            #
+################################################################################
+
+LINUX_BINS_OUT_DIR=$(OUT_DIR)/linux_$(GOARCH)
+DOCKER_IMAGE_TAG=$(REPO)/$(RELEASE_NAME):$(DAPR_VERSION)
+DAPR_RUNTIME_DOCKER_IMAGE_NAME=daprd
+DAPR_RUNTIME_DOCKER_IMAGE_TAG=$(REPO)/$(DAPR_RUNTIME_DOCKER_IMAGE_NAME):$(DAPR_VERSION)
+DAPR_PLACEMENT_DOCKER_IMAGE_NAME=placement
+DAPR_PLACEMENT_DOCKER_IMAGE_TAG=$(REPO)/$(DAPR_PLACEMENT_DOCKER_IMAGE_NAME):$(DAPR_VERSION)
+DAPR_SENTRY_DOCKER_IMAGE_NAME=sentry
+DAPR_SENTRY_DOCKER_IMAGE_TAG=$(REPO)/$(DAPR_SENTRY_DOCKER_IMAGE_NAME):$(DAPR_VERSION)
+
+ifeq ($(LATEST_RELEASE),true)
+DOCKER_IMAGE_LATEST_TAG=$(REPO)/$(RELEASE_NAME):$(LATEST_TAG)
+DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG):$(LATEST_TAG)
+DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG):$(LATEST_TAG)
+DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG=$(DAPR_SENTRY_DOCKER_IMAGE_TAG):$(LATEST_TAG)
+endif
+
+# build docker image for linux
+docker-build:
+ifeq ($(GOARCH),amd64)
+	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) build --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(info Building $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) build --build-arg PKG_FILES=daprd -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(info Building $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) build --build-arg PKG_FILES=placement -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(info Building $(DAPR_SENTRY_DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) build --build-arg PKG_FILES=sentry -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+else
+	-$(DOCKER) buildx create --use --name daprbuild
+	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset
+	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+endif
+ifeq ($(LATEST_RELEASE),true)
+	$(info Building $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
+	$(DOCKER) tag $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) $(DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) tag $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) tag $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) tag $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+endif
+
+check-arch-platform:
+ifeq ($(GOARCH),arm)
+	$(eval DOCKER_IMAGE_PLATFORM := $(GOOS)/arm/v7)
+else ifeq ($(GOARCH),arm64)
+	$(eval DOCKER_IMAGE_PLATFORM := $(GOOS)/arm64/v8)
+endif
+# push docker image to the registry
+docker-push: check-arch-platform docker-build
+ifeq ($(GOARCH),amd64)
+	$(info Pushing $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) docker image ...)
+	$(DOCKER) push $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(info Pushing $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) docker image ...)
+	$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(info Pushing $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) docker image ...)
+	$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(info Pushing $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) docker image ...)
+	$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+else
+	-$(DOCKER) buildx create --use --name daprbuild
+	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset
+	$(DOCKER) buildx build --build-arg PKG_FILES=*  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)  --push --platform $(DOCKER_IMAGE_PLATFORM)
+	$(DOCKER) buildx build --build-arg PKG_FILES=daprd  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)  --push --platform $(DOCKER_IMAGE_PLATFORM)
+	$(DOCKER) buildx build --build-arg PKG_FILES=placement  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)  --push --platform $(DOCKER_IMAGE_PLATFORM)
+	$(DOCKER) buildx build --build-arg PKG_FILES=sentry  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)  --push --platform $(DOCKER_IMAGE_PLATFORM) 
+endif
+ifeq ($(LATEST_RELEASE),true)
+	$(info Pushing $(DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH) docker image ...)
+	$(DOCKER) push $(DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+endif
+
+windows-version:
+ifeq ($(WINDOWS_VERSION),)
+	$(error WINDOWS_VERSION environment variable must be set)
+endif
+
+docker-windows-base-build: check-windows-version
+	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/Dockerfile-windows-base . -t $(REPO)/windows-base:$(WINDOWS_VERSION)
+
+docker-windows-base-push: docker-windows-base-build
+	$(DOCKER) push $(REPO)/windows-base:$(WINDOWS_VERSION)
 
 ################################################################################
 # Target: manifest-gen                                                         #
@@ -178,35 +264,24 @@ $(foreach ITEM,$(BINARIES),$(eval $(call genArchiveBinary,$(ITEM),$(ARCHIVE_OUT_
 # Generate helm chart manifest
 manifest-gen: dapr.yaml
 
-dapr.yaml: check-docker-env
+$(HOME)/.helm:
+	$(HELM) init --client-only
+
+dapr.yaml:  $(HOME)/.helm
 	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
-		--include-crds=true  --set global.ha.enabled=$(HA_MODE) --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
-
-################################################################################
-# Target: upload-helmchart
-################################################################################
-
-# Upload helm charts to Helm Registry
-upload-helmchart:
-	export HELM_EXPERIMENTAL_OCI=1; \
-	$(HELM) chart save ${HELM_CHART_ROOT}/${RELEASE_NAME} ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}; \
-	$(HELM) chart push ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}
+		--set-string global.tag=$(DAPR_VERSION) --set-string global.registry=$(REPO) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
 # Target: docker-deploy-k8s                                                    #
 ################################################################################
 
-docker-deploy-k8s: check-docker-env check-arch
-	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
+docker-deploy-k8s: $(HOME)/.helm
+	$(info Deploying $(REPO)/${RELEASE_NAME}:$(DAPR_VERSION) to the current K8S context...)
 	$(HELM) install \
-		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) --wait --timeout 5m0s \
-		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
-		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
-		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
-		--set dapr_placement.logLevel=debug \
-		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) $(HELM_CHART_DIR)
+		--name=$(RELEASE_NAME) --namespace=$(HELM_NAMESPACE) \
+		--set-string global.tag=$(DAPR_VERSION) --set-string global.registry=$(REPO) $(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #
@@ -214,82 +289,25 @@ docker-deploy-k8s: check-docker-env check-arch
 release: build archive
 
 ################################################################################
+# Target:   tidy                                                               #
+################################################################################
+.PHONY: tidy
+tidy:
+	go mod tidy
+	go mod vendor
+################################################################################
+# Clean : clean                                                                #
+################################################################################
+.PHONY:clean
+clean:
+	$(DOCKER) rmi -f $(shell docker images -q $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH))  || true
+	$(DOCKER) rmi -f $(shell docker images -q $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)) || true
+	$(DOCKER) rmi -f $(shell docker images -q $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)) || true
+	$(DOCKER) rmi -f $(shell docker images -q $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)) || true
+################################################################################
 # Target: test                                                                 #
 ################################################################################
 .PHONY: test
 test:
 	go test ./pkg/... $(COVERAGE_OPTS)
 	go test ./tests/...
-
-################################################################################
-# Target: lint                                                                 #
-################################################################################
-# Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
-.PHONY: lint
-lint:
-	$(GOLANGCI_LINT) run --timeout=20m
-
-################################################################################
-# Target: modtidy                                                              #
-################################################################################
-.PHONY: modtidy
-modtidy:
-	go mod tidy
-
-################################################################################
-# Target: init-proto                                                            #
-################################################################################
-.PHONY: init-proto
-init-proto:
-	go get google.golang.org/protobuf/cmd/protoc-gen-go@v1.25.0 google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1.0
-
-################################################################################
-# Target: gen-proto                                                            #
-################################################################################
-GRPC_PROTOS:=common internals operator placement runtime sentry
-PROTO_PREFIX:=github.com/dapr/dapr
-
-# Generate archive files for each binary
-# $(1): the binary name to be archived
-define genProtoc
-.PHONY: gen-proto-$(1)
-gen-proto-$(1):
-	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) ./dapr/proto/$(1)/v1/*.proto
-endef
-
-$(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
-
-GEN_PROTOS:=$(foreach ITEM,$(GRPC_PROTOS),gen-proto-$(ITEM))
-
-.PHONY: gen-proto
-gen-proto: $(GEN_PROTOS) modtidy
-
-################################################################################
-# Target: get-components-contrib                                               #
-################################################################################
-.PHONY: get-components-contrib
-get-components-contrib:
-	go get github.com/dapr/components-contrib@master
-
-################################################################################
-# Target: check-diff                                                           #
-################################################################################
-.PHONY: check-diff
-check-diff:
-	git diff --exit-code ./go.mod # check no changes
-	git diff --exit-code ./go.sum # check no changes
-
-################################################################################
-# Target: codegen                                                              #
-################################################################################
-include tools/codegen.mk
-
-################################################################################
-# Target: docker                                                               #
-################################################################################
-include docker/docker.mk
-
-################################################################################
-# Target: tests                                                                #
-################################################################################
-include tests/dapr_tests.mk
