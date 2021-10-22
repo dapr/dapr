@@ -1093,7 +1093,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
+		require.NoError(t, os.Mkdir(dir, 0777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1118,7 +1118,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
+		require.NoError(t, os.Mkdir(dir, 0777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1145,7 +1145,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
+		require.NoError(t, os.Mkdir(dir, 0777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
