@@ -24,4 +24,7 @@ spec:
       app.kubernetes.io/component: operator
       app.kubernetes.io/part-of: "dapr"
       app.kubernetes.io/managed-by: "helm"
+      {{- with .Values.global.labels }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
 {{- end }}
