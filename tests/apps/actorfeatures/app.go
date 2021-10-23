@@ -10,8 +10,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -36,6 +37,8 @@ const (
 	drainRebalancedActors           = true
 	secondsToWaitInMethod           = 5
 )
+
+var httpClient = newHTTPClient()
 
 type daprActor struct {
 	actorType string
@@ -304,7 +307,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	case "timers":
 		fallthrough
 	case "reminders":
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		defer r.Body.Close()
 		if err != nil {
 			log.Printf("Could not get reminder request: %s", err.Error())
@@ -353,7 +356,6 @@ func testCallMetadataHandler(w http.ResponseWriter, r *http.Request) {
 
 // the test side calls the 4 cases below in order
 func actorStateTest(testName string, w http.ResponseWriter, actorType string, id string) error {
-
 	// save multiple key values
 	if testName == "savestatetest" {
 		url := fmt.Sprintf(actorSaveStateURLFormat, actorType, id)
@@ -400,7 +402,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 		// perform a get on a key saved above
 		url := fmt.Sprintf(actorGetStateURLFormat, actorType, id, "key1")
 
-		body, err := httpCall("GET", url, nil, 200)
+		_, err := httpCall("GET", url, nil, 200)
 		if err != nil {
 			log.Printf("actor state call failed: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -409,7 +411,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 
 		// query a non-existing key.  This should return 204 with 0 length response.
 		url = fmt.Sprintf(actorGetStateURLFormat, actorType, id, "keynotpresent")
-		body, err = httpCall("GET", url, nil, 204)
+		body, err := httpCall("GET", url, nil, 204)
 		if err != nil {
 			log.Printf("actor state call failed: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -424,7 +426,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 
 		// query a non-existing actor.  This should return 400.
 		url = fmt.Sprintf(actorGetStateURLFormat, actorType, "actoriddoesnotexist", "keynotpresent")
-		body, err = httpCall("GET", url, nil, 400)
+		_, err = httpCall("GET", url, nil, 400)
 		if err != nil {
 			log.Printf("actor state call failed: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -463,7 +465,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 		// perform a get on an existing key
 		url := fmt.Sprintf(actorGetStateURLFormat, actorType, id, "key1")
 
-		body, err := httpCall("GET", url, nil, 200)
+		_, err := httpCall("GET", url, nil, 200)
 		if err != nil {
 			log.Printf("actor state call failed: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -473,7 +475,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 		// query a non-existing key - this was present but deleted.  This should return 204 with 0 length response.
 		url = fmt.Sprintf(actorGetStateURLFormat, actorType, id, "key4")
 
-		body, err = httpCall("GET", url, nil, 204)
+		body, err := httpCall("GET", url, nil, 204)
 		if err != nil {
 			log.Printf("actor state call failed: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -508,8 +510,7 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 		return nil, err
 	}
 
-	client := http.Client{}
-	res, err := client.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +518,7 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 	defer res.Body.Close()
 
 	if res.StatusCode != expectedHTTPStatusCode {
-		errBody, err := ioutil.ReadAll(res.Body)
+		errBody, err := io.ReadAll(res.Body)
 		if err == nil {
 			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody))
 			return nil, t
@@ -527,7 +528,7 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 		return nil, t
 	}
 
-	resBody, err := ioutil.ReadAll(res.Body)
+	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -567,6 +568,21 @@ func appRouter() *mux.Router {
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
+}
+
+func newHTTPClient() *http.Client {
+	dialer := &net.Dialer{ //nolint:exhaustivestruct
+		Timeout: 5 * time.Second,
+	}
+	netTransport := &http.Transport{ //nolint:exhaustivestruct
+		DialContext:         dialer.DialContext,
+		TLSHandshakeTimeout: 5 * time.Second,
+	}
+
+	return &http.Client{ //nolint:exhaustivestruct
+		Timeout:   30 * time.Second,
+		Transport: netTransport,
+	}
 }
 
 func main() {

@@ -160,7 +160,7 @@ func NewActors(
 		appHealthy:               atomic.NewBool(true),
 		certChain:                certChain,
 		tracingSpec:              tracingSpec,
-		reentrancyEnabled:        configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
+		reentrancyEnabled:        configuration.IsFeatureEnabled(features, configuration.ActorReentrancy) && config.Reentrancy.Enabled,
 		actorTypeMetadataEnabled: configuration.IsFeatureEnabled(features, configuration.ActorTypeMetadata),
 	}
 }
@@ -1100,6 +1100,8 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		}
 	}
 
+	log.Debugf("create timer %q dueTime:%s period:%s repeats:%d ttl:%s",
+		req.Name, dueTime.String(), period.String(), repeats, ttl.String())
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 

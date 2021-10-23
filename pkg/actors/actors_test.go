@@ -1116,7 +1116,7 @@ func TestTimerRepeats(t *testing.T) {
 		timerRepeats(ctx, t, "", "R3/PT2S", "", 3, 8*time.Second, 0)
 	})
 	t.Run("timer with dueTime deleted after 1 sec", func(t *testing.T) {
-		timerRepeats(ctx, t, time.Now().Add(2*time.Second).Format(time.RFC3339), "PT2S", "", 1, 6*time.Second, 3*time.Second)
+		timerRepeats(ctx, t, time.Now().Add(2*time.Second).Format(time.RFC3339), "PT4S", "", 1, 8*time.Second, 3*time.Second)
 	})
 	t.Run("timer without dueTime deleted after 1 sec", func(t *testing.T) {
 		timerRepeats(ctx, t, "", "PT2S", "", 1, 4*time.Second, time.Second)
@@ -1125,7 +1125,7 @@ func TestTimerRepeats(t *testing.T) {
 		timerRepeats(ctx, t, time.Now().Add(2*time.Second).Format(time.RFC3339), "PT2S", "3s", 2, 8*time.Second, 0)
 	})
 	t.Run("timer without dueTime ttl", func(t *testing.T) {
-		timerRepeats(ctx, t, "", "2s", time.Now().Add(3*time.Second).Format(time.RFC3339), 2, 6*time.Second, 0)
+		timerRepeats(ctx, t, "", "4s", time.Now().Add(6*time.Second).Format(time.RFC3339), 2, 10*time.Second, 0)
 	})
 }
 
