@@ -121,7 +121,7 @@ func UpdateSpanStatusFromHTTPStatus(span *trace.Span, code int) {
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/http.md#status
 func traceStatusFromHTTPCode(httpCode int) trace.Status {
-	var code = codes.Unknown
+	var code codes.Code = codes.Unknown
 	switch httpCode {
 	case http.StatusUnauthorized:
 		code = codes.Unauthenticated
