@@ -8,7 +8,6 @@ package http
 import (
 	"encoding/base64"
 	"fmt"
-	"go.opencensus.io/trace"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
