@@ -121,7 +121,7 @@ func UpdateSpanStatusFromHTTPStatus(span *trace.Span, code int) {
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/http.md#status
 func traceStatusFromHTTPCode(httpCode int) trace.Status {
-	var code codes.Code = codes.Unknown
+	var code = codes.Unknown
 	switch httpCode {
 	case http.StatusUnauthorized:
 		code = codes.Unauthenticated
@@ -180,8 +180,7 @@ func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, strin
 }
 
 func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
-	h := TraceStateToW3CString(sc)
-	if h != "" && len(h) <= maxTracestateLen {
+	if h := TraceStateToW3CString(sc); h != "" && len(h) <= maxTracestateLen {
 		setHeader(tracestateHeader, h)
 	}
 }

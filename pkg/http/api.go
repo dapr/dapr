@@ -8,6 +8,7 @@ package http
 import (
 	"encoding/base64"
 	"fmt"
+	"go.opencensus.io/trace"
 	"strconv"
 	"strings"
 	"sync"
@@ -394,7 +395,10 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		if req.Metadata == nil {
 			req.Metadata = map[string]string{}
 		}
-		req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
+		// if sc is not empty context, set traceparent Header.
+		if (trace.SpanContext{}) != sc {
+			req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
+		}
 		if sc.Tracestate != nil {
 			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
 		}
