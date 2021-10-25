@@ -8,7 +8,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -34,7 +34,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("test execution request received")
 
 	var testParams TestParameters
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(500)
 		w.Write([]byte(fmt.Sprintf("error reading request body: %s", err)))
@@ -96,5 +96,5 @@ func runTest(params TestParameters) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ioutil.ReadFile("result.json")
+	return os.ReadFile("result.json")
 }

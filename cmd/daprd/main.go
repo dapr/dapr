@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/valyala/fasthttp"
+	_ "go.uber.org/automaxprocs"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/version"
@@ -96,6 +97,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
 	bindings_cosmosdb "github.com/dapr/components-contrib/bindings/azure/cosmosdb"
+	bindings_cosmosgraphdb "github.com/dapr/components-contrib/bindings/azure/cosmosgraphdb"
 	"github.com/dapr/components-contrib/bindings/azure/eventgrid"
 	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
@@ -371,6 +373,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("azure.cosmosdb", func() bindings.OutputBinding {
 				return bindings_cosmosdb.NewCosmosDB(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.cosmosgraphdb", func() bindings.OutputBinding {
+				return bindings_cosmosgraphdb.NewCosmosGraphDB(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
 				return eventgrid.NewAzureEventGrid(logContrib)

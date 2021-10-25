@@ -160,7 +160,7 @@ func NewActors(
 		appHealthy:               atomic.NewBool(true),
 		certChain:                certChain,
 		tracingSpec:              tracingSpec,
-		reentrancyEnabled:        configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
+		reentrancyEnabled:        configuration.IsFeatureEnabled(features, configuration.ActorReentrancy) && config.Reentrancy.Enabled,
 		actorTypeMetadataEnabled: configuration.IsFeatureEnabled(features, configuration.ActorTypeMetadata),
 	}
 }
@@ -920,6 +920,14 @@ func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderRe
 	return remindersInPartitionAfterInsertion, newReminderRef, stateKey, m.calculateEtag(newReminderRef.actorRemindersPartitionID)
 }
 
+func (m *ActorMetadata) calculateDatabasePartitionKey(stateKey string) string {
+	if m.RemindersMetadata.PartitionCount > 0 {
+		return m.ID
+	}
+
+	return stateKey
+}
+
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
@@ -1015,11 +1023,14 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		// First we add it to the partition list.
 		remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, &reminder)
 
+		// Get the database partiton key (needed for CosmosDB)
+		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
+
 		// Now we can add it to the "global" list.
 		reminders = append(reminders, reminderRef)
 
 		// Then, save the partition to the database.
-		err2 = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag)
+		err2 = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
 		if err2 != nil {
 			return err2
 		}
@@ -1089,6 +1100,8 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		}
 	}
 
+	log.Debugf("create timer %q dueTime:%s period:%s repeats:%d ttl:%s",
+		req.Name, dueTime.String(), period.String(), repeats, ttl.String())
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 
@@ -1307,7 +1320,10 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	}
 
 	// Save to database.
-	transaction := state.TransactionalStateRequest{}
+	metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
+	transaction := state.TransactionalStateRequest{
+		Metadata: metadata,
+	}
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		partitionID := i + 1
 		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(partitionID))
@@ -1315,8 +1331,9 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 		transaction.Operations = append(transaction.Operations, state.TransactionalStateOperation{
 			Operation: state.Upsert,
 			Request: state.SetRequest{
-				Key:   stateKey,
-				Value: stateValue,
+				Key:      stateKey,
+				Value:    stateValue,
+				Metadata: metadata,
 			},
 		})
 	}
@@ -1347,6 +1364,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
+		metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
 		actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{}
 		reminders := []actorReminderReference{}
 
@@ -1357,7 +1375,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			key := actorMetadata.calculateRemindersStateKey(actorType, partition)
 			keyPartitionMap[key] = partition
 			getRequests = append(getRequests, state.GetRequest{
-				Key: key,
+				Key:      key,
+				Metadata: metadata,
 			})
 		}
 
@@ -1450,13 +1469,14 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	return reminderRefs, actorMetadata, nil
 }
 
-func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string) error {
+func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string, databasePartitionKey string) error {
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
 	return a.store.Set(&state.SetRequest{
-		Key:   stateKey,
-		Value: reminders,
-		ETag:  etag,
+		Key:      stateKey,
+		Value:    reminders,
+		ETag:     etag,
+		Metadata: map[string]string{metadataPartitionKey: databasePartitionKey},
 	})
 }
 
@@ -1500,8 +1520,11 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 			}
 		}
 
+		// Get the database partiton key (needed for CosmosDB)
+		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
+
 		// Then, save the partition to the database.
-		err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag)
+		err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
 		if err != nil {
 			return err
 		}

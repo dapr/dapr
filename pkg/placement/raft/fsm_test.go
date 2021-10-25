@@ -7,7 +7,7 @@ package raft
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"testing"
 
 	"github.com/hashicorp/raft"
@@ -81,7 +81,7 @@ func TestRestore(t *testing.T) {
 	assert.NoError(t, err)
 
 	// act
-	err = fsm.Restore(ioutil.NopCloser(buf))
+	err = fsm.Restore(io.NopCloser(buf))
 
 	// assert
 	assert.NoError(t, err)

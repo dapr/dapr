@@ -76,7 +76,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Docker image registry                                                   | `docker.io/daprio`      |
-| `global.tag`                              | Docker image version tag                                                | `1.4.0-rc.3`            |
+| `global.tag`                              | Docker image version tag                                                | `1.4.3`            |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
 | `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry            | `""`                   |
@@ -93,6 +93,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
 | `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector | `{}`                 |
+| `global.tolerations`                     | Pods will be allowed to schedule onto a node whose taints match the tolerations | `{}`                 |
+| `global.labels`                           | Custom pod levels                                                       | `{}`                 |
 
 ### Dapr Dashboard options:
 | Parameter                                 | Description                                                             | Default                 |

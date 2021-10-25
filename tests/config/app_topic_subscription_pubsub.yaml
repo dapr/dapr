@@ -3,8 +3,8 @@ kind: Subscription
 metadata:
   name: c-topic-subscription
 spec:
-  topic: pubsub-c-topic
-  route: /pubsub-c-topic
   pubsubname: messagebus
+  topic: pubsub-c-topic-http
+  route: /pubsub-c-topic-http
 scopes:
 - pubsub-subscriber

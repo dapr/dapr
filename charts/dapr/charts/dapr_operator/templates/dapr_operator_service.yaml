@@ -8,4 +8,16 @@ spec:
   ports:
   - protocol: TCP
     port: {{ .Values.ports.port }} 
-    targetPort: {{ .Values.ports.targetPort }}  
+    targetPort: {{ .Values.ports.targetPort }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dapr-webhook
+spec:
+  ports:
+  - port: 443
+    targetPort: 19443
+    protocol: TCP
+  selector:
+    app: dapr-operator

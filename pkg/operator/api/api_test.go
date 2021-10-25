@@ -6,6 +6,8 @@
 package api
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -82,7 +84,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 		err = processComponentSecrets(&c, "default", client)
 		assert.NoError(t, err)
 
-		assert.Equal(t, "value1", c.Spec.Metadata[0].Value.String())
+		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
+		jsonEnc, _ := json.Marshal(enc)
+
+		assert.Equal(t, jsonEnc, c.Spec.Metadata[0].Value.Raw)
 	})
 
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
@@ -126,6 +131,18 @@ func TestProcessComponentSecrets(t *testing.T) {
 		err = processComponentSecrets(&c, "default", client)
 		assert.NoError(t, err)
 
-		assert.Equal(t, "value1", c.Spec.Metadata[0].Value.String())
+		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
+		jsonEnc, _ := json.Marshal(enc)
+
+		assert.Equal(t, jsonEnc, c.Spec.Metadata[0].Value.Raw)
+	})
+}
+
+func TestChanGracefullyClose(t *testing.T) {
+	t.Run("close updateChan", func(t *testing.T) {
+		ch := make(chan *componentsapi.Component)
+		instance := initChanGracefully(ch)
+		instance.Close()
+		assert.Equal(t, true, instance.isClosed)
 	})
 }

@@ -74,12 +74,14 @@ func (s *server) StartNonBlocking() error {
 	customServer := &fasthttp.Server{
 		Handler:            handler,
 		MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+		ReadBufferSize:     s.config.ReadBufferSize * 1024,
+		StreamRequestBody:  s.config.StreamRequestBody,
 	}
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
 	if s.config.UnixDomainSocket != "" {
-		socket := fmt.Sprintf("/%s/dapr-%s-http.socket", s.config.UnixDomainSocket, s.config.AppID)
+		socket := fmt.Sprintf("%s/dapr-%s-http.socket", s.config.UnixDomainSocket, s.config.AppID)
 		l, err := net.Listen("unix", socket)
 		if err != nil {
 			return err
