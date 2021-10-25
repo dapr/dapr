@@ -243,7 +243,7 @@ func main() {
 			}),
 		),
 		runtime.WithConfigurations(
-			configuration_loader.New("redis.native", func() configuration.Store {
+			configuration_loader.New("redis", func() configuration.Store {
 				return configuration_redis.NewRedisConfigurationStore(logContrib)
 			}),
 		),

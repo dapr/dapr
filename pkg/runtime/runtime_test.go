@@ -206,7 +206,7 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 
 func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
 	b, _ := yaml.Marshal(subscription)
-	os.WriteFile(filePath, b, 0o600)
+	os.WriteFile(filePath, b, 0600)
 }
 
 func TestProcessComponentsAndDependents(t *testing.T) {

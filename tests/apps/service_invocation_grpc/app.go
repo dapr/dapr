@@ -25,7 +25,8 @@ import (
 )
 
 // server is our user app
-type server struct{}
+type server struct{
+}
 
 type appResponse struct {
 	Message string `json:"message,omitempty"`
@@ -70,7 +71,7 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 
 func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
-	requestMD := map[string][]string{}
+	var requestMD = map[string][]string{}
 	for k, vals := range md {
 		requestMD[k] = vals
 		fmt.Printf("incoming md: %s %q", k, vals)

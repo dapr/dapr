@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/dapr/dapr/pkg/actors"
 	"io"
 	"log"
 	"net"
@@ -104,13 +105,11 @@ type TempTransactionalDelete struct {
 	Key string `json:"key"`
 }
 
-var (
-	actorLogs               = []actorLogEntry{}
-	actorLogsMutex          = &sync.Mutex{}
-	registeredActorType     = getActorType()
-	actorReminderPartitions = getActorRemindersPartitions()
-	actors                  sync.Map
-)
+var actorLogs = []actorLogEntry{}
+var actorLogsMutex = &sync.Mutex{}
+var registeredActorType = getActorType()
+var actorReminderPartitions = getActorRemindersPartitions()
+var actors sync.Map
 
 var daprConfigResponse = daprConfig{
 	[]string{getActorType()},
@@ -358,6 +357,7 @@ func testCallMetadataHandler(w http.ResponseWriter, r *http.Request) {
 
 // the test side calls the 4 cases below in order
 func actorStateTest(testName string, w http.ResponseWriter, actorType string, id string) error {
+
 	// save multiple key values
 	if testName == "savestatetest" {
 		url := fmt.Sprintf(actorSaveStateURLFormat, actorType, id)

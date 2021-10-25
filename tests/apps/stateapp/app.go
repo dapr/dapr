@@ -172,7 +172,7 @@ func parseState(key string, body []byte) (*appState, error) {
 func getAll(states []daprState, statestore string) ([]daprState, error) {
 	log.Printf("Processing get request for %d states.", len(states))
 
-	output := make([]daprState, 0, len(states))
+	var output = make([]daprState, 0, len(states))
 	for _, state := range states {
 		value, err := get(state.Key, statestore)
 		if err != nil {
@@ -193,7 +193,7 @@ func getAll(states []daprState, statestore string) ([]daprState, error) {
 func getBulk(states []daprState, statestore string) ([]daprState, error) {
 	log.Printf("Processing get bulk request for %d states.", len(states))
 
-	output := make([]daprState, 0, len(states))
+	var output = make([]daprState, 0, len(states))
 
 	url, err := createBulkStateURL(statestore)
 	if err != nil {
@@ -280,6 +280,7 @@ func deleteAll(states []daprState, statestore string) error {
 
 	for _, state := range states {
 		err := delete(state.Key, statestore)
+
 		if err != nil {
 			return err
 		}
@@ -340,10 +341,10 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		req.States[i].Metadata = map[string]string{metadataPartitionKey: partitionKey}
 	}
 
-	res := requestResponse{}
-	uri := r.URL.RequestURI()
+	var res = requestResponse{}
+	var uri = r.URL.RequestURI()
 	var states []daprState
-	statusCode := http.StatusOK
+	var statusCode = http.StatusOK
 
 	res.StartTime = epoch()
 
@@ -407,21 +408,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%v\n", req)
 	var res requestResponse
 	res.StartTime = epoch()
-	statusCode := http.StatusOK
+	var statusCode = http.StatusOK
 
-<<<<<<< HEAD
-	daprPort, _ := os.LookupEnv("DAPR_GRPC_PORT")
-	daprAddress := fmt.Sprintf("127.0.0.1:%s", daprPort)
-	log.Printf("dapr grpc address is %s\n", daprAddress)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
-	if err != nil {
-		log.Print(err.Error())
-	}
-	defer conn.Close()
-
-	client := runtimev1pb.NewDaprClient(conn)
-=======
->>>>>>> upstream/master
 	cmd := mux.Vars(r)["command"]
 	statestore := mux.Vars(r)["statestore"]
 	switch cmd {
@@ -513,11 +501,8 @@ func toDaprStates(response *runtimev1pb.GetBulkStateResponse) ([]daprState, erro
 	return result, nil
 }
 
-<<<<<<< HEAD
-func deleteAllGRPC(client runtimev1pb.DaprClient, states []daprState, statestore string) error {
-=======
 func deleteAllGRPC(states []daprState, statestore string) error {
->>>>>>> upstream/master
+
 	for _, state := range states {
 		log.Printf("deleting sate for key %s\n", state.Key)
 		_, err := daprClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{

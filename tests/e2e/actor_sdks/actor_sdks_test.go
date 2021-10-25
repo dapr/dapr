@@ -16,11 +16,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -28,10 +27,8 @@ const (
 	numHealthChecks = 60                   // Number of get calls before starting tests.
 )
 
-var (
-	tr   *runner.TestRunner
-	apps []kube.AppDescription
-)
+var tr   *runner.TestRunner
+var apps []kube.AppDescription
 
 func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 	t.Logf("Starting health check for %s\n", externalURL)

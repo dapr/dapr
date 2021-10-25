@@ -16,12 +16,11 @@ import (
 	"strings"
 	"testing"
 
-	guuid "github.com/google/uuid"
-	"github.com/stretchr/testify/require"
-
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	guuid "github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -447,7 +446,7 @@ func TestStateTransactionApps(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	transactionTests := []struct {
+	var transactionTests = []struct {
 		protocol string
 		in       testStateTransactionCase
 	}{

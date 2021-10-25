@@ -1205,12 +1205,10 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		})
 	}
 
-	// save to cache
-	// h.api.configurationCaches[fmt.Sprintf("%s||%s", h.storeName, h.appId)] = c
 	if err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
 		Items: items,
 	}); err != nil {
-		apiServerLogger.Errorf("")
+		apiServerLogger.Debug(err)
 	}
 	return nil
 }
@@ -1243,13 +1241,8 @@ func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfiguration
 		serverStream: configurationServer,
 	}
 
-	err = store.Subscribe(context.Background(), req, handler.updateEventHandler)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrConfigurationGet, request.Keys, request.StoreName, err))
-		apiServerLogger.Debug(err)
-		a.configurationSubscribeLock.Unlock()
-		return err
-	}
+	// TODO(@laurence) deal with failed subscription and retires
+	_ = store.Subscribe(context.Background(), req, handler.updateEventHandler)
 
 	for _, k := range unsubscribedKeys {
 		a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)] = true

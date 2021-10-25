@@ -225,6 +225,7 @@ func invokeService(remoteApp, method string) (appResponse, int, error) {
 
 func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, int, error) {
 	resp, err := invokeServiceWithBodyHeader(remoteApp, method, data, map[string]string{})
+
 	if err != nil {
 		return appResponse{}, resp.StatusCode, err
 	}
@@ -407,6 +408,7 @@ func requestHTTPToHTTP(w http.ResponseWriter, r *http.Request, send func(remoteA
 	}
 
 	resp, err := send(commandBody.RemoteApp, "retrieve_request_object", b, headers)
+
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
 		onHTTPCallFailed(w, 0, err)
@@ -493,6 +495,7 @@ func testV1RequestHTTPToGRPC(w http.ResponseWriter, r *http.Request) {
 		b,
 		headers,
 	)
+
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
 		onHTTPCallFailed(w, 0, err)
@@ -581,6 +584,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 		grpc.Header(&header),   // will retrieve header
 		grpc.Trailer(&trailer), // will retrieve trailer
 	)
+
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
 		onHTTPCallFailed(w, 0, err)
@@ -674,6 +678,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 		req,
 		grpc.Header(&header), // will retrieve header
 	)
+
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
 		onHTTPCallFailed(w, 0, err)
@@ -795,6 +800,7 @@ func httpToGrpcTest(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("httpToGrpcTest calling with message %s\n", string(b))
 	resp, statusCode, err := invokeServiceWithBody(commandBody.RemoteApp, "httpToGrpcTest", b)
+
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
 		onHTTPCallFailed(w, statusCode, err)
@@ -971,7 +977,7 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 		body := resp.Data.GetValue()
 
 		fmt.Printf("resp was %s\n", string(body))
-		// var responseMessage string
+		//var responseMessage string
 		var appResp appResponse
 		err = json.Unmarshal(body, &appResp)
 		if err != nil {
@@ -1127,6 +1133,7 @@ func parseErrorServiceCall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := json.NewDecoder(r.Body).Decode(&data)
+
 	if err != nil {
 		onSerializationFailed(w, err)
 		return

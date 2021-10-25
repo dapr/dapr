@@ -90,7 +90,7 @@ func (s *ActorService) onHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *ActorService) router() http.Handler {
-	r := chi.NewRouter()
+	var r = chi.NewRouter()
 	r.Get("/dapr/config", s.onConfig)
 	r.Get("/healthz", s.onHealthz)
 
