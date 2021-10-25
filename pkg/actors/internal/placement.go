@@ -49,7 +49,7 @@ type ActorPlacement struct {
 
 	// serverAddr is the list of placement addresses.
 	serverAddr []string
-	// serverIndex is the the current index of placement servers in serverAddr.
+	// serverIndex is the current index of placement servers in serverAddr.
 	serverIndex atomic.Int32
 
 	// clientCert is the workload certificate to connect placement.
@@ -231,7 +231,7 @@ func (p *ActorPlacement) Start() {
 			}
 
 			// appHealthFn is the health status of actor service application. This allows placement to update
-			// memberlist and hashing table quickly.
+			// the member list and hashing table quickly.
 			if !p.appHealthFn() {
 				// app is unresponsive, close the stream and disconnect from the placement service.
 				// Then Placement will remove this host from the member list.

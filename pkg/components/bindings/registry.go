@@ -82,7 +82,7 @@ func (b *bindingsRegistry) RegisterOutputBindings(components ...OutputBinding) {
 	}
 }
 
-// Create instantiates an input binding based on `name`.
+// CreateInputBinding Create instantiates an input binding based on `name`.
 func (b *bindingsRegistry) CreateInputBinding(name, version string) (bindings.InputBinding, error) {
 	if method, ok := b.getInputBinding(name, version); ok {
 		return method(), nil
@@ -90,7 +90,7 @@ func (b *bindingsRegistry) CreateInputBinding(name, version string) (bindings.In
 	return nil, errors.Errorf("couldn't find input binding %s/%s", name, version)
 }
 
-// Create instantiates an output binding based on `name`.
+// CreateOutputBinding Create instantiates an output binding based on `name`.
 func (b *bindingsRegistry) CreateOutputBinding(name, version string) (bindings.OutputBinding, error) {
 	if method, ok := b.getOutputBinding(name, version); ok {
 		return method(), nil

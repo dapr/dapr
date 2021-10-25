@@ -42,6 +42,7 @@ require (
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.8.0
+	go.uber.org/automaxprocs v1.4.0
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
 	google.golang.org/genproto v0.0.0-20201204160425-06b3db808446
 	google.golang.org/grpc v1.38.0
