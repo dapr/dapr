@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/golang/protobuf/ptypes/any"
 
@@ -39,6 +40,11 @@ type testCommandRequest struct {
 type indexHandlerResponse struct {
 	Message string `json:"message,omitempty"`
 }
+
+var (
+	grpcConn   *grpc.ClientConn
+	daprClient runtimev1pb.DaprClient
+)
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -96,16 +102,6 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", daprPortGRPC), grpc.WithInsecure())
-	if err != nil {
-		log.Printf("Could not make dapr client: %s", err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer conn.Close()
-
-	client := runtimev1pb.NewDaprClient(conn)
-
 	for _, message := range requestBody.Messages {
 		body, _ := json.Marshal(&message)
 
@@ -116,7 +112,7 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 			Operation: "create",
 		}
 
-		_, err = client.InvokeBinding(context.Background(), &req)
+		_, err = daprClient.InvokeBinding(context.Background(), &req)
 		if err != nil {
 			log.Printf("Error sending request to GRPC output binding: %s", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -129,16 +125,6 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Entered getReceivedTopicsGRPC")
 
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", daprPortGRPC), grpc.WithInsecure())
-	if err != nil {
-		log.Printf("Could not make dapr client: %s", err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer conn.Close()
-
-	client := runtimev1pb.NewDaprClient(conn)
-
 	req := runtimev1pb.InvokeServiceRequest{
 		Id: "bindinginputgrpc",
 		Message: &commonv1pb.InvokeRequest{
@@ -150,7 +136,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	resp, err := client.InvokeService(context.Background(), &req)
+	resp, err := daprClient.InvokeService(context.Background(), &req)
 	if err != nil {
 		log.Printf("Could not get received messages: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -173,7 +159,31 @@ func appRouter() *mux.Router {
 	return router
 }
 
+func initGRPCClient() {
+	url := fmt.Sprintf("localhost:%d", 50001)
+	log.Printf("Connecting to dapr using url %s", url)
+	for retries := 10; retries > 0; retries-- {
+		var err error
+		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		if err == nil {
+			break
+		}
+
+		if retries == 0 {
+			log.Printf("Could not connect to dapr: %v", err)
+			log.Panic(err)
+		}
+
+		log.Printf("Could not connect to dapr: %v, retrying...", err)
+		time.Sleep(5 * time.Second)
+	}
+
+	daprClient = runtimev1pb.NewDaprClient(grpcConn)
+}
+
 func main() {
+	initGRPCClient()
+
 	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))

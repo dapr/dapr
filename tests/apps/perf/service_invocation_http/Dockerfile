@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-FROM golang:1.15 as build_env
+FROM golang:1.17 as build_env
 
 WORKDIR /app
 COPY app.go .

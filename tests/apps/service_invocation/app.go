@@ -16,6 +16,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -125,6 +126,13 @@ var testMethods []httpTestMethods = []httpTestMethods{
 		ExpectBody: true,
 	},
 }
+
+var httpClient = newHTTPClient()
+
+var (
+	grpcConn   *grpc.ClientConn
+	daprClient runtimev1pb.DaprClient
+)
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -252,14 +260,13 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 		t = bytes.NewBuffer(data)
 	}
 
-	client := &http.Client{Timeout: time.Minute * 5}
 	/* #nosec */
 	req, _ := http.NewRequest("POST", url, t)
 	for k, v := range headers {
 		req.Header.Add(k, v)
 	}
 
-	return client.Do(req)
+	return httpClient.Do(req)
 }
 
 func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error) {
@@ -271,7 +278,6 @@ func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, hea
 		t = bytes.NewBuffer(data)
 	}
 
-	client := &http.Client{Timeout: time.Minute * 5}
 	/* #nosec */
 	req, _ := http.NewRequest("POST", url, t)
 	req.Header.Add("dapr-app-id", remoteApp)
@@ -279,7 +285,7 @@ func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, hea
 		req.Header.Add(k, v)
 	}
 
-	return client.Do(req)
+	return httpClient.Do(req)
 }
 
 func constructRequest(id, method, httpVerb string, body []byte) *runtimev1pb.InvokeServiceRequest {
@@ -544,7 +550,6 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Create the client
-	client := runtimev1pb.NewDaprClient(conn)
 	tracing, _ := strconv.ParseBool(commandBody.RemoteAppTracing)
 	var ctx context.Context
 	if tracing {
@@ -570,7 +575,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	var header, trailer metadata.MD
-	resp, err := client.InvokeService(
+	resp, err := daprClient.InvokeService(
 		ctx,
 		req,
 		grpc.Header(&header),   // will retrieve header
@@ -635,18 +640,6 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("grpcToHTTPTest - target app: %s\n", commandBody.RemoteApp)
 
-	daprAddress := fmt.Sprintf("localhost:%s", "50001")
-
-	fmt.Printf("dapr address is %s\n", daprAddress)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer conn.Close()
-
-	// Create the client
-	client := runtimev1pb.NewDaprClient(conn)
-
 	tracing, _ := strconv.ParseBool(commandBody.RemoteAppTracing)
 	var ctx context.Context
 	if tracing {
@@ -676,7 +669,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	var header metadata.MD
-	resp, err := client.InvokeService(
+	resp, err := daprClient.InvokeService(
 		ctx,
 		req,
 		grpc.Header(&header), // will retrieve header
@@ -733,19 +726,6 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("grpcToGrpcTest - target app: %s\n", commandBody.RemoteApp)
 
-	daprPort := 50001
-	daprAddress := fmt.Sprintf("localhost:%s", strconv.Itoa(daprPort))
-
-	fmt.Printf("dapr address is %s\n", daprAddress)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer conn.Close()
-
-	// Create the client
-	client := runtimev1pb.NewDaprClient(conn)
-
 	testMessage := guuid.New().String()
 	b, err := json.Marshal(testMessage)
 	if err != nil {
@@ -756,8 +736,9 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("grpcToGrpcTest calling with message %s\n", string(b))
 
-	req := constructRequest(commandBody.RemoteApp, "grpcToGrpcTest", "", b)
-	resp, err := client.InvokeService(context.Background(), req)
+	var req = constructRequest(commandBody.RemoteApp, "grpcToGrpcTest", "", b)
+	resp, err := daprClient.InvokeService(context.Background(), req)
+
 	if err != nil {
 		logAndSetResponse(w, http.StatusInternalServerError, "grpc call failed with "+err.Error())
 		return
@@ -949,18 +930,6 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("grpcToHTTPTest - target app: %s\n", commandBody.RemoteApp)
 
-	daprAddress := fmt.Sprintf("localhost:%s", "50001")
-
-	fmt.Printf("dapr address is %s\n", daprAddress)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer conn.Close()
-
-	// Create the client
-	client := runtimev1pb.NewDaprClient(conn)
-
 	var b []byte
 	for _, v := range httpMethods {
 		testMessage := guuid.New().String()
@@ -993,7 +962,7 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		resp, err = client.InvokeService(context.Background(), req)
+		resp, err = daprClient.InvokeService(context.Background(), req)
 		if err != nil {
 			logAndSetResponse(w, http.StatusInternalServerError, "error returned from grpc client")
 			return
@@ -1064,12 +1033,15 @@ func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var testResponse negativeTestResult
 
-	client := newHTTPClient()
+	prevTimeout := httpClient.Timeout
 	// Explicitly set the timeout to force an error
 	if commandBody.Method == "timeouterror" {
-		client.Timeout = 5 * time.Second
+		httpClient.Timeout = 5 * time.Second
 	}
-	resp, err := client.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(b)) // nolint
+	resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(b)) // nolint
+	if commandBody.Method == "timeouterror" {
+		httpClient.Timeout = prevTimeout
+	}
 
 	testResponse.MainCallSuccessful = err == nil && resp.StatusCode == 200
 
@@ -1103,10 +1075,6 @@ func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("badServiceCallTestGrpc - target app: %s\n", commandBody.RemoteApp)
 
-	daprAddress := fmt.Sprintf("localhost:%s", "50001")
-
-	fmt.Printf("dapr address is %s\n", daprAddress)
-
 	timeoutDuration := time.Duration(30)
 	// Shorten the timeout if we want to force the error
 	if commandBody.Method == "timeouterror" {
@@ -1114,15 +1082,6 @@ func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration*time.Second)
 	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, daprAddress, grpc.WithInsecure())
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer conn.Close()
-
-	// Create the client
-	client := runtimev1pb.NewDaprClient(conn)
 
 	var testMessage struct {
 		Data string `json:"data"`
@@ -1135,7 +1094,7 @@ func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
 	req := constructRequest(commandBody.RemoteApp, commandBody.Method, "POST", b)
 
 	var testResponse negativeTestResult
-	resp, err := client.InvokeService(ctx, req)
+	resp, err := daprClient.InvokeService(ctx, req)
 	testResponse.MainCallSuccessful = true
 	if err != nil {
 		testResponse.MainCallSuccessful = false
@@ -1225,26 +1184,13 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 		fmt.Printf("largeDataErrorServiceCall - Request size: %d\n", len(jsonBody))
 
 		if isHTTP {
-			client := newHTTPClient()
-			resp, err := client.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(jsonBody)) // nolint
+			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(jsonBody)) // nolint
 
 			result.CallSuccessful = !((resp != nil && resp.StatusCode != 200) || err != nil)
 		} else {
-			daprAddress := fmt.Sprintf("localhost:%s", "50001")
-
-			conn, err := grpc.DialContext(context.Background(), daprAddress, grpc.WithInsecure())
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			defer conn.Close()
-
-			// Create the client
-			client := runtimev1pb.NewDaprClient(conn)
-
 			req := constructRequest("serviceinvocation-callee-0", "posthandler", "POST", jsonBody)
 
-			_, err = client.InvokeService(context.Background(), req)
+			_, err := daprClient.InvokeService(context.Background(), req)
 
 			result.CallSuccessful = err == nil
 		}
@@ -1256,6 +1202,8 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 }
 
 func main() {
+	initGRPCClient()
+
 	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
 
 	httpMethods = []string{"POST", "GET", "PUT", "DELETE"}
@@ -1297,15 +1245,77 @@ func logAndSetResponse(w http.ResponseWriter, statusCode int, message string) {
 
 //--- The functions below are copied from utils/helpers.go to workaround the package include in a container problem.
 
-func newHTTPClient() http.Client {
-	return http.Client{
-		Transport: &http.Transport{
-			// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
-			Dial: (&net.Dialer{
-				Timeout: 5 * time.Minute,
-			}).Dial,
-		},
+// HTTPPost is a helper to make POST request call to url
+func HTTPPost(url string, data []byte) ([]byte, error) {
+	resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(data)) //nolint
+
+	if err != nil {
+		return nil, err
 	}
+
+	return extractBody(resp.Body)
+}
+
+// Wraps GET calls
+func HTTPGet(url string) ([]byte, error) {
+	resp, err := httpClient.Get(sanitizeHTTPURL(url)) //nolint
+
+	if err != nil {
+		return nil, err
+	}
+
+	return extractBody(resp.Body)
+}
+
+// HTTPDelete calls a given URL with the HTTP DELETE method.
+func HTTPDelete(url string, data []byte) ([]byte, error) {
+	var requestBody io.Reader = nil
+	if data != nil {
+		requestBody = bytes.NewBuffer(data)
+	}
+
+	req, err := http.NewRequest("DELETE", sanitizeHTTPURL(url), requestBody)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := extractBody(res.Body)
+	defer res.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+func HTTPPut(url string, data []byte) ([]byte, error) {
+	var requestBody io.Reader = nil
+	if data != nil {
+		requestBody = bytes.NewBuffer(data)
+	}
+
+	req, err := http.NewRequest("PUT", sanitizeHTTPURL(url), requestBody)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := extractBody(res.Body)
+	defer res.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
 }
 
 func sanitizeHTTPURL(url string) string {
@@ -1327,4 +1337,42 @@ func extractBody(r io.ReadCloser) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+func initGRPCClient() {
+	daprPort, _ := os.LookupEnv("DAPR_GRPC_PORT")
+	url := fmt.Sprintf("localhost:%s", daprPort)
+	log.Printf("Connecting to dapr using url %s", url)
+	for retries := 10; retries > 0; retries-- {
+		var err error
+		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		if err == nil {
+			break
+		}
+
+		if retries == 0 {
+			log.Printf("Could not connect to dapr: %v", err)
+			log.Panic(err)
+		}
+
+		log.Printf("Could not connect to dapr: %v, retrying...", err)
+		time.Sleep(5 * time.Second)
+	}
+
+	daprClient = runtimev1pb.NewDaprClient(grpcConn)
+}
+
+func newHTTPClient() *http.Client {
+	dialer := &net.Dialer{ //nolint:exhaustivestruct
+		Timeout: 5 * time.Second,
+	}
+	netTransport := &http.Transport{ //nolint:exhaustivestruct
+		DialContext:         dialer.DialContext,
+		TLSHandshakeTimeout: 5 * time.Second,
+	}
+
+	return &http.Client{ //nolint:exhaustivestruct
+		Timeout:   30 * time.Second,
+		Transport: netTransport,
+	}
 }
