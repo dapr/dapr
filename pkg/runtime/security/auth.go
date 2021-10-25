@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
-	"io/ioutil"
 	"os"
 	"sync"
 	"time"
@@ -155,7 +154,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 // currently we support Kubernetes identities.
 func getToken() string {
-	b, _ := ioutil.ReadFile(kubeTknPath)
+	b, _ := os.ReadFile(kubeTknPath)
 	return string(b)
 }
 

@@ -1,0 +1,30 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.azure.cosmosdb
+  version: v1
+  initTimeout: 1m
+  metadata:
+  - name: masterKey
+    secretKeyRef:
+      name: cosmosdb-secret
+      key: primaryMasterKey
+  - name: url
+    secretKeyRef:
+      name: cosmosdb-secret
+      key: url
+  - name: database
+    value: dapr-aks-e2e-tests
+  - name: collection
+    secretKeyRef:
+      name: cosmosdb-secret
+      key: collection
+  - name: actorStateStore
+    value: true
