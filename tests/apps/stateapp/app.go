@@ -175,9 +175,11 @@ func getAll(states []daprState, statestore string) ([]daprState, error) {
 	var output = make([]daprState, 0, len(states))
 	for _, state := range states {
 		value, err := get(state.Key, statestore)
+
 		if err != nil {
 			return nil, err
 		}
+
 		log.Printf("Result for get request for key %s: %v", state.Key, value)
 		output = append(output, daprState{
 			Key:   state.Key,
