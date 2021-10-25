@@ -12,12 +12,11 @@
 package placement
 
 import (
-	reflect "reflect"
-	sync "sync"
-
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	reflect "reflect"
+	sync "sync"
 )
 
 const (
@@ -376,19 +375,16 @@ func file_dapr_proto_placement_v1_placement_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_placement_v1_placement_proto_rawDescData
 }
 
-var (
-	file_dapr_proto_placement_v1_placement_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-	file_dapr_proto_placement_v1_placement_proto_goTypes  = []interface{}{
-		(*PlacementOrder)(nil),  // 0: dapr.proto.placement.v1.PlacementOrder
-		(*PlacementTables)(nil), // 1: dapr.proto.placement.v1.PlacementTables
-		(*PlacementTable)(nil),  // 2: dapr.proto.placement.v1.PlacementTable
-		(*Host)(nil),            // 3: dapr.proto.placement.v1.Host
-		nil,                     // 4: dapr.proto.placement.v1.PlacementTables.EntriesEntry
-		nil,                     // 5: dapr.proto.placement.v1.PlacementTable.HostsEntry
-		nil,                     // 6: dapr.proto.placement.v1.PlacementTable.LoadMapEntry
-	}
-)
-
+var file_dapr_proto_placement_v1_placement_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_dapr_proto_placement_v1_placement_proto_goTypes = []interface{}{
+	(*PlacementOrder)(nil),  // 0: dapr.proto.placement.v1.PlacementOrder
+	(*PlacementTables)(nil), // 1: dapr.proto.placement.v1.PlacementTables
+	(*PlacementTable)(nil),  // 2: dapr.proto.placement.v1.PlacementTable
+	(*Host)(nil),            // 3: dapr.proto.placement.v1.Host
+	nil,                     // 4: dapr.proto.placement.v1.PlacementTables.EntriesEntry
+	nil,                     // 5: dapr.proto.placement.v1.PlacementTable.HostsEntry
+	nil,                     // 6: dapr.proto.placement.v1.PlacementTable.LoadMapEntry
+}
 var file_dapr_proto_placement_v1_placement_proto_depIdxs = []int32{
 	1, // 0: dapr.proto.placement.v1.PlacementOrder.tables:type_name -> dapr.proto.placement.v1.PlacementTables
 	4, // 1: dapr.proto.placement.v1.PlacementTables.entries:type_name -> dapr.proto.placement.v1.PlacementTables.EntriesEntry

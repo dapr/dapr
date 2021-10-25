@@ -4,7 +4,6 @@ package placement
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -69,7 +68,8 @@ type PlacementServer interface {
 }
 
 // UnimplementedPlacementServer should be embedded to have forward compatible implementations.
-type UnimplementedPlacementServer struct{}
+type UnimplementedPlacementServer struct {
+}
 
 func (UnimplementedPlacementServer) ReportDaprStatus(Placement_ReportDaprStatusServer) error {
 	return status.Errorf(codes.Unimplemented, "method ReportDaprStatus not implemented")

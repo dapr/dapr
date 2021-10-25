@@ -178,7 +178,6 @@ func getAll(states []daprState, statestore string) ([]daprState, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		log.Printf("Result for get request for key %s: %v", state.Key, value)
 		output = append(output, daprState{
 			Key:   state.Key,
@@ -502,7 +501,6 @@ func toDaprStates(response *runtimev1pb.GetBulkStateResponse) ([]daprState, erro
 }
 
 func deleteAllGRPC(states []daprState, statestore string) error {
-
 	for _, state := range states {
 		log.Printf("deleting sate for key %s\n", state.Key)
 		_, err := daprClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{

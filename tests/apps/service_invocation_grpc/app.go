@@ -25,8 +25,7 @@ import (
 )
 
 // server is our user app
-type server struct{
-}
+type server struct{}
 
 type appResponse struct {
 	Message string `json:"message,omitempty"`

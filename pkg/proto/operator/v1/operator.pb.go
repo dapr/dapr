@@ -12,13 +12,12 @@
 package operator
 
 import (
-	reflect "reflect"
-	sync "sync"
-
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	reflect "reflect"
+	sync "sync"
 )
 
 const (
@@ -459,20 +458,17 @@ func file_dapr_proto_operator_v1_operator_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_operator_v1_operator_proto_rawDescData
 }
 
-var (
-	file_dapr_proto_operator_v1_operator_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-	file_dapr_proto_operator_v1_operator_proto_goTypes  = []interface{}{
-		(*ListComponentsRequest)(nil),     // 0: dapr.proto.operator.v1.ListComponentsRequest
-		(*ComponentUpdateRequest)(nil),    // 1: dapr.proto.operator.v1.ComponentUpdateRequest
-		(*ComponentUpdateEvent)(nil),      // 2: dapr.proto.operator.v1.ComponentUpdateEvent
-		(*ListComponentResponse)(nil),     // 3: dapr.proto.operator.v1.ListComponentResponse
-		(*GetConfigurationRequest)(nil),   // 4: dapr.proto.operator.v1.GetConfigurationRequest
-		(*GetConfigurationResponse)(nil),  // 5: dapr.proto.operator.v1.GetConfigurationResponse
-		(*ListSubscriptionsResponse)(nil), // 6: dapr.proto.operator.v1.ListSubscriptionsResponse
-		(*emptypb.Empty)(nil),             // 7: google.protobuf.Empty
-	}
-)
-
+var file_dapr_proto_operator_v1_operator_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_dapr_proto_operator_v1_operator_proto_goTypes = []interface{}{
+	(*ListComponentsRequest)(nil),     // 0: dapr.proto.operator.v1.ListComponentsRequest
+	(*ComponentUpdateRequest)(nil),    // 1: dapr.proto.operator.v1.ComponentUpdateRequest
+	(*ComponentUpdateEvent)(nil),      // 2: dapr.proto.operator.v1.ComponentUpdateEvent
+	(*ListComponentResponse)(nil),     // 3: dapr.proto.operator.v1.ListComponentResponse
+	(*GetConfigurationRequest)(nil),   // 4: dapr.proto.operator.v1.GetConfigurationRequest
+	(*GetConfigurationResponse)(nil),  // 5: dapr.proto.operator.v1.GetConfigurationResponse
+	(*ListSubscriptionsResponse)(nil), // 6: dapr.proto.operator.v1.ListSubscriptionsResponse
+	(*emptypb.Empty)(nil),             // 7: google.protobuf.Empty
+}
 var file_dapr_proto_operator_v1_operator_proto_depIdxs = []int32{
 	1, // 0: dapr.proto.operator.v1.Operator.ComponentUpdate:input_type -> dapr.proto.operator.v1.ComponentUpdateRequest
 	0, // 1: dapr.proto.operator.v1.Operator.ListComponents:input_type -> dapr.proto.operator.v1.ListComponentsRequest

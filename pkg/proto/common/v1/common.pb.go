@@ -12,13 +12,12 @@
 package common
 
 import (
-	reflect "reflect"
-	sync "sync"
-
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	anypb "google.golang.org/protobuf/types/known/anypb"
+	reflect "reflect"
+	sync "sync"
 )
 
 const (
@@ -804,26 +803,23 @@ func file_dapr_proto_common_v1_common_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_common_v1_common_proto_rawDescData
 }
 
-var (
-	file_dapr_proto_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-	file_dapr_proto_common_v1_common_proto_msgTypes  = make([]protoimpl.MessageInfo, 9)
-	file_dapr_proto_common_v1_common_proto_goTypes   = []interface{}{
-		(HTTPExtension_Verb)(0),            // 0: dapr.proto.common.v1.HTTPExtension.Verb
-		(StateOptions_StateConcurrency)(0), // 1: dapr.proto.common.v1.StateOptions.StateConcurrency
-		(StateOptions_StateConsistency)(0), // 2: dapr.proto.common.v1.StateOptions.StateConsistency
-		(*HTTPExtension)(nil),              // 3: dapr.proto.common.v1.HTTPExtension
-		(*InvokeRequest)(nil),              // 4: dapr.proto.common.v1.InvokeRequest
-		(*InvokeResponse)(nil),             // 5: dapr.proto.common.v1.InvokeResponse
-		(*StateItem)(nil),                  // 6: dapr.proto.common.v1.StateItem
-		(*Etag)(nil),                       // 7: dapr.proto.common.v1.Etag
-		(*StateOptions)(nil),               // 8: dapr.proto.common.v1.StateOptions
-		(*ConfigurationItem)(nil),          // 9: dapr.proto.common.v1.ConfigurationItem
-		nil,                                // 10: dapr.proto.common.v1.StateItem.MetadataEntry
-		nil,                                // 11: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
-		(*anypb.Any)(nil),                  // 12: google.protobuf.Any
-	}
-)
-
+var file_dapr_proto_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_dapr_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
+	(HTTPExtension_Verb)(0),            // 0: dapr.proto.common.v1.HTTPExtension.Verb
+	(StateOptions_StateConcurrency)(0), // 1: dapr.proto.common.v1.StateOptions.StateConcurrency
+	(StateOptions_StateConsistency)(0), // 2: dapr.proto.common.v1.StateOptions.StateConsistency
+	(*HTTPExtension)(nil),              // 3: dapr.proto.common.v1.HTTPExtension
+	(*InvokeRequest)(nil),              // 4: dapr.proto.common.v1.InvokeRequest
+	(*InvokeResponse)(nil),             // 5: dapr.proto.common.v1.InvokeResponse
+	(*StateItem)(nil),                  // 6: dapr.proto.common.v1.StateItem
+	(*Etag)(nil),                       // 7: dapr.proto.common.v1.Etag
+	(*StateOptions)(nil),               // 8: dapr.proto.common.v1.StateOptions
+	(*ConfigurationItem)(nil),          // 9: dapr.proto.common.v1.ConfigurationItem
+	nil,                                // 10: dapr.proto.common.v1.StateItem.MetadataEntry
+	nil,                                // 11: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
+	(*anypb.Any)(nil),                  // 12: google.protobuf.Any
+}
 var file_dapr_proto_common_v1_common_proto_depIdxs = []int32{
 	0,  // 0: dapr.proto.common.v1.HTTPExtension.verb:type_name -> dapr.proto.common.v1.HTTPExtension.Verb
 	12, // 1: dapr.proto.common.v1.InvokeRequest.data:type_name -> google.protobuf.Any

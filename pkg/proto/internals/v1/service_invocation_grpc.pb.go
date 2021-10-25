@@ -4,7 +4,6 @@ package internals
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -62,12 +61,12 @@ type ServiceInvocationServer interface {
 }
 
 // UnimplementedServiceInvocationServer should be embedded to have forward compatible implementations.
-type UnimplementedServiceInvocationServer struct{}
+type UnimplementedServiceInvocationServer struct {
+}
 
 func (UnimplementedServiceInvocationServer) CallActor(context.Context, *InternalInvokeRequest) (*InternalInvokeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CallActor not implemented")
 }
-
 func (UnimplementedServiceInvocationServer) CallLocal(context.Context, *InternalInvokeRequest) (*InternalInvokeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CallLocal not implemented")
 }

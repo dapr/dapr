@@ -12,13 +12,12 @@
 package sentry
 
 import (
-	reflect "reflect"
-	sync "sync"
-
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
 )
 
 const (
@@ -237,15 +236,12 @@ func file_dapr_proto_sentry_v1_sentry_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_sentry_v1_sentry_proto_rawDescData
 }
 
-var (
-	file_dapr_proto_sentry_v1_sentry_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-	file_dapr_proto_sentry_v1_sentry_proto_goTypes  = []interface{}{
-		(*SignCertificateRequest)(nil),  // 0: dapr.proto.sentry.v1.SignCertificateRequest
-		(*SignCertificateResponse)(nil), // 1: dapr.proto.sentry.v1.SignCertificateResponse
-		(*timestamppb.Timestamp)(nil),   // 2: google.protobuf.Timestamp
-	}
-)
-
+var file_dapr_proto_sentry_v1_sentry_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_dapr_proto_sentry_v1_sentry_proto_goTypes = []interface{}{
+	(*SignCertificateRequest)(nil),  // 0: dapr.proto.sentry.v1.SignCertificateRequest
+	(*SignCertificateResponse)(nil), // 1: dapr.proto.sentry.v1.SignCertificateResponse
+	(*timestamppb.Timestamp)(nil),   // 2: google.protobuf.Timestamp
+}
 var file_dapr_proto_sentry_v1_sentry_proto_depIdxs = []int32{
 	2, // 0: dapr.proto.sentry.v1.SignCertificateResponse.valid_until:type_name -> google.protobuf.Timestamp
 	0, // 1: dapr.proto.sentry.v1.CA.SignCertificate:input_type -> dapr.proto.sentry.v1.SignCertificateRequest

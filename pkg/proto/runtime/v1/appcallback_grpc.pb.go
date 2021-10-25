@@ -4,13 +4,11 @@ package runtime
 
 import (
 	context "context"
-
+	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -110,24 +108,21 @@ type AppCallbackServer interface {
 }
 
 // UnimplementedAppCallbackServer should be embedded to have forward compatible implementations.
-type UnimplementedAppCallbackServer struct{}
+type UnimplementedAppCallbackServer struct {
+}
 
 func (UnimplementedAppCallbackServer) OnInvoke(context.Context, *v1.InvokeRequest) (*v1.InvokeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnInvoke not implemented")
 }
-
 func (UnimplementedAppCallbackServer) ListTopicSubscriptions(context.Context, *emptypb.Empty) (*ListTopicSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTopicSubscriptions not implemented")
 }
-
 func (UnimplementedAppCallbackServer) OnTopicEvent(context.Context, *TopicEventRequest) (*TopicEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnTopicEvent not implemented")
 }
-
 func (UnimplementedAppCallbackServer) ListInputBindings(context.Context, *emptypb.Empty) (*ListInputBindingsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListInputBindings not implemented")
 }
-
 func (UnimplementedAppCallbackServer) OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBindingEvent not implemented")
 }

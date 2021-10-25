@@ -4,7 +4,6 @@ package operator
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -112,20 +111,18 @@ type OperatorServer interface {
 }
 
 // UnimplementedOperatorServer should be embedded to have forward compatible implementations.
-type UnimplementedOperatorServer struct{}
+type UnimplementedOperatorServer struct {
+}
 
 func (UnimplementedOperatorServer) ComponentUpdate(*ComponentUpdateRequest, Operator_ComponentUpdateServer) error {
 	return status.Errorf(codes.Unimplemented, "method ComponentUpdate not implemented")
 }
-
 func (UnimplementedOperatorServer) ListComponents(context.Context, *ListComponentsRequest) (*ListComponentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListComponents not implemented")
 }
-
 func (UnimplementedOperatorServer) GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfiguration not implemented")
 }
-
 func (UnimplementedOperatorServer) ListSubscriptions(context.Context, *emptypb.Empty) (*ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
 }

@@ -357,7 +357,6 @@ func testCallMetadataHandler(w http.ResponseWriter, r *http.Request) {
 
 // the test side calls the 4 cases below in order
 func actorStateTest(testName string, w http.ResponseWriter, actorType string, id string) error {
-
 	// save multiple key values
 	if testName == "savestatetest" {
 		url := fmt.Sprintf(actorSaveStateURLFormat, actorType, id)
