@@ -844,9 +844,11 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if err != nil {
+			var body []byte
 			if resp != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(resp.Data)))
+				body = resp.Data
 			}
+			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(body)))
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
