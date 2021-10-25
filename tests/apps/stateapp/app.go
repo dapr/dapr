@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,8 +31,11 @@ const (
 
 	// statestore is the name of the store
 	stateURLTemplate            = "http://localhost:3500/v1.0/state/%s"
-	bulkStateURLTemplate        = "http://localhost:3500/v1.0/state/%s/bulk"
+	bulkStateURLTemplate        = "http://localhost:3500/v1.0/state/%s/bulk?metadata.partitionKey=e2etest"
 	stateTransactionURLTemplate = "http://localhost:3500/v1.0/state/%s/transaction"
+
+	metadataPartitionKey = "partitionKey"
+	partitionKey         = "e2etest"
 )
 
 // appState represents a state in this app.
@@ -41,9 +45,10 @@ type appState struct {
 
 // daprState represents a state in Dapr.
 type daprState struct {
-	Key           string    `json:"key,omitempty"`
-	Value         *appState `json:"value,omitempty"`
-	OperationType string    `json:"operationType,omitempty"`
+	Key           string            `json:"key,omitempty"`
+	Value         *appState         `json:"value,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	OperationType string            `json:"operationType,omitempty"`
 }
 
 // bulkGetRequest is the bulk get request object for the test
@@ -71,6 +76,13 @@ type requestResponse struct {
 type appResponse struct {
 	Message string `json:"message,omitempty"`
 }
+
+var httpClient = newHTTPClient()
+
+var (
+	grpcConn   *grpc.ClientConn
+	daprClient runtimev1pb.DaprClient
+)
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -251,8 +263,7 @@ func delete(key, statestore string) error {
 	}
 
 	log.Printf("Deleting state for %s", url)
-	client := &http.Client{}
-	res, err := client.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("could not delete key %s in Dapr: %s", key, err.Error())
 	}
@@ -294,6 +305,7 @@ func executeTransaction(states []daprState, statestore string) error {
 
 	jsonValue, err := json.Marshal(map[string]interface{}{
 		"operations": transactionalOperations,
+		"metadata":   map[string]string{metadataPartitionKey: partitionKey},
 	})
 	if err != nil {
 		log.Printf("Could save transactional operations in Dapr: %s", err.Error())
@@ -325,6 +337,9 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 			Message: err.Error(),
 		})
 		return
+	}
+	for i := range req.States {
+		req.States[i].Metadata = map[string]string{metadataPartitionKey: partitionKey}
 	}
 
 	var res = requestResponse{}
@@ -396,22 +411,11 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	res.StartTime = epoch()
 	var statusCode = http.StatusOK
 
-	daprPort, _ := os.LookupEnv("DAPR_GRPC_PORT")
-	daprAddress := fmt.Sprintf("127.0.0.1:%s", daprPort)
-	log.Printf("dapr grpc address is %s\n", daprAddress)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
-
-	if err != nil {
-		log.Print(err.Error())
-	}
-	defer conn.Close()
-
-	client := runtimev1pb.NewDaprClient(conn)
 	cmd := mux.Vars(r)["command"]
 	statestore := mux.Vars(r)["statestore"]
 	switch cmd {
 	case "save":
-		_, err := client.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		_, err := daprClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
 			StoreName: statestore,
 			States:    daprState2StateItems(req.States),
 		})
@@ -420,9 +424,10 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 			statusCode, res.Message = setErrorMessage("ExecuteSaveState", err.Error())
 		}
 	case "getbulk":
-		response, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
+		response, err := daprClient.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
 			StoreName: statestore,
 			Keys:      daprState2Keys(req.States),
+			Metadata:  map[string]string{metadataPartitionKey: partitionKey},
 		})
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("GetBulkState", err.Error())
@@ -433,21 +438,22 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		res.States = states
 	case "get":
-		states, err := getAllGRPC(client, req.States, statestore)
+		states, err := getAllGRPC(req.States, statestore)
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("GetState", err.Error())
 		}
 		res.States = states
 	case "delete":
 		statusCode = http.StatusNoContent
-		err = deleteAllGRPC(client, req.States, statestore)
+		err = deleteAllGRPC(req.States, statestore)
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("DeleteState", err.Error())
 		}
 	case "transact":
-		_, err = client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
+		_, err = daprClient.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
 			StoreName:  statestore,
 			Operations: daprState2TransactionalStateRequest(req.States),
+			Metadata:   map[string]string{metadataPartitionKey: partitionKey},
 		})
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("ExecuteStateTransaction", err.Error())
@@ -492,31 +498,34 @@ func toDaprStates(response *runtimev1pb.GetBulkStateResponse) ([]daprState, erro
 			Value: daprStateItem,
 		})
 	}
+
 	return result, nil
 }
 
-func deleteAllGRPC(client runtimev1pb.DaprClient, states []daprState, statestore string) error {
-
+func deleteAllGRPC(states []daprState, statestore string) error {
 	for _, state := range states {
 		log.Printf("deleting sate for key %s\n", state.Key)
-		_, err := client.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
+		_, err := daprClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
 			StoreName: statestore,
 			Key:       state.Key,
+			Metadata:  map[string]string{metadataPartitionKey: partitionKey},
 		})
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
-func getAllGRPC(client runtimev1pb.DaprClient, states []daprState, statestore string) ([]daprState, error) {
+func getAllGRPC(states []daprState, statestore string) ([]daprState, error) {
 	var responses []daprState
 	for _, state := range states {
 		log.Printf("getting state for key %s\n", state.Key)
-		res, err := client.GetState(context.Background(), &runtimev1pb.GetStateRequest{
+		res, err := daprClient.GetState(context.Background(), &runtimev1pb.GetStateRequest{
 			StoreName: statestore,
 			Key:       state.Key,
+			Metadata:  map[string]string{metadataPartitionKey: partitionKey},
 		})
 		if err != nil {
 			return nil, err
@@ -531,11 +540,13 @@ func getAllGRPC(client runtimev1pb.DaprClient, states []daprState, statestore st
 			Value: val,
 		})
 	}
+
 	return responses, nil
 }
 
 func setErrorMessage(method, errorString string) (int, string) {
 	log.Printf("GRPC %s had error %s\n", method, errorString)
+
 	return http.StatusInternalServerError, errorString
 }
 
@@ -544,10 +555,12 @@ func daprState2StateItems(daprStates []daprState) []*commonv1pb.StateItem {
 	for _, daprState := range daprStates {
 		val, _ := json.Marshal(daprState.Value)
 		stateItems = append(stateItems, &commonv1pb.StateItem{
-			Key:   daprState.Key,
-			Value: val,
+			Key:      daprState.Key,
+			Value:    val,
+			Metadata: map[string]string{metadataPartitionKey: partitionKey},
 		})
 	}
+
 	return stateItems
 }
 
@@ -563,6 +576,7 @@ func daprState2TransactionalStateRequest(daprStates []daprState) []*runtimev1pb.
 			},
 		})
 	}
+
 	return transactionalStateRequests
 }
 
@@ -574,6 +588,8 @@ func createStateURL(key, statestore string) (string, error) {
 	}
 
 	url.Path = path.Join(url.Path, key)
+	url.RawQuery = "metadata.partitionKey=e2etest"
+
 	return url.String(), nil
 }
 
@@ -583,6 +599,7 @@ func createBulkStateURL(statestore string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not parse %s: %s", bulkStateURL, err.Error())
 	}
+
 	return url.String(), nil
 }
 
@@ -603,7 +620,47 @@ func appRouter() *mux.Router {
 	return router
 }
 
+func newHTTPClient() http.Client {
+	dialer := &net.Dialer{ //nolint:exhaustivestruct
+		Timeout: 5 * time.Second,
+	}
+	netTransport := &http.Transport{ //nolint:exhaustivestruct
+		DialContext:         dialer.DialContext,
+		TLSHandshakeTimeout: 5 * time.Second,
+	}
+
+	return http.Client{ //nolint:exhaustivestruct
+		Timeout:   30 * time.Second,
+		Transport: netTransport,
+	}
+}
+
+func initGRPCClient() {
+	daprPort, _ := os.LookupEnv("DAPR_GRPC_PORT")
+	url := fmt.Sprintf("localhost:%s", daprPort)
+	log.Printf("Connecting to dapr using url %s", url)
+	for retries := 10; retries > 0; retries-- {
+		var err error
+		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		if err == nil {
+			break
+		}
+
+		if retries == 0 {
+			log.Printf("Could not connect to dapr: %v", err)
+			log.Panic(err)
+		}
+
+		log.Printf("Could not connect to dapr: %v, retrying...", err)
+		time.Sleep(5 * time.Second)
+	}
+
+	daprClient = runtimev1pb.NewDaprClient(grpcConn)
+}
+
 func main() {
+	initGRPCClient()
+
 	log.Printf("State App - listening on http://localhost:%d", appPort)
 	log.Printf("State endpoint - to be saved at %s", fmt.Sprintf(stateURLTemplate, "statestore"))
 

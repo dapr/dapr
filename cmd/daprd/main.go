@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/valyala/fasthttp"
+	_ "go.uber.org/automaxprocs"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/version"
