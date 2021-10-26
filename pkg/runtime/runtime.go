@@ -343,9 +343,11 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	grpcAPI.SetDirectMessaging(a.directMessaging)
 
-	err = a.initActors()
-	if err != nil {
+	if a.hostingActors() {
+	    err = a.initActors()
+	    if err != nil {
 		log.Warnf("failed to init actors: %s", err)
+	    }
 	}
 
 	a.daprHTTPAPI.SetActorRuntime(a.actor)
