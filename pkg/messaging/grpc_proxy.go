@@ -82,7 +82,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		}
 
 		conn, err := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
-		return ctx, conn, err
+		return outCtx, conn, err
 	}
 
 	// proxy to a remote daprd
