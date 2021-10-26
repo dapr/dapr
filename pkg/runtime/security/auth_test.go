@@ -33,7 +33,7 @@ func TestGetSentryIdentifier(t *testing.T) {
 	t.Run("with identity in env", func(t *testing.T) {
 		envID := "cluster.local"
 		os.Setenv("SENTRY_LOCAL_IDENTITY", envID)
-		defer os.Clearenv()
+		defer os.Unsetenv("SENTRY_LOCAL_IDENTITY")
 
 		id := getSentryIdentifier("app1")
 		assert.Equal(t, envID, id)
