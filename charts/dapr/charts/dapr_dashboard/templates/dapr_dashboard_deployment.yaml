@@ -18,6 +18,9 @@ spec:
         app.kubernetes.io/component: dashboard
         app.kubernetes.io/part-of: "dapr"
         app.kubernetes.io/managed-by: "helm"
+        {{- with .Values.global.labels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       serviceAccountName: dashboard-reader
       affinity:
