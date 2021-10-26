@@ -190,27 +190,27 @@ endif
 docker-build:
 ifeq ($(GOARCH),amd64)
 	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) build --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) build --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)
 	$(info Building $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) build --build-arg PKG_FILES=daprd -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) build --build-arg PKG_FILES=daprd -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)
 	$(info Building $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) build --build-arg PKG_FILES=placement -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) build --build-arg PKG_FILES=placement -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)
 	$(info Building $(DAPR_SENTRY_DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) build --build-arg PKG_FILES=sentry -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) build --build-arg PKG_FILES=sentry -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)
 else
 	-$(DOCKER) buildx create --use --name daprbuild
 	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset
-	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
-	$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
-	$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
-	$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)
+	$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)
+	$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)
+	$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)
 endif
 ifeq ($(LATEST_RELEASE),true)
 	$(info Building $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
-	$(DOCKER) tag $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) $(DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
-	$(DOCKER) tag $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
-	$(DOCKER) tag $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
-	$(DOCKER) tag $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+	$(DOCKER) tag $(DOCKER_IMAGE_TAG) $(DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) tag $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) tag $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) tag $(DAPR_SENTRY_DOCKER_IMAGE_TAG) $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)
 endif
 
 check-arch-platform:
@@ -222,28 +222,28 @@ endif
 # push docker image to the registry
 docker-push: check-arch-platform docker-build
 ifeq ($(GOARCH),amd64)
-	$(info Pushing $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) docker image ...)
-	$(DOCKER) push $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
-	$(info Pushing $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) docker image ...)
-	$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
-	$(info Pushing $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) docker image ...)
-	$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
-	$(info Pushing $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH) docker image ...)
-	$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)
+	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) push $(DOCKER_IMAGE_TAG)
+	$(info Pushing $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)
+	$(info Pushing $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)
+	$(info Pushing $(DAPR_SENTRY_DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_TAG)
 else
 	-$(DOCKER) buildx create --use --name daprbuild
 	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset
-	$(DOCKER) buildx build --build-arg PKG_FILES=*  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)  --push --platform $(DOCKER_IMAGE_PLATFORM)
-	$(DOCKER) buildx build --build-arg PKG_FILES=daprd  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)  --push --platform $(DOCKER_IMAGE_PLATFORM)
-	$(DOCKER) buildx build --build-arg PKG_FILES=placement  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)  --push --platform $(DOCKER_IMAGE_PLATFORM)
-	$(DOCKER) buildx build --build-arg PKG_FILES=sentry  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)  --push --platform $(DOCKER_IMAGE_PLATFORM) 
+	$(DOCKER) buildx build --build-arg PKG_FILES=*  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DOCKER_IMAGE_TAG)  --push --platform $(DOCKER_IMAGE_PLATFORM)
+	$(DOCKER) buildx build --build-arg PKG_FILES=daprd  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)  --push --platform $(DOCKER_IMAGE_PLATFORM)
+	$(DOCKER) buildx build --build-arg PKG_FILES=placement  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)  --push --platform $(DOCKER_IMAGE_PLATFORM)
+	$(DOCKER) buildx build --build-arg PKG_FILES=sentry  -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)  -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)  --push --platform $(DOCKER_IMAGE_PLATFORM) 
 endif
 ifeq ($(LATEST_RELEASE),true)
-	$(info Pushing $(DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH) docker image ...)
-	$(DOCKER) push $(DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
-	$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
-	$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
-	$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)-$(GOOS)-$(GOARCH)
+	$(info Pushing $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
+	$(DOCKER) push $(DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)
 endif
 
 windows-version:
@@ -300,10 +300,10 @@ tidy:
 ################################################################################
 .PHONY:clean
 clean:
-	$(DOCKER) rmi -f $(shell docker images -q $(DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH))  || true
-	$(DOCKER) rmi -f $(shell docker images -q $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)) || true
-	$(DOCKER) rmi -f $(shell docker images -q $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)) || true
-	$(DOCKER) rmi -f $(shell docker images -q $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(GOOS)-$(GOARCH)) || true
+	$(DOCKER) rmi -f $(shell docker images -q $(DOCKER_IMAGE_TAG))  || true
+	$(DOCKER) rmi -f $(shell docker images -q $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)) || true
+	$(DOCKER) rmi -f $(shell docker images -q $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)) || true
+	$(DOCKER) rmi -f $(shell docker images -q $(DAPR_SENTRY_DOCKER_IMAGE_TAG)) || true
 ################################################################################
 # Target: test                                                                 #
 ################################################################################
