@@ -844,7 +844,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if err != nil {
-			body := resp.Data
+			var body []byte
+			if resp != nil {
+				body = resp.Data
+			}
 			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(body)))
 		}
 		if resp != nil {
