@@ -716,8 +716,11 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 					}
 
 					comps := resp.GetComponents()
-					for _, c := range comps {
-						parseAndUpdate(c)
+					for i := 0; i < len(comps); i++ {
+						// avoid missing any updates during the init component time.
+						go func(comp []byte) {
+							parseAndUpdate(comp)
+						}(comps[i])
 					}
 
 					return nil
@@ -1433,6 +1436,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	req := invokev1.NewInvokeMethodRequest(msg.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.data, contenttype.CloudEventContentType)
+	req.WithCustomHTTPMetadata(msg.metadata)
 
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
@@ -1553,6 +1557,8 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}
 	}
+
+	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
 	// call appcallback
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
