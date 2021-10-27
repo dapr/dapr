@@ -27,7 +27,11 @@ func TestGetTrustAnchors(t *testing.T) {
 		os.Setenv(certs.TrustAnchorsEnvVar, "111")
 		os.Setenv(certs.CertChainEnvVar, "111")
 		os.Setenv(certs.CertKeyEnvVar, "111")
-		defer os.Clearenv()
+		defer func() {
+			os.Unsetenv(certs.TrustAnchorsEnvVar)
+			os.Unsetenv(certs.CertChainEnvVar)
+			os.Unsetenv(certs.CertKeyEnvVar)
+		}()
 
 		certChain, _ := GetCertChain()
 		caPool, err := CertPool(certChain.Cert)
@@ -39,7 +43,11 @@ func TestGetTrustAnchors(t *testing.T) {
 		os.Setenv(certs.TrustAnchorsEnvVar, testRootCert)
 		os.Setenv(certs.CertChainEnvVar, "111")
 		os.Setenv(certs.CertKeyEnvVar, "111")
-		defer os.Clearenv()
+		defer func() {
+			os.Unsetenv(certs.TrustAnchorsEnvVar)
+			os.Unsetenv(certs.CertChainEnvVar)
+			os.Unsetenv(certs.CertKeyEnvVar)
+		}()
 
 		certChain, err := GetCertChain()
 		assert.Nil(t, err)
@@ -72,7 +80,11 @@ func TestInitSidecarAuthenticator(t *testing.T) {
 	os.Setenv(certs.TrustAnchorsEnvVar, testRootCert)
 	os.Setenv(certs.CertChainEnvVar, "111")
 	os.Setenv(certs.CertKeyEnvVar, "111")
-	defer os.Clearenv()
+	defer func() {
+		os.Unsetenv(certs.TrustAnchorsEnvVar)
+		os.Unsetenv(certs.CertChainEnvVar)
+		os.Unsetenv(certs.CertKeyEnvVar)
+	}()
 
 	certChain, _ := GetCertChain()
 	_, err := GetSidecarAuthenticator("localhost:5050", certChain)

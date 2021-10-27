@@ -105,12 +105,13 @@ func TestResponses(t *testing.T) {
 		server := httptest.NewServer(&testServer{
 			statusCode: 200,
 		})
+		defer server.Close()
 
 		ch := StartEndpointHealthCheck(server.URL, WithInterval(time.Second*1), WithFailureThreshold(1))
 		for {
 			healthy := <-ch
 			assert.True(t, healthy)
-			server.Close()
+
 			return
 		}
 	})
@@ -119,12 +120,13 @@ func TestResponses(t *testing.T) {
 		server := httptest.NewServer(&testServer{
 			statusCode: 201,
 		})
+		defer server.Close()
 
 		ch := StartEndpointHealthCheck(server.URL, WithInterval(time.Second*1), WithFailureThreshold(1), WithSuccessStatusCode(201))
 		for {
 			healthy := <-ch
 			assert.True(t, healthy)
-			server.Close()
+
 			return
 		}
 	})
@@ -133,12 +135,13 @@ func TestResponses(t *testing.T) {
 		server := httptest.NewServer(&testServer{
 			statusCode: 500,
 		})
+		defer server.Close()
 
 		ch := StartEndpointHealthCheck(server.URL, WithInterval(time.Second*1), WithFailureThreshold(1))
 		for {
 			healthy := <-ch
 			assert.False(t, healthy)
-			server.Close()
+
 			return
 		}
 	})
@@ -148,6 +151,7 @@ func TestResponses(t *testing.T) {
 			statusCode: 500,
 		}
 		server := httptest.NewServer(test)
+		defer server.Close()
 
 		ch := StartEndpointHealthCheck(server.URL, WithInterval(time.Second*1), WithFailureThreshold(1))
 		count := 0
@@ -159,7 +163,7 @@ func TestResponses(t *testing.T) {
 				test.statusCode = 200
 			} else {
 				assert.True(t, healthy)
-				server.Close()
+
 				return
 			}
 		}

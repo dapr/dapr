@@ -159,6 +159,7 @@ type DaprRuntime struct {
 	topicRoutes            map[string]TopicRoute
 	inputBindingRoutes     map[string]string
 	shutdownC              chan error
+	apiClosers             []io.Closer
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -847,7 +848,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if err != nil {
-			body := resp.Data
+			var body []byte
+			if resp != nil {
+				body = resp.Data
+			}
 			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(body)))
 		}
 		if resp != nil {
@@ -935,23 +939,35 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.APIListenAddresses, publicPort, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.StreamRequestBody)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
-	err := server.StartNonBlocking()
-	return err
+	if err := server.StartNonBlocking(); err != nil {
+		return err
+	}
+	a.apiClosers = append(a.apiClosers, server)
+
+	return nil
 }
 
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{""}, port)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator, a.proxy)
-	err := server.StartNonBlocking()
-	return err
+	if err := server.StartNonBlocking(); err != nil {
+		return err
+	}
+	a.apiClosers = append(a.apiClosers, server)
+
+	return nil
 }
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.APIListenAddresses, port)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy)
-	err := server.StartNonBlocking()
-	return err
+	if err := server.StartNonBlocking(); err != nil {
+		return err
+	}
+	a.apiClosers = append(a.apiClosers, server)
+
+	return nil
 }
 
 func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) grpc.ServerConfig {
@@ -1878,11 +1894,20 @@ func (a *DaprRuntime) cleanSocket() {
 }
 
 func (a *DaprRuntime) Shutdown(duration time.Duration) {
+	// Ensure the Unix socket file is removed if a panic occurs.
+	defer a.cleanSocket()
+
 	a.stopActor()
-	log.Infof("dapr shutting down. Waiting %s to finish outstanding operations", duration)
+	log.Infof("dapr shutting down.")
+	log.Info("Stopping Dapr APIs")
+	for _, closer := range a.apiClosers {
+		if err := closer.Close(); err != nil {
+			log.Warnf("error closing API: %v", err)
+		}
+	}
+	log.Infof("Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
 	a.shutdownComponents()
-	a.cleanSocket()
 	a.shutdownC <- nil
 }
 

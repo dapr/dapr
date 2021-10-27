@@ -1,15 +1,19 @@
 package grpc
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/config"
+	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
 func TestCertRenewal(t *testing.T) {
@@ -84,4 +88,15 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		assert.Equal(t, 1, len(serverOption))
 	})
+}
+
+func TestClose(t *testing.T) {
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4)
+	a := &api{}
+	server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
+	require.NoError(t, server.StartNonBlocking())
+	dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
+	assert.NoError(t, server.Close())
 }
