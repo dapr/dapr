@@ -2647,7 +2647,11 @@ func TestMTLS(t *testing.T) {
 		os.Setenv(certs.TrustAnchorsEnvVar, testCertRoot)
 		os.Setenv(certs.CertChainEnvVar, "a")
 		os.Setenv(certs.CertKeyEnvVar, "b")
-		defer os.Clearenv()
+		defer func() {
+			os.Unsetenv(certs.TrustAnchorsEnvVar)
+			os.Unsetenv(certs.CertChainEnvVar)
+			os.Unsetenv(certs.CertKeyEnvVar)
+		}()
 
 		certChain, err := security.GetCertChain()
 		assert.Nil(t, err)
@@ -2868,7 +2872,7 @@ func TestNamespace(t *testing.T) {
 
 	t.Run("non-empty namespace", func(t *testing.T) {
 		os.Setenv("NAMESPACE", "a")
-		defer os.Clearenv()
+		defer os.Unsetenv("NAMESPACE")
 
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
