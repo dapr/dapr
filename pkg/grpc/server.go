@@ -8,6 +8,7 @@ package grpc
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -39,6 +40,7 @@ const (
 
 // Server is an interface for the dapr gRPC server.
 type Server interface {
+	io.Closer
 	StartNonBlocking() error
 }
 
@@ -48,8 +50,7 @@ type server struct {
 	tracingSpec        config.TracingSpec
 	metricSpec         config.MetricSpec
 	authenticator      auth.Authenticator
-	listeners          []net.Listener
-	srv                *grpc_go.Server
+	servers            []*grpc_go.Server
 	renewMutex         *sync.Mutex
 	signedCert         *auth.SignedCertificate
 	tlsCert            tls.Certificate
@@ -127,27 +128,37 @@ func (s *server) StartNonBlocking() error {
 	if len(listeners) == 0 {
 		return errors.Errorf("could not listen on any endpoint")
 	}
-	s.listeners = listeners
-
-	server, err := s.getGRPCServer()
-	if err != nil {
-		return err
-	}
-	s.srv = server
-
-	if s.kind == internalServer {
-		internalv1pb.RegisterServiceInvocationServer(server, s.api)
-	} else if s.kind == apiServer {
-		runtimev1pb.RegisterDaprServer(server, s.api)
-	}
 
 	for _, listener := range listeners {
-		go func(l net.Listener) {
+		// server is created in a loop because each instance
+		// has a handle on the underlying listener.
+		server, err := s.getGRPCServer()
+		if err != nil {
+			return err
+		}
+		s.servers = append(s.servers, server)
+
+		if s.kind == internalServer {
+			internalv1pb.RegisterServiceInvocationServer(server, s.api)
+		} else if s.kind == apiServer {
+			runtimev1pb.RegisterDaprServer(server, s.api)
+		}
+
+		go func(server *grpc_go.Server, l net.Listener) {
 			if err := server.Serve(l); err != nil {
 				s.logger.Fatalf("gRPC serve error: %v", err)
 			}
-		}(listener)
+		}(server, listener)
 	}
+	return nil
+}
+
+func (s *server) Close() error {
+	for _, server := range s.servers {
+		// This calls `Close()` on the underlying listener.
+		server.GracefulStop()
+	}
+
 	return nil
 }
 
