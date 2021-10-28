@@ -1,4 +1,3 @@
-//go:build perf
 // +build perf
 
 // ------------------------------------------------------------
@@ -78,6 +77,7 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	// FORCE param values to verify PR. REMOVE THIS BEFORE MERGING.
 	// p.TestDuration = "2m"
 	p.QPS = 50
+	p.ClientConnections = 12
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
