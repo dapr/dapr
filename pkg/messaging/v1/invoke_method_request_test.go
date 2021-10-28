@@ -6,6 +6,7 @@
 package v1
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -174,4 +175,30 @@ func TestAddHeadersDoesNotOverwrite(t *testing.T) {
 	assert.NotNil(t, req.r.Metadata)
 	assert.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
 	assert.Equal(t, "test", req.r.Metadata["Dapr-Reentrant-Id"].Values[0])
+}
+
+func TestWithCustomHTTPMetadata(t *testing.T) {
+	customMetadataKey := func(i int) string {
+		return fmt.Sprintf("customMetadataKey%d", i)
+	}
+	customMetadataValue := func(i int) string {
+		return fmt.Sprintf("customMetadataValue%d", i)
+	}
+
+	numMetadata := 10
+	md := make(map[string]string, numMetadata)
+	for i := 0; i < numMetadata; i++ {
+		md[customMetadataKey(i)] = customMetadataValue(i)
+	}
+
+	req := NewInvokeMethodRequest("test_method")
+	req.WithCustomHTTPMetadata(md)
+
+	imrMd := req.Metadata()
+	for i := 0; i < numMetadata; i++ {
+		val, ok := imrMd[customMetadataKey(i)]
+		assert.True(t, ok)
+		// We assume only 1 value per key as the input map can only support string -> string mapping.
+		assert.Equal(t, customMetadataValue(i), val.Values[0])
+	}
 }
