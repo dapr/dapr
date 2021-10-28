@@ -65,6 +65,7 @@ const (
 	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
 	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
+	daprEnablePlacementKey            = "dapr.io/enable-placement"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -358,6 +359,10 @@ func getReadBufferSize(annotations map[string]string) (int32, error) {
 
 func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprHTTPStreamRequestBody, defaultDaprHTTPStreamRequestBody)
+}
+
+func placementEnabled(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprEnablePlacementKey, false)
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
@@ -678,6 +683,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	if HTTPStreamRequestBodyEnabled {
 		c.Args = append(c.Args, "--http-stream-request-body")
+	}
+
+	if placementEnabled(annotations) {
+		c.Args = append(c.Args, "--enable-placement")
 	}
 
 	secret := getAPITokenSecret(annotations)

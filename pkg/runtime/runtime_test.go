@@ -2607,6 +2607,7 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewRuntimeConfig(
 		TestRuntimeConfigID,
+		true,
 		[]string{"10.10.10.12"},
 		"10.10.10.11",
 		cors.DefaultAllowedOrigins,
@@ -3025,6 +3026,14 @@ func TestInitActors(t *testing.T) {
 
 		hosted := r.hostingActors()
 		assert.False(t, hosted)
+	})
+
+	t.Run("placement enable = false", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{EnablePlacement: false}, &config.Configuration{}, &config.AccessControlList{})
+		defer stopRuntime(t, r)
+
+		err := r.initActors()
+		assert.Nil(t, err)
 	})
 }
 
