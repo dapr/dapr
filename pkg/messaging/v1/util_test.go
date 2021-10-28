@@ -8,6 +8,7 @@ package v1
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -347,4 +348,32 @@ func TestProtobufToJSON(t *testing.T) {
 	// For mac and windows
 	comp2 := string(jsonBody) == "{\"stackEntries\":[\"first stack\", \"second stack\"]}"
 	assert.True(t, comp1 || comp2)
+}
+
+func TestWithCustomGrpcMetadata(t *testing.T) {
+	customMetadataKey := func(i int) string {
+		return fmt.Sprintf("customMetadataKey%d", i)
+	}
+	customMetadataValue := func(i int) string {
+		return fmt.Sprintf("customMetadataValue%d", i)
+	}
+
+	numMetadata := 10
+	md := make(map[string]string, numMetadata)
+	for i := 0; i < numMetadata; i++ {
+		md[customMetadataKey(i)] = customMetadataValue(i)
+	}
+
+	ctx := context.Background()
+	ctx = WithCustomGRPCMetadata(ctx, md)
+
+	ctxMd, ok := metadata.FromOutgoingContext(ctx)
+	assert.True(t, ok)
+
+	for i := 0; i < numMetadata; i++ {
+		val, ok := ctxMd[strings.ToLower(customMetadataKey(i))]
+		assert.True(t, ok)
+		// We assume only 1 value per key as the input map can only support string -> string mapping.
+		assert.Equal(t, customMetadataValue(i), val[0])
+	}
 }
