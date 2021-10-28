@@ -442,3 +442,13 @@ func ProtobufToJSON(message protoreflect.ProtoMessage) ([]byte, error) {
 	}
 	return marshaler.Marshal(message)
 }
+
+// WithCustomGRPCMetadata applies a metadata map to the outgoing context metadata.
+func WithCustomGRPCMetadata(ctx context.Context, md map[string]string) context.Context {
+	for k, v := range md {
+		// Uppercase keys will be converted to lowercase.
+		ctx = metadata.AppendToOutgoingContext(ctx, k, v)
+	}
+
+	return ctx
+}

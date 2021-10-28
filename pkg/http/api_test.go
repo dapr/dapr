@@ -1678,7 +1678,7 @@ func TestAPIToken(t *testing.T) {
 	token := "1234"
 
 	os.Setenv("DAPR_API_TOKEN", token)
-	defer os.Clearenv()
+	defer os.Unsetenv("DAPR_API_TOKEN")
 
 	fakeHeaderMetadata := map[string][]string{
 		"Accept-Encoding": {"gzip"},
