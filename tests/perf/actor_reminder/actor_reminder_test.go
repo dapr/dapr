@@ -76,8 +76,8 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 
 	// FORCE param values to verify PR. REMOVE THIS BEFORE MERGING.
 	// p.TestDuration = "2m"
-	p.QPS = 50
-	p.ClientConnections = 12
+	p.QPS = 500
+	// p.ClientConnections = 12
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
@@ -153,5 +153,5 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num400)
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
-	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
+	require.True(t, daprResult.ActualQPS > 57)
 }
