@@ -76,8 +76,8 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 
 	// FORCE param values to verify PR. REMOVE THIS BEFORE MERGING.
 	// p.TestDuration = "2m"
-	p.QPS = 500
-	// p.ClientConnections = 12
+	p.QPS = 60
+	p.ClientConnections = 2
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
