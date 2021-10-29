@@ -10,13 +10,18 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fasthttp/router"
+	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
+	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
 type mockHost struct {
@@ -636,4 +641,15 @@ func TestAliasRoute(t *testing.T) {
 		routes := s.getRouter(eps).List()
 		assert.Equal(t, 1, len(routes[router.MethodWild]))
 	})
+}
+
+func TestClose(t *testing.T) {
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+	serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false)
+	a := &api{}
+	server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
+	require.NoError(t, server.StartNonBlocking())
+	dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
+	assert.NoError(t, server.Close())
 }

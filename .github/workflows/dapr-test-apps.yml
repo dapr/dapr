@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-name: Validate build for E2E test apps
+name: dapr-test-apps
 
 on:
   workflow_dispatch:
@@ -48,3 +48,11 @@ jobs:
           DAPR_TEST_REGISTRY: localhost:5000
           DAPR_TEST_TAG: dev
         run: make build-e2e-app-all
+      - name: Build all perf test apps
+        if: matrix.target_os == 'linux' && matrix.target_arch == 'amd64'
+        env:
+          TARGET_OS: ${{ matrix.target_os }}
+          TARGET_ARCH: ${{ matrix.target_arch }}
+          DAPR_TEST_REGISTRY: localhost:5000
+          DAPR_TEST_TAG: dev
+        run: make build-perf-app-all

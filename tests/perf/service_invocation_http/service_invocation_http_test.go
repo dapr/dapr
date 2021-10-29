@@ -134,12 +134,16 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	percentiles := map[int]string{1: "75th", 2: "90th"}
+	tp90Latency := 0.0
 
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
 
 		latency := (daprValue - baselineValue) * 1000
+		if v == "90th" {
+			tp90Latency = latency
+		}
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 	}
 
@@ -159,4 +163,6 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
+	require.Greater(t, tp90Latency, 0.0)
+	require.LessOrEqual(t, tp90Latency, 2.0)
 }
