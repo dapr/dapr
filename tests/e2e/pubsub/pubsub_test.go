@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -328,6 +329,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:   true,
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
+			EnablePlacement:  true,
 		},
 		{
 			AppName:          subscriberAppName,
@@ -338,6 +340,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:   true,
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
+			EnablePlacement:  true,
 		},
 	}
 

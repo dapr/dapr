@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -38,31 +39,34 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "allowlists-caller",
-			DaprEnabled:    true,
-			ImageName:      "e2e-service_invocation",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:         "allowlists-caller",
+			DaprEnabled:     true,
+			ImageName:       "e2e-service_invocation",
+			Replicas:        1,
+			IngressEnabled:  true,
+			MetricsEnabled:  true,
+			EnablePlacement: true,
 		},
 		{
-			Config:         "allowlistsappconfig",
-			AppName:        "allowlists-callee-http",
-			DaprEnabled:    true,
-			ImageName:      "e2e-service_invocation",
-			Replicas:       1,
-			IngressEnabled: false,
-			MetricsEnabled: true,
+			Config:          "allowlistsappconfig",
+			AppName:         "allowlists-callee-http",
+			DaprEnabled:     true,
+			ImageName:       "e2e-service_invocation",
+			Replicas:        1,
+			IngressEnabled:  false,
+			MetricsEnabled:  true,
+			EnablePlacement: true,
 		},
 		{
-			Config:         "allowlistsgrpcappconfig",
-			AppName:        "allowlists-callee-grpc",
-			DaprEnabled:    true,
-			ImageName:      "e2e-service_invocation_grpc",
-			Replicas:       1,
-			IngressEnabled: false,
-			MetricsEnabled: true,
-			AppProtocol:    "grpc",
+			Config:          "allowlistsgrpcappconfig",
+			AppName:         "allowlists-callee-grpc",
+			DaprEnabled:     true,
+			ImageName:       "e2e-service_invocation_grpc",
+			Replicas:        1,
+			IngressEnabled:  false,
+			MetricsEnabled:  true,
+			AppProtocol:     "grpc",
+			EnablePlacement: true,
 		},
 	}
 

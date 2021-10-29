@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -44,32 +45,35 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "httpmetrics",
-			DaprEnabled:    true,
-			ImageName:      "e2e-hellodapr",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:         "httpmetrics",
+			DaprEnabled:     true,
+			ImageName:       "e2e-hellodapr",
+			Replicas:        1,
+			IngressEnabled:  true,
+			MetricsEnabled:  true,
+			EnablePlacement: true,
 		},
 		{
 			AppName: "grpcmetrics",
 			// TODO: Some AKS clusters created before do not support CRD defaulting even
 			// if Kubernetes version is 1.16/1.17 later.
 			// Config:         "obs-defaultmetric",
-			DaprEnabled:    true,
-			ImageName:      "e2e-stateapp",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			DaprEnabled:     true,
+			ImageName:       "e2e-stateapp",
+			Replicas:        1,
+			IngressEnabled:  true,
+			MetricsEnabled:  true,
+			EnablePlacement: true,
 		},
 		{
-			AppName:        "disabledmetric",
-			Config:         "disable-telemetry",
-			DaprEnabled:    true,
-			ImageName:      "e2e-hellodapr",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:         "disabledmetric",
+			Config:          "disable-telemetry",
+			DaprEnabled:     true,
+			ImageName:       "e2e-hellodapr",
+			Replicas:        1,
+			IngressEnabled:  true,
+			MetricsEnabled:  true,
+			EnablePlacement: true,
 		},
 	}
 

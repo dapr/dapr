@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -119,28 +120,30 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        appName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorfeatures",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			DaprCPULimit:   "2.0",
-			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
+			AppName:         appName,
+			DaprEnabled:     true,
+			ImageName:       "e2e-actorfeatures",
+			Replicas:        1,
+			IngressEnabled:  true,
+			MetricsEnabled:  true,
+			DaprCPULimit:    "2.0",
+			DaprCPURequest:  "0.1",
+			AppCPULimit:     "2.0",
+			AppCPURequest:   "0.1",
+			EnablePlacement: true,
 		},
 		{
-			AppName:        "actortestclient",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorclientapp",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			DaprCPULimit:   "2.0",
-			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
+			AppName:         "actortestclient",
+			DaprEnabled:     true,
+			ImageName:       "e2e-actorclientapp",
+			Replicas:        1,
+			IngressEnabled:  true,
+			MetricsEnabled:  true,
+			DaprCPULimit:    "2.0",
+			DaprCPURequest:  "0.1",
+			AppCPULimit:     "2.0",
+			AppCPURequest:   "0.1",
+			EnablePlacement: true,
 		},
 	}
 

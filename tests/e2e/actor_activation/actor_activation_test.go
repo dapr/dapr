@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -78,12 +79,13 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        appName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorapp",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:         appName,
+			DaprEnabled:     true,
+			ImageName:       "e2e-actorapp",
+			Replicas:        1,
+			IngressEnabled:  true,
+			MetricsEnabled:  true,
+			EnablePlacement: true,
 		},
 	}
 

@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -257,22 +258,24 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        publisherAppName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-pubsub-publisher",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:         publisherAppName,
+			DaprEnabled:     true,
+			ImageName:       "e2e-pubsub-publisher",
+			Replicas:        1,
+			IngressEnabled:  true,
+			MetricsEnabled:  true,
+			EnablePlacement: true,
 		},
 		{
-			AppName:        subscriberAppName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-pubsub-subscriber-routing_grpc",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			AppProtocol:    "grpc",
-			Config:         "pubsubroutingconfig",
+			AppName:         subscriberAppName,
+			DaprEnabled:     true,
+			ImageName:       "e2e-pubsub-subscriber-routing_grpc",
+			Replicas:        1,
+			IngressEnabled:  true,
+			MetricsEnabled:  true,
+			AppProtocol:     "grpc",
+			Config:          "pubsubroutingconfig",
+			EnablePlacement: true,
 		},
 	}
 
