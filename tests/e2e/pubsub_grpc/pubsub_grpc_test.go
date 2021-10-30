@@ -38,7 +38,7 @@ const (
 	randomOffsetMax           = 99
 	numberOfMessagesToPublish = 100
 
-	receiveMessageRetries = 5
+	receiveMessageRetries = 10
 
 	publisherAppName  = "pubsub-publisher-grpc"
 	subscriberAppName = "pubsub-subscriber-grpc"
