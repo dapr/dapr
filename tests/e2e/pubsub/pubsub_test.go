@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -35,7 +36,7 @@ const (
 	randomOffsetMax           = 99
 	numberOfMessagesToPublish = 100
 
-	receiveMessageRetries = 5
+	receiveMessageRetries = 10
 
 	publisherAppName  = "pubsub-publisher"
 	subscriberAppName = "pubsub-subscriber"
@@ -292,7 +293,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
 			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(1 * time.Second)
+			time.Sleep(5 * time.Second)
 		} else {
 			break
 		}
