@@ -1,11 +1,12 @@
-FROM golang:1.15 as build_env
+FROM golang:1.17 as build_env
 
 WORKDIR /app
 COPY app.go .
-RUN go get -d -v
-RUN go build -o tester .
+RUN go mod init app.dapr.io/main && \
+  go get -d -v && \
+  go build -o tester .
 
-FROM golang:1.15 as fortio_build_env
+FROM golang:1.17 as fortio_build_env
 
 WORKDIR /fortio
 ADD "https://api.github.com/repos/fortio/fortio/branches/master" skipcache

@@ -41,6 +41,9 @@ spec:
         app.kubernetes.io/component: sentry
         app.kubernetes.io/part-of: "dapr"
         app.kubernetes.io/managed-by: "helm"
+        {{- with .Values.global.labels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
       annotations:
         prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
@@ -48,18 +51,6 @@ spec:
         prometheus.io/path: "/"
 {{- end }}
     spec:
-{{- if eq .Values.global.ha.enabled true }}
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - dapr-sentry
-            topologyKey: "kubernetes.io/hostname"
-{{- end }}
       containers:
       - name: dapr-sentry
         livenessProbe:
@@ -175,16 +166,14 @@ spec:
 {{- end }}
 {{- if .Values.global.ha.enabled }}
         podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - dapr-sentry
-              topologyKey: topology.kubernetes.io/zone
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-sentry
+            topologyKey: "kubernetes.io/hostname"
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:

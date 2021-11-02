@@ -17,6 +17,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -403,7 +404,10 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		if req.Metadata == nil {
 			req.Metadata = map[string]string{}
 		}
-		req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
+		// if sc is not empty context, set traceparent Header.
+		if sc != (trace.SpanContext{}) {
+			req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
+		}
 		if sc.Tracestate != nil {
 			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
 		}
@@ -1667,7 +1671,7 @@ func (a *api) isSecretAllowed(storeName, key string) bool {
 	if config, ok := a.secretsConfiguration[storeName]; ok {
 		return config.IsSecretAllowed(key)
 	}
-	// By default if a configuration is not defined for a secret store, return true.
+	// By default, if a configuration is not defined for a secret store, return true.
 	return true
 }
 

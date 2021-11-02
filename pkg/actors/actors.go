@@ -160,7 +160,7 @@ func NewActors(
 		appHealthy:               atomic.NewBool(true),
 		certChain:                certChain,
 		tracingSpec:              tracingSpec,
-		reentrancyEnabled:        configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
+		reentrancyEnabled:        configuration.IsFeatureEnabled(features, configuration.ActorReentrancy) && config.Reentrancy.Enabled,
 		actorTypeMetadataEnabled: configuration.IsFeatureEnabled(features, configuration.ActorTypeMetadata),
 	}
 }

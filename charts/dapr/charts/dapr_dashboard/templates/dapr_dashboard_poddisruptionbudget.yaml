@@ -1,5 +1,9 @@
 {{- if eq .Values.global.ha.enabled true }}
+{{- if .Capabilities.APIVersions.Has "policy/v1" }}
+apiVersion: policy/v1
+{{- else }}
 apiVersion: policy/v1beta1
+{{- end }}
 kind: PodDisruptionBudget
 metadata:
   name: dapr-dashboard-disruption-budget
@@ -20,4 +24,7 @@ spec:
       app.kubernetes.io/component: dashboard
       app.kubernetes.io/part-of: "dapr"
       app.kubernetes.io/managed-by: "helm"
+      {{- with .Values.global.labels }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
 {{- end }}
