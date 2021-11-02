@@ -2212,7 +2212,7 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 func TestV1StateEndpoints(t *testing.T) {
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
-	var fakeStore state.Store = fakeStateStore{}
+	var fakeStore state.Store = fakeStateStoreQuerier{}
 	fakeStores := map[string]state.Store{
 		"store1": fakeStore,
 	}
@@ -2229,10 +2229,11 @@ func TestV1StateEndpoints(t *testing.T) {
 
 	t.Run("Get state - 400 ERR_STATE_STORE_NOT_FOUND or NOT_CONFIGURED", func(t *testing.T) {
 		apisAndMethods := map[string][]string{
-			"v1.0/state/nonexistantStore/bad-key":     {"GET", "DELETE"},
-			"v1.0/state/nonexistantStore/":            {"POST", "PUT"},
-			"v1.0/state/nonexistantStore/bulk":        {"POST", "PUT"},
-			"v1.0/state/nonexistantStore/transaction": {"POST", "PUT"},
+			"v1.0/state/nonexistantStore/bad-key":      {"GET", "DELETE"},
+			"v1.0/state/nonexistantStore/":             {"POST", "PUT"},
+			"v1.0/state/nonexistantStore/bulk":         {"POST", "PUT"},
+			"v1.0/state/nonexistantStore/transaction":  {"POST", "PUT"},
+			"v1.0-alpha1/state/nonexistantStore/query": {"POST", "PUT"},
 		}
 
 		for apiPath, testMethods := range apisAndMethods {
@@ -2258,6 +2259,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			"v1.0/state/store1/",
 			"v1.0/state/store1/bulk",
 			"v1.0/state/store1/transaction",
+			"v1.0-alpha1/state/store1/query",
 		}
 
 		for _, apiPath := range apiPaths {
@@ -2485,7 +2487,93 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		assert.Equal(t, expectedResponses, responses, "Responses do not match")
 	})
+
+	t.Run("Query state request", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0-alpha1/state/%s/query", storeName)
+		// act
+		resp := fakeServer.DoRequest("PUT", apiPath, []byte(queryTestRequestOK), nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		// act
+		resp = fakeServer.DoRequest("POST", apiPath, []byte(queryTestRequestOK), nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		// act
+		resp = fakeServer.DoRequest("POST", apiPath, []byte(queryTestRequestNoRes), nil)
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		// act
+		resp = fakeServer.DoRequest("POST", apiPath, []byte(queryTestRequestErr), nil)
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		// act
+		resp = fakeServer.DoRequest("POST", apiPath, []byte(queryTestRequestSyntaxErr), nil)
+		// assert
+		assert.Equal(t, 400, resp.StatusCode)
+	})
 }
+
+func TestStateStoreQuerierNotImplemented(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		stateStores: map[string]state.Store{"store1": fakeStateStore{}},
+	}
+	fakeServer.StartServer(testAPI.constructStateEndpoints())
+
+	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/store1/query", nil, nil)
+	// assert
+	assert.Equal(t, 404, resp.StatusCode)
+	assert.Equal(t, "ERR_METHOD_NOT_FOUND", resp.ErrorBody["errorCode"])
+}
+
+func TestStateStoreQuerierNotEnabled(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		stateStores: map[string]state.Store{"store1": fakeStateStoreQuerier{}},
+	}
+	fakeServer.StartServer(testAPI.constructStateEndpoints())
+
+	resp := fakeServer.DoRequest("POST", "v1.0/state/store1/query", nil, nil)
+	// assert
+	assert.Equal(t, 405, resp.StatusCode)
+}
+
+const (
+	queryTestRequestOK = `{
+	"query": {
+		"filter": {
+			"EQ": { "a": "b" }
+		},
+		"sort": [
+			{ "key": "a" }
+		],
+		"pagination": {
+			"limit": 2
+		}
+	}
+}`
+	queryTestRequestNoRes = `{
+	"query": {
+		"filter": {
+			"EQ": { "a": "b" }
+		},
+		"pagination": {
+			"limit": 2
+		}
+	}
+}`
+	queryTestRequestErr = `{
+	"query": {
+		"filter": {
+			"EQ": { "a": "b" }
+		},
+		"sort": [
+			{ "key": "a" }
+		]
+	}
+}`
+	queryTestRequestSyntaxErr = `syntax error`
+)
 
 type fakeStateStore struct {
 	counter int
@@ -2574,6 +2662,30 @@ func (c fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 		return errors.New("Transaction error")
 	}
 	return nil
+}
+
+type fakeStateStoreQuerier struct {
+	fakeStateStore
+}
+
+func (c fakeStateStoreQuerier) Query(req *state.QueryRequest) (*state.QueryResponse, error) {
+	// simulate empty data
+	if req.Query.Sort == nil {
+		return &state.QueryResponse{}, nil
+	}
+	// simulate error
+	if req.Query.Page.Limit == 0 {
+		return nil, errors.New("Query error")
+	}
+	// simulate full result
+	return &state.QueryResponse{
+		Results: []state.QueryItem{
+			{
+				Key:  "1",
+				Data: []byte(`{"a":"b"}`),
+			},
+		},
+	}, nil
 }
 
 func TestV1SecretEndpoints(t *testing.T) {
@@ -2745,7 +2857,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 func TestV1TransactionEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	var fakeStore state.Store = fakeStateStore{}
+	var fakeStore state.Store = fakeStateStoreQuerier{}
 	fakeStoreNonTransactional := new(daprt.MockStateStore)
 	fakeStores := map[string]state.Store{
 		"store1":                fakeStore,

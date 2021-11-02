@@ -11,11 +11,11 @@
 
 $TOPICS_AND_SUBSCRIPTIONS = `
   [pscustomobject]@{
-    topics = "pubsub-a-topic-http", "pubsub-b-topic-http", "pubsub-c-topic-http", "pubsub-job-topic-http", "pubsub-raw-topic-http";
+    topics = "pubsub-a-topic-http", "pubsub-b-topic-http", "pubsub-c-topic-http", "pubsub-raw-topic-http";
     subscriptions = ,"pubsub-subscriber";
   }, `
   [pscustomobject]@{
-    topics = "pubsub-a-topic-grpc", "pubsub-b-topic-grpc", "pubsub-c-topic-grpc", "pubsub-job-topic-grpc", "pubsub-raw-topic-grpc";
+    topics = "pubsub-a-topic-grpc", "pubsub-b-topic-grpc", "pubsub-c-topic-grpc", "pubsub-raw-topic-grpc";
     subscriptions = ,"pubsub-subscriber-grpc";
   }, `
   [pscustomobject]@{
@@ -25,6 +25,10 @@ $TOPICS_AND_SUBSCRIPTIONS = `
   [pscustomobject]@{
     topics = "pubsub-routing-grpc", "pubsub-routing-crd-grpc";
     subscriptions = ,"pubsub-subscriber-routing-grpc";
+  },
+  [pscustomobject]@{
+    topics = ,"pubsub-job-topic-http";
+    subscriptions = ,"job-subscriber";
   }
 
 function Setup-ServiceBus-Subscription(
