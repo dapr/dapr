@@ -9,5 +9,5 @@
 
 # Usage: start_azure_setup.ps1
 
-Start-Job -ScriptBlock{ & $PSScriptRoot\setup_cosmosdb.ps1 }
-Start-Job -ScriptBlock{ & $PSScriptRoot\setup_servicebus.ps1 }
+Start-Process nohup "pwsh -noprofile $PSScriptRoot\setup_cosmosdb.ps1"
+Start-Process nohup "pwsh -noprofile $PSScriptRoot\setup_servicebus.ps1"
