@@ -106,6 +106,21 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 	return imr
 }
 
+// WithCustomHTTPMetadata applies a metadata map to a InvokeMethodRequest.
+func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *InvokeMethodRequest {
+	for k, v := range md {
+		if imr.r.Metadata == nil {
+			imr.r.Metadata = make(map[string]*internalv1pb.ListStringValue)
+		}
+
+		// NOTE: We don't explicitly lowercase the keys here but this will be done
+		//       later when attached to the HTTP request as headers.
+		imr.r.Metadata[k] = &internalv1pb.ListStringValue{Values: []string{v}}
+	}
+
+	return imr
+}
+
 // EncodeHTTPQueryString generates querystring for http using http extension object.
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	m := imr.r.Message
