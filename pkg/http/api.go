@@ -90,6 +90,7 @@ type metadata struct {
 
 const (
 	apiVersionV1         = "v1.0"
+	apiVersionV1alpha1   = "v1.0-alpha1"
 	idParam              = "id"
 	methodParam          = "method"
 	topicParam           = "topic"
@@ -215,6 +216,12 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Route:   "state/{storeName}/transaction",
 			Version: apiVersionV1,
 			Handler: a.onPostStateTransaction,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
+			Route:   "state/{storeName}/query",
+			Version: apiVersionV1alpha1,
+			Handler: a.onQueryState,
 		},
 	}
 }
@@ -1598,6 +1605,70 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respond(reqCtx, withEmpty())
 	}
+}
+
+func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		// error has been already logged
+		return
+	}
+
+	querier, ok := store.(state.Querier)
+	if !ok {
+		msg := NewErrorResponse("ERR_METHOD_NOT_FOUND", fmt.Sprintf(messages.ErrNotFound, "Query"))
+		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
+		log.Debug(msg)
+		return
+	}
+
+	var req state.QueryRequest
+	if err = a.json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+	req.Metadata = getMetadataFromRequest(reqCtx)
+
+	resp, err := querier.Query(&req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_STATE_QUERY", fmt.Sprintf(messages.ErrStateQuery, storeName, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	if resp == nil || len(resp.Results) == 0 {
+		respond(reqCtx, withEmpty())
+		return
+	}
+
+	encrypted := encryption.EncryptedStateStore(storeName)
+
+	qresp := QueryResponse{
+		Results:  make([]QueryItem, len(resp.Results)),
+		Token:    resp.Token,
+		Metadata: resp.Metadata,
+	}
+	for i := range resp.Results {
+		qresp.Results[i].Key = state_loader.GetOriginalStateKey(resp.Results[i].Key)
+		qresp.Results[i].ETag = resp.Results[i].ETag
+		qresp.Results[i].Error = resp.Results[i].Error
+		if encrypted {
+			val, err := encryption.TryDecryptValue(storeName, resp.Results[i].Data)
+			if err != nil {
+				log.Debugf("query error: %s", err)
+				qresp.Results[i].Error = err.Error()
+				continue
+			}
+			qresp.Results[i].Data = jsoniter.RawMessage(val)
+		} else {
+			qresp.Results[i].Data = jsoniter.RawMessage(resp.Results[i].Data)
+		}
+	}
+
+	b, _ := a.json.Marshal(qresp)
+	respond(reqCtx, withJSON(fasthttp.StatusOK, b))
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
