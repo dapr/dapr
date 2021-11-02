@@ -64,8 +64,8 @@ type API interface {
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
-	GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
-	SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationServer) error
+	GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
+	SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
 	DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error)
@@ -1148,7 +1148,7 @@ func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 	return a.configurationStores[name], nil
 }
 
-func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
 	store, err := a.getConfigurationStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1187,7 +1187,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 type configurationEventHandler struct {
 	api          *api
 	storeName    string
-	serverStream runtimev1pb.Dapr_SubscribeConfigurationServer
+	serverStream runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
@@ -1213,7 +1213,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 	return nil
 }
 
-func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationServer) error {
+func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error {
 	store, err := a.getConfigurationStore(request.StoreName)
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrConfigurationSubscribe, request.Keys, request.StoreName, err))

@@ -73,10 +73,10 @@ service Dapr {
   rpc InvokeActor (InvokeActorRequest) returns (InvokeActorResponse) {}
 
   // GetConfiguration gets configuration from configuration store.
-  rpc GetConfiguration(GetConfigurationRequest) returns (GetConfigurationResponse) {}
+  rpc GetConfigurationAlpha1(GetConfigurationRequest) returns (GetConfigurationResponse) {}
 
   // SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
-  rpc SubscribeConfiguration(SubscribeConfigurationRequest) returns (stream SubscribeConfigurationResponse) {}
+  rpc SubscribeConfigurationAlpha1(SubscribeConfigurationRequest) returns (stream SubscribeConfigurationResponse) {}
 
   // Gets metadata of the sidecar
   rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
