@@ -180,8 +180,7 @@ func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, strin
 }
 
 func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
-	h := TraceStateToW3CString(sc)
-	if h != "" && len(h) <= maxTracestateLen {
+	if h := TraceStateToW3CString(sc); h != "" && len(h) <= maxTracestateLen {
 		setHeader(tracestateHeader, h)
 	}
 }

@@ -1,0 +1,42 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: messagebus
+spec:
+  type: pubsub.azure.servicebus
+  initTimeout: 1m
+  version: v1
+  metadata:
+  - name: connectionString
+    secretKeyRef:
+      name: servicebus-secret
+      key: connectionString
+  - name: handlerTimeoutInSec
+    value: 5
+  - name: timeoutInSec
+    value: 5
+  - name: lockDurationInSec
+    value: 5
+  - name: lockRenewalInSec
+    value: 5
+  - name: defaultMessageTimeToLiveInSec
+    value: 999
+  - name: maxConcurrentHandlers
+    value: 5
+  - name: prefetchCount
+    value: 20
+  - name: publishMaxRetries
+    value: 100
+  - name: publishInitialRetryInternalInMs
+    value: 1
+  - name: maxDeliveryCount
+    value: 999
+  - name: maxActiveMessages
+    value: 20
+  - name: disableEntityManagement
+    value: "true"
