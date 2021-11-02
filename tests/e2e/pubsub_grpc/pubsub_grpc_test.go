@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -37,7 +38,7 @@ const (
 	randomOffsetMax           = 99
 	numberOfMessagesToPublish = 100
 
-	receiveMessageRetries = 5
+	receiveMessageRetries = 10
 
 	publisherAppName  = "pubsub-publisher-grpc"
 	subscriberAppName = "pubsub-subscriber-grpc"
