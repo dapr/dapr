@@ -103,32 +103,32 @@ function Setup-ServiceBus(
     Write-Host "Selected Dapr Test Resource group: $DaprTestResouceGroup"
     Write-Host "Selected Dapr Test ServiceBus namespace: $DaprTestServiceBusNamespace"
 
-    Write-Host "Deleting existing servicebus namespace ..."
-    az servicebus namespace delete --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace
-    if($?) {
-      Write-Host "Deleted existing servicebus namespace."
-    } else {
-      Write-Host "Failed to delete servicebus namespace, skipping."
-    }
-
-    Write-Host "Creating servicebus namespace ..."
-    az servicebus namespace create --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace --location westus2
-    if($?) {
-      Write-Host "Created servicebus namespace."
-    } else {
-      throw "Failed to create servicebus namespace."
-    }
-
-    foreach ($topicsAndSubscriptions in $TOPICS_AND_SUBSCRIPTIONS) {
-      Setup-ServiceBus-Topics-And-Subscriptions $DaprTestResouceGroup $DaprTestServiceBusNamespace $topicsAndSubscriptions.topics $topicsAndSubscriptions.subscriptions
-    }
-
+    # Delete fist since this secret is the criteria to determine if the setup completed.
     Write-Host "Deleting secret from Kubernetes cluster ..."
     kubectl delete secret servicebus-secret --namespace=$DaprNamespace
     if($?) {
       Write-Host "Deleted existing secret."
     } else {
       Write-Host "Failed to delete secret, skipping."
+    }
+
+    # Reuse namespace since it can avoid connectivity issues on first call in the tests.
+    Write-Host "Checking if servicebus namespace exists ..."
+    $exists = az servicebus namespace exists --name $DaprTestServiceBusNamespace | jq '.nameAvailable == false'
+    if($exists) {
+      Write-Host "Namespace already exists."
+    } else {
+      Write-Host "Creating servicebus namespace ..."
+      az servicebus namespace create --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace --location westus2
+      if($?) {
+        Write-Host "Created servicebus namespace."
+      } else {
+        throw "Failed to create servicebus namespace."
+      }
+    }
+
+    foreach ($topicsAndSubscriptions in $TOPICS_AND_SUBSCRIPTIONS) {
+      Setup-ServiceBus-Topics-And-Subscriptions $DaprTestResouceGroup $DaprTestServiceBusNamespace $topicsAndSubscriptions.topics $topicsAndSubscriptions.subscriptions
     }
 
     $connectionString = az servicebus namespace authorization-rule keys list --resource-group $DaprTestResouceGroup --namespace-name $DaprTestServiceBusNamespace --name RootManageSharedAccessKey --query primaryConnectionString --output tsv
