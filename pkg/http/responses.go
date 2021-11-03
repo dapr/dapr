@@ -27,6 +27,21 @@ type BulkGetResponse struct {
 	Error    string              `json:"error,omitempty"`
 }
 
+// QueryResponse is the response object for querying state.
+type QueryResponse struct {
+	Results  []QueryItem       `json:"results"`
+	Token    string            `json:"token,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// QueryItem is an object representing a single entry in query results.
+type QueryItem struct {
+	Key   string              `json:"key"`
+	Data  jsoniter.RawMessage `json:"data"`
+	ETag  *string             `json:"etag,omitempty"`
+	Error string              `json:"error,omitempty"`
+}
+
 type option = func(ctx *fasthttp.RequestCtx)
 
 // withEtag sets etag header.
