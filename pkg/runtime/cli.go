@@ -230,10 +230,6 @@ func FromFlags() (*DaprRuntime, error) {
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
-
-		if configErr != nil {
-			log.Debugf("Config error: %v", configErr)
-		}
 	}
 
 	if configErr != nil {

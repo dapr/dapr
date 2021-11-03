@@ -28,6 +28,8 @@ type DaprClient interface {
 	GetBulkState(ctx context.Context, in *GetBulkStateRequest, opts ...grpc.CallOption) (*GetBulkStateResponse, error)
 	// Saves the state for a specific key.
 	SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Queries the state.
+	QueryStateAlpha1(ctx context.Context, in *QueryStateRequest, opts ...grpc.CallOption) (*QueryStateResponse, error)
 	// Deletes the state for a specific key.
 	DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Deletes a bulk of state items for a list of keys
@@ -102,6 +104,15 @@ func (c *daprClient) GetBulkState(ctx context.Context, in *GetBulkStateRequest, 
 func (c *daprClient) SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SaveState", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) QueryStateAlpha1(ctx context.Context, in *QueryStateRequest, opts ...grpc.CallOption) (*QueryStateResponse, error) {
+	out := new(QueryStateResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/QueryStateAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -273,6 +284,8 @@ type DaprServer interface {
 	GetBulkState(context.Context, *GetBulkStateRequest) (*GetBulkStateResponse, error)
 	// Saves the state for a specific key.
 	SaveState(context.Context, *SaveStateRequest) (*emptypb.Empty, error)
+	// Queries the state.
+	QueryStateAlpha1(context.Context, *QueryStateRequest) (*QueryStateResponse, error)
 	// Deletes the state for a specific key.
 	DeleteState(context.Context, *DeleteStateRequest) (*emptypb.Empty, error)
 	// Deletes a bulk of state items for a list of keys
@@ -324,6 +337,9 @@ func (UnimplementedDaprServer) GetBulkState(context.Context, *GetBulkStateReques
 }
 func (UnimplementedDaprServer) SaveState(context.Context, *SaveStateRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SaveState not implemented")
+}
+func (UnimplementedDaprServer) QueryStateAlpha1(context.Context, *QueryStateRequest) (*QueryStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryStateAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) DeleteState(context.Context, *DeleteStateRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteState not implemented")
@@ -456,6 +472,24 @@ func _Dapr_SaveState_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).SaveState(ctx, req.(*SaveStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_QueryStateAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).QueryStateAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/QueryStateAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).QueryStateAlpha1(ctx, req.(*QueryStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -788,6 +822,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SaveState",
 			Handler:    _Dapr_SaveState_Handler,
+		},
+		{
+			MethodName: "QueryStateAlpha1",
+			Handler:    _Dapr_QueryStateAlpha1_Handler,
 		},
 		{
 			MethodName: "DeleteState",

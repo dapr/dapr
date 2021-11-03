@@ -23,6 +23,7 @@ var endpoints = map[string][]string{
 		"/dapr.proto.runtime.v1.Dapr/GetState",
 		"/dapr.proto.runtime.v1.Dapr/GetBulkState",
 		"/dapr.proto.runtime.v1.Dapr/SaveState",
+		"/dapr.proto.runtime.v1.Dapr/QueryState",
 		"/dapr.proto.runtime.v1.Dapr/DeleteState",
 		"/dapr.proto.runtime.v1.Dapr/DeleteBulkState",
 		"/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction",
