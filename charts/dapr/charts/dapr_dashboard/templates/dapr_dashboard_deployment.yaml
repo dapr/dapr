@@ -51,7 +51,7 @@ spec:
 {{- end }}
       containers:
       - name: dapr-dashboard
-        image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        image: "{{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
@@ -66,9 +66,9 @@ spec:
         - containerPort: 8080
         resources:
 {{ toYaml .Values.resources | indent 10 }}
-{{- if .Values.image.imagePullSecrets }}
+{{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.image.imagePullSecrets }}
+        - name: {{ .Values.global.imagePullSecrets }}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:
