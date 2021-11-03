@@ -63,6 +63,7 @@ type API interface {
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
+	QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
 	DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error)
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error)
@@ -545,6 +546,60 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		return &emptypb.Empty{}, err
 	}
 	return &emptypb.Empty{}, nil
+}
+
+func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {
+	ret := &runtimev1pb.QueryStateResponse{}
+
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return ret, err
+	}
+
+	querier, ok := store.(state.Querier)
+	if !ok {
+		err = status.Errorf(codes.Unimplemented, messages.ErrNotFound, "Query")
+		apiServerLogger.Debug(err)
+		return ret, err
+	}
+
+	var req state.QueryRequest
+	if err = jsoniter.Unmarshal([]byte(in.GetQuery()), &req); err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrMalformedRequest, err.Error())
+		apiServerLogger.Debug(err)
+		return ret, err
+	}
+
+	resp, err := querier.Query(&req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrStateQuery, in.GetStoreName(), err.Error())
+		apiServerLogger.Debug(err)
+		return ret, err
+	}
+	if resp == nil || len(resp.Results) == 0 {
+		return ret, nil
+	}
+
+	encrypted := encryption.EncryptedStateStore(in.StoreName)
+	ret.Results = make([]*runtimev1pb.QueryStateItem, len(resp.Results))
+	ret.Token = resp.Token
+	ret.Metadata = resp.Metadata
+
+	for i := range resp.Results {
+		ret.Results[i] = &runtimev1pb.QueryStateItem{
+			Key: state_loader.GetOriginalStateKey(resp.Results[i].Key),
+		}
+		if encrypted {
+			ret.Results[i].Data, err = encryption.TryDecryptValue(in.StoreName, resp.Results[i].Data)
+			if err != nil {
+				apiServerLogger.Debug("query error: %s", err)
+				ret.Results[i].Error = err.Error()
+			}
+		}
+	}
+
+	return ret, nil
 }
 
 // stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error.
