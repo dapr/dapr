@@ -183,7 +183,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 
 		resultStatusCode = statusCode
 		return err
-	}, backoff.NewExponentialBackOff())
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(10*time.Seconds()), 5))
 
 	return resultStatusCode, resultErr
 }
