@@ -19,8 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
-
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -153,24 +151,15 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 
 func postSingleMessage(url string, data []byte) (int, error) {
 	// HTTPPostWithStatus by default sends with content-type application/json
-	resultStatusCode := 0
-	resultErr := backoff.Retry(func() error {
-		resultStatusCode = 0
-		_, statusCode, err := utils.HTTPPostWithStatus(url, data)
-		if err != nil {
-			log.Printf("Publish failed with error=%s, response is nil", err.Error())
-			resultStatusCode = http.StatusInternalServerError
-			return err
-		}
-		if statusCode != http.StatusOK {
-			err = fmt.Errorf("publish failed with StatusCode=%d", statusCode)
-		}
-
-		resultStatusCode = statusCode
-		return err
-	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(10*time.Seconds()), 5))
-
-	return resultStatusCode, resultErr
+	_, statusCode, err := utils.HTTPPostWithStatus(url, data)
+	if err != nil {
+		log.Printf("Publish failed with error=%s, response is nil", err.Error())
+		return http.StatusInternalServerError, err
+	}
+	if statusCode != http.StatusOK {
+		err = fmt.Errorf("publish failed with StatusCode=%d", statusCode)
+	}
+	return statusCode, err
 }
 
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
