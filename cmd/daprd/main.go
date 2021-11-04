@@ -73,6 +73,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 
+	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
 	// Name resolutions.
@@ -140,6 +141,9 @@ import (
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+
+	"github.com/dapr/components-contrib/configuration"
+	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
 )
 
 var (
@@ -236,6 +240,11 @@ func main() {
 			state_loader.New("aws.dynamodb", state_dynamodb.NewDynamoDBStateStore),
 			state_loader.New("mysql", func() state.Store {
 				return state_mysql.NewMySQLStateStore(logContrib)
+			}),
+		),
+		runtime.WithConfigurations(
+			configuration_loader.New("redis", func() configuration.Store {
+				return configuration_redis.NewRedisConfigurationStore(logContrib)
 			}),
 		),
 		runtime.WithPubSubs(
