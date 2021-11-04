@@ -90,13 +90,7 @@ func publishHealthCheck(publisherExternalURL string) error {
 	url := fmt.Sprintf("http://%s/tests/publish", publisherExternalURL)
 
 	return backoff.Retry(func() error {
-		statusCode, err := postSingleMessage(url, jsonValue)
-
-		// return on an unsuccessful publish
-		if statusCode != http.StatusNoContent {
-			return err
-		}
-
+		_, err := postSingleMessage(url, jsonValue)
 		return err
 	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10))
 }
@@ -198,7 +192,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 		log.Printf("Publish failed with error=%s, response is nil", err.Error())
 		return http.StatusInternalServerError, err
 	}
-	if statusCode != http.StatusOK {
+	if (statusCode != http.StatusOK) && (statusCode != http.StatusNoContent) {
 		err = fmt.Errorf("publish failed with StatusCode=%d", statusCode)
 	}
 	return statusCode, err
