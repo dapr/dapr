@@ -14,7 +14,7 @@
 
 function SetEnv($Name, $Value)
 {
-    Write-Host "Writing $Name to env file"
+    Write-Host "Writing $Name=$Value to env file"
     Write-Output "$Name=$Value" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 }
 
