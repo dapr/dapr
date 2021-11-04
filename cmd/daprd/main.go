@@ -383,7 +383,7 @@ func main() {
 			bindings_loader.NewOutput("azure.cosmosdb", func() bindings.OutputBinding {
 				return bindings_cosmosdb.NewCosmosDB(logContrib)
 			}),
-			bindings_loader.NewOutput("azure.cosmosdbgremlinapi", func() bindings.OutputBinding {
+			bindings_loader.NewOutput("azure.cosmosdb.gremlinapi", func() bindings.OutputBinding {
 				return bindings_cosmosdbgremlinapi.NewCosmosDBGremlinAPI(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
