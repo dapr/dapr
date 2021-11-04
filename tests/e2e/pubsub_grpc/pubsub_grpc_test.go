@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -72,6 +74,31 @@ type cloudEvent struct {
 	Type            string      `json:"type"`
 	DataContentType string      `json:"datacontenttype"`
 	Data            interface{} `json:"data"`
+}
+
+// checks is publishing is working.
+func publishHealthCheck(publisherExternalURL string) error {
+	commandBody := publishCommand{
+		ContentType: "application/json",
+		Topic:       "pubsub-healthcheck-topic-grpc",
+		Protocol:    "grpc",
+		Data:        "health check",
+	}
+	jsonValue, _ := json.Marshal(commandBody)
+
+	// this is the publish app's endpoint, not a dapr endpoint
+	url := fmt.Sprintf("http://%s/tests/publish", publisherExternalURL)
+
+	return backoff.Retry(func() error {
+		statusCode, err := postSingleMessage(url, jsonValue)
+
+		// return on an unsuccessful publish
+		if statusCode != http.StatusNoContent {
+			return err
+		}
+
+		return err
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10))
 }
 
 // sends messages to the publisher app.  The publisher app does the actual publish.
@@ -444,6 +471,9 @@ func TestPubSubGRPC(t *testing.T) {
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	err = publishHealthCheck(publisherExternalURL)
 	require.NoError(t, err)
 
 	protocol := "grpc"

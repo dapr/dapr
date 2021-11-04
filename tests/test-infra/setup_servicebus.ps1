@@ -29,6 +29,14 @@ $TOPICS_AND_SUBSCRIPTIONS = `
   [pscustomobject]@{
     topics = ,"pubsub-job-topic-http";
     subscriptions = "pubsub-subscriber", "job-subscriber";
+  },
+  [pscustomobject]@{
+    topics = ,"pubsub-healthcheck-topic-http";
+    subscriptions = ,"pubsub-subscriber";
+  },
+  [pscustomobject]@{
+    topics = ,"pubsub-healthcheck-topic-grpc";
+    subscriptions = ,"pubsub-subscriber-grpc";
   }
 
 function Setup-ServiceBus-Subscription(
