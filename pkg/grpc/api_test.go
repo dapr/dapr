@@ -94,6 +94,10 @@ func (m *mockGRPCAPI) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRe
 	return &emptypb.Empty{}, nil
 }
 
+func (m *mockGRPCAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {
+	return &runtimev1pb.QueryStateResponse{}, nil
+}
+
 func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
@@ -1704,4 +1708,136 @@ func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOpt
 		Consistency: "strong",
 	}
 	return &testOptions, expected
+}
+
+type mockStateStoreQuerier struct {
+	daprt.MockStateStore
+	daprt.MockQuerier
+}
+
+const (
+	queryTestRequestOK = `{
+	"query": {
+		"filter": {
+			"EQ": { "a": "b" }
+		},
+		"sort": [
+			{ "key": "a" }
+		],
+		"pagination": {
+			"limit": 2
+		}
+	}
+}`
+	queryTestRequestNoRes = `{
+	"query": {
+		"filter": {
+			"EQ": { "a": "b" }
+		},
+		"pagination": {
+			"limit": 2
+		}
+	}
+}`
+	queryTestRequestErr = `{
+	"query": {
+		"filter": {
+			"EQ": { "a": "b" }
+		},
+		"sort": [
+			{ "key": "a" }
+		]
+	}
+}`
+	queryTestRequestSyntaxErr = `syntax error`
+)
+
+func TestQueryState(t *testing.T) {
+	port, err := freeport.GetFreePort()
+	assert.NoError(t, err)
+
+	fakeStore := &mockStateStoreQuerier{}
+	// simulate full result
+	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
+		return len(req.Query.Sort) != 0 && req.Query.Page.Limit != 0
+	})).Return(
+		&state.QueryResponse{
+			Results: []state.QueryItem{
+				{
+					Key:  "1",
+					Data: []byte(`{"a":"b"}`),
+				},
+			},
+		}, nil)
+	// simulate empty data
+	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
+		return len(req.Query.Sort) == 0 && req.Query.Page.Limit != 0
+	})).Return(
+		&state.QueryResponse{
+			Results: []state.QueryItem{},
+		}, nil)
+	// simulate error
+	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
+		return len(req.Query.Sort) != 0 && req.Query.Page.Limit == 0
+	})).Return(nil, errors.New("Query error"))
+
+	server := startTestServerAPI(port, &api{
+		id:          "fakeAPI",
+		stateStores: map[string]state.Store{"store1": fakeStore},
+	})
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	resp, err := client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
+		StoreName: "store1",
+		Query:     queryTestRequestOK,
+	})
+	assert.Equal(t, 1, len(resp.Results))
+	assert.Equal(t, codes.OK, status.Code(err))
+
+	resp, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
+		StoreName: "store1",
+		Query:     queryTestRequestNoRes,
+	})
+	assert.Equal(t, 0, len(resp.Results))
+	assert.Equal(t, codes.OK, status.Code(err))
+
+	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
+		StoreName: "store1",
+		Query:     queryTestRequestErr,
+	})
+	assert.Equal(t, codes.Internal, status.Code(err))
+
+	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
+		StoreName: "store1",
+		Query:     queryTestRequestSyntaxErr,
+	})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestStateStoreQuerierNotImplemented(t *testing.T) {
+	port, err := freeport.GetFreePort()
+	assert.NoError(t, err)
+
+	server := startDaprAPIServer(
+		port,
+		&api{
+			id:          "fakeAPI",
+			stateStores: map[string]state.Store{"store1": &daprt.MockStateStore{}},
+		},
+		"")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
+		StoreName: "store1",
+	})
+	assert.Equal(t, codes.Unimplemented, status.Code(err))
 }
