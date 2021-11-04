@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"go.uber.org/ratelimit"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -37,6 +38,7 @@ const (
 	// This is random so the first message name is not the same every time.
 	randomOffsetMax           = 99
 	numberOfMessagesToPublish = 100
+	publishRateLimitRPS       = 50
 
 	receiveMessageRetries = 10
 
@@ -106,6 +108,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 		Protocol:    protocol,
 		Metadata:    metadata,
 	}
+	rateLimit := ratelimit.New(publishRateLimitRPS)
 	//nolint: gosec
 	offset := rand.Intn(randomOffsetMax)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
@@ -132,6 +135,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
 		}
 
+		rateLimit.Take()
 		statusCode, err := postSingleMessage(url, jsonValue)
 		// return on an unsuccessful publish
 		if statusCode != http.StatusNoContent {
