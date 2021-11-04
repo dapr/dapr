@@ -127,7 +127,7 @@ function Setup-ServiceBus(
       Write-Host "Namespace already exists."
     } else {
       Write-Host "Creating servicebus namespace ..."
-      az servicebus namespace create --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace --location westus2
+      az servicebus namespace create --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace --location westus2 --sku Premium --capacity 2
       if($?) {
         Write-Host "Created servicebus namespace."
       } else {
