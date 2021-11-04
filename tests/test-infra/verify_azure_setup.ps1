@@ -21,7 +21,7 @@ function Verify-Secret(
     while(!$found) {
       kubectl describe secret $SecretName --namespace=$DaprNamespace
       if(!$?) {
-          Write-Error "Did not find secret: SecretName."
+          Write-Host "Did not find secret: #SecretName, retrying ..."
           Start-Sleep -s 10
       } else {
         $found = $true
