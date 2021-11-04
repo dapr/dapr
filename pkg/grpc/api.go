@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/dapr/components-contrib/configuration"
+
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/grpc"
@@ -62,6 +64,8 @@ type API interface {
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
+	GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
+	SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
 	QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
@@ -86,22 +90,25 @@ type API interface {
 }
 
 type api struct {
-	actor                    actors.Actors
-	directMessaging          messaging.DirectMessaging
-	appChannel               channel.AppChannel
-	stateStores              map[string]state.Store
-	transactionalStateStores map[string]state.TransactionalStore
-	secretStores             map[string]secretstores.SecretStore
-	secretsConfiguration     map[string]config.SecretsScope
-	pubsubAdapter            runtime_pubsub.Adapter
-	id                       string
-	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec              config.TracingSpec
-	accessControlList        *config.AccessControlList
-	appProtocol              string
-	extendedMetadata         sync.Map
-	components               []components_v1alpha.Component
-	shutdown                 func()
+	actor                      actors.Actors
+	directMessaging            messaging.DirectMessaging
+	appChannel                 channel.AppChannel
+	stateStores                map[string]state.Store
+	transactionalStateStores   map[string]state.TransactionalStore
+	secretStores               map[string]secretstores.SecretStore
+	secretsConfiguration       map[string]config.SecretsScope
+	configurationStores        map[string]configuration.Store
+	configurationSubscribe     map[string]bool
+	configurationSubscribeLock sync.Mutex
+	pubsubAdapter              runtime_pubsub.Adapter
+	id                         string
+	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec                config.TracingSpec
+	accessControlList          *config.AccessControlList
+	appProtocol                string
+	extendedMetadata           sync.Map
+	components                 []components_v1alpha.Component
+	shutdown                   func()
 }
 
 // NewAPI returns a new gRPC API.
@@ -110,6 +117,7 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
+	configurationStores map[string]configuration.Store,
 	pubsubAdapter runtime_pubsub.Adapter,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
@@ -135,6 +143,7 @@ func NewAPI(
 		stateStores:              stateStores,
 		transactionalStateStores: transactionalStateStores,
 		secretStores:             secretStores,
+		configurationStores:      configurationStores,
 		secretsConfiguration:     secretsConfiguration,
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		tracingSpec:              tracingSpec,
@@ -1181,4 +1190,118 @@ func stringValueOrEmpty(value *string) string {
 	}
 
 	return *value
+}
+
+func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
+	if a.configurationStores == nil || len(a.configurationStores) == 0 {
+		return nil, status.Error(codes.FailedPrecondition, messages.ErrConfigurationStoresNotConfigured)
+	}
+
+	if a.configurationStores[name] == nil {
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrConfigurationStoreNotFound, name)
+	}
+	return a.configurationStores[name], nil
+}
+
+func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+	store, err := a.getConfigurationStore(in.StoreName)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetConfigurationResponse{}, err
+	}
+
+	req := configuration.GetRequest{
+		Keys:     in.Keys,
+		Metadata: in.Metadata,
+	}
+
+	getResponse, err := store.Get(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, req.Keys, in.StoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetConfigurationResponse{}, err
+	}
+
+	cachedItems := make([]*commonv1pb.ConfigurationItem, 0)
+	for _, v := range getResponse.Items {
+		cachedItems = append(cachedItems, &commonv1pb.ConfigurationItem{
+			Key:      v.Key,
+			Metadata: v.Metadata,
+			Value:    v.Value,
+			Version:  v.Version,
+		})
+	}
+
+	response := &runtimev1pb.GetConfigurationResponse{
+		Items: cachedItems,
+	}
+
+	return response, nil
+}
+
+type configurationEventHandler struct {
+	api          *api
+	storeName    string
+	serverStream runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server
+}
+
+func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
+	if h.api.appChannel == nil {
+		return status.Error(codes.Internal, messages.ErrChannelNotFound)
+	}
+
+	items := make([]*commonv1pb.ConfigurationItem, 0)
+	for _, v := range e.Items {
+		items = append(items, &commonv1pb.ConfigurationItem{
+			Key:      v.Key,
+			Value:    v.Value,
+			Version:  v.Version,
+			Metadata: v.Metadata,
+		})
+	}
+
+	if err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
+		Items: items,
+	}); err != nil {
+		apiServerLogger.Debug(err)
+	}
+	return nil
+}
+
+func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error {
+	store, err := a.getConfigurationStore(request.StoreName)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrConfigurationSubscribe, request.Keys, request.StoreName, err))
+		apiServerLogger.Debug(err)
+		return err
+	}
+
+	subscribeKeys := request.Keys
+	unsubscribedKeys := make([]string, 0)
+	a.configurationSubscribeLock.Lock()
+	for _, k := range subscribeKeys {
+		if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
+			unsubscribedKeys = append(unsubscribedKeys, k)
+		}
+	}
+
+	req := &configuration.SubscribeRequest{
+		Keys:     unsubscribedKeys,
+		Metadata: request.GetMetadata(),
+	}
+
+	handler := &configurationEventHandler{
+		api:          a,
+		storeName:    request.StoreName,
+		serverStream: configurationServer,
+	}
+
+	// TODO(@laurence) deal with failed subscription and retires
+	_ = store.Subscribe(context.Background(), req, handler.updateEventHandler)
+
+	for _, k := range unsubscribedKeys {
+		a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)] = true
+	}
+	a.configurationSubscribeLock.Unlock()
+	return nil
 }
