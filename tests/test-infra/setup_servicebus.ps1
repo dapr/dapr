@@ -123,22 +123,23 @@ function Setup-ServiceBus(
     # Reuse namespace since it can avoid connectivity issues on first call in the tests.
     Write-Host "Checking if servicebus namespace exists ..."
     $namespaceExistsResult = az servicebus namespace exists --name $DaprTestServiceBusNamespace | ConvertFrom-Json
-    if(!$namespaceExistsResult.nameAvailable) {
-      Write-Host "Namespace already exists. Updating ..."
-      az servicebus namespace update --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace --sku Premium --set sku.capacity=16
-      if($?) {
-        Write-Host "Updated servicebus namespace."
-      } else {
-        throw "Failed to update servicebus namespace."
-      }
-    } else {
+
+    if($namespaceExistsResult.nameAvailable) {
       Write-Host "Creating servicebus namespace ..."
-      az servicebus namespace create --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace --location westus2 --sku Premium --capacity 16
+      az servicebus namespace create --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace --location westus2 --sku Premium
       if($?) {
         Write-Host "Created servicebus namespace."
       } else {
         throw "Failed to create servicebus namespace."
       }
+    }
+
+    Write-Host "Updating servicebus namespace ..."
+    az servicebus namespace update --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace --sku Premium --set sku.capacity=16
+    if($?) {
+      Write-Host "Updated servicebus namespace."
+    } else {
+      throw "Failed to update servicebus namespace."
     }
 
     foreach ($topicsAndSubscriptions in $TOPICS_AND_SUBSCRIPTIONS) {
