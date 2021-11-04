@@ -24,7 +24,7 @@ jobs:
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_STATE_STORE: cosmosdb
-      DAPR_TEST_PUBSUB: servicebus
+      DAPR_TEST_PUBSUB: redis
       HELMVER: v3.4.0
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
