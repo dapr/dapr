@@ -38,7 +38,7 @@ const (
 	// This is random so the first message name is not the same every time.
 	randomOffsetMax           = 99
 	numberOfMessagesToPublish = 100
-	publishRateLimitRPS       = 50
+	publishRateLimitRPS       = 25
 
 	receiveMessageRetries = 10
 

@@ -21,7 +21,7 @@ function SetEnv($Name, $Value)
 
 SetEnv "DAPR_TEST_STATE_STORE" "cosmosdb"
 # Temporarily use redis until we fix E2E to run with Azure Service Bus.
-SetEnv "DAPR_TEST_PUBSUB" "redis"
+SetEnv "DAPR_TEST_PUBSUB" "servicebus"
 
 SetEnv "DAPR_TEST_RESOURCE_GROUP" "dapre2e"
 SetEnv "DAPR_TEST_COSMOSDB_ACCOUNT" "dapr-e2e-tests"
