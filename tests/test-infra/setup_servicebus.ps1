@@ -12,31 +12,31 @@
 $TOPICS_AND_SUBSCRIPTIONS = `
   [pscustomobject]@{
     topics = "pubsub-a-topic-http", "pubsub-b-topic-http", "pubsub-c-topic-http", "pubsub-raw-topic-http";
-    subscriptions = ,"pubsub-subscriber";
+    subscriptions = "pubsub-publisher", "pubsub-subscriber";
   }, `
   [pscustomobject]@{
     topics = "pubsub-a-topic-grpc", "pubsub-b-topic-grpc", "pubsub-c-topic-grpc", "pubsub-raw-topic-grpc";
-    subscriptions = ,"pubsub-subscriber-grpc";
+    subscriptions = "pubsub-publisher-grpc", "pubsub-subscriber-grpc";
   }, `
   [pscustomobject]@{
     topics = "pubsub-routing-http", "pubsub-routing-crd-http";
-    subscriptions = ,"pubsub-subscriber-routing";
+    subscriptions = "pubsub-publisher-routing", "pubsub-subscriber-routing";
   }, `
   [pscustomobject]@{
     topics = "pubsub-routing-grpc", "pubsub-routing-crd-grpc";
-    subscriptions = ,"pubsub-subscriber-routing-grpc";
+    subscriptions = "pubsub-publisher-routing-grpc", "pubsub-subscriber-routing-grpc";
   },
   [pscustomobject]@{
     topics = ,"pubsub-job-topic-http";
-    subscriptions = "pubsub-subscriber", "job-subscriber";
+    subscriptions = "pubsub-publisher", "pubsub-subscriber", "job-subscriber";
   },
   [pscustomobject]@{
     topics = ,"pubsub-healthcheck-topic-http";
-    subscriptions = ,"pubsub-subscriber";
+    subscriptions = "pubsub-publisher", "pubsub-subscriber";
   },
   [pscustomobject]@{
     topics = ,"pubsub-healthcheck-topic-grpc";
-    subscriptions = ,"pubsub-subscriber-grpc";
+    subscriptions = "pubsub-publisher-grpc"," pubsub-subscriber-grpc";
   }
 
 function Setup-ServiceBus-Subscription(
