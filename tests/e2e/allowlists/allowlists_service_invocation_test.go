@@ -67,6 +67,15 @@ func TestMain(m *testing.M) {
 	}
 
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
+	config, err := tr.Platform.GetConfiguration("daprsystem")
+	if err != nil {
+		fmt.Printf("configuration name: daprsystem, get failed: %s \n", err.Error())
+		os.Exit(-1)
+	}
+	if !config.Spec.MTLSSpec.Enabled {
+		fmt.Printf("mtls disabled. can't running unit tests")
+		os.Exit(0)
+	}
 	os.Exit(tr.Start(m))
 }
 
