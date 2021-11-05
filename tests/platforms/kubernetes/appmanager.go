@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -610,9 +611,12 @@ func (m *AppManager) IsServiceDeleted(svc *apiv1.Service, err error) bool {
 func (m *AppManager) minikubeNodeIP() string {
 	// if you are running the test in minikube environment, DAPR_TEST_MINIKUBE_IP environment variable must be
 	// minikube cluster IP address from the output of `minikube ip` command
-
-	// TODO: Use the better way to get the node ip of minikube
-	return os.Getenv(MiniKubeIPEnvVar)
+	cmd := exec.Command("minikube", "ip")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return os.Getenv(MiniKubeIPEnvVar)
+	}
+	return string(out[:len(out)-1])
 }
 
 // DeleteJob deletes job for the test app.
