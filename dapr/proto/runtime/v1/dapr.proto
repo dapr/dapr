@@ -30,6 +30,9 @@ service Dapr {
   // Saves the state for a specific key.
   rpc SaveState(SaveStateRequest) returns (google.protobuf.Empty) {}
 
+  // Queries the state.
+  rpc QueryStateAlpha1(QueryStateRequest) returns (QueryStateResponse) {}
+
   // Deletes the state for a specific key.
   rpc DeleteState(DeleteStateRequest) returns (google.protobuf.Empty) {}
 
@@ -71,6 +74,12 @@ service Dapr {
 
   // InvokeActor calls a method on an actor.
   rpc InvokeActor (InvokeActorRequest) returns (InvokeActorResponse) {}
+
+  // GetConfiguration gets configuration from configuration store.
+  rpc GetConfigurationAlpha1(GetConfigurationRequest) returns (GetConfigurationResponse) {}
+
+  // SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
+  rpc SubscribeConfigurationAlpha1(SubscribeConfigurationRequest) returns (stream SubscribeConfigurationResponse) {}
 
   // Gets metadata of the sidecar
   rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
@@ -196,6 +205,45 @@ message SaveStateRequest {
 
   // The array of the state key values.
   repeated common.v1.StateItem states = 2;
+}
+
+// QueryStateRequest is the message to query state store.
+message QueryStateRequest {
+  // The name of state store.
+  string store_name = 1;
+
+  // The query in JSON format.
+  string query = 2;
+
+  // The metadata which will be sent to state store components.
+  map<string,string> metadata = 3;
+}
+
+message QueryStateItem {
+  // The object key.
+  string key = 1;
+
+  // The object value.
+  bytes  data = 2;
+
+  // The entity tag which represents the specific version of data.
+  // ETag format is defined by the corresponding data store.
+  string etag = 3;
+
+  // The error message indicating an error in processing of the query result.
+  string error = 4;
+}
+
+// QueryStateResponse is the response conveying the query results.
+message QueryStateResponse {
+  // An array of query results.
+  repeated QueryStateItem results = 1;
+
+  // Pagination token.
+  string token = 2;
+
+  // The metadata which will be sent to app.
+  map<string,string> metadata = 3;
 }
 
 // PublishEventRequest is the message to publish event data to pubsub topic
@@ -409,3 +457,43 @@ message SetMetadataRequest {
   string key = 1;
   string value = 2;
 }
+
+// GetConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
+message GetConfigurationRequest {
+  // Required. The name of configuration store.
+  string store_name = 1;
+
+  // Optional. The key of the configuration item to fetch.
+  // If set, only query for the specified configuration items.
+  // Empty list means fetch all.
+  repeated string keys = 2;
+
+  // Optional. The metadata which will be sent to configuration store components.
+  map<string,string> metadata = 3;
+}
+
+// GetConfigurationResponse is the response conveying the list of configuration values.
+// It should be the FULL configuration of specified application which contains all of its configuration items.
+message GetConfigurationResponse {
+  repeated common.v1.ConfigurationItem items = 1;
+}
+
+// SubscribeConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
+message SubscribeConfigurationRequest {
+  // The name of configuration store.
+  string store_name = 1;
+
+  // Optional. The key of the configuration item to fetch.
+  // If set, only query for the specified configuration items.
+  // Empty list means fetch all.
+  repeated string keys = 2;
+
+  // The metadata which will be sent to configuration store components.
+  map<string,string> metadata = 3;
+}
+
+message SubscribeConfigurationResponse {
+  // The list of items containing configuration values
+  repeated common.v1.ConfigurationItem items = 1;
+}
+

@@ -17,9 +17,15 @@ function Verify-Secret(
     if([String]::IsNullOrWhiteSpace($DaprNamespace)){$DaprNamespace="default"}
   }
   process{
-    kubectl describe secret $SecretName --namespace=$DaprNamespace
-    if(!$?) {
-        throw "Did not find secret: SecretName."
+    $found = $false
+    while(!$found) {
+      kubectl describe secret $SecretName --namespace=$DaprNamespace
+      if(!$?) {
+          Write-Error "Did not find secret: SecretName."
+          Start-Sleep -s 10
+      } else {
+        $found = $true
+      }
     }
   }
   end{}
