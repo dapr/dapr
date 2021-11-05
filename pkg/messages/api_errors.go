@@ -67,4 +67,10 @@ const (
 
 	// Healthz.
 	ErrHealthNotReady = "dapr is not ready"
+
+	// Configuration.
+	ErrConfigurationStoresNotConfigured = "error configuration stores not configured"
+	ErrConfigurationStoreNotFound       = "error configuration stores %s not found"
+	ErrConfigurationGet                 = "fail to get %s from Configuration store %s: %s"
+	ErrConfigurationSubscribe           = "fail to subscribe %s from Configuration store %s: %s"
 )
