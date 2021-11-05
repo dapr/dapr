@@ -19,13 +19,14 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
+
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
 // FakeComponents implements ComponentInterface
@@ -75,7 +76,6 @@ func (c *FakeComponents) List(opts v1.ListOptions) (result *v1alpha1.ComponentLi
 func (c *FakeComponents) Watch(opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(componentsResource, c.ns, opts))
-
 }
 
 // Create takes the representation of a component and creates it.  Returns the server's representation of the component, and an error, if there is any.

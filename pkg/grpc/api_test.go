@@ -50,7 +50,11 @@ import (
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 )
 
-const maxGRPCServerUptime = 100 * time.Millisecond
+const (
+	maxGRPCServerUptime = 100 * time.Millisecond
+	goodKey             = "fakeAPI||good-key"
+	errorKey            = "fakeAPI||error-key"
+)
 
 type mockGRPCAPI struct{}
 
@@ -863,13 +867,13 @@ func TestSaveState(t *testing.T) {
 		if len(reqs) == 0 {
 			return false
 		}
-		return reqs[0].Key == "fakeAPI||good-key"
+		return reqs[0].Key == goodKey
 	})).Return(nil)
 	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
-		return reqs[0].Key == "fakeAPI||error-key"
+		return reqs[0].Key == errorKey
 	})).Return(errors.New("failed to save state with error-key"))
 
 	fakeAPI := &api{
@@ -945,14 +949,99 @@ func TestSaveState(t *testing.T) {
 func TestGetState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == "fakeAPI||good-key"
+		return req.Key == goodKey
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
 			ETag: ptr.String("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == "fakeAPI||error-key"
+		return req.Key == errorKey
+	})).Return(
+		nil,
+		errors.New("failed to get state with error-key"))
+
+	fakeAPI := &api{
+		id:          "fakeAPI",
+		stateStores: map[string]state.Store{"store1": fakeStore},
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	testCases := []struct {
+		testName         string
+		storeName        string
+		key              string
+		errorExcepted    bool
+		expectedResponse *runtimev1pb.GetStateResponse
+		expectedError    codes.Code
+	}{
+		{
+			testName:      "get state",
+			storeName:     "store1",
+			key:           "good-key",
+			errorExcepted: false,
+			expectedResponse: &runtimev1pb.GetStateResponse{
+				Data: []byte("test-data"),
+				Etag: "test-etag",
+			},
+			expectedError: codes.OK,
+		},
+		{
+			testName:         "get store with non-existing store",
+			storeName:        "no-store",
+			key:              "good-key",
+			errorExcepted:    true,
+			expectedResponse: &runtimev1pb.GetStateResponse{},
+			expectedError:    codes.InvalidArgument,
+		},
+		{
+			testName:         "get store with key but error occurs",
+			storeName:        "store1",
+			key:              "error-key",
+			errorExcepted:    true,
+			expectedResponse: &runtimev1pb.GetStateResponse{},
+			expectedError:    codes.Internal,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetStateRequest{
+				StoreName: tt.storeName,
+				Key:       tt.key,
+			}
+
+			resp, err := client.GetState(context.Background(), req)
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, resp.Data, tt.expectedResponse.Data, "Expected response Data to be same")
+				assert.Equal(t, resp.Etag, tt.expectedResponse.Etag, "Expected response Etag to be same")
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
+			}
+		})
+	}
+}
+
+func TestGetConfiguration(t *testing.T) {
+	fakeStore := &daprt.MockStateStore{}
+	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == goodKey
+	})).Return(
+		&state.GetResponse{
+			Data: []byte("test-data"),
+			ETag: ptr.String("test-etag"),
+		}, nil)
+	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == errorKey
 	})).Return(
 		nil,
 		errors.New("failed to get state with error-key"))
@@ -1030,14 +1119,14 @@ func TestGetState(t *testing.T) {
 func TestGetBulkState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == "fakeAPI||good-key"
+		return req.Key == goodKey
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
 			ETag: ptr.String("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == "fakeAPI||error-key"
+		return req.Key == errorKey
 	})).Return(
 		nil,
 		errors.New("failed to get state with error-key"))
@@ -1147,10 +1236,10 @@ func TestGetBulkState(t *testing.T) {
 func TestDeleteState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
-		return req.Key == "fakeAPI||good-key"
+		return req.Key == goodKey
 	})).Return(nil)
 	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
-		return req.Key == "fakeAPI||error-key"
+		return req.Key == errorKey
 	})).Return(errors.New("failed to delete state with key2"))
 
 	fakeAPI := &api{
