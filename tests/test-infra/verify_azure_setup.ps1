@@ -17,10 +17,15 @@ function Verify-Secret(
     if([String]::IsNullOrWhiteSpace($DaprNamespace)){$DaprNamespace="default"}
   }
   process{
+    $tries = 0
     $found = $false
     while(!$found) {
       kubectl describe secret $SecretName --namespace=$DaprNamespace
+      $tries = $tries + 1
       if(!$?) {
+          if($tries -ge 30) {
+            throw "Did not find secret: $SecretName."
+          }
           Write-Host "Did not find secret: $SecretName, retrying ..."
           Start-Sleep -s 10
       } else {
