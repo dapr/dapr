@@ -10,4 +10,6 @@
 # Usage: start_azure_setup.ps1
 
 Start-Process nohup "pwsh -noprofile $PSScriptRoot\setup_cosmosdb.ps1"
-Start-Process nohup "pwsh -noprofile $PSScriptRoot\setup_servicebus.ps1"
+#Start-Process nohup "pwsh -noprofile $PSScriptRoot\setup_servicebus.ps1"
+# Temporarily running this serially to see error.
+pwsh -noprofile "$PSScriptRoot\setup_servicebus.ps1"
