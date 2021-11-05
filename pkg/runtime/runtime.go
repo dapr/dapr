@@ -918,6 +918,17 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
 			appResponseBody = resp.Message().Data.Value
+			err := a.json.Unmarshal(resp.Message().Data.Value, &response)
+			if err == nil && response.Data != nil {
+				b, errB := a.json.Marshal(response.Data)
+				if errB == nil {
+					appResponseBody = b
+				}
+
+				if response.Concurrency != bindingsConcurrencyParallel {
+					response.Concurrency = bindingsConcurrencySequential
+				}
+			}
 		}
 	}
 
