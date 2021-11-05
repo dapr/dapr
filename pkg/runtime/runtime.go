@@ -20,8 +20,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
+
+	"github.com/dapr/components-contrib/configuration"
+	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
+
 	"contrib.go.opencensus.io/exporter/zipkin"
-	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 	jsoniter "github.com/json-iterator/go"
@@ -92,6 +96,7 @@ const (
 	secretStoreComponent            ComponentCategory = "secretstores"
 	stateComponent                  ComponentCategory = "state"
 	middlewareComponent             ComponentCategory = "middleware"
+	configurationComponent          ComponentCategory = "configuration"
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
 	kubernetesSecretStore                             = "kubernetes"
@@ -103,6 +108,7 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	secretStoreComponent,
 	stateComponent,
 	middlewareComponent,
+	configurationComponent,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -162,6 +168,9 @@ type DaprRuntime struct {
 	apiClosers             []io.Closer
 
 	secretsConfiguration map[string]config.SecretsScope
+
+	configurationStoreRegistry configuration_loader.Registry
+	configurationStores        map[string]configuration.Store
 
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentDependents map[string][]components_v1alpha1.Component
@@ -223,7 +232,9 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		allowedTopics:       map[string][]string{},
 		inputBindingRoutes:  map[string]string{},
 
-		secretsConfiguration: map[string]config.SecretsScope{},
+		secretsConfiguration:       map[string]config.SecretsScope{},
+		configurationStoreRegistry: configuration_loader.NewRegistry(),
+		configurationStores:        map[string]configuration.Store{},
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
@@ -328,6 +339,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.pubSubRegistry.Register(opts.pubsubs...)
 	a.secretStoresRegistry.Register(opts.secretStores...)
 	a.stateStoreRegistry.Register(opts.states...)
+	a.configurationStoreRegistry.Register(opts.configurations...)
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
@@ -981,7 +993,7 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration, a.configurationStores,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
 		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents, a.ShutdownWithWait)
 }
@@ -1087,6 +1099,31 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 		a.outputBindings[c.ObjectMeta.Name] = binding
 		diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	}
+	return nil
+}
+
+func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
+	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
+	if err != nil {
+		log.Warnf("error creating configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
+		return err
+	}
+	if store != nil {
+		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
+		err := store.Init(configuration.Metadata{
+			Properties: props,
+		})
+		if err != nil {
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+			log.Warnf("error initializing configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+			return err
+		}
+
+		a.configurationStores[s.ObjectMeta.Name] = store
+		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
+	}
+
 	return nil
 }
 
@@ -1777,6 +1814,8 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 		return a.initSecretStore(comp)
 	case stateComponent:
 		return a.initState(comp)
+	case configurationComponent:
+		return a.initConfiguration(comp)
 	}
 	return nil
 }

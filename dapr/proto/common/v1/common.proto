@@ -125,3 +125,19 @@ message StateOptions {
   StateConcurrency concurrency = 1;
   StateConsistency consistency = 2;
 }
+
+
+// ConfigurationItem represents all the configuration with its name(key).
+message ConfigurationItem {
+  // Required. The name of configuration item
+  string key = 1;
+
+  // Required. The value of configuration item.
+  string value = 2;
+
+  // Version is response only and cannot be fetched. Store is not expected to keep all versions available
+  string version = 3;
+
+  // the metadata which will be passed to/from configuration store component.
+  map<string,string> metadata = 4;
+}
