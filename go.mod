@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/dapr/components-contrib v1.4.0-rc1.0.20211102224707-ad9ebba20423
+	github.com/dapr/components-contrib v1.5.0-rc.1
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
@@ -43,6 +43,7 @@ require (
 	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.8.0
 	go.uber.org/automaxprocs v1.4.0
+	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
 	google.golang.org/genproto v0.0.0-20201204160425-06b3db808446
 	google.golang.org/grpc v1.38.0
@@ -58,6 +59,8 @@ require (
 	k8s.io/metrics v0.20.0
 	sigs.k8s.io/controller-runtime v0.7.0
 )
+
+require github.com/cenkalti/backoff v2.2.1+incompatible
 
 require (
 	cloud.google.com/go v0.65.0 // indirect
@@ -109,7 +112,6 @@ require (
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b // indirect
 	github.com/camunda-cloud/zeebe/clients/go v1.0.1 // indirect
-	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/coreos/go-oidc v2.1.0+incompatible // indirect
 	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
@@ -253,7 +255,6 @@ require (
 	go.opentelemetry.io/otel/trace v0.19.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e // indirect
-	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/oauth2 v0.0.0-20210220000619-9bb904979d93 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect

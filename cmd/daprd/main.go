@@ -73,6 +73,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 
+	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
 	// Name resolutions.
@@ -97,7 +98,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
 	bindings_cosmosdb "github.com/dapr/components-contrib/bindings/azure/cosmosdb"
-	bindings_cosmosgraphdb "github.com/dapr/components-contrib/bindings/azure/cosmosgraphdb"
+	bindings_cosmosdbgremlinapi "github.com/dapr/components-contrib/bindings/azure/cosmosdbgremlinapi"
 	"github.com/dapr/components-contrib/bindings/azure/eventgrid"
 	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
@@ -140,6 +141,9 @@ import (
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+
+	"github.com/dapr/components-contrib/configuration"
+	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
 )
 
 var (
@@ -236,6 +240,11 @@ func main() {
 			state_loader.New("aws.dynamodb", state_dynamodb.NewDynamoDBStateStore),
 			state_loader.New("mysql", func() state.Store {
 				return state_mysql.NewMySQLStateStore(logContrib)
+			}),
+		),
+		runtime.WithConfigurations(
+			configuration_loader.New("redis", func() configuration.Store {
+				return configuration_redis.NewRedisConfigurationStore(logContrib)
 			}),
 		),
 		runtime.WithPubSubs(
@@ -374,8 +383,8 @@ func main() {
 			bindings_loader.NewOutput("azure.cosmosdb", func() bindings.OutputBinding {
 				return bindings_cosmosdb.NewCosmosDB(logContrib)
 			}),
-			bindings_loader.NewOutput("azure.cosmosgraphdb", func() bindings.OutputBinding {
-				return bindings_cosmosgraphdb.NewCosmosGraphDB(logContrib)
+			bindings_loader.NewOutput("azure.cosmosdb.gremlinapi", func() bindings.OutputBinding {
+				return bindings_cosmosdbgremlinapi.NewCosmosDBGremlinAPI(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
 				return eventgrid.NewAzureEventGrid(logContrib)
