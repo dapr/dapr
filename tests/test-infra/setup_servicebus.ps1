@@ -120,11 +120,23 @@ function Setup-ServiceBus(
       Write-Host "Failed to delete secret, skipping."
     }
 
-    # Reuse namespace since it can avoid connectivity issues on first call in the tests.
+    # Reuse namespace (when possible) since it can avoid connectivity issues on first call in the tests.
     Write-Host "Checking if servicebus namespace exists ..."
-    $namespaceExistsResult = az servicebus namespace exists --name $DaprTestServiceBusNamespace | ConvertFrom-Json
+    $serviceBusNamespaceDetails = az servicebus namespace show --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace | ConvertFrom-Json
+    $exists = $?
+    if($exists -and ($serviceBusNamespaceDetails.sku.tier -ne 'Premium')) {
+      # Namespace exists but is not premium, deleting it.
+      Write-Host "Deleting servicebus namespace ..."
+      az servicebus namespace delete --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace
+      if($?) {
+        Write-Host "Deleted servicebus namespace."
+      } else {
+        throw "Failed to delete servicebus namespace."
+      }
+      $exists = $false
+    }
 
-    if($namespaceExistsResult.nameAvailable) {
+    if(!$exists) {
       Write-Host "Creating servicebus namespace ..."
       az servicebus namespace create --resource-group $DaprTestResouceGroup --name $DaprTestServiceBusNamespace --location westus2 --sku Premium
       if($?) {
