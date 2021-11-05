@@ -831,32 +831,46 @@ func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool
 	return nil, false
 }
 
-func (m *ActorMetadata) calculateReminderPartition(actorID, reminderName string) uint32 {
+func (m *ActorMetadata) calculateReminderPartition(actorID, reminderName string) (uint32, error) {
 	if m.RemindersMetadata.PartitionCount <= 0 {
-		return 0
+		return 0, nil
 	}
 
 	// do not change this hash function because it would be a breaking change.
 	h := fnv.New32a()
-	h.Write([]byte(actorID))
-	h.Write([]byte(reminderName))
-	return (h.Sum32() % uint32(m.RemindersMetadata.PartitionCount)) + 1
+	_, err := h.Write([]byte(actorID))
+	if err != nil {
+		return 0, err
+	}
+	_, err = h.Write([]byte(reminderName))
+	if err != nil {
+		return 0, err
+	}
+	return (h.Sum32() % uint32(m.RemindersMetadata.PartitionCount)) + 1, nil
 }
 
-func (m *ActorMetadata) createReminderReference(reminder *Reminder) actorReminderReference {
+func (m *ActorMetadata) createReminderReference(reminder *Reminder) (actorReminderReference, error) {
 	if m.RemindersMetadata.PartitionCount > 0 {
+		actorRemindersPartitionID, err := m.calculateReminderPartition(reminder.ActorID, reminder.Name)
+		if err != nil {
+			return actorReminderReference{
+				actorMetadataID:           m.ID,
+				actorRemindersPartitionID: actorRemindersPartitionID,
+				reminder:                  reminder,
+			}, err
+		}
 		return actorReminderReference{
 			actorMetadataID:           m.ID,
-			actorRemindersPartitionID: m.calculateReminderPartition(reminder.ActorID, reminder.Name),
+			actorRemindersPartitionID: actorRemindersPartitionID,
 			reminder:                  reminder,
-		}
+		}, nil
 	}
 
 	return actorReminderReference{
 		actorMetadataID:           "",
 		actorRemindersPartitionID: 0,
 		reminder:                  reminder,
-	}
+	}, nil
 }
 
 func (m *ActorMetadata) calculateRemindersStateKey(actorType string, remindersPartitionID uint32) string {
@@ -904,7 +918,7 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminder
 }
 
 func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderReference, reminder *Reminder) ([]Reminder, actorReminderReference, string, *string) {
-	newReminderRef := m.createReminderReference(reminder)
+	newReminderRef, _ := m.createReminderReference(reminder)
 
 	var remindersInPartitionAfterInsertion []Reminder
 	for _, reminderRef := range reminderRefs {
@@ -1023,7 +1037,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		// First we add it to the partition list.
 		remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, &reminder)
 
-		// Get the database partiton key (needed for CosmosDB)
+		// Get the database partition key (needed for CosmosDB)
 		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
 
 		// Now we can add it to the "global" list.
@@ -1037,7 +1051,10 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 		// Finally, we must save metadata to get a new eTag.
 		// This avoids a race condition between an update and a repartitioning.
-		a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		errForSaveActorType := a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		if errForSaveActorType != nil {
+			return errForSaveActorType
+		}
 
 		a.remindersLock.Lock()
 		a.reminders[req.ActorType] = reminders
@@ -1315,8 +1332,17 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 
 	// Recalculate partition for each reminder.
 	for _, reminderRef := range reminderRefs {
-		partitionID := actorMetadata.calculateReminderPartition(reminderRef.reminder.ActorID, reminderRef.reminder.Name)
-		actorRemindersPartitions[partitionID-1] = append(actorRemindersPartitions[partitionID-1], reminderRef.reminder)
+		partitionID, errForCalculatePartition := actorMetadata.calculateReminderPartition(reminderRef.reminder.ActorID, reminderRef.reminder.Name)
+		if errForCalculatePartition != nil {
+			return nil, errForCalculatePartition
+		}
+
+		if partitionID > 0 {
+			actorRemindersPartitions[partitionID-1] = append(actorRemindersPartitions[partitionID-1], reminderRef.reminder)
+		} else {
+			log.Warnf("The calculated partition ID result of reminder %s is less than or equal to 0",
+				reminderRef.reminder.Name)
+		}
 	}
 
 	// Save to database.
@@ -1520,7 +1546,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 			}
 		}
 
-		// Get the database partiton key (needed for CosmosDB)
+		// Get the database partition key (needed for CosmosDB)
 		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
 
 		// Then, save the partition to the database.
@@ -1531,7 +1557,10 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 
 		// Finally, we must save metadata to get a new eTag.
 		// This avoids a race condition between an update and a repartitioning.
-		a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		errForSaveActorType := a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		if errForSaveActorType != nil {
+			return errForSaveActorType
+		}
 
 		a.remindersLock.Lock()
 		a.reminders[req.ActorType] = reminders
