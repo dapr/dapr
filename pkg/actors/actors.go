@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package actors
 
@@ -11,6 +19,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	nethttp "net/http"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -49,6 +58,7 @@ import (
 const (
 	daprSeparator        = "||"
 	metadataPartitionKey = "partitionKey"
+	metadataZeroID       = "00000000-0000-0000-0000-000000000000"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -83,6 +93,7 @@ type actorsRuntime struct {
 	activeTimersLock         *sync.RWMutex
 	activeReminders          *sync.Map
 	remindersLock            *sync.RWMutex
+	remindersMigrationLock   *sync.Mutex
 	activeRemindersLock      *sync.RWMutex
 	reminders                map[string][]actorReminderReference
 	evaluationLock           *sync.RWMutex
@@ -117,7 +128,7 @@ type ActorRemindersMetadata struct {
 type actorReminderReference struct {
 	actorMetadataID           string
 	actorRemindersPartitionID uint32
-	reminder                  *Reminder
+	reminder                  Reminder
 }
 
 const (
@@ -152,6 +163,7 @@ func NewActors(
 		activeTimersLock:         &sync.RWMutex{},
 		activeReminders:          &sync.Map{},
 		remindersLock:            &sync.RWMutex{},
+		remindersMigrationLock:   &sync.Mutex{},
 		activeRemindersLock:      &sync.RWMutex{},
 		reminders:                map[string][]actorReminderReference{},
 		evaluationLock:           &sync.RWMutex{},
@@ -443,6 +455,9 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	resp, err := a.store.Get(&state.GetRequest{
 		Key:      key,
 		Metadata: metadata,
+		Options: state.GetStateOption{
+			Consistency: state.Strong,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -530,7 +545,9 @@ func (a *actorsRuntime) drainRebalancedActors() {
 			if address != "" && !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
 				// actor has been moved to a different host, deactivate when calls are done cancel any reminders
 				// each item in reminders contain a struct with some metadata + the actual reminder struct
+				a.remindersLock.RLock()
 				reminders := a.reminders[actorType]
+				a.remindersLock.RUnlock()
 				for _, r := range reminders {
 					// r.reminder refers to the actual reminder struct that is saved in the db
 					if r.reminder.ActorType == actorType && r.reminder.ActorID == actorID {
@@ -592,6 +609,7 @@ func (a *actorsRuntime) evaluateReminders() {
 		if err != nil {
 			log.Errorf("error getting reminders for actor type %s: %s", t, err)
 		} else {
+			log.Debugf("loaded %d reminders for actor type %s", len(vals), t)
 			a.remindersLock.Lock()
 			a.reminders[t] = vals
 			a.remindersLock.Unlock()
@@ -604,6 +622,10 @@ func (a *actorsRuntime) evaluateReminders() {
 					r := reminders[i] // Make a copy since we will refer to this as a reference in this loop.
 					targetActorAddress, _ := a.placement.LookupActor(r.reminder.ActorType, r.reminder.ActorID)
 					if targetActorAddress == "" {
+						log.Warnf("did not find address for actor ID %s and actor type %s in reminder %s",
+							r.reminder.ActorID,
+							r.reminder.ActorType,
+							r.reminder.Name)
 						continue
 					}
 
@@ -615,10 +637,20 @@ func (a *actorsRuntime) evaluateReminders() {
 						if !exists {
 							stop := make(chan bool)
 							a.activeReminders.Store(reminderKey, stop)
-							err := a.startReminder(r.reminder, stop)
+							err := a.startReminder(&r.reminder, stop)
 							if err != nil {
 								log.Errorf("error starting reminder: %s", err)
+							} else {
+								log.Debugf("started reminder %s for actor ID %s and actor type %s",
+									r.reminder.Name,
+									r.reminder.ActorID,
+									r.reminder.ActorType)
 							}
+						} else {
+							log.Debugf("reminder %s already exists for actor ID %s and actor type %s",
+								r.reminder.Name,
+								r.reminder.ActorID,
+								r.reminder.ActorType)
 						}
 					}
 				}
@@ -637,6 +669,9 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: constructCompositeKey(actorKey, name),
+		Options: state.GetStateOption{
+			Consistency: state.Strong,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -662,6 +697,9 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 	err := a.store.Set(&state.SetRequest{
 		Key:   constructCompositeKey(actorKey, name),
 		Value: track,
+		Options: state.SetStateOption{
+			Consistency: state.Strong,
+		},
 	})
 	return err
 }
@@ -673,6 +711,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 	var (
 		nextTime, ttl            time.Time
 		period                   time.Duration
+		years, months, days      int
 		repeats, repetitionsLeft int
 	)
 
@@ -688,7 +727,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 
 	repeats = -1 // set to default
 	if len(reminder.Period) != 0 {
-		if period, repeats, err = parseDuration(reminder.Period); err != nil {
+		if years, months, days, period, repeats, err = parseDuration(reminder.Period); err != nil {
 			return errors.Wrap(err, "error parsing reminder period")
 		}
 	}
@@ -704,13 +743,13 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			return errors.Wrap(err, "error parsing reminder last fired time")
 		}
 		repetitionsLeft = track.RepetitionLeft
-		nextTime = lastFiredTime.Add(period)
+		nextTime = lastFiredTime.AddDate(years, months, days).Add(period)
 	} else {
 		repetitionsLeft = repeats
 		nextTime = registeredTime
 	}
 
-	go func(reminder *Reminder, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, stop chan bool) {
+	go func(reminder *Reminder, years int, months int, days int, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, stop chan bool) {
 		var (
 			ttlTimer, nextTimer *time.Timer
 			ttlTimerC           <-chan time.Time
@@ -765,10 +804,10 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				log.Errorf("error updating reminder track: %v", err)
 			}
 			// if reminder is not repetitive, proceed with reminder deletion
-			if period == 0 {
+			if years == 0 && months == 0 && days == 0 && period == 0 {
 				break L
 			}
-			nextTime = nextTime.Add(period)
+			nextTime = nextTime.AddDate(years, months, days).Add(period)
 			if nextTimer.Stop() {
 				<-nextTimer.C
 			}
@@ -782,7 +821,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		if err != nil {
 			log.Errorf("error deleting reminder: %s", err)
 		}
-	}(reminder, period, nextTime, ttl, repetitionsLeft, stopChannel)
+	}(reminder, years, months, days, period, nextTime, ttl, repetitionsLeft, stopChannel)
 
 	return nil
 }
@@ -809,7 +848,7 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 
 func (a *actorsRuntime) reminderRequiresUpdate(req *CreateReminderRequest, reminder *Reminder) bool {
 	if reminder.ActorID == req.ActorID && reminder.ActorType == req.ActorType && reminder.Name == req.Name &&
-		(reminder.Data != req.Data || reminder.DueTime != req.DueTime || reminder.Period != req.Period ||
+		(!reflect.DeepEqual(reminder.Data, req.Data) || reminder.DueTime != req.DueTime || reminder.Period != req.Period ||
 			len(req.TTL) != 0 || (len(reminder.ExpirationTime) != 0 && len(req.TTL) == 0)) {
 		return true
 	}
@@ -824,7 +863,7 @@ func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool
 
 	for _, r := range reminders {
 		if r.reminder.ActorID == req.ActorID && r.reminder.ActorType == req.ActorType && r.reminder.Name == req.Name {
-			return r.reminder, true
+			return &r.reminder, true
 		}
 	}
 
@@ -843,7 +882,7 @@ func (m *ActorMetadata) calculateReminderPartition(actorID, reminderName string)
 	return (h.Sum32() % uint32(m.RemindersMetadata.PartitionCount)) + 1
 }
 
-func (m *ActorMetadata) createReminderReference(reminder *Reminder) actorReminderReference {
+func (m *ActorMetadata) createReminderReference(reminder Reminder) actorReminderReference {
 	if m.RemindersMetadata.PartitionCount > 0 {
 		return actorReminderReference{
 			actorMetadataID:           m.ID,
@@ -853,7 +892,7 @@ func (m *ActorMetadata) createReminderReference(reminder *Reminder) actorReminde
 	}
 
 	return actorReminderReference{
-		actorMetadataID:           "",
+		actorMetadataID:           metadataZeroID,
 		actorRemindersPartitionID: 0,
 		reminder:                  reminder,
 	}
@@ -895,7 +934,7 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminder
 
 		// Only the items in the partition to be updated.
 		if reminderRef.actorRemindersPartitionID == partitionID {
-			remindersInPartitionAfterRemoval = append(remindersInPartitionAfterRemoval, *reminderRef.reminder)
+			remindersInPartitionAfterRemoval = append(remindersInPartitionAfterRemoval, reminderRef.reminder)
 		}
 	}
 
@@ -903,18 +942,18 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminder
 	return remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
 }
 
-func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderReference, reminder *Reminder) ([]Reminder, actorReminderReference, string, *string) {
+func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderReference, reminder Reminder) ([]Reminder, actorReminderReference, string, *string) {
 	newReminderRef := m.createReminderReference(reminder)
 
 	var remindersInPartitionAfterInsertion []Reminder
 	for _, reminderRef := range reminderRefs {
 		// Only the items in the partition to be updated.
 		if reminderRef.actorRemindersPartitionID == newReminderRef.actorRemindersPartitionID {
-			remindersInPartitionAfterInsertion = append(remindersInPartitionAfterInsertion, *reminderRef.reminder)
+			remindersInPartitionAfterInsertion = append(remindersInPartitionAfterInsertion, reminderRef.reminder)
 		}
 	}
 
-	remindersInPartitionAfterInsertion = append(remindersInPartitionAfterInsertion, *reminder)
+	remindersInPartitionAfterInsertion = append(remindersInPartitionAfterInsertion, reminder)
 
 	stateKey := m.calculateRemindersStateKey(newReminderRef.reminder.ActorType, newReminderRef.actorRemindersPartitionID)
 	return remindersInPartitionAfterInsertion, newReminderRef, stateKey, m.calculateEtag(newReminderRef.actorRemindersPartitionID)
@@ -989,7 +1028,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	reminder.RegisteredTime = dueTime.Format(time.RFC3339)
 
 	if len(req.Period) != 0 {
-		_, repeats, err = parseDuration(req.Period)
+		_, _, _, _, repeats, err = parseDuration(req.Period)
 		if err != nil {
 			return errors.Wrap(err, "error parsing reminder period")
 		}
@@ -1015,13 +1054,13 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	a.activeReminders.Store(reminderKey, stop)
 
 	err = backoff.Retry(func() error {
-		reminders, actorMetadata, err2 := a.getRemindersForActorType(req.ActorType, true)
+		reminders, actorMetadata, err2 := a.getRemindersForActorType(req.ActorType, false)
 		if err2 != nil {
 			return err2
 		}
 
 		// First we add it to the partition list.
-		remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, &reminder)
+		remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, reminder)
 
 		// Get the database partiton key (needed for CosmosDB)
 		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
@@ -1037,7 +1076,10 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 		// Finally, we must save metadata to get a new eTag.
 		// This avoids a race condition between an update and a repartitioning.
-		a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		err2 = a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		if err2 != nil {
+			return err2
+		}
 
 		a.remindersLock.Lock()
 		a.reminders[req.ActorType] = reminders
@@ -1052,10 +1094,11 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
 	var (
-		err          error
-		repeats      int
-		dueTime, ttl time.Time
-		period       time.Duration
+		err                 error
+		repeats             int
+		dueTime, ttl        time.Time
+		period              time.Duration
+		years, months, days int
 	)
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
@@ -1076,13 +1119,16 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
 			return errors.Wrap(err, "error parsing timer due time")
 		}
+		if dueTime.Before(time.Now()) {
+			return errors.Errorf("timer %s has already expired: dueTime: %s TTL: %s", timerKey, req.DueTime, req.TTL)
+		}
 	} else {
 		dueTime = time.Now()
 	}
 
 	repeats = -1 // set to default
 	if len(req.Period) != 0 {
-		if period, repeats, err = parseDuration(req.Period); err != nil {
+		if years, months, days, period, repeats, err = parseDuration(req.Period); err != nil {
 			return errors.Wrap(err, "error parsing timer period")
 		}
 		// error on timers with zero repetitions
@@ -1151,11 +1197,11 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 				log.Errorf("could not find active timer %s", timerKey)
 				return
 			}
-			if repeats == 0 || period == 0 {
+			if repeats == 0 || (years == 0 && months == 0 && days == 0 && period == 0) {
 				log.Infof("timer %s has been completed", timerKey)
 				break L
 			}
-			nextTime = nextTime.Add(period)
+			nextTime = nextTime.AddDate(years, months, days).Add(period)
 			if nextTimer.Stop() {
 				<-nextTimer.C
 			}
@@ -1206,6 +1252,10 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 		Key:   metadataKey,
 		Value: actorMetadata,
 		ETag:  actorMetadata.Etag,
+		Options: state.SetStateOption{
+			Concurrency: state.FirstWrite,
+			Consistency: state.Strong,
+		},
 	})
 }
 
@@ -1216,7 +1266,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 
 	if !a.actorTypeMetadataEnabled {
 		return &ActorMetadata{
-			ID: uuid.NewString(),
+			ID: metadataZeroID,
 			RemindersMetadata: ActorRemindersMetadata{
 				partitionsEtag: nil,
 				PartitionCount: 0,
@@ -1225,92 +1275,95 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 		}, nil
 	}
 
-	metadataKey := constructCompositeKey("actors", actorType, "metadata")
-	resp, err := a.store.Get(&state.GetRequest{
-		Key: metadataKey,
-	})
-	if err != nil || len(resp.Data) == 0 {
-		// Metadata field does not exist or failed to read.
-		// We fallback to the default "zero" partition behavior.
+	result := ActorMetadata{
+		ID: metadataZeroID,
+		RemindersMetadata: ActorRemindersMetadata{
+			partitionsEtag: nil,
+			PartitionCount: 0,
+		},
+		Etag: nil,
+	}
+	retryErr := backoff.Retry(func() error {
+		metadataKey := constructCompositeKey("actors", actorType, "metadata")
+		resp, err := a.store.Get(&state.GetRequest{
+			Key: metadataKey,
+			Options: state.GetStateOption{
+				Consistency: state.Strong,
+			},
+		})
+		if err != nil {
+			return err
+		}
 		actorMetadata := ActorMetadata{
-			ID: uuid.NewString(),
+			ID: metadataZeroID,
 			RemindersMetadata: ActorRemindersMetadata{
 				partitionsEtag: nil,
 				PartitionCount: 0,
 			},
 			Etag: nil,
 		}
-
-		// Save metadata field to make sure the error was due to record not found.
-		// If the previous error was due to database, this write will fail due to:
-		//   1. database is still not responding, or
-		//   2. etag does not match since the item already exists.
-		// This write operation is also needed because we want to avoid a race condition
-		// where another sidecar is trying to do the same.
-		etag := ""
-		if resp != nil && resp.ETag != nil {
-			etag = *resp.ETag
+		if len(resp.Data) > 0 {
+			err = json.Unmarshal(resp.Data, &actorMetadata)
+			if err != nil {
+				return fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
+			}
+			actorMetadata.Etag = resp.ETag
 		}
 
-		actorMetadata.Etag = &etag
-		err = a.saveActorTypeMetadata(actorType, &actorMetadata)
-		if err != nil {
-			return nil, err
+		if migrate {
+			err = a.migrateRemindersForActorType(actorType, &actorMetadata)
+			if err != nil {
+				return err
+			}
 		}
 
-		// Needs to read to get the etag
-		resp, err = a.store.Get(&state.GetRequest{
-			Key: metadataKey,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
+		result = actorMetadata
+		return nil
+	}, backoff.NewExponentialBackOff())
 
-	var actorMetadata ActorMetadata
-	err = json.Unmarshal(resp.Data, &actorMetadata)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
+	if retryErr != nil {
+		return nil, retryErr
 	}
-	actorMetadata.Etag = resp.ETag
-	if !migrate {
-		return &actorMetadata, nil
-	}
-
-	return a.migrateRemindersForActorType(actorType, &actorMetadata)
+	return &result, nil
 }
 
-func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMetadata *ActorMetadata) (*ActorMetadata, error) {
+func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMetadata *ActorMetadata) error {
 	if !a.actorTypeMetadataEnabled {
-		return actorMetadata, nil
+		return nil
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount == a.config.RemindersStoragePartitions {
-		return actorMetadata, nil
+		return nil
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount > a.config.RemindersStoragePartitions {
 		log.Warnf("cannot decrease number of partitions for reminders of actor type %s", actorType)
-		return actorMetadata, nil
+		return nil
 	}
 
+	// Nice to have: avoid conflicting migration within the same process.
+	a.remindersMigrationLock.Lock()
+	defer a.remindersMigrationLock.Unlock()
 	log.Warnf("migrating actor metadata record for actor type %s", actorType)
 
 	// Fetch all reminders for actor type.
 	reminderRefs, refreshedActorMetadata, err := a.getRemindersForActorType(actorType, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if refreshedActorMetadata.ID != actorMetadata.ID {
-		return nil, errors.Errorf("could not migrate reminders for actor type %s due to race condition in actor metadata", actorType)
+		return errors.Errorf("could not migrate reminders for actor type %s due to race condition in actor metadata", actorType)
 	}
+
+	log.Infof("migrating %d reminders for actor type %s", len(reminderRefs), actorType)
+	*actorMetadata = *refreshedActorMetadata
 
 	// Recreate as a new metadata identifier.
 	actorMetadata.ID = uuid.NewString()
 	actorMetadata.RemindersMetadata.PartitionCount = a.config.RemindersStoragePartitions
-	actorRemindersPartitions := make([][]*Reminder, actorMetadata.RemindersMetadata.PartitionCount)
+	actorRemindersPartitions := make([][]Reminder, actorMetadata.RemindersMetadata.PartitionCount)
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
-		actorRemindersPartitions[i] = make([]*Reminder, 0)
+		actorRemindersPartitions[i] = make([]Reminder, 0)
 	}
 
 	// Recalculate partition for each reminder.
@@ -1320,37 +1373,25 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	}
 
 	// Save to database.
-	metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
-	transaction := state.TransactionalStateRequest{
-		Metadata: metadata,
-	}
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		partitionID := i + 1
 		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(partitionID))
 		stateValue := actorRemindersPartitions[i]
-		transaction.Operations = append(transaction.Operations, state.TransactionalStateOperation{
-			Operation: state.Upsert,
-			Request: state.SetRequest{
-				Key:      stateKey,
-				Value:    stateValue,
-				Metadata: metadata,
-			},
-		})
-	}
-	err = a.transactionalStore.Multi(&transaction)
-	if err != nil {
-		return nil, err
+		err = a.saveRemindersInPartition(context.TODO(), stateKey, stateValue, nil, actorMetadata.ID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Save new metadata so the new "metadataID" becomes the new de factor referenced list for reminders.
 	err = a.saveActorTypeMetadata(actorType, actorMetadata)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	log.Warnf(
 		"completed actor metadata record migration for actor type %s, new metadata ID = %s",
 		actorType, actorMetadata.ID)
-	return actorMetadata, nil
+	return nil
 }
 
 func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool) ([]actorReminderReference, *ActorMetadata, error) {
@@ -1363,6 +1404,9 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		return nil, nil, fmt.Errorf("could not read actor type metadata: %w", merr)
 	}
 
+	log.Debugf(
+		"starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
+		actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount)
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
 		metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
 		actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{}
@@ -1377,6 +1421,9 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			getRequests = append(getRequests, state.GetRequest{
 				Key:      key,
 				Metadata: metadata,
+				Options: state.GetStateOption{
+					Consistency: state.Strong,
+				},
 			})
 		}
 
@@ -1399,11 +1446,22 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 					resp, ferr := a.store.Get(&getRequest)
 					if ferr != nil {
 						r.Error = ferr.Error()
-					} else if resp != nil {
-						r.Data = jsoniter.RawMessage(resp.Data)
-						r.ETag = resp.ETag
-						r.Metadata = resp.Metadata
+						return
 					}
+
+					if resp == nil {
+						r.Error = "response not found for partition"
+						return
+					}
+
+					if len(resp.Data) == 0 {
+						r.Error = "data not found for reminder partition"
+						return
+					}
+
+					r.Data = jsoniter.RawMessage(resp.Data)
+					r.ETag = resp.ETag
+					r.Metadata = resp.Metadata
 				}
 
 				limiter.Execute(fn, &bulkResponse[i])
@@ -1424,27 +1482,37 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 				if err != nil {
 					return nil, nil, fmt.Errorf("could not parse actor reminders partition %v: %w", resp.Key, err)
 				}
+			} else {
+				return nil, nil, fmt.Errorf("no data found for reminder partition %v: %w", resp.Key, err)
 			}
 
 			for j := range batch {
 				reminders = append(reminders, actorReminderReference{
 					actorMetadataID:           actorMetadata.ID,
 					actorRemindersPartitionID: partition,
-					reminder:                  &batch[j],
+					reminder:                  batch[j],
 				})
 			}
 		}
 
+		log.Debugf(
+			"finished reading reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions: total of %d reminders",
+			actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount, len(reminders))
 		return reminders, actorMetadata, nil
 	}
 
 	key := constructCompositeKey("actors", actorType)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
+		Options: state.GetStateOption{
+			Consistency: state.Strong,
+		},
 	})
 	if err != nil {
 		return nil, nil, err
 	}
+
+	log.Debugf("read reminders from %s without partition: %s", key, string(resp.Data))
 
 	var reminders []Reminder
 	if len(resp.Data) > 0 {
@@ -1457,26 +1525,35 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	reminderRefs := make([]actorReminderReference, len(reminders))
 	for j := range reminders {
 		reminderRefs[j] = actorReminderReference{
-			actorMetadataID:           "",
+			actorMetadataID:           actorMetadata.ID,
 			actorRemindersPartitionID: 0,
-			reminder:                  &reminders[j],
+			reminder:                  reminders[j],
 		}
 	}
 
 	actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{
 		0: resp.ETag,
 	}
+
+	log.Debugf(
+		"finished reading reminders for actor type %s (migrate=%t), with metadata id %s and no partitions: total of %d reminders",
+		actorType, migrate, actorMetadata.ID, len(reminderRefs))
 	return reminderRefs, actorMetadata, nil
 }
 
 func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string, databasePartitionKey string) error {
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
+	log.Debugf("saving %d reminders in %s ...", len(reminders), stateKey)
 	return a.store.Set(&state.SetRequest{
 		Key:      stateKey,
 		Value:    reminders,
 		ETag:     etag,
 		Metadata: map[string]string{metadataPartitionKey: databasePartitionKey},
+		Options: state.SetStateOption{
+			Concurrency: state.FirstWrite,
+			Consistency: state.Strong,
+		},
 	})
 }
 
@@ -1505,7 +1582,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	}
 
 	err := backoff.Retry(func() error {
-		reminders, actorMetadata, err := a.getRemindersForActorType(req.ActorType, true)
+		reminders, actorMetadata, err := a.getRemindersForActorType(req.ActorType, false)
 		if err != nil {
 			return err
 		}
@@ -1531,7 +1608,10 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 
 		// Finally, we must save metadata to get a new eTag.
 		// This avoids a race condition between an update and a repartitioning.
-		a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		err = a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		if err != nil {
+			return err
+		}
 
 		a.remindersLock.Lock()
 		a.reminders[req.ActorType] = reminders
@@ -1553,7 +1633,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
-	reminders, _, err := a.getRemindersForActorType(req.ActorType, true)
+	reminders, _, err := a.getRemindersForActorType(req.ActorType, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1621,12 +1701,12 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	return nil
 }
 
-func parseISO8601Duration(from string) (time.Duration, int, error) {
+func parseISO8601Duration(from string) (int, int, int, time.Duration, int, error) {
 	match := pattern.FindStringSubmatch(from)
 	if match == nil {
-		return 0, 0, errors.Errorf("unsupported ISO8601 duration format %q", from)
+		return 0, 0, 0, 0, 0, errors.Errorf("unsupported ISO8601 duration format %q", from)
 	}
-	duration := time.Duration(0)
+	years, months, days, duration := 0, 0, 0, time.Duration(0)
 	// -1 signifies infinite repetition
 	repetition := -1
 	for i, name := range pattern.SubexpNames() {
@@ -1636,17 +1716,17 @@ func parseISO8601Duration(from string) (time.Duration, int, error) {
 		}
 		val, err := strconv.Atoi(part)
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, 0, 0, 0, err
 		}
 		switch name {
 		case "year":
-			duration += time.Hour * 24 * 365 * time.Duration(val)
+			years = val
 		case "month":
-			duration += time.Hour * 24 * 30 * time.Duration(val)
+			months = val
 		case "week":
-			duration += time.Hour * 24 * 7 * time.Duration(val)
+			days += 7 * val
 		case "day":
-			duration += time.Hour * 24 * time.Duration(val)
+			days += val
 		case "hour":
 			duration += time.Hour * time.Duration(val)
 		case "minute":
@@ -1656,25 +1736,25 @@ func parseISO8601Duration(from string) (time.Duration, int, error) {
 		case "repetition":
 			repetition = val
 		default:
-			return 0, 0, fmt.Errorf("unsupported ISO8601 duration field %s", name)
+			return 0, 0, 0, 0, 0, fmt.Errorf("unsupported ISO8601 duration field %s", name)
 		}
 	}
-	return duration, repetition, nil
+	return years, months, days, duration, repetition, nil
 }
 
 // parseDuration creates time.Duration from either:
 // - ISO8601 duration format,
 // - time.Duration string format.
-func parseDuration(from string) (time.Duration, int, error) {
-	d, r, err := parseISO8601Duration(from)
+func parseDuration(from string) (int, int, int, time.Duration, int, error) {
+	y, m, d, dur, r, err := parseISO8601Duration(from)
 	if err == nil {
-		return d, r, nil
+		return y, m, d, dur, r, nil
 	}
-	d, err = time.ParseDuration(from)
+	dur, err = time.ParseDuration(from)
 	if err == nil {
-		return d, -1, nil
+		return 0, 0, 0, dur, -1, nil
 	}
-	return 0, 0, errors.Errorf("unsupported duration format %q", from)
+	return 0, 0, 0, 0, 0, errors.Errorf("unsupported duration format %q", from)
 }
 
 // parseTime creates time.Duration from either:
@@ -1689,15 +1769,15 @@ func parseTime(from string, offset *time.Time) (time.Time, error) {
 	} else {
 		start = time.Now()
 	}
-	d, r, err := parseISO8601Duration(from)
+	y, m, d, dur, r, err := parseISO8601Duration(from)
 	if err == nil {
 		if r != -1 {
 			return time.Time{}, errors.Errorf("repetitions are not allowed")
 		}
-		return start.Add(d), nil
+		return start.AddDate(y, m, d).Add(dur), nil
 	}
-	if d, err = time.ParseDuration(from); err == nil {
-		return start.Add(d), nil
+	if dur, err = time.ParseDuration(from); err == nil {
+		return start.Add(dur), nil
 	}
 	if t, err := time.Parse(time.RFC3339, from); err == nil {
 		return t, nil
