@@ -23,8 +23,7 @@ jobs:
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
-      DAPR_TEST_STATE_STORE: cosmosdb
-      DAPR_TEST_PUBSUB: servicebus
+      TEST_CLOUD_ENV: azure
       HELMVER: v3.4.0
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
@@ -124,15 +123,13 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: Start setup for Azure resources
-        if: env.TEST_CLUSTER != ''
-        env:
-          DAPR_TEST_RESOURCE_GROUP: dapre2e
-          DAPR_TEST_COSMOSDB_ACCOUNT: dapr-e2e-tests
-          DAPR_TEST_COSMOSDB_DATABASE: dapr-aks-e2e-tests
-          DAPR_TEST_COSMOSDB_COLLECTION: ${{ env.TEST_CLUSTER }}
-          DAPR_TEST_SERVICEBUS_NAMESPACE: ${{ env.TEST_CLUSTER }}
-        run: ./tests/test-infra/start_azure_setup.ps1
+      - name: Setup environment variables for ${{ env.TEST_CLOUD_ENV }}
+        if: env.TEST_CLUSTER != '' && env.TEST_CLOUD_ENV != ''
+        run: ./tests/test-infra/setup_${{ env.TEST_CLOUD_ENV }}_env.ps1
+        shell: pwsh
+      - name: Start setup for cloud resources
+        if: env.TEST_CLUSTER != '' && env.TEST_CLOUD_ENV != ''
+        run: ./tests/test-infra/start_${{ env.TEST_CLOUD_ENV }}_setup.ps1
         shell: pwsh
       - name: Build dapr and its docker image and push them to test registry
         if: env.TEST_CLUSTER != ''
@@ -167,9 +164,9 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           make push-e2e-app-all
-      - name: Verify Azure resources
-        if: env.TEST_CLUSTER != ''
-        run: ./tests/test-infra/verify_azure_setup.ps1
+      - name: Verify cloud resources
+        if: env.TEST_CLUSTER != '' && env.TEST_CLOUD_ENV != ''
+        run: ./tests/test-infra/verify_${{ env.TEST_CLOUD_ENV }}_setup.ps1
         shell: pwsh
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
