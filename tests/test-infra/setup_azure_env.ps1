@@ -14,14 +14,14 @@
 
 function SetEnv($Name, $Value)
 {
-    Write-Host "Writing $Name to env file"
+    Write-Host "Writing $Name=$Value to env file"
     Write-Output "$Name=$Value" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 }
 
 
 SetEnv "DAPR_TEST_STATE_STORE" "cosmosdb"
 # Temporarily use redis until we fix E2E to run with Azure Service Bus.
-SetEnv "DAPR_TEST_PUBSUB" "redis"
+SetEnv "DAPR_TEST_PUBSUB" "servicebus"
 
 SetEnv "DAPR_TEST_RESOURCE_GROUP" "dapre2e"
 SetEnv "DAPR_TEST_COSMOSDB_ACCOUNT" "dapr-e2e-tests"

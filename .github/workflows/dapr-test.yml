@@ -226,3 +226,7 @@ jobs:
       - name: Clean up ${{ env.TEST_CLUSTER }} cluster
         if: always() && env.TEST_CLUSTER != ''
         run: make clean-test-env
+      - name: Tears down cloud resources
+        if: always() && env.TEST_CLUSTER != '' && env.TEST_CLOUD_ENV != ''
+        run: ./tests/test-infra/teardown_${{ env.TEST_CLOUD_ENV }}.ps1
+        shell: pwsh
