@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package runtime
 
@@ -2095,7 +2103,8 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
+		TestSecondPubsubName, "", []byte("Test Message"), "", "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -2144,7 +2153,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		// Generate a new envelope to avoid affecting other tests by modifying shared `envelope`
 		envelopeNoTraceID := pubsub.NewCloudEventsEnvelope(
-			"", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
+			"", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "",
+			[]byte("Test Message"), "", "")
 		delete(envelopeNoTraceID, pubsub.TraceIDField)
 		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
 		assert.Nil(t, err)
@@ -2361,7 +2371,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
+		TestSecondPubsubName, "", []byte("Test Message"), "", "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -2373,7 +2384,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		path:       "topic1",
 	}
 
-	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "")
+	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
+		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "")
 	base64, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -2632,9 +2644,15 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		4,
 		"",
 		4,
-		false)
+		false,
+		time.Second)
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
+}
+
+func TestGracefulShutdown(t *testing.T) {
+	r := NewTestDaprRuntime(modes.StandaloneMode)
+	assert.Equal(t, time.Second, r.runtimeConfig.GracefulShutdownDuration)
 }
 
 func TestMTLS(t *testing.T) {

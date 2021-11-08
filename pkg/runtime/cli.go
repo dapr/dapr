@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package runtime
 
@@ -11,6 +19,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -58,6 +67,7 @@ func FromFlags() (*DaprRuntime, error) {
 	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
 	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in KB to handle sending multi-KB headers. By default 4 KB.")
 	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
+	daprGracefulShutdownSeconds := flag.Int("dapr-graceful-shutdown-seconds", -1, "Graceful shutdown time in seconds.")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -160,6 +170,13 @@ func FromFlags() (*DaprRuntime, error) {
 		readBufferSize = DefaultReadBufferSize
 	}
 
+	var gracefulShutdownDuration time.Duration
+	if *daprGracefulShutdownSeconds == -1 {
+		gracefulShutdownDuration = defaultGracefulShutdownDuration
+	} else {
+		gracefulShutdownDuration = time.Duration(*daprGracefulShutdownSeconds) * time.Second
+	}
+
 	placementAddresses := []string{}
 	if *placementServiceHostAddr != "" {
 		placementAddresses = parsePlacementAddr(*placementServiceHostAddr)
@@ -180,7 +197,7 @@ func FromFlags() (*DaprRuntime, error) {
 		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
 	}
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package

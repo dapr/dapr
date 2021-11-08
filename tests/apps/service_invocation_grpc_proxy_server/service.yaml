@@ -20,7 +20,6 @@ spec:
         dapr.io/enabled: "true"
         dapr.io/app-id: "grpcproxyserver"
         dapr.io/app-port: "50051"
-        dapr.io/app-protocol: "grpc"
     spec:
       containers:
       - name: service-invocation-grpc-proxy-server
