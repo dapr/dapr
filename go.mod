@@ -43,6 +43,7 @@ require (
 	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.8.0
 	go.uber.org/automaxprocs v1.4.0
+	go.uber.org/ratelimit v0.2.0
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
 	google.golang.org/genproto v0.0.0-20201204160425-06b3db808446
@@ -99,6 +100,7 @@ require (
 	github.com/alibaba/sentinel-golang v1.0.3 // indirect
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.7+incompatible // indirect
 	github.com/aliyun/aliyun-tablestore-go-sdk v1.6.0 // indirect
+	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
 	github.com/andybalholm/brotli v1.0.2 // indirect
 	github.com/antlr/antlr4 v0.0.0-20200503195918-621b933c7a7f // indirect
 	github.com/apache/pulsar-client-go v0.6.1-0.20211027182823-171ef578e91a // indirect
