@@ -25,7 +25,6 @@ spec:
         dapr.io/app-id: "loadtestclient"
         dapr.io/log-as-json: "true"
         dapr.io/enable-profiling: "true"
-        dapr.io/enable-placement: "true"
     spec:
       affinity:
         nodeAffinity:
