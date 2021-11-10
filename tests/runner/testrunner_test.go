@@ -94,24 +94,22 @@ func (m *MockPlatform) GetTotalRestarts(appName string) (int, error) {
 func TestStartRunner(t *testing.T) {
 	fakeTestApps := []kube.AppDescription{
 		{
-			AppName:         "fakeapp",
-			DaprEnabled:     true,
-			ImageName:       "fakeapp",
-			RegistryName:    "fakeregistry",
-			Replicas:        1,
-			IngressEnabled:  true,
-			MetricsEnabled:  true,
-			EnablePlacement: true,
+			AppName:        "fakeapp",
+			DaprEnabled:    true,
+			ImageName:      "fakeapp",
+			RegistryName:   "fakeregistry",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
-			AppName:         "fakeapp1",
-			DaprEnabled:     true,
-			ImageName:       "fakeapp",
-			RegistryName:    "fakeregistry",
-			Replicas:        1,
-			IngressEnabled:  true,
-			MetricsEnabled:  true,
-			EnablePlacement: true,
+			AppName:        "fakeapp1",
+			DaprEnabled:    true,
+			ImageName:      "fakeapp",
+			RegistryName:   "fakeregistry",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 

@@ -14,14 +14,13 @@ import (
 
 func TestBuildDeploymentObject(t *testing.T) {
 	testApp := AppDescription{
-		AppName:         "testapp",
-		DaprEnabled:     true,
-		ImageName:       "helloworld",
-		RegistryName:    "dariotest",
-		Replicas:        1,
-		IngressEnabled:  true,
-		MetricsEnabled:  true,
-		EnablePlacement: true,
+		AppName:        "testapp",
+		DaprEnabled:    true,
+		ImageName:      "helloworld",
+		RegistryName:   "dariotest",
+		Replicas:       1,
+		IngressEnabled: true,
+		MetricsEnabled: true,
 	}
 
 	t.Run("Dapr Enabled", func(t *testing.T) {
@@ -49,13 +48,12 @@ func TestBuildDeploymentObject(t *testing.T) {
 
 func TestBuildJobObject(t *testing.T) {
 	testApp := AppDescription{
-		AppName:         "testapp",
-		DaprEnabled:     true,
-		ImageName:       "helloworld",
-		RegistryName:    "dariotest",
-		Replicas:        1,
-		IngressEnabled:  true,
-		EnablePlacement: true,
+		AppName:        "testapp",
+		DaprEnabled:    true,
+		ImageName:      "helloworld",
+		RegistryName:   "dariotest",
+		Replicas:       1,
+		IngressEnabled: true,
 	}
 
 	t.Run("Dapr Enabled", func(t *testing.T) {
@@ -83,14 +81,13 @@ func TestBuildJobObject(t *testing.T) {
 
 func TestBuildServiceObject(t *testing.T) {
 	testApp := AppDescription{
-		AppName:         "testapp",
-		DaprEnabled:     true,
-		ImageName:       "helloworld",
-		RegistryName:    "dariotest",
-		Replicas:        1,
-		IngressEnabled:  true,
-		MetricsEnabled:  true,
-		EnablePlacement: true,
+		AppName:        "testapp",
+		DaprEnabled:    true,
+		ImageName:      "helloworld",
+		RegistryName:   "dariotest",
+		Replicas:       1,
+		IngressEnabled: true,
+		MetricsEnabled: true,
 	}
 
 	t.Run("Ingress is enabled", func(t *testing.T) {

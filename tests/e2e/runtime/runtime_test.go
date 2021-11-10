@@ -78,26 +78,24 @@ func TestMain(m *testing.M) {
 
 	initApps := []kube.AppDescription{
 		{
-			AppName:         runtimeInitAppName,
-			DaprEnabled:     true,
-			ImageName:       "e2e-runtime_init",
-			Replicas:        1,
-			IngressEnabled:  false,
-			MetricsEnabled:  true,
-			AppPort:         -1,
-			EnablePlacement: true,
+			AppName:        runtimeInitAppName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-runtime_init",
+			Replicas:       1,
+			IngressEnabled: false,
+			MetricsEnabled: true,
+			AppPort:        -1,
 		},
 	}
 
 	testApps := []kube.AppDescription{
 		{
-			AppName:         runtimeAppName,
-			DaprEnabled:     true,
-			ImageName:       "e2e-runtime",
-			Replicas:        1,
-			IngressEnabled:  true,
-			MetricsEnabled:  true,
-			EnablePlacement: true,
+			AppName:        runtimeAppName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-runtime",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 

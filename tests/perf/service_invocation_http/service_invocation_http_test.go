@@ -42,7 +42,6 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
-			EnablePlacement:   true,
 		},
 		{
 			AppName:           "tester",
@@ -60,7 +59,6 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
-			EnablePlacement:   true,
 		},
 	}
 

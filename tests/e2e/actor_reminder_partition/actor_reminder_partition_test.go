@@ -91,8 +91,7 @@ func TestMain(m *testing.M) {
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": "testactorreminderpartition",
 			},
-			Config:          "actortypemetadata",
-			EnablePlacement: true,
+			Config: "actortypemetadata",
 		},
 	}
 

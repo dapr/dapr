@@ -167,7 +167,7 @@ func NewActors(
 
 func (a *actorsRuntime) Init() error {
 	if !a.config.EnablePlacement {
-		log.Infof("the placement switch is turned off")
+		log.Infof("actors: placement-server is disabled")
 		return nil
 	}
 

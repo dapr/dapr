@@ -46,14 +46,13 @@ func newFakeKubeClient() *KubeClient {
 
 func testAppDescription() AppDescription {
 	return AppDescription{
-		AppName:         "testapp",
-		DaprEnabled:     true,
-		ImageName:       "helloworld",
-		RegistryName:    "dapriotest",
-		Replicas:        1,
-		IngressEnabled:  true,
-		MetricsEnabled:  true,
-		EnablePlacement: true,
+		AppName:        "testapp",
+		DaprEnabled:    true,
+		ImageName:      "helloworld",
+		RegistryName:   "dapriotest",
+		Replicas:       1,
+		IngressEnabled: true,
+		MetricsEnabled: true,
 	}
 }
 

@@ -52,7 +52,6 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
-			EnablePlacement:   true,
 		},
 		{
 			AppName:           "hellogreendapr",
@@ -65,7 +64,6 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
-			EnablePlacement:   true,
 		},
 		{
 			AppName:           "helloenvtestdapr",
@@ -78,7 +76,6 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
-			EnablePlacement:   true,
 		},
 	}
 

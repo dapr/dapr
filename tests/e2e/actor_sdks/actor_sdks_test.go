@@ -51,7 +51,6 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:   true,
 			AppMemoryLimit:   "500Mi",
 			AppMemoryRequest: "200Mi",
-			EnablePlacement:  true,
 		},
 		{
 			AppName:          "actordotnet",
@@ -62,7 +61,6 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:   true,
 			AppMemoryLimit:   "500Mi",
 			AppMemoryRequest: "200Mi",
-			EnablePlacement:  true,
 		},
 		{
 			AppName:          "actorpython",
@@ -73,7 +71,6 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:   true,
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
-			EnablePlacement:  true,
 		},
 	}
 
@@ -90,7 +87,6 @@ func TestMain(m *testing.M) {
 				MetricsEnabled:   true,
 				AppMemoryLimit:   "200Mi",
 				AppMemoryRequest: "100Mi",
-				EnablePlacement:  true,
 			})
 	}
 

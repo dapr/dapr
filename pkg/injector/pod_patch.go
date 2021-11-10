@@ -362,7 +362,7 @@ func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
 }
 
 func placementEnabled(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprEnablePlacementKey, false)
+	return getBoolAnnotationOrDefault(annotations, daprEnablePlacementKey, true)
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {

@@ -266,7 +266,6 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:   true,
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
-			EnablePlacement:  true,
 		},
 		{
 			AppName:          subscriberAppName,
@@ -278,7 +277,6 @@ func TestMain(m *testing.M) {
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
 			Config:           "pubsubroutingconfig",
-			EnablePlacement:  true,
 		},
 	}
 

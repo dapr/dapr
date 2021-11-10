@@ -376,13 +376,12 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:         appName,
-			DaprEnabled:     true,
-			ImageName:       "e2e-stateapp",
-			Replicas:        1,
-			IngressEnabled:  true,
-			MetricsEnabled:  true,
-			EnablePlacement: true,
+			AppName:        appName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-stateapp",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 

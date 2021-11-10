@@ -374,23 +374,21 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:         publisherAppName,
-			DaprEnabled:     true,
-			ImageName:       "e2e-pubsub-publisher",
-			Replicas:        1,
-			IngressEnabled:  true,
-			MetricsEnabled:  true,
-			EnablePlacement: true,
+			AppName:        publisherAppName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-pubsub-publisher",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
-			AppName:         subscriberAppName,
-			DaprEnabled:     true,
-			ImageName:       "e2e-pubsub-subscriber_grpc",
-			Replicas:        1,
-			IngressEnabled:  true,
-			MetricsEnabled:  true,
-			AppProtocol:     "grpc",
-			EnablePlacement: true,
+			AppName:        subscriberAppName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-pubsub-subscriber_grpc",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
+			AppProtocol:    "grpc",
 		},
 	}
 

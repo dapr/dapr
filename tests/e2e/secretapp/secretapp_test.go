@@ -166,14 +166,13 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			Config:          "secretappconfig",
-			AppName:         appName,
-			DaprEnabled:     true,
-			ImageName:       "e2e-secretapp",
-			Replicas:        1,
-			IngressEnabled:  true,
-			MetricsEnabled:  true,
-			EnablePlacement: true,
+			Config:         "secretappconfig",
+			AppName:        appName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-secretapp",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 

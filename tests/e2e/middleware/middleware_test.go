@@ -48,23 +48,21 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:         appName,
-			DaprEnabled:     true,
-			ImageName:       "e2e-middleware",
-			Replicas:        1,
-			IngressEnabled:  true,
-			MetricsEnabled:  true,
-			Config:          "pipeline",
-			EnablePlacement: true,
+			AppName:        appName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-middleware",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
+			Config:         "pipeline",
 		},
 		{
-			AppName:         "no-middleware",
-			DaprEnabled:     true,
-			ImageName:       "e2e-middleware",
-			Replicas:        1,
-			IngressEnabled:  true,
-			MetricsEnabled:  true,
-			EnablePlacement: true,
+			AppName:        "no-middleware",
+			DaprEnabled:    true,
+			ImageName:      "e2e-middleware",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 
