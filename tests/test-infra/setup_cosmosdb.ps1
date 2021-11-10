@@ -32,6 +32,15 @@ function Setup-CosmosDB(
     Write-Host "Selected Dapr Test CosmosDB database: $DaprTestCosmosDBDatabase"
     Write-Host "Selected Dapr Test CosmosDB collection: $DaprTestCosmosDBCollection"
 
+    # Delete fist since this secret is the criteria to determine if the setup completed.
+    Write-Host "Deleting secret from Kubernetes cluster ..."
+    kubectl delete secret cosmosdb-secret --namespace=$DaprNamespace
+    if($?) {
+      Write-Host "Deleted existing secret."
+    } else {
+      Write-Host "Failed to delete secret, skipping."
+    }
+
     Write-Host "Deleting existing collection ..."
     az cosmosdb sql container delete -a $DaprTestCosmosDBAccount -g $DaprTestResouceGroup -n $DaprTestCosmosDBCollection -d $DaprTestCosmosDBDatabase --yes
     if($?) {
@@ -46,15 +55,6 @@ function Setup-CosmosDB(
       Write-Host "Created collection."
     } else {
       throw "Failed to create collection."
-    }
-
-
-    Write-Host "Deleting secret from Kubernetes cluster ..."
-    kubectl delete secret cosmosdb-secret --namespace=$DaprNamespace
-    if($?) {
-      Write-Host "Deleted existing secret."
-    } else {
-      Write-Host "Failed to delete secret, skipping."
     }
 
     $primaryKey = az cosmosdb keys list --name $DaprTestCosmosDBAccount --resource-group $DaprTestResouceGroup | jq .primaryMasterKey
