@@ -22,7 +22,7 @@ var log = logger.NewLogger("dapr.signals")
 // caught a second time, the program is terminated immediately with exit code 1.
 func Context() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
-	sigCh := make(chan os.Signal)
+	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-sigCh
