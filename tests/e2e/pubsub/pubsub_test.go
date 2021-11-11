@@ -19,6 +19,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+	"go.uber.org/ratelimit"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -35,6 +38,7 @@ const (
 	// This is random so the first message name is not the same every time.
 	randomOffsetMax           = 99
 	numberOfMessagesToPublish = 100
+	publishRateLimitRPS       = 25
 
 	receiveMessageRetries = 10
 
@@ -72,6 +76,25 @@ type cloudEvent struct {
 	Data            string `json:"data"`
 }
 
+// checks is publishing is working.
+func publishHealthCheck(publisherExternalURL string) error {
+	commandBody := publishCommand{
+		ContentType: "application/json",
+		Topic:       "pubsub-healthcheck-topic-http",
+		Protocol:    "http",
+		Data:        "health check",
+	}
+	jsonValue, _ := json.Marshal(commandBody)
+
+	// this is the publish app's endpoint, not a dapr endpoint
+	url := fmt.Sprintf("http://%s/tests/publish", publisherExternalURL)
+
+	return backoff.Retry(func() error {
+		_, err := postSingleMessage(url, jsonValue)
+		return err
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10))
+}
+
 // sends messages to the publisher app.  The publisher app does the actual publish.
 func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string, metadata map[string]string, cloudEventType string) ([]string, error) {
 	var sentMessages []string
@@ -85,6 +108,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 		Protocol:    protocol,
 		Metadata:    metadata,
 	}
+	rateLimit := ratelimit.New(publishRateLimitRPS)
 	//nolint: gosec
 	offset := rand.Intn(randomOffsetMax)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
@@ -111,6 +135,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
 		}
 
+		rateLimit.Take()
 		statusCode, err := postSingleMessage(url, jsonValue)
 		// return on an unsuccessful publish
 		if statusCode != http.StatusNoContent {
@@ -156,7 +181,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 		log.Printf("Publish failed with error=%s, response is nil", err.Error())
 		return http.StatusInternalServerError, err
 	}
-	if statusCode != http.StatusOK {
+	if (statusCode != http.StatusOK) && (statusCode != http.StatusNoContent) {
 		err = fmt.Errorf("publish failed with StatusCode=%d", statusCode)
 	}
 	return statusCode, err
@@ -397,6 +422,9 @@ func TestPubSubHTTP(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	err = publishHealthCheck(publisherExternalURL)
 	require.NoError(t, err)
 
 	protocol := "http"
