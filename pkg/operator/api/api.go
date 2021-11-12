@@ -252,11 +252,8 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 				return nil
 			}
 			go updateComponentFunc(c)
-
 		}
 	}
-
-	return nil
 }
 
 // chanGracefully control channel to close gracefully in multi-goroutines.
