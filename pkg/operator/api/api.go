@@ -247,8 +247,12 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		select {
 		case <-srv.Context().Done():
 			return nil
-		case c := <-updateChan:
+		case c, ok := <-updateChan:
+			if !ok {
+				return nil
+			}
 			go updateComponentFunc(c)
+
 		}
 	}
 
