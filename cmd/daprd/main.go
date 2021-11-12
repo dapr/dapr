@@ -41,7 +41,6 @@ import (
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
-	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/couchbase"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
@@ -224,9 +223,6 @@ func main() {
 			}),
 			state_loader.New("hazelcast", func() state.Store {
 				return hazelcast.NewHazelcastStore(logContrib)
-			}),
-			state_loader.New("cloudstate.crdt", func() state.Store {
-				return cloudstate.NewCRDT(logContrib)
 			}),
 			state_loader.New("couchbase", func() state.Store {
 				return couchbase.NewCouchbaseStateStore(logContrib)
