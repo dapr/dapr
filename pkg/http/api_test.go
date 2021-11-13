@@ -1219,7 +1219,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 		mockActors := new(daprt.MockActors)
 
-		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
 
 		testAPI.actor = mockActors
 

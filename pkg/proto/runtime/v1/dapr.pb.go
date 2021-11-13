@@ -1814,7 +1814,7 @@ func (x *UnregisterActorReminderRequest) GetName() string {
 	return ""
 }
 
-// RenameActorReminderRequest is the message to unregister an actor reminder.
+// RenameActorReminderRequest is the message to rename an actor reminder.
 type RenameActorReminderRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -2062,7 +2062,7 @@ func (x *ExecuteActorStateTransactionRequest) GetOperations() []*TransactionalAc
 	return nil
 }
 
-// TransactionalAcorStateOperation is the message to execute a specified operation with a key-value pair.
+// TransactionalActorStateOperation is the message to execute a specified operation with a key-value pair.
 type TransactionalActorStateOperation struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
