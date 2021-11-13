@@ -198,7 +198,7 @@ test-deps:
 	# In golang >=1.16 there is a new way to do this with `go install gotest.tools/gotestsum@latest`
 	# But this doesn't work with <=1.15.
 	# (see: https://golang.org/ref/mod#go-install)
-	command -v gotestsum || GO111MODULE=off go install gotest.tools/gotestsum
+	command -v gotestsum || GO111MODULE=off go install gotest.tools/gotestsum@latest
 
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
