@@ -46,8 +46,6 @@ jobs:
             target_arch: arm64
           - os: macOS-latest
             target_arch: arm
-          - os: macOS-latest
-            target_arch: arm64
     steps:
       - name: Set up Go ${{ env.GOVER }}
         uses: actions/setup-go@v2
@@ -203,6 +201,11 @@ jobs:
         uses: actions/download-artifact@master
         with:
           name: dapr_darwin_amd64
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: download artifacts - dapr_darwin_arm64
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_darwin_arm64
           path: ${{ env.ARTIFACT_DIR }}
       - name: download artifacts - dapr_grafana_dashboards
         uses: actions/download-artifact@master

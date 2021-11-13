@@ -77,7 +77,7 @@ type AccessControlListOperationAction struct {
 type ConfigurationSpec struct {
 	HTTPPipelineSpec   PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
 	TracingSpec        TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MTLSSpec           MTLSSpec           `json:"mtls,omitempty"`
+	MTLSSpec           MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
 	MetricSpec         MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
 	Secrets            SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 	AccessControlSpec  AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
@@ -176,9 +176,9 @@ type NameResolutionSpec struct {
 }
 
 type MTLSSpec struct {
-	Enabled          bool   `json:"enabled"`
-	WorkloadCertTTL  string `json:"workloadCertTTL"`
-	AllowedClockSkew string `json:"allowedClockSkew"`
+	Enabled          bool   `json:"enabled" yaml:"enabled"`
+	WorkloadCertTTL  string `json:"workloadCertTTL" yaml:"workloadCertTTL"`
+	AllowedClockSkew string `json:"allowedClockSkew" yaml:"allowedClockSkew"`
 }
 
 // SpiffeID represents the separated fields in a spiffe id.
