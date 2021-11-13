@@ -917,9 +917,12 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminder
 	return remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
 }
 
-func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderReference, reminder *Reminder) ([]Reminder, actorReminderReference, string, *string) {
-	newReminderRef, _ := m.createReminderReference(reminder)
-
+func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderReference, reminder *Reminder) ([]Reminder,
+	actorReminderReference, string, *string, error) {
+	newReminderRef, err := m.createReminderReference(reminder)
+	if err != nil {
+		return nil, newReminderRef, "", nil, err
+	}
 	var remindersInPartitionAfterInsertion []Reminder
 	for _, reminderRef := range reminderRefs {
 		// Only the items in the partition to be updated.
@@ -931,7 +934,7 @@ func (m *ActorMetadata) insertReminderInPartition(reminderRefs []actorReminderRe
 	remindersInPartitionAfterInsertion = append(remindersInPartitionAfterInsertion, *reminder)
 
 	stateKey := m.calculateRemindersStateKey(newReminderRef.reminder.ActorType, newReminderRef.actorRemindersPartitionID)
-	return remindersInPartitionAfterInsertion, newReminderRef, stateKey, m.calculateEtag(newReminderRef.actorRemindersPartitionID)
+	return remindersInPartitionAfterInsertion, newReminderRef, stateKey, m.calculateEtag(newReminderRef.actorRemindersPartitionID), nil
 }
 
 func (m *ActorMetadata) calculateDatabasePartitionKey(stateKey string) string {
@@ -1035,7 +1038,11 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		}
 
 		// First we add it to the partition list.
-		remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, &reminder)
+		remindersInPartition, reminderRef, stateKey, etag, errForInsertReminder := actorMetadata.insertReminderInPartition(reminders, &reminder)
+
+		if errForInsertReminder != nil {
+			return errForInsertReminder
+		}
 
 		// Get the database partition key (needed for CosmosDB)
 		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
