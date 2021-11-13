@@ -559,6 +559,7 @@ func TestRenameReminder(t *testing.T) {
 		ActorID:   actorID,
 		Name:      "reminder0",
 	})
+	assert.Nil(t, err)
 	assert.Nil(t, oldReminder)
 
 	// verify that the reminder retrieved with the new name already exists
@@ -567,6 +568,7 @@ func TestRenameReminder(t *testing.T) {
 		ActorID:   actorID,
 		Name:      "reminder1",
 	})
+	assert.Nil(t, err)
 	assert.NotNil(t, newReminder)
 	assert.Equal(t, "1s", newReminder.Period)
 	assert.Equal(t, "1s", newReminder.DueTime)
