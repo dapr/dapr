@@ -144,6 +144,7 @@ func NewAPI(
 		transactionalStateStores: transactionalStateStores,
 		secretStores:             secretStores,
 		configurationStores:      configurationStores,
+		configurationSubscribe:   make(map[string]bool, 0),
 		secretsConfiguration:     secretsConfiguration,
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		tracingSpec:              tracingSpec,
