@@ -346,3 +346,13 @@ func TestFeatureSpecForStandAlone(t *testing.T) {
 		})
 	}
 }
+
+func TestMTLSSpecForStandAlone(t *testing.T) {
+	t.Run("test mtls spec config", func(t *testing.T) {
+		config, _, err := LoadStandaloneConfiguration("./testdata/mtls_config.yaml")
+		assert.NoError(t, err)
+		assert.True(t, config.Spec.MTLSSpec.Enabled)
+		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
+		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
+	})
+}
