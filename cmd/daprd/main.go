@@ -153,11 +153,7 @@ var (
 
 func main() {
 	// set GOMAXPROCS
-	undo, err := maxprocs.Set()
-	defer undo()
-	if err != nil {
-		log.Fatal("failed to set GOMAXPROCS: %v", err)
-	}
+	_, _ = maxprocs.Set()
 
 	logger.DaprVersion = version.Version()
 	rt, err := runtime.FromFlags()
