@@ -144,7 +144,7 @@ func NewAPI(
 		transactionalStateStores: transactionalStateStores,
 		secretStores:             secretStores,
 		configurationStores:      configurationStores,
-		configurationSubscribe:   make(map[string]bool, 0),
+		configurationSubscribe:   make(map[string]bool),
 		secretsConfiguration:     secretsConfiguration,
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		tracingSpec:              tracingSpec,
@@ -1247,10 +1247,6 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
-	if h.api.appChannel == nil {
-		return status.Error(codes.Internal, messages.ErrChannelNotFound)
-	}
-
 	items := make([]*commonv1pb.ConfigurationItem, 0)
 	for _, v := range e.Items {
 		items = append(items, &commonv1pb.ConfigurationItem{
