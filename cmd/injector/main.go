@@ -80,7 +80,7 @@ func init() {
 
 	flag.Parse()
 
-	if err = utils.SetEnvVariables(map[string]string{
+	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: *kubeconfig,
 	}); err != nil {
 		log.Fatalf("error set env failed:  %s", err.Error())
