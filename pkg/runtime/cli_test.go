@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/dapr/dapr/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -46,7 +47,7 @@ func TestSetEnvVariables(t *testing.T) {
 			"ABC_HOST": "456",
 		}
 
-		err := setEnvVariables(variables)
+		err := utils.SetEnvVariables(variables)
 
 		assert.NoError(t, err)
 

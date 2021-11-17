@@ -200,7 +200,7 @@ func FromFlags() (*DaprRuntime, error) {
 		env.DaprProfilePort: *profilePort,
 	}
 
-	if err = setEnvVariables(variables); err != nil {
+	if err = utils.SetEnvVariables(variables); err != nil {
 		return nil, err
 	}
 
@@ -245,16 +245,6 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Fatalf(err.Error())
 	}
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList), nil
-}
-
-func setEnvVariables(variables map[string]string) error {
-	for key, value := range variables {
-		err := os.Setenv(key, value)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func parsePlacementAddr(val string) []string {

@@ -6,8 +6,7 @@
 package utils
 
 import (
-	"flag"
-	"path/filepath"
+	"os"
 	"strings"
 	"time"
 
@@ -15,12 +14,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
 )
 
 var (
-	clientSet  *kubernetes.Clientset
-	kubeConfig *rest.Config
+	clientSet     *kubernetes.Clientset
+	kubeConfig    *rest.Config
+	KubeConfigVar = "KUBE_CONFIG"
 )
 
 func initKubeConfig() {
@@ -38,18 +37,10 @@ func GetConfig() *rest.Config {
 	if kubeConfig != nil {
 		return kubeConfig
 	}
-
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
-
+	kubeconfig := os.Getenv(KubeConfigVar)
 	conf, err := rest.InClusterConfig()
 	if err != nil {
-		conf, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
+		conf, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 		if err != nil {
 			panic(err)
 		}
@@ -103,4 +94,15 @@ func StringSliceContains(needle string, haystack []string) bool {
 		}
 	}
 	return false
+}
+
+// SetEnvVariables set variables to environment.
+func SetEnvVariables(variables map[string]string) error {
+	for key, value := range variables {
+		err := os.Setenv(key, value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
