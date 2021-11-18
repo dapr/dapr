@@ -24,7 +24,8 @@ FORCE_INMEM ?= true
 LATEST_RELEASE ?=
 
 PROTOC ?=protoc
-
+# name of protoc-gen-go when protoc-gen-go --version is run.
+PROTOC_GEN_GO_NAME = "protoc-gen-go"
 ifdef REL_VERSION
 	DAPR_VERSION := $(REL_VERSION)
 else
@@ -58,8 +59,11 @@ else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
 else
    TARGET_OS_LOCAL ?= windows
+   PROTOC_GEN_GO_NAME := "protoc-gen-go.exe"
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
+
+PROTOC_GEN_GO_NAME+= "v1.25.0"
 
 # Default docker container and e2e test targst.
 TARGET_OS ?= linux
@@ -299,7 +303,7 @@ check-proto-version: ## Checking the version of proto related tools
 	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc 1.1.0" \
 	|| { echo "please use protoc-gen-go-grpc 1.1.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
-	@test "$(shell protoc-gen-go --version 2>&1)" = "protoc-gen-go v1.25.0" \
+	@test "$(shell protoc-gen-go --version 2>&1)" = "$(PROTOC_GEN_GO_NAME)" \
 	|| { echo "please use protoc-gen-go v1.25.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
