@@ -55,7 +55,7 @@ func TestParseEnvString(t *testing.T) {
 			expEnv:    []corev1.EnvVar{},
 		},
 		{
-			testName:  "valid environment string.",
+			testName:  "common valid environment string.",
 			envStr:    "ENV1=value1,ENV2=value2, ENV3=value3",
 			expEnvLen: 3,
 			expEnv: []corev1.EnvVar{
@@ -70,6 +70,21 @@ func TestParseEnvString(t *testing.T) {
 				{
 					Name:  "ENV3",
 					Value: "value3",
+				},
+			},
+		},
+		{
+			testName:  "special valid environment string.",
+			envStr:    `HTTP_PROXY=http://myproxy.com, NO_PROXY="localhost,127.0.0.1,.amazonaws.com"`,
+			expEnvLen: 2,
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "HTTP_PROXY",
+					Value: "http://myproxy.com",
+				},
+				{
+					Name:  "NO_PROXY",
+					Value: `"localhost,127.0.0.1,.amazonaws.com"`,
 				},
 			},
 		},
