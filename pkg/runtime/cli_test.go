@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/utils"
+
 	"github.com/stretchr/testify/assert"
 )
 

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dapr/kit/logger"
 	"k8s.io/client-go/util/homedir"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
@@ -21,6 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.injector")
