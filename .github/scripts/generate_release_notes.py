@@ -160,16 +160,20 @@ for issueOrPR in issuesOrPRs:
         for c in a: 
             contributors.add("@" + str(c))
     repo = issueOrPR.repository
-    match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
+    if repo == "docs":
+        # Do not add this to the list of changes (but add to contributors).
+        continue
     hasNote = False
-    if match:
-        note = match.group(1).strip()
-        if note:
-            if note.upper() not in ["NOT APPLICABLE", "N/A"]:
-                for text_substitution in text_substitutions:
-                    note = text_substitution[0].sub(text_substitution[1], note)
-                changes.append((repo, issueOrPR, note, contributors, url))
-            hasNote = True
+    if not (issueOrPR.body is None):
+        match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
+        if match:
+            note = match.group(1).strip()
+            if note:
+                if note.upper() not in ["NOT APPLICABLE", "N/A"]:
+                    for text_substitution in text_substitutions:
+                        note = text_substitution[0].sub(text_substitution[1], note)
+                    changes.append((repo, issueOrPR, note, contributors, url))
+                hasNote = True
     if not hasNote:
         # Issue or PR has no release note.
         # Auto-generate a release note as fallback.
@@ -186,7 +190,7 @@ lastSubtitle=""
 breakingChangeLines=[]
 lastBreakingChangeSubtitle=""
 
-# generate changes for relase notes (only issues/pr that have release notes)
+# generate changes for release notes (only issues/pr that have release notes)
 for change in sorted(changes, key=lambda c: (get_repo_priority(c[0].name), c[0].stargazers_count * -1, c[0].id, c[1].id)):
     breakingChange='breaking-change' in [l.name for l in change[1].labels]
     subtitle=get_repo_subtitle(change[0].name)
