@@ -28,6 +28,9 @@ func (s *Subscription) ConvertTo(dstRaw conversion.Hub) error {
 		return errors.New("expected to to convert to *v1alpha1.Subscription")
 	}
 
+	// Copy scopes
+	dst.Scopes = s.Scopes
+
 	// ObjectMeta
 	dst.ObjectMeta = s.ObjectMeta
 
@@ -51,6 +54,9 @@ func (s *Subscription) ConvertFrom(srcRaw conversion.Hub) error {
 	if !ok {
 		return errors.New("expected to to convert from *v1alpha1.Subscription")
 	}
+
+	// Copy scopes
+	s.Scopes = src.Scopes
 
 	// ObjectMeta
 	s.ObjectMeta = src.ObjectMeta
