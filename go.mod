@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/dapr/components-contrib v1.5.0
+	github.com/dapr/components-contrib v1.5.0-rc.1.0.20211118233040-dfe52cf88fe9
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
@@ -73,15 +73,20 @@ require (
 	github.com/Azure/azure-amqp-common-go/v3 v3.1.0 // indirect
 	github.com/Azure/azure-event-hubs-go/v3 v3.3.10 // indirect
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
-	github.com/Azure/azure-sdk-for-go v48.2.0+incompatible // indirect
+	github.com/Azure/azure-sdk-for-go v57.2.0+incompatible // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.20.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.12.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v0.8.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.3.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.1.0 // indirect
 	github.com/Azure/azure-service-bus-go v0.10.10 // indirect
 	github.com/Azure/azure-storage-blob-go v0.10.0 // indirect
 	github.com/Azure/azure-storage-queue-go v0.0.0-20191125232315-636801874cdd // indirect
 	github.com/Azure/go-amqp v0.13.1 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
-	github.com/Azure/go-autorest/autorest v0.11.12 // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.9.5 // indirect
-	github.com/Azure/go-autorest/autorest/azure/auth v0.4.2 // indirect
+	github.com/Azure/go-autorest/autorest v0.11.21 // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.9.16 // indirect
+	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8 // indirect
 	github.com/Azure/go-autorest/autorest/azure/cli v0.4.2 // indirect
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/autorest/to v0.4.0 // indirect
@@ -140,7 +145,6 @@ require (
 	github.com/evanphx/json-patch v4.9.0+incompatible // indirect
 	github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5 // indirect
 	github.com/fatih/color v1.10.0 // indirect
-	github.com/form3tech-oss/jwt-go v3.2.2+incompatible // indirect
 	github.com/go-logr/logr v0.3.0 // indirect
 	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
@@ -156,6 +160,7 @@ require (
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/gofrs/uuid v3.2.0+incompatible // indirect
 	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
+	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/mock v1.6.0 // indirect
@@ -221,6 +226,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
+	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
@@ -229,7 +235,6 @@ require (
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rs/zerolog v1.18.0 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
-	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20210217112953-d4a072536008 // indirect
 	github.com/sendgrid/rest v2.6.3+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.5.0+incompatible // indirect
