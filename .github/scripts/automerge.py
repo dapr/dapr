@@ -14,9 +14,9 @@ g = Github(os.getenv("GITHUB_TOKEN"))
 repo = g.get_repo(os.getenv("GITHUB_REPOSITORY"))
 maintainers = [m.strip() for m in os.getenv("MAINTAINERS").split(',')]
 
-def fetch_pulls(mergeable_state):
+def fetch_pulls(mergeable_state, label = 'automerge'):
     return [pr for pr in repo.get_pulls(state='open', sort='created') \
-        if pr.mergeable_state == mergeable_state and 'automerge' in [l.name for l in pr.labels]]
+        if (not pr.draft) and pr.mergeable_state == mergeable_state and (not label or label in [l.name for l in pr.labels])]
 
 def is_approved(pr):
     approvers = [r.user.login for r in pr.get_reviews() if r.state == 'APPROVED' and r.user.login in maintainers]
@@ -40,17 +40,15 @@ for pr in pulls:
 if len(pulls) > 0 and not merged:
     print("No PR was automerged.")
 
-# Now, update all PRs that are behind.
-pulls = fetch_pulls('behind')
+# Now, update all PRs that are behind, regardless of automerge label.
+pulls = fetch_pulls('behind', '')
 print(f"Detected {len(pulls)} open pull requests in {repo.name} to be updated.")
 for pr in pulls:
-    if is_approved(pr):
-        # Update all PRs since there is no guarantee they will all pass.
-        print(f"Updating PR {pr.html_url}")
-        try:
-            pr.update_branch()
-        except:
-            print(f"Failed to update PR {pr.html_url}")
+    print(f"Updating PR {pr.html_url}")
+    try:
+        pr.update_branch()
+    except:
+        print(f"Failed to update PR {pr.html_url}")
 
 pulls = fetch_pulls('dirty')
 print(f"Detected {len(pulls)} open pull requests in {repo.name} to be automerged but are in dirty state.")
