@@ -1945,14 +1945,14 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
 	registry := http_middleware_loader.NewRegistry()
-	registry.Register(http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
+	registry.Register(http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 		return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 			return func(ctx *fasthttp.RequestCtx) {
 				body := string(ctx.PostBody())
 				ctx.Request.SetBody([]byte(strings.ToUpper(body)))
 				h(ctx)
 			}
-		}
+		}, nil
 	}))
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
