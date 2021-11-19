@@ -114,11 +114,18 @@ func TestStringSliceContains(t *testing.T) {
 }
 
 func TestSetEnvVariables(t *testing.T) {
-	t.Run("set environment variables", func(t *testing.T) {
+	t.Run("set environment variables success", func(t *testing.T) {
 		err := SetEnvVariables(map[string]string{
 			"testKey": "testValue",
 		})
 		assert.Nil(t, err)
 		assert.Equal(t, "testValue", os.Getenv("testKey"))
+	})
+	t.Run("set environment variables failed", func(t *testing.T) {
+		err := SetEnvVariables(map[string]string{
+			"": "testValue",
+		})
+		assert.NotNil(t, err)
+		assert.NotEqual(t, "testValue", os.Getenv(""))
 	})
 }
