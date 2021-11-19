@@ -74,11 +74,6 @@ require (
 	github.com/Azure/azure-event-hubs-go/v3 v3.3.10 // indirect
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
 	github.com/Azure/azure-sdk-for-go v57.2.0+incompatible // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.20.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.12.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v0.8.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.3.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.1.0 // indirect
 	github.com/Azure/azure-service-bus-go v0.10.10 // indirect
 	github.com/Azure/azure-storage-blob-go v0.10.0 // indirect
 	github.com/Azure/azure-storage-queue-go v0.0.0-20191125232315-636801874cdd // indirect
@@ -226,7 +221,6 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
-	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
@@ -302,8 +296,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.0.2 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
-
-replace github.com/dapr/components-contrib => ../components-contrib
 
 replace (
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
