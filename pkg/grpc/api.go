@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -66,6 +67,7 @@ type API interface {
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
 	GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
 	SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error
+	UnSubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnSubscribeConfigurationRequest) (*runtimev1pb.UnSubscribeConfigurationResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
 	QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
@@ -98,7 +100,7 @@ type api struct {
 	secretStores               map[string]secretstores.SecretStore
 	secretsConfiguration       map[string]config.SecretsScope
 	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]bool
+	configurationSubscribe     map[string]chan struct{}
 	configurationSubscribeLock sync.Mutex
 	pubsubAdapter              runtime_pubsub.Adapter
 	id                         string
@@ -144,6 +146,7 @@ func NewAPI(
 		transactionalStateStores: transactionalStateStores,
 		secretStores:             secretStores,
 		configurationStores:      configurationStores,
+		configurationSubscribe:   make(map[string]chan struct{}),
 		secretsConfiguration:     secretsConfiguration,
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		tracingSpec:              tracingSpec,
@@ -1276,17 +1279,12 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		return err
 	}
 
-	subscribeKeys := request.Keys
-	unsubscribedKeys := make([]string, 0)
-	a.configurationSubscribeLock.Lock()
-	for _, k := range subscribeKeys {
-		if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
-			unsubscribedKeys = append(unsubscribedKeys, k)
-		}
-	}
+	sort.Slice(request.Keys, func(i, j int) bool {
+		return request.Keys[i] < request.Keys[j]
+	})
 
 	req := &configuration.SubscribeRequest{
-		Keys:     unsubscribedKeys,
+		Keys:     request.Keys,
 		Metadata: request.GetMetadata(),
 	}
 
@@ -1296,12 +1294,42 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		serverStream: configurationServer,
 	}
 
-	// TODO(@laurence) deal with failed subscription and retires
-	_ = store.Subscribe(context.Background(), req, handler.updateEventHandler)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	for _, k := range unsubscribedKeys {
-		a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)] = true
+	// TODO(@laurence) deal with failed subscription and retires
+	_ = store.Subscribe(ctx, req, handler.updateEventHandler)
+	stop := make(chan struct{})
+	a.configurationSubscribeLock.Lock()
+	a.configurationSubscribe[getConfigSubscribeUniqueKey(request.GetStoreName(), request.GetKeys())] = stop
+	a.configurationSubscribeLock.Unlock()
+	<-stop
+	return nil
+}
+
+func (a *api) UnSubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnSubscribeConfigurationRequest) (*runtimev1pb.UnSubscribeConfigurationResponse, error) {
+	sort.Slice(request.Keys, func(i, j int) bool {
+		return request.Keys[i] < request.Keys[j]
+	})
+
+	a.configurationSubscribeLock.Lock()
+	a.configurationSubscribeLock.Unlock()
+
+	subscribeStreamUniqueKey := getConfigSubscribeUniqueKey(request.GetStoreName(), request.GetKeys())
+	if stop, ok := a.configurationSubscribe[subscribeStreamUniqueKey]; ok {
+		close(stop)
+		delete(a.configurationSubscribe, subscribeStreamUniqueKey)
+		return &runtimev1pb.UnSubscribeConfigurationResponse{
+			Ok: true,
+		}, nil
 	}
 	a.configurationSubscribeLock.Unlock()
-	return nil
+	return &runtimev1pb.UnSubscribeConfigurationResponse{
+		Ok:      false,
+		Message: fmt.Sprintf("Subscribtion with store name %s, and keys = %s not found.", request.GetStoreName(), request.GetKeys()),
+	}, nil
+}
+
+func getConfigSubscribeUniqueKey(storeName string, keys []string) string {
+	return fmt.Sprintf("%s||%s", storeName, keys)
 }
