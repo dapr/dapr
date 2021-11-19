@@ -7,6 +7,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -109,5 +110,15 @@ func TestStringSliceContains(t *testing.T) {
 	t.Run("didn't find a item", func(t *testing.T) {
 		assert.False(t, StringSliceContains("not-in-item", []string{}))
 		assert.False(t, StringSliceContains("not-in-item", nil))
+	})
+}
+
+func TestSetEnvVariables(t *testing.T) {
+	t.Run("set environment variables", func(t *testing.T) {
+		err := SetEnvVariables(map[string]string{
+			"testKey": "testValue",
+		})
+		assert.Nil(t, err)
+		assert.Equal(t, "testValue", os.Getenv("testKey"))
 	})
 }
