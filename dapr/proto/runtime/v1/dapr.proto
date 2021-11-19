@@ -82,7 +82,7 @@ service Dapr {
   rpc SubscribeConfigurationAlpha1(SubscribeConfigurationRequest) returns (stream SubscribeConfigurationResponse) {}
 
   // UnSubscribeConfiguration unsubscribe the subscription of configuration
-  rpc UnSubscribeConfigurationAlpha1(SubscribeConfigurationRequest) returns (UnSubscribeConfigurationResponse) {}
+  rpc UnSubscribeConfigurationAlpha1(UnSubscribeConfigurationRequest) returns (UnSubscribeConfigurationResponse) {}
 
   // Gets metadata of the sidecar
   rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}

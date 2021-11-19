@@ -63,7 +63,7 @@ type DaprClient interface {
 	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
 	SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error)
 	// UnSubscribeConfiguration unsubscribe the subscription of configuration
-	UnSubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnSubscribeConfigurationResponse, error)
+	UnSubscribeConfigurationAlpha1(ctx context.Context, in *UnSubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnSubscribeConfigurationResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -292,7 +292,7 @@ func (x *daprSubscribeConfigurationAlpha1Client) Recv() (*SubscribeConfiguration
 	return m, nil
 }
 
-func (c *daprClient) UnSubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnSubscribeConfigurationResponse, error) {
+func (c *daprClient) UnSubscribeConfigurationAlpha1(ctx context.Context, in *UnSubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnSubscribeConfigurationResponse, error) {
 	out := new(UnSubscribeConfigurationResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnSubscribeConfigurationAlpha1", in, out, opts...)
 	if err != nil {
@@ -375,7 +375,7 @@ type DaprServer interface {
 	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
 	SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error
 	// UnSubscribeConfiguration unsubscribe the subscription of configuration
-	UnSubscribeConfigurationAlpha1(context.Context, *SubscribeConfigurationRequest) (*UnSubscribeConfigurationResponse, error)
+	UnSubscribeConfigurationAlpha1(context.Context, *UnSubscribeConfigurationRequest) (*UnSubscribeConfigurationResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -451,7 +451,7 @@ func (UnimplementedDaprServer) GetConfigurationAlpha1(context.Context, *GetConfi
 func (UnimplementedDaprServer) SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeConfigurationAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) UnSubscribeConfigurationAlpha1(context.Context, *SubscribeConfigurationRequest) (*UnSubscribeConfigurationResponse, error) {
+func (UnimplementedDaprServer) UnSubscribeConfigurationAlpha1(context.Context, *UnSubscribeConfigurationRequest) (*UnSubscribeConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnSubscribeConfigurationAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error) {
@@ -857,7 +857,7 @@ func (x *daprSubscribeConfigurationAlpha1Server) Send(m *SubscribeConfigurationR
 }
 
 func _Dapr_UnSubscribeConfigurationAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SubscribeConfigurationRequest)
+	in := new(UnSubscribeConfigurationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -869,7 +869,7 @@ func _Dapr_UnSubscribeConfigurationAlpha1_Handler(srv interface{}, ctx context.C
 		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnSubscribeConfigurationAlpha1",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).UnSubscribeConfigurationAlpha1(ctx, req.(*SubscribeConfigurationRequest))
+		return srv.(DaprServer).UnSubscribeConfigurationAlpha1(ctx, req.(*UnSubscribeConfigurationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
