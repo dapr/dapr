@@ -40,11 +40,11 @@ func TestRegistry(t *testing.T) {
 		metadata := h.Metadata{}
 
 		// act
-		testRegistry.Register(http.New(middlewareName, func(h.Metadata) http_middleware.Middleware {
-			return mock
+		testRegistry.Register(http.New(middlewareName, func(h.Metadata) (http_middleware.Middleware, error) {
+			return mock, nil
 		}))
-		testRegistry.Register(http.New(middlewareNameV2, func(h.Metadata) http_middleware.Middleware {
-			return mockV2
+		testRegistry.Register(http.New(middlewareNameV2, func(h.Metadata) (http_middleware.Middleware, error) {
+			return mockV2, nil
 		}))
 
 		// Function values are not comparable.
