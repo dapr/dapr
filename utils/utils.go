@@ -40,10 +40,9 @@ func GetConfig() *rest.Config {
 	if kubeConfig != nil {
 		return kubeConfig
 	}
-	kubeconfig := os.Getenv(KubeConfigVar)
 	conf, err := rest.InClusterConfig()
 	if err != nil {
-		conf, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		conf, err = clientcmd.BuildConfigFromFlags("", os.Getenv(KubeConfigVar))
 		if err != nil {
 			panic(err)
 		}
