@@ -1309,7 +1309,7 @@ func (a *api) UnSubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	})
 
 	a.configurationSubscribeLock.Lock()
-	a.configurationSubscribeLock.Unlock()
+	defer a.configurationSubscribeLock.Unlock()
 
 	subscribeStreamUniqueKey := getConfigSubscribeUniqueKey(request.GetStoreName(), request.GetKeys())
 	if stop, ok := a.configurationSubscribe[subscribeStreamUniqueKey]; ok {
@@ -1319,10 +1319,9 @@ func (a *api) UnSubscribeConfigurationAlpha1(ctx context.Context, request *runti
 			Ok: true,
 		}, nil
 	}
-	a.configurationSubscribeLock.Unlock()
 	return &runtimev1pb.UnSubscribeConfigurationResponse{
 		Ok:      false,
-		Message: fmt.Sprintf("Subscribtion with store name %s, and keys = %s not found.", request.GetStoreName(), request.GetKeys()),
+		Message: fmt.Sprintf("Subscription with store name %s, and keys = %s not found.", request.GetStoreName(), request.GetKeys()),
 	}, nil
 }
 
