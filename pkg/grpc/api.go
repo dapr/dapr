@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/dapr/dapr/pkg/cache"
+
 	"github.com/dapr/components-contrib/configuration"
 
 	"github.com/golang/protobuf/ptypes/empty"
@@ -56,6 +58,7 @@ import (
 
 const (
 	daprHTTPStatusHeader = "dapr-http-status"
+	refreshCache         = "refresh_cache"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -737,6 +740,19 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		Name:     in.Key,
 		Metadata: in.Metadata,
 	}
+	response := &runtimev1pb.GetSecretResponse{}
+
+	refresh := false
+	if in.Metadata != nil {
+		refresh, _ = strconv.ParseBool(in.Metadata[refreshCache])
+	}
+	if cache.EnabledForSecretStore(secretStoreName) && !refresh {
+		cacheData, err := cache.GetValue(secretStoreName, req)
+		if err == nil {
+			response.Data = cacheData
+			return response, nil
+		}
+	}
 
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
 	if err != nil {
@@ -745,9 +761,11 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
-	response := &runtimev1pb.GetSecretResponse{}
 	if getResponse.Data != nil {
 		response.Data = getResponse.Data
+	}
+	if cache.EnabledForSecretStore(secretStoreName) {
+		cache.SetValueAsync(secretStoreName, req, getResponse.Data)
 	}
 	return response, nil
 }
@@ -782,6 +800,10 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	for key, v := range getResponse.Data {
 		if a.isSecretAllowed(secretStoreName, key) {
 			filteredSecrets[key] = v
+			// since we don't know the key, so for bulk get only cache the allowed items
+			if cache.EnabledForSecretStore(secretStoreName) {
+				cache.SetValueAsync(secretStoreName, secretstores.GetSecretRequest{Name: key, Metadata: req.Metadata}, v)
+			}
 		} else {
 			apiServerLogger.Debugf(messages.ErrPermissionDenied, key, in.StoreName)
 		}

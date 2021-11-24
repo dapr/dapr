@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dapr/dapr/pkg/cache"
+
 	"github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
@@ -115,6 +117,7 @@ const (
 	traceparentHeader    = "traceparent"
 	tracestateHeader     = "tracestate"
 	daprAppID            = "dapr-app-id"
+	refreshCache         = "refresh_cache"
 )
 
 // NewAPI returns a new API.
@@ -707,6 +710,15 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
+	if refresh, _ := strconv.ParseBool(metadata[refreshCache]); cache.EnabledForSecretStore(secretStoreName) && !refresh {
+		cacheData, err := cache.GetValue(secretStoreName, req)
+		if err == nil {
+			respBytes, _ := a.json.Marshal(cacheData)
+			respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
+			return
+		}
+	}
+
 	resp, err := store.GetSecret(req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
@@ -719,6 +731,9 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	if resp.Data == nil {
 		respond(reqCtx, withEmpty())
 		return
+	}
+	if cache.EnabledForSecretStore(secretStoreName) {
+		cache.SetValueAsync(secretStoreName, req, resp.Data)
 	}
 
 	respBytes, _ := a.json.Marshal(resp.Data)
@@ -756,6 +771,10 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 	for key, v := range resp.Data {
 		if a.isSecretAllowed(secretStoreName, key) {
 			filteredSecrets[key] = v
+			// since we don't know the key, so for bulk get only cache the allowed items
+			if cache.EnabledForSecretStore(secretStoreName) {
+				cache.SetValueAsync(secretStoreName, secretstores.GetSecretRequest{Name: key, Metadata: req.Metadata}, v)
+			}
 		} else {
 			log.Debugf(messages.ErrPermissionDenied, key, secretStoreName)
 		}

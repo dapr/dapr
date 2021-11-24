@@ -28,6 +28,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/dapr/pkg/cache"
+
 	"github.com/cenkalti/backoff"
 
 	"github.com/dapr/components-contrib/configuration"
@@ -2136,8 +2138,15 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 		return err
 	}
 
+	properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+	err = cache.InitSecretStoreCaches(c.ObjectMeta.Name, properties)
+	if err != nil {
+		log.Warnf("failed to init cache for secret store %s: %s", c.ObjectMeta.Name, err)
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
+		return err
+	}
 	err = secretStore.Init(secretstores.Metadata{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+		Properties: properties,
 	})
 	if err != nil {
 		log.Warnf("failed to init secret store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
