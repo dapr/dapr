@@ -711,8 +711,8 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if refresh, _ := strconv.ParseBool(metadata[refreshCache]); cache.EnabledForSecretStore(secretStoreName) && !refresh {
-		cacheData, err := cache.GetValue(secretStoreName, req)
-		if err == nil {
+		cacheData, cacheErr := cache.GetValue(secretStoreName, req)
+		if cacheErr == nil {
 			respBytes, _ := a.json.Marshal(cacheData)
 			respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
 			return

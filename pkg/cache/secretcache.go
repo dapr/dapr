@@ -87,17 +87,17 @@ func GetValue(storeName string, req secretstores.GetSecretRequest) (res map[stri
 	return
 }
 
-// SetValueSync set a cache value synchronously
+// SetValueSync set a cache value synchronously.
 func SetValueSync(storeName string, req secretstores.GetSecretRequest, value map[string]string) error {
 	return SetValue(storeName, req, value, true)
 }
 
-// SetValueAsync  set a cache value asynchronously for better performance
+// SetValueAsync  set a cache value asynchronously for better performance.
 func SetValueAsync(storeName string, req secretstores.GetSecretRequest, value map[string]string) error {
 	return SetValue(storeName, req, value, false)
 }
 
-// SetValue set secret key value to cache
+// SetValue set secret key value to cache.
 func SetValue(storeName string, req secretstores.GetSecretRequest, value map[string]string, sync bool) error {
 	key := getCacheKey(req)
 	// empty value will not cached
