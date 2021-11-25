@@ -1367,6 +1367,8 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
+	// Populate W3C tracestate to cloudevent envelope
+	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
 	data := body
 
@@ -1377,6 +1379,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			DataContentType: contentType,
 			Data:            body,
 			TraceID:         corID,
+			TraceState:      traceState,
 			Pubsub:          pubsubName,
 		})
 		if err != nil {
