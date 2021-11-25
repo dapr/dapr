@@ -1270,7 +1270,6 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error {
 	store, err := a.getConfigurationStore(request.StoreName)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrConfigurationSubscribe, request.Keys, request.StoreName, err))
 		apiServerLogger.Debug(err)
 		return err
 	}
@@ -1294,7 +1293,12 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	defer cancel()
 
 	// TODO(@laurence) deal with failed subscription and retires
-	_ = store.Subscribe(ctx, req, handler.updateEventHandler)
+	err = store.Subscribe(ctx, req, handler.updateEventHandler)
+	if err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return err
+	}
 	stop := make(chan struct{})
 	a.configurationSubscribeLock.Lock()
 	a.configurationSubscribe[getConfigSubscribeUniqueKey(request.GetStoreName(), request.GetKeys())] = stop

@@ -30,11 +30,10 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/kit/logger"
-
 	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
@@ -48,6 +47,7 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -1032,23 +1032,51 @@ func TestGetState(t *testing.T) {
 }
 
 func TestGetConfiguration(t *testing.T) {
-	fakeStore := &daprt.MockStateStore{}
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == goodKey
-	})).Return(
-		&state.GetResponse{
-			Data: []byte("test-data"),
-			ETag: ptr.String("test-etag"),
+	fakeConfigurationStore := &daprt.MockConfigurationStore{}
+	fakeConfigurationStore.On("Get",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *configuration.GetRequest) bool {
+			return req.Keys[0] == "good-key"
+		})).Return(
+		&configuration.GetResponse{
+			Items: []*configuration.Item{
+				{
+					Key:   "good-key",
+					Value: "test-data",
+				},
+			},
 		}, nil)
-	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == errorKey
-	})).Return(
+	fakeConfigurationStore.On("Get",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *configuration.GetRequest) bool {
+			return req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" && req.Keys[2] == "good-key3"
+		})).Return(
+		&configuration.GetResponse{
+			Items: []*configuration.Item{
+				{
+					Key:   "good-key1",
+					Value: "test-data",
+				},
+				{
+					Key:   "good-key2",
+					Value: "test-data",
+				},
+				{
+					Key:   "good-key3",
+					Value: "test-data",
+				},
+			},
+		}, nil)
+	fakeConfigurationStore.On("Get",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *configuration.GetRequest) bool {
+			return req.Keys[0] == "error-key"
+		})).Return(
 		nil,
 		errors.New("failed to get state with error-key"))
-
 	fakeAPI := &api{
-		id:          "fakeAPI",
-		stateStores: map[string]state.Store{"store1": fakeStore},
+		id:                  "fakeAPI",
+		configurationStores: map[string]configuration.Store{"store1": fakeConfigurationStore},
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1062,56 +1090,306 @@ func TestGetConfiguration(t *testing.T) {
 	testCases := []struct {
 		testName         string
 		storeName        string
-		key              string
+		keys             []string
 		errorExcepted    bool
-		expectedResponse *runtimev1pb.GetStateResponse
+		expectedResponse *runtimev1pb.GetConfigurationResponse
 		expectedError    codes.Code
 	}{
 		{
 			testName:      "get state",
 			storeName:     "store1",
-			key:           "good-key",
+			keys:          []string{"good-key"},
 			errorExcepted: false,
-			expectedResponse: &runtimev1pb.GetStateResponse{
-				Data: []byte("test-data"),
-				Etag: "test-etag",
+			expectedResponse: &runtimev1pb.GetConfigurationResponse{
+				Items: []*commonv1pb.ConfigurationItem{
+					{
+						Key:   "good-key",
+						Value: "test-data",
+					},
+				},
+			},
+			expectedError: codes.OK,
+		},
+		{
+			testName:      "get state",
+			storeName:     "store1",
+			keys:          []string{"good-key1", "good-key2", "good-key3"},
+			errorExcepted: false,
+			expectedResponse: &runtimev1pb.GetConfigurationResponse{
+				Items: []*commonv1pb.ConfigurationItem{
+					{
+						Key:   "good-key1",
+						Value: "test-data",
+					},
+					{
+						Key:   "good-key2",
+						Value: "test-data",
+					},
+					{
+						Key:   "good-key3",
+						Value: "test-data",
+					},
+				},
 			},
 			expectedError: codes.OK,
 		},
 		{
 			testName:         "get store with non-existing store",
 			storeName:        "no-store",
-			key:              "good-key",
+			keys:             []string{"good-key"},
 			errorExcepted:    true,
-			expectedResponse: &runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetConfigurationResponse{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
 			testName:         "get store with key but error occurs",
 			storeName:        "store1",
-			key:              "error-key",
+			keys:             []string{"error-key"},
 			errorExcepted:    true,
-			expectedResponse: &runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetConfigurationResponse{},
 			expectedError:    codes.Internal,
 		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
-			req := &runtimev1pb.GetStateRequest{
+			req := &runtimev1pb.GetConfigurationRequest{
 				StoreName: tt.storeName,
-				Key:       tt.key,
+				Keys:      tt.keys,
 			}
 
-			resp, err := client.GetState(context.Background(), req)
+			resp, err := client.GetConfigurationAlpha1(context.Background(), req)
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
-				assert.Equal(t, resp.Data, tt.expectedResponse.Data, "Expected response Data to be same")
-				assert.Equal(t, resp.Etag, tt.expectedResponse.Etag, "Expected response Etag to be same")
+				assert.Equal(t, resp.Items, tt.expectedResponse.Items, "Expected response items to be same")
 			} else {
 				assert.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
+		})
+	}
+}
+
+func TestSubscribeConfiguration(t *testing.T) {
+	fakeConfigurationStore := &daprt.MockConfigurationStore{}
+	fakeConfigurationStore.On("Subscribe",
+		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
+			return req.Keys[0] == "good-key"
+		}),
+		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
+			_ = f(context.Background(), &configuration.UpdateEvent{
+				Items: []*configuration.Item{
+					{
+						Key:   "good-key",
+						Value: "test-data",
+					},
+				},
+			})
+			return true
+		})).Return(nil)
+	fakeConfigurationStore.On("Subscribe",
+		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
+			return req.Keys[0] == "error-key"
+		}),
+		mock.AnythingOfType("configuration.UpdateHandler")).Return(errors.New("failed to get state with error-key"))
+
+	fakeAPI := &api{
+		configurationSubscribe: make(map[string]chan struct{}),
+		id:                     "fakeAPI",
+		configurationStores:    map[string]configuration.Store{"store1": fakeConfigurationStore},
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	testCases := []struct {
+		testName         string
+		storeName        string
+		keys             []string
+		errorExcepted    bool
+		expectedResponse []*commonv1pb.ConfigurationItem
+		expectedError    codes.Code
+	}{
+		{
+			testName:      "get state with single key",
+			storeName:     "store1",
+			keys:          []string{"good-key"},
+			errorExcepted: false,
+			expectedResponse: []*commonv1pb.ConfigurationItem{
+				{
+					Key:   "good-key",
+					Value: "test-data",
+				},
+			},
+			expectedError: codes.OK,
+		},
+		{
+			testName:         "get store with non-existing store",
+			storeName:        "no-store",
+			keys:             []string{"good-key"},
+			errorExcepted:    true,
+			expectedResponse: []*commonv1pb.ConfigurationItem{},
+			expectedError:    codes.InvalidArgument,
+		},
+		{
+			testName:         "get store with key but error occurs",
+			storeName:        "store1",
+			keys:             []string{"error-key"},
+			errorExcepted:    true,
+			expectedResponse: []*commonv1pb.ConfigurationItem{},
+			expectedError:    codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.SubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
+
+			resp, _ := client.SubscribeConfigurationAlpha1(context.Background(), req)
+			if !tt.errorExcepted {
+				rsp, err := resp.Recv()
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, rsp.Items, tt.expectedResponse, "Expected response items to be same")
+			} else {
+				retry := 3
+				count := 0
+				_, err := resp.Recv()
+				for {
+					if err != nil {
+						break
+					}
+					if count > retry {
+						break
+					}
+					count++
+					time.Sleep(time.Millisecond * 10)
+					_, err = resp.Recv()
+				}
+				assert.Equal(t, tt.expectedError, status.Code(err))
+				assert.Error(t, err, "Expected error")
+			}
+		})
+	}
+}
+
+func TestUnSubscribeConfiguration(t *testing.T) {
+	fakeConfigurationStore := &daprt.MockConfigurationStore{}
+	stop := make(chan struct{})
+	defer close(stop)
+	fakeConfigurationStore.On("Subscribe",
+		mock.AnythingOfType("*context.cancelCtx"),
+		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
+			return req.Keys[0] == "good-key"
+		}),
+		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
+			go func() {
+				for {
+					select {
+					case <-stop:
+						return
+					default:
+					}
+					if err := f(context.Background(), &configuration.UpdateEvent{
+						Items: []*configuration.Item{
+							{
+								Key:   "good-key",
+								Value: "test-data",
+							},
+						},
+					}); err != nil {
+						return
+					}
+					time.Sleep(time.Millisecond * 10)
+				}
+			}()
+			return true
+		})).Return(nil)
+	fakeAPI := &api{
+		configurationSubscribe: make(map[string]chan struct{}),
+		id:                     "fakeAPI",
+		configurationStores:    map[string]configuration.Store{"store1": fakeConfigurationStore},
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	testCases := []struct {
+		testName         string
+		storeName        string
+		keys             []string
+		expectedResponse []*commonv1pb.ConfigurationItem
+		expectedError    codes.Code
+	}{
+		{
+			testName:  "Test unsubscribe",
+			storeName: "store1",
+			keys:      []string{"good-key"},
+			expectedResponse: []*commonv1pb.ConfigurationItem{
+				{
+					Key:   "good-key",
+					Value: "test-data",
+				},
+			},
+			expectedError: codes.OK,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.SubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
+
+			resp, err := client.SubscribeConfigurationAlpha1(context.Background(), req)
+			assert.Nil(t, err, "Error should be nil")
+			retry := 3
+			count := 0
+			for {
+				if count > retry {
+					break
+				}
+				count++
+				time.Sleep(time.Millisecond * 10)
+				rsp, recvErr := resp.Recv()
+				assert.NotNil(t, rsp)
+				assert.Nil(t, recvErr)
+				assert.Equal(t, tt.expectedResponse, rsp.Items)
+			}
+			assert.Nil(t, err, "Error should be nil")
+			_, err = client.UnSubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnSubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			})
+			assert.Nil(t, err, "Error should be nil")
+			count = 0
+			for {
+				if err != nil && err.Error() == "EOF" {
+					break
+				}
+				if count > retry {
+					break
+				}
+				count++
+				time.Sleep(time.Millisecond * 10)
+				_, err = resp.Recv()
+			}
+			assert.Error(t, err, "Unsubscribed channle should returns EOF")
 		})
 	}
 }
