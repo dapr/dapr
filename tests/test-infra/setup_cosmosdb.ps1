@@ -16,7 +16,8 @@ function Setup-CosmosDB(
   [string] $DaprTestResouceGroup,
   [string] $DaprTestCosmosDBAccount,
   [string] $DaprTestCosmosDBDatabase,
-  [string] $DaprTestCosmosDBCollection
+  [string] $DaprTestCosmosDBCollection,
+  [string] $DaprTestCosmosDBQueryCollection
 ) {
   begin{
     if([String]::IsNullOrWhiteSpace($DaprNamespace)){$DaprNamespace="default"}
@@ -24,6 +25,7 @@ function Setup-CosmosDB(
     if([String]::IsNullOrWhiteSpace($DaprTestCosmosDBAccount)){$DaprTestCosmosDBAccount="dapr-e2e-tests"}
     if([String]::IsNullOrWhiteSpace($DaprTestCosmosDBDatabase)){$DaprTestCosmosDBDatabase="dapr-aks-e2e-tests"}
     if([String]::IsNullOrWhiteSpace($DaprTestCosmosDBCollection)){$DaprTestCosmosDBCollection="dapr-aks-e2e-state"}
+    if([String]::IsNullOrWhiteSpace($DaprTestCosmosDBQueryCollection)){$DaprTestCosmosDBQueryCollection="dapr-aks-e2e-state-query"}
   }
   process{
     Write-Host "Selected Kubernetes namespace: $DaprNamespace"
@@ -31,6 +33,7 @@ function Setup-CosmosDB(
     Write-Host "Selected Dapr Test CosmosDB account: $DaprTestCosmosDBAccount"
     Write-Host "Selected Dapr Test CosmosDB database: $DaprTestCosmosDBDatabase"
     Write-Host "Selected Dapr Test CosmosDB collection: $DaprTestCosmosDBCollection"
+    Write-Host "Selected Dapr Test CosmosDB query collection: $DaprTestCosmosDBQueryCollection"
 
     # Delete fist since this secret is the criteria to determine if the setup completed.
     Write-Host "Deleting secret from Kubernetes cluster ..."
@@ -57,10 +60,27 @@ function Setup-CosmosDB(
       throw "Failed to create collection."
     }
 
+    Write-Host "Deleting existing query collection ..."
+    az cosmosdb sql container delete -a $DaprTestCosmosDBAccount -g $DaprTestResouceGroup -n $DaprTestCosmosDBQueryCollection -d $DaprTestCosmosDBDatabase --yes
+    if($?) {
+      Write-Host "Deleted existing query collection."
+    } else {
+      Write-Host "Failed to delete query collection, skipping."
+    }
+
+    Write-Host "Creating query collection ..."
+    az cosmosdb sql container create -g $DaprTestResouceGroup -a $DaprTestCosmosDBAccount -d $DaprTestCosmosDBDatabase -n $DaprTestCosmosDBQueryCollection --partition-key-path '/partitionKey'
+    if($?) {
+      Write-Host "Created query collection."
+    } else {
+      throw "Failed to create query collection."
+    }
+
     $primaryKey = az cosmosdb keys list --name $DaprTestCosmosDBAccount --resource-group $DaprTestResouceGroup | jq .primaryMasterKey
     kubectl create secret generic cosmosdb-secret --namespace=$DaprNamespace `
       --from-literal=url=https://$DaprTestCosmosDBAccount.documents.azure.com:443/ `
       --from-literal=collection=$DaprTestCosmosDBCollection `
+      --from-literal=queryCollection=$DaprTestCosmosDBQueryCollection `
       --from-literal=primaryMasterKey=$primaryKey
     if(!$?) {
       throw "Could not create cosmosdb-secret."
@@ -71,4 +91,4 @@ function Setup-CosmosDB(
   end{}
 }
 
-Setup-CosmosDB $env:DAPR_NAMESPACE $env:DAPR_TEST_RESOURCE_GROUP $env:DAPR_TEST_COSMOSDB_ACCOUNT $env:DAPR_TEST_COSMOSDB_DATABASE $env:DAPR_TEST_COSMOSDB_COLLECTION
+Setup-CosmosDB $env:DAPR_NAMESPACE $env:DAPR_TEST_RESOURCE_GROUP $env:DAPR_TEST_COSMOSDB_ACCOUNT $env:DAPR_TEST_COSMOSDB_DATABASE $env:DAPR_TEST_COSMOSDB_COLLECTION $env:DAPR_TEST_COSMOSDB_QUERY_COLLECTION
