@@ -222,7 +222,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 	for c := range updateChan {
 		go func(c *componentsapi.Component) {
-			err := processComponentSecrets(c, in.Namespace, a.Client)
+			err := processComponentSecrets(c, c.Namespace, a.Client)
 			if err != nil {
 				log.Warnf("error processing component %s secrets: %s", c.Name, err)
 				return
