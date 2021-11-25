@@ -1,0 +1,16 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: querystatestore
+spec:
+  type: state.mongodb
+  version: v1
+  initTimeout: 1m
+  metadata:
+  - name: host
+    value: dapr-mongodb.dapr-tests.svc.cluster.local:27017
