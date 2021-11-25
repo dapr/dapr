@@ -20,6 +20,7 @@ import (
 	global_config "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -179,8 +180,60 @@ func FromFlags() (*DaprRuntime, error) {
 	if len(daprAPIListenAddressList) == 0 {
 		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
 	}
+
+	var (
+		certChain    *credentials.CertChain
+		globalConfig *global_config.Configuration
+		configErr    error
+		namespace    string
+	)
+
+	if *config != "" {
+		switch modes.DaprMode(*mode) {
+		case modes.KubernetesMode:
+			certChain, err = security.GetCertChain()
+			if err != nil {
+				return nil, err
+			}
+			client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, certChain)
+			if clientErr != nil {
+				return nil, clientErr
+			}
+			defer conn.Close()
+			namespace = os.Getenv("NAMESPACE")
+			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, client)
+		case modes.StandaloneMode:
+			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
+		}
+	}
+
+	if configErr != nil {
+		log.Fatalf("error loading configuration: %s", configErr)
+	}
+	if globalConfig == nil {
+		log.Info("loading default configuration")
+		globalConfig = global_config.LoadDefaultConfiguration()
+	}
+
+	// if enableMTLS or sentryAddress is not set from flag, then set it from config
+	if !*enableMTLS {
+		*enableMTLS = globalConfig.Spec.MTLSSpec.Enabled
+	}
+	if *sentryAddress == "" {
+		*sentryAddress = globalConfig.Spec.MTLSSpec.SentryAddress
+	}
+
+	// if tls is enabled but certChain hasn't load, then load it
+	if *enableMTLS && certChain == nil {
+		certChain, err = security.GetCertChain()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
 		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody)
+	runtimeConfig.CertChain = certChain
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
@@ -204,42 +257,7 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	var globalConfig *global_config.Configuration
-	var configErr error
-
-	if *enableMTLS || *mode == string(modes.KubernetesMode) {
-		runtimeConfig.CertChain, err = security.GetCertChain()
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	var accessControlList *global_config.AccessControlList
-	var namespace string
-
-	if *config != "" {
-		switch modes.DaprMode(*mode) {
-		case modes.KubernetesMode:
-			client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
-			if clientErr != nil {
-				return nil, clientErr
-			}
-			defer conn.Close()
-			namespace = os.Getenv("NAMESPACE")
-			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, client)
-		case modes.StandaloneMode:
-			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
-		}
-	}
-
-	if configErr != nil {
-		log.Fatalf("error loading configuration: %s", configErr)
-	}
-	if globalConfig == nil {
-		log.Info("loading default configuration")
-		globalConfig = global_config.LoadDefaultConfiguration()
-	}
-
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())

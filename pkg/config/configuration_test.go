@@ -354,5 +354,6 @@ func TestMTLSSpecForStandAlone(t *testing.T) {
 		assert.True(t, config.Spec.MTLSSpec.Enabled)
 		assert.Equal(t, "25s", config.Spec.MTLSSpec.WorkloadCertTTL)
 		assert.Equal(t, "1h", config.Spec.MTLSSpec.AllowedClockSkew)
+		assert.Equal(t, "localhost:50001", config.Spec.MTLSSpec.SentryAddress)
 	})
 }
