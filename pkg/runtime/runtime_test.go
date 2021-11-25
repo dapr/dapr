@@ -2095,7 +2095,8 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
+		TestSecondPubsubName, "", []byte("Test Message"), "", "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -2144,7 +2145,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		// Generate a new envelope to avoid affecting other tests by modifying shared `envelope`
 		envelopeNoTraceID := pubsub.NewCloudEventsEnvelope(
-			"", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
+			"", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "",
+			[]byte("Test Message"), "", "")
 		delete(envelopeNoTraceID, pubsub.TraceIDField)
 		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
 		assert.Nil(t, err)
@@ -2361,7 +2363,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
+		TestSecondPubsubName, "", []byte("Test Message"), "", "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -2373,7 +2376,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		path:       "topic1",
 	}
 
-	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "")
+	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
+		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "")
 	base64, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
