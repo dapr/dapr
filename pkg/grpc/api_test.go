@@ -830,6 +830,7 @@ func TestSecretCache(t *testing.T) {
 	}
 
 	// test cache
+	daprt.GetSecretCount = 0
 	resp, err := client.GetSecret(context.Background(), req)
 	assert.NoError(t, err, "Expected no error")
 	assert.Equal(t, resp.Data["good-key"], "life is good", "Expected responses to be same")
