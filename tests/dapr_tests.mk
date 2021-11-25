@@ -56,6 +56,10 @@ ifeq ($(DAPR_TEST_STATE_STORE),)
 DAPR_TEST_STATE_STORE=redis
 endif
 
+ifeq ($(DAPR_TEST_QUERY_STATE_STORE),)
+DAPR_TEST_QUERY_STATE_STORE=mongodb
+endif
+
 ifeq ($(DAPR_TEST_PUBSUB),)
 DAPR_TEST_PUBSUB=redis
 endif
@@ -149,7 +153,7 @@ delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 	kubectl delete namespace $(DAPR_TEST_SECONDARY_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -249,8 +253,16 @@ setup-test-env-kafka:
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) 
 
+# install mongodb to the cluster without password
+setup-test-env-mongodb:
+	$(HELM) install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
+
+# delete mongodb from cluster
+delete-test-env-mongodb:
+	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
+
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb
 
 save-dapr-control-plane-k8s-logs:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -270,6 +282,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
