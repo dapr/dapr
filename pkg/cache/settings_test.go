@@ -71,6 +71,15 @@ func TestSettings_NewCache(t *testing.T) {
 	assert.NotNil(t, cache.Setting)
 	assert.NotNil(t, cache.Cache)
 	assert.NotNil(t, cache.aead)
+
+	metadata = map[string]string{"cacheEnable": "false"}
+	s = DefaultSettings()
+	err = s.Decode(metadata)
+	assert.Nil(t, err)
+
+	cache, err = s.NewCache()
+	assert.Equal(t, ErrDisable, err)
+	assert.Nil(t, cache)
 }
 
 func Test_randomKey(t *testing.T) {

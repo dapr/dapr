@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/cache"
+
 	"github.com/agrea/ptr"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
@@ -792,6 +794,73 @@ func TestGetSecret(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSecretCache(t *testing.T) {
+	storeName1 := "store1"
+	storeName2 := "store2"
+	fakeStore := daprt.FakeSecretStore{}
+	fakeStores := map[string]secretstores.SecretStore{
+		storeName1: fakeStore,
+		storeName2: fakeStore,
+	}
+	secretsConfiguration := map[string]config.SecretsScope{}
+	err := cache.InitSecretStoreCaches(storeName1, map[string]string{"cacheEnable": "true"})
+	assert.Nil(t, err)
+
+	// Setup Dapr API server
+	fakeAPI := &api{
+		id:                   "fakeAPI",
+		secretStores:         fakeStores,
+		secretsConfiguration: secretsConfiguration,
+	}
+	// Run test server
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+	// Create gRPC test client
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+	// act
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	req := &runtimev1pb.GetSecretRequest{
+		StoreName: storeName1,
+		Key:       "good-key",
+	}
+
+	// test cache
+	resp, err := client.GetSecret(context.Background(), req)
+	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, resp.Data["good-key"], "life is good", "Expected responses to be same")
+	assert.Equal(t, 1, daprt.GetSecretCount, "Expected get secret req count added")
+	resp, err = client.GetSecret(context.Background(), req)
+	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, resp.Data["good-key"], "life is good", "Expected responses to be same")
+	assert.Equal(t, 1, daprt.GetSecretCount, "Expected get count not add when enable cache")
+
+	// test refresh cache
+	req.Metadata = map[string]string{refreshCache: "true"}
+	resp, err = client.GetSecret(context.Background(), req)
+	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, resp.Data["good-key"], "life is good", "Expected responses to be same")
+	assert.Equal(t, 2, daprt.GetSecretCount, "Expected get count add when refresh cache is true")
+
+	// test no cache
+	req = &runtimev1pb.GetSecretRequest{
+		StoreName: storeName2,
+		Key:       "good-key",
+	}
+	daprt.GetSecretCount = 0
+	resp, err = client.GetSecret(context.Background(), req)
+	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, resp.Data["good-key"], "life is good", "Expected responses to be same")
+	assert.Equal(t, 1, daprt.GetSecretCount, "Expected get secret req count added")
+
+	resp, err = client.GetSecret(context.Background(), req)
+	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, resp.Data["good-key"], "life is good", "Expected responses to be same")
+	assert.Equal(t, 2, daprt.GetSecretCount, "Expected get secret req count added")
 }
 
 func TestGetBulkSecret(t *testing.T) {

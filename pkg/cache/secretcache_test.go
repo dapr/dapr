@@ -6,6 +6,7 @@
 package cache
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -21,12 +22,20 @@ const (
 
 var testGetReq = secretstores.GetSecretRequest{Name: "key"}
 
-func TestSecretStoreCaches(t *testing.T) {
+func TestEnableSecretStoreCaches(t *testing.T) {
 	metadata := map[string]string{"cacheEnable": "true", "cacheTTL": "1m", "cacheMemoryLimit": "10000"}
 	err := InitSecretStoreCaches(testStoreName, metadata)
 	assert.Nil(t, err)
 	enable := EnabledForSecretStore(testStoreName)
 	assert.True(t, enable)
+}
+
+func TestDisableSecretStoreCaches(t *testing.T) {
+	metadata := map[string]string{"cacheEnable": "false"}
+	err := InitSecretStoreCaches(testStoreName, metadata)
+	assert.Nil(t, err)
+	enable := EnabledForSecretStore(testStoreName)
+	assert.False(t, enable)
 }
 
 func TestValue(t *testing.T) {
@@ -35,6 +44,14 @@ func TestValue(t *testing.T) {
 	metadata := map[string]string{"cacheEnable": "true", "cacheTTL": "1m", "cacheMemoryLimit": "10000"}
 	err := InitSecretStoreCaches(testStoreName, metadata)
 	assert.Nil(t, err)
+
+	t.Run("test set empty", func(t *testing.T) {
+		err := SetValueSync(testStoreName, testGetReq, nil)
+		assert.Nil(t, err)
+		value, err := GetValue(testStoreName, testGetReq)
+		assert.Equal(t, ErrNotFound, err)
+		assert.Empty(t, value)
+	})
 
 	t.Run("test set sync and get", func(t *testing.T) {
 		err := SetValueSync(testStoreName, testGetReq, testValue1)
@@ -118,6 +135,14 @@ func TestMemoryLimit(t *testing.T) {
 	// after set the second item the first item is supposed to be evicted
 	_, err = GetValue(testStoreName, testGetReq)
 	assert.Equal(t, err, ErrNotFound)
+}
+
+func TestMaxMemoryLimit(t *testing.T) {
+	limit := strconv.FormatInt(MaxMemoryLimit*10, 10)
+	metadata := map[string]string{"cacheEnable": "true", "cacheMemoryLimit": limit}
+	err := InitSecretStoreCaches(testStoreName, metadata)
+	assert.Nil(t, err)
+	assert.Equal(t, MaxMemoryLimit, int(secretStoreCaches[testStoreName].Setting.MemoryLimit))
 }
 
 func TestEncryptAndDecrypt(t *testing.T) {

@@ -19,9 +19,12 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 )
 
+var GetSecretCount int
+
 type FakeSecretStore struct{}
 
 func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	GetSecretCount++
 	if req.Name == "good-key" {
 		return secretstores.GetSecretResponse{
 			Data: map[string]string{"good-key": "life is good"},
