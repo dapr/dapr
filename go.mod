@@ -8,9 +8,11 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
+	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/dapr/components-contrib v1.5.0-rc.1.0.20211129190835-a49f4283fd75
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
+	github.com/dgraph-io/ristretto v0.1.0
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
@@ -59,11 +61,6 @@ require (
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.20.0
 	sigs.k8s.io/controller-runtime v0.7.0
-)
-
-require (
-	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/dgraph-io/ristretto v0.1.0
 )
 
 require (
