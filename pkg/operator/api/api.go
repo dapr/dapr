@@ -221,6 +221,10 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	chWrapper := initChanGracefully(updateChan)
 
 	for c := range updateChan {
+		if c.Namespace != in.Namespace {
+			continue
+		}
+
 		go func(c *componentsapi.Component) {
 			err := processComponentSecrets(c, c.Namespace, a.Client)
 			if err != nil {
