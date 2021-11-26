@@ -18,6 +18,7 @@ import (
 
 const (
 	testStoreName = "secretStore"
+	disabledStoreName = "secretStoreDisabled"
 )
 
 var testGetReq = secretstores.GetSecretRequest{Name: "key"}
@@ -32,9 +33,14 @@ func TestEnableSecretStoreCaches(t *testing.T) {
 
 func TestDisableSecretStoreCaches(t *testing.T) {
 	metadata := map[string]string{"cacheEnable": "false"}
-	err := InitSecretStoreCaches(testStoreName, metadata)
+	err := InitSecretStoreCaches(disabledStoreName, metadata)
 	assert.Nil(t, err)
-	enable := EnabledForSecretStore(testStoreName)
+	enable := EnabledForSecretStore(disabledStoreName)
+	assert.False(t, enable)
+
+	err = InitSecretStoreCaches(disabledStoreName, nil)
+	assert.Nil(t, err)
+	enable = EnabledForSecretStore(disabledStoreName)
 	assert.False(t, enable)
 }
 
