@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	testStoreName = "secretStore"
+	testStoreName     = "secretStore"
 	disabledStoreName = "secretStoreDisabled"
 )
 
