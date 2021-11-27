@@ -15,7 +15,6 @@ import (
 	_ "go.uber.org/automaxprocs"
 
 	"github.com/dapr/dapr/pkg/runtime"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/kit/logger"
 
 	// Included components in compiled daprd.
@@ -151,7 +150,6 @@ var (
 )
 
 func main() {
-	logger.DaprVersion = version.Version()
 	rt, err := runtime.FromFlags()
 	if err != nil {
 		log.Fatal(err)
