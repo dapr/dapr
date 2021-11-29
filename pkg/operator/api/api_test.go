@@ -9,8 +9,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,7 +20,18 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
+
+type mockComponentUpdateServer struct {
+	grpc.ServerStream
+	Calls int
+}
+
+func (m *mockComponentUpdateServer) Send(*operatorv1pb.ComponentUpdateEvent) error {
+	m.Calls++
+	return nil
+}
 
 func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
@@ -144,5 +157,91 @@ func TestChanGracefullyClose(t *testing.T) {
 		instance := initChanGracefully(ch)
 		instance.Close()
 		assert.Equal(t, true, instance.isClosed)
+	})
+}
+
+func TestComponentUpdate(t *testing.T) {
+	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
+		c := componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns1",
+			},
+			Spec: componentsapi.ComponentSpec{},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		assert.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).Build()
+
+		mockSidecar := &mockComponentUpdateServer{}
+		api := NewAPIServer(client).(*apiServer)
+
+		go func() {
+			// Send a component update, give sidecar time to register
+			time.Sleep(time.Millisecond * 500)
+
+			for _, connUpdateChan := range api.allConnUpdateChan {
+				connUpdateChan <- &c
+
+				// Give sidecar time to register update
+				time.Sleep(time.Millisecond * 500)
+				close(connUpdateChan)
+			}
+		}()
+
+		// Start sidecar update loop
+		api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
+			Namespace: "ns2",
+		}, mockSidecar)
+
+		assert.Zero(t, mockSidecar.Calls)
+	})
+
+	t.Run("sidecar is updated when component namespace is a match", func(t *testing.T) {
+		c := componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns1",
+			},
+			Spec: componentsapi.ComponentSpec{},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		assert.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).Build()
+
+		mockSidecar := &mockComponentUpdateServer{}
+		api := NewAPIServer(client).(*apiServer)
+
+		go func() {
+			// Send a component update, give sidecar time to register
+			time.Sleep(time.Millisecond * 500)
+
+			for _, connUpdateChan := range api.allConnUpdateChan {
+				connUpdateChan <- &c
+
+				// Give sidecar time to register update
+				time.Sleep(time.Millisecond * 500)
+				close(connUpdateChan)
+			}
+		}()
+
+		// Start sidecar update loop
+		api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
+			Namespace: "ns1",
+		}, mockSidecar)
+
+		assert.Equal(t, 1, mockSidecar.Calls)
 	})
 }
