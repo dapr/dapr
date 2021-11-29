@@ -2601,7 +2601,7 @@ func (x *SubscribeConfigurationRequest) GetMetadata() map[string]string {
 	return nil
 }
 
-// SubscribeConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
+// UnSubscribeConfigurationRequest is the message to stop watching the key-value configuration.
 type UnSubscribeConfigurationRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -2609,9 +2609,9 @@ type UnSubscribeConfigurationRequest struct {
 
 	// The name of configuration store.
 	StoreName string `protobuf:"bytes,1,opt,name=store_name,json=storeName,proto3" json:"store_name,omitempty"`
-	// Optional. The key of the configuration item to fetch.
-	// If set, only query for the specified configuration items.
-	// Empty list means fetch all.
+	// Optional. The keys of the configuration item to stop watching.
+	// Store_name and keys should match previous SubscribeConfigurationRequest's keys and store_name.
+	// Once invoked, the previous subscription that watching update event would return.
 	Keys []string `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty"`
 }
 

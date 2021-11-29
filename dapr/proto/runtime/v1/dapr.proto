@@ -495,14 +495,14 @@ message SubscribeConfigurationRequest {
   map<string,string> metadata = 3;
 }
 
-// SubscribeConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
+// UnSubscribeConfigurationRequest is the message to stop watching the key-value configuration.
 message UnSubscribeConfigurationRequest {
   // The name of configuration store.
   string store_name = 1;
 
-  // Optional. The key of the configuration item to fetch.
-  // If set, only query for the specified configuration items.
-  // Empty list means fetch all.
+  // Optional. The keys of the configuration item to stop watching.
+  // Store_name and keys should match previous SubscribeConfigurationRequest's keys and store_name.
+  // Once invoked, the previous subscription that watching update event would return.
   repeated string keys = 2;
 }
 
