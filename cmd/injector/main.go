@@ -28,7 +28,6 @@ const (
 )
 
 func main() {
-	logger.DaprVersion = version.Version()
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
