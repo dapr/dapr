@@ -30,7 +30,6 @@ var log = logger.NewLogger("dapr.placement")
 const gracefulTimeout = 10 * time.Second
 
 func main() {
-	logger.DaprVersion = version.Version()
 	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
 
 	cfg := newConfig()
