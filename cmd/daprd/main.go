@@ -12,7 +12,7 @@ import (
 	"syscall"
 
 	"github.com/valyala/fasthttp"
-	_ "go.uber.org/automaxprocs"
+	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/version"
@@ -152,6 +152,9 @@ var (
 )
 
 func main() {
+	// set GOMAXPROCS
+	_, _ = maxprocs.Set()
+
 	logger.DaprVersion = version.Version()
 	rt, err := runtime.FromFlags()
 	if err != nil {
