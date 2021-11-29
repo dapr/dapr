@@ -6,7 +6,6 @@ FROM daprio/windows-java-base:$WINDOWS_VERSION as build
 RUN mkdir "c:\build"
 WORKDIR "c:\build"
 
-RUN refreshenv
 COPY pom.xml .
 RUN mvn dependency:go-offline
 
