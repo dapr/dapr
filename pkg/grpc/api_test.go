@@ -1908,7 +1908,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 
 		assert.NoError(t, err)
 
-		var r = &runtimev1pb.SubscribeConfigurationResponse{}
+		r := &runtimev1pb.SubscribeConfigurationResponse{}
 
 		for {
 			update, err := s.Recv()
@@ -1929,8 +1929,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 	})
 }
 
-type mockConfigStore struct {
-}
+type mockConfigStore struct{}
 
 func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
 	return nil
