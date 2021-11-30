@@ -150,6 +150,7 @@ func NewAPI(
 		accessControlList:        accessControlList,
 		appProtocol:              appProtocol,
 		shutdown:                 shutdown,
+		configurationSubscribe:   map[string]bool{},
 	}
 }
 
@@ -1246,10 +1247,6 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
-	if h.api.appChannel == nil {
-		return status.Error(codes.Internal, messages.ErrChannelNotFound)
-	}
-
 	items := make([]*commonv1pb.ConfigurationItem, 0)
 	for _, v := range e.Items {
 		items = append(items, &commonv1pb.ConfigurationItem{
@@ -1279,6 +1276,8 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	subscribeKeys := request.Keys
 	unsubscribedKeys := make([]string, 0)
 	a.configurationSubscribeLock.Lock()
+	defer a.configurationSubscribeLock.Unlock()
+
 	for _, k := range subscribeKeys {
 		if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
 			unsubscribedKeys = append(unsubscribedKeys, k)
@@ -1296,12 +1295,21 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		serverStream: configurationServer,
 	}
 
+	ctx := context.TODO()
 	// TODO(@laurence) deal with failed subscription and retires
 	_ = store.Subscribe(context.Background(), req, handler.updateEventHandler)
+	err = store.Subscribe(ctx, req, handler.updateEventHandler)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		a.configurationSubscribeLock.Unlock()
+		return err
+	}
 
 	for _, k := range unsubscribedKeys {
 		a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)] = true
 	}
 	a.configurationSubscribeLock.Unlock()
+
+	<-ctx.Done()
 	return nil
 }
