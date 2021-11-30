@@ -1276,7 +1276,6 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	subscribeKeys := request.Keys
 	unsubscribedKeys := make([]string, 0)
 	a.configurationSubscribeLock.Lock()
-	defer a.configurationSubscribeLock.Unlock()
 
 	for _, k := range subscribeKeys {
 		if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
