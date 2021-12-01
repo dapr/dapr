@@ -1626,7 +1626,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	var req state.QueryRequest
-	if err = a.json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+	if err = a.json.Unmarshal(reqCtx.PostBody(), &req.Query); err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
