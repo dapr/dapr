@@ -2611,37 +2611,31 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 
 const (
 	queryTestRequestOK = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"sort": [
-			{ "key": "a" }
-		],
-		"pagination": {
-			"limit": 2
-		}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"sort": [
+		{ "key": "a" }
+	],
+	"page": {
+		"limit": 2
 	}
 }`
 	queryTestRequestNoRes = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"pagination": {
-			"limit": 2
-		}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"page": {
+		"limit": 2
 	}
 }`
 	queryTestRequestErr = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"sort": [
-			{ "key": "a" }
-		]
-	}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"sort": [
+		{ "key": "a" }
+	]
 }`
 	queryTestRequestSyntaxErr = `syntax error`
 )
