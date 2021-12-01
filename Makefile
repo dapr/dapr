@@ -63,7 +63,7 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_NAME+= "v1.25.0"
+PROTOC_GEN_GO_NAME+= "v1.26.0"
 
 # Default docker container and e2e test targst.
 TARGET_OS ?= linux
@@ -100,10 +100,12 @@ HELM_REGISTRY?=daprio.azurecr.io
 # Go build details                                                             #
 ################################################################################
 BASE_PACKAGE_NAME := github.com/dapr/dapr
+LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.gitcommit=$(GIT_COMMIT) \
   -X $(BASE_PACKAGE_NAME)/pkg/version.gitversion=$(GIT_VERSION) \
-  -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)
+  -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION) \
+  -X $(LOGGER_PACKAGE_NAME).DaprVersion=$(DAPR_VERSION)
 
 ifeq ($(origin DEBUG), undefined)
   BUILDTYPE_DIR:=release
@@ -254,8 +256,8 @@ modtidy:
 ################################################################################
 .PHONY: init-proto
 init-proto:
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.25.0
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1.0
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.26
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1
 
 ################################################################################
 # Target: gen-proto                                                            #
@@ -305,7 +307,7 @@ check-proto-version: ## Checking the version of proto related tools
 	|| { echo "please use protoc-gen-go-grpc 1.1.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 	@test "$(shell protoc-gen-go --version 2>&1)" = "$(PROTOC_GEN_GO_NAME)" \
-	|| { echo "please use protoc-gen-go v1.25.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	|| { echo "please use protoc-gen-go v1.26.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
 # Target: check-proto-diff                                                           #

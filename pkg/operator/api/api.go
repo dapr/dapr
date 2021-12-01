@@ -219,34 +219,45 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		a.connLock.Unlock()
 	}()
 	chWrapper := initChanGracefully(updateChan)
+	updateComponentFunc := func(c *componentsapi.Component) {
+		if c.Namespace != in.Namespace {
+			return
+		}
 
-	for c := range updateChan {
-		go func(c *componentsapi.Component) {
-			err := processComponentSecrets(c, in.Namespace, a.Client)
-			if err != nil {
-				log.Warnf("error processing component %s secrets: %s", c.Name, err)
-				return
-			}
+		err := processComponentSecrets(c, in.Namespace, a.Client)
+		if err != nil {
+			log.Warnf("error processing component %s secrets: %s", c.Name, err)
+			return
+		}
 
-			b, err := json.Marshal(&c)
-			if err != nil {
-				log.Warnf("error serializing component %s (%s): %s", c.GetName(), c.Spec.Type, err)
-				return
+		b, err := json.Marshal(&c)
+		if err != nil {
+			log.Warnf("error serializing component %s (%s): %s", c.GetName(), c.Spec.Type, err)
+			return
+		}
+		err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
+			Component: b,
+		})
+		if err != nil {
+			log.Warnf("error updating sidecar with component %s (%s): %s", c.GetName(), c.Spec.Type, err)
+			if status.Code(err) == codes.Unavailable {
+				chWrapper.Close()
 			}
-			err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
-				Component: b,
-			})
-			if err != nil {
-				log.Warnf("error updating sidecar with component %s (%s): %s", c.GetName(), c.Spec.Type, err)
-				if status.Code(err) == codes.Unavailable {
-					chWrapper.Close()
-				}
-				return
-			}
-			log.Infof("updated sidecar with component %s (%s)", c.GetName(), c.Spec.Type)
-		}(c)
+			return
+		}
+		log.Infof("updated sidecar with component %s (%s)", c.GetName(), c.Spec.Type)
 	}
-	return nil
+	for {
+		select {
+		case <-srv.Context().Done():
+			return nil
+		case c, ok := <-updateChan:
+			if !ok {
+				return nil
+			}
+			go updateComponentFunc(c)
+		}
+	}
 }
 
 // chanGracefully control channel to close gracefully in multi-goroutines.

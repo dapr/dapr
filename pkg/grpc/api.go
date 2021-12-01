@@ -241,7 +241,10 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	span := diag_utils.SpanFromContext(ctx)
+	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
+	// Populate W3C tracestate to cloudevent envelope
+	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
 	body := []byte{}
 	if in.Data != nil {
@@ -257,6 +260,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			DataContentType: in.DataContentType,
 			Data:            body,
 			TraceID:         corID,
+			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
 		})
 		if err != nil {
@@ -574,11 +578,12 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	}
 
 	var req state.QueryRequest
-	if err = jsoniter.Unmarshal([]byte(in.GetQuery()), &req); err != nil {
+	if err = jsoniter.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrMalformedRequest, err.Error())
 		apiServerLogger.Debug(err)
 		return ret, err
 	}
+	req.Metadata = in.GetMetadata()
 
 	resp, err := querier.Query(&req)
 	if err != nil {

@@ -180,6 +180,10 @@ jobs:
       run: |
         make setup-test-env-kafka
 
+    - name: Setup MongoDB
+      run: |
+        make setup-test-env-mongodb
+
     - name: Setup test components
       run: |
         make setup-test-components
