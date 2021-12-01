@@ -160,6 +160,12 @@ func TestIntercept(t *testing.T) {
 		}
 
 		p := NewProxy(connectionFn, "a", "a:123", 50005, acl)
+		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
+			return remoteApp{
+				id:      "a",
+				address: "a:123",
+			}, nil
+		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			ctx = metadata.AppendToOutgoingContext(ctx, "a", "b")
 			return ctx
