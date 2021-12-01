@@ -72,7 +72,12 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 	appID := v[0]
 
-	if appID == p.appID {
+	target, err := p.remoteAppFn(appID)
+	if err != nil {
+		return ctx, nil, err
+	}
+
+	if target.id == p.appID {
 		// proxy locally to the app
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl)
@@ -86,12 +91,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	}
 
 	// proxy to a remote daprd
-	remote, err := p.remoteAppFn(appID)
-	if err != nil {
-		return ctx, nil, err
-	}
-
-	conn, err := p.connectionFactory(outCtx, remote.address, remote.id, remote.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+	conn, err := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 	outCtx = p.telemetryFn(outCtx)
 
 	return outCtx, conn, err
