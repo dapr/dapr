@@ -30,36 +30,39 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
+// make it easier for test
+var (
+	mode = flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
+	daprHTTPPort = flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
+	daprAPIListenAddresses = flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
+	daprPublicPort = flag.String("dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
+	daprAPIGRPCPort = flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
+	daprInternalGRPCPort = flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
+	appPort = flag.String("app-port", "", "The port the application is listening on")
+	profilePort = flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
+	appProtocol = flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
+	componentsPath = flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
+	daprConfig = flag.String("config", "", "Path to config file, or name of a configuration object")
+	appID = flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
+	controlPlaneAddress = flag.String("control-plane-address", "", "Address for a Dapr control plane")
+	sentryAddress = flag.String("sentry-address", "", "Address for the Sentry CA service")
+	placementServiceHostAddr = flag.String("placement-host-address", "", "Addresses for Dapr Actor Placement servers")
+	allowedOrigins = flag.String("allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
+	enableProfiling = flag.Bool("enable-profiling", false, "Enable profiling")
+	runtimeVersion = flag.Bool("version", false, "Prints the runtime version")
+	buildInfo = flag.Bool("build-info", false, "Prints the build info")
+	waitCommand = flag.Bool("wait", false, "wait for Dapr outbound ready")
+	appMaxConcurrency = flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
+	enableMTLS = flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
+	appSSL = flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
+	daprHTTPMaxRequestSize = flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
+	unixDomainSocket = flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
+	daprHTTPReadBufferSize = flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in KB to handle sending multi-KB headers. By default 4 KB.")
+	daprHTTPStreamRequestBody = flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
+)
+
 // FromFlags parses command flags and returns DaprRuntime instance.
 func FromFlags() (*DaprRuntime, error) {
-	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
-	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
-	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
-	daprPublicPort := flag.String("dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
-	daprAPIGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
-	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
-	appPort := flag.String("app-port", "", "The port the application is listening on")
-	profilePort := flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
-	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
-	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
-	config := flag.String("config", "", "Path to config file, or name of a configuration object")
-	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
-	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
-	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
-	placementServiceHostAddr := flag.String("placement-host-address", "", "Addresses for Dapr Actor Placement servers")
-	allowedOrigins := flag.String("allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
-	enableProfiling := flag.Bool("enable-profiling", false, "Enable profiling")
-	runtimeVersion := flag.Bool("version", false, "Prints the runtime version")
-	buildInfo := flag.Bool("build-info", false, "Prints the build info")
-	waitCommand := flag.Bool("wait", false, "wait for Dapr outbound ready")
-	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
-	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
-	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
-	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
-	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
-	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in KB to handle sending multi-KB headers. By default 4 KB.")
-	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
-
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
@@ -188,7 +191,7 @@ func FromFlags() (*DaprRuntime, error) {
 		namespace    string
 	)
 
-	if *config != "" {
+	if *daprConfig != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
 			certChain, err = security.GetCertChain()
@@ -201,9 +204,9 @@ func FromFlags() (*DaprRuntime, error) {
 			}
 			defer conn.Close()
 			namespace = os.Getenv("NAMESPACE")
-			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, client)
+			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*daprConfig, namespace, client)
 		case modes.StandaloneMode:
-			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
+			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*daprConfig)
 		}
 	}
 
@@ -231,7 +234,7 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
+	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *daprConfig, *componentsPath,
 		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody)
 	runtimeConfig.CertChain = certChain
 

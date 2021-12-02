@@ -6,10 +6,13 @@
 package runtime
 
 import (
+	"flag"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/sentry/certs"
 )
 
 func TestParsePlacementAddr(t *testing.T) {
@@ -54,4 +57,21 @@ func TestSetEnvVariables(t *testing.T) {
 			assert.Equal(t, value, os.Getenv(key))
 		}
 	})
+}
+
+func TestFromFlagsForMTLSConfig(t *testing.T) {
+	err := flag.Set("config", "../config/testdata/mtls_config.yaml")
+	assert.NoError(t, err)
+	err = flag.Set("app-id", "test-app")
+	assert.NoError(t, err)
+	os.Setenv(certs.TrustAnchorsEnvVar, "testdata")
+	os.Setenv(certs.CertChainEnvVar, "testdata")
+	os.Setenv(certs.CertKeyEnvVar, "testdata")
+
+	runtime, err := FromFlags()
+	assert.NoError(t, err)
+	assert.True(t, runtime.runtimeConfig.mtlsEnabled)
+	assert.Equal(t, runtime.runtimeConfig.SentryServiceAddress, "localhost:50001")
+	assert.True(t, runtime.globalConfig.Spec.MTLSSpec.Enabled)
+	assert.Equal(t, runtime.globalConfig.Spec.MTLSSpec.SentryAddress, "localhost:50001")
 }
