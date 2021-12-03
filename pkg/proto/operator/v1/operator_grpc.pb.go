@@ -27,6 +27,10 @@ type OperatorClient interface {
 	GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
 	ListSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	// Returns a given resiliency configuration by name
+	GetResiliency(ctx context.Context, in *GetResiliencyRequest, opts ...grpc.CallOption) (*GetResiliencyResponse, error)
+	// Returns a list of resiliency configurations
+	ListResiliency(ctx context.Context, in *ListResiliencyRequest, opts ...grpc.CallOption) (*ListResiliencyResponse, error)
 }
 
 type operatorClient struct {
@@ -96,6 +100,24 @@ func (c *operatorClient) ListSubscriptions(ctx context.Context, in *emptypb.Empt
 	return out, nil
 }
 
+func (c *operatorClient) GetResiliency(ctx context.Context, in *GetResiliencyRequest, opts ...grpc.CallOption) (*GetResiliencyResponse, error) {
+	out := new(GetResiliencyResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/GetResiliency", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *operatorClient) ListResiliency(ctx context.Context, in *ListResiliencyRequest, opts ...grpc.CallOption) (*ListResiliencyResponse, error) {
+	out := new(ListResiliencyResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListResiliency", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OperatorServer is the server API for Operator service.
 // All implementations should embed UnimplementedOperatorServer
 // for forward compatibility
@@ -108,6 +130,10 @@ type OperatorServer interface {
 	GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
 	ListSubscriptions(context.Context, *emptypb.Empty) (*ListSubscriptionsResponse, error)
+	// Returns a given resiliency configuration by name
+	GetResiliency(context.Context, *GetResiliencyRequest) (*GetResiliencyResponse, error)
+	// Returns a list of resiliency configurations
+	ListResiliency(context.Context, *ListResiliencyRequest) (*ListResiliencyResponse, error)
 }
 
 // UnimplementedOperatorServer should be embedded to have forward compatible implementations.
@@ -125,6 +151,12 @@ func (UnimplementedOperatorServer) GetConfiguration(context.Context, *GetConfigu
 }
 func (UnimplementedOperatorServer) ListSubscriptions(context.Context, *emptypb.Empty) (*ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
+}
+func (UnimplementedOperatorServer) GetResiliency(context.Context, *GetResiliencyRequest) (*GetResiliencyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetResiliency not implemented")
+}
+func (UnimplementedOperatorServer) ListResiliency(context.Context, *ListResiliencyRequest) (*ListResiliencyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListResiliency not implemented")
 }
 
 // UnsafeOperatorServer may be embedded to opt out of forward compatibility for this service.
@@ -213,6 +245,42 @@ func _Operator_ListSubscriptions_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Operator_GetResiliency_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetResiliencyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OperatorServer).GetResiliency(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.operator.v1.Operator/GetResiliency",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OperatorServer).GetResiliency(ctx, req.(*GetResiliencyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Operator_ListResiliency_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListResiliencyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OperatorServer).ListResiliency(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.operator.v1.Operator/ListResiliency",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OperatorServer).ListResiliency(ctx, req.(*ListResiliencyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Operator_ServiceDesc is the grpc.ServiceDesc for Operator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -231,6 +299,14 @@ var Operator_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListSubscriptions",
 			Handler:    _Operator_ListSubscriptions_Handler,
+		},
+		{
+			MethodName: "GetResiliency",
+			Handler:    _Operator_GetResiliency_Handler,
+		},
+		{
+			MethodName: "ListResiliency",
+			Handler:    _Operator_ListResiliency_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
