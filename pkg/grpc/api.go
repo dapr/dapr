@@ -1296,7 +1296,6 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	ctx := context.TODO()
 	// TODO(@laurence) deal with failed subscription and retires
-	_ = store.Subscribe(context.Background(), req, handler.updateEventHandler)
 	err = store.Subscribe(ctx, req, handler.updateEventHandler)
 	if err != nil {
 		apiServerLogger.Debug(err)
