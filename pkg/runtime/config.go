@@ -15,7 +15,7 @@ package runtime
 
 import (
 	"time"
-	
+
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/modes"
