@@ -1648,7 +1648,11 @@ func parseISO8601Duration(from string) (time.Duration, int, error) {
 		}
 		switch name {
 		case "year":
-			duration += time.Hour * 24 * 365 * time.Duration(val)
+			daysPreYear := time.Duration(365)
+			if ((val%4) == 0 && (val%100) != 0) || (val%400) == 0 {
+				daysPreYear = time.Duration(366)
+			}
+			duration += time.Hour * 24 * daysPreYear * time.Duration(val)
 		case "month":
 			duration += time.Hour * 24 * 30 * time.Duration(val)
 		case "week":
