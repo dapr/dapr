@@ -296,6 +296,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 		podStatus := map[string][]apiv1.ContainerStatus{}
 		if err == nil {
 			for _, pod := range podList.Items {
+				log.Printf("Pod state %v", pod)
 				podStatus[pod.Name] = pod.Status.ContainerStatuses
 			}
 			log.Printf("deployment %s relate pods: %+v", m.app.AppName, podList)
@@ -304,6 +305,16 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 		}
 
 		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v pod status: %+v error: %s", m.app.AppName, lastDeployment, podStatus, waitErr)
+	}
+
+	// get deployment's Pods detail status info
+	serviceClient := m.client.Services(m.namespace)
+	// Filter only 'testapp=appName' labeled Pods
+	serviceList, err := serviceClient.List(context.TODO(), metav1.ListOptions{})
+	if err == nil {
+		for _, pod := range serviceList.Items {
+			log.Printf("Deployment successful. Services %v", pod)
+		}
 	}
 
 	return lastDeployment, nil
@@ -395,7 +406,7 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 
 	// Filter only 'testapp=appName' labeled Pods
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+		LabelSelector: "dapr.io/enabled=true",
 	})
 	if err != nil {
 		return false, 0, 0, err
