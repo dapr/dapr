@@ -375,6 +375,11 @@ func TestActorFeatures(t *testing.T) {
 
 		time.Sleep(sleepTime)
 
+		// This initial probe makes the test wait a little bit longer when needed,
+		// making this test less flaky due to delays in the deployment.
+		_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
+		require.NoError(t, err)
+
 		// Reset reminder
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		require.NoError(t, err)
