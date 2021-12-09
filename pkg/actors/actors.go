@@ -1322,10 +1322,10 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 		partitionID := i + 1
 		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(partitionID))
 		stateValue := actorRemindersPartitions[i]
-		requests = append(requests, state.SetRequest{
+		requests[i] = state.SetRequest{
 			Key:   stateKey,
 			Value: stateValue,
-		})
+		}
 	}
 	err = a.store.BulkSet(requests)
 	if err != nil {

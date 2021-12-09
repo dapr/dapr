@@ -188,7 +188,13 @@ func (f *fakeStateStore) Set(req *state.SetRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
+func (f *fakeStateStore) BulkSet(reqs []state.SetRequest) error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	for _, req := range reqs {
+		b, _ := json.Marshal(req.Value)
+		f.items[req.Key] = f.newItem(b)
+	}
 	return nil
 }
 
