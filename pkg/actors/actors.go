@@ -1237,8 +1237,12 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: metadataKey,
 	})
-	if err != nil || len(resp.Data) == 0 {
-		// Metadata field does not exist or failed to read.
+	if err != nil {
+		return nil, err
+	}
+
+	if len(resp.Data) == 0 {
+		// Metadata field does not exist.
 		// We fallback to the default "zero" partition behavior.
 		actorMetadata := ActorMetadata{
 			ID: uuid.NewString(),
