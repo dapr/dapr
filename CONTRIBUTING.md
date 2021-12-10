@@ -49,6 +49,23 @@ Before you file an issue, make sure you've checked the following:
 
 This section describes the guidelines for contributing code / docs to Dapr.
 
+### Pull Requests
+
+All contributions come through pull requests. To submit a proposed change, we recommend following this workflow:
+
+1. Make sure there's an issue (bug or proposal) raised, which sets the expectations for the contribution you are about to make.
+1. Fork the relevant repo and create a new branch
+1. Create your change
+    - Code changes require tests
+1. Update relevant documentation for the change
+1. Commit with [DCO sign-off](#developer-certificate-of-origin-signing-your-work) and open a PR
+1. Wait for the CI process to finish and make sure all checks are green
+1. A maintainer of the project will be assigned, and you can expect a review within a few days
+
+#### Use work-in-progress PRs for early feedback
+
+A good way to communicate before investing too much time is to create a "Work-in-progress" PR and share it with your reviewers. The standard way of doing this is to add a "[WIP]" prefix in your PR's title and assign the **do-not-merge** label. This will let people looking at your PR know that it is not well baked yet.
+
 ### Developer Certificate of Origin: Signing your work
 
 #### Every commit needs to be signed
@@ -91,23 +108,6 @@ git add -A
 git commit -s -m "one commit on <branch-name>"
 git push --force
 ```
-
-### Pull Requests
-
-All contributions come through pull requests. To submit a proposed change, we recommend following this workflow:
-
-1. Make sure there's an issue (bug or proposal) raised, which sets the expectations for the contribution you are about to make.
-1. Fork the relevant repo and create a new branch
-1. Create your change
-    - Code changes require tests
-1. Update relevant documentation for the change
-1. Commit and open a PR
-1. Wait for the CI process to finish and make sure all checks are green
-1. A maintainer of the project will be assigned, and you can expect a review within a few days
-
-#### Use work-in-progress PRs for early feedback
-
-A good way to communicate before investing too much time is to create a "Work-in-progress" PR and share it with your reviewers. The standard way of doing this is to add a "[WIP]" prefix in your PR's title and assign the **do-not-merge** label. This will let people looking at your PR know that it is not well baked yet.
 
 ### Use of Third-party code
 
