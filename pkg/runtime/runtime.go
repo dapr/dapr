@@ -107,7 +107,6 @@ const (
 	configurationComponent          ComponentCategory = "configuration"
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
-	maxGracefulShutdownDuration                       = time.Second * 30
 	kubernetesSecretStore                             = "kubernetes"
 )
 
