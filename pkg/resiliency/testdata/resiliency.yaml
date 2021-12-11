@@ -13,6 +13,21 @@ spec:
 
     # Retries are named templates for and are instantiated for life of the operation.
     retries:
+      serviceRetry:
+        policy: constant
+        duration: 5s
+        maxRetries: 10
+
+      actorRetry:
+        policy: constant
+        duration: 5s
+        maxRetries: 10
+
+      stateRetry:
+        policy: constant
+        duration: 5s
+        maxRetries: 10
+
       pubsubRetry:
         policy: constant
         duration: 5s
@@ -41,6 +56,24 @@ spec:
     # using these settings as a template. See logic below under `buildingBlocks`.
     # Circuit breakers maintain counters that can live as long as the Dapr sidecar.
     circuitBreakers:
+      serviceCB:
+          maxRequests: 1
+          interval: 8s
+          timeout: 45s
+          trip: consecutiveFailures > 8
+
+      stateCB:
+          maxRequests: 1
+          interval: 8s
+          timeout: 45s
+          trip: consecutiveFailures > 8
+
+      actorCB:
+          maxRequests: 1
+          interval: 8s
+          timeout: 45s
+          trip: consecutiveFailures > 8
+
       pubsubCB:
         maxRequests: 1
         interval: 8s
@@ -55,18 +88,18 @@ spec:
     services:
       appB:
         timeout: general
-        retry: general
+        retry: serviceRetry
         # Circuit breakers for services are scoped per endpoint (e.g. hostname + port).
         # When a breaker is tripped, that route is removed from load balancing for the configured `timeout` duration.
-        circuitBreaker: general
+        circuitBreaker: serviceCB
 
     actors:
       myActorType:
         timeout: general
-        retry: general
+        retry: actorRetry
         # Circuit breakers for actors are scoped by type, id, or both.
         # When a breaker is tripped, that type or id is removed from the placement table for the configured `timeout` duration.
-        circuitBreaker: general
+        circuitBreaker: actorCB
         circuitBreakerScope: both
         circuitBreakerCacheSize: 5000
 
@@ -75,10 +108,10 @@ spec:
       # Watching, which is not implemented yet, is out of scope.
       statestore1:
         timeout: general
-        retry: general
+        retry: stateRetry
         # Circuit breakers for components are scoped per component configuration/instance (e.g. redis1).
         # When this breaker is tripped, all interaction to that component is prevented for the configured `timeout` duration.
-        circuitBreaker: general
+        circuitBreaker: stateCB
 
       # For Pub/Sub, policies apply only to publishing.
       # Subscribing/consuming is handled by routes.
@@ -89,7 +122,7 @@ spec:
       pubsub2:
         retry: pubsubRetry
         circuitBreaker: pubsubCB
-    
+
     # Routes represent the application's URI/paths that receive incoming events from both
     # PubSub and Input binding components. The route values correspond to the value configured
     # in the Subscription configuration or programmatic call. For input bindings, this is
@@ -97,5 +130,5 @@ spec:
     routes:
       'dsstatus.v3':
         timeout: general
-        retry: general
-        circuitBreaker: general
+        retry: pubsubRetry
+        circuitBreaker: pubsubCB

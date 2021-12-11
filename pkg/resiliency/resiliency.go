@@ -1,23 +1,40 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package resiliency
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	lru "github.com/hashicorp/golang-lru"
 	"gopkg.in/yaml.v2"
 
 	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/kit/config"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/retry"
 )
 
 const (
@@ -25,109 +42,482 @@ const (
 	operatorTimePerRetry = time.Second * 5
 )
 
-// Wrapper to let us define some helper functions without duplicating the domain definition.
-type Resiliency struct {
-	Resiliency resiliency_v1alpha.Resiliency
-}
+// ActorCircuitBreakerScope indicates the scope of the circuit breaker for an actor.
+type ActorCircuitBreakerScope int
 
-func LoadDefaultResiliency() *Resiliency {
-	return &Resiliency{resiliency_v1alpha.Resiliency{}}
-}
+const (
+	// ActorCircuitBreakerScopeType indicates the type scope (less granular).
+	ActorCircuitBreakerScopeType ActorCircuitBreakerScope = iota
+	// ActorCircuitBreakerScopeID indicates the type+id scope (more granular).
+	ActorCircuitBreakerScopeID
+	// ActorCircuitBreakerScopeBoth indicates both type and type+id are used for scope.
+	ActorCircuitBreakerScopeBoth // Usage is TODO
+)
 
-func LoadStandaloneResiliency(path, runtimeId string, log logger.Logger) []Resiliency {
-	var resiliencies []Resiliency
+type (
+	Provider interface {
+		RoutePolicy(ctx context.Context, name string) Runner
+		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
+		RemoveEndpoint(name string, endpoint string)
+		ActorPolicy(ctx context.Context, actorType string, id string) Runner
+		ComponentPolicy(ctx context.Context, name string) Runner
+	}
 
+	// Resiliency encapsulates configuration for timeouts, retries, and circuit breakers.
+	// It maps services, actors, components, and routes to each of these configurations.
+	// Lastly, it maintains circuit breaker state across invocations.
+	Resiliency struct {
+		log logger.Logger
+
+		timeouts        map[string]time.Duration
+		retries         map[string]*retry.Config
+		circuitBreakers map[string]*breaker.CircuitBreaker
+
+		actorCBCaches map[string]*lru.Cache
+		serviceCBs    map[string]*circuitBreakerInstances
+		componentCBs  *circuitBreakerInstances
+
+		services   map[string]PolicyNames
+		actors     map[string]ActorPolicyNames
+		components map[string]PolicyNames
+		routes     map[string]PolicyNames
+	}
+
+	// circuitBreakerInstances stores circuit breaker state for components
+	// that have ephemeral instances (actors, service endpoints)
+	circuitBreakerInstances struct {
+		sync.RWMutex
+		cbs map[string]*breaker.CircuitBreaker
+	}
+
+	// PolicyNames contains the policy names for a timeout, retry, and circuit breaker.
+	// Empty values mean that no policy is configured.
+	PolicyNames struct {
+		Timeout        string
+		Retry          string
+		CircuitBreaker string
+	}
+
+	// ActorPolicyNames add the circuit breaker scope to PolicyNames.
+	ActorPolicyNames struct {
+		PolicyNames
+		CircuitBreakerScope ActorCircuitBreakerScope
+	}
+)
+
+// Ensure `*Resiliency` satisfies the `Provider` interface.
+var _ = (Provider)((*Resiliency)(nil))
+
+func LoadStandaloneResiliency(log logger.Logger, path, runtimeID string) []*resiliency_v1alpha.Resiliency {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return resiliencies
+		return nil
 	}
 
 	files, err := os.ReadDir(path)
 	if err != nil {
 		log.Errorf("failed to read resiliences from path %s: %s", err)
-		return resiliencies
+		return nil
 	}
+
+	configs := make([]*resiliency_v1alpha.Resiliency, 0, len(files))
 
 	for _, file := range files {
 		filePath := filepath.Join(path, file.Name())
 		b, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Errorf("Could not read file %s - %s", file.Name(), err.Error())
+			log.Errorf("Could not read resiliency file %s: %w", file.Name(), err)
 			continue
 		}
 
-		// Parse environment variables from yaml
-		b = []byte(os.ExpandEnv(string(b)))
-		resiliencies = appendResiliency(resiliencies, b, log)
+		var resiliency resiliency_v1alpha.Resiliency
+		if err = yaml.Unmarshal(b, &resiliency); err != nil {
+			log.Errorf("Could not parse resiliency file %s: %w", file.Name(), err)
+			continue
+		}
+
+		configs = append(configs, &resiliency)
 	}
 
-	return filterResiliencies(resiliencies, runtimeId)
+	return filterResiliencyConfigs(configs, runtimeID)
 }
 
-func LoadKubernetesResiliency(runtimeId, namespace string, operatorClient operatorv1pb.OperatorClient, log logger.Logger) []Resiliency {
-	var resiliences []Resiliency
-
+func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, operatorClient operatorv1pb.OperatorClient) []*resiliency_v1alpha.Resiliency {
 	resp, err := operatorClient.ListResiliency(context.Background(), &operatorv1pb.ListResiliencyRequest{
 		Namespace: namespace,
 	}, grpc_retry.WithMax(operatorRetryCount), grpc_retry.WithPerRetryTimeout(operatorTimePerRetry))
 	if err != nil {
 		log.Errorf("Error listing resiliences: %s", err.Error())
-		return resiliences
+		return nil
 	}
 
 	if resp.GetResiliencies() == nil {
 		log.Debug("No resiliencies found.")
-		return resiliences
+		return nil
 	}
 
-	for _, body := range resp.GetResiliencies() {
-		resiliences = appendResiliency(resiliences, body, log)
+	configs := make([]*resiliency_v1alpha.Resiliency, 0, len(resp.GetResiliencies()))
+
+	for _, b := range resp.GetResiliencies() {
+		var resiliency resiliency_v1alpha.Resiliency
+		if err = yaml.Unmarshal(b, &resiliency); err != nil {
+			log.Errorf("Could not parse resiliency: %w", err)
+			continue
+		}
+
+		configs = append(configs, &resiliency)
 	}
 
-	return filterResiliencies(resiliences, runtimeId)
+	return filterResiliencyConfigs(configs, runtimeID)
 }
 
-func (r *Resiliency) GetRetryPolicyOrDefault(policyName string) *resiliency_v1alpha.Retry {
-	if retries, ok := r.Resiliency.Spec.Policies.Retries[policyName]; ok {
-		return &retries
+func DecodeConfigurations(log logger.Logger, c ...*resiliency_v1alpha.Resiliency) *Resiliency {
+	r := New(log)
+	for _, config := range c {
+		if err := r.DecodeConfiguration(config); err != nil {
+			log.Errorf("Could not read resiliency %s: %w", &config.ObjectMeta.Name, err)
+			continue
+		}
 	}
-	return &resiliency_v1alpha.Retry{
-		Policy:      "constant",
-		Duration:    "1s",
-		MaxInterval: "10s",
-		MaxRetries:  10,
+	return r
+}
+
+// New creates a new Resiliency.
+func New(log logger.Logger) *Resiliency {
+	return &Resiliency{
+		log:             log,
+		timeouts:        make(map[string]time.Duration),
+		retries:         make(map[string]*retry.Config),
+		circuitBreakers: make(map[string]*breaker.CircuitBreaker),
+		actorCBCaches:   make(map[string]*lru.Cache),
+		serviceCBs:      make(map[string]*circuitBreakerInstances),
+		componentCBs: &circuitBreakerInstances{
+			cbs: make(map[string]*breaker.CircuitBreaker, 10),
+		},
+		services:   make(map[string]PolicyNames),
+		actors:     make(map[string]ActorPolicyNames),
+		components: make(map[string]PolicyNames),
+		routes:     make(map[string]PolicyNames),
 	}
 }
 
-func (r *Resiliency) GetTimeoutOrDefault(timeoutName string) string {
-	if timeout, ok := r.Resiliency.Spec.Policies.Timeouts[timeoutName]; ok {
-		return timeout
+// DecodeConfiguration reads in a single resiliency configuration.
+func (r *Resiliency) DecodeConfiguration(c *resiliency_v1alpha.Resiliency) error {
+	if c == nil {
+		return nil
 	}
-	return "15s"
+
+	if err := r.decodePolicies(c); err != nil {
+		return err
+	}
+	return r.decodeBuildingBlocks(c)
 }
 
-func (r *Resiliency) GetCircuitBreakerOrDefault(circuitBreakerName string) *resiliency_v1alpha.CircuitBreaker {
-	if circuitBreaker, ok := r.Resiliency.Spec.Policies.CircuitBreakers[circuitBreakerName]; ok {
-		return &circuitBreaker
+func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error) {
+	policies := c.Spec.Policies
+
+	for name, t := range policies.Timeouts {
+		if r.timeouts[name], err = parseDuration(t); err != nil {
+			return fmt.Errorf("invalid duration %q, %s: %w", name, t, err)
+		}
 	}
-	return &resiliency_v1alpha.CircuitBreaker{
-		MaxRequests: 10,
-		Interval:    "5s",
-		Timeout:     "10s",
-		Trip:        "consecutiveFailures > 5",
+
+	for name, t := range policies.Retries {
+		rc := retry.DefaultConfig()
+		m, err := toMap(t)
+		if err != nil {
+			return err
+		}
+		if err = retry.DecodeConfig(&rc, m); err != nil {
+			return fmt.Errorf("invalid retry configuration %q: %w", name, err)
+		}
+		r.retries[name] = &rc
+	}
+
+	for name, t := range policies.CircuitBreakers {
+		var cb breaker.CircuitBreaker
+		m, err := toMap(t)
+		if err != nil {
+			return err
+		}
+		if err = config.Decode(m, &cb); err != nil {
+			return fmt.Errorf("invalid retry configuration %q: %w", name, err)
+		}
+		cb.Name = name
+		cb.Initialize()
+		r.circuitBreakers[name] = &cb
+	}
+
+	return nil
+}
+
+func (r *Resiliency) decodeBuildingBlocks(c *resiliency_v1alpha.Resiliency) error {
+	buildingBlocks := c.Spec.BuildingBlocks
+
+	for name, t := range buildingBlocks.Services {
+		r.services[name] = PolicyNames{
+			Timeout:        t.Timeout,
+			Retry:          t.Retry,
+			CircuitBreaker: t.CircuitBreaker,
+		}
+		r.serviceCBs[name] = &circuitBreakerInstances{
+			cbs: make(map[string]*breaker.CircuitBreaker, 10),
+		}
+	}
+
+	for name, t := range buildingBlocks.Actors {
+		scope, err := ParseActorCircuitBreakerScope(t.CircuitBreakerScope)
+		if err != nil {
+			return err
+		}
+		r.actors[name] = ActorPolicyNames{
+			PolicyNames: PolicyNames{
+				Timeout:        t.Timeout,
+				Retry:          t.Retry,
+				CircuitBreaker: t.CircuitBreaker,
+			},
+			CircuitBreakerScope: scope,
+		}
+		r.actorCBCaches[name], err = lru.New(t.CircuitBreakerCacheSize)
+		if err != nil {
+			return err
+		}
+	}
+
+	for name, t := range buildingBlocks.Components {
+		r.components[name] = PolicyNames{
+			Timeout:        t.Timeout,
+			Retry:          t.Retry,
+			CircuitBreaker: t.CircuitBreaker,
+		}
+	}
+
+	for name, t := range buildingBlocks.Routes {
+		name = strings.TrimPrefix(name, "/") // Ignore slash prefix.
+		r.routes[name] = PolicyNames{
+			Timeout:        t.Timeout,
+			Retry:          t.Retry,
+			CircuitBreaker: t.CircuitBreaker,
+		}
+	}
+
+	return nil
+}
+
+// RoutePolicy returns the policy for a route.
+func (r *Resiliency) RoutePolicy(ctx context.Context, name string) Runner {
+	var t time.Duration
+	var rc *retry.Config
+	var cb *breaker.CircuitBreaker
+	name = strings.TrimPrefix(name, "/") // Ignore slash prefix.
+	operationName := fmt.Sprintf("route[%s]", name)
+	if r == nil {
+		return Policy(ctx, r.log, operationName, t, rc, cb)
+	}
+	policyNames, ok := r.routes[name]
+	if ok {
+		if policyNames.Timeout != "" {
+			t = r.timeouts[policyNames.Timeout]
+		}
+		if policyNames.Retry != "" {
+			rc = r.retries[policyNames.Retry]
+		}
+		if policyNames.CircuitBreaker != "" {
+			cb = r.circuitBreakers[policyNames.CircuitBreaker]
+		}
+	}
+
+	return Policy(ctx, r.log, operationName, t, rc, cb)
+}
+
+// EndpointPolicy returns the policy for a service endpoint.
+func (r *Resiliency) EndpointPolicy(ctx context.Context, service string, endpoint string) Runner {
+	var t time.Duration
+	var rc *retry.Config
+	var cb *breaker.CircuitBreaker
+	operationName := fmt.Sprintf("endpoint[%s, %s]", service, endpoint)
+	if r == nil {
+		return Policy(ctx, r.log, operationName, t, rc, cb)
+	}
+	policyNames, ok := r.services[service]
+	if ok {
+		if policyNames.Timeout != "" {
+			t = r.timeouts[policyNames.Timeout]
+		}
+		if policyNames.Retry != "" {
+			rc = r.retries[policyNames.Retry]
+		}
+		if policyNames.CircuitBreaker != "" {
+			template := r.circuitBreakers[policyNames.CircuitBreaker]
+			ep, ok := r.serviceCBs[service]
+			if ok {
+				cb = ep.Get(endpoint, template)
+			}
+		}
+	}
+
+	return Policy(ctx, r.log, operationName, t, rc, cb)
+}
+
+// RemoveEndpoint removes an endpoint from a service.
+// This would be used when a service is taken out of service.
+func (r *Resiliency) RemoveEndpoint(name string, endpoint string) {
+	ep, ok := r.serviceCBs[name]
+	if ok {
+		ep.Remove(endpoint)
 	}
 }
 
-func filterResiliencies(resiliences []Resiliency, runtimeId string) []Resiliency {
-	var filteredResiliencies []Resiliency
+// ActorPolicy returns the policy for an actor instance.
+func (r *Resiliency) ActorPolicy(ctx context.Context, actorType string, id string) Runner {
+	var t time.Duration
+	var rc *retry.Config
+	var cb *breaker.CircuitBreaker
+	operationName := fmt.Sprintf("actor[%s, %s]", actorType, id)
+	if r == nil {
+		return Policy(ctx, r.log, operationName, t, rc, cb)
+	}
+	policyNames, ok := r.actors[actorType]
+	if ok {
+		if policyNames.Timeout != "" {
+			t = r.timeouts[policyNames.Timeout]
+		}
+		if policyNames.Retry != "" {
+			rc = r.retries[policyNames.Retry]
+		}
+		if policyNames.CircuitBreaker != "" {
+			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
+			if ok {
+				cache, ok := r.actorCBCaches[actorType]
+				if ok {
+					var key string
+					if policyNames.CircuitBreakerScope == ActorCircuitBreakerScopeType {
+						key = actorType
+					} else {
+						key = actorType + "-" + id
+					}
+
+					cbi, ok := cache.Get(key)
+					if ok {
+						cb, _ = cbi.(*breaker.CircuitBreaker)
+					} else {
+						cb = &breaker.CircuitBreaker{
+							Name:        key,
+							MaxRequests: template.MaxRequests,
+							Interval:    template.Interval,
+							Timeout:     template.Timeout,
+							Trip:        template.Trip,
+						}
+						cb.Initialize()
+						cache.Add(key, cb)
+					}
+				}
+			}
+		}
+	}
+
+	return Policy(ctx, r.log, operationName, t, rc, cb)
+}
+
+// ComponentPolicy returns the policy for a component.
+func (r *Resiliency) ComponentPolicy(ctx context.Context, name string) Runner {
+	var t time.Duration
+	var rc *retry.Config
+	var cb *breaker.CircuitBreaker
+	operationName := fmt.Sprintf("component[%s]", name)
+	if r == nil {
+		return Policy(ctx, r.log, operationName, t, rc, cb)
+	}
+	policyNames, ok := r.components[name]
+	if ok {
+		if policyNames.Timeout != "" {
+			t = r.timeouts[policyNames.Timeout]
+		}
+		if policyNames.Retry != "" {
+			rc = r.retries[policyNames.Retry]
+		}
+		if policyNames.CircuitBreaker != "" {
+			template := r.circuitBreakers[policyNames.CircuitBreaker]
+			cb = r.componentCBs.Get(name, template)
+		}
+	}
+
+	return Policy(ctx, r.log, operationName, t, rc, cb)
+}
+
+// Get returns a cached circuit breaker if one exists.
+// Otherwise, it returns a new circuit breaker based on the provided template.
+func (e *circuitBreakerInstances) Get(instanceName string, template *breaker.CircuitBreaker) *breaker.CircuitBreaker {
+	e.RLock()
+	cb, ok := e.cbs[instanceName]
+	e.RUnlock()
+	if ok {
+		return cb
+	}
+
+	cb = &breaker.CircuitBreaker{
+		Name:        template.Name + "-" + instanceName,
+		MaxRequests: template.MaxRequests,
+		Interval:    template.Interval,
+		Timeout:     template.Timeout,
+		Trip:        template.Trip,
+	}
+	cb.Initialize()
+
+	e.Lock()
+	e.cbs[instanceName] = cb
+	e.Unlock()
+
+	return cb
+}
+
+// Remove deletes a circuit break from the cache.
+func (e *circuitBreakerInstances) Remove(name string) {
+	e.Lock()
+	delete(e.cbs, name)
+	e.Unlock()
+}
+
+func toMap(val interface{}) (interface{}, error) {
+	jsonBytes, err := json.Marshal(val)
+	if err != nil {
+		return nil, err
+	}
+	var v interface{}
+	err = json.Unmarshal(jsonBytes, &v)
+
+	return v, err
+}
+
+func parseDuration(val string) (time.Duration, error) {
+	if i, err := strconv.ParseInt(val, 10, 64); err == nil {
+		return time.Duration(i) * time.Millisecond, nil
+	}
+	return time.ParseDuration(val)
+}
+
+func ParseActorCircuitBreakerScope(val string) (ActorCircuitBreakerScope, error) {
+	switch val {
+	case "type":
+		return ActorCircuitBreakerScopeType, nil
+	case "id":
+		return ActorCircuitBreakerScopeID, nil
+	case "both":
+		return ActorCircuitBreakerScopeBoth, nil
+	}
+	return ActorCircuitBreakerScope(0), fmt.Errorf("unknown circuit breaker scope %q", val)
+}
+
+func filterResiliencyConfigs(resiliences []*resiliency_v1alpha.Resiliency, runtimeID string) []*resiliency_v1alpha.Resiliency {
+	var filteredResiliencies []*resiliency_v1alpha.Resiliency
 
 	for _, resiliency := range resiliences {
-		if len(resiliency.Resiliency.Scopes) == 0 {
+		if len(resiliency.Scopes) == 0 {
 			filteredResiliencies = append(filteredResiliencies, resiliency)
 			continue
 		}
 
-		for _, scope := range resiliency.Resiliency.Scopes {
-			if scope == runtimeId {
+		for _, scope := range resiliency.Scopes {
+			if scope == runtimeID {
 				filteredResiliencies = append(filteredResiliencies, resiliency)
 				break
 			}
@@ -135,14 +525,4 @@ func filterResiliencies(resiliences []Resiliency, runtimeId string) []Resiliency
 	}
 
 	return filteredResiliencies
-}
-
-func appendResiliency(list []Resiliency, b []byte, log logger.Logger) []Resiliency {
-	resiliency := resiliency_v1alpha.Resiliency{}
-	err := yaml.Unmarshal(b, &resiliency)
-	if err != nil {
-		log.Errorf("Could not parse resiliency: %s", err.Error())
-		return list
-	}
-	return append(list, Resiliency{resiliency})
 }

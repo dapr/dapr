@@ -6,5 +6,6 @@
 package resiliency
 
 const (
+	// GroupName is the API group name.
 	GroupName = "dapr.io"
 )
