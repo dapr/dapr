@@ -111,6 +111,8 @@ git push --force-with-lease <remote-name> <branch-name>
 
 - Third-party code must include licenses.
 
+**Thank You!** - Your contributions to open source, large or small, make projects like this possible. Thank you for taking the time to contribute.
+
 ## Code of Conduct
 
 This project has adopted the [Contributor Covenant Code of Conduct](https://github.com/dapr/community/blob/master/CODE-OF-CONDUCT.md)
