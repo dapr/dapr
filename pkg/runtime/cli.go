@@ -176,9 +176,6 @@ func FromFlags() (*DaprRuntime, error) {
 	} else {
 		gracefulShutdownDuration = time.Duration(*daprGracefulShutdownSeconds) * time.Second
 	}
-	if gracefulShutdownDuration > maxGracefulShutdownDuration {
-		gracefulShutdownDuration = maxGracefulShutdownDuration
-	}
 
 	placementAddresses := []string{}
 	if *placementServiceHostAddr != "" {
