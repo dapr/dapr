@@ -1431,11 +1431,14 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			}
 
 			var batch []Reminder
-			if len(resp.Data) > 0 {
-				err = json.Unmarshal(resp.Data, &batch)
-				if err != nil {
-					return nil, nil, fmt.Errorf("could not parse actor reminders partition %v: %w", resp.Key, err)
-				}
+			if len(resp.Data) == 0 {
+				// Empty content is also an error. Even with no reminder, an empty array as JSON should still be present.
+				return nil, nil, fmt.Errorf("could not find data for reminder partition %v: %w", resp.Key, err)
+			}
+
+			err = json.Unmarshal(resp.Data, &batch)
+			if err != nil {
+				return nil, nil, fmt.Errorf("could not parse actor reminders partition %v: %w", resp.Key, err)
 			}
 
 			for j := range batch {
