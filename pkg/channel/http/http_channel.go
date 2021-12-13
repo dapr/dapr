@@ -72,6 +72,7 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 			MaxIdemponentCallAttempts: 0,
 			MaxResponseBodySize:       maxRequestBodySize * 1024 * 1024,
 			ReadBufferSize:            readBufferSize * 1024,
+			DisablePathNormalizing:    true,
 		},
 		baseAddress:         fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
 		tracingSpec:         spec,
@@ -191,7 +192,8 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	uri := fmt.Sprintf("%s/%s", h.baseAddress, req.Message().GetMethod())
-	channelReq.SetRequestURI(uri)
+	channelReq.URI().Update(uri)
+	channelReq.URI().DisablePathNormalizing = true
 	channelReq.URI().SetQueryString(req.EncodeHTTPQueryString())
 	channelReq.Header.SetMethod(req.Message().HttpExtension.Verb.String())
 
