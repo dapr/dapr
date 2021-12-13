@@ -57,6 +57,7 @@ import (
 const (
 	daprSeparator        = "||"
 	metadataPartitionKey = "partitionKey"
+	metadataZeroID       = "00000000-0000-0000-0000-000000000000"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -91,6 +92,7 @@ type actorsRuntime struct {
 	activeTimersLock         *sync.RWMutex
 	activeReminders          *sync.Map
 	remindersLock            *sync.RWMutex
+	remindersMigrationLock   *sync.Mutex
 	activeRemindersLock      *sync.RWMutex
 	reminders                map[string][]actorReminderReference
 	evaluationLock           *sync.RWMutex
@@ -160,6 +162,7 @@ func NewActors(
 		activeTimersLock:         &sync.RWMutex{},
 		activeReminders:          &sync.Map{},
 		remindersLock:            &sync.RWMutex{},
+		remindersMigrationLock:   &sync.Mutex{},
 		activeRemindersLock:      &sync.RWMutex{},
 		reminders:                map[string][]actorReminderReference{},
 		evaluationLock:           &sync.RWMutex{},
@@ -600,6 +603,7 @@ func (a *actorsRuntime) evaluateReminders() {
 		if err != nil {
 			log.Errorf("error getting reminders for actor type %s: %s", t, err)
 		} else {
+			log.Debugf("loaded %d reminders for actor type %s", len(vals), t)
 			a.remindersLock.Lock()
 			a.reminders[t] = vals
 			a.remindersLock.Unlock()
@@ -612,6 +616,10 @@ func (a *actorsRuntime) evaluateReminders() {
 					r := reminders[i] // Make a copy since we will refer to this as a reference in this loop.
 					targetActorAddress, _ := a.placement.LookupActor(r.reminder.ActorType, r.reminder.ActorID)
 					if targetActorAddress == "" {
+						log.Warnf("did not find address for actor ID %s and actor type %s in reminder %s",
+							r.reminder.ActorID,
+							r.reminder.ActorType,
+							r.reminder.Name)
 						continue
 					}
 
@@ -626,7 +634,17 @@ func (a *actorsRuntime) evaluateReminders() {
 							err := a.startReminder(r.reminder, stop)
 							if err != nil {
 								log.Errorf("error starting reminder: %s", err)
+							} else {
+								log.Debugf("started reminder %s for actor ID %s and actor type %s",
+									r.reminder.Name,
+									r.reminder.ActorID,
+									r.reminder.ActorType)
 							}
+						} else {
+							log.Debugf("reminder %s already exists for actor ID %s and actor type %s",
+								r.reminder.Name,
+								r.reminder.ActorID,
+								r.reminder.ActorType)
 						}
 					}
 				}
@@ -862,7 +880,7 @@ func (m *ActorMetadata) createReminderReference(reminder *Reminder) actorReminde
 	}
 
 	return actorReminderReference{
-		actorMetadataID:           "",
+		actorMetadataID:           metadataZeroID,
 		actorRemindersPartitionID: 0,
 		reminder:                  reminder,
 	}
@@ -1024,7 +1042,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	a.activeReminders.Store(reminderKey, stop)
 
 	err = backoff.Retry(func() error {
-		reminders, actorMetadata, err2 := a.getRemindersForActorType(req.ActorType, true)
+		reminders, actorMetadata, err2 := a.getRemindersForActorType(req.ActorType, false)
 		if err2 != nil {
 			return err2
 		}
@@ -1046,7 +1064,10 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 		// Finally, we must save metadata to get a new eTag.
 		// This avoids a race condition between an update and a repartitioning.
-		a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		err2 = a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		if err2 != nil {
+			return err2
+		}
 
 		a.remindersLock.Lock()
 		a.reminders[req.ActorType] = reminders
@@ -1216,6 +1237,10 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 		Key:   metadataKey,
 		Value: actorMetadata,
 		ETag:  actorMetadata.Etag,
+		Options: state.SetStateOption{
+			Concurrency: state.FirstWrite,
+			Consistency: state.Strong,
+		},
 	})
 }
 
@@ -1226,7 +1251,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 
 	if !a.actorTypeMetadataEnabled {
 		return &ActorMetadata{
-			ID: uuid.NewString(),
+			ID: metadataZeroID,
 			RemindersMetadata: ActorRemindersMetadata{
 				partitionsEtag: nil,
 				PartitionCount: 0,
@@ -1235,89 +1260,89 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 		}, nil
 	}
 
-	metadataKey := constructCompositeKey("actors", actorType, "metadata")
-	resp, err := a.store.Get(&state.GetRequest{
-		Key: metadataKey,
-	})
-	if err != nil || len(resp.Data) == 0 {
-		// Metadata field does not exist or failed to read.
-		// We fallback to the default "zero" partition behavior.
+	result := ActorMetadata{
+		ID: metadataZeroID,
+		RemindersMetadata: ActorRemindersMetadata{
+			partitionsEtag: nil,
+			PartitionCount: 0,
+		},
+		Etag: nil,
+	}
+	retryErr := backoff.Retry(func() error {
+		metadataKey := constructCompositeKey("actors", actorType, "metadata")
+		resp, err := a.store.Get(&state.GetRequest{
+			Key: metadataKey,
+		})
+		if err != nil {
+			return err
+		}
 		actorMetadata := ActorMetadata{
-			ID: uuid.NewString(),
+			ID: metadataZeroID,
 			RemindersMetadata: ActorRemindersMetadata{
 				partitionsEtag: nil,
 				PartitionCount: 0,
 			},
 			Etag: nil,
 		}
+		if len(resp.Data) > 0 {
+			err = json.Unmarshal(resp.Data, &actorMetadata)
+			if err != nil {
+				return fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
+			}
+			actorMetadata.Etag = resp.ETag
+			if !migrate {
+				result = actorMetadata
+				return nil
+			}
 
-		// Save metadata field to make sure the error was due to record not found.
-		// If the previous error was due to database, this write will fail due to:
-		//   1. database is still not responding, or
-		//   2. etag does not match since the item already exists.
-		// This write operation is also needed because we want to avoid a race condition
-		// where another sidecar is trying to do the same.
-		etag := ""
-		if resp != nil && resp.ETag != nil {
-			etag = *resp.ETag
+			err = a.migrateRemindersForActorType(actorType, &actorMetadata)
+			if err != nil {
+				return err
+			}
+
+			result = actorMetadata
 		}
+		return nil
+	}, backoff.NewExponentialBackOff())
 
-		actorMetadata.Etag = &etag
-		err = a.saveActorTypeMetadata(actorType, &actorMetadata)
-		if err != nil {
-			return nil, err
-		}
-
-		// Needs to read to get the etag
-		resp, err = a.store.Get(&state.GetRequest{
-			Key: metadataKey,
-		})
-		if err != nil {
-			return nil, err
-		}
+	if retryErr != nil {
+		return nil, retryErr
 	}
-
-	var actorMetadata ActorMetadata
-	err = json.Unmarshal(resp.Data, &actorMetadata)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
-	}
-	actorMetadata.Etag = resp.ETag
-	if !migrate {
-		return &actorMetadata, nil
-	}
-
-	return a.migrateRemindersForActorType(actorType, &actorMetadata)
+	return &result, nil
 }
 
-func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMetadata *ActorMetadata) (*ActorMetadata, error) {
+func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMetadata *ActorMetadata) error {
 	if !a.actorTypeMetadataEnabled {
-		return actorMetadata, nil
+		return nil
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount == a.config.RemindersStoragePartitions {
-		return actorMetadata, nil
+		return nil
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount > a.config.RemindersStoragePartitions {
 		log.Warnf("cannot decrease number of partitions for reminders of actor type %s", actorType)
-		return actorMetadata, nil
+		return nil
 	}
 
+	// Nice to have: avoid conflicting migration within the same process.
+	a.remindersMigrationLock.Lock()
+	defer a.remindersMigrationLock.Unlock()
 	log.Warnf("migrating actor metadata record for actor type %s", actorType)
 
 	// Fetch all reminders for actor type.
 	reminderRefs, refreshedActorMetadata, err := a.getRemindersForActorType(actorType, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if refreshedActorMetadata.ID != actorMetadata.ID {
-		return nil, errors.Errorf("could not migrate reminders for actor type %s due to race condition in actor metadata", actorType)
+		return errors.Errorf("could not migrate reminders for actor type %s due to race condition in actor metadata", actorType)
 	}
 
 	// Recreate as a new metadata identifier.
 	actorMetadata.ID = uuid.NewString()
 	actorMetadata.RemindersMetadata.PartitionCount = a.config.RemindersStoragePartitions
+	actorMetadata.Etag = refreshedActorMetadata.Etag
 	actorRemindersPartitions := make([][]*Reminder, actorMetadata.RemindersMetadata.PartitionCount)
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		actorRemindersPartitions[i] = make([]*Reminder, 0)
@@ -1349,18 +1374,18 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	}
 	err = a.transactionalStore.Multi(&transaction)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Save new metadata so the new "metadataID" becomes the new de factor referenced list for reminders.
 	err = a.saveActorTypeMetadata(actorType, actorMetadata)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	log.Warnf(
 		"completed actor metadata record migration for actor type %s, new metadata ID = %s",
 		actorType, actorMetadata.ID)
-	return actorMetadata, nil
+	return nil
 }
 
 func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool) ([]actorReminderReference, *ActorMetadata, error) {
@@ -1373,6 +1398,9 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		return nil, nil, fmt.Errorf("could not read actor type metadata: %w", merr)
 	}
 
+	log.Debugf(
+		"starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
+		actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount)
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
 		metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
 		actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{}
@@ -1445,6 +1473,9 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			}
 		}
 
+		log.Debugf(
+			"finished reading reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions: total of %d reminders",
+			actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount, len(reminders))
 		return reminders, actorMetadata, nil
 	}
 
@@ -1467,7 +1498,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	reminderRefs := make([]actorReminderReference, len(reminders))
 	for j := range reminders {
 		reminderRefs[j] = actorReminderReference{
-			actorMetadataID:           "",
+			actorMetadataID:           actorMetadata.ID,
 			actorRemindersPartitionID: 0,
 			reminder:                  &reminders[j],
 		}
@@ -1476,12 +1507,17 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	actorMetadata.RemindersMetadata.partitionsEtag = map[uint32]*string{
 		0: resp.ETag,
 	}
+
+	log.Debugf(
+		"finished reading reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions: total of %d reminders",
+		actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount, len(reminders))
 	return reminderRefs, actorMetadata, nil
 }
 
 func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string, databasePartitionKey string) error {
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
+	log.Debugf("saving %d reminders in %s ...", len(reminders), stateKey)
 	return a.store.Set(&state.SetRequest{
 		Key:      stateKey,
 		Value:    reminders,
@@ -1515,7 +1551,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	}
 
 	err := backoff.Retry(func() error {
-		reminders, actorMetadata, err := a.getRemindersForActorType(req.ActorType, true)
+		reminders, actorMetadata, err := a.getRemindersForActorType(req.ActorType, false)
 		if err != nil {
 			return err
 		}
@@ -1541,7 +1577,10 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 
 		// Finally, we must save metadata to get a new eTag.
 		// This avoids a race condition between an update and a repartitioning.
-		a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		err = a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+		if err != nil {
+			return err
+		}
 
 		a.remindersLock.Lock()
 		a.reminders[req.ActorType] = reminders
@@ -1563,7 +1602,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
-	reminders, _, err := a.getRemindersForActorType(req.ActorType, true)
+	reminders, _, err := a.getRemindersForActorType(req.ActorType, false)
 	if err != nil {
 		return nil, err
 	}
