@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package grpc
 
@@ -9,8 +17,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -1995,37 +2005,31 @@ type mockStateStoreQuerier struct {
 
 const (
 	queryTestRequestOK = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"sort": [
-			{ "key": "a" }
-		],
-		"pagination": {
-			"limit": 2
-		}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"sort": [
+		{ "key": "a" }
+	],
+	"page": {
+		"limit": 2
 	}
 }`
 	queryTestRequestNoRes = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"pagination": {
-			"limit": 2
-		}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"page": {
+		"limit": 2
 	}
 }`
 	queryTestRequestErr = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"sort": [
-			{ "key": "a" }
-		]
-	}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"sort": [
+		{ "key": "a" }
+	]
 }`
 	queryTestRequestSyntaxErr = `syntax error`
 )
@@ -2118,4 +2122,117 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 		StoreName: "store1",
 	})
 	assert.Equal(t, codes.Unimplemented, status.Code(err))
+}
+
+func TestGetConfigurationAlpha1(t *testing.T) {
+	t.Run("get configuration item", func(t *testing.T) {
+		port, err := freeport.GetFreePort()
+		assert.NoError(t, err)
+
+		server := startDaprAPIServer(
+			port,
+			&api{
+				id:                  "fakeAPI",
+				configurationStores: map[string]configuration.Store{"store1": &mockConfigStore{}},
+			},
+			"")
+		defer server.Stop()
+
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+		r, err := client.GetConfigurationAlpha1(context.TODO(), &runtimev1pb.GetConfigurationRequest{
+			StoreName: "store1",
+			Keys: []string{
+				"key1",
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.NotNil(t, r.Items)
+		assert.Len(t, r.Items, 1)
+		assert.Equal(t, "key1", r.Items[0].Key)
+		assert.Equal(t, "val1", r.Items[0].Value)
+	})
+}
+
+func TestSubscribeConfigurationAlpha1(t *testing.T) {
+	t.Run("get configuration item", func(t *testing.T) {
+		port, err := freeport.GetFreePort()
+		assert.NoError(t, err)
+
+		server := startDaprAPIServer(
+			port,
+			&api{
+				id:                         "fakeAPI",
+				configurationStores:        map[string]configuration.Store{"store1": &mockConfigStore{}},
+				configurationSubscribe:     make(map[string]chan struct{}),
+				configurationSubscribeLock: sync.Mutex{},
+			},
+			"")
+		defer server.Stop()
+
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		ctx := context.TODO()
+		client := runtimev1pb.NewDaprClient(clientConn)
+		s, err := client.SubscribeConfigurationAlpha1(ctx, &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "store1",
+			Keys: []string{
+				"key1",
+			},
+		})
+
+		assert.NoError(t, err)
+
+		r := &runtimev1pb.SubscribeConfigurationResponse{}
+
+		for {
+			update, err := s.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			if update != nil {
+				r = update
+				break
+			}
+		}
+
+		assert.NotNil(t, r)
+		assert.Len(t, r.Items, 1)
+		assert.Equal(t, "key1", r.Items[0].Key)
+		assert.Equal(t, "val1", r.Items[0].Value)
+	})
+}
+
+type mockConfigStore struct{}
+
+func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
+	return nil
+}
+
+func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
+	return &configuration.GetResponse{
+		Items: []*configuration.Item{
+			{
+				Key:   req.Keys[0],
+				Value: "val1",
+			},
+		},
+	}, nil
+}
+
+func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) error {
+	handler(ctx, &configuration.UpdateEvent{
+		Items: []*configuration.Item{
+			{
+				Key:   "key1",
+				Value: "val1",
+			},
+		},
+	})
+	return nil
 }
