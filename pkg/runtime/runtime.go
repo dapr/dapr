@@ -2091,6 +2091,8 @@ func (a *DaprRuntime) createAppChannel() error {
 			log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
 		}
 		a.appChannel = ch
+	} else {
+		log.Warn("app channel is not initialized. did you make sure to configure an app-port?")
 	}
 
 	return nil
