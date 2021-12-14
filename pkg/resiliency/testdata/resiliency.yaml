@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Resiliency
 metadata:
-  name: daprResiliency
+  name: resiliency
 # Like in the Subscriptions CRD, scopes lists the Dapr App IDs that this
 # configuration applies to.
 scopes:

@@ -65,6 +65,7 @@ const (
 	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
 	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
+	daprResiliencyKey                 = "dapr.io/resiliency"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -294,6 +295,10 @@ func getAppPort(annotations map[string]string) (int32, error) {
 
 func getConfig(annotations map[string]string) string {
 	return getStringAnnotation(annotations, daprConfigKey)
+}
+
+func getResiliency(annotations map[string]string) string {
+	return getStringAnnotation(annotations, daprResiliencyKey)
 }
 
 func getProtocol(annotations map[string]string) string {
@@ -575,6 +580,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--metrics-port", fmt.Sprintf("%v", metricsPort),
 		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
+		"--resiliency", getResiliency(annotations),
 	}
 
 	debugEnabled := getEnableDebug(annotations)
