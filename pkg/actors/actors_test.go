@@ -1710,7 +1710,7 @@ func TestHostValidation(t *testing.T) {
 
 func TestParseDuration(t *testing.T) {
 	t.Run("parse time.Duration", func(t *testing.T) {
-		duration, y, m, d, repetition, err := parseDuration("0h30m0s")
+		y, m, d, duration, repetition, err := parseDuration("0h30m0s")
 		assert.Nil(t, err)
 		assert.Equal(t, time.Minute*30, duration)
 		assert.Equal(t, 0, y)
@@ -1719,7 +1719,7 @@ func TestParseDuration(t *testing.T) {
 		assert.Equal(t, -1, repetition)
 	})
 	t.Run("parse ISO 8601 duration with repetition", func(t *testing.T) {
-		duration, y, m, d, repetition, err := parseDuration("R5/P10Y5M3DT30M")
+		y, m, d, duration, repetition, err := parseDuration("R5/P10Y5M3DT30M")
 		assert.Nil(t, err)
 		assert.Equal(t, 10, y)
 		assert.Equal(t, 5, m)
@@ -1728,7 +1728,7 @@ func TestParseDuration(t *testing.T) {
 		assert.Equal(t, 5, repetition)
 	})
 	t.Run("parse ISO 8601 duration without repetition", func(t *testing.T) {
-		duration, y, m, d, repetition, err := parseDuration("P1MT2H10M3S")
+		y, m, d, duration, repetition, err := parseDuration("P1MT2H10M3S")
 		assert.Nil(t, err)
 		assert.Equal(t, 0, y)
 		assert.Equal(t, 1, m)
