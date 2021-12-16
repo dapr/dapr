@@ -170,22 +170,22 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 		// Unexpected response: both GRPC and HTTP have to log the same level.
 		log.Errorf(getTopicsError, err)
 		return nil, err
+	}
+
+	if resp == nil || resp.Subscriptions == nil || len(resp.Subscriptions) == 0 {
+		log.Debug(noSubscriptionsError)
 	} else {
-		if resp == nil || resp.Subscriptions == nil || len(resp.Subscriptions) == 0 {
-			log.Debug(noSubscriptionsError)
-		} else {
-			for _, s := range resp.Subscriptions {
-				rules, err := parseRoutingRulesGRPC(s.Routes)
-				if err != nil {
-					return nil, err
-				}
-				subscriptions = append(subscriptions, Subscription{
-					PubsubName: s.PubsubName,
-					Topic:      s.GetTopic(),
-					Metadata:   s.GetMetadata(),
-					Rules:      rules,
-				})
+		for _, s := range resp.Subscriptions {
+			rules, err := parseRoutingRulesGRPC(s.Routes)
+			if err != nil {
+				return nil, err
 			}
+			subscriptions = append(subscriptions, Subscription{
+				PubsubName: s.PubsubName,
+				Topic:      s.GetTopic(),
+				Metadata:   s.GetMetadata(),
+				Rules:      rules,
+			})
 		}
 	}
 
