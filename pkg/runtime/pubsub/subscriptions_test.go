@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -368,10 +370,15 @@ type mockUnstableGRPCSubscriptions struct {
 	runtimev1pb.AppCallbackClient
 	callCount        int
 	successThreshold int
+	unimplemented    bool
 }
 
 func (m *mockUnstableGRPCSubscriptions) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 	m.callCount++
+
+	if m.unimplemented {
+		return nil, status.Error(codes.Unimplemented, "Unimplemented method")
+	}
 
 	if m.callCount < m.successThreshold {
 		return nil, errors.New("connection refused")
@@ -469,6 +476,17 @@ func TestGRPCSubscriptions(t *testing.T) {
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
+	})
+
+	t.Run("server is running, app returns unimplemented error, no retries", func(t *testing.T) {
+		m := mockUnstableGRPCSubscriptions{
+			successThreshold: 3,
+			unimplemented:    true,
+		}
+
+		_, err := GetSubscriptionsGRPC(&m, log)
+		require.Error(t, err)
+		assert.Equal(t, 1, m.callCount)
 	})
 }
 

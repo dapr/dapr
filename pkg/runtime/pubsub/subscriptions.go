@@ -11,6 +11,8 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -153,12 +155,21 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 
 	backoff.Retry(func() error {
 		resp, err = channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
+
+		if err != nil {
+			if s, ok := status.FromError(err); ok && s != nil {
+				if s.Code() == codes.Unimplemented {
+					return nil
+				}
+			}
+		}
 		return err
 	}, backoff.NewExponentialBackOff())
 
 	if err != nil {
 		// Unexpected response: both GRPC and HTTP have to log the same level.
 		log.Errorf(getTopicsError, err)
+		return nil, err
 	} else {
 		if resp == nil || resp.Subscriptions == nil || len(resp.Subscriptions) == 0 {
 			log.Debug(noSubscriptionsError)
