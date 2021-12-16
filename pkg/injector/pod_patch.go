@@ -56,10 +56,10 @@ const (
 	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
 	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
 	daprAppSSLKey                     = "dapr.io/app-ssl"
+	sidecarAPIGRPCPortKey             = "com.infoblox.dapr.sidecar-grpc-port"
+	sidecarHTTPPortKey                = "com.infoblox.dapr.sidecar-http-port"
+	sidecarInternalGRPCPortKey        = "com.infoblox.dapr.sidecar-internal-grpc-port"
 	containersPath                    = "/spec/containers"
-	sidecarHTTPPort                   = 3500
-	sidecarAPIGRPCPort                = 50001
-	sidecarInternalGRPCPort           = 50002
 	userContainerDaprHTTPPortName     = "DAPR_HTTP_PORT"
 	userContainerDaprGRPCPortName     = "DAPR_GRPC_PORT"
 	apiAddress                        = "dapr-api"
@@ -75,6 +75,9 @@ const (
 	kubernetesMountPath               = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig                     = "daprsystem"
 	defaultMetricsPort                = 9090
+	defaultSidecarHTTPPort            = 3500
+	defaultSidecarAPIGRPCPort         = 50001
+	defaultSidecarInternalGRPCPortKey = 50002
 	sidecarHealthzPath                = "healthz"
 	defaultHealthzProbeDelaySeconds   = 3
 	defaultHealthzProbeTimeoutSeconds = 3
@@ -142,11 +145,21 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	envPatchOps := []PatchOperation{}
 	var path string
 	var value interface{}
+	portEnv := []corev1.EnvVar{
+		{
+			Name:  userContainerDaprHTTPPortName,
+			Value: fmt.Sprint(getSideCarHTTPPort(pod.Annotations)),
+		},
+		{
+			Name:  userContainerDaprGRPCPortName,
+			Value: fmt.Sprint(getSideCarAPIGRPCPort(pod.Annotations)),
+		},
+	}
 	if len(pod.Spec.Containers) == 0 {
 		path = containersPath
 		value = []corev1.Container{*sidecarContainer}
 	} else {
-		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
+		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers, portEnv)
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
@@ -166,21 +179,11 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 // This function add Dapr environment variables to all the containers in any Dapr enabled pod.
 // The containers can be injected or user defined.
-func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
-	portEnv := []corev1.EnvVar{
-		{
-			Name:  userContainerDaprHTTPPortName,
-			Value: strconv.Itoa(sidecarHTTPPort),
-		},
-		{
-			Name:  userContainerDaprGRPCPortName,
-			Value: strconv.Itoa(sidecarAPIGRPCPort),
-		},
-	}
+func addDaprEnvVarsToContainers(containers []corev1.Container, daprEnv []corev1.EnvVar) []PatchOperation {
 	envPatchOps := []PatchOperation{}
 	for i, container := range containers {
 		path := fmt.Sprintf("%s/%d/env", containersPath, i)
-		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
+		patchOps := getEnvPatchOperations(container.Env, daprEnv, path)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
 	return envPatchOps
@@ -305,6 +308,18 @@ func profilingEnabled(annotations map[string]string) bool {
 
 func appSSLEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprAppSSLKey, defaultAppSSL)
+}
+
+func getSideCarAPIGRPCPort(annotations map[string]string) int32 {
+	return getInt32AnnotationOrDefault(annotations, sidecarAPIGRPCPortKey, defaultSidecarAPIGRPCPort)
+}
+
+func getSideCarHTTPPort(annotations map[string]string) int32 {
+	return getInt32AnnotationOrDefault(annotations, sidecarHTTPPortKey, defaultSidecarHTTPPort)
+}
+
+func getSideCarInternalGRPCPort(annotations map[string]string) int32 {
+	return getInt32AnnotationOrDefault(annotations, sidecarInternalGRPCPortKey, defaultSidecarInternalGRPCPortKey)
 }
 
 func getAPITokenSecret(annotations map[string]string) string {
@@ -475,6 +490,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	pullPolicy := getPullPolicy(imagePullPolicy)
 
+	sidecarHTTPPort := getSideCarHTTPPort(annotations)
+
 	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
 
 	allowPrivilegeEscalation := false
@@ -484,6 +501,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		log.Warn(err)
 	}
 
+	sidecarAPIGRPCPort := getSideCarAPIGRPCPort(annotations)
+	sidecarInternalGRPCPort := getSideCarInternalGRPCPort(annotations)
 	c := &corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,

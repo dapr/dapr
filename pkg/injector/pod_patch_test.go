@@ -80,11 +80,11 @@ func TestGetProbeHttpHandler(t *testing.T) {
 	expectedHandler := corev1.Handler{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: expectedPath,
-			Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
+			Port: intstr.IntOrString{IntVal: defaultSidecarHTTPPort},
 		},
 	}
 
-	assert.EqualValues(t, expectedHandler, getProbeHTTPHandler(sidecarHTTPPort, pathElements...))
+	assert.EqualValues(t, expectedHandler, getProbeHTTPHandler(defaultSidecarHTTPPort, pathElements...))
 }
 
 func TestGetSideCarContainer(t *testing.T) {
@@ -169,6 +169,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	testCases := []struct {
 		testName      string
 		mockContainer corev1.Container
+		mockEnvs      []corev1.EnvVar
 		expOpsLen     int
 		expOps        []PatchOperation
 	}{
@@ -176,6 +177,16 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			testName: "empty environment vars",
 			mockContainer: corev1.Container{
 				Name: "MockContainer",
+			},
+			mockEnvs: []corev1.EnvVar{
+				{
+					Name:  userContainerDaprHTTPPortName,
+					Value: fmt.Sprint(defaultSidecarHTTPPort),
+				},
+				{
+					Name:  userContainerDaprGRPCPortName,
+					Value: strconv.Itoa(defaultSidecarAPIGRPCPort),
+				},
 			},
 			expOpsLen: 1,
 			expOps: []PatchOperation{
@@ -185,11 +196,11 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					Value: []corev1.EnvVar{
 						{
 							Name:  userContainerDaprHTTPPortName,
-							Value: strconv.Itoa(sidecarHTTPPort),
+							Value: fmt.Sprint(defaultSidecarHTTPPort),
 						},
 						{
 							Name:  userContainerDaprGRPCPortName,
-							Value: strconv.Itoa(sidecarAPIGRPCPort),
+							Value: strconv.Itoa(defaultSidecarAPIGRPCPort),
 						},
 					},
 				},
@@ -206,6 +217,16 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					},
 				},
 			},
+			mockEnvs: []corev1.EnvVar{
+				{
+					Name:  userContainerDaprHTTPPortName,
+					Value: fmt.Sprint(defaultSidecarHTTPPort),
+				},
+				{
+					Name:  userContainerDaprGRPCPortName,
+					Value: strconv.Itoa(defaultSidecarAPIGRPCPort),
+				},
+			},
 			expOpsLen: 2,
 			expOps: []PatchOperation{
 				{
@@ -213,7 +234,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					Path: "/spec/containers/0/env/-",
 					Value: corev1.EnvVar{
 						Name:  userContainerDaprHTTPPortName,
-						Value: strconv.Itoa(sidecarHTTPPort),
+						Value: fmt.Sprint(defaultSidecarHTTPPort),
 					},
 				},
 				{
@@ -221,7 +242,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					Path: "/spec/containers/0/env/-",
 					Value: corev1.EnvVar{
 						Name:  userContainerDaprGRPCPortName,
-						Value: strconv.Itoa(sidecarAPIGRPCPort),
+						Value: strconv.Itoa(defaultSidecarAPIGRPCPort),
 					},
 				},
 			},
@@ -241,6 +262,16 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					},
 				},
 			},
+			mockEnvs: []corev1.EnvVar{
+				{
+					Name:  userContainerDaprHTTPPortName,
+					Value: fmt.Sprint(defaultSidecarHTTPPort),
+				},
+				{
+					Name:  userContainerDaprGRPCPortName,
+					Value: strconv.Itoa(defaultSidecarAPIGRPCPort),
+				},
+			},
 			expOpsLen: 1,
 			expOps: []PatchOperation{
 				{
@@ -248,7 +279,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					Path: "/spec/containers/0/env/-",
 					Value: corev1.EnvVar{
 						Name:  userContainerDaprHTTPPortName,
-						Value: strconv.Itoa(sidecarHTTPPort),
+						Value: fmt.Sprint(defaultSidecarHTTPPort),
 					},
 				},
 			},
@@ -268,6 +299,16 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					},
 				},
 			},
+			mockEnvs: []corev1.EnvVar{
+				{
+					Name:  userContainerDaprHTTPPortName,
+					Value: fmt.Sprint(defaultSidecarHTTPPort),
+				},
+				{
+					Name:  userContainerDaprGRPCPortName,
+					Value: strconv.Itoa(defaultSidecarAPIGRPCPort),
+				},
+			},
 			expOpsLen: 0,
 			expOps:    []PatchOperation{},
 		},
@@ -276,7 +317,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := addDaprEnvVarsToContainers([]corev1.Container{tc.mockContainer})
+			patchEnv := addDaprEnvVarsToContainers([]corev1.Container{tc.mockContainer}, tc.mockEnvs)
 			fmt.Println(tc.testName)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
