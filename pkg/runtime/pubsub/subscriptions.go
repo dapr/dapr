@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
+	"github.com/dapr/kit/retry"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -70,15 +72,14 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 	var resp *invokev1.InvokeMethodResponse
 	var err error
 
-	backoff.Retry(func() error {
+	backoff := getSubscriptionsBackoff()
+
+	retry.NotifyRecover(func() error {
 		resp, err = channel.InvokeMethod(ctx, req)
 		return err
-	}, backoff.NewExponentialBackOff())
-
-	if err != nil {
-		log.Errorf(getTopicsError, err)
-		return nil, err
-	}
+	}, backoff, func(err error, d time.Duration) {
+		log.Debug("failed getting gRPC subscriptions, starting retry")
+	}, func() {})
 
 	switch resp.Status().Code {
 	case http.StatusOK:
@@ -147,13 +148,21 @@ func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subs
 	return subscriptions
 }
 
+func getSubscriptionsBackoff() backoff.BackOff {
+	config := retry.DefaultConfig()
+	config.Policy = retry.PolicyExponential
+	return config.NewBackOff()
+}
+
 func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger) ([]Subscription, error) {
 	var subscriptions []Subscription
 
 	var err error
 	var resp *runtimev1pb.ListTopicSubscriptionsResponse
 
-	backoff.Retry(func() error {
+	backoff := getSubscriptionsBackoff()
+
+	retry.NotifyRecover(func() error {
 		resp, err = channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
 
 		if err != nil {
@@ -164,7 +173,9 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 			}
 		}
 		return err
-	}, backoff.NewExponentialBackOff())
+	}, backoff, func(err error, d time.Duration) {
+		log.Debug("failed getting gRPC subscriptions, starting retry")
+	}, func() {})
 
 	if err != nil {
 		// Unexpected response: both GRPC and HTTP have to log the same level.
