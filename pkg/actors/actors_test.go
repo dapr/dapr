@@ -1736,6 +1736,22 @@ func TestParseDuration(t *testing.T) {
 		assert.Equal(t, time.Hour*2+time.Minute*10+time.Second*3, duration)
 		assert.Equal(t, -1, repetition)
 	})
+	t.Run("parse ISO 8610 with leap yean", func(t *testing.T) {
+		y, m, d, dur, _, err := parseDuration("P1Y2M3D")
+		assert.Nil(t, err)
+
+		// 2020 is a leap year
+		start, _ := time.Parse("2006-01-02 15:04:05", "2020-02-03 11:12:13")
+		target := start.AddDate(y, m, d).Add(dur)
+		expect, _ := time.Parse("2006-01-02 15:04:05", "2021-04-06 11:12:13")
+		assert.Equal(t, time.Duration(0), target.Sub(expect))
+
+		// 2019 is not a leap year
+		start, _ = time.Parse("2006-01-02 15:04:05", "2019-02-03 11:12:13")
+		target = start.AddDate(y, m, d).Add(dur)
+		expect, _ = time.Parse("2006-01-02 15:04:05", "2020-04-06 11:12:13")
+		assert.Equal(t, time.Duration(0), target.Sub(expect))
+	})
 	t.Run("parse RFC3339 datetime", func(t *testing.T) {
 		_, _, _, _, _, err := parseDuration(time.Now().Add(time.Minute).Format(time.RFC3339))
 		assert.NotNil(t, err)
