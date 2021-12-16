@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cenkalti/backoff"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -63,10 +64,17 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 
 	// TODO Propagate Context
 	ctx := context.Background()
-	resp, err := channel.InvokeMethod(ctx, req)
+
+	var resp *invokev1.InvokeMethodResponse
+	var err error
+
+	backoff.Retry(func() error {
+		resp, err = channel.InvokeMethod(ctx, req)
+		return err
+	}, backoff.NewExponentialBackOff())
+
 	if err != nil {
 		log.Errorf(getTopicsError, err)
-
 		return nil, err
 	}
 
@@ -140,7 +148,14 @@ func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subs
 func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger) ([]Subscription, error) {
 	var subscriptions []Subscription
 
-	resp, err := channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
+	var err error
+	var resp *runtimev1pb.ListTopicSubscriptionsResponse
+
+	backoff.Retry(func() error {
+		resp, err = channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
+		return err
+	}, backoff.NewExponentialBackOff())
+
 	if err != nil {
 		// Unexpected response: both GRPC and HTTP have to log the same level.
 		log.Errorf(getTopicsError, err)
