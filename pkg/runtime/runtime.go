@@ -1345,7 +1345,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	return thepubsub.Publish(req)
+	return a.pubSubs[req.PubsubName].Publish(req)
 }
 
 // GetPubSub is an adapter method to find a pubsub by name.
