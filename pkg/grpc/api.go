@@ -611,7 +611,8 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 
 	for i := range resp.Results {
 		ret.Results[i] = &runtimev1pb.QueryStateItem{
-			Key: state_loader.GetOriginalStateKey(resp.Results[i].Key),
+			Key:  state_loader.GetOriginalStateKey(resp.Results[i].Key),
+			Data: resp.Results[i].Data,
 		}
 		if encrypted {
 			ret.Results[i].Data, err = encryption.TryDecryptValue(in.StoreName, resp.Results[i].Data)
