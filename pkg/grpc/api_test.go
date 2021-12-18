@@ -2080,6 +2080,9 @@ func TestQueryState(t *testing.T) {
 	})
 	assert.Equal(t, 1, len(resp.Results))
 	assert.Equal(t, codes.OK, status.Code(err))
+	if len(resp.Results) > 0 {
+		assert.NotNil(t, resp.Results[0].Data)
+	}
 
 	resp, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: "store1",
