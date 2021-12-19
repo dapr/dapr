@@ -1065,7 +1065,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		repeats             int
 		dueTime, ttl        time.Time
 		period              time.Duration
-		yeads, months, days int
+		years, months, days int
 	)
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
@@ -1092,7 +1092,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 	repeats = -1 // set to default
 	if len(req.Period) != 0 {
-		if yeads, months, days, period, repeats, err = parseDuration(req.Period); err != nil {
+		if years, months, days, period, repeats, err = parseDuration(req.Period); err != nil {
 			return errors.Wrap(err, "error parsing timer period")
 		}
 		// error on timers with zero repetitions
@@ -1161,11 +1161,11 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 				log.Errorf("could not find active timer %s", timerKey)
 				return
 			}
-			if repeats == 0 || (yeads == 0 && months == 0 && days == 0 && period == 0) {
+			if repeats == 0 || (years == 0 && months == 0 && days == 0 && period == 0) {
 				log.Infof("timer %s has been completed", timerKey)
 				break L
 			}
-			nextTime = nextTime.AddDate(yeads, months, days).Add(period)
+			nextTime = nextTime.AddDate(years, months, days).Add(period)
 			if nextTimer.Stop() {
 				<-nextTimer.C
 			}
