@@ -105,7 +105,7 @@ require (
 	github.com/aliyun/aliyun-tablestore-go-sdk v1.6.0 // indirect
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
 	github.com/andybalholm/brotli v1.0.2 // indirect
-	github.com/antlr/antlr4 v0.0.0-20200503195918-621b933c7a7f // indirect
+	github.com/antlr/antlr4/runtime/Go/antlr v0.0.0-20210826220005-b48c857c3a0e // indirect
 	github.com/apache/pulsar-client-go v0.6.1-0.20211027182823-171ef578e91a // indirect
 	github.com/apache/pulsar-client-go/oauth2 v0.0.0-20201120111947-b8bd55bc02bd // indirect
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
