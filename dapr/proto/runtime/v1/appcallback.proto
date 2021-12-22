@@ -168,6 +168,9 @@ message TopicRoutes {
 
   // The default path for this topic.
   string default = 2;
+
+  // Use data as payload when publishing message to app.
+  string default_data_as_payload = 3;
 }
 
 message TopicRule {
@@ -180,6 +183,9 @@ message TopicRule {
   // This value is passed in TopicEventRequest and used by OnTopicEvent to "switch"
   // inside the handler.
   string path = 2;
+
+  // Use data as payload when publishing message to app.
+  string data_as_payload = 3;
 }
 
 // ListInputBindingsResponse is the message including the list of input bindings.

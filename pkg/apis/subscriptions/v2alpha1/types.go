@@ -53,6 +53,9 @@ type Routes struct {
 	// The default path for this topic.
 	// +optional
 	Default string `json:"default,omitempty"`
+	// The default setting for data as payload.
+	// +optional
+	DefaultDataAsPayload bool `json:"defaultDataAsPayload,omitempty"`
 }
 
 // Rule is used to specify the condition for sending
@@ -67,6 +70,9 @@ type Rule struct {
 
 	// The path for events that match this rule.
 	Path string `json:"path"`
+
+	// Use CloudEvent data field as payload to send to app.
+	DataAsPayload *bool `json:"dataAsPayload,omitempty"`
 }
 
 // +kubebuilder:object:root=true

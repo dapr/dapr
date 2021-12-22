@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"k8s.io/utils/pointer"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,7 +75,8 @@ func testDeclarativeSubscriptionV1() subscriptionsapi_v1alpha1.Subscription {
 			Metadata: map[string]string{
 				"testName": "testValue",
 			},
-			Route: "myroute",
+			Route:         "myroute",
+			DataAsPayload: true,
 		},
 	}
 }
@@ -94,15 +96,17 @@ func testDeclarativeSubscriptionV2() subscriptionsapi_v2alpha1.Subscription {
 			Routes: subscriptionsapi_v2alpha1.Routes{
 				Rules: []subscriptionsapi_v2alpha1.Rule{
 					{
-						Match: `event.type == "myevent.v3"`,
-						Path:  "myroute.v3",
+						Match:         `event.type == "myevent.v3"`,
+						Path:          "myroute.v3",
+						DataAsPayload: pointer.BoolPtr(false),
 					},
 					{
 						Match: `event.type == "myevent.v2"`,
 						Path:  "myroute.v2",
 					},
 				},
-				Default: "myroute",
+				Default:              "myroute",
+				DefaultDataAsPayload: true,
 			},
 		},
 	}
@@ -130,6 +134,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 1) {
 				assert.Equal(t, "myroute", subs[0].Rules[0].Path)
+				assert.True(t, subs[0].Rules[0].DataAsPayload)
 			}
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "scope1", subs[0].Scopes[0])
@@ -138,10 +143,11 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 	})
 
 	t.Run("load multiple subscriptions", func(t *testing.T) {
-		for i := 0; i < 1; i++ {
+		for i := 0; i < 2; i++ {
 			s := testDeclarativeSubscriptionV1()
 			s.Spec.Topic = fmt.Sprintf("%v", i)
 			s.Spec.Route = fmt.Sprintf("%v", i)
+			s.Spec.DataAsPayload = i%2 == 0
 			s.Spec.Pubsubname = fmt.Sprintf("%v", i)
 			s.Spec.Metadata = map[string]string{
 				"testName": fmt.Sprintf("%v", i),
@@ -152,15 +158,17 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		}
 
 		subs := DeclarativeSelfHosted(dir, log)
-		if assert.Len(t, subs, 2) {
-			for i := 0; i < 1; i++ {
+		if assert.Len(t, subs, 3) {
+			for i := 0; i < 2; i++ {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
 				if assert.Equal(t, 1, len(subs[i].Rules)) {
 					assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Rules[0].Path)
+					assert.Equal(t, i%2 == 0, subs[i].Rules[0].DataAsPayload)
 				}
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].PubsubName)
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Scopes[0])
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Metadata["testName"])
+
 			}
 		}
 	})
@@ -195,8 +203,11 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.False(t, subs[0].Rules[0].DataAsPayload)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.True(t, subs[0].Rules[1].DataAsPayload)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+				assert.True(t, subs[0].Rules[2].DataAsPayload)
 			}
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "scope1", subs[0].Scopes[0])
@@ -211,6 +222,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 			s.Spec.Topic = iStr
 			for j := range s.Spec.Routes.Rules {
 				s.Spec.Routes.Rules[j].Path = iStr
+				s.Spec.Routes.Rules[j].DataAsPayload = pointer.BoolPtr(i%2 == 0)
 			}
 			s.Spec.Routes.Default = iStr
 			s.Spec.Pubsubname = iStr
@@ -229,6 +241,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 				assert.Equal(t, iStr, subs[i].Topic)
 				if assert.Equal(t, 3, len(subs[i].Rules)) {
 					assert.Equal(t, iStr, subs[i].Rules[0].Path)
+					assert.Equal(t, i%2 == 0, subs[i].Rules[0].DataAsPayload)
 				}
 				assert.Equal(t, iStr, subs[i].PubsubName)
 				assert.Equal(t, iStr, subs[i].Scopes[0])
@@ -273,15 +286,17 @@ func (m *mockUnstableHTTPSubscriptions) InvokeMethod(ctx context.Context, req *i
 			Routes: RoutesJSON{
 				Rules: []*RuleJSON{
 					{
-						Match: `event.type == "myevent.v3"`,
-						Path:  "myroute.v3",
+						Match:         `event.type == "myevent.v3"`,
+						Path:          "myroute.v3",
+						DataAsPayload: pointer.BoolPtr(false),
 					},
 					{
 						Match: `event.type == "myevent.v2"`,
 						Path:  "myroute.v2",
 					},
 				},
-				Default: "myroute",
+				Default:              "myroute",
+				DefaultDataAsPayload: true,
 			},
 		},
 	}
@@ -308,15 +323,17 @@ func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.
 			Routes: RoutesJSON{
 				Rules: []*RuleJSON{
 					{
-						Match: `event.type == "myevent.v3"`,
-						Path:  "myroute.v3",
+						Match:         `event.type == "myevent.v3"`,
+						Path:          "myroute.v3",
+						DataAsPayload: pointer.BoolPtr(false),
 					},
 					{
 						Match: `event.type == "myevent.v2"`,
 						Path:  "myroute.v2",
 					},
 				},
-				Default: "myroute",
+				Default:              "myroute",
+				DefaultDataAsPayload: true,
 			},
 		},
 	}
@@ -337,8 +354,11 @@ func TestHTTPSubscriptions(t *testing.T) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.False(t, subs[0].Rules[0].DataAsPayload)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.True(t, subs[0].Rules[1].DataAsPayload)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+				assert.True(t, subs[0].Rules[2].DataAsPayload)
 			}
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
@@ -357,8 +377,11 @@ func TestHTTPSubscriptions(t *testing.T) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.False(t, subs[0].Rules[0].DataAsPayload)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.True(t, subs[0].Rules[1].DataAsPayload)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+				assert.True(t, subs[0].Rules[2].DataAsPayload)
 			}
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
@@ -395,15 +418,17 @@ func (m *mockUnstableGRPCSubscriptions) ListTopicSubscriptions(ctx context.Conte
 				Routes: &runtimev1pb.TopicRoutes{
 					Rules: []*runtimev1pb.TopicRule{
 						{
-							Match: `event.type == "myevent.v3"`,
-							Path:  "myroute.v3",
+							Match:         `event.type == "myevent.v3"`,
+							Path:          "myroute.v3",
+							DataAsPayload: "false",
 						},
 						{
 							Match: `event.type == "myevent.v2"`,
 							Path:  "myroute.v2",
 						},
 					},
-					Default: "myroute",
+					Default:              "myroute",
+					DefaultDataAsPayload: "true",
 				},
 			},
 		},
@@ -426,15 +451,17 @@ func (m *mockGRPCSubscriptions) ListTopicSubscriptions(ctx context.Context, in *
 				Routes: &runtimev1pb.TopicRoutes{
 					Rules: []*runtimev1pb.TopicRule{
 						{
-							Match: `event.type == "myevent.v3"`,
-							Path:  "myroute.v3",
+							Match:         `event.type == "myevent.v3"`,
+							Path:          "myroute.v3",
+							DataAsPayload: "false",
 						},
 						{
 							Match: `event.type == "myevent.v2"`,
 							Path:  "myroute.v2",
 						},
 					},
-					Default: "myroute",
+					Default:              "myroute",
+					DefaultDataAsPayload: "true",
 				},
 			},
 		},
@@ -450,8 +477,11 @@ func TestGRPCSubscriptions(t *testing.T) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.False(t, subs[0].Rules[0].DataAsPayload)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.True(t, subs[0].Rules[1].DataAsPayload)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+				assert.True(t, subs[0].Rules[2].DataAsPayload)
 			}
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
@@ -470,8 +500,11 @@ func TestGRPCSubscriptions(t *testing.T) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 3) {
 				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.False(t, subs[0].Rules[0].DataAsPayload)
 				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.True(t, subs[0].Rules[1].DataAsPayload)
 				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+				assert.True(t, subs[0].Rules[2].DataAsPayload)
 			}
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
@@ -512,8 +545,11 @@ func TestK8sSubscriptions(t *testing.T) {
 		assert.Equal(t, "topic1", subs[0].Topic)
 		if assert.Len(t, subs[0].Rules, 3) {
 			assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+			assert.False(t, subs[0].Rules[0].DataAsPayload)
 			assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+			assert.True(t, subs[0].Rules[1].DataAsPayload)
 			assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+			assert.True(t, subs[0].Rules[2].DataAsPayload)
 		}
 		assert.Equal(t, "pubsub", subs[0].PubsubName)
 		assert.Equal(t, "testValue", subs[0].Metadata["testName"])

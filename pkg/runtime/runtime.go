@@ -535,6 +535,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 		log.Debugf("subscribing to topic=%s on pubsub=%s", topic, name)
 
+		defaultDataAsPayload := findDefaultDataAsPayload(route)
 		routeMetadata := route.metadata
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic:    topic,
@@ -554,7 +555,9 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 			var cloudEvent map[string]interface{}
 			data := msg.Data
-			if rawPayload {
+			if rawPayload && defaultDataAsPayload {
+				cloudEvent = pubsub.FromRawPayload(nil, msg.Topic, name)
+			} else if rawPayload {
 				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
 				data, err = a.json.Marshal(cloudEvent)
 				if err != nil {
@@ -576,7 +579,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			}
 
 			route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
-			routePath, shouldProcess, err := findMatchingRoute(&route, cloudEvent, a.featureRoutingEnabled)
+			routePath, shouldProcess, dataAsPayload, err := findMatchingRoute(&route, cloudEvent, a.featureRoutingEnabled)
 			if err != nil {
 				return err
 			}
@@ -584,6 +587,14 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				// The event does not match any route specified so ignore it.
 				log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msg.Topic)
 				return nil
+			}
+			if dataAsPayload && !rawPayload {
+				cloudData := cloudEvent[pubsub.DataField]
+				if cloudEvent == nil {
+					log.Warnf("event %v in pubsub %s and topic %s is configured to use data as payload, but data was missing. Use cloud event instead", cloudEvent[pubsub.IDField], name, msg.Topic)
+				} else {
+					data, _ = json.Marshal(cloudData)
+				}
 			}
 
 			return publishFunc(ctx, &pubsubSubscribedMessage{
@@ -603,7 +614,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(route *Route, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess bool, err error) {
+func findMatchingRoute(route *Route, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess, dataAsPayload bool, err error) {
 	hasRules := len(route.rules) > 0
 	if hasRules {
 		data := map[string]interface{}{
@@ -611,14 +622,21 @@ func findMatchingRoute(route *Route, cloudEvent interface{}, routingEnabled bool
 		}
 		rule, err := matchRoutingRule(route, data, routingEnabled)
 		if err != nil {
-			return "", false, err
+			return "", false, false, err
 		}
-		if rule != nil {
-			return rule.Path, true, nil
+		if rule != nil && rule.Path != "" {
+			return rule.Path, true, rule.DataAsPayload, nil
 		}
 	}
 
-	return "", false, nil
+	return "", false, false, nil
+}
+
+func findDefaultDataAsPayload(route Route) (dataAsPayload bool) {
+	if len(route.rules) == 0 {
+		return false
+	}
+	return route.rules[len(route.rules)-1].DataAsPayload && route.rules[len(route.rules)-1].Match == nil
 }
 
 func matchRoutingRule(route *Route, data map[string]interface{}, routingEnabled bool) (*runtime_pubsub.Rule, error) {

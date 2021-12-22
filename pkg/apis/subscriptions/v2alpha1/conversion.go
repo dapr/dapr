@@ -39,6 +39,7 @@ func (s *Subscription) ConvertTo(dstRaw conversion.Hub) error {
 	dst.Spec.Topic = s.Spec.Topic
 	dst.Spec.Metadata = s.Spec.Metadata
 	dst.Spec.Route = s.Spec.Routes.Default
+	dst.Spec.DataAsPayload = s.Spec.Routes.DefaultDataAsPayload
 
 	// +kubebuilder:docs-gen:collapse=rote conversion
 	return nil
@@ -66,6 +67,7 @@ func (s *Subscription) ConvertFrom(srcRaw conversion.Hub) error {
 	s.Spec.Topic = src.Spec.Topic
 	s.Spec.Metadata = src.Spec.Metadata
 	s.Spec.Routes.Default = src.Spec.Route
+	s.Spec.Routes.DefaultDataAsPayload = src.Spec.DataAsPayload
 
 	// +kubebuilder:docs-gen:collapse=rote conversion
 	return nil

@@ -38,6 +38,9 @@ type SubscriptionSpec struct {
 	// +optional
 	Metadata map[string]string `json:"metadata,omitempty"`
 	Route    string            `json:"route"`
+	// Use data as payload.
+	// +optional
+	DataAsPayload bool `json:"dataAsPayload,omitempty"`
 }
 
 // +kubebuilder:object:root=true

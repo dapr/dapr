@@ -9,8 +9,9 @@ type Subscription struct {
 }
 
 type Rule struct {
-	Match Expr   `json:"match"`
-	Path  string `json:"path"`
+	Match         Expr   `json:"match"`
+	Path          string `json:"path"`
+	DataAsPayload bool   `json:"data_as_payload"`
 }
 
 type Expr interface {

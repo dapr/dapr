@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,21 +42,24 @@ const (
 
 type (
 	SubscriptionJSON struct {
-		PubsubName string            `json:"pubsubname"`
-		Topic      string            `json:"topic"`
-		Metadata   map[string]string `json:"metadata,omitempty"`
-		Route      string            `json:"route"`  // Single route from v1alpha1
-		Routes     RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
+		PubsubName    string            `json:"pubsubname"`
+		Topic         string            `json:"topic"`
+		Metadata      map[string]string `json:"metadata,omitempty"`
+		Route         string            `json:"route"`           // Single route from v1alpha1
+		DataAsPayload bool              `json:"data_as_payload"` // Single dataAsPayload from v1alpha1
+		Routes        RoutesJSON        `json:"routes"`          // Multiple routes from v2alpha1
 	}
 
 	RoutesJSON struct {
-		Rules   []*RuleJSON `json:"rules,omitempty"`
-		Default string      `json:"default,omitempty"`
+		Rules                []*RuleJSON `json:"rules,omitempty"`
+		Default              string      `json:"default,omitempty"`
+		DefaultDataAsPayload bool        `json:"default_data_as_payload"`
 	}
 
 	RuleJSON struct {
-		Match string `json:"match"`
-		Path  string `json:"path"`
+		Match         string `json:"match"`
+		Path          string `json:"path"`
+		DataAsPayload *bool  `json:"data_as_payload"`
 	}
 )
 
@@ -97,7 +101,11 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 
 			rules := make([]*Rule, 0, len(si.Routes.Rules)+1)
 			for _, r := range si.Routes.Rules {
-				rule, err := createRoutingRule(r.Match, r.Path)
+				dataAsPayload := si.Routes.DefaultDataAsPayload
+				if r.DataAsPayload != nil {
+					dataAsPayload = *r.DataAsPayload
+				}
+				rule, err := createRoutingRule(r.Match, r.Path, dataAsPayload)
 				if err != nil {
 					return nil, err
 				}
@@ -107,13 +115,15 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 			// If a default path is set, add a rule with a nil `Match`,
 			// which is treated as `true` and always selected if
 			// no previous rules match.
-			if si.Routes.Default != "" {
+			if si.Routes.Default != "" || si.Routes.DefaultDataAsPayload {
 				rules = append(rules, &Rule{
-					Path: si.Routes.Default,
+					Path:          si.Routes.Default,
+					DataAsPayload: si.Routes.DefaultDataAsPayload,
 				})
 			} else if si.Route != "" {
 				rules = append(rules, &Rule{
-					Path: si.Route,
+					Path:          si.Route,
+					DataAsPayload: si.DataAsPayload,
 				})
 			}
 
@@ -288,7 +298,8 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 			PubsubName: sub.Spec.Pubsubname,
 			Rules: []*Rule{
 				{
-					Path: sub.Spec.Route,
+					Path:          sub.Spec.Route,
+					DataAsPayload: sub.Spec.DataAsPayload,
 				},
 			},
 			Metadata: sub.Spec.Metadata,
@@ -301,7 +312,11 @@ func parseRoutingRulesYAML(routes subscriptionsapi_v2alpha1.Routes) ([]*Rule, er
 	r := make([]*Rule, 0, len(routes.Rules)+1)
 
 	for _, rule := range routes.Rules {
-		rr, err := createRoutingRule(rule.Match, rule.Path)
+		dataAsPayload := routes.DefaultDataAsPayload
+		if rule.DataAsPayload != nil {
+			dataAsPayload = *rule.DataAsPayload
+		}
+		rr, err := createRoutingRule(rule.Match, rule.Path, dataAsPayload)
 		if err != nil {
 			return nil, err
 		}
@@ -313,7 +328,8 @@ func parseRoutingRulesYAML(routes subscriptionsapi_v2alpha1.Routes) ([]*Rule, er
 	// no previous rules match.
 	if routes.Default != "" {
 		r = append(r, &Rule{
-			Path: routes.Default,
+			Path:          routes.Default,
+			DataAsPayload: routes.DefaultDataAsPayload,
 		})
 	}
 
@@ -328,8 +344,13 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 	}
 	r := make([]*Rule, 0, len(routes.Rules)+1)
 
+	defaultDataAsPayload, _ := strconv.ParseBool(routes.DefaultDataAsPayload)
 	for _, rule := range routes.Rules {
-		rr, err := createRoutingRule(rule.Match, rule.Path)
+		dataAsPayload := defaultDataAsPayload
+		if rule.DataAsPayload != "" {
+			dataAsPayload, _ = strconv.ParseBool(rule.DataAsPayload)
+		}
+		rr, err := createRoutingRule(rule.Match, rule.Path, dataAsPayload)
 		if err != nil {
 			return nil, err
 		}
@@ -341,7 +362,8 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 	// no previous rules match.
 	if routes.Default != "" {
 		r = append(r, &Rule{
-			Path: routes.Default,
+			Path:          routes.Default,
+			DataAsPayload: defaultDataAsPayload,
 		})
 	}
 
@@ -356,7 +378,7 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 	return r, nil
 }
 
-func createRoutingRule(match, path string) (*Rule, error) {
+func createRoutingRule(match, path string, dataAsPayload bool) (*Rule, error) {
 	var e *expr.Expr
 	matchTrimmed := strings.TrimSpace(match)
 	if matchTrimmed != "" {
@@ -367,8 +389,9 @@ func createRoutingRule(match, path string) (*Rule, error) {
 	}
 
 	return &Rule{
-		Match: e,
-		Path:  path,
+		Match:         e,
+		Path:          path,
+		DataAsPayload: dataAsPayload,
 	}, nil
 }
 

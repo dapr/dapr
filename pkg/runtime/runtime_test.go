@@ -214,7 +214,7 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 
 func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
 	b, _ := yaml.Marshal(subscription)
-	os.WriteFile(filePath, b, 0600)
+	os.WriteFile(filePath, b, 0o600)
 }
 
 func TestProcessComponentsAndDependents(t *testing.T) {
@@ -990,7 +990,7 @@ func TestInitPubSub(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		subs := getSubscriptionsJSONString(
 			[]string{"topic0", "topic1"}, // first pubsub
-			[]string{"topic0"})           // second pubsub
+			[]string{"topic0"}) // second pubsub
 		fakeResp.WithRawData([]byte(subs), "application/json")
 
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
@@ -1101,7 +1101,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1126,7 +1126,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1153,7 +1153,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -3397,20 +3397,21 @@ func stopRuntime(t *testing.T, rt *DaprRuntime) {
 }
 
 func TestFindMatchingRoute(t *testing.T) {
-	r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath")
+	r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath", true)
 	require.NoError(t, err)
 	route := Route{
 		rules: []*runtime_pubsub.Rule{r},
 	}
-	path, shouldProcess, err := findMatchingRoute(&route, map[string]interface{}{
+	path, shouldProcess, dataAsPayload, err := findMatchingRoute(&route, map[string]interface{}{
 		"type": "MyEventType",
 	}, true)
 	require.NoError(t, err)
 	assert.Equal(t, "mypath", path)
 	assert.True(t, shouldProcess)
+	assert.True(t, dataAsPayload)
 }
 
-func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
+func createRoutingRule(match, path string, dataAsPayload bool) (*runtime_pubsub.Rule, error) {
 	var e *expr.Expr
 	matchTrimmed := strings.TrimSpace(match)
 	if matchTrimmed != "" {
@@ -3421,8 +3422,9 @@ func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
 	}
 
 	return &runtime_pubsub.Rule{
-		Match: e,
-		Path:  path,
+		Match:         e,
+		Path:          path,
+		DataAsPayload: dataAsPayload,
 	}, nil
 }
 
