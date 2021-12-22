@@ -19,6 +19,13 @@ runAsNonRoot: true
 resources: {}
 kubeClusterDomain: cluster.local
 
+livenessProbe:
+  initialDelaySeconds: 3
+  periodSeconds: 3
+readinessProbe:
+  initialDelaySeconds: 3
+  periodSeconds: 3
+
 debug:
   enabled: false
   port: 40000
