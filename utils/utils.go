@@ -36,12 +36,12 @@ var (
 
 func initKubeConfig() {
 	kubeConfig = GetConfig()
-	clientset, err := kubernetes.NewForConfig(kubeConfig)
+
+	var err error
+	clientSet, err = kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
 		panic(err)
 	}
-
-	clientSet = clientset
 }
 
 // GetConfig gets a kubernetes rest config.
@@ -50,12 +50,11 @@ func GetConfig() *rest.Config {
 		return kubeConfig
 	}
 
-	var kubeconfig *string
+	kubeconfig := flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	if home := homedir.HomeDir(); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
+
 	flag.Parse()
 
 	conf, err := rest.InClusterConfig()
@@ -84,7 +83,7 @@ func ToISO8601DateTimeString(dateTime time.Time) string {
 	return dateTime.UTC().Format("2006-01-02T15:04:05.999999Z")
 }
 
-// add env-vars from annotations.
+// ParseEnvString add env-vars from annotations.
 func ParseEnvString(envStr string) []corev1.EnvVar {
 	indexes := envRegexp.FindAllStringIndex(envStr, -1)
 	lastEnd := len(envStr)
@@ -110,7 +109,7 @@ func ParseEnvString(envStr string) []corev1.EnvVar {
 	return envVars
 }
 
-// StringSliceContains return true if an array containe the "str" string.
+// StringSliceContains return true if an array contain the "str" string.
 func StringSliceContains(needle string, haystack []string) bool {
 	for _, item := range haystack {
 		if item == needle {

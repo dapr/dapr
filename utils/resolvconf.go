@@ -16,8 +16,6 @@ const (
 	commentMarker            = "#"
 )
 
-var searchRegexp = regexp.MustCompile(`^\s*search\s*(([^\s]+\s*)*)$`)
-
 // GetKubeClusterDomain search KubeClusterDomain value from /etc/resolv.conf file.
 func GetKubeClusterDomain() (string, error) {
 	resolvContent, err := getResolvContent(defaultResolvPath)
@@ -28,15 +26,15 @@ func GetKubeClusterDomain() (string, error) {
 }
 
 func getClusterDomain(resolvConf []byte) (string, error) {
-	var kubeClusterDomian string
+	var cubeClusterDomain string
 	searchDomains := getResolvSearchDomains(resolvConf)
 	sort.Strings(searchDomains)
 	if len(searchDomains) == 0 || searchDomains[0] == "" {
-		kubeClusterDomian = DefaultKubeClusterDomain
+		cubeClusterDomain = DefaultKubeClusterDomain
 	} else {
-		kubeClusterDomian = searchDomains[0]
+		cubeClusterDomain = searchDomains[0]
 	}
-	return kubeClusterDomian, nil
+	return cubeClusterDomain, nil
 }
 
 func getResolvContent(resolvPath string) ([]byte, error) {
@@ -47,6 +45,8 @@ func getResolvSearchDomains(resolvConf []byte) []string {
 	var (
 		domains []string
 		lines   [][]byte
+
+		searchRegexp = regexp.MustCompile(`^\s*search\s*(([^\s]+\s*)*)$`)
 	)
 
 	scanner := bufio.NewScanner(bytes.NewReader(resolvConf))
@@ -62,10 +62,9 @@ func getResolvSearchDomains(resolvConf []byte) []string {
 
 	for _, line := range lines {
 		match := searchRegexp.FindSubmatch(line)
-		if match == nil {
-			continue
+		if len(match) >= 2 {
+			domains = strings.Fields(string(match[1]))
 		}
-		domains = strings.Fields(string(match[1]))
 	}
 
 	return domains
