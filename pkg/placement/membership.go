@@ -321,18 +321,28 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 	}
 	var err error
 	for _, s := range targets {
+
 		config := retry.DefaultConfig()
 		config.MaxRetries = 3
 		backoff := config.NewBackOff()
 		retry.NotifyRecover(
 			func() error {
+				// Check stream in stream pool, if stream is not available, skip to next.
+				if !p.hasStreamConn(s) {
+					remoteAddr := "n/a"
+					if peer, ok := peer.FromContext(s.Context()); ok {
+						remoteAddr = peer.Addr.String()
+					}
+					log.Debugf("runtime host (%q) is disconnected with server. go with next dissemination (operation: %s).", remoteAddr, operation)
+					return nil
+				}
+
 				err = s.Send(o)
 				if err != nil {
 					remoteAddr := "n/a"
 					if peer, ok := peer.FromContext(s.Context()); ok {
 						remoteAddr = peer.Addr.String()
 					}
-
 					log.Errorf("error updating runtime host (%q) on %q operation: %s", remoteAddr, operation, err)
 					return err
 				}

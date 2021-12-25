@@ -286,3 +286,14 @@ func (p *Service) deleteStreamConn(conn placementGRPCStream) {
 	}
 	p.streamConnPoolLock.Unlock()
 }
+
+func (p *Service) hasStreamConn(conn placementGRPCStream) bool {
+	p.streamConnPoolLock.Lock()
+	defer p.streamConnPoolLock.Unlock()
+	for _, c := range p.streamConnPool {
+		if c == conn {
+			return true
+		}
+	}
+	return false
+}
