@@ -18,6 +18,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	nethttp "net/http"
@@ -191,7 +192,13 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	channelReq := fasthttp.AcquireRequest()
 
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
-	uri := fmt.Sprintf("%s/%s", h.baseAddress, req.Message().GetMethod())
+	var uri string
+	method := req.Message().GetMethod()
+	if strings.HasPrefix(method, "/") {
+		uri = fmt.Sprintf("%s%s", h.baseAddress, method)
+	} else {
+		uri = fmt.Sprintf("%s/%s", h.baseAddress, method)
+	}
 	channelReq.URI().Update(uri)
 	channelReq.URI().DisablePathNormalizing = true
 	channelReq.URI().SetQueryString(req.EncodeHTTPQueryString())
