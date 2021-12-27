@@ -1439,9 +1439,13 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 					if ferr != nil {
 						r.Error = ferr.Error()
 					} else if resp != nil {
-						r.Data = jsoniter.RawMessage(resp.Data)
-						r.ETag = resp.ETag
-						r.Metadata = resp.Metadata
+						if len(resp.Data) == 0 {
+							r.Error = "could not read data for partition"
+						} else {
+							r.Data = jsoniter.RawMessage(resp.Data)
+							r.ETag = resp.ETag
+							r.Metadata = resp.Metadata
+						}
 					}
 				}
 
@@ -1463,6 +1467,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 				if err != nil {
 					return nil, nil, fmt.Errorf("could not parse actor reminders partition %v: %w", resp.Key, err)
 				}
+			} else {
+				return nil, nil, fmt.Errorf("no data found for reminder partition %v: %w", resp.Key, err)
 			}
 
 			for j := range batch {
