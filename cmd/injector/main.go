@@ -33,9 +33,7 @@ import (
 
 var log = logger.NewLogger("dapr.injector")
 
-const (
-	healthzPort = 8080
-)
+const healthzPort = 8080
 
 func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
