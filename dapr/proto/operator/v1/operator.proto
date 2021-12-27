@@ -33,11 +33,13 @@ service Operator {
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
 message ListComponentsRequest {
   string namespace = 1;
+  string podName = 2;
 }
 
 // ComponentUpdateRequest is the request to get updates about new components for a given namespace.
 message ComponentUpdateRequest {
   string namespace = 1;
+  string podName = 2;
 }
 
 // ComponentUpdateEvent includes the updated component event.
@@ -54,6 +56,7 @@ message ListComponentResponse {
 message GetConfigurationRequest {
   string name = 1;
   string namespace = 2;
+  string podName = 3;
 }
 
 // GetConfigurationResponse includes the requested configuration.

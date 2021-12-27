@@ -625,6 +625,14 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 				Name:  "NAMESPACE",
 				Value: namespace,
 			},
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
 		},
 		Args: args,
 		ReadinessProbe: &corev1.Probe{

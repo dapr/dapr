@@ -134,13 +134,13 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		err := processComponentSecrets(&c, in.Namespace, a.Client)
 		if err != nil {
-			log.Warnf("error processing component %s secrets: %s", c.Name, err)
+			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
 			return &operatorv1pb.ListComponentResponse{}, err
 		}
 
 		b, err := json.Marshal(&c)
 		if err != nil {
-			log.Warnf("error marshalling component %s : %s", c.Name, err)
+			log.Warnf("error marshalling component %s from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
 			continue
 		}
 		resp.Components = append(resp.Components, b)
@@ -234,26 +234,26 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 		err := processComponentSecrets(c, in.Namespace, a.Client)
 		if err != nil {
-			log.Warnf("error processing component %s secrets: %s", c.Name, err)
+			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
 			return
 		}
 
 		b, err := json.Marshal(&c)
 		if err != nil {
-			log.Warnf("error serializing component %s (%s): %s", c.GetName(), c.Spec.Type, err)
+			log.Warnf("error serializing component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
 			return
 		}
 		err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
 			Component: b,
 		})
 		if err != nil {
-			log.Warnf("error updating sidecar with component %s (%s): %s", c.GetName(), c.Spec.Type, err)
+			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
 			if status.Code(err) == codes.Unavailable {
 				chWrapper.Close()
 			}
 			return
 		}
-		log.Infof("updated sidecar with component %s (%s)", c.GetName(), c.Spec.Type)
+		log.Infof("updated sidecar with component %s (%s) from pod %s/%s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName)
 	}
 	for {
 		select {
