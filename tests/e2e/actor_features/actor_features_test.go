@@ -375,9 +375,8 @@ func TestActorFeatures(t *testing.T) {
 		_, err = utils.HTTPPost(fmt.Sprintf(shutdownURLFormat, externalURL), []byte(""))
 		require.NoError(t, err)
 
+		time.Sleep(sleepTime)
 		err = backoff.Retry(func() error {
-			time.Sleep(sleepTime)
-
 			resp, errb := utils.HTTPGet(logsURL)
 			if errb != nil {
 				return errb
@@ -389,7 +388,7 @@ func TestActorFeatures(t *testing.T) {
 			}
 
 			return nil
-		}, backoff.WithMaxRetries(backoff.NewConstantBackOff(10*time.Second), 10))
+		}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10))
 		require.NoError(t, err)
 
 		// Reset reminder
