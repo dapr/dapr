@@ -2894,6 +2894,27 @@ func TestNamespace(t *testing.T) {
 	})
 }
 
+func TestPodName(t *testing.T) {
+	t.Run("empty podName", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		podName := rt.getPodName()
+
+		assert.Empty(t, podName)
+	})
+
+	t.Run("non-empty podName", func(t *testing.T) {
+		os.Setenv("POD_NAME", "testPodName")
+		defer os.Unsetenv("POD_NAME")
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		podName := rt.getPodName()
+
+		assert.Equal(t, "testPodName", podName)
+	})
+}
+
 func TestAuthorizedComponents(t *testing.T) {
 	testCompName := "fakeComponent"
 
