@@ -1304,18 +1304,16 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 				return fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
 			}
 			actorMetadata.Etag = resp.ETag
-			if !migrate {
-				result = actorMetadata
-				return nil
-			}
+		}
 
+		if migrate {
 			err = a.migrateRemindersForActorType(actorType, &actorMetadata)
 			if err != nil {
 				return err
 			}
-
-			result = actorMetadata
 		}
+
+		result = actorMetadata
 		return nil
 	}, backoff.NewExponentialBackOff())
 
