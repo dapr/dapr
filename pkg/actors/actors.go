@@ -454,6 +454,9 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	resp, err := a.store.Get(&state.GetRequest{
 		Key:      key,
 		Metadata: metadata,
+		Options: state.GetStateOption{
+			Consistency: state.Strong,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -663,6 +666,9 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: constructCompositeKey(actorKey, name),
+		Options: state.GetStateOption{
+			Consistency: state.Strong,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -688,6 +694,9 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 	err := a.store.Set(&state.SetRequest{
 		Key:   constructCompositeKey(actorKey, name),
 		Value: track,
+		Options: state.SetStateOption{
+			Consistency: state.Strong,
+		},
 	})
 	return err
 }
@@ -1272,6 +1281,9 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 		metadataKey := constructCompositeKey("actors", actorType, "metadata")
 		resp, err := a.store.Get(&state.GetRequest{
 			Key: metadataKey,
+			Options: state.GetStateOption{
+				Consistency: state.Strong,
+			},
 		})
 		if err != nil {
 			return err
@@ -1416,6 +1428,9 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			getRequests = append(getRequests, state.GetRequest{
 				Key:      key,
 				Metadata: metadata,
+				Options: state.GetStateOption{
+					Consistency: state.Strong,
+				},
 			})
 		}
 
@@ -1489,6 +1504,9 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	key := constructCompositeKey("actors", actorType)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
+		Options: state.GetStateOption{
+			Consistency: state.Strong,
+		},
 	})
 	if err != nil {
 		return nil, nil, err
@@ -1530,6 +1548,10 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 		Value:    reminders,
 		ETag:     etag,
 		Metadata: map[string]string{metadataPartitionKey: databasePartitionKey},
+		Options: state.SetStateOption{
+			Concurrency: state.FirstWrite,
+			Consistency: state.Strong,
+		},
 	})
 }
 
