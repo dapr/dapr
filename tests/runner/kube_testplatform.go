@@ -308,13 +308,20 @@ func (c *KubeTestPlatform) SetAppEnv(name, key, value string) error {
 func (c *KubeTestPlatform) Restart(name string) error {
 	// To minic the restart behavior, scale to 0 and then scale to the original replicas.
 	app := c.AppResources.FindActiveResource(name)
-	originalReplicas := app.(*kube.AppManager).App().Replicas
+	m := app.(*kube.AppManager)
+	originalReplicas := m.App().Replicas
 
 	if err := c.Scale(name, 0); err != nil {
 		return err
 	}
 
-	return c.Scale(name, originalReplicas)
+	if err := c.Scale(name, originalReplicas); err != nil {
+		return err
+	}
+
+	m.StreamContainerLogs()
+
+	return nil
 }
 
 // PortForwardToApp opens a new connection to the app on a the target port and returns the local port or error.
