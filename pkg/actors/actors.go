@@ -544,7 +544,9 @@ func (a *actorsRuntime) drainRebalancedActors() {
 			if address != "" && !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
 				// actor has been moved to a different host, deactivate when calls are done cancel any reminders
 				// each item in reminders contain a struct with some metadata + the actual reminder struct
+				a.remindersLock.RLock()
 				reminders := a.reminders[actorType]
+				a.remindersLock.RUnlock()
 				for _, r := range reminders {
 					// r.reminder refers to the actual reminder struct that is saved in the db
 					if r.reminder.ActorType == actorType && r.reminder.ActorID == actorID {
@@ -1368,26 +1370,14 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 	}
 
 	// Save to database.
-	metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
-	transaction := state.TransactionalStateRequest{
-		Metadata: metadata,
-	}
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		partitionID := i + 1
 		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(partitionID))
 		stateValue := actorRemindersPartitions[i]
-		transaction.Operations = append(transaction.Operations, state.TransactionalStateOperation{
-			Operation: state.Upsert,
-			Request: state.SetRequest{
-				Key:      stateKey,
-				Value:    stateValue,
-				Metadata: metadata,
-			},
-		})
-	}
-	err = a.transactionalStore.Multi(&transaction)
-	if err != nil {
-		return err
+		err = a.saveRemindersInPartition(context.TODO(), stateKey, stateValue, nil, actorMetadata.ID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Save new metadata so the new "metadataID" becomes the new de factor referenced list for reminders.
