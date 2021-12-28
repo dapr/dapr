@@ -223,11 +223,14 @@ func TestActorReminder(t *testing.T) {
 
 				// Shutdown the sidecar to load the new partition config
 				_, err = utils.HTTPPost(fmt.Sprintf(shutdownSidecarURLFormat, externalURL), []byte(""))
+				err = tr.Platform.SetAppEnv(appName, "TEST_APP_ACTOR_REMINDERS_PARTITIONS", strconv.Itoa(newPartitionCount))
 				require.NoError(t, err)
+
+				t.Logf("Waiting for app %s to restart ...", appName)
 
 				// Sleep for some time to let the sidecar restart.
 				// Calling the health-check right away might trigger a false-positive health prior to actual restart.
-				time.Sleep(secondsToWaitForAppRestart * time.Second)
+				time.Sleep(secondsToWaitForAppRestart * 12 * time.Second)
 
 				expectedEnvPartitionCount = strconv.Itoa(newPartitionCount)
 			}
