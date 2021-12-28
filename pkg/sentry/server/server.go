@@ -102,6 +102,10 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 	issuerExp := s.certAuth.GetCACertBundle().GetIssuerCertExpiry()
 	serverCertTTL := issuerExp.Sub(now)
 
+	if serverCertTTL <= 30 {
+		log.Warn("Your mTLS certificate has expired. Please renew as soon as possible")
+	}
+
 	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), nil, serverCertTTL, false)
 	if err != nil {
 		return nil, err
