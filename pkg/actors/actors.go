@@ -608,7 +608,7 @@ func (a *actorsRuntime) evaluateReminders() {
 		if err != nil {
 			log.Errorf("error getting reminders for actor type %s: %s", t, err)
 		} else {
-			log.Debugf("loaded %d reminders for actor type %s", len(vals), t)
+			log.Infof("loaded %d reminders for actor type %s", len(vals), t)
 			a.remindersLock.Lock()
 			a.reminders[t] = vals
 			a.remindersLock.Unlock()
@@ -1530,7 +1530,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string, databasePartitionKey string) error {
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
-	log.Debugf("saving %d reminders in %s ...", len(reminders), stateKey)
+	log.Infof("saving %d reminders in %s ...", len(reminders), stateKey)
 	return a.store.Set(&state.SetRequest{
 		Key:      stateKey,
 		Value:    reminders,
