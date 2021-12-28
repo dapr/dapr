@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package config
 
@@ -77,7 +85,7 @@ type AccessControlListOperationAction struct {
 type ConfigurationSpec struct {
 	HTTPPipelineSpec   PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
 	TracingSpec        TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MTLSSpec           MTLSSpec           `json:"mtls,omitempty"`
+	MTLSSpec           MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
 	MetricSpec         MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
 	Secrets            SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 	AccessControlSpec  AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
@@ -176,9 +184,9 @@ type NameResolutionSpec struct {
 }
 
 type MTLSSpec struct {
-	Enabled          bool   `json:"enabled"`
-	WorkloadCertTTL  string `json:"workloadCertTTL"`
-	AllowedClockSkew string `json:"allowedClockSkew"`
+	Enabled          bool   `json:"enabled" yaml:"enabled"`
+	WorkloadCertTTL  string `json:"workloadCertTTL" yaml:"workloadCertTTL"`
+	AllowedClockSkew string `json:"allowedClockSkew" yaml:"allowedClockSkew"`
 }
 
 // SpiffeID represents the separated fields in a spiffe id.

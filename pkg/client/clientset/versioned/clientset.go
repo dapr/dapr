@@ -21,11 +21,12 @@ package versioned
 import (
 	"fmt"
 
-	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
-	configurationv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/configuration/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
+
+	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/configuration/v1alpha1"
 )
 
 type Interface interface {

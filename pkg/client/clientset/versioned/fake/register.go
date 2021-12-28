@@ -19,22 +19,25 @@ limitations under the License.
 package fake
 
 import (
-	componentsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+
+	componentsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 )
 
-var scheme = runtime.NewScheme()
-var codecs = serializer.NewCodecFactory(scheme)
-var parameterCodec = runtime.NewParameterCodec(scheme)
-var localSchemeBuilder = runtime.SchemeBuilder{
-	componentsv1alpha1.AddToScheme,
-	configurationv1alpha1.AddToScheme,
-}
+var (
+	scheme             = runtime.NewScheme()
+	codecs             = serializer.NewCodecFactory(scheme)
+	parameterCodec     = runtime.NewParameterCodec(scheme)
+	localSchemeBuilder = runtime.SchemeBuilder{
+		componentsv1alpha1.AddToScheme,
+		configurationv1alpha1.AddToScheme,
+	}
+)
 
 // AddToScheme adds all types of this clientset into the given scheme. This allows composition
 // of clientsets, like in:

@@ -67,6 +67,18 @@ spec:
         prometheus.io/path: "/"
 {{- end }}
     spec:
+{{- if eq .Values.global.ha.enabled true }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-operator
+            topologyKey: "kubernetes.io/hostname"
+{{- end }}
       containers:
       - name: dapr-operator
         livenessProbe:
@@ -190,14 +202,16 @@ spec:
 {{- end }}
 {{- if .Values.global.ha.enabled }}
         podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - dapr-operator
-            topologyKey: "kubernetes.io/hostname"
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-operator
+              topologyKey: topology.kubernetes.io/zone
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:

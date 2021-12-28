@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"github.com/dapr/dapr/pkg/components/bindings"
+	"github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pubsub"
@@ -14,6 +15,7 @@ type (
 	runtimeOpts struct {
 		secretStores    []secretstores.SecretStore
 		states          []state.State
+		configurations  []configuration.Configuration
 		pubsubs         []pubsub.PubSub
 		nameResolutions []nameresolution.NameResolution
 		inputBindings   []bindings.InputBinding
@@ -38,6 +40,13 @@ func WithSecretStores(secretStores ...secretstores.SecretStore) Option {
 func WithStates(states ...state.State) Option {
 	return func(o *runtimeOpts) {
 		o.states = append(o.states, states...)
+	}
+}
+
+// WithConfigurations adds configuration store components to the runtime.
+func WithConfigurations(configurations ...configuration.Configuration) Option {
+	return func(o *runtimeOpts) {
+		o.configurations = append(o.configurations, configurations...)
 	}
 }
 

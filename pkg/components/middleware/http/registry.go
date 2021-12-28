@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package http
 
@@ -20,7 +28,7 @@ type (
 	// Middleware is a HTTP middleware component definition.
 	Middleware struct {
 		Name          string
-		FactoryMethod func(metadata middleware.Metadata) http_middleware.Middleware
+		FactoryMethod FactoryMethod
 	}
 
 	// Registry is the interface for callers to get registered HTTP middleware.
@@ -30,12 +38,15 @@ type (
 	}
 
 	httpMiddlewareRegistry struct {
-		middleware map[string]func(middleware.Metadata) http_middleware.Middleware
+		middleware map[string]FactoryMethod
 	}
+
+	// FactoryMethod is the method creating middleware from metadata.
+	FactoryMethod func(metadata middleware.Metadata) (http_middleware.Middleware, error)
 )
 
 // New creates a Middleware.
-func New(name string, factoryMethod func(metadata middleware.Metadata) http_middleware.Middleware) Middleware {
+func New(name string, factoryMethod FactoryMethod) Middleware {
 	return Middleware{
 		Name:          name,
 		FactoryMethod: factoryMethod,
@@ -45,7 +56,7 @@ func New(name string, factoryMethod func(metadata middleware.Metadata) http_midd
 // NewRegistry returns a new HTTP middleware registry.
 func NewRegistry() Registry {
 	return &httpMiddlewareRegistry{
-		middleware: map[string]func(middleware.Metadata) http_middleware.Middleware{},
+		middleware: map[string]FactoryMethod{},
 	}
 }
 
@@ -59,12 +70,16 @@ func (p *httpMiddlewareRegistry) Register(components ...Middleware) {
 // Create instantiates a HTTP middleware based on `name`.
 func (p *httpMiddlewareRegistry) Create(name, version string, metadata middleware.Metadata) (http_middleware.Middleware, error) {
 	if method, ok := p.getMiddleware(name, version); ok {
-		return method(metadata), nil
+		mid, err := method(metadata)
+		if err != nil {
+			return nil, errors.Errorf("error creating HTTP middleware %s/%s: %s", name, version, err)
+		}
+		return mid, nil
 	}
 	return nil, errors.Errorf("HTTP middleware %s/%s has not been registered", name, version)
 }
 
-func (p *httpMiddlewareRegistry) getMiddleware(name, version string) (func(middleware.Metadata) http_middleware.Middleware, bool) {
+func (p *httpMiddlewareRegistry) getMiddleware(name, version string) (FactoryMethod, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	middlewareFn, ok := p.middleware[nameLower+"/"+versionLower]

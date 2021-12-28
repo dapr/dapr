@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package utils
 
@@ -55,7 +63,7 @@ func TestParseEnvString(t *testing.T) {
 			expEnv:    []corev1.EnvVar{},
 		},
 		{
-			testName:  "valid environment string.",
+			testName:  "common valid environment string.",
 			envStr:    "ENV1=value1,ENV2=value2, ENV3=value3",
 			expEnvLen: 3,
 			expEnv: []corev1.EnvVar{
@@ -70,6 +78,21 @@ func TestParseEnvString(t *testing.T) {
 				{
 					Name:  "ENV3",
 					Value: "value3",
+				},
+			},
+		},
+		{
+			testName:  "special valid environment string.",
+			envStr:    `HTTP_PROXY=http://myproxy.com, NO_PROXY="localhost,127.0.0.1,.amazonaws.com"`,
+			expEnvLen: 2,
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "HTTP_PROXY",
+					Value: "http://myproxy.com",
+				},
+				{
+					Name:  "NO_PROXY",
+					Value: `"localhost,127.0.0.1,.amazonaws.com"`,
 				},
 			},
 		},

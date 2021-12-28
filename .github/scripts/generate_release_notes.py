@@ -1,7 +1,15 @@
-# ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation and Dapr Contributors.
-# Licensed under the MIT License.
-# ------------------------------------------------------------
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 # This script finds all release notes from issues in the milestone project.
 
@@ -160,16 +168,20 @@ for issueOrPR in issuesOrPRs:
         for c in a: 
             contributors.add("@" + str(c))
     repo = issueOrPR.repository
-    match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
+    if repo == "docs":
+        # Do not add this to the list of changes (but add to contributors).
+        continue
     hasNote = False
-    if match:
-        note = match.group(1).strip()
-        if note:
-            if note.upper() not in ["NOT APPLICABLE", "N/A"]:
-                for text_substitution in text_substitutions:
-                    note = text_substitution[0].sub(text_substitution[1], note)
-                changes.append((repo, issueOrPR, note, contributors, url))
-            hasNote = True
+    if not (issueOrPR.body is None):
+        match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
+        if match:
+            note = match.group(1).strip()
+            if note:
+                if note.upper() not in ["NOT APPLICABLE", "N/A"]:
+                    for text_substitution in text_substitutions:
+                        note = text_substitution[0].sub(text_substitution[1], note)
+                    changes.append((repo, issueOrPR, note, contributors, url))
+                hasNote = True
     if not hasNote:
         # Issue or PR has no release note.
         # Auto-generate a release note as fallback.
@@ -186,7 +198,7 @@ lastSubtitle=""
 breakingChangeLines=[]
 lastBreakingChangeSubtitle=""
 
-# generate changes for relase notes (only issues/pr that have release notes)
+# generate changes for release notes (only issues/pr that have release notes)
 for change in sorted(changes, key=lambda c: (get_repo_priority(c[0].name), c[0].stargazers_count * -1, c[0].id, c[1].id)):
     breakingChange='breaking-change' in [l.name for l in change[1].labels]
     subtitle=get_repo_subtitle(change[0].name)

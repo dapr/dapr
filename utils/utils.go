@@ -1,13 +1,22 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package utils
 
 import (
 	"flag"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -21,6 +30,8 @@ import (
 var (
 	clientSet  *kubernetes.Clientset
 	kubeConfig *rest.Config
+
+	envRegexp = regexp.MustCompile(`(?m)(,)\s*[a-zA-Z\_][a-zA-Z0-9\_]*=`)
 )
 
 func initKubeConfig() {
@@ -74,21 +85,25 @@ func ToISO8601DateTimeString(dateTime time.Time) string {
 }
 
 // add env-vars from annotations.
-// see https://github.com/dapr/dapr/issues/2508.
 func ParseEnvString(envStr string) []corev1.EnvVar {
+	indexes := envRegexp.FindAllStringIndex(envStr, -1)
+	lastEnd := len(envStr)
+	parts := make([]string, len(indexes)+1)
+	for i := len(indexes) - 1; i >= 0; i-- {
+		parts[i+1] = strings.TrimSpace(envStr[indexes[i][0]+1 : lastEnd])
+		lastEnd = indexes[i][0]
+	}
+	parts[0] = envStr[0:lastEnd]
+
 	envVars := make([]corev1.EnvVar, 0)
-	envPairs := strings.Split(envStr, ",")
-
-	for _, value := range envPairs {
-		pair := strings.Split(strings.TrimSpace(value), "=")
-
-		if len(pair) != 2 {
+	for _, s := range parts {
+		pairs := strings.Split(strings.TrimSpace(s), "=")
+		if len(pairs) != 2 {
 			continue
 		}
-
 		envVars = append(envVars, corev1.EnvVar{
-			Name:  pair[0],
-			Value: pair[1],
+			Name:  pairs[0],
+			Value: pairs[1],
 		})
 	}
 
