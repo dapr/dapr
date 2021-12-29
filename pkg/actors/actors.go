@@ -608,7 +608,7 @@ func (a *actorsRuntime) evaluateReminders() {
 		if err != nil {
 			log.Errorf("error getting reminders for actor type %s: %s", t, err)
 		} else {
-			log.Infof("loaded %d reminders for actor type %s", len(vals), t)
+			log.Debugf("loaded %d reminders for actor type %s", len(vals), t)
 			a.remindersLock.Lock()
 			a.reminders[t] = vals
 			a.remindersLock.Unlock()
@@ -1351,6 +1351,7 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 		return errors.Errorf("could not migrate reminders for actor type %s due to race condition in actor metadata", actorType)
 	}
 
+	log.Infof("migrating %d reminders for actor type %s", len(reminderRefs), actorType)
 	*actorMetadata = *refreshedActorMetadata
 
 	// Recreate as a new metadata identifier.
@@ -1441,15 +1442,22 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 					resp, ferr := a.store.Get(&getRequest)
 					if ferr != nil {
 						r.Error = ferr.Error()
-					} else if resp != nil {
-						if len(resp.Data) == 0 {
-							r.Error = "could not read data for partition"
-						} else {
-							r.Data = jsoniter.RawMessage(resp.Data)
-							r.ETag = resp.ETag
-							r.Metadata = resp.Metadata
-						}
+						return
 					}
+
+					if resp == nil {
+						r.Error = "response not found for partition"
+						return
+					}
+
+					if len(resp.Data) == 0 {
+						r.Error = "data not found for reminder partition"
+						return
+					}
+
+					r.Data = jsoniter.RawMessage(resp.Data)
+					r.ETag = resp.ETag
+					r.Metadata = resp.Metadata
 				}
 
 				limiter.Execute(fn, &bulkResponse[i])
@@ -1500,6 +1508,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		return nil, nil, err
 	}
 
+	log.Debugf("read reminders from %s without partition: %s", key, string(resp.Data))
+
 	var reminders []Reminder
 	if len(resp.Data) > 0 {
 		err = json.Unmarshal(resp.Data, &reminders)
@@ -1522,15 +1532,15 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	}
 
 	log.Debugf(
-		"finished reading reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions: total of %d reminders",
-		actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount, len(reminders))
+		"finished reading reminders for actor type %s (migrate=%t), with metadata id %s and no partitions: total of %d reminders",
+		actorType, migrate, actorMetadata.ID, len(reminderRefs))
 	return reminderRefs, actorMetadata, nil
 }
 
 func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey string, reminders []Reminder, etag *string, databasePartitionKey string) error {
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
-	log.Infof("saving %d reminders in %s ...", len(reminders), stateKey)
+	log.Debugf("saving %d reminders in %s ...", len(reminders), stateKey)
 	return a.store.Set(&state.SetRequest{
 		Key:      stateKey,
 		Value:    reminders,
