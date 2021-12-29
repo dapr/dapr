@@ -376,6 +376,7 @@ func TestActorFeatures(t *testing.T) {
 
 		time.Sleep(120 * time.Second)
 		err = backoff.Retry(func() error {
+			time.Sleep(30 * time.Second)
 			resp, errb := utils.HTTPGet(logsURL)
 			if errb != nil {
 				return errb
