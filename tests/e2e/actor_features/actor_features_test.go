@@ -371,11 +371,10 @@ func TestActorFeatures(t *testing.T) {
 		require.GreaterOrEqual(t, firstCount, minFirstCount)
 
 		t.Logf("Restarting %s ...", appName)
-		// Shutdown the sidecar and app.
-		_, err = utils.HTTPPost(fmt.Sprintf(shutdownURLFormat, externalURL), []byte(""))
+		err := tr.Platform.Restart(appName)
 		require.NoError(t, err)
 
-		time.Sleep(sleepTime)
+		time.Sleep(120 * time.Second)
 		err = backoff.Retry(func() error {
 			resp, errb := utils.HTTPGet(logsURL)
 			if errb != nil {
