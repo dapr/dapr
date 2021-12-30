@@ -73,6 +73,7 @@ const (
 	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
 	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
+	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -364,6 +365,10 @@ func getReadBufferSize(annotations map[string]string) (int32, error) {
 	return getInt32Annotation(annotations, daprReadBufferSize)
 }
 
+func getGracefulShutdownSeconds(annotations map[string]string) (int32, error) {
+	return getInt32Annotation(annotations, daprGracefulShutdownSeconds)
+}
+
 func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprHTTPStreamRequestBody, defaultDaprHTTPStreamRequestBody)
 }
@@ -540,6 +545,11 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		log.Warn(err)
 	}
 
+	gracefulShutdownSeconds, err := getGracefulShutdownSeconds(annotations)
+	if err != nil {
+		log.Warn(err)
+	}
+
 	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
 
 	ports := []corev1.ContainerPort{
@@ -583,6 +593,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--metrics-port", fmt.Sprintf("%v", metricsPort),
 		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
+		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
 	}
 
 	debugEnabled := getEnableDebug(annotations)

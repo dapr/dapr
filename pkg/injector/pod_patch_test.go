@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+const defaultTestConfig = "config"
+
 func TestLogAsJSONEnabled(t *testing.T) {
 	t.Run("dapr.io/log-as-json is true", func(t *testing.T) {
 		fakeAnnotation := map[string]string{
@@ -97,7 +99,7 @@ func TestGetProbeHttpHandler(t *testing.T) {
 func TestGetSideCarContainer(t *testing.T) {
 	t.Run("get sidecar container without debugging", func(t *testing.T) {
 		annotations := map[string]string{}
-		annotations[daprConfigKey] = "config"
+		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
 		annotations[daprLogAsJSON] = trueString
 		annotations[daprAPITokenSecret] = "secret"
@@ -116,7 +118,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "placement:50000",
-			"--config", "config",
+			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -124,6 +126,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
+			"--dapr-graceful-shutdown-seconds", "-1",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -144,7 +147,7 @@ func TestGetSideCarContainer(t *testing.T) {
 
 	t.Run("get sidecar container with debugging", func(t *testing.T) {
 		annotations := map[string]string{}
-		annotations[daprConfigKey] = "config"
+		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
 		annotations[daprLogAsJSON] = trueString
 		annotations[daprAPITokenSecret] = "secret"
@@ -173,7 +176,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "placement:50000",
-			"--config", "config",
+			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -181,6 +184,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
+			"--dapr-graceful-shutdown-seconds", "-1",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -199,7 +203,7 @@ func TestGetSideCarContainer(t *testing.T) {
 	})
 	t.Run("get sidecar container override listen address", func(t *testing.T) {
 		annotations := map[string]string{}
-		annotations[daprConfigKey] = "config"
+		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprListenAddresses] = "1.2.3.4,::1"
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
 
@@ -215,7 +219,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "placement:50000",
-			"--config", "config",
+			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -223,6 +227,73 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--metrics-port", "9090",
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
+			"--dapr-graceful-shutdown-seconds", "-1",
+			"--enable-mtls",
+		}
+
+		assert.EqualValues(t, expectedArgs, container.Args)
+	})
+
+	t.Run("invalid graceful shutdown seconds", func(t *testing.T) {
+		annotations := map[string]string{}
+		annotations[daprConfigKey] = defaultTestConfig
+		annotations[daprGracefulShutdownSeconds] = "invalid"
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+
+		expectedArgs := []string{
+			"--mode", "kubernetes",
+			"--dapr-http-port", "3500",
+			"--dapr-grpc-port", "50001",
+			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
+			"--app-port", "",
+			"--app-id", "app_id",
+			"--control-plane-address", "controlplane:9000",
+			"--app-protocol", "http",
+			"--placement-host-address", "placement:50000",
+			"--config", defaultTestConfig,
+			"--log-level", "info",
+			"--app-max-concurrency", "-1",
+			"--sentry-address", "sentry:50000",
+			"--enable-metrics=true",
+			"--metrics-port", "9090",
+			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
+			"--dapr-graceful-shutdown-seconds", "-1",
+			"--enable-mtls",
+		}
+
+		assert.EqualValues(t, expectedArgs, container.Args)
+	})
+
+	t.Run("valid graceful shutdown seconds", func(t *testing.T) {
+		annotations := map[string]string{}
+		annotations[daprConfigKey] = defaultTestConfig
+		annotations[daprGracefulShutdownSeconds] = "5"
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+
+		expectedArgs := []string{
+			"--mode", "kubernetes",
+			"--dapr-http-port", "3500",
+			"--dapr-grpc-port", "50001",
+			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
+			"--app-port", "",
+			"--app-id", "app_id",
+			"--control-plane-address", "controlplane:9000",
+			"--app-protocol", "http",
+			"--placement-host-address", "placement:50000",
+			"--config", defaultTestConfig,
+			"--log-level", "info",
+			"--app-max-concurrency", "-1",
+			"--sentry-address", "sentry:50000",
+			"--enable-metrics=true",
+			"--metrics-port", "9090",
+			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
+			"--dapr-graceful-shutdown-seconds", "5",
 			"--enable-mtls",
 		}
 
