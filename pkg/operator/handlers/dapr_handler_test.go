@@ -23,9 +23,16 @@ func TestGetAppID(t *testing.T) {
 		// Arrange
 		expected := "test_id"
 		deployment := getDeployment(expected, "true")
+		statefulset := getStatefulSet(expected, "true")
 
 		// Act
 		got := testDaprHandler.getAppID(deployment)
+
+		// Assert
+		assert.Equal(t, expected, got)
+
+		// Act
+		got = testDaprHandler.getAppID(statefulset)
 
 		// Assert
 		assert.Equal(t, expected, got)
@@ -50,9 +57,16 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 		// Arrange
 		expected := "true"
 		deployment := getDeployment("test_id", expected)
+		statefulset := getStatefulSet("test_id", expected)
 
 		// Act
 		got := testDaprHandler.isAnnotatedForDapr(deployment)
+
+		// Assert
+		assert.True(t, got)
+
+		// Act
+		got = testDaprHandler.isAnnotatedForDapr(statefulset)
 
 		// Assert
 		assert.True(t, got)
@@ -127,6 +141,36 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
 }
 
+func TestCreateDaprServiceAppIDAndMetricsSettingsWithStatefulset(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+	ctx := context.Background()
+	myDaprService := types.NamespacedName{
+		Namespace: "test",
+		Name:      "test",
+	}
+	statefulSet := getStatefulSet("test", "true")
+	statefulSet.Spec.Selector = &meta_v1.LabelSelector{
+		MatchLabels: map[string]string{},
+	}
+	statefulSet.Spec.Template.Annotations[daprMetricsPortKey] = "12345"
+
+	service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, statefulSet, "test")
+	require.NotNil(t, service)
+	assert.Equal(t, "test", service.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"])
+	assert.Equal(t, "12345", service.ObjectMeta.Annotations["prometheus.io/port"])
+	assert.Equal(t, "/", service.ObjectMeta.Annotations["prometheus.io/path"])
+
+	statefulSet.Spec.Template.Annotations[daprEnableMetricsKey] = "false"
+
+	service = testDaprHandler.createDaprServiceValues(ctx, myDaprService, statefulSet, "test")
+	require.NotNil(t, service)
+	assert.Equal(t, "test", service.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/scrape"])
+	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/port"])
+	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
+}
+
 func TestGetMetricsPort(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 	t.Run("metrics port override", func(t *testing.T) {
@@ -189,6 +233,35 @@ func getDeployment(appID string, daprEnabled string) *appsv1.Deployment {
 		},
 
 		Spec: appsv1.DeploymentSpec{
+			Template: podTemplateSpec,
+		},
+	}
+
+	return deployment
+}
+
+func getStatefulSet(appID string, daprEnabled string) *appsv1.StatefulSet {
+	// Arrange
+	metadata := meta_v1.ObjectMeta{
+		Name:   "app",
+		Labels: map[string]string{"app": "test_app"},
+		Annotations: map[string]string{
+			appIDAnnotationKey:       appID,
+			daprEnabledAnnotationKey: daprEnabled,
+			daprEnableMetricsKey:     "true",
+		},
+	}
+
+	podTemplateSpec := corev1.PodTemplateSpec{
+		ObjectMeta: metadata,
+	}
+
+	deployment := &appsv1.StatefulSet{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "app",
+		},
+
+		Spec: appsv1.StatefulSetSpec{
 			Template: podTemplateSpec,
 		},
 	}
