@@ -1199,7 +1199,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("timer/%s", name))
 	req.WithActor(actorType, actorID)
 	req.WithRawData(b, invokev1.JSONContentType)
-	_, err = a.callLocalActor(context.Background(), req)
+	_, err = a.Call(context.Background(), req)
 	if err != nil {
 		log.Errorf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
 	}
