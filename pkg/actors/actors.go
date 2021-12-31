@@ -1086,6 +1086,9 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
 			return errors.Wrap(err, "error parsing timer due time")
 		}
+		if dueTime.Before(time.Now()){
+			return errors.Errorf("timer %s has already expired: dueTime: %s TTL: %s", timerKey, req.DueTime, req.TTL)
+		}
 	} else {
 		dueTime = time.Now()
 	}
@@ -1199,7 +1202,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("timer/%s", name))
 	req.WithActor(actorType, actorID)
 	req.WithRawData(b, invokev1.JSONContentType)
-	_, err = a.callLocalActor(context.Background(), req)
+	_, err = a.Call(context.Background(), req)
 	if err != nil {
 		log.Errorf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
 	}
