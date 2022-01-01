@@ -77,8 +77,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub/natsstreaming"
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
-	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 	"github.com/dapr/components-contrib/pubsub/rocketmq"
+	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
