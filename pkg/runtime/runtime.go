@@ -1752,7 +1752,7 @@ func (a *DaprRuntime) processComponents() {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
 			if !comp.Spec.IgnoreErrors {
 				log.Warnf("process component error daprd process will exited, gracefully to stop")
-				a.Shutdown(defaultGracefulShutdownDuration)
+				a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
 				log.Fatalf(e)
 			}
 			log.Errorf(e)
@@ -1915,7 +1915,7 @@ func (a *DaprRuntime) shutdownComponents() error {
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
-	a.Shutdown(defaultGracefulShutdownDuration)
+	a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
 	os.Exit(0)
 }
 
