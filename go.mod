@@ -38,7 +38,7 @@ require (
 	github.com/prometheus/common v0.32.1
 	github.com/stretchr/testify v1.7.0
 	github.com/trusch/grpc-proxy v0.0.0-20190529073533-02b64529f274
-	github.com/valyala/fasthttp v1.28.0
+	github.com/valyala/fasthttp v1.31.1-0.20211216042702-258a4c17b4f4
 	go.opencensus.io v0.23.0
 	go.opentelemetry.io/otel v0.19.0
 	go.uber.org/atomic v1.9.0
@@ -213,7 +213,7 @@ require (
 	github.com/jstemmer/go-junit-report v0.9.1 // indirect
 	github.com/keighl/postmark v0.0.0-20190821160221-28358b1a94e3 // indirect
 	github.com/keybase/go-keychain v0.0.0-20190712205309-48d3d31d256d // indirect
-	github.com/klauspost/compress v1.12.2 // indirect
+	github.com/klauspost/compress v1.13.4 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/linkedin/goavro/v2 v2.9.8 // indirect
 	github.com/machinebox/graphql v0.2.2 // indirect
