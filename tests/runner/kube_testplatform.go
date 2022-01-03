@@ -18,7 +18,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"time"
 
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
@@ -297,9 +296,6 @@ func (c *KubeTestPlatform) SetAppEnv(name, key, value string) error {
 		return err
 	}
 
-	// 120s is the observed time to spawn a new test app POD and terminate the old one.
-	// This sleep time is important for the stream log to work.
-	time.Sleep(120 * time.Second)
 	if _, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone); err != nil {
 		return err
 	}
@@ -321,10 +317,6 @@ func (c *KubeTestPlatform) Restart(name string) error {
 	}
 
 	if err := c.Scale(name, originalReplicas); err != nil {
-		return err
-	}
-
-	if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
 		return err
 	}
 
