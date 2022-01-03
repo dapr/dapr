@@ -682,6 +682,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 	var (
 		nextTime, ttl            time.Time
 		period                   time.Duration
+		years, months, days      int
 		repeats, repetitionsLeft int
 	)
 
@@ -697,7 +698,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 
 	repeats = -1 // set to default
 	if len(reminder.Period) != 0 {
-		if period, repeats, err = parseDuration(reminder.Period); err != nil {
+		if years, months, days, period, repeats, err = parseDuration(reminder.Period); err != nil {
 			return errors.Wrap(err, "error parsing reminder period")
 		}
 	}
@@ -713,13 +714,13 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			return errors.Wrap(err, "error parsing reminder last fired time")
 		}
 		repetitionsLeft = track.RepetitionLeft
-		nextTime = lastFiredTime.Add(period)
+		nextTime = lastFiredTime.AddDate(years, months, days).Add(period)
 	} else {
 		repetitionsLeft = repeats
 		nextTime = registeredTime
 	}
 
-	go func(reminder *Reminder, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, stop chan bool) {
+	go func(reminder *Reminder, years int, months int, days int, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, stop chan bool) {
 		var (
 			ttlTimer, nextTimer *time.Timer
 			ttlTimerC           <-chan time.Time
@@ -774,10 +775,10 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				log.Errorf("error updating reminder track: %v", err)
 			}
 			// if reminder is not repetitive, proceed with reminder deletion
-			if period == 0 {
+			if years == 0 && months == 0 && days == 0 && period == 0 {
 				break L
 			}
-			nextTime = nextTime.Add(period)
+			nextTime = nextTime.AddDate(years, months, days).Add(period)
 			if nextTimer.Stop() {
 				<-nextTimer.C
 			}
@@ -791,7 +792,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		if err != nil {
 			log.Errorf("error deleting reminder: %s", err)
 		}
-	}(reminder, period, nextTime, ttl, repetitionsLeft, stopChannel)
+	}(reminder, years, months, days, period, nextTime, ttl, repetitionsLeft, stopChannel)
 
 	return nil
 }
@@ -998,7 +999,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	reminder.RegisteredTime = dueTime.Format(time.RFC3339)
 
 	if len(req.Period) != 0 {
-		_, repeats, err = parseDuration(req.Period)
+		_, _, _, _, repeats, err = parseDuration(req.Period)
 		if err != nil {
 			return errors.Wrap(err, "error parsing reminder period")
 		}
@@ -1061,10 +1062,11 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
 	var (
-		err          error
-		repeats      int
-		dueTime, ttl time.Time
-		period       time.Duration
+		err                 error
+		repeats             int
+		dueTime, ttl        time.Time
+		period              time.Duration
+		years, months, days int
 	)
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
@@ -1091,7 +1093,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 	repeats = -1 // set to default
 	if len(req.Period) != 0 {
-		if period, repeats, err = parseDuration(req.Period); err != nil {
+		if years, months, days, period, repeats, err = parseDuration(req.Period); err != nil {
 			return errors.Wrap(err, "error parsing timer period")
 		}
 		// error on timers with zero repetitions
@@ -1160,11 +1162,11 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 				log.Errorf("could not find active timer %s", timerKey)
 				return
 			}
-			if repeats == 0 || period == 0 {
+			if repeats == 0 || (years == 0 && months == 0 && days == 0 && period == 0) {
 				log.Infof("timer %s has been completed", timerKey)
 				break L
 			}
-			nextTime = nextTime.Add(period)
+			nextTime = nextTime.AddDate(years, months, days).Add(period)
 			if nextTimer.Stop() {
 				<-nextTimer.C
 			}
@@ -1720,12 +1722,12 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	return nil
 }
 
-func parseISO8601Duration(from string) (time.Duration, int, error) {
+func parseISO8601Duration(from string) (int, int, int, time.Duration, int, error) {
 	match := pattern.FindStringSubmatch(from)
 	if match == nil {
-		return 0, 0, errors.Errorf("unsupported ISO8601 duration format %q", from)
+		return 0, 0, 0, 0, 0, errors.Errorf("unsupported ISO8601 duration format %q", from)
 	}
-	duration := time.Duration(0)
+	years, months, days, duration := 0, 0, 0, time.Duration(0)
 	// -1 signifies infinite repetition
 	repetition := -1
 	for i, name := range pattern.SubexpNames() {
@@ -1735,17 +1737,17 @@ func parseISO8601Duration(from string) (time.Duration, int, error) {
 		}
 		val, err := strconv.Atoi(part)
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, 0, 0, 0, err
 		}
 		switch name {
 		case "year":
-			duration += time.Hour * 24 * 365 * time.Duration(val)
+			years = val
 		case "month":
-			duration += time.Hour * 24 * 30 * time.Duration(val)
+			months = val
 		case "week":
-			duration += time.Hour * 24 * 7 * time.Duration(val)
+			days += 7 * val
 		case "day":
-			duration += time.Hour * 24 * time.Duration(val)
+			days += val
 		case "hour":
 			duration += time.Hour * time.Duration(val)
 		case "minute":
@@ -1755,25 +1757,25 @@ func parseISO8601Duration(from string) (time.Duration, int, error) {
 		case "repetition":
 			repetition = val
 		default:
-			return 0, 0, fmt.Errorf("unsupported ISO8601 duration field %s", name)
+			return 0, 0, 0, 0, 0, fmt.Errorf("unsupported ISO8601 duration field %s", name)
 		}
 	}
-	return duration, repetition, nil
+	return years, months, days, duration, repetition, nil
 }
 
 // parseDuration creates time.Duration from either:
 // - ISO8601 duration format,
 // - time.Duration string format.
-func parseDuration(from string) (time.Duration, int, error) {
-	d, r, err := parseISO8601Duration(from)
+func parseDuration(from string) (int, int, int, time.Duration, int, error) {
+	y, m, d, dur, r, err := parseISO8601Duration(from)
 	if err == nil {
-		return d, r, nil
+		return y, m, d, dur, r, nil
 	}
-	d, err = time.ParseDuration(from)
+	dur, err = time.ParseDuration(from)
 	if err == nil {
-		return d, -1, nil
+		return 0, 0, 0, dur, -1, nil
 	}
-	return 0, 0, errors.Errorf("unsupported duration format %q", from)
+	return 0, 0, 0, 0, 0, errors.Errorf("unsupported duration format %q", from)
 }
 
 // parseTime creates time.Duration from either:
@@ -1788,15 +1790,15 @@ func parseTime(from string, offset *time.Time) (time.Time, error) {
 	} else {
 		start = time.Now()
 	}
-	d, r, err := parseISO8601Duration(from)
+	y, m, d, dur, r, err := parseISO8601Duration(from)
 	if err == nil {
 		if r != -1 {
 			return time.Time{}, errors.Errorf("repetitions are not allowed")
 		}
-		return start.Add(d), nil
+		return start.AddDate(y, m, d).Add(dur), nil
 	}
-	if d, err = time.ParseDuration(from); err == nil {
-		return start.Add(d), nil
+	if dur, err = time.ParseDuration(from); err == nil {
+		return start.Add(dur), nil
 	}
 	if t, err := time.Parse(time.RFC3339, from); err == nil {
 		return t, nil
