@@ -1118,6 +1118,9 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
 			return errors.Wrap(err, "error parsing timer due time")
 		}
+		if dueTime.Before(time.Now()) {
+			return errors.Errorf("timer %s has already expired: dueTime: %s TTL: %s", timerKey, req.DueTime, req.TTL)
+		}
 	} else {
 		dueTime = time.Now()
 	}
