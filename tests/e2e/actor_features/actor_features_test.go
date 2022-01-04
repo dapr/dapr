@@ -607,13 +607,10 @@ func TestActorFeatures(t *testing.T) {
 		res, err := utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 		require.NoError(t, err)
 
-		var prevMetadata metadata
-		err = json.Unmarshal(res, &prevMetadata)
+		var previousMetadata metadata
+		err = json.Unmarshal(res, &previousMetadata)
 		require.NoError(t, err)
-		var prevActors int
-		if len(prevMetadata.Actors) > 0 {
-			prevActors = prevMetadata.Actors[0].Count
-		}
+		require.NotNil(t, previousMetadata)
 
 		// Each test needs to have a different actorID
 		actorIDBase := "1008Instance"
@@ -629,16 +626,17 @@ func TestActorFeatures(t *testing.T) {
 		res, err = utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 		require.NoError(t, err)
 
-		expected := metadata{
-			ID: appName,
-			Actors: []activeActorsCount{{
-				Type:  "testactorfeatures",
-				Count: prevActors + actorsToCheckMetadata,
-			}},
-		}
-		var actual metadata
-		err = json.Unmarshal(res, &actual)
+		var currentMetadata metadata
+		err = json.Unmarshal(res, &currentMetadata)
 		require.NoError(t, err)
-		require.Equal(t, expected, actual)
+		require.NotNil(t, currentMetadata)
+
+		require.Equal(t, appName, currentMetadata.ID)
+		require.Equal(t, appName, previousMetadata.ID)
+		require.Greater(t, len(previousMetadata.Actors), 0)
+		require.Greater(t, len(currentMetadata.Actors), 0)
+		require.Equal(t, "testactorfeatures", currentMetadata.Actors[0].Type)
+		require.Equal(t, "testactorfeatures", previousMetadata.Actors[0].Type)
+		require.Greater(t, currentMetadata.Actors[0].Count, previousMetadata.Actors[0].Count)
 	})
 }
