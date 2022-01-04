@@ -115,16 +115,17 @@ type TempTransactionalDelete struct {
 var actorLogs = []actorLogEntry{}
 var actorLogsMutex = &sync.Mutex{}
 var registeredActorType = getActorType()
-var actorReminderPartitions = getActorRemindersPartitions()
 var actors sync.Map
 
-var daprConfigResponse = daprConfig{
-	[]string{getActorType()},
-	actorIdleTimeout,
-	actorScanInterval,
-	drainOngoingCallTimeout,
-	drainRebalancedActors,
-	actorReminderPartitions,
+var envOverride sync.Map
+
+func getEnv(envName string) string {
+	value, ok := envOverride.Load(envName)
+	if ok {
+		return fmt.Sprintf("%v", value)
+	}
+
+	return os.Getenv(envName)
 }
 
 func resetLogs() {
@@ -135,7 +136,7 @@ func resetLogs() {
 }
 
 func getActorType() string {
-	actorType := os.Getenv(actorTypeEnvName)
+	actorType := getEnv(actorTypeEnvName)
 	if actorType == "" {
 		return defaultActorType
 	}
@@ -144,7 +145,7 @@ func getActorType() string {
 }
 
 func getActorRemindersPartitions() int {
-	val := os.Getenv(actorRemindersPartitionsEnvName)
+	val := getEnv(actorRemindersPartitionsEnvName)
 	if val == "" {
 		return 0
 	}
@@ -172,7 +173,12 @@ func appendLog(actorType string, actorID string, action string, start int) {
 }
 
 func getLogs() []actorLogEntry {
-	return actorLogs
+	actorLogsMutex.Lock()
+	defer actorLogsMutex.Unlock()
+
+	dst := make([]actorLogEntry, len(actorLogs))
+	copy(dst, actorLogs)
+	return dst
 }
 
 func createActorID(actorType string, id string) string {
@@ -198,6 +204,15 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
+	var daprConfigResponse = daprConfig{
+		[]string{getActorType()},
+		actorIdleTimeout,
+		actorScanInterval,
+		drainOngoingCallTimeout,
+		drainRebalancedActors,
+		getActorRemindersPartitions(),
+	}
+
 	log.Printf("Processing dapr request for %s, responding with %v", r.URL.RequestURI(), daprConfigResponse)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -308,6 +323,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 
 	url := fmt.Sprintf(actorMethodURLFormat, actorType, id, callType, method)
 
+	expectedHTTPCode := 200
 	var req timerReminderRequest
 	switch callType {
 	case "method":
@@ -315,6 +331,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	case "timers":
 		fallthrough
 	case "reminders":
+		expectedHTTPCode = 204
 		body, err := io.ReadAll(r.Body)
 		defer r.Body.Close()
 		if err != nil {
@@ -325,7 +342,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(body, &req)
 	}
 
-	body, err := httpCall(r.Method, url, req, 200)
+	body, err := httpCall(r.Method, url, req, expectedHTTPCode)
 	if err != nil {
 		log.Printf("Could not read actor's test response: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -360,6 +377,58 @@ func testCallMetadataHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write(body)
+}
+
+func shutdownHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+
+	shutdownURL := fmt.Sprintf("%s/shutdown", daprV1URL)
+	_, err := httpCall(r.Method, shutdownURL, nil, 204)
+	if err != nil {
+		log.Printf("Could not shutdown sidecar: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		log.Fatal("simulating fatal shutdown")
+	}()
+}
+
+func shutdownSidecarHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+
+	shutdownURL := fmt.Sprintf("%s/shutdown", daprV1URL)
+	_, err := httpCall(r.Method, shutdownURL, nil, 204)
+	if err != nil {
+		log.Printf("Could not shutdown sidecar: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func testEnvHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+
+	envName := mux.Vars(r)["envName"]
+	if r.Method == "GET" {
+		envValue := getEnv(envName)
+
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(envValue))
+	}
+
+	if r.Method == "POST" {
+		body, err := io.ReadAll(r.Body)
+		defer r.Body.Close()
+		if err != nil {
+			log.Printf("Could not read config env value: %s", err.Error())
+			return
+		}
+
+		envOverride.Store(envName, string(body))
+	}
 }
 
 // the test side calls the 4 cases below in order
@@ -570,7 +639,10 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
 	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")
+	router.HandleFunc("/test/env/{envName}", testEnvHandler).Methods("GET", "POST")
 	router.HandleFunc("/test/logs", logsHandler).Methods("DELETE")
+	router.HandleFunc("/test/shutdown", shutdownHandler).Methods("POST")
+	router.HandleFunc("/test/shutdownsidecar", shutdownSidecarHandler).Methods("POST")
 	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
 
 	router.Use(mux.CORSMethodMiddleware(router))
