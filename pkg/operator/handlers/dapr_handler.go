@@ -51,7 +51,7 @@ type DaprHandler struct {
 	Scheme *runtime.Scheme
 }
 
-type innerReconciler struct {
+type Reconciler struct {
 	*DaprHandler
 	newWrapper func() ObjectWrapper
 }
@@ -89,7 +89,7 @@ func (h *DaprHandler) Init() error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 100,
 		}).
-		Complete(&innerReconciler{
+		Complete(&Reconciler{
 			DaprHandler: h,
 			newWrapper: func() ObjectWrapper {
 				return &DeploymentWrapper{
@@ -105,7 +105,7 @@ func (h *DaprHandler) Init() error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 100,
 		}).
-		Complete(&innerReconciler{
+		Complete(&Reconciler{
 			DaprHandler: h,
 			newWrapper: func() ObjectWrapper {
 				return &StatefulsetWrapper{
@@ -116,7 +116,7 @@ func (h *DaprHandler) Init() error {
 }
 
 // Reconcile the expected services for deployments | statefulset annotated for Dapr.
-func (i *innerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (i *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// var wrapper appsv1.Deployment | appsv1.StatefulSet
 	wrapper := i.newWrapper()
 
