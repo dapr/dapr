@@ -272,6 +272,10 @@ delete-test-env-mongodb:
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb
 
+save-dapr-control-plane-k8s-resources:
+	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
+	kubectl describe all -n $(DAPR_TEST_NAMESPACE) > '$(DAPR_CONTAINER_LOG_PATH)/control_plane_k8s_resources.txt'
+
 save-dapr-control-plane-k8s-logs:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
 	kubectl logs -l 'app.kubernetes.io/name=dapr' -n $(DAPR_TEST_NAMESPACE) > '$(DAPR_CONTAINER_LOG_PATH)/control_plane_containers.log'
