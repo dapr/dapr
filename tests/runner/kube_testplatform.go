@@ -296,9 +296,13 @@ func (c *KubeTestPlatform) SetAppEnv(name, key, value string) error {
 		return err
 	}
 
-	_, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone)
+	if _, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone); err != nil {
+		return err
+	}
 
-	return err
+	appManager.StreamContainerLogs()
+
+	return nil
 }
 
 // Restart restarts all instances for the app.

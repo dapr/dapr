@@ -39,8 +39,10 @@ const (
 	numHealthChecks              = 60                                   // Number of get calls before starting tests.
 	numActorsPerThread           = 10                                   // Number of get calls before starting tests.
 	secondsToCheckReminderResult = 20                                   // How much time to wait to make sure the result is in logs.
-	actorInvokeURLFormat         = "%s/test/testactorreminder/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
+	actorName                    = "testactorreminder"                  // Actor name
+	actorInvokeURLFormat         = "%s/test/" + actorName + "/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat           = "%s/test/logs"                       // URL to fetch logs from test app.
+	shutdownURLFormat            = "%s/test/shutdown"                   // URL to shutdown sidecar and app.
 )
 
 // represents a response for the APIs in this app.
@@ -100,7 +102,7 @@ func TestMain(m *testing.M) {
 			AppCPULimit:    "2.0",
 			AppCPURequest:  "0.1",
 			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_TYPE": "testactorreminder",
+				"TEST_APP_ACTOR_TYPE": actorName,
 			},
 		},
 	}
@@ -181,16 +183,18 @@ func TestActorReminder(t *testing.T) {
 		wg.Wait()
 
 		t.Logf("Restarting %s ...", appName)
-		tr.Platform.Restart(appName)
+		// Shutdown the sidecar
+		_, err = utils.HTTPPost(fmt.Sprintf(shutdownURLFormat, externalURL), []byte(""))
+		require.NoError(t, err)
+
+		t.Logf("Sleeping for %d seconds to see if reminders will trigger ...", secondsToCheckReminderResult)
+		time.Sleep(secondsToCheckReminderResult * time.Second)
 
 		// This initial probe makes the test wait a little bit longer when needed,
 		// making this test less flaky due to delays in the deployment.
 		t.Logf("Checking if app is healthy ...")
 		_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
 		require.NoError(t, err)
-
-		t.Logf("Sleeping for %d seconds to see if reminders will trigger ...", secondsToCheckReminderResult)
-		time.Sleep(secondsToCheckReminderResult * time.Second)
 
 		t.Logf("Getting logs from %s ...", logsURL)
 		resp, err := utils.HTTPGet(logsURL)
