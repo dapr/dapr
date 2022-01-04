@@ -1,10 +1,18 @@
 //go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package stateapp_e2e
 
@@ -588,5 +596,50 @@ func TestMissingAndMisconfiguredStateStore(t *testing.T) {
 			require.Equal(t, tc.status, status)
 			require.Nil(t, err)
 		})
+	}
+}
+
+func TestQueryStateStore(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// Populate store.
+	url := fmt.Sprintf("%s/test/%s/%s/querystatestore", externalURL, "http", "load")
+	body, err := os.ReadFile("query-data/dataset.json")
+	require.NoError(t, err)
+
+	_, status, err := utils.HTTPPostWithStatus(url, body)
+	require.NoError(t, err)
+	require.Equal(t, 204, status)
+
+	tests := []struct {
+		path string
+		keys int
+	}{
+		{
+			path: "./query-data/query.json",
+			keys: 3,
+		},
+	}
+	for _, test := range tests {
+		body, err := os.ReadFile(test.path)
+		require.NoError(t, err)
+
+		for _, protocol := range []string{"http", "grpc"} {
+			url := fmt.Sprintf("%s/test/%s/%s/querystatestore", externalURL, protocol, "query")
+			resp, status, err := utils.HTTPPostWithStatus(url, body)
+			require.NoError(t, err)
+			require.Equal(t, 200, status)
+
+			var states requestResponse
+			err = json.Unmarshal(resp, &states)
+			require.NoError(t, err)
+			require.Equal(t, test.keys, len(states.States))
+		}
 	}
 }
