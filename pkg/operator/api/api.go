@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -187,7 +186,7 @@ func processComponentSecrets(component *componentsapi.Component, namespace strin
 }
 
 // ListSubscriptions returns a list of Dapr pub/sub subscriptions.
-func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
+func (a *apiServer) ListSubscriptions(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	resp := &operatorv1pb.ListSubscriptionsResponse{
 		Subscriptions: [][]byte{},
 	}
@@ -204,7 +203,7 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 		}
 		b, err := json.Marshal(&s)
 		if err != nil {
-			log.Warnf("error marshalling subscription: %s", err)
+			log.Warnf("error marshalling subscription for pod %s/%s: %s", in.Namespace, in.PodName, err)
 			continue
 		}
 		resp.Subscriptions = append(resp.Subscriptions, b)

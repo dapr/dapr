@@ -11,7 +11,6 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subscriptions "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
@@ -43,7 +42,7 @@ func (o *mockOperator) ListComponents(ctx context.Context, in *operatorv1pb.List
 	}, nil
 }
 
-func (o *mockOperator) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
+func (o *mockOperator) ListSubscriptions(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	subscription := subscriptions.Subscription{}
 	subscription.ObjectMeta.Name = "test"
 	subscription.Spec = subscriptions.SubscriptionSpec{

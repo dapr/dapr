@@ -494,7 +494,7 @@ type mockK8sSubscriptions struct {
 	operatorv1pb.OperatorClient
 }
 
-func (m *mockK8sSubscriptions) ListSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*operatorv1pb.ListSubscriptionsResponse, error) {
+func (m *mockK8sSubscriptions) ListSubscriptions(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	v2 := testDeclarativeSubscriptionV2()
 	v2Bytes, err := yaml.Marshal(v2)
 	if err != nil {
@@ -507,7 +507,7 @@ func (m *mockK8sSubscriptions) ListSubscriptions(ctx context.Context, in *emptyp
 
 func TestK8sSubscriptions(t *testing.T) {
 	m := mockK8sSubscriptions{}
-	subs := DeclarativeKubernetes(&m, log)
+	subs := DeclarativeKubernetes(&m, "testPodName", "testNamespace", log)
 	if assert.Len(t, subs, 1) {
 		assert.Equal(t, "topic1", subs[0].Topic)
 		if assert.Len(t, subs[0].Rules, 3) {

@@ -43,12 +43,12 @@ type KubernetesComponents struct {
 }
 
 // NewKubernetesComponents returns a new kubernetes loader.
-func NewKubernetesComponents(configuration config.KubernetesConfig, namespace string, operatorClient operatorv1pb.OperatorClient, name string) *KubernetesComponents {
+func NewKubernetesComponents(configuration config.KubernetesConfig, namespace string, operatorClient operatorv1pb.OperatorClient, podName string) *KubernetesComponents {
 	return &KubernetesComponents{
 		config:    configuration,
 		client:    operatorClient,
 		namespace: namespace,
-		podName:   name,
+		podName:   podName,
 	}
 }
 
