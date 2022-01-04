@@ -14,6 +14,7 @@ limitations under the License.
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"testing"
@@ -39,6 +40,10 @@ type mockComponentUpdateServer struct {
 func (m *mockComponentUpdateServer) Send(*operatorv1pb.ComponentUpdateEvent) error {
 	m.Calls++
 	return nil
+}
+
+func (m *mockComponentUpdateServer) Context() context.Context {
+	return context.TODO()
 }
 
 func TestProcessComponentSecrets(t *testing.T) {
