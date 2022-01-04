@@ -92,9 +92,7 @@ func (h *DaprHandler) Init() error {
 		Complete(&Reconciler{
 			DaprHandler: h,
 			newWrapper: func() ObjectWrapper {
-				return &DeploymentWrapper{
-					&appsv1.Deployment{},
-				}
+				return &DeploymentWrapper{}
 			},
 		}); err != nil {
 		return err
@@ -108,9 +106,7 @@ func (h *DaprHandler) Init() error {
 		Complete(&Reconciler{
 			DaprHandler: h,
 			newWrapper: func() ObjectWrapper {
-				return &StatefulsetWrapper{
-					&appsv1.StatefulSet{},
-				}
+				return &StatefulsetWrapper{}
 			},
 		})
 }
@@ -121,7 +117,7 @@ func (i *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	wrapper := i.newWrapper()
 
 	expectedService := false
-	if err := i.Get(ctx, req.NamespacedName, wrapper); err != nil {
+	if err := i.Get(ctx, req.NamespacedName, wrapper.GetObject()); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Debugf("deployment has be deleted, %s", req.NamespacedName)
 		} else {
@@ -149,8 +145,8 @@ func (h *DaprHandler) daprServiceName(appID string) string {
 	return fmt.Sprintf("%s-dapr", appID)
 }
 
-func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, deployment ObjectWrapper) error {
-	appID := h.getAppID(deployment)
+func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, wrapper ObjectWrapper) error {
+	appID := h.getAppID(wrapper)
 	err := validation.ValidateKubernetesAppID(appID)
 	if err != nil {
 		return err
@@ -163,8 +159,8 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	var daprSvc corev1.Service
 	if err := h.Get(ctx, mayDaprService, &daprSvc); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Debugf("no service for deployment found, deployment: %s/%s", namespace, mayDaprService.Name)
-			return h.createDaprService(ctx, mayDaprService, deployment)
+			log.Debugf("no service for wrapper found, wrapper: %s/%s", namespace, mayDaprService.Name)
+			return h.createDaprService(ctx, mayDaprService, wrapper)
 		}
 		log.Errorf("unable to get service, %s, err: %s", mayDaprService, err)
 		return err
@@ -172,15 +168,15 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	return nil
 }
 
-func (h *DaprHandler) createDaprService(ctx context.Context, expectedService types.NamespacedName, obj ObjectWrapper) error {
-	appID := h.getAppID(obj)
-	service := h.createDaprServiceValues(ctx, expectedService, obj, appID)
+func (h *DaprHandler) createDaprService(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper) error {
+	appID := h.getAppID(wrapper)
+	service := h.createDaprServiceValues(ctx, expectedService, wrapper, appID)
 
-	if err := ctrl.SetControllerReference(obj, service, h.Scheme); err != nil {
+	if err := ctrl.SetControllerReference(wrapper.GetObject(), service, h.Scheme); err != nil {
 		return err
 	}
 	if err := h.Create(ctx, service); err != nil {
-		log.Errorf("unable to create Dapr service for obj, service: %s, err: %s", expectedService, err)
+		log.Errorf("unable to create Dapr service for wrapper, service: %s, err: %s", expectedService, err)
 		return err
 	}
 	log.Debugf("created service: %s", expectedService)
@@ -188,9 +184,9 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 	return nil
 }
 
-func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedService types.NamespacedName, obj ObjectWrapper, appID string) *corev1.Service {
-	enableMetrics := h.getEnableMetrics(obj)
-	metricsPort := h.getMetricsPort(obj)
+func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper, appID string) *corev1.Service {
+	enableMetrics := h.getEnableMetrics(wrapper)
+	metricsPort := h.getMetricsPort(wrapper)
 	log.Debugf("enableMetrics: %v", enableMetrics)
 
 	annotations := map[string]string{
@@ -211,7 +207,7 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector:  obj.GetMatchLabels(),
+			Selector:  wrapper.GetMatchLabels(),
 			ClusterIP: clusterIPNone,
 			Ports: []corev1.ServicePort{
 				{
@@ -243,16 +239,16 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	}
 }
 
-func (h *DaprHandler) getAppID(obj ObjectWrapper) string {
-	annotations := obj.GetTemplateAnnotations()
+func (h *DaprHandler) getAppID(wrapper ObjectWrapper) string {
+	annotations := wrapper.GetTemplateAnnotations()
 	if val, ok := annotations[appIDAnnotationKey]; ok && val != "" {
 		return val
 	}
 	return ""
 }
 
-func (h *DaprHandler) isAnnotatedForDapr(obj ObjectWrapper) bool {
-	annotations := obj.GetTemplateAnnotations()
+func (h *DaprHandler) isAnnotatedForDapr(wrapper ObjectWrapper) bool {
+	annotations := wrapper.GetTemplateAnnotations()
 	enabled, ok := annotations[daprEnabledAnnotationKey]
 	if !ok {
 		return false
@@ -265,8 +261,8 @@ func (h *DaprHandler) isAnnotatedForDapr(obj ObjectWrapper) bool {
 	}
 }
 
-func (h *DaprHandler) getEnableMetrics(obj ObjectWrapper) bool {
-	annotations := obj.GetTemplateAnnotations()
+func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {
+	annotations := wrapper.GetTemplateAnnotations()
 	enableMetrics := defaultMetricsEnabled
 	if val, ok := annotations[daprEnableMetricsKey]; ok {
 		if v, err := strconv.ParseBool(val); err == nil {
@@ -276,8 +272,8 @@ func (h *DaprHandler) getEnableMetrics(obj ObjectWrapper) bool {
 	return enableMetrics
 }
 
-func (h *DaprHandler) getMetricsPort(obj ObjectWrapper) int {
-	annotations := obj.GetTemplateAnnotations()
+func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int {
+	annotations := wrapper.GetTemplateAnnotations()
 	metricsPort := defaultMetricsPort
 	if val, ok := annotations[daprMetricsPortKey]; ok {
 		if v, err := strconv.Atoi(val); err == nil {
