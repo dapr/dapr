@@ -80,6 +80,10 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 	appID := v[0]
 
+	if p.remoteAppFn == nil {
+		return ctx, nil, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete.")
+	}
+
 	target, err := p.remoteAppFn(appID)
 	if err != nil {
 		return ctx, nil, err
