@@ -1008,7 +1008,13 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
-
+	if strings.Contains(actorType, actors.DaprSeparator) || strings.Contains(actorID, actors.DaprSeparator) {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST",
+			fmt.Sprintf(messages.ErrMalformedRequest, fmt.Sprintf("actorType or actorID can't contains %s", actors.DaprSeparator)))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
 	var req actors.CreateTimerRequest
 	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
