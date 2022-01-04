@@ -228,6 +228,10 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	}()
 	chWrapper := initChanGracefully(updateChan)
 	updateComponentFunc := func(c *componentsapi.Component) {
+		if c.Namespace != in.Namespace {
+			return
+		}
+
 		err := processComponentSecrets(c, in.Namespace, a.Client)
 		if err != nil {
 			log.Warnf("error processing component %s secrets: %s", c.Name, err)
