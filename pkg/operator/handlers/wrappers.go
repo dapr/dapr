@@ -9,10 +9,11 @@ type ObjectWrapper interface {
 	client.Object
 	GetMatchLabels() map[string]string
 	GetTemplateAnnotations() map[string]string
+	GetObject() client.Object
 }
 
 type DeploymentWrapper struct {
-	*appsv1.Deployment
+	appsv1.Deployment
 }
 
 func (d *DeploymentWrapper) GetMatchLabels() map[string]string {
@@ -24,11 +25,11 @@ func (d *DeploymentWrapper) GetTemplateAnnotations() map[string]string {
 }
 
 func (d *DeploymentWrapper) GetObject() client.Object {
-	return d
+	return &d.Deployment
 }
 
 type StatefulsetWrapper struct {
-	*appsv1.StatefulSet
+	appsv1.StatefulSet
 }
 
 func (s *StatefulsetWrapper) GetMatchLabels() map[string]string {
@@ -40,5 +41,5 @@ func (s *StatefulsetWrapper) GetTemplateAnnotations() map[string]string {
 }
 
 func (s *StatefulsetWrapper) GetObject() client.Object {
-	return s
+	return &s.StatefulSet
 }

@@ -195,7 +195,7 @@ func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 		ObjectMeta: metadata,
 	}
 
-	deployment := &appsv1.Deployment{
+	deployment := appsv1.Deployment{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: "app",
 		},
@@ -210,9 +210,7 @@ func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 		},
 	}
 
-	return &DeploymentWrapper{
-		deployment,
-	}
+	return &DeploymentWrapper{deployment}
 }
 
 func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
@@ -231,7 +229,7 @@ func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 		ObjectMeta: metadata,
 	}
 
-	stratefulset := &appsv1.StatefulSet{
+	stratefulset := appsv1.StatefulSet{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: "app",
 		},
