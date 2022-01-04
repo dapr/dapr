@@ -52,8 +52,8 @@ type DaprHandler struct {
 }
 
 type innerReconciler struct {
-	h       *DaprHandler
-	factory func() client.Object
+	*DaprHandler
+	newWrapper func() ObjectWrapper
 }
 
 // NewDaprHandler returns a new Dapr handler.
@@ -90,9 +90,11 @@ func (h *DaprHandler) Init() error {
 			MaxConcurrentReconciles: 100,
 		}).
 		Complete(&innerReconciler{
-			h: h,
-			factory: func() client.Object {
-				return &appsv1.Deployment{}
+			DaprHandler: h,
+			newWrapper: func() ObjectWrapper {
+				return &DeploymentWrapper{
+					&appsv1.Deployment{},
+				}
 			},
 		}); err != nil {
 		return err
@@ -104,20 +106,22 @@ func (h *DaprHandler) Init() error {
 			MaxConcurrentReconciles: 100,
 		}).
 		Complete(&innerReconciler{
-			h: h,
-			factory: func() client.Object {
-				return &appsv1.StatefulSet{}
+			DaprHandler: h,
+			newWrapper: func() ObjectWrapper {
+				return &StatefulsetWrapper{
+					&appsv1.StatefulSet{},
+				}
 			},
 		})
 }
 
 // Reconcile the expected services for deployments | statefulset annotated for Dapr.
 func (i *innerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// var obj appsv1.Deployment | appsv1.StatefulSet
-	obj := i.factory()
+	// var wrapper appsv1.Deployment | appsv1.StatefulSet
+	wrapper := i.newWrapper()
 
 	expectedService := false
-	if err := i.h.Get(ctx, req.NamespacedName, obj); err != nil {
+	if err := i.Get(ctx, req.NamespacedName, wrapper); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Debugf("deployment has be deleted, %s", req.NamespacedName)
 		} else {
@@ -125,15 +129,15 @@ func (i *innerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			return ctrl.Result{}, err
 		}
 	} else {
-		if obj.GetDeletionTimestamp() != nil {
+		if wrapper.GetDeletionTimestamp() != nil {
 			log.Debugf("deployment is being deleted, %s", req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
-		expectedService = i.h.isAnnotatedForDapr(obj)
+		expectedService = i.isAnnotatedForDapr(wrapper)
 	}
 
 	if expectedService {
-		if err := i.h.ensureDaprServicePresent(ctx, req.Namespace, obj); err != nil {
+		if err := i.ensureDaprServicePresent(ctx, req.Namespace, wrapper); err != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
@@ -145,7 +149,7 @@ func (h *DaprHandler) daprServiceName(appID string) string {
 	return fmt.Sprintf("%s-dapr", appID)
 }
 
-func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, deployment client.Object) error {
+func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, deployment ObjectWrapper) error {
 	appID := h.getAppID(deployment)
 	err := validation.ValidateKubernetesAppID(appID)
 	if err != nil {
@@ -159,7 +163,7 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	var daprSvc corev1.Service
 	if err := h.Get(ctx, mayDaprService, &daprSvc); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Debugf("no service for deployment found, deployment: %s/%s", namespace, deployment.GetName())
+			log.Debugf("no service for deployment found, deployment: %s/%s", namespace, mayDaprService.Name)
 			return h.createDaprService(ctx, mayDaprService, deployment)
 		}
 		log.Errorf("unable to get service, %s, err: %s", mayDaprService, err)
@@ -168,7 +172,7 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	return nil
 }
 
-func (h *DaprHandler) createDaprService(ctx context.Context, expectedService types.NamespacedName, obj client.Object) error {
+func (h *DaprHandler) createDaprService(ctx context.Context, expectedService types.NamespacedName, obj ObjectWrapper) error {
 	appID := h.getAppID(obj)
 	service := h.createDaprServiceValues(ctx, expectedService, obj, appID)
 
@@ -184,7 +188,7 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 	return nil
 }
 
-func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedService types.NamespacedName, obj client.Object, appID string) *corev1.Service {
+func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedService types.NamespacedName, obj ObjectWrapper, appID string) *corev1.Service {
 	enableMetrics := h.getEnableMetrics(obj)
 	metricsPort := h.getMetricsPort(obj)
 	log.Debugf("enableMetrics: %v", enableMetrics)
@@ -207,7 +211,7 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector:  h.getSelectorMatchLabel(obj),
+			Selector:  obj.GetMatchLabels(),
 			ClusterIP: clusterIPNone,
 			Ports: []corev1.ServicePort{
 				{
@@ -239,16 +243,16 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	}
 }
 
-func (h *DaprHandler) getAppID(obj client.Object) string {
-	annotations := h.getTemplateMetaAnnotations(obj)
+func (h *DaprHandler) getAppID(obj ObjectWrapper) string {
+	annotations := obj.GetTemplateAnnotations()
 	if val, ok := annotations[appIDAnnotationKey]; ok && val != "" {
 		return val
 	}
 	return ""
 }
 
-func (h *DaprHandler) isAnnotatedForDapr(obj client.Object) bool {
-	annotations := h.getTemplateMetaAnnotations(obj)
+func (h *DaprHandler) isAnnotatedForDapr(obj ObjectWrapper) bool {
+	annotations := obj.GetTemplateAnnotations()
 	enabled, ok := annotations[daprEnabledAnnotationKey]
 	if !ok {
 		return false
@@ -261,8 +265,8 @@ func (h *DaprHandler) isAnnotatedForDapr(obj client.Object) bool {
 	}
 }
 
-func (h *DaprHandler) getEnableMetrics(obj client.Object) bool {
-	annotations := h.getTemplateMetaAnnotations(obj)
+func (h *DaprHandler) getEnableMetrics(obj ObjectWrapper) bool {
+	annotations := obj.GetTemplateAnnotations()
 	enableMetrics := defaultMetricsEnabled
 	if val, ok := annotations[daprEnableMetricsKey]; ok {
 		if v, err := strconv.ParseBool(val); err == nil {
@@ -272,8 +276,8 @@ func (h *DaprHandler) getEnableMetrics(obj client.Object) bool {
 	return enableMetrics
 }
 
-func (h *DaprHandler) getMetricsPort(obj client.Object) int {
-	annotations := h.getTemplateMetaAnnotations(obj)
+func (h *DaprHandler) getMetricsPort(obj ObjectWrapper) int {
+	annotations := obj.GetTemplateAnnotations()
 	metricsPort := defaultMetricsPort
 	if val, ok := annotations[daprMetricsPortKey]; ok {
 		if v, err := strconv.Atoi(val); err == nil {
@@ -281,28 +285,4 @@ func (h *DaprHandler) getMetricsPort(obj client.Object) int {
 		}
 	}
 	return metricsPort
-}
-
-func (h *DaprHandler) getTemplateMetaAnnotations(obj client.Object) map[string]string {
-	if deployment, ok := obj.(*appsv1.Deployment); ok {
-		return deployment.Spec.Template.ObjectMeta.Annotations
-	}
-
-	if statefulset, ok := obj.(*appsv1.StatefulSet); ok {
-		return statefulset.Spec.Template.ObjectMeta.Annotations
-	}
-
-	return map[string]string{}
-}
-
-func (h *DaprHandler) getSelectorMatchLabel(obj client.Object) map[string]string {
-	if deployment, ok := obj.(*appsv1.Deployment); ok {
-		return deployment.Spec.Selector.MatchLabels
-	}
-
-	if statefulset, ok := obj.(*appsv1.StatefulSet); ok {
-		return statefulset.Spec.Selector.MatchLabels
-	}
-
-	return map[string]string{}
 }
