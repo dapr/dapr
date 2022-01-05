@@ -14,6 +14,7 @@ limitations under the License.
 package validation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,13 @@ func TestValidationForKubernetes(t *testing.T) {
 		for i := 0; i < 64; i++ {
 			id += "a"
 		}
+		err := ValidateKubernetesAppID(id)
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid length if suffix -dapr is appended", func(t *testing.T) {
+		// service name id+"-dapr" exceeds 63 characters (59 + 5 = 64)
+		id := strings.Repeat("a", 59)
 		err := ValidateKubernetesAppID(id)
 		assert.Error(t, err)
 	})

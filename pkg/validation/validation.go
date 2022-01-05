@@ -35,12 +35,16 @@ func ValidateKubernetesAppID(appID string) error {
 	if appID == "" {
 		return errors.New("value for the dapr.io/app-id annotation is empty")
 	}
-	r := isDNS1123Label(appID)
+	r := isDNS1123Label(serviceName(appID))
 	if len(r) == 0 {
 		return nil
 	}
-	s := fmt.Sprintf("invalid app id(input: %s): %s", appID, strings.Join(r, ","))
+	s := fmt.Sprintf("invalid app id(input: %s, service: %s): %s", appID, serviceName(appID), strings.Join(r, ","))
 	return errors.New(s)
+}
+
+func serviceName(appID string) string {
+	return fmt.Sprintf("%s-dapr", appID)
 }
 
 // The function was taken as-is from: https://github.com/kubernetes/apimachinery/blob/fc49b38c19f02a58ebc476347e622142f19820b9/pkg/util/validation/validation.go

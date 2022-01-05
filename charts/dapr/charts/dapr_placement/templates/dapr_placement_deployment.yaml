@@ -41,22 +41,22 @@ spec:
             path: /healthz
             port: 8080
 {{- if eq .Values.debug.enabled false }}
-          initialDelaySeconds: 10
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
 {{- else }}
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
 {{- end }}
-          periodSeconds: 3
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
           failureThreshold: 5
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
 {{- if eq .Values.debug.enabled false }}
-          initialDelaySeconds: 3
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
 {{- else }}
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
 {{- end }}
-          periodSeconds: 3
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           failureThreshold: 5
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
