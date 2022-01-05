@@ -162,7 +162,7 @@ type DaprRuntime struct {
 	httpMiddlewareRegistry http_middleware_loader.Registry
 	hostAddress            string
 	actorStateStoreName    string
-	actorStateStoreCount   int
+	actorStateStoreLock    *sync.RWMutex
 	authenticator          security.Authenticator
 	namespace              string
 	scopedSubscriptions    map[string][]string
@@ -221,6 +221,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		accessControlList:      accessControlList,
 		componentsLock:         &sync.RWMutex{},
 		components:             make([]components_v1alpha1.Component, 0),
+		actorStateStoreLock:    &sync.RWMutex{},
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
 		json:                   jsoniter.ConfigFastest,
 		inputBindings:          map[string]bindings.InputBinding{},
@@ -1184,15 +1185,16 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		// set specified actor store if "actorStateStore" is true in the spec.
 		actorStoreSpecified := props[actorStateStore]
 		if actorStoreSpecified == "true" {
-			if a.actorStateStoreCount++; a.actorStateStoreCount == 1 {
+			a.actorStateStoreLock.Lock()
+			if a.actorStateStoreName == "" {
+				log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
 				a.actorStateStoreName = s.ObjectMeta.Name
+			} else {
+				log.Warnf("ignoring duplicate actor state store: %s", s.ObjectMeta.Name)
 			}
+			a.actorStateStoreLock.Unlock()
 		}
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
-	}
-
-	if a.hostingActors() && (a.actorStateStoreName == "" || a.actorStateStoreCount != 1) {
-		log.Warnf("either no actor state store or multiple actor state stores are specified in the configuration, actor stores specified: %d", a.actorStateStoreCount)
 	}
 
 	return nil
@@ -1631,6 +1633,11 @@ func (a *DaprRuntime) initActors() error {
 	if err != nil {
 		return err
 	}
+	a.actorStateStoreLock.Lock()
+	defer a.actorStateStoreLock.Unlock()
+	if a.actorStateStoreName == "" {
+		return errors.New("no actor state store defined")
+	}
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.appConfig.Entities,
 		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout,
 		a.appConfig.DrainRebalancedActors, a.namespace, a.appConfig.Reentrancy, a.appConfig.RemindersStoragePartitions)
@@ -1745,7 +1752,7 @@ func (a *DaprRuntime) processComponents() {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
 			if !comp.Spec.IgnoreErrors {
 				log.Warnf("process component error daprd process will exited, gracefully to stop")
-				a.Shutdown(defaultGracefulShutdownDuration)
+				a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
 				log.Fatalf(e)
 			}
 			log.Errorf(e)
@@ -1908,7 +1915,7 @@ func (a *DaprRuntime) shutdownComponents() error {
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
-	a.Shutdown(defaultGracefulShutdownDuration)
+	a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
 	os.Exit(0)
 }
 
