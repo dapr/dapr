@@ -16,8 +16,8 @@ limitations under the License.
 package actor_timer_with_state_perf
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"os"
 	"testing"
 	"time"

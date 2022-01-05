@@ -17,8 +17,8 @@ limitations under the License.
 package pubsubapp
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"log"
 	"math/rand"
 	"net/http"

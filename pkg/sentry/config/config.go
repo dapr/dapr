@@ -1,9 +1,10 @@
 package config
 
 import (
-	"encoding/json"
 	"os"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/pkg/errors"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"

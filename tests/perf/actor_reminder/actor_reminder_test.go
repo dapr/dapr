@@ -17,8 +17,8 @@ limitations under the License.
 package actor_reminder_perf
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"os"
 	"testing"
 	"time"

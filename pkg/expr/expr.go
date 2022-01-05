@@ -1,8 +1,9 @@
 package expr
 
 import (
-	"encoding/json"
 	"strings"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/checker/decls"

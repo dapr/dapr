@@ -14,11 +14,12 @@ limitations under the License.
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	serve "actorload/cmd/stateactor/service"
 	cl "actorload/pkg/actor/client"

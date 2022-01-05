@@ -15,8 +15,9 @@ package components
 
 import (
 	"context"
-	"encoding/json"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 

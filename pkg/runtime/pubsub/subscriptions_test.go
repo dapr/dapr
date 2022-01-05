@@ -2,12 +2,13 @@ package pubsub
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/ghodss/yaml"
 	"github.com/stretchr/testify/assert"

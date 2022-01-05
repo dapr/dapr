@@ -15,7 +15,8 @@ package testing
 
 import (
 	context "context"
-	"encoding/json"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"

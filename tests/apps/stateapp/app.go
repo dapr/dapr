@@ -16,7 +16,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -27,13 +26,12 @@ import (
 	"path"
 	"time"
 
-	"github.com/gorilla/mux"
-	jsoniter "github.com/json-iterator/go"
-	"google.golang.org/grpc"
-
 	daprhttp "github.com/dapr/dapr/pkg/http"
+	"github.com/dapr/dapr/pkg/json"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/gorilla/mux"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -357,7 +355,7 @@ func executeQuery(query []byte, statestore string) ([]daprState, error) {
 	}
 
 	var qres daprhttp.QueryResponse
-	err = jsoniter.Unmarshal(body, &qres)
+	err = json.Unmarshal(body, &qres)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal query response from Dapr: %s", err.Error())
 	}

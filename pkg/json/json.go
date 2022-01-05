@@ -16,6 +16,7 @@ package json
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 )
 
@@ -38,4 +39,30 @@ func NewDecoder(r io.Reader) *json.Decoder {
 
 func NewEncoder(w io.Writer) *json.Encoder {
 	return json.NewEncoder(w)
+}
+
+// ConvertMapI2MapS https://github.com/icza/dyno/blob/49cb137208359a52dd5e57438a576a0d6abe3d6f/dyno.go
+func ConvertMapI2MapS(v interface{}) interface{} {
+	switch x := v.(type) {
+	case map[interface{}]interface{}:
+		m := map[string]interface{}{}
+		for k, v2 := range x {
+			switch k2 := k.(type) {
+			case string:
+				m[k2] = ConvertMapI2MapS(v2)
+			default:
+				m[fmt.Sprint(k)] = ConvertMapI2MapS(v2)
+			}
+		}
+		v = m
+	case []interface{}:
+		for i, v2 := range x {
+			x[i] = ConvertMapI2MapS(v2)
+		}
+	case map[string]interface{}:
+		for k, v2 := range x {
+			x[k] = ConvertMapI2MapS(v2)
+		}
+	}
+	return v
 }
