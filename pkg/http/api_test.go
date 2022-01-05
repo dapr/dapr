@@ -2172,7 +2172,6 @@ func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 	router := routing.New()
 	parameterFinder, _ := regexp.Compile("/{.*}")
 	for _, e := range endpoints {
-
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 		f.handle(e, parameterFinder, path, router)
 
