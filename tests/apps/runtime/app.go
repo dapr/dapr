@@ -15,13 +15,14 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"

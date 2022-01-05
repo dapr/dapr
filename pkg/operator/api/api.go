@@ -15,10 +15,11 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	b64 "encoding/base64"
 

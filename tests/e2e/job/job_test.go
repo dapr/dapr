@@ -17,8 +17,8 @@ limitations under the License.
 package job
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"log"
 	"os"
 	"testing"

@@ -26,7 +26,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/raft v1.2.0
 	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea
-	github.com/json-iterator/go v1.1.11
+	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.4.1

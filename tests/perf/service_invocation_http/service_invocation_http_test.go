@@ -17,8 +17,8 @@ limitations under the License.
 package service_invocation_http_perf
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"os"
 	"testing"
 

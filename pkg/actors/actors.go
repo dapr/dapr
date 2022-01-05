@@ -27,8 +27,9 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/logger"
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
@@ -36,9 +37,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/channel"
@@ -48,6 +46,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/health"
+	daprjson "github.com/dapr/dapr/pkg/json"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -680,7 +679,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 	track := ReminderTrack{
 		RepetitionLeft: -1,
 	}
-	json.Unmarshal(resp.Data, &track)
+	daprjson.Unmarshal(resp.Data, &track)
 	return &track, nil
 }
 
@@ -832,7 +831,7 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 		Period:  reminder.Period,
 		Data:    reminder.Data,
 	}
-	b, err := json.Marshal(&r)
+	b, err := daprjson.Marshal(&r)
 	if err != nil {
 		return err
 	}
@@ -1226,7 +1225,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 		DueTime:  dueTime,
 		Period:   period,
 	}
-	b, err := json.Marshal(&t)
+	b, err := daprjson.Marshal(&t)
 	if err != nil {
 		return err
 	}
@@ -1302,6 +1301,12 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 			},
 			Etag: nil,
 		}
+		if len(resp.Data) > 0 {
+			err = daprjson.Unmarshal(resp.Data, &actorMetadata)
+			if err != nil {
+				return fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
+			}
+			actorMetadata.Etag = resp.ETag
 		if len(resp.Data) > 0 {
 			err = json.Unmarshal(resp.Data, &actorMetadata)
 			if err != nil {
@@ -1459,6 +1464,20 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 						return
 					}
 
+					r.Data = json.RawMessage(resp.Data)
+					r.ETag = resp.ETag
+					r.Metadata = resp.Metadata
+
+					if resp == nil {
+						r.Error = "response not found for partition"
+						return
+					}
+
+					if len(resp.Data) == 0 {
+						r.Error = "data not found for reminder partition"
+						return
+					}
+
 					r.Data = jsoniter.RawMessage(resp.Data)
 					r.ETag = resp.ETag
 					r.Metadata = resp.Metadata
@@ -1478,7 +1497,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 
 			var batch []Reminder
 			if len(resp.Data) > 0 {
-				err = json.Unmarshal(resp.Data, &batch)
+				err = daprjson.Unmarshal(resp.Data, &batch)
 				if err != nil {
 					return nil, nil, fmt.Errorf("could not parse actor reminders partition %v: %w", resp.Key, err)
 				}
@@ -1516,7 +1535,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 
 	var reminders []Reminder
 	if len(resp.Data) > 0 {
-		err = json.Unmarshal(resp.Data, &reminders)
+		err = daprjson.Unmarshal(resp.Data, &reminders)
 		if err != nil {
 			return nil, nil, fmt.Errorf("could not parse actor reminders: %v", err)
 		}

@@ -15,7 +15,6 @@ package main
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +22,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/gorilla/mux"
 	"k8s.io/apimachinery/pkg/util/sets"

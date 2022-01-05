@@ -15,11 +15,12 @@ package injector
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"

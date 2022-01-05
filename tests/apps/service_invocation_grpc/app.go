@@ -15,10 +15,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
