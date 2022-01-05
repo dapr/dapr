@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	daprjson "github.com/dapr/dapr/pkg/json"
 	"io"
 	"net"
 	gohttp "net/http"
@@ -29,6 +28,7 @@ import (
 	"time"
 
 	"github.com/agrea/ptr"
+	daprjson "github.com/dapr/dapr/pkg/json"
 	routing "github.com/fasthttp/router"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"

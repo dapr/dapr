@@ -179,6 +179,10 @@ jobs:
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
+      - name: Save control plane K8s resources
+        if: always() && env.TEST_CLUSTER != ''
+        run: |
+          make save-dapr-control-plane-k8s-resources || true
       - name: Save control plane logs
         if: always() && env.TEST_CLUSTER != ''
         run: |
