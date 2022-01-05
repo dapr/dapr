@@ -14,7 +14,6 @@ limitations under the License.
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"log"
 	"os"
@@ -24,6 +23,8 @@ import (
 	cl "actorload/pkg/actor/client"
 	http_client "actorload/pkg/actor/client/http"
 	rt "actorload/pkg/actor/runtime"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const (

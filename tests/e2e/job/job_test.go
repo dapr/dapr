@@ -17,13 +17,13 @@ limitations under the License.
 package job
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"

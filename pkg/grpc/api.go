@@ -17,13 +17,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"strconv"
 	"sync"
 
 	"github.com/dapr/components-contrib/configuration"
 
 	"github.com/golang/protobuf/ptypes/empty"
-	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -281,7 +281,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		features := thepubsub.Features()
 		pubsub.ApplyMetadata(envelope, features, in.Metadata)
 
-		data, err = jsoniter.ConfigFastest.Marshal(envelope)
+		data, err = json.Marshal(envelope)
 		if err != nil {
 			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
 			apiServerLogger.Debug(err)
@@ -587,7 +587,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	}
 
 	var req state.QueryRequest
-	if err = jsoniter.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
+	if err = json.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrMalformedRequest, err.Error())
 		apiServerLogger.Debug(err)
 		return ret, err

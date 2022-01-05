@@ -14,7 +14,8 @@ limitations under the License.
 package service
 
 import (
-	"encoding/json"
+	"github.com/dapr/dapr/pkg/json"
+
 	"io"
 )
 

@@ -17,12 +17,12 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"strconv"
 	"time"
 
 	nethttp "net/http"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/plugin/ochttp/propagation/tracecontext"
 	"google.golang.org/grpc/codes"
@@ -54,7 +54,6 @@ type Channel struct {
 	ch                  chan int
 	tracingSpec         config.TracingSpec
 	appHeaderToken      string
-	json                jsoniter.API
 	maxResponseBodySize int
 }
 
@@ -76,7 +75,6 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 		baseAddress:         fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
 		tracingSpec:         spec,
 		appHeaderToken:      auth.GetAppToken(),
-		json:                jsoniter.ConfigFastest,
 		maxResponseBodySize: maxRequestBodySize,
 	}
 
@@ -117,7 +115,7 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	}
 
 	_, body := resp.RawData()
-	if err = h.json.Unmarshal(body, &config); err != nil {
+	if err = json.Unmarshal(body, &config); err != nil {
 		return nil, err
 	}
 

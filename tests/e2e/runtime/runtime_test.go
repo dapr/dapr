@@ -16,7 +16,6 @@ limitations under the License.
 package runtime_e2e
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -24,6 +23,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"

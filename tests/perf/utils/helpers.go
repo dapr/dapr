@@ -18,7 +18,6 @@ package utils
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -27,12 +26,12 @@ import (
 	"strings"
 	"time"
 
-	guuid "github.com/google/uuid"
-
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/kit/logger"
+	guuid "github.com/google/uuid"
 )
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.

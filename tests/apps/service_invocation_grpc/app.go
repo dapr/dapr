@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -28,6 +27,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
+	"github.com/dapr/dapr/pkg/json"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

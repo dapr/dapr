@@ -14,9 +14,7 @@ limitations under the License.
 package http
 
 import (
-	"encoding/json"
-
-	jsoniter "github.com/json-iterator/go"
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/valyala/fasthttp"
 )
 
@@ -28,11 +26,11 @@ const (
 
 // BulkGetResponse is the response object for a state bulk get operation.
 type BulkGetResponse struct {
-	Key      string              `json:"key"`
-	Data     jsoniter.RawMessage `json:"data,omitempty"`
-	ETag     *string             `json:"etag,omitempty"`
-	Metadata map[string]string   `json:"metadata,omitempty"`
-	Error    string              `json:"error,omitempty"`
+	Key      string            `json:"key"`
+	Data     []byte            `json:"data,omitempty"`
+	ETag     *string           `json:"etag,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+	Error    string            `json:"error,omitempty"`
 }
 
 // QueryResponse is the response object for querying state.
@@ -44,10 +42,10 @@ type QueryResponse struct {
 
 // QueryItem is an object representing a single entry in query results.
 type QueryItem struct {
-	Key   string              `json:"key"`
-	Data  jsoniter.RawMessage `json:"data"`
-	ETag  *string             `json:"etag,omitempty"`
-	Error string              `json:"error,omitempty"`
+	Key   string  `json:"key"`
+	Data  []byte  `json:"data"`
+	ETag  *string `json:"etag,omitempty"`
+	Error string  `json:"error,omitempty"`
 }
 
 type option = func(ctx *fasthttp.RequestCtx)

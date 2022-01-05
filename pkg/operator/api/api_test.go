@@ -16,7 +16,6 @@ package api
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
+	"github.com/dapr/dapr/pkg/json"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 

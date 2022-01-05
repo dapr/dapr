@@ -15,7 +15,6 @@ package config
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"sort"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/dapr/dapr/pkg/json"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 

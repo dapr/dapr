@@ -3,7 +3,6 @@ package operator
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"os"
 	"strings"
 
@@ -18,6 +17,7 @@ import (
 
 	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const webhookCAName = "dapr-webhook-ca"

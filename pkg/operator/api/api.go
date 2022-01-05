@@ -15,13 +15,13 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
 
 	b64 "encoding/base64"
 
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"

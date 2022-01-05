@@ -18,7 +18,6 @@ package metrics_e2e
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,6 +34,8 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 type testCommandRequest struct {

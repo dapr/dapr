@@ -15,13 +15,14 @@ package injector
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -30,8 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
-
-	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
 )
 
 const (

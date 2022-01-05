@@ -17,11 +17,11 @@ limitations under the License.
 package service_invocation_http_perf
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"

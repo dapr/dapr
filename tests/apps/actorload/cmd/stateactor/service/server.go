@@ -15,7 +15,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,6 +26,8 @@ import (
 	cl "actorload/pkg/actor/client"
 	http_client "actorload/pkg/actor/client/http"
 	actor_rt "actorload/pkg/actor/runtime"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/go-chi/chi"
 )

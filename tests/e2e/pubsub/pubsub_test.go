@@ -17,7 +17,6 @@ limitations under the License.
 package pubsubapp_e2e
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -30,6 +29,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"go.uber.org/ratelimit"
 
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
