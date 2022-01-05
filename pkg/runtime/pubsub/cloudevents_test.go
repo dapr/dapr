@@ -14,8 +14,9 @@ limitations under the License.
 package pubsub
 
 import (
-	"encoding/json"
 	"testing"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/stretchr/testify/assert"
 )

@@ -2,11 +2,12 @@ package components
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"

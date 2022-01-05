@@ -3,9 +3,10 @@ package operator
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"os"
 	"strings"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"

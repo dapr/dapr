@@ -15,18 +15,17 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/json"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
-
-	"github.com/dapr/dapr/pkg/config"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 type testConcurrencyHandler struct {

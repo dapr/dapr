@@ -17,8 +17,8 @@ limitations under the License.
 package hellodapr_e2e
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"os"
 	"testing"
 

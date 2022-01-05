@@ -16,9 +16,10 @@ package api
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"

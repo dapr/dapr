@@ -15,7 +15,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -23,6 +22,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/gorilla/mux"
 	"github.com/valyala/fasthttp"

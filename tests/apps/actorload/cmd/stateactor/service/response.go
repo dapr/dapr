@@ -14,8 +14,9 @@ limitations under the License.
 package service
 
 import (
-	"encoding/json"
 	"io"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 // ActorResponse is the default response body contract.

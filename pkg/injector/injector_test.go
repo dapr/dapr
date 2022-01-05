@@ -15,12 +15,13 @@ package injector
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/admission/v1"

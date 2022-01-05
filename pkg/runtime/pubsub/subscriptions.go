@@ -2,12 +2,13 @@ package pubsub
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/ghodss/yaml"

@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"github.com/agrea/ptr"
+	daprjson "github.com/dapr/dapr/pkg/json"
 	routing "github.com/fasthttp/router"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -87,7 +87,6 @@ func TestPubSubEndpoints(t *testing.T) {
 				return &daprt.MockPubSub{}
 			},
 		},
-		json: jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
 
@@ -232,7 +231,6 @@ func TestShutdownEndpoints(t *testing.T) {
 	m := mock.Mock{}
 	m.On("shutdown", mock.Anything).Return()
 	testAPI := &api{
-		json: jsoniter.ConfigFastest,
 		shutdown: func() {
 			m.MethodCalled("shutdown")
 		},
@@ -295,7 +293,6 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			}
 			return &bindings.InvokeResponse{Data: []byte("testresponse")}, nil
 		},
-		json: jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
 
@@ -304,7 +301,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
-		b, _ := json.Marshal(&req)
+		b, _ := daprjson.Marshal(&req)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -320,7 +317,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
-		b, _ := json.Marshal(&req)
+		b, _ := daprjson.Marshal(&req)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -334,7 +331,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 	t.Run("Invoke output bindings - 400 InternalError invalid req", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testresponse", apiVersionV1)
 		req := `{"dat" : "invalid request"}`
-		b, _ := json.Marshal(&req)
+		b, _ := daprjson.Marshal(&req)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -350,7 +347,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
-		b, _ := json.Marshal(&req)
+		b, _ := daprjson.Marshal(&req)
 
 		testAPI.sendToOutputBindingFn = func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			return nil, errors.New("missing binding name")
@@ -379,7 +376,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
-		json:                  jsoniter.ConfigFastest,
 		tracingSpec:           spec,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
@@ -389,7 +385,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
-		b, _ := json.Marshal(&req)
+		b, _ := daprjson.Marshal(&req)
 
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
@@ -407,7 +403,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
-		b, _ := json.Marshal(&req)
+		b, _ := daprjson.Marshal(&req)
 
 		testAPI.sendToOutputBindingFn = func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			return nil, errors.New("missing binding name")
@@ -444,7 +440,6 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
-		json:            jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
@@ -851,7 +846,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		actor: nil,
-		json:  jsoniter.ConfigFastest,
 	}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
@@ -1042,7 +1036,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		inputBodyBytes, err := daprjson.Marshal(testTransactionalOperations)
 
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
@@ -1082,7 +1076,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		inputBodyBytes, err := daprjson.Marshal(testTransactionalOperations)
 
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
@@ -1127,7 +1121,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		inputBodyBytes, err := daprjson.Marshal(testTransactionalOperations)
 
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
@@ -1157,7 +1151,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		inputBodyBytes, err := json.Marshal(reminderRequest)
+		inputBodyBytes, err := daprjson.Marshal(reminderRequest)
 
 		assert.NoError(t, err)
 		for _, method := range []string{"POST", "PUT"} {
@@ -1187,7 +1181,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		inputBodyBytes, err := json.Marshal(reminderRequest)
+		inputBodyBytes, err := daprjson.Marshal(reminderRequest)
 
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
@@ -1336,7 +1330,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		inputBodyBytes, err := json.Marshal(timerRequest)
+		inputBodyBytes, err := daprjson.Marshal(timerRequest)
 
 		assert.NoError(t, err)
 		for _, method := range []string{"POST", "PUT"} {
@@ -1366,7 +1360,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		inputBodyBytes, err := json.Marshal(timerRequest)
+		inputBodyBytes, err := daprjson.Marshal(timerRequest)
 
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
@@ -1529,7 +1523,6 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
-		json: jsoniter.ConfigFastest,
 	}
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
@@ -1543,7 +1536,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			{"name": "MockComponent2Name", "type": "mock.component2Type", "version": "v1.0"},
 		},
 	}
-	expectedBodyBytes, _ := json.Marshal(expectedBody)
+	expectedBodyBytes, _ := daprjson.Marshal(expectedBody)
 
 	t.Run("Metadata - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/metadata"
@@ -1579,14 +1572,13 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		actor:       nil,
-		json:        jsoniter.ConfigFastest,
 		tracingSpec: spec,
 	}
 
 	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
 
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
-	fakeData, _ := json.Marshal(fakeBodyObject)
+	fakeData, _ := daprjson.Marshal(fakeBodyObject)
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
@@ -1668,7 +1660,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		inputBodyBytes, err := daprjson.Marshal(testTransactionalOperations)
 
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
@@ -2204,9 +2196,9 @@ func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, 
 
 	if response.ContentType == "application/json" {
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
-			json.Unmarshal(bodyBytes, &response.JSONBody)
+			daprjson.Unmarshal(bodyBytes, &response.JSONBody)
 		} else {
-			json.Unmarshal(bodyBytes, &response.ErrorBody)
+			daprjson.Unmarshal(bodyBytes, &response.ErrorBody)
 		}
 	}
 
@@ -2230,7 +2222,6 @@ func TestV1StateEndpoints(t *testing.T) {
 	testAPI := &api{
 		stateStores:              fakeStores,
 		transactionalStateStores: fakeTransactionalStores,
-		json:                     jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -2317,7 +2308,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		request := []state.SetRequest{{
 			Key: "good-key",
 		}}
-		b, _ := json.Marshal(request)
+		b, _ := daprjson.Marshal(request)
 		// act
 		resp := fakeServer.DoRequest("PUT", apiPath, b, nil)
 		// assert
@@ -2330,7 +2321,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		request := []state.SetRequest{{
 			Key: "good-key",
 		}}
-		b, _ := json.Marshal(request)
+		b, _ := daprjson.Marshal(request)
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
@@ -2345,7 +2336,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			Key:  "error-key",
 			ETag: &empty,
 		}}
-		b, _ := json.Marshal(request)
+		b, _ := daprjson.Marshal(request)
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
@@ -2359,7 +2350,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			Key:  "good-key",
 			ETag: &etag,
 		}}
-		b, _ := json.Marshal(request)
+		b, _ := daprjson.Marshal(request)
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
@@ -2374,7 +2365,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			Key:  "good-key",
 			ETag: &invalidEtag,
 		}}
-		b, _ := json.Marshal(request)
+		b, _ := daprjson.Marshal(request)
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
@@ -2410,7 +2401,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Bulk state get - Empty request", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
 		request := BulkGetRequest{}
-		body, _ := json.Marshal(request)
+		body, _ := daprjson.Marshal(request)
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
 		// assert
@@ -2420,7 +2411,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Bulk state get - PUT request", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
 		request := BulkGetRequest{}
-		body, _ := json.Marshal(request)
+		body, _ := daprjson.Marshal(request)
 		// act
 		resp := fakeServer.DoRequest("PUT", apiPath, body, nil)
 		// assert
@@ -2432,7 +2423,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		request := BulkGetRequest{
 			Keys: []string{"good-key", "foo"},
 		}
-		body, _ := json.Marshal(request)
+		body, _ := daprjson.Marshal(request)
 
 		// act
 
@@ -2442,13 +2433,13 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on a normal request")
 
 		var responses []BulkGetResponse
-
-		assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
+		//json.Unmarshal([]byte(`[{"key":"good-key","data":"life is good","etag":"122"},{"key":"foo"}]`), &responses)
+		assert.NoError(t, daprjson.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
 
 		expectedResponses := []BulkGetResponse{
 			{
 				Key:   "good-key",
-				Data:  jsoniter.RawMessage("life is good"),
+				Data:  json.RawMessage("life is good"),
 				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
@@ -2468,7 +2459,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		request := BulkGetRequest{
 			Keys: []string{"good-key", "error-key"},
 		}
-		body, _ := json.Marshal(request)
+		body, _ := daprjson.Marshal(request)
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
 		// assert
@@ -2476,12 +2467,12 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		var responses []BulkGetResponse
 
-		assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
+		assert.NoError(t, daprjson.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
 
 		expectedResponses := []BulkGetResponse{
 			{
 				Key:   "good-key",
-				Data:  jsoniter.RawMessage("life is good"),
+				Data:  json.RawMessage("life is good"),
 				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
@@ -2622,7 +2613,7 @@ func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
-			Data: []byte("\"bGlmZSBpcyBnb29k\""),
+			Data: []byte("life is good"),
 			ETag: ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 		}, nil
 	}
@@ -2717,7 +2708,6 @@ func TestV1SecretEndpoints(t *testing.T) {
 	testAPI := &api{
 		secretsConfiguration: secretsConfiguration,
 		secretStores:         fakeStores,
-		json:                 jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
@@ -2834,7 +2824,6 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		json:  jsoniter.ConfigFastest,
 	}
 
 	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
@@ -2871,7 +2860,6 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	testAPI := &api{
 		stateStores:              fakeStores,
 		transactionalStateStores: fakeTransactionalStores,
-		json:                     jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
@@ -3003,7 +2991,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := daprjson.Marshal(state.TransactionalStateRequest{
 			Operations: testTransactionalOperations,
 		})
 
@@ -3034,7 +3022,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+		inputBodyBytes, err := daprjson.Marshal(state.TransactionalStateRequest{
 			Operations: testTransactionalOperations,
 			Metadata: map[string]string{
 				"error": "true",

@@ -18,8 +18,8 @@ package metrics_e2e
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"io"
 	"net/http"
 	"os"

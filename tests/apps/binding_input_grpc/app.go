@@ -15,11 +15,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"sync"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"

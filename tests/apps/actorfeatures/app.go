@@ -15,7 +15,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +25,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/gorilla/mux"
 )
