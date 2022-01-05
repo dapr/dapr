@@ -15,6 +15,7 @@ package runtime
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -28,7 +29,7 @@ func TestNewConfig(t *testing.T) {
 		[]string{"1.2.3.4"}, &publicPort, 8080, 7070,
 		true, 1, true,
 		"localhost:5052", true, 4,
-		"", 4, true)
+		"", 4, true, time.Second)
 
 	assert.Equal(t, "app1", c.ID)
 	assert.Equal(t, true, c.EnablePlacement)
@@ -55,4 +56,5 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, "", c.UnixDomainSocket)
 	assert.Equal(t, 4, c.ReadBufferSize)
 	assert.Equal(t, true, c.StreamRequestBody)
+	assert.Equal(t, time.Second, c.GracefulShutdownDuration)
 }

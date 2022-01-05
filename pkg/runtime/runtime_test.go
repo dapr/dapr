@@ -2645,9 +2645,15 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		4,
 		"",
 		4,
-		false)
+		false,
+		time.Second)
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
+}
+
+func TestGracefulShutdown(t *testing.T) {
+	r := NewTestDaprRuntime(modes.StandaloneMode)
+	assert.Equal(t, time.Second, r.runtimeConfig.GracefulShutdownDuration)
 }
 
 func TestMTLS(t *testing.T) {
