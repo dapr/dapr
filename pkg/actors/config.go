@@ -34,6 +34,7 @@ type Config struct {
 	Namespace                     string
 	Reentrancy                    app_config.ReentrancyConfig
 	RemindersStoragePartitions    int
+	EnablePlacement               bool
 }
 
 const (
@@ -45,7 +46,7 @@ const (
 )
 
 // NewConfig returns the actor runtime configuration.
-func NewConfig(hostAddress, appID string, placementAddresses []string, hostedActors []string, port int,
+func NewConfig(hostAddress, appID string, enablePlacement bool, placementAddresses []string, hostedActors []string, port int,
 	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string, drainRebalancedActors bool, namespace string,
 	reentrancy app_config.ReentrancyConfig, remindersStoragePartitions int) Config {
 	c := Config{
@@ -62,6 +63,7 @@ func NewConfig(hostAddress, appID string, placementAddresses []string, hostedAct
 		Namespace:                     namespace,
 		Reentrancy:                    reentrancy,
 		RemindersStoragePartitions:    remindersStoragePartitions,
+		EnablePlacement:               enablePlacement,
 	}
 
 	scanDuration, err := time.ParseDuration(actorScanInterval)

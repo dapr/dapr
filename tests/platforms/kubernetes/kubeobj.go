@@ -44,10 +44,10 @@ const (
 	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests.
 	DaprTestNamespaceEnvVar = "DAPR_TEST_NAMESPACE"
 
-	// Environment variable for setting Kubernetes node affinity OS.
+	// TargetOsEnvVar Environment variable for setting Kubernetes node affinity OS.
 	TargetOsEnvVar = "TARGET_OS"
 
-	// Environment variable for setting Kubernetes node affinity ARCH.
+	// TargetArchEnvVar Environment variable for setting Kubernetes node affinity ARCH.
 	TargetArchEnvVar = "TARGET_ARCH"
 )
 
@@ -77,6 +77,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
+			"dapr.io/enable-placement":                  strconv.FormatBool(appDesc.EnablePlacement),
 		}
 		if !appDesc.IsJob {
 			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)

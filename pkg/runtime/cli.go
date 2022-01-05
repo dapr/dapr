@@ -68,6 +68,7 @@ func FromFlags() (*DaprRuntime, error) {
 	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in KB to handle sending multi-KB headers. By default 4 KB.")
 	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
 	daprGracefulShutdownSeconds := flag.Int("dapr-graceful-shutdown-seconds", -1, "Graceful shutdown time in seconds.")
+	enablePlacement := flag.Bool("enable-placement", true, "Enable placement")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -196,8 +197,10 @@ func FromFlags() (*DaprRuntime, error) {
 	if len(daprAPIListenAddressList) == 0 {
 		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
 	}
-	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration)
+	runtimeConfig := NewRuntimeConfig(*appID, *enablePlacement, placementAddresses, *controlPlaneAddress, *allowedOrigins,
+		*config, *componentsPath, appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList,
+		publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize,
+		*unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package

@@ -38,4 +38,5 @@ type AppDescription struct {
 	DaprMemoryRequest string
 	Namespace         *string
 	IsJob             bool
+	EnablePlacement   bool
 }

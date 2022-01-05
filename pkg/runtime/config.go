@@ -60,6 +60,7 @@ type Config struct {
 	APIListenAddresses       []string
 	ApplicationProtocol      Protocol
 	Mode                     modes.DaprMode
+	EnablePlacement          bool
 	PlacementAddresses       []string
 	GlobalConfig             string
 	AllowedOrigins           string
@@ -79,10 +80,11 @@ type Config struct {
 
 // NewRuntimeConfig returns a new runtime config.
 func NewRuntimeConfig(
-	id string, placementAddresses []string,
+	id string, enablePlacement bool, placementAddresses []string,
 	controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string,
 	httpPort, internalGRPCPort, apiGRPCPort int, apiListenAddresses []string, publicPort *int, appPort, profilePort int,
-	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, streamRequestBody bool, gracefulShutdownDuration time.Duration) *Config {
+	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int,
+	unixDomainSocket string, readBufferSize int, streamRequestBody bool, gracefulShutdownDuration time.Duration) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
@@ -94,6 +96,7 @@ func NewRuntimeConfig(
 		APIListenAddresses:  apiListenAddresses,
 		ApplicationProtocol: Protocol(appProtocol),
 		Mode:                modes.DaprMode(mode),
+		EnablePlacement:     enablePlacement,
 		PlacementAddresses:  placementAddresses,
 		GlobalConfig:        globalConfig,
 		AllowedOrigins:      allowedOrigins,
