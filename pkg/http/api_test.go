@@ -1319,6 +1319,28 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
+	t.Run("Reminder Create - 400 Contains ||", func(t *testing.T) {
+		apiPath := "v1.0/actors/a||b/c||d/reminders/reminder1"
+		reminderRequest := actors.CreateReminderRequest{
+			Name:      "reminder1",
+			ActorType: "a||b",
+			ActorID:   "c||d",
+		}
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+		assert.Contains(t, string(resp.RawBody), "actorType or actorID can't contains ||")
+	})
+
 	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 
