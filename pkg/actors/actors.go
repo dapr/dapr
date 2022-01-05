@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	nethttp "net/http"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -848,7 +849,7 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 
 func (a *actorsRuntime) reminderRequiresUpdate(req *CreateReminderRequest, reminder *Reminder) bool {
 	if reminder.ActorID == req.ActorID && reminder.ActorType == req.ActorType && reminder.Name == req.Name &&
-		(reminder.Data != req.Data || reminder.DueTime != req.DueTime || reminder.Period != req.Period ||
+		(!reflect.DeepEqual(reminder.Data, req.Data) || reminder.DueTime != req.DueTime || reminder.Period != req.Period ||
 			len(req.TTL) != 0 || (len(reminder.ExpirationTime) != 0 && len(req.TTL) == 0)) {
 		return true
 	}
