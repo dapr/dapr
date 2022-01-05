@@ -236,6 +236,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-mtls",
+			"--enable-placement",
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -269,6 +270,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-mtls",
+			"--enable-placement",
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
