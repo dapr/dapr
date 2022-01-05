@@ -37,8 +37,39 @@ jobs:
   # However, KinD currently does not support Windows nodes so this is
   # not intended to be a complete replacement for our AKS-based E2E
   # workflows.
+  build-e2e:
+    name: e2e image build
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY_PORT: 5000
+      REGISTRY_NAME: kind-registry
+      DAPR_REGISTRY: localhost:5000/dapr
+      DAPR_TAG: dev
+      DAPR_NAMESPACE: dapr-tests
+      GOVER: 1.17
+    steps:
+    - name: Set up Go ${{ env.GOVER }}
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ env.GOVER }}
+    - name: Check out code onto GOPATH
+      uses: actions/checkout@v2
+      with:
+        path: ./src/github.com/dapr/dapr
+    # setup image cache
+    - uses: satackey/action-docker-layer-caching@v0.0.11
+      # Ignore the failure of a step and avoid terminating the job.
+      continue-on-error: true
+    - name: Build Dapr
+      run: |
+        make build-linux
+        make docker-build
+    - name: Build test apps
+      run: |
+        make build-e2e-app-all
   e2e:
     name: e2e
+    needs: build-e2e
     runs-on: ubuntu-latest
     env:
       REGISTRY_PORT: 5000
@@ -157,16 +188,16 @@ jobs:
       uses: azure/setup-helm@v1
       with:
         version: v3.3.4
-
-    - name: Build and push Dapr
+    # setup image cache
+    - uses: satackey/action-docker-layer-caching@v0.0.11
+      # Ignore the failure of a step and avoid terminating the job.
+      continue-on-error: true
+    - name: Push Dapr
       run: |
-        make build-linux
-        make docker-build
-        make docker-push
+        make docker-push-e2e
 
-    - name: Build and push test apps
+    - name: Push test apps
       run: |
-        make build-e2e-app-all
         make push-e2e-app-all
 
     - name: Setup Dapr
