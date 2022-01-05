@@ -3058,7 +3058,24 @@ func TestInitActors(t *testing.T) {
 		defer stopRuntime(t, r)
 
 		err := r.initActors()
-		assert.Nil(t, err)
+		assert.NotNil(t, err)
+	})
+
+	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{EnablePlacement: false}, &config.Configuration{}, &config.AccessControlList{})
+		defer stopRuntime(t, r)
+
+		assert.Nil(t, r.actor)
+		assert.NotNil(t, r.stateStores)
+	})
+
+	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{EnablePlacement: false}, &config.Configuration{}, &config.AccessControlList{})
+		defer stopRuntime(t, r)
+
+		assert.Equal(t, "", r.actorStateStoreName)
+		err := r.initActors()
+		assert.NotNil(t, err)
 	})
 }
 

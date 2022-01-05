@@ -275,11 +275,10 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 
 func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
-	store := fakeStore()
 	config := NewConfig("", TestAppID, false, []string{""},
 		nil, 0, "", "", "",
 		false, "", config.ReentrancyConfig{}, 0)
-	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
+	a := NewActors(nil, appChannel, nil, config, nil, spec, nil)
 
 	return a.(*actorsRuntime)
 }
@@ -1924,10 +1923,7 @@ func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
 		assert.Nil(t, testActorsRuntime.placement)
 	})
 
-	t.Run("the store can still be initialized normally", func(t *testing.T) {
-		assert.NotNil(t, testActorsRuntime.store)
-		r, e := testActorsRuntime.getReminderTrack("foo", "bar")
-		assert.Nil(t, e)
-		assert.NotNil(t, r)
+	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
+		assert.Nil(t, testActorsRuntime.store)
 	})
 }

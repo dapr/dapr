@@ -428,9 +428,11 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	grpcAPI.SetDirectMessaging(a.directMessaging)
 
-	err = a.initActors()
-	if err != nil {
-		log.Warnf("failed to init actors: %s", err)
+	if a.runtimeConfig.EnablePlacement {
+		err = a.initActors()
+		if err != nil {
+			log.Warnf("failed to init actors: %s", err)
+		}
 	}
 
 	a.daprHTTPAPI.SetActorRuntime(a.actor)
@@ -1182,17 +1184,20 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 			return err
 		}
 
-		// set specified actor store if "actorStateStore" is true in the spec.
-		actorStoreSpecified := props[actorStateStore]
-		if actorStoreSpecified == "true" {
-			a.actorStateStoreLock.Lock()
-			if a.actorStateStoreName == "" {
-				log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
-				a.actorStateStoreName = s.ObjectMeta.Name
-			} else {
-				log.Warnf("ignoring duplicate actor state store: %s", s.ObjectMeta.Name)
+		// when placement is disabled, don't set specified actor store.
+		if a.runtimeConfig.EnablePlacement {
+			// set specified actor store if "actorStateStore" is true in the spec.
+			actorStoreSpecified := props[actorStateStore]
+			if actorStoreSpecified == "true" {
+				a.actorStateStoreLock.Lock()
+				if a.actorStateStoreName == "" {
+					log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
+					a.actorStateStoreName = s.ObjectMeta.Name
+				} else {
+					log.Warnf("ignoring duplicate actor state store: %s", s.ObjectMeta.Name)
+				}
+				a.actorStateStoreLock.Unlock()
 			}
-			a.actorStateStoreLock.Unlock()
 		}
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 	}
