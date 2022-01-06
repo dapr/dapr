@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -170,6 +171,13 @@ func TestWrapper(t *testing.T) {
 	t.Run("get annotations from wrapper", func(t *testing.T) {
 		assert.Equal(t, "test_id", deploymentWrapper.GetTemplateAnnotations()[appIDAnnotationKey])
 		assert.Equal(t, "test_id", statefulsetWrapper.GetTemplateAnnotations()[appIDAnnotationKey])
+	})
+
+	t.Run("get object from wrapper", func(t *testing.T) {
+		assert.Equal(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
+		assert.Equal(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
+		assert.NotEqual(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
+		assert.NotEqual(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
 	})
 }
 

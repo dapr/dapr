@@ -111,6 +111,10 @@ func (h *DaprHandler) Init() error {
 		})
 }
 
+func (h *DaprHandler) daprServiceName(appID string) string {
+	return fmt.Sprintf("%s-dapr", appID)
+}
+
 // Reconcile the expected services for deployments | statefulset annotated for Dapr.
 func (i *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// var wrapper appsv1.Deployment | appsv1.StatefulSet
@@ -139,10 +143,6 @@ func (i *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (h *DaprHandler) daprServiceName(appID string) string {
-	return fmt.Sprintf("%s-dapr", appID)
 }
 
 func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, wrapper ObjectWrapper) error {
