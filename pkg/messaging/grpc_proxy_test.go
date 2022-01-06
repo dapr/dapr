@@ -187,4 +187,18 @@ func TestIntercept(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, conn)
 	})
+
+	t.Run("SetRemoteAppFn never called", func(t *testing.T) {
+		p := NewProxy(connectionFn, "a", "a:123", 50005, nil)
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return ctx
+		})
+
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		proxy := p.(*proxy)
+		_, conn, err := proxy.intercept(ctx, "/test")
+
+		assert.Error(t, err)
+		assert.Nil(t, conn)
+	})
 }
