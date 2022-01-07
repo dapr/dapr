@@ -536,6 +536,51 @@ func TestCreateReminder(t *testing.T) {
 	assert.Equal(t, numReminders, len(reminders))
 }
 
+func TestCalculateReminderPartition(t *testing.T) {
+	t.Run("calculate partition according to normal partition count", func(t *testing.T) {
+		actorMetadata := ActorMetadata{
+			ID: metadataZeroID,
+			RemindersMetadata: ActorRemindersMetadata{
+				partitionsEtag: nil,
+				PartitionCount: 1,
+			},
+			Etag: nil,
+		}
+
+		r, err := actorMetadata.calculateReminderPartition("1", "reminder1")
+		assert.Equal(t, uint32(1), r)
+		assert.Nil(t, err)
+	})
+
+	t.Run("calculate partition when partition count is 0", func(t *testing.T) {
+		actorMetadata := ActorMetadata{
+			ID: metadataZeroID,
+			RemindersMetadata: ActorRemindersMetadata{
+				partitionsEtag: nil,
+				PartitionCount: 0,
+			},
+			Etag: nil,
+		}
+		r, err := actorMetadata.calculateReminderPartition("1", "reminder1")
+		assert.Equal(t, uint32(0), r)
+		assert.Nil(t, err)
+	})
+
+	t.Run("calculate partition according to illegal partition count", func(t *testing.T) {
+		actorMetadata := ActorMetadata{
+			ID: metadataZeroID,
+			RemindersMetadata: ActorRemindersMetadata{
+				partitionsEtag: nil,
+				PartitionCount: -1,
+			},
+			Etag: nil,
+		}
+		r, err := actorMetadata.calculateReminderPartition("1", "reminder1")
+		assert.Equal(t, uint32(0), r)
+		assert.Nil(t, err)
+	})
+}
+
 func TestOverrideReminder(t *testing.T) {
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
