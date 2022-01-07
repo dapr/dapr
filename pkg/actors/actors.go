@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/dapr/dapr/pkg/health"
 	"hash/fnv"
 	nethttp "net/http"
 	"reflect"
@@ -28,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/dapr/dapr/pkg/health"
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
