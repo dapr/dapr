@@ -394,6 +394,11 @@ func TestStoreIsNotInited(t *testing.T) {
 		e := testActorsRuntime.DeleteReminder(context.Background(), &DeleteReminderRequest{})
 		assert.NotNil(t, e)
 	})
+
+	t.Run("RenameReminder", func(t *testing.T) {
+		e := testActorsRuntime.RenameReminder(context.Background(), &RenameReminderRequest{})
+		assert.NotNil(t, e)
+	})
 }
 
 func TestTimerExecution(t *testing.T) {
@@ -532,6 +537,55 @@ func TestCreateReminder(t *testing.T) {
 	assert.Equal(t, TestActorMetadataPartitionCount, len(partitions))
 	assert.Equal(t, numReminders, len(reminderReferences))
 	assert.Equal(t, numReminders, len(reminders))
+}
+
+func TestRenameReminder(t *testing.T) {
+	appChannel := new(mockAppChannel)
+	testActorsRuntime := newTestActorsRuntimeWithMock(appChannel)
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
+	err := testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Name:      "reminder0",
+		Period:    "1s",
+		DueTime:   "1s",
+		TTL:       "PT10M",
+		Data:      "a",
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+
+	// rename reminder
+	err = testActorsRuntime.RenameReminder(ctx, &RenameReminderRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		OldName:   "reminder0",
+		NewName:   "reminder1",
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+
+	// verify that the reminder retrieved with the old name no longer exists
+	oldReminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Name:      "reminder0",
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, oldReminder)
+
+	// verify that the reminder retrieved with the new name already exists
+	newReminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Name:      "reminder1",
+	})
+	assert.Nil(t, err)
+	assert.NotNil(t, newReminder)
+	assert.Equal(t, "1s", newReminder.Period)
+	assert.Equal(t, "1s", newReminder.DueTime)
+	assert.Equal(t, "a", newReminder.Data)
 }
 
 func TestOverrideReminder(t *testing.T) {

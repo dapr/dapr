@@ -334,6 +334,12 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onGetActorReminder,
 		},
+		{
+			Methods: []string{fasthttp.MethodPatch},
+			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
+			Version: apiVersionV1,
+			Handler: a.onRenameActorReminder,
+		},
 	}
 }
 
@@ -989,6 +995,40 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	err = a.actor.CreateReminder(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", fmt.Sprintf(messages.ErrActorReminderCreate, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+	} else {
+		respond(reqCtx, withEmpty())
+	}
+}
+
+func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
+	if a.actor == nil {
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		return
+	}
+
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	name := reqCtx.UserValue(nameParam).(string)
+
+	var req actors.RenameReminderRequest
+	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	req.OldName = name
+	req.ActorType = actorType
+	req.ActorID = actorID
+
+	err = a.actor.RenameReminder(reqCtx, &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_ACTOR_REMINDER_RENAME", fmt.Sprintf(messages.ErrActorReminderRename, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {
