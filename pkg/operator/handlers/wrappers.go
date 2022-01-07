@@ -6,7 +6,6 @@ import (
 )
 
 type ObjectWrapper interface {
-	client.Object
 	GetMatchLabels() map[string]string
 	GetTemplateAnnotations() map[string]string
 	GetObject() client.Object
@@ -28,18 +27,18 @@ func (d *DeploymentWrapper) GetObject() client.Object {
 	return &d.Deployment
 }
 
-type StatefulsetWrapper struct {
+type StatefulSetWrapper struct {
 	appsv1.StatefulSet
 }
 
-func (s *StatefulsetWrapper) GetMatchLabels() map[string]string {
+func (s *StatefulSetWrapper) GetMatchLabels() map[string]string {
 	return s.Spec.Selector.MatchLabels
 }
 
-func (s *StatefulsetWrapper) GetTemplateAnnotations() map[string]string {
+func (s *StatefulSetWrapper) GetTemplateAnnotations() map[string]string {
 	return s.Spec.Template.ObjectMeta.Annotations
 }
 
-func (s *StatefulsetWrapper) GetObject() client.Object {
+func (s *StatefulSetWrapper) GetObject() client.Object {
 	return &s.StatefulSet
 }
