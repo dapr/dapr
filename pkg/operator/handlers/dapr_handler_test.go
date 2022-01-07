@@ -252,7 +252,7 @@ func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 		},
 	}
 
-	return &StatefulsetWrapper{
+	return &StatefulSetWrapper{
 		stratefulset,
 	}
 }

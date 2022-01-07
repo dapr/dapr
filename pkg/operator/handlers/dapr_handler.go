@@ -106,7 +106,7 @@ func (h *DaprHandler) Init() error {
 		Complete(&Reconciler{
 			DaprHandler: h,
 			newWrapper: func() ObjectWrapper {
-				return &StatefulsetWrapper{}
+				return &StatefulSetWrapper{}
 			},
 		})
 }
@@ -116,12 +116,12 @@ func (h *DaprHandler) daprServiceName(appID string) string {
 }
 
 // Reconcile the expected services for deployments | statefulset annotated for Dapr.
-func (i *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// var wrapper appsv1.Deployment | appsv1.StatefulSet
-	wrapper := i.newWrapper()
+	wrapper := r.newWrapper()
 
 	expectedService := false
-	if err := i.Get(ctx, req.NamespacedName, wrapper.GetObject()); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, wrapper.GetObject()); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Debugf("deployment has be deleted, %s", req.NamespacedName)
 		} else {
@@ -129,15 +129,15 @@ func (i *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 	} else {
-		if wrapper.GetDeletionTimestamp() != nil {
+		if wrapper.GetObject().GetDeletionTimestamp() != nil {
 			log.Debugf("deployment is being deleted, %s", req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
-		expectedService = i.isAnnotatedForDapr(wrapper)
+		expectedService = r.isAnnotatedForDapr(wrapper)
 	}
 
 	if expectedService {
-		if err := i.ensureDaprServicePresent(ctx, req.Namespace, wrapper); err != nil {
+		if err := r.ensureDaprServicePresent(ctx, req.Namespace, wrapper); err != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
