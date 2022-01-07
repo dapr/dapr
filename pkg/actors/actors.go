@@ -29,6 +29,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/google/uuid"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
@@ -1459,7 +1460,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 						return
 					}
 
-					r.Data = json.RawMessage(resp.Data)
+					r.Data = jsoniter.RawMessage(resp.Data)
 					r.ETag = resp.ETag
 					r.Metadata = resp.Metadata
 				}
