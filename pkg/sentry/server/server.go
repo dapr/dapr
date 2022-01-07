@@ -101,9 +101,10 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 	now := time.Now().UTC()
 	issuerExp := s.certAuth.GetCACertBundle().GetIssuerCertExpiry()
 	serverCertTTL := issuerExp.Sub(now)
+	hoursLeft := serverCertTTL.Hours()
 
-	if serverCertTTL <= 30 {
-		log.Warn("Your mTLS certificate has expired. Please renew as soon as possible")
+	if serverCertTTL.Hours() <= 720 {
+		log.Warn("The root CA cert is about to expire in %s days", hoursLeft/24)
 	}
 
 	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), nil, serverCertTTL, false)
