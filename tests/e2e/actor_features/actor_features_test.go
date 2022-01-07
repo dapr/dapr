@@ -24,11 +24,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	guuid "github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,6 +50,7 @@ const (
 	actorDeleteURLFormat                  = "%s/actors/testactorfeatures/%s"     // URL to deactivate an actor in test app.
 	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
 	actorMetadataURLFormat                = "%s/test/metadata"                   // URL to fetch metadata from test app.
+	shutdownURLFormat                     = "%s/test/shutdown"                   // URL to shutdown sidecar and app.
 	actorInvokeRetriesAfterRestart        = 10                                   // Number of retried to invoke actor after restart.
 )
 
@@ -368,23 +370,29 @@ func TestActorFeatures(t *testing.T) {
 		// Min call is based off of having a 1s period/due time, the amount of seconds we've waited, and a bit of room for timing.
 		require.GreaterOrEqual(t, firstCount, minFirstCount)
 
-		err = tr.Platform.Restart(appName)
-		assert.NoError(t, err)
-		externalURL = tr.Platform.AcquireAppExternalURL(appName)
-		require.NotEmpty(t, externalURL, "Could not get external URL after app restart.")
+		t.Logf("Restarting %s ...", appName)
+		err := tr.Platform.Restart(appName)
+		require.NoError(t, err)
 
-		time.Sleep(sleepTime)
+		err = backoff.Retry(func() error {
+			time.Sleep(30 * time.Second)
+			resp, errb := utils.HTTPGet(logsURL)
+			if errb != nil {
+				return errb
+			}
+
+			count := countActorAction(resp, actorID, reminderName)
+			if count < minimumCallsForTimerAndReminderResult {
+				return fmt.Errorf("Not enough reminder calls: %d vs %d", count, minimumCallsForTimerAndReminderResult)
+			}
+
+			return nil
+		}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10))
+		require.NoError(t, err)
 
 		// Reset reminder
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		require.NoError(t, err)
-
-		resp, err = utils.HTTPGet(logsURL)
-		require.NoError(t, err)
-
-		restartDelayDiscount := 2
-		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minFirstCount-restartDelayDiscount)
-		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minimumCallsForTimerAndReminderResult-restartDelayDiscount)
 	})
 
 	t.Run("Actor timer.", func(t *testing.T) {

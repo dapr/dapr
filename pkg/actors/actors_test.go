@@ -511,7 +511,14 @@ func TestCreateReminder(t *testing.T) {
 		assert.Nil(t, err)
 	}
 
-	reminderReferences, actorTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(actorType, false)
+	// Does not migrate yet
+	_, actorTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(actorType, false)
+	assert.Nil(t, err)
+	assert.True(t, len(actorTypeMetadata.ID) > 0)
+	assert.Equal(t, 0, actorTypeMetadata.RemindersMetadata.PartitionCount)
+
+	// Migrates here.
+	reminderReferences, actorTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(actorType, true)
 	assert.Nil(t, err)
 	assert.True(t, len(actorTypeMetadata.ID) > 0)
 	assert.Equal(t, TestActorMetadataPartitionCount, actorTypeMetadata.RemindersMetadata.PartitionCount)
