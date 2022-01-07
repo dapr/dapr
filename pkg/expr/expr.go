@@ -1,11 +1,12 @@
 package expr
 
 import (
+	"strings"
+
 	"github.com/dapr/dapr/pkg/json"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/checker/decls"
 	expr_proto "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
-	"strings"
 )
 
 const missingVariableMessage = "undeclared reference to '"
