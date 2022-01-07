@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	jsoniter "github.com/json-iterator/go"
 	"io"
 	"net"
 	gohttp "net/http"
@@ -2440,7 +2441,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		expectedResponses := []BulkGetResponse{
 			{
 				Key:   "good-key",
-				Data:  json.RawMessage("life is good"),
+				Data:  jsoniter.RawMessage("life is good"),
 				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
@@ -2473,7 +2474,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		expectedResponses := []BulkGetResponse{
 			{
 				Key:   "good-key",
-				Data:  json.RawMessage("life is good"),
+				Data:  jsoniter.RawMessage("life is good"),
 				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},

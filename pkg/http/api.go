@@ -15,9 +15,9 @@ package http
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	daprjson "github.com/dapr/dapr/pkg/json"
+	jsoniter "github.com/json-iterator/go"
 	"strconv"
 	"strings"
 	"sync"
@@ -494,7 +494,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 				log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
 				bulkResp[i].Error = responses[i].Error
 			} else {
-				bulkResp[i].Data = json.RawMessage(responses[i].Data)
+				bulkResp[i].Data = jsoniter.RawMessage(responses[i].Data)
 				bulkResp[i].ETag = responses[i].ETag
 				bulkResp[i].Metadata = responses[i].Metadata
 			}
@@ -524,7 +524,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 					log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
 					r.Error = err.Error()
 				} else if resp != nil {
-					r.Data = json.RawMessage(resp.Data)
+					r.Data = jsoniter.RawMessage(resp.Data)
 					r.ETag = resp.ETag
 					r.Metadata = resp.Metadata
 				}
@@ -1671,9 +1671,9 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 				qresp.Results[i].Error = err.Error()
 				continue
 			}
-			qresp.Results[i].Data = json.RawMessage(val)
+			qresp.Results[i].Data = jsoniter.RawMessage(val)
 		} else {
-			qresp.Results[i].Data = json.RawMessage(resp.Results[i].Data)
+			qresp.Results[i].Data = jsoniter.RawMessage(resp.Results[i].Data)
 		}
 	}
 
