@@ -182,7 +182,7 @@ jobs:
       - name: Save control plane K8s resources
         if: always() && env.TEST_CLUSTER != ''
         run: |
-          make save-dapr-control-plane-k8s-resources
+          make save-dapr-control-plane-k8s-resources || true
       - name: Save control plane logs
         if: always() && env.TEST_CLUSTER != ''
         run: |
