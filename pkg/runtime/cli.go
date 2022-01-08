@@ -248,34 +248,22 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
-	var resiliencyConfig *resiliency_config.Resiliency
-	var resiliencyErr error
+	var resiliencyConfigs []resiliency_config.Resiliency
 
-	if *resiliency != "" {
-		log.Infof("Loading resiliency from %s", *resiliency)
-		switch modes.DaprMode(*mode) {
-		case modes.KubernetesMode:
-			namespace = os.Getenv("NAMESPACE")
-			resiliencyConfig, resiliencyErr = resiliency_config.LoadKubernetesResiliency(*resiliency, namespace, operatorClient)
-		case modes.StandaloneMode:
-			resiliencyConfig, resiliencyErr = resiliency_config.LoadStandaloneResiliency(*resiliency)
-		}
+	switch modes.DaprMode(*mode) {
+	case modes.KubernetesMode:
+		namespace = os.Getenv("NAMESPACE")
+		resiliencyConfigs = resiliency_config.LoadKubernetesResiliency(*appID, namespace, operatorClient, log)
+	case modes.StandaloneMode:
+		resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(*componentsPath, *appID, log)
 	}
-
-	if resiliencyErr != nil {
-		log.Errorf("Resiliency Configuration could not be loaded: %s", resiliencyErr.Error())
-	}
-	if resiliencyConfig == nil {
-		log.Info("Resiliency not specified, loading the default.")
-		resiliencyConfig = resiliency_config.LoadDefaultResiliency()
-	}
-	log.Infof("Loaded resiliency: %+v", resiliencyConfig)
+	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
 
 	accessControlList, err := acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyConfig), nil
+	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyConfigs), nil
 }
 
 func setEnvVariables(variables map[string]string) error {

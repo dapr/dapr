@@ -7,16 +7,17 @@ package resiliency
 
 import (
 	"context"
-	"encoding/json"
 	"os"
+	"path/filepath"
 	"time"
 
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
 	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -33,50 +34,56 @@ func LoadDefaultResiliency() *Resiliency {
 	return &Resiliency{resiliency_v1alpha.Resiliency{}}
 }
 
-func LoadStandaloneResiliency(path string) (*Resiliency, error) {
-	_, err := os.Stat(path)
-	if err != nil {
-		return nil, err
+func LoadStandaloneResiliency(path, runtimeId string, log logger.Logger) []Resiliency {
+	var resiliencies []Resiliency
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return resiliencies
 	}
 
-	b, err := os.ReadFile(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
-		return nil, err
+		log.Errorf("failed to read resiliences from path %s: %s", err)
+		return resiliencies
 	}
 
-	// Parse environment variables from yaml
-	b = []byte(os.ExpandEnv(string(b)))
+	for _, file := range files {
+		filePath := filepath.Join(path, file.Name())
+		b, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Errorf("Could not read file %s - %s", file.Name(), err.Error())
+			continue
+		}
 
-	resiliency := &resiliency_v1alpha.Resiliency{}
-	err = yaml.Unmarshal(b, resiliency)
-	if err != nil {
-		return nil, err
+		// Parse environment variables from yaml
+		b = []byte(os.ExpandEnv(string(b)))
+		resiliencies = appendResiliency(resiliencies, b, log)
 	}
 
-	return &Resiliency{*resiliency}, nil
+	return filterResiliencies(resiliencies, runtimeId)
 }
 
-func LoadKubernetesResiliency(resiliencyConfig, namespace string, operatorClient operatorv1pb.OperatorClient) (*Resiliency, error) {
-	resp, err := operatorClient.GetResiliency(context.Background(), &operatorv1pb.GetResiliencyRequest{
-		Name:      resiliencyConfig,
+func LoadKubernetesResiliency(runtimeId, namespace string, operatorClient operatorv1pb.OperatorClient, log logger.Logger) []Resiliency {
+	var resiliences []Resiliency
+
+	resp, err := operatorClient.ListResiliency(context.Background(), &operatorv1pb.ListResiliencyRequest{
 		Namespace: namespace,
 	}, grpc_retry.WithMax(operatorRetryCount), grpc_retry.WithPerRetryTimeout(operatorTimePerRetry))
 	if err != nil {
-		return nil, err
+		log.Errorf("Error listing resiliences: %s", err.Error())
+		return resiliences
 	}
 
-	if resp.GetResiliency() == nil {
-		return nil, errors.Errorf("Resilienct %s was not found.", resiliencyConfig)
+	if resp.GetResiliencies() == nil {
+		log.Debug("No resiliencies found.")
+		return resiliences
 	}
 
-	resiliency := LoadDefaultResiliency()
-	err = json.Unmarshal(resp.GetResiliency(), &resiliency.Resiliency)
-
-	if err != nil {
-		return nil, err
+	for _, body := range resp.GetResiliencies() {
+		resiliences = appendResiliency(resiliences, body, log)
 	}
 
-	return resiliency, nil
+	return filterResiliencies(resiliences, runtimeId)
 }
 
 func (r *Resiliency) GetRetryPolicyOrDefault(policyName string) *resiliency_v1alpha.Retry {
@@ -108,4 +115,34 @@ func (r *Resiliency) GetCircuitBreakerOrDefault(circuitBreakerName string) *resi
 		Timeout:     "10s",
 		Trip:        "consecutiveFailures > 5",
 	}
+}
+
+func filterResiliencies(resiliences []Resiliency, runtimeId string) []Resiliency {
+	var filteredResiliencies []Resiliency
+
+	for _, resiliency := range resiliences {
+		if len(resiliency.Resiliency.Scopes) == 0 {
+			filteredResiliencies = append(filteredResiliencies, resiliency)
+			continue
+		}
+
+		for _, scope := range resiliency.Resiliency.Scopes {
+			if scope == runtimeId {
+				filteredResiliencies = append(filteredResiliencies, resiliency)
+				break
+			}
+		}
+	}
+
+	return filteredResiliencies
+}
+
+func appendResiliency(list []Resiliency, b []byte, log logger.Logger) []Resiliency {
+	resiliency := resiliency_v1alpha.Resiliency{}
+	err := yaml.Unmarshal(b, &resiliency)
+	if err != nil {
+		log.Errorf("Could not parse resiliency: %s", err.Error())
+		return list
+	}
+	return append(list, Resiliency{resiliency})
 }

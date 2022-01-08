@@ -142,7 +142,7 @@ func NewMockKubernetesStoreWithInitCallback(cb func()) secretstores.SecretStore 
 
 func TestNewRuntime(t *testing.T) {
 	// act
-	r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, &resiliency.Resiliency{})
+	r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, []resiliency.Resiliency{})
 
 	// assert
 	assert.NotNil(t, r, "runtime must be initiated")
@@ -2639,7 +2639,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		4,
 		false)
 
-	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, &resiliency.Resiliency{})
+	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, []resiliency.Resiliency{})
 }
 
 func TestMTLS(t *testing.T) {
@@ -3011,7 +3011,7 @@ func (m *mockPublishPubSub) Features() []pubsub.Feature {
 
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, &resiliency.Resiliency{})
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, []resiliency.Resiliency{})
 		defer stopRuntime(t, r)
 		r.namespace = ""
 		r.runtimeConfig.mtlsEnabled = true
@@ -3021,7 +3021,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("actors hosted = true", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, &resiliency.Resiliency{})
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, []resiliency.Resiliency{})
 		defer stopRuntime(t, r)
 		r.appConfig = config.ApplicationConfig{
 			Entities: []string{"actor1"},
@@ -3032,7 +3032,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("actors hosted = false", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, &resiliency.Resiliency{})
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, []resiliency.Resiliency{})
 		defer stopRuntime(t, r)
 
 		hosted := r.hostingActors()
@@ -3042,7 +3042,7 @@ func TestInitActors(t *testing.T) {
 
 func TestInitBindings(t *testing.T) {
 	t.Run("single input binding", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, &resiliency.Resiliency{})
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, []resiliency.Resiliency{})
 		defer stopRuntime(t, r)
 		r.bindingsRegistry.RegisterInputBindings(
 			bindings_loader.NewInput("testInputBinding", func() bindings.InputBinding {
@@ -3058,7 +3058,7 @@ func TestInitBindings(t *testing.T) {
 	})
 
 	t.Run("single output binding", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, &resiliency.Resiliency{})
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, []resiliency.Resiliency{})
 		defer stopRuntime(t, r)
 		r.bindingsRegistry.RegisterOutputBindings(
 			bindings_loader.NewOutput("testOutputBinding", func() bindings.OutputBinding {
@@ -3074,7 +3074,7 @@ func TestInitBindings(t *testing.T) {
 	})
 
 	t.Run("one input binding, one output binding", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, &resiliency.Resiliency{})
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, []resiliency.Resiliency{})
 		defer stopRuntime(t, r)
 		r.bindingsRegistry.RegisterInputBindings(
 			bindings_loader.NewInput("testinput", func() bindings.InputBinding {
@@ -3163,7 +3163,7 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.Name, func(t *testing.T) {
-			r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, &resiliency.Resiliency{})
+			r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, []resiliency.Resiliency{})
 
 			mockAppChannel := new(channelt.MockAppChannel)
 			r.appChannel = mockAppChannel

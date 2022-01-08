@@ -19,13 +19,14 @@ import (
 
 	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/kit/logger"
 )
 
 type mockOperator struct {
 	operatorv1pb.UnimplementedOperatorServer
 }
 
-func (mockOperator) GetResiliency(context.Context, *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetResiliencyResponse, error) {
+func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
 	resiliency := resiliency_v1alpha.Resiliency{
 		Spec: resiliency_v1alpha.ResiliencySpec{
 			Policies: resiliency_v1alpha.Policy{
@@ -82,11 +83,72 @@ func (mockOperator) GetResiliency(context.Context, *operatorv1pb.GetResiliencyRe
 			},
 		},
 	}
+	resiliencyBytes, _ := json.Marshal(resiliency)
 
-	body, _ := json.Marshal(resiliency)
+	resiliencyWithScope := resiliency_v1alpha.Resiliency{
+		Spec: resiliency_v1alpha.ResiliencySpec{
+			Policies: resiliency_v1alpha.Policy{
+				Timeouts: map[string]string{
+					"general": "5s",
+				},
+				Retries: map[string]resiliency_v1alpha.Retry{
+					"pubsubRetry": {
+						Policy:     "constant",
+						Duration:   "5s",
+						MaxRetries: 10,
+					},
+				},
+				CircuitBreakers: map[string]resiliency_v1alpha.CircuitBreaker{
+					"pubsubCB": {
+						Interval:    "8s",
+						Timeout:     "45s",
+						Trip:        "consecutiveFailures > 8",
+						MaxRequests: 1,
+					},
+				},
+			},
+			BuildingBlocks: resiliency_v1alpha.BuildingBlocks{
+				Services: map[string]resiliency_v1alpha.Service{
+					"appB": {
+						Timeout:        "general",
+						Retry:          "general",
+						CircuitBreaker: "general",
+					},
+				},
+				Actors: map[string]resiliency_v1alpha.Actor{
+					"myActorType": {
+						Timeout:                 "general",
+						Retry:                   "general",
+						CircuitBreaker:          "general",
+						CircuitBreakerScope:     "both",
+						CircuitBreakerCacheSize: 5000,
+					},
+				},
+				Components: map[string]resiliency_v1alpha.Component{
+					"statestore1": {
+						Timeout:        "general",
+						Retry:          "general",
+						CircuitBreaker: "general",
+					},
+				},
+				Routes: map[string]resiliency_v1alpha.Route{
+					"dsstatus.v3": {
+						Timeout:        "general",
+						Retry:          "general",
+						CircuitBreaker: "general",
+					},
+				},
+			},
+		},
+		Scopes: []string{"app1", "app2"},
+	}
+	resiliencyWithScopesBytes, _ := json.Marshal(resiliencyWithScope)
 
-	return &operatorv1pb.GetResiliencyResponse{
-		Resiliency: body,
+	return &operatorv1pb.ListResiliencyResponse{
+		Resiliencies: [][]byte{
+			resiliencyBytes,
+			resiliencyWithScopesBytes,
+		},
 	}, nil
 }
 
@@ -96,9 +158,10 @@ func getOperatorClient(address string) operatorv1pb.OperatorClient {
 }
 
 func TestLoadStandaloneResiliency(t *testing.T) {
-	resiliency, err := LoadStandaloneResiliency("./testdata/resiliency.yaml")
-	assert.NoError(t, err)
-	assert.NotNil(t, resiliency)
+	resiliencies := LoadStandaloneResiliency("./testdata", "appId", logger.NewLogger("resiliencyTest"))
+	assert.NotNil(t, resiliencies)
+	assert.Len(t, resiliencies, 1)
+	resiliency := resiliencies[0]
 
 	// Assert the basics.
 	assert.NotNil(t, resiliency.Resiliency.Spec)
@@ -222,9 +285,10 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	resiliency, err := LoadKubernetesResiliency("default", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)))
-	assert.NoError(t, err)
-	assert.NotNil(t, resiliency)
+	resiliencies := LoadKubernetesResiliency("appId", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)), logger.NewLogger("resiliencyTest"))
+	assert.NotNil(t, resiliencies)
+	assert.Len(t, resiliencies, 1)
+	resiliency := resiliencies[0]
 
 	// Assert the policy section.
 	assert.Equal(t, resiliency.GetTimeoutOrDefault("general"), "5s")
@@ -275,4 +339,36 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 	assert.Equal(t, "general", routes["dsstatus.v3"].Timeout)
 	assert.Equal(t, "general", routes["dsstatus.v3"].Retry)
 	assert.Equal(t, "general", routes["dsstatus.v3"].CircuitBreaker)
+}
+
+func TestResiliencyScopeIsRespected(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	assert.NoError(t, err)
+
+	s := grpc.NewServer()
+	operatorv1pb.RegisterOperatorServer(s, &mockOperator{})
+	defer s.Stop()
+
+	go func() {
+		s.Serve(lis)
+	}()
+
+	time.Sleep(time.Second * 1)
+
+	resiliencies := LoadStandaloneResiliency("./testdata", "app1", logger.NewLogger("resiliencyTest"))
+	assert.NotNil(t, resiliencies)
+	assert.Len(t, resiliencies, 2)
+
+	resiliencies = LoadKubernetesResiliency("app2", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)), logger.NewLogger("resiliencyTest"))
+	assert.NotNil(t, resiliencies)
+	assert.Len(t, resiliencies, 2)
+
+	resiliencies = LoadStandaloneResiliency("./testdata", "app2", logger.NewLogger("resiliencyTest"))
+	assert.NotNil(t, resiliencies)
+	assert.Len(t, resiliencies, 2)
+
+	resiliencies = LoadStandaloneResiliency("./testdata", "app3", logger.NewLogger("resiliencyTest"))
+	assert.NotNil(t, resiliencies)
+	assert.Len(t, resiliencies, 1)
 }

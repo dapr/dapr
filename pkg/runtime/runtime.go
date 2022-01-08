@@ -178,7 +178,7 @@ type DaprRuntime struct {
 
 	proxy messaging.Proxy
 
-	resiliencyConfig *resiliency.Resiliency
+	resiliencyConfigs []resiliency.Resiliency
 
 	// TODO: Remove feature flag once feature is ratified
 	featureRoutingEnabled bool
@@ -209,7 +209,7 @@ type pubsubSubscribedMessage struct {
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
-func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyConfig *resiliency.Resiliency) *DaprRuntime {
+func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyConfigs []resiliency.Resiliency) *DaprRuntime {
 	return &DaprRuntime{
 		runtimeConfig:          runtimeConfig,
 		globalConfig:           globalConfig,
@@ -243,7 +243,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
 
-		resiliencyConfig: resiliencyConfig,
+		resiliencyConfigs: resiliencyConfigs,
 	}
 }
 
