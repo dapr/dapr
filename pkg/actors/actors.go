@@ -891,18 +891,11 @@ func (m *ActorMetadata) calculateReminderPartition(actorID, reminderName string)
 func (m *ActorMetadata) createReminderReference(reminder Reminder) (actorReminderReference, error) {
 	if m.RemindersMetadata.PartitionCount > 0 {
 		actorRemindersPartitionID, err := m.calculateReminderPartition(reminder.ActorID, reminder.Name)
-		if err != nil {
-			return actorReminderReference{
-				actorMetadataID:           m.ID,
-				actorRemindersPartitionID: actorRemindersPartitionID,
-				reminder:                  reminder,
-			}, err
-		}
 		return actorReminderReference{
 			actorMetadataID:           m.ID,
 			actorRemindersPartitionID: actorRemindersPartitionID,
 			reminder:                  reminder,
-		}, nil
+		}, err
 	}
 
 	return actorReminderReference{

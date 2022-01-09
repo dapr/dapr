@@ -581,6 +581,23 @@ func TestCalculateReminderPartition(t *testing.T) {
 	})
 }
 
+func TestCreateReminderReference(t *testing.T) {
+	t.Run("create reminder reference according to illegal partition count", func(t *testing.T) {
+		actorMetadata := ActorMetadata{
+			ID: metadataZeroID,
+			RemindersMetadata: ActorRemindersMetadata{
+				partitionsEtag: nil,
+				PartitionCount: -1,
+			},
+			Etag: nil,
+		}
+		r, err := actorMetadata.createReminderReference(Reminder{})
+		assert.Equal(t, uint32(0), r.actorRemindersPartitionID)
+		assert.Equal(t, metadataZeroID, r.actorMetadataID)
+		assert.Nil(t, err)
+	})
+}
+
 func TestOverrideReminder(t *testing.T) {
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
