@@ -1658,7 +1658,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 	a.activeReminders.Store(reminderKey, stopChannel)
 
 	err := backoff.Retry(func() error {
-		reminders, actorMetadata, err2 := a.getRemindersForActorType(reminder.ActorType, true)
+		reminders, actorMetadata, err2 := a.getRemindersForActorType(reminder.ActorType, false)
 		if err2 != nil {
 			return err2
 		}
