@@ -2204,7 +2204,6 @@ func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 	}
 
 	return router
-
 }
 
 func (f *fakeHTTPServer) Shutdown() {
