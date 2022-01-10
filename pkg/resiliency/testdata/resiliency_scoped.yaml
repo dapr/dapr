@@ -2,6 +2,12 @@ apiVersion: dapr.io/v1alpha1
 kind: Resiliency
 metadata:
   name: resiliency
+# Like in the Subscriptions CRD, scopes lists the Dapr App IDs that this
+# configuration applies to.
+scopes:
+  - app1
+  - app1 # duplicate to ensure we don't store it twice
+  - app2
 spec:
 
   policies:
