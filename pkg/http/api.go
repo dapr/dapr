@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package http
 
@@ -326,6 +334,12 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Handler: a.onGetActorReminder,
+		},
+		{
+			Methods: []string{fasthttp.MethodPatch},
+			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
+			Version: apiVersionV1,
+			Handler: a.onRenameActorReminder,
 		},
 	}
 }
@@ -989,6 +1003,40 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
+func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
+	if a.actor == nil {
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		return
+	}
+
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	name := reqCtx.UserValue(nameParam).(string)
+
+	var req actors.RenameReminderRequest
+	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	req.OldName = name
+	req.ActorType = actorType
+	req.ActorID = actorID
+
+	err = a.actor.RenameReminder(reqCtx, &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_ACTOR_REMINDER_RENAME", fmt.Sprintf(messages.ErrActorReminderRename, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+	} else {
+		respond(reqCtx, withEmpty())
+	}
+}
+
 func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
@@ -1626,7 +1674,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	var req state.QueryRequest
-	if err = a.json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+	if err = a.json.Unmarshal(reqCtx.PostBody(), &req.Query); err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
