@@ -169,9 +169,9 @@ func getOperatorClient(address string) operatorv1pb.OperatorClient {
 
 func TestPoliciesForBuildingBlocks(t *testing.T) {
 	ctx := context.Background()
-	configs := LoadStandaloneResiliency(log, "./testdata", "default")
+	configs := LoadStandaloneResiliency(log, "default", "./testdata")
 	assert.Len(t, configs, 1)
-	r := DecodeConfigurations(log, configs...)
+	r := FromConfigurations(log, configs...)
 
 	tests := []struct {
 		name   string
@@ -288,19 +288,15 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	resiliencies := LoadStandaloneResiliency(log, "./testdata", "app1")
-	assert.NotNil(t, resiliencies)
+	resiliencies := LoadStandaloneResiliency(log, "app1", "./testdata")
 	assert.Len(t, resiliencies, 2)
 
 	resiliencies = LoadKubernetesResiliency(log, "app2", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)))
-	assert.NotNil(t, resiliencies)
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadStandaloneResiliency(log, "./testdata", "app2")
-	assert.NotNil(t, resiliencies)
+	resiliencies = LoadStandaloneResiliency(log, "app2", "./testdata")
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadStandaloneResiliency(log, "./testdata", "app3")
-	assert.NotNil(t, resiliencies)
+	resiliencies = LoadStandaloneResiliency(log, "app3", "./testdata")
 	assert.Len(t, resiliencies, 1)
 }

@@ -16,6 +16,7 @@ package breaker_test
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,8 +30,9 @@ func TestCircuitBreaker(t *testing.T) {
 	err := trip.DecodeString("consecutiveFailures > 2")
 	require.NoError(t, err)
 	cb := breaker.CircuitBreaker{
-		Name: "test",
-		Trip: &trip,
+		Name:    "test",
+		Trip:    &trip,
+		Timeout: 10 * time.Millisecond,
 	}
 	cb.Initialize()
 	for i := 0; i < 3; i++ {
@@ -42,4 +44,9 @@ func TestCircuitBreaker(t *testing.T) {
 		return nil
 	})
 	assert.EqualError(t, err, "circuit breaker is open")
+	time.Sleep(100 * time.Millisecond)
+	err = cb.Execute(func() error {
+		return nil
+	})
+	assert.NoError(t, err)
 }

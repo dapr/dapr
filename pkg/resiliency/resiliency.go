@@ -55,11 +55,19 @@ const (
 )
 
 type (
+	// Provider is the interface for returning a `Runner` for the various
+	// resiliency scenarios in the runtime.
 	Provider interface {
+		// RoutePolicy returns the policy for a route.
 		RoutePolicy(ctx context.Context, name string) Runner
+		// EndpointPolicy returns the policy for a service endpoint.
 		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
+		// RemoveEndpoint removes an endpoint from a service.
+		// This would be used when a service is taken out of service.
 		RemoveEndpoint(name string, endpoint string)
+		// ActorPolicy returns the policy for an actor instance.
 		ActorPolicy(ctx context.Context, actorType string, id string) Runner
+		// ComponentPolicy returns the policy for a component.
 		ComponentPolicy(ctx context.Context, name string) Runner
 	}
 
@@ -108,7 +116,8 @@ type (
 // Ensure `*Resiliency` satisfies the `Provider` interface.
 var _ = (Provider)((*Resiliency)(nil))
 
-func LoadStandaloneResiliency(log logger.Logger, path, runtimeID string) []*resiliency_v1alpha.Resiliency {
+// LoadStandaloneResiliency loads resiliency configurations from a file path.
+func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resiliency_v1alpha.Resiliency {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
 	}
@@ -141,6 +150,7 @@ func LoadStandaloneResiliency(log logger.Logger, path, runtimeID string) []*resi
 	return filterResiliencyConfigs(configs, runtimeID)
 }
 
+// LoadKubernetesResiliency loads resiliency configurations from the Kubernetes operator.
 func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, operatorClient operatorv1pb.OperatorClient) []*resiliency_v1alpha.Resiliency {
 	resp, err := operatorClient.ListResiliency(context.Background(), &operatorv1pb.ListResiliencyRequest{
 		Namespace: namespace,
@@ -170,7 +180,8 @@ func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, op
 	return filterResiliencyConfigs(configs, runtimeID)
 }
 
-func DecodeConfigurations(log logger.Logger, c ...*resiliency_v1alpha.Resiliency) *Resiliency {
+// FromConfigurations creates a resiliency provider and decodes the configurations from `c`.
+func FromConfigurations(log logger.Logger, c ...*resiliency_v1alpha.Resiliency) *Resiliency {
 	r := New(log)
 	for _, config := range c {
 		if err := r.DecodeConfiguration(config); err != nil {
@@ -495,6 +506,7 @@ func parseDuration(val string) (time.Duration, error) {
 	return time.ParseDuration(val)
 }
 
+// ParseActorCircuitBreakerScope parses a string to a `ActorCircuitBreakerScope`.
 func ParseActorCircuitBreakerScope(val string) (ActorCircuitBreakerScope, error) {
 	switch val {
 	case "type":

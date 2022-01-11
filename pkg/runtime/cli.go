@@ -255,10 +255,10 @@ func FromFlags() (*DaprRuntime, error) {
 		namespace = os.Getenv("NAMESPACE")
 		resiliencyConfigs = resiliency_config.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
 	case modes.StandaloneMode:
-		resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(log, *componentsPath, *appID)
+		resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(log, *appID, *componentsPath)
 	}
 	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-	r := resiliency_config.DecodeConfigurations(log, resiliencyConfigs...)
+	r := resiliency_config.FromConfigurations(log, resiliencyConfigs...)
 
 	accessControlList, err := acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
