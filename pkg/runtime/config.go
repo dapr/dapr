@@ -1,11 +1,21 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package runtime
 
 import (
+	"time"
+
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/modes"
@@ -39,31 +49,32 @@ const (
 
 // Config holds the Dapr Runtime configuration.
 type Config struct {
-	ID                   string
-	HTTPPort             int
-	PublicPort           *int
-	ProfilePort          int
-	EnableProfiling      bool
-	APIGRPCPort          int
-	InternalGRPCPort     int
-	ApplicationPort      int
-	APIListenAddresses   []string
-	ApplicationProtocol  Protocol
-	Mode                 modes.DaprMode
-	PlacementAddresses   []string
-	GlobalConfig         string
-	AllowedOrigins       string
-	Standalone           config.StandaloneConfig
-	Kubernetes           config.KubernetesConfig
-	MaxConcurrency       int
-	mtlsEnabled          bool
-	SentryServiceAddress string
-	CertChain            *credentials.CertChain
-	AppSSL               bool
-	MaxRequestBodySize   int
-	UnixDomainSocket     string
-	ReadBufferSize       int
-	StreamRequestBody    bool
+	ID                       string
+	HTTPPort                 int
+	PublicPort               *int
+	ProfilePort              int
+	EnableProfiling          bool
+	APIGRPCPort              int
+	InternalGRPCPort         int
+	ApplicationPort          int
+	APIListenAddresses       []string
+	ApplicationProtocol      Protocol
+	Mode                     modes.DaprMode
+	PlacementAddresses       []string
+	GlobalConfig             string
+	AllowedOrigins           string
+	Standalone               config.StandaloneConfig
+	Kubernetes               config.KubernetesConfig
+	MaxConcurrency           int
+	mtlsEnabled              bool
+	SentryServiceAddress     string
+	CertChain                *credentials.CertChain
+	AppSSL                   bool
+	MaxRequestBodySize       int
+	UnixDomainSocket         string
+	ReadBufferSize           int
+	StreamRequestBody        bool
+	GracefulShutdownDuration time.Duration
 }
 
 // NewRuntimeConfig returns a new runtime config.
@@ -71,7 +82,7 @@ func NewRuntimeConfig(
 	id string, placementAddresses []string,
 	controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string,
 	httpPort, internalGRPCPort, apiGRPCPort int, apiListenAddresses []string, publicPort *int, appPort, profilePort int,
-	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, streamRequestBody bool) *Config {
+	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, streamRequestBody bool, gracefulShutdownDuration time.Duration) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
@@ -92,14 +103,15 @@ func NewRuntimeConfig(
 		Kubernetes: config.KubernetesConfig{
 			ControlPlaneAddress: controlPlaneAddress,
 		},
-		EnableProfiling:      enableProfiling,
-		MaxConcurrency:       maxConcurrency,
-		mtlsEnabled:          mtlsEnabled,
-		SentryServiceAddress: sentryAddress,
-		AppSSL:               appSSL,
-		MaxRequestBodySize:   maxRequestBodySize,
-		UnixDomainSocket:     unixDomainSocket,
-		ReadBufferSize:       readBufferSize,
-		StreamRequestBody:    streamRequestBody,
+		EnableProfiling:          enableProfiling,
+		MaxConcurrency:           maxConcurrency,
+		mtlsEnabled:              mtlsEnabled,
+		SentryServiceAddress:     sentryAddress,
+		AppSSL:                   appSSL,
+		MaxRequestBodySize:       maxRequestBodySize,
+		UnixDomainSocket:         unixDomainSocket,
+		ReadBufferSize:           readBufferSize,
+		StreamRequestBody:        streamRequestBody,
+		GracefulShutdownDuration: gracefulShutdownDuration,
 	}
 }

@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package messaging
 
@@ -72,7 +80,16 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 	appID := v[0]
 
-	if appID == p.appID {
+	if p.remoteAppFn == nil {
+		return ctx, nil, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete.")
+	}
+
+	target, err := p.remoteAppFn(appID)
+	if err != nil {
+		return ctx, nil, err
+	}
+
+	if target.id == p.appID {
 		// proxy locally to the app
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl)
@@ -81,20 +98,15 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 			}
 		}
 
-		conn, err := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
-		return outCtx, conn, err
+		conn, cErr := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+		return outCtx, conn, cErr
 	}
 
 	// proxy to a remote daprd
-	remote, err := p.remoteAppFn(appID)
-	if err != nil {
-		return ctx, nil, err
-	}
-
-	conn, err := p.connectionFactory(outCtx, remote.address, remote.id, remote.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+	conn, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 	outCtx = p.telemetryFn(outCtx)
 
-	return outCtx, conn, err
+	return outCtx, conn, cErr
 }
 
 // SetRemoteAppFn sets a function that helps the proxy resolve an app ID to an actual address.
