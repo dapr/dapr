@@ -5,12 +5,16 @@ import (
 	"reflect"
 	"testing"
 
+	"k8s.io/client-go/kubernetes/scheme"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
 func TestNewDaprHandler(t *testing.T) {
@@ -178,6 +182,67 @@ func TestWrapper(t *testing.T) {
 		assert.Equal(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
 		assert.NotEqual(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 		assert.NotEqual(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
+	})
+}
+
+func TestInit(t *testing.T) {
+	mgr := dapr_testing.NewMockManager()
+
+	_ = scheme.AddToScheme(mgr.GetScheme())
+
+	handler := NewDaprHandler(mgr)
+
+	t.Run("test init dapr handler", func(t *testing.T) {
+		assert.NotNil(t, handler)
+
+		err := handler.Init()
+
+		assert.Nil(t, err)
+
+		assert.Equal(t, 2, len(mgr.GetRunnables()))
+
+		srv := &corev1.Service{}
+		val := mgr.GetIndexerFunc(&corev1.Service{})(srv)
+		assert.Nil(t, val)
+
+		trueA := true
+		srv = &corev1.Service{
+			ObjectMeta: meta_v1.ObjectMeta{
+				OwnerReferences: []meta_v1.OwnerReference{
+					{
+						Name:       "TestName",
+						Controller: &trueA,
+						APIVersion: "apps/v1",
+						Kind:       "Deployment",
+					},
+				},
+			},
+		}
+
+		val = mgr.GetIndexerFunc(&corev1.Service{})(srv)
+		assert.Equal(t, []string{"TestName"}, val)
+	})
+
+	t.Run("test wrapper", func(t *testing.T) {
+		deploymentCtl := mgr.GetRunnables()[0]
+		statefulsetCtl := mgr.GetRunnables()[1]
+
+		// the runnable is sigs.k8s.io/controller-runtime/pkg/internal/controller.Controller
+		reconciler := reflect.Indirect(reflect.ValueOf(deploymentCtl)).FieldByName("Do").Interface().(*Reconciler)
+
+		wrapper := reconciler.newWrapper()
+
+		assert.NotNil(t, wrapper)
+
+		assert.Equal(t, reflect.TypeOf(&appsv1.Deployment{}), reflect.TypeOf(wrapper.GetObject()))
+
+		reconciler = reflect.Indirect(reflect.ValueOf(statefulsetCtl)).FieldByName("Do").Interface().(*Reconciler)
+
+		wrapper = reconciler.newWrapper()
+
+		assert.NotNil(t, wrapper)
+
+		assert.Equal(t, reflect.TypeOf(&appsv1.StatefulSet{}), reflect.TypeOf(wrapper.GetObject()))
 	})
 }
 
