@@ -18,12 +18,14 @@ on:
     branches:
       - master
       - release-*
+      - feature/*
     tags:
       - v*
   pull_request:
     branches:
       - master
       - release-*
+      - feature/*
 jobs:
   build:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
