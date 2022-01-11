@@ -17,6 +17,7 @@ on:
     branches:
       - master
       - 'release-*'
+      - 'feature/*'
 
 defaults:
   run:
