@@ -31,18 +31,6 @@ spec:
 {{- end }}
     spec:
       serviceAccountName: dapr-operator
-{{- if eq .Values.global.ha.enabled true }}
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - dapr-sidecar-injector
-            topologyKey: "kubernetes.io/hostname"
-{{- end }}
       containers:
       - name: dapr-sidecar-injector
         livenessProbe:
