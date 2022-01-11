@@ -75,6 +75,7 @@ type Actors interface {
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
 	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
 	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
+	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
 	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
@@ -856,13 +857,13 @@ func (a *actorsRuntime) reminderRequiresUpdate(req *CreateReminderRequest, remin
 	return false
 }
 
-func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool) {
+func (a *actorsRuntime) getReminder(reminderName string, actorType string, actorID string) (*Reminder, bool) {
 	a.remindersLock.RLock()
-	reminders := a.reminders[req.ActorType]
+	reminders := a.reminders[actorType]
 	a.remindersLock.RUnlock()
 
 	for _, r := range reminders {
-		if r.reminder.ActorID == req.ActorID && r.reminder.ActorType == req.ActorType && r.reminder.Name == req.Name {
+		if r.reminder.ActorID == actorID && r.reminder.ActorType == actorType && r.reminder.Name == reminderName {
 			return &r.reminder, true
 		}
 	}
@@ -984,7 +985,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 	a.activeRemindersLock.Lock()
 	defer a.activeRemindersLock.Unlock()
-	if r, exists := a.getReminder(req); exists {
+	if r, exists := a.getReminder(req.Name, req.ActorType, req.ActorID); exists {
 		if a.reminderRequiresUpdate(req, r) {
 			err := a.DeleteReminder(ctx, &DeleteReminderRequest{
 				ActorID:   req.ActorID,
@@ -998,10 +999,6 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			return nil
 		}
 	}
-
-	// Store the reminder in active reminders list
-	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
-	reminderKey := constructCompositeKey(actorKey, req.Name)
 
 	if a.evaluationBusy {
 		select {
@@ -1055,51 +1052,14 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		// check if already expired
 		if now.After(ttl) || dueTime.After(ttl) {
 			return errors.Errorf("reminder %s has already expired: registeredTime: %s TTL:%s",
-				reminderKey, reminder.RegisteredTime, req.TTL)
+				reminder.Name, reminder.RegisteredTime, req.TTL)
 		}
 		reminder.ExpirationTime = ttl.UTC().Format(time.RFC3339)
 	}
 
 	stop := make(chan bool)
-	a.activeReminders.Store(reminderKey, stop)
 
-	err = backoff.Retry(func() error {
-		reminders, actorMetadata, err2 := a.getRemindersForActorType(req.ActorType, false)
-		if err2 != nil {
-			return err2
-		}
-
-		// First we add it to the partition list.
-		remindersInPartition, reminderRef, stateKey, etag, errForInsertReminder := actorMetadata.insertReminderInPartition(reminders, reminder)
-
-		if errForInsertReminder != nil {
-			return errForInsertReminder
-		}
-
-		// Get the database partition key (needed for CosmosDB)
-		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
-
-		// Now we can add it to the "global" list.
-		reminders = append(reminders, reminderRef)
-
-		// Then, save the partition to the database.
-		err2 = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
-		if err2 != nil {
-			return err2
-		}
-
-		// Finally, we must save metadata to get a new eTag.
-		// This avoids a race condition between an update and a repartitioning.
-		errForSaveActorType := a.saveActorTypeMetadata(req.ActorType, actorMetadata)
-		if errForSaveActorType != nil {
-			return errForSaveActorType
-		}
-
-		a.remindersLock.Lock()
-		a.reminders[req.ActorType] = reminders
-		a.remindersLock.Unlock()
-		return nil
-	}, backoff.NewExponentialBackOff())
+	err = a.storeReminder(ctx, reminder, stop)
 	if err != nil {
 		return err
 	}
@@ -1652,6 +1612,109 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		return err
 	}
 
+	return nil
+}
+
+func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
+	if a.store == nil {
+		return errors.New("actors: state store does not exist or incorrectly configured")
+	}
+
+	a.activeRemindersLock.Lock()
+	defer a.activeRemindersLock.Unlock()
+
+	oldReminder, exists := a.getReminder(req.OldName, req.ActorType, req.ActorID)
+	if !exists {
+		return nil
+	}
+
+	// delete old reminder
+	err := a.DeleteReminder(ctx, &DeleteReminderRequest{
+		ActorID:   req.ActorID,
+		ActorType: req.ActorType,
+		Name:      req.OldName,
+	})
+	if err != nil {
+		return err
+	}
+
+	if a.evaluationBusy {
+		select {
+		case <-time.After(time.Second * 5):
+			return errors.New("error rename reminder: timed out after 5s")
+		case <-a.evaluationChan:
+			break
+		}
+	}
+
+	reminder := Reminder{
+		ActorID:        req.ActorID,
+		ActorType:      req.ActorType,
+		Name:           req.NewName,
+		Data:           oldReminder.Data,
+		Period:         oldReminder.Period,
+		DueTime:        oldReminder.DueTime,
+		RegisteredTime: oldReminder.RegisteredTime,
+		ExpirationTime: oldReminder.ExpirationTime,
+	}
+
+	stop := make(chan bool)
+
+	err = a.storeReminder(ctx, reminder, stop)
+	if err != nil {
+		return err
+	}
+
+	return a.startReminder(&reminder, stop)
+}
+
+func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, stopChannel chan bool) error {
+	// Store the reminder in active reminders list
+	actorKey := constructCompositeKey(reminder.ActorType, reminder.ActorID)
+	reminderKey := constructCompositeKey(actorKey, reminder.Name)
+
+	a.activeReminders.Store(reminderKey, stopChannel)
+
+	err := backoff.Retry(func() error {
+		reminders, actorMetadata, err2 := a.getRemindersForActorType(reminder.ActorType, false)
+		if err2 != nil {
+			return err2
+		}
+
+		// First we add it to the partition list.
+		remindersInPartition, reminderRef, stateKey, etag, errForInsertReminder := actorMetadata.insertReminderInPartition(reminders, reminder)
+
+		if errForInsertReminder != nil {
+			return errForInsertReminder
+		}
+
+		// Get the database partition key (needed for CosmosDB)
+		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
+
+		// Now we can add it to the "global" list.
+		reminders = append(reminders, reminderRef)
+
+		// Then, save the partition to the database.
+		err2 = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
+		if err2 != nil {
+			return err2
+		}
+
+		// Finally, we must save metadata to get a new eTag.
+		// This avoids a race condition between an update and a repartitioning.
+		errForSaveMetadata := a.saveActorTypeMetadata(reminder.ActorType, actorMetadata)
+		if errForSaveMetadata != nil {
+			return errForSaveMetadata
+		}
+
+		a.remindersLock.Lock()
+		a.reminders[reminder.ActorType] = reminders
+		a.remindersLock.Unlock()
+		return nil
+	}, backoff.NewExponentialBackOff())
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
