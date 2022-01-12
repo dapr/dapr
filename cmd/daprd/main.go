@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package main
 
@@ -47,6 +55,7 @@ import (
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
 	state_mysql "github.com/dapr/components-contrib/state/mysql"
+	state_oci_objectstorage "github.com/dapr/components-contrib/state/oci/objectstorage"
 	"github.com/dapr/components-contrib/state/postgresql"
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/rethinkdb"
@@ -70,7 +79,7 @@ import (
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
-
+	"github.com/dapr/components-contrib/pubsub/rocketmq"
 	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
@@ -238,6 +247,9 @@ func main() {
 			state_loader.New("mysql", func() state.Store {
 				return state_mysql.NewMySQLStateStore(logContrib)
 			}),
+			state_loader.New("oci.objectstorage", func() state.Store {
+				return state_oci_objectstorage.NewOCIObjectStorageStore(logContrib)
+			}),
 		),
 		runtime.WithConfigurations(
 			configuration_loader.New("redis", func() configuration.Store {
@@ -274,6 +286,9 @@ func main() {
 			}),
 			pubsub_loader.New("rabbitmq", func() pubs.PubSub {
 				return rabbitmq.NewRabbitMQ(logContrib)
+			}),
+			pubsub_loader.New("rocketmq", func() pubs.PubSub {
+				return rocketmq.NewRocketMQ(logContrib)
 			}),
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)

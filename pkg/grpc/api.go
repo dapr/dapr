@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package grpc
 
@@ -78,6 +86,7 @@ type API interface {
 	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error)
 	RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error)
 	UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error)
+	RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameActorReminderRequest) (*emptypb.Empty, error)
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
@@ -150,6 +159,7 @@ func NewAPI(
 		accessControlList:        accessControlList,
 		appProtocol:              appProtocol,
 		shutdown:                 shutdown,
+		configurationSubscribe:   map[string]bool{},
 	}
 }
 
@@ -578,11 +588,12 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	}
 
 	var req state.QueryRequest
-	if err = jsoniter.Unmarshal([]byte(in.GetQuery()), &req); err != nil {
+	if err = jsoniter.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrMalformedRequest, err.Error())
 		apiServerLogger.Debug(err)
 		return ret, err
 	}
+	req.Metadata = in.GetMetadata()
 
 	resp, err := querier.Query(&req)
 	if err != nil {
@@ -601,7 +612,8 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 
 	for i := range resp.Results {
 		ret.Results[i] = &runtimev1pb.QueryStateItem{
-			Key: state_loader.GetOriginalStateKey(resp.Results[i].Key),
+			Key:  state_loader.GetOriginalStateKey(resp.Results[i].Key),
+			Data: resp.Results[i].Data,
 		}
 		if encrypted {
 			ret.Results[i].Data, err = encryption.TryDecryptValue(in.StoreName, resp.Results[i].Data)
@@ -992,6 +1004,24 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 	return &emptypb.Empty{}, err
 }
 
+func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameActorReminderRequest) (*emptypb.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	req := &actors.RenameReminderRequest{
+		OldName:   in.OldName,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+		NewName:   in.NewName,
+	}
+
+	err := a.actor.RenameReminder(ctx, req)
+	return &emptypb.Empty{}, err
+}
+
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
 	if a.actor == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
@@ -1250,10 +1280,6 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
-	if h.api.appChannel == nil {
-		return status.Error(codes.Internal, messages.ErrChannelNotFound)
-	}
-
 	items := make([]*commonv1pb.ConfigurationItem, 0)
 	for _, v := range e.Items {
 		items = append(items, &commonv1pb.ConfigurationItem{
@@ -1283,6 +1309,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	subscribeKeys := request.Keys
 	unsubscribedKeys := make([]string, 0)
 	a.configurationSubscribeLock.Lock()
+
 	for _, k := range subscribeKeys {
 		if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
 			unsubscribedKeys = append(unsubscribedKeys, k)
@@ -1300,12 +1327,20 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		serverStream: configurationServer,
 	}
 
+	ctx := context.TODO()
 	// TODO(@laurence) deal with failed subscription and retires
-	_ = store.Subscribe(context.Background(), req, handler.updateEventHandler)
+	err = store.Subscribe(ctx, req, handler.updateEventHandler)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		a.configurationSubscribeLock.Unlock()
+		return err
+	}
 
 	for _, k := range unsubscribedKeys {
 		a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)] = true
 	}
 	a.configurationSubscribeLock.Unlock()
+
+	<-ctx.Done()
 	return nil
 }

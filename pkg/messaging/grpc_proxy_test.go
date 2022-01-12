@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package messaging
 
@@ -160,6 +168,12 @@ func TestIntercept(t *testing.T) {
 		}
 
 		p := NewProxy(connectionFn, "a", "a:123", 50005, acl)
+		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
+			return remoteApp{
+				id:      "a",
+				address: "a:123",
+			}, nil
+		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			ctx = metadata.AppendToOutgoingContext(ctx, "a", "b")
 			return ctx
@@ -168,6 +182,20 @@ func TestIntercept(t *testing.T) {
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 
+		_, conn, err := proxy.intercept(ctx, "/test")
+
+		assert.Error(t, err)
+		assert.Nil(t, conn)
+	})
+
+	t.Run("SetRemoteAppFn never called", func(t *testing.T) {
+		p := NewProxy(connectionFn, "a", "a:123", 50005, nil)
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return ctx
+		})
+
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		proxy := p.(*proxy)
 		_, conn, err := proxy.intercept(ctx, "/test")
 
 		assert.Error(t, err)

@@ -35,14 +35,14 @@ For more details on initializing Helm, [read the Helm docs](https://helm.sh/docs
 
 2. Install the Dapr chart on your cluster in the dapr-system namespace:
     ```
-    helm install dapr dapr/dapr --namespace dapr-system --create-namespace --wait
+    helm install dapr dapr/dapr --namespace dapr-system --wait
     ```
 
 ## Verify installation
 
 Once the chart is installed, verify the Dapr control plane system service pods are running in the `dapr-system` namespace:
 ```
-kubectl get pods --namespace dapr-system --create-namespace
+kubectl get pods --namespace dapr-system
 ```
 
 ## Uninstall the Chart
@@ -76,7 +76,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Docker image registry                                                   | `docker.io/daprio`      |
-| `global.tag`                              | Docker image version tag                                                | `1.5.0`            |
+| `global.tag`                              | Docker image version tag                                                | `1.5.1`            |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
 | `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry            | `""`                   |
@@ -126,7 +126,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.replicationFactor`        | Number of consistent hashing virtual node | `100`   |
 | `dapr_placement.logLevel`                 | Service Log level                                                       | `info`                  |
 | `dapr_placement.image.name`               | Service docker image name (`global.registry/dapr_placement.image.name`) | `dapr`   |
-| `dapr_placement.cluster.forceInMemoryLog` | Use in-memeory log store and disable volume attach when `global.ha.enabled` is true | `false`   |
+| `dapr_placement.cluster.forceInMemoryLog` | Use in-memory log store and disable volume attach when `global.ha.enabled` is true | `false`   |
 | `dapr_placement.cluster.logStorePath`     | Mount path for persistent volume for log store in unix-like system when `global.ha.enabled` is true | `/var/run/dapr/raft-log`   |
 | `dapr_placement.cluster.logStoreWinPath`  | Mount path for persistent volume for log store in windows when `global.ha.enabled` is true | `C:\\raft-log`   |
 | `dapr_placement.volumeclaims.storageSize` | Attached volume size | `1Gi`   |
@@ -162,6 +162,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.resources`         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
 | `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |
+| `dapr_sidecar_injector.hostNetwork` | Enable hostNetwork mode. This is helpful when working with overlay networks such as Calico CNI and admission webhooks fail | `false` |
 
 
 
@@ -173,7 +174,7 @@ The Helm chart has the follow configuration options that can be supplied:
 This command creates three replicas of each control plane pod for an HA deployment (with the exception of the Placement pod) in the dapr-system namespace:
 
 ```
-helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set global.ha.enabled=true --wait
+helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true --wait
 ```
 
 ## Example of installing edge version of Dapr
@@ -181,7 +182,7 @@ helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set glo
 This command deploys the latest `edge` version of Dapr to `dapr-system` namespace. This is useful if you want to deploy the latest version of Dapr to test a feature or some capability in your Kubernetes cluster.
 
 ```
-helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set-string global.tag=edge --wait
+helm install dapr dapr/dapr --namespace dapr-system --set-string global.tag=edge --wait
 ```
 
 ## Example of installing dapr on Minikube
@@ -209,7 +210,7 @@ global:
 
 Install dapr:
 ```bash
-helm install dapr dapr/dapr --namespace dapr-system --create-namespace --values values.yml --wait
+helm install dapr dapr/dapr --namespace dapr-system --values values.yml --wait
 ```
 
 ## Example of debugging dapr
@@ -233,7 +234,7 @@ dapr_operator:
 
 Step into dapr project, and install dapr:
 ```bash
-helm install dapr charts/dapr --namespace dapr-system --create-namespace --values values.yml --wait
+helm install dapr charts/dapr --namespace dapr-system --values values.yml --wait
 ```
 
 Find the target dapr-operator pod:
@@ -247,5 +248,5 @@ kubectl port-forward dapr-operator-5c99475ffc-m9z9f 40000:40000 -n dapr-system
 ```
 ## Example of using nodeSelector option
 ```
-helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set global.nodeSelector.myLabel=myValue --wait
+helm install dapr dapr/dapr --namespace dapr-system --set global.nodeSelector.myLabel=myValue --wait
 ```
