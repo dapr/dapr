@@ -16,11 +16,12 @@ package http
 import (
 	"encoding/base64"
 	"fmt"
-	daprjson "github.com/dapr/dapr/pkg/json"
-	jsoniter "github.com/json-iterator/go"
 	"strconv"
 	"strings"
 	"sync"
+
+	daprjson "github.com/dapr/dapr/pkg/json"
+	jsoniter "github.com/json-iterator/go"
 
 	"github.com/fasthttp/router"
 	"github.com/mitchellh/mapstructure"
@@ -1014,7 +1015,7 @@ func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 
 	var req actors.RenameReminderRequest
-	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
+	err := daprjson.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))

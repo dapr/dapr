@@ -17,9 +17,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/dapr/dapr/pkg/json"
 	"strconv"
 	"sync"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/dapr/components-contrib/configuration"
 
