@@ -19,4 +19,3 @@ test_report_unit.json
 
 # Go Workspaces (introduced in Go 1.18+)
 go.work
-
