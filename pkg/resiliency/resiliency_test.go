@@ -60,11 +60,12 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 				},
 			},
 			BuildingBlocks: resiliency_v1alpha.BuildingBlocks{
-				Services: map[string]resiliency_v1alpha.PolicyNames{
+				Services: map[string]resiliency_v1alpha.EndpointPolicyNames{
 					"appB": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
+						Timeout:                 "general",
+						Retry:                   "general",
+						CircuitBreaker:          "general",
+						CircuitBreakerCacheSize: 100,
 					},
 				},
 				Actors: map[string]resiliency_v1alpha.ActorPolicyNames{
@@ -118,11 +119,12 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 				},
 			},
 			BuildingBlocks: resiliency_v1alpha.BuildingBlocks{
-				Services: map[string]resiliency_v1alpha.PolicyNames{
+				Services: map[string]resiliency_v1alpha.EndpointPolicyNames{
 					"appB": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
+						Timeout:                 "general",
+						Retry:                   "general",
+						CircuitBreaker:          "general",
+						CircuitBreakerCacheSize: 100,
 					},
 				},
 				Actors: map[string]resiliency_v1alpha.ActorPolicyNames{

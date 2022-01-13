@@ -82,6 +82,8 @@ spec:
                       properties:
                         circuitBreaker:
                           type: string
+                        circuitBreakerCacheSize:
+                          type: integer
                         retry:
                           type: string
                         timeout:

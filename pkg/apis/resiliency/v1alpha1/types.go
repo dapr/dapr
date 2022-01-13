@@ -57,16 +57,23 @@ type CircuitBreaker struct {
 }
 
 type BuildingBlocks struct {
-	Services   map[string]PolicyNames      `json:"services,omitempty" yaml:"services,omitempty"`
-	Actors     map[string]ActorPolicyNames `json:"actors,omitempty" yaml:"actors,omitempty"`
-	Components map[string]PolicyNames      `json:"components,omitempty" yaml:"components,omitempty"`
-	Routes     map[string]PolicyNames      `json:"routes,omitempty" yaml:"routes,omitempty"`
+	Services   map[string]EndpointPolicyNames `json:"services,omitempty" yaml:"services,omitempty"`
+	Actors     map[string]ActorPolicyNames    `json:"actors,omitempty" yaml:"actors,omitempty"`
+	Components map[string]PolicyNames         `json:"components,omitempty" yaml:"components,omitempty"`
+	Routes     map[string]PolicyNames         `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
 type PolicyNames struct {
 	Timeout        string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Retry          string `json:"retry,omitempty" yaml:"retry,omitempty"`
 	CircuitBreaker string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
+}
+
+type EndpointPolicyNames struct {
+	Timeout                 string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Retry                   string `json:"retry,omitempty" yaml:"retry,omitempty"`
+	CircuitBreaker          string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
+	CircuitBreakerCacheSize int    `json:"circuitBreakerCacheSize,omitempty" yaml:"circuitBreakerCacheSize,omitempty"`
 }
 
 type ActorPolicyNames struct {

@@ -40,6 +40,9 @@ import (
 const (
 	operatorRetryCount   = 100
 	operatorTimePerRetry = time.Second * 5
+
+	defaultEndpointCacheSize = 100
+	defaultActorCacheSize    = 5000
 )
 
 // ActorCircuitBreakerScope indicates the scope of the circuit breaker for an actor.
@@ -62,9 +65,6 @@ type (
 		RoutePolicy(ctx context.Context, name string) Runner
 		// EndpointPolicy returns the policy for a service endpoint.
 		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
-		// RemoveEndpoint removes an endpoint from a service.
-		// This would be used when a service is taken out of service.
-		RemoveEndpoint(name string, endpoint string)
 		// ActorPolicy returns the policy for an actor instance.
 		ActorPolicy(ctx context.Context, actorType string, id string) Runner
 		// ComponentPolicy returns the policy for a component.
@@ -82,7 +82,7 @@ type (
 		circuitBreakers map[string]*breaker.CircuitBreaker
 
 		actorCBCaches map[string]*lru.Cache
-		serviceCBs    map[string]*circuitBreakerInstances
+		serviceCBs    map[string]*lru.Cache
 		componentCBs  *circuitBreakerInstances
 
 		services   map[string]PolicyNames
@@ -200,7 +200,7 @@ func New(log logger.Logger) *Resiliency {
 		retries:         make(map[string]*retry.Config),
 		circuitBreakers: make(map[string]*breaker.CircuitBreaker),
 		actorCBCaches:   make(map[string]*lru.Cache),
-		serviceCBs:      make(map[string]*circuitBreakerInstances),
+		serviceCBs:      make(map[string]*lru.Cache),
 		componentCBs: &circuitBreakerInstances{
 			cbs: make(map[string]*breaker.CircuitBreaker, 10),
 		},
@@ -261,7 +261,7 @@ func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error
 	return nil
 }
 
-func (r *Resiliency) decodeBuildingBlocks(c *resiliency_v1alpha.Resiliency) error {
+func (r *Resiliency) decodeBuildingBlocks(c *resiliency_v1alpha.Resiliency) (err error) {
 	buildingBlocks := c.Spec.BuildingBlocks
 
 	for name, t := range buildingBlocks.Services {
@@ -270,8 +270,12 @@ func (r *Resiliency) decodeBuildingBlocks(c *resiliency_v1alpha.Resiliency) erro
 			Retry:          t.Retry,
 			CircuitBreaker: t.CircuitBreaker,
 		}
-		r.serviceCBs[name] = &circuitBreakerInstances{
-			cbs: make(map[string]*breaker.CircuitBreaker, 10),
+		if t.CircuitBreakerCacheSize == 0 {
+			t.CircuitBreakerCacheSize = defaultEndpointCacheSize
+		}
+		r.serviceCBs[name], err = lru.New(t.CircuitBreakerCacheSize)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -287,6 +291,9 @@ func (r *Resiliency) decodeBuildingBlocks(c *resiliency_v1alpha.Resiliency) erro
 				CircuitBreaker: t.CircuitBreaker,
 			},
 			CircuitBreakerScope: scope,
+		}
+		if t.CircuitBreakerCacheSize == 0 {
+			t.CircuitBreakerCacheSize = defaultActorCacheSize
 		}
 		r.actorCBCaches[name], err = lru.New(t.CircuitBreakerCacheSize)
 		if err != nil {
@@ -359,23 +366,29 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, service string, endpoin
 		}
 		if policyNames.CircuitBreaker != "" {
 			template := r.circuitBreakers[policyNames.CircuitBreaker]
-			ep, ok := r.serviceCBs[service]
 			if ok {
-				cb = ep.Get(endpoint, template)
+				cache, ok := r.serviceCBs[service]
+				if ok {
+					cbi, ok := cache.Get(endpoint)
+					if ok {
+						cb, _ = cbi.(*breaker.CircuitBreaker)
+					} else {
+						cb = &breaker.CircuitBreaker{
+							Name:        endpoint,
+							MaxRequests: template.MaxRequests,
+							Interval:    template.Interval,
+							Timeout:     template.Timeout,
+							Trip:        template.Trip,
+						}
+						cb.Initialize()
+						cache.Add(endpoint, cb)
+					}
+				}
 			}
 		}
 	}
 
 	return Policy(ctx, r.log, operationName, t, rc, cb)
-}
-
-// RemoveEndpoint removes an endpoint from a service.
-// This would be used when a service is taken out of service.
-func (r *Resiliency) RemoveEndpoint(name string, endpoint string) {
-	ep, ok := r.serviceCBs[name]
-	if ok {
-		ep.Remove(endpoint)
-	}
 }
 
 // ActorPolicy returns the policy for an actor instance.
