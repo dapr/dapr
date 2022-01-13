@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/dapr/components-contrib v1.5.0-rc.1.0.20220105071850-a013b58d6cee
+	github.com/dapr/components-contrib v1.5.0-rc.1.0.20220107235319-3c28fee80f1c
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
@@ -61,7 +61,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.7.0
 )
 
-require github.com/cenkalti/backoff v2.2.1+incompatible
+require (
+	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/go-logr/logr v0.3.0
+)
 
 require (
 	cloud.google.com/go v0.65.0 // indirect
@@ -149,7 +152,6 @@ require (
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/go-kit/log v0.1.0 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
-	github.com/go-logr/logr v0.3.0 // indirect
 	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.3 // indirect
@@ -323,3 +325,5 @@ replace (
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )
+
+replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
