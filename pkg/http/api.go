@@ -460,6 +460,10 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	metadata := getMetadataFromRequest(reqCtx)
+	// add content type from HTTP header
+	if contentType := getContentTypeFromRequest(reqCtx); len(contentType) != 0 {
+		metadata["Content-Type"] = contentType
+	}
 
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
 	if len(req.Keys) == 0 {
@@ -586,6 +590,10 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	metadata := getMetadataFromRequest(reqCtx)
+	// add content type from HTTP header
+	if contentType := getContentTypeFromRequest(reqCtx); len(contentType) != 0 {
+		metadata["Content-Type"] = contentType
+	}
 
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
@@ -795,6 +803,8 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	contentType := getContentTypeFromRequest(reqCtx)
+
 	reqs := []state.SetRequest{}
 	err = a.json.Unmarshal(reqCtx.PostBody(), &reqs)
 	if err != nil {
@@ -815,6 +825,13 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 			log.Debug(err)
 			return
+		}
+		// add content type from HTTP header to metadata
+		if len(contentType) != 0 {
+			if reqs[i].Metadata == nil {
+				reqs[i].Metadata = make(map[string]string)
+			}
+			reqs[i].Metadata["Content-Type"] = contentType
 		}
 
 		if encryption.EncryptedStateStore(storeName) {
@@ -1528,6 +1545,14 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	})
 
 	return metadata
+}
+
+func getContentTypeFromRequest(reqCtx *fasthttp.RequestCtx) string {
+	var contentType string
+	if ct := reqCtx.Request.Header.ContentType(); len(ct) != 0 {
+		contentType = string(ct)
+	}
+	return contentType
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
