@@ -30,16 +30,16 @@ metadata:
   name: dapr-operator-admin
 rules:
 - apiGroups: ["*"]
-  resources: ["customresourcedefinitions", "serviceaccounts", "deployments", "services", "configmaps", "secrets", "components", "configurations", "subscriptions", "leases"]
+  resources: ["customresourcedefinitions", "serviceaccounts", "deployments", "statefulsets", "services", "configmaps", "secrets", "components", "configurations", "subscriptions", "leases"]
   verbs: ["get"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
+  resources: ["deployments", "statefulsets", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
   verbs: ["list"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
+  resources: ["deployments", "statefulsets", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
   verbs: ["watch"]
 - apiGroups: ["*"]
-  resources: ["services", "secrets", "subscriptions", "configmaps", "leases", "services/finalizers", "deployments/finalizers"]
+  resources: ["services", "secrets", "subscriptions", "configmaps", "leases", "services/finalizers", "deployments/finalizers", "statefulsets/finalizers"]
   verbs: ["update"]
 - apiGroups: ["*"]
   resources: ["customresourcedefinitions"]
@@ -48,7 +48,7 @@ rules:
   resources: ["services", "leases"]
   verbs: ["delete"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "configmaps", "events", "leases"]
+  resources: ["deployments", "statefulsets", "services", "configmaps", "events", "leases"]
   verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

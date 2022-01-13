@@ -61,7 +61,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.7.0
 )
 
-require github.com/cenkalti/backoff v2.2.1+incompatible
+require (
+	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/go-logr/logr v0.3.0
+)
 
 require (
 	cloud.google.com/go v0.65.0 // indirect
@@ -149,7 +152,6 @@ require (
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/go-kit/log v0.1.0 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
-	github.com/go-logr/logr v0.3.0 // indirect
 	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.3 // indirect
