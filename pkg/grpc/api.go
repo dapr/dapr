@@ -17,7 +17,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/dapr/components-contrib/configuration"
@@ -74,6 +76,7 @@ type API interface {
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
 	GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
 	SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error
+	UnSubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnSubscribeConfigurationRequest) (*runtimev1pb.UnSubscribeConfigurationResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
 	QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
@@ -106,7 +109,7 @@ type api struct {
 	secretStores               map[string]secretstores.SecretStore
 	secretsConfiguration       map[string]config.SecretsScope
 	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]bool
+	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
 	pubsubAdapter              runtime_pubsub.Adapter
 	id                         string
@@ -152,13 +155,13 @@ func NewAPI(
 		transactionalStateStores: transactionalStateStores,
 		secretStores:             secretStores,
 		configurationStores:      configurationStores,
+		configurationSubscribe:   make(map[string]chan struct{}),
 		secretsConfiguration:     secretsConfiguration,
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		tracingSpec:              tracingSpec,
 		accessControlList:        accessControlList,
 		appProtocol:              appProtocol,
 		shutdown:                 shutdown,
-		configurationSubscribe:   map[string]bool{},
 	}
 }
 
@@ -1281,23 +1284,16 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error {
 	store, err := a.getConfigurationStore(request.StoreName)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrConfigurationSubscribe, request.Keys, request.StoreName, err))
 		apiServerLogger.Debug(err)
 		return err
 	}
 
-	subscribeKeys := request.Keys
-	unsubscribedKeys := make([]string, 0)
-	a.configurationSubscribeLock.Lock()
-
-	for _, k := range subscribeKeys {
-		if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
-			unsubscribedKeys = append(unsubscribedKeys, k)
-		}
-	}
+	sort.Slice(request.Keys, func(i, j int) bool {
+		return request.Keys[i] < request.Keys[j]
+	})
 
 	req := &configuration.SubscribeRequest{
-		Keys:     unsubscribedKeys,
+		Keys:     request.Keys,
 		Metadata: request.GetMetadata(),
 	}
 
@@ -1307,20 +1303,83 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		serverStream: configurationServer,
 	}
 
-	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// TODO(@laurence) deal with failed subscription and retires
 	err = store.Subscribe(ctx, req, handler.updateEventHandler)
 	if err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
 		apiServerLogger.Debug(err)
-		a.configurationSubscribeLock.Unlock()
 		return err
 	}
-
-	for _, k := range unsubscribedKeys {
-		a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)] = true
-	}
+	stop := make(chan struct{})
+	a.configurationSubscribeLock.Lock()
+	a.configurationSubscribe[getConfigSubscribeUniqueKey(request.GetStoreName(), request.GetKeys())] = stop
 	a.configurationSubscribeLock.Unlock()
-
-	<-ctx.Done()
+	<-stop
 	return nil
+}
+
+func (a *api) UnSubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnSubscribeConfigurationRequest) (*runtimev1pb.UnSubscribeConfigurationResponse, error) {
+	sort.Slice(request.Keys, func(i, j int) bool {
+		return request.Keys[i] < request.Keys[j]
+	})
+
+	a.configurationSubscribeLock.Lock()
+	defer a.configurationSubscribeLock.Unlock()
+
+	storeName := request.GetStoreName()
+	unsubscribeKeys := request.GetKeys()
+
+	for _, unsubscribeKey := range unsubscribeKeys {
+		for k, stop := range a.configurationSubscribe {
+			subscribingKeys := getSubscribingKeys(storeName, k)
+			if afterRemovedSubscribingKeys, ok := keyInKeysAndRemove(unsubscribeKey, subscribingKeys); ok {
+				// key to unsubscribe is included in this subscription
+				if len(afterRemovedSubscribingKeys) == 0 {
+					// close subscription with no subscribing key
+					close(stop)
+				} else {
+					// set new key
+					a.configurationSubscribe[getConfigSubscribeUniqueKey(storeName, afterRemovedSubscribingKeys)] = a.configurationSubscribe[k]
+				}
+				delete(a.configurationSubscribe, k)
+			}
+		}
+	}
+	subscribeStreamUniqueKey := getConfigSubscribeUniqueKey(request.GetStoreName(), request.GetKeys())
+	if stop, ok := a.configurationSubscribe[subscribeStreamUniqueKey]; ok {
+		close(stop)
+		delete(a.configurationSubscribe, subscribeStreamUniqueKey)
+		return &runtimev1pb.UnSubscribeConfigurationResponse{
+			Ok: true,
+		}, nil
+	}
+	return &runtimev1pb.UnSubscribeConfigurationResponse{
+		Ok:      false,
+		Message: fmt.Sprintf("Subscription with store name %s, and keys = %s not found.", request.GetStoreName(), request.GetKeys()),
+	}, nil
+}
+
+func getConfigSubscribeUniqueKey(storeName string, keys []string) string {
+	return fmt.Sprintf("%s||%s", storeName, strings.Join(keys, ","))
+}
+
+func getSubscribingKeys(storeName string, key string) []string {
+	storeNameAndKeys := strings.Split(key, "||")
+	if storeNameAndKeys[0] != storeName {
+		return []string{}
+	}
+	return strings.Split(storeNameAndKeys[1], ",")
+}
+
+func keyInKeysAndRemove(key string, keys []string) ([]string, bool) {
+	resultKeys := make([]string, 0)
+	for _, v := range keys {
+		if v != key {
+			resultKeys = append(resultKeys, v)
+		}
+	}
+	return resultKeys, len(resultKeys) != len(keys)
 }
