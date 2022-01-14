@@ -48,7 +48,7 @@ type Operator interface {
 
 type operator struct {
 	ctx         context.Context
-	daprHandler handlers.Handler
+	daprHandler *handlers.DaprHandler
 	apiServer   api.Server
 
 	configName    string
