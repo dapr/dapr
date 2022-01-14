@@ -588,6 +588,12 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		return ret, err
 	}
 
+	if encryption.EncryptedStateStore(in.StoreName) {
+		err = status.Errorf(codes.Aborted, messages.ErrStateQuery, in.GetStoreName(), "cannot query encrypted store")
+		apiServerLogger.Debug(err)
+		return ret, err
+	}
+
 	var req state.QueryRequest
 	if err = json.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrMalformedRequest, err.Error())
@@ -606,7 +612,6 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		return ret, nil
 	}
 
-	encrypted := encryption.EncryptedStateStore(in.StoreName)
 	ret.Results = make([]*runtimev1pb.QueryStateItem, len(resp.Results))
 	ret.Token = resp.Token
 	ret.Metadata = resp.Metadata
@@ -615,13 +620,6 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		ret.Results[i] = &runtimev1pb.QueryStateItem{
 			Key:  state_loader.GetOriginalStateKey(resp.Results[i].Key),
 			Data: resp.Results[i].Data,
-		}
-		if encrypted {
-			ret.Results[i].Data, err = encryption.TryDecryptValue(in.StoreName, resp.Results[i].Data)
-			if err != nil {
-				apiServerLogger.Debug("query error: %s", err)
-				ret.Results[i].Error = err.Error()
-			}
 		}
 	}
 

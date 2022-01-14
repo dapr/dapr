@@ -58,6 +58,7 @@ import (
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/encryption"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -2609,6 +2610,20 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	resp := fakeServer.DoRequest("POST", "v1.0/state/store1/query", nil, nil)
 	// assert
 	assert.Equal(t, 405, resp.StatusCode)
+}
+
+func TestStateStoreQuerierEncrypted(t *testing.T) {
+	storeName := "encrypted-store1"
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		stateStores: map[string]state.Store{storeName: fakeStateStoreQuerier{}},
+	}
+	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
+	fakeServer.StartServer(testAPI.constructStateEndpoints())
+
+	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/"+storeName+"/query", nil, nil)
+	// assert
+	assert.Equal(t, 400, resp.StatusCode)
 }
 
 const (
