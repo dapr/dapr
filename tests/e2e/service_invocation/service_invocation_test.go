@@ -170,6 +170,24 @@ var serviceinvocationTests = []struct {
 		"multihop",
 		"singlehop is called",
 	},
+	{
+		"Test call double encoded path",
+		"serviceinvocation-callee",
+		"path/value%252F123",
+		"path/value%252F123",
+	},
+	{
+		"Test call encoded path",
+		"serviceinvocation-callee",
+		"path/value%2F123",
+		"path/value%2F123",
+	},
+	{
+		"Test call normal path",
+		"serviceinvocation-callee",
+		"path/value/123",
+		"path/value/123",
+	},
 }
 
 var moreServiceinvocationTests = []struct {
