@@ -22,8 +22,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dapr/dapr/pkg/json"
 	"github.com/gorilla/mux"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const (

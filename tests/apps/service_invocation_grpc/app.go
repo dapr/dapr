@@ -27,9 +27,10 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
-	"github.com/dapr/dapr/pkg/json"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 // server is our user app

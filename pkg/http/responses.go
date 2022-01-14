@@ -14,9 +14,10 @@ limitations under the License.
 package http
 
 import (
-	"github.com/dapr/dapr/pkg/json"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const (

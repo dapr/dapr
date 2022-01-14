@@ -20,8 +20,9 @@ import (
 	"strings"
 	"sync"
 
-	daprjson "github.com/dapr/dapr/pkg/json"
 	jsoniter "github.com/json-iterator/go"
+
+	daprjson "github.com/dapr/dapr/pkg/json"
 
 	"github.com/fasthttp/router"
 	"github.com/mitchellh/mapstructure"

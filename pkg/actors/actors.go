@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/dapr/dapr/pkg/health"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
@@ -37,6 +36,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/pkg/health"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/kit/logger"

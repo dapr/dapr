@@ -21,7 +21,6 @@ import (
 
 	b64 "encoding/base64"
 
-	"github.com/dapr/dapr/pkg/json"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -30,6 +29,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/dapr/kit/logger"
 
