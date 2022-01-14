@@ -29,6 +29,7 @@ import (
 
 	// Secret stores.
 	"github.com/dapr/components-contrib/secretstores"
+	alicloud_paramstore "github.com/dapr/components-contrib/secretstores/alicloud/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
@@ -192,6 +193,9 @@ func main() {
 			}),
 			secretstores_loader.New("local.env", func() secretstores.SecretStore {
 				return secretstore_env.NewEnvSecretStore(logContrib)
+			}),
+			secretstores_loader.New("alicloud.parameterstore", func() secretstores.SecretStore {
+				return alicloud_paramstore.NewParameterStore(logContrib)
 			}),
 		),
 		runtime.WithStates(
