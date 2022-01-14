@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"k8s.io/utils/pointer"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/pointer"
 
 	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -168,7 +168,6 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].PubsubName)
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Scopes[0])
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Metadata["testName"])
-
 			}
 		}
 	})

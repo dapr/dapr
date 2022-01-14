@@ -990,7 +990,7 @@ func TestInitPubSub(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		subs := getSubscriptionsJSONString(
 			[]string{"topic0", "topic1"}, // first pubsub
-			[]string{"topic0"}) // second pubsub
+			[]string{"topic0"})           // second pubsub
 		fakeResp.WithRawData([]byte(subs), "application/json")
 
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
