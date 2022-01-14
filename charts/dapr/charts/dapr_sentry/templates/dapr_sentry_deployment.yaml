@@ -63,7 +63,7 @@ spec:
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
           {{- end }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
-          failureThreshold: 5
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
         readinessProbe:
           httpGet:
             path: /healthz
@@ -74,7 +74,7 @@ spec:
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
           {{- end }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
-          failureThreshold: 5
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
