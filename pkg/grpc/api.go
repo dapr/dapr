@@ -89,6 +89,7 @@ type API interface {
 	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error)
 	RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error)
 	UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error)
+	RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameActorReminderRequest) (*emptypb.Empty, error)
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
@@ -589,6 +590,12 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		return ret, err
 	}
 
+	if encryption.EncryptedStateStore(in.StoreName) {
+		err = status.Errorf(codes.Aborted, messages.ErrStateQuery, in.GetStoreName(), "cannot query encrypted store")
+		apiServerLogger.Debug(err)
+		return ret, err
+	}
+
 	var req state.QueryRequest
 	if err = jsoniter.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrMalformedRequest, err.Error())
@@ -607,7 +614,6 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		return ret, nil
 	}
 
-	encrypted := encryption.EncryptedStateStore(in.StoreName)
 	ret.Results = make([]*runtimev1pb.QueryStateItem, len(resp.Results))
 	ret.Token = resp.Token
 	ret.Metadata = resp.Metadata
@@ -616,13 +622,6 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 		ret.Results[i] = &runtimev1pb.QueryStateItem{
 			Key:  state_loader.GetOriginalStateKey(resp.Results[i].Key),
 			Data: resp.Results[i].Data,
-		}
-		if encrypted {
-			ret.Results[i].Data, err = encryption.TryDecryptValue(in.StoreName, resp.Results[i].Data)
-			if err != nil {
-				apiServerLogger.Debug("query error: %s", err)
-				ret.Results[i].Error = err.Error()
-			}
 		}
 	}
 
@@ -1003,6 +1002,24 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 	}
 
 	err := a.actor.DeleteReminder(ctx, req)
+	return &emptypb.Empty{}, err
+}
+
+func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameActorReminderRequest) (*emptypb.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	req := &actors.RenameReminderRequest{
+		OldName:   in.OldName,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+		NewName:   in.NewName,
+	}
+
+	err := a.actor.RenameReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 

@@ -49,6 +49,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -2229,6 +2230,32 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 		StoreName: "store1",
 	})
 	assert.Equal(t, codes.Unimplemented, status.Code(err))
+}
+
+func TestStateStoreQuerierEncrypted(t *testing.T) {
+	port, err := freeport.GetFreePort()
+	assert.NoError(t, err)
+
+	storeName := "encrypted-store1"
+	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
+
+	server := startDaprAPIServer(
+		port,
+		&api{
+			id:          "fakeAPI",
+			stateStores: map[string]state.Store{storeName: &mockStateStoreQuerier{}},
+		},
+		"")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
+		StoreName: storeName,
+	})
+	assert.Equal(t, codes.Aborted, status.Code(err))
 }
 
 func TestGetConfigurationAlpha1(t *testing.T) {

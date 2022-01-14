@@ -30,6 +30,9 @@ spec:
         prometheus.io/path: "/"
 {{- end }}
     spec:
+      {{- if .Values.hostNetwork }}
+      hostNetwork: true
+      {{- end }}
       serviceAccountName: dapr-operator
 {{- if eq .Values.global.ha.enabled true }}
       affinity:
