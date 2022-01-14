@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/dapr/components-contrib/configuration"
@@ -1340,9 +1339,14 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 }
 
 func (a *api) UnSubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnSubscribeConfigurationRequest) (*runtimev1pb.UnSubscribeConfigurationResponse, error) {
-	sort.Slice(request.Keys, func(i, j int) bool {
-		return request.Keys[i] < request.Keys[j]
-	})
+	store, err := a.getConfigurationStore(request.StoreName)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.UnSubscribeConfigurationResponse{
+			Ok:      false,
+			Message: err.Error(),
+		}, err
+	}
 
 	a.configurationSubscribeLock.Lock()
 	defer a.configurationSubscribeLock.Unlock()
@@ -1366,38 +1370,16 @@ func (a *api) UnSubscribeConfigurationAlpha1(ctx context.Context, request *runti
 			}
 		}
 	}
-	subscribeStreamUniqueKey := getConfigSubscribeUniqueKey(request.GetStoreName(), request.GetKeys())
-	if stop, ok := a.configurationSubscribe[subscribeStreamUniqueKey]; ok {
-		close(stop)
-		delete(a.configurationSubscribe, subscribeStreamUniqueKey)
+
+	if err := store.Unsubscribe(ctx, &configuration.UnSubscribeRequest{
+		Keys: unsubscribeKeys,
+	}); err != nil {
 		return &runtimev1pb.UnSubscribeConfigurationResponse{
-			Ok: true,
-		}, nil
+			Ok:      false,
+			Message: err.Error(),
+		}, err
 	}
 	return &runtimev1pb.UnSubscribeConfigurationResponse{
-		Ok:      false,
-		Message: fmt.Sprintf("Subscription with store name %s, and keys = %s not found.", request.GetStoreName(), request.GetKeys()),
+		Ok: true,
 	}, nil
-}
-
-func getConfigSubscribeUniqueKey(storeName string, keys []string) string {
-	return fmt.Sprintf("%s||%s", storeName, strings.Join(keys, ","))
-}
-
-func getSubscribingKeys(storeName string, key string) []string {
-	storeNameAndKeys := strings.Split(key, "||")
-	if storeNameAndKeys[0] != storeName {
-		return []string{}
-	}
-	return strings.Split(storeNameAndKeys[1], ",")
-}
-
-func keyInKeysAndRemove(key string, keys []string) ([]string, bool) {
-	resultKeys := make([]string, 0)
-	for _, v := range keys {
-		if v != key {
-			resultKeys = append(resultKeys, v)
-		}
-	}
-	return resultKeys, len(resultKeys) != len(keys)
 }

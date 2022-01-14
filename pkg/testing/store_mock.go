@@ -70,3 +70,17 @@ func (_m *MockConfigurationStore) Subscribe(ctx context.Context, req *configurat
 
 	return r0
 }
+
+// Unsubscribe provides a mock function with given fields: ctx, req
+func (_m *MockConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnSubscribeRequest) error {
+	ret := _m.Called(ctx, req)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *configuration.UnSubscribeRequest) error); ok {
+		r0 = rf(ctx, req)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}

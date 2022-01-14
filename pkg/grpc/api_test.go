@@ -2370,3 +2370,7 @@ func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.Subs
 	})
 	return nil
 }
+
+func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnSubscribeRequest) error {
+	return nil
+}
