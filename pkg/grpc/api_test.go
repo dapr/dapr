@@ -1225,7 +1225,6 @@ func TestSubscribeConfiguration(t *testing.T) {
 					},
 				})
 			}
-
 			return true
 		})).Return(nil)
 	fakeConfigurationStore.On("Subscribe",
@@ -1376,7 +1375,6 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			}()
 			return true
 		})).Return(nil)
-
 	fakeConfigurationStore.On("Subscribe",
 		mock.AnythingOfType("*context.cancelCtx"),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -2186,6 +2184,9 @@ func TestQueryState(t *testing.T) {
 	})
 	assert.Equal(t, 1, len(resp.Results))
 	assert.Equal(t, codes.OK, status.Code(err))
+	if len(resp.Results) > 0 {
+		assert.NotNil(t, resp.Results[0].Data)
+	}
 
 	resp, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: "store1",
