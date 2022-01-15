@@ -624,7 +624,7 @@ func findMatchingRoute(route *Route, cloudEvent interface{}, routingEnabled bool
 		if err != nil {
 			return "", false, false, err
 		}
-		if rule != nil && rule.Path != "" {
+		if rule != nil {
 			return rule.Path, true, rule.DataAsPayload, nil
 		}
 	}
