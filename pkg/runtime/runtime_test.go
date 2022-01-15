@@ -3397,18 +3397,49 @@ func stopRuntime(t *testing.T, rt *DaprRuntime) {
 }
 
 func TestFindMatchingRoute(t *testing.T) {
-	r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath", true)
-	require.NoError(t, err)
-	route := Route{
-		rules: []*runtime_pubsub.Rule{r},
-	}
-	path, shouldProcess, dataAsPayload, err := findMatchingRoute(&route, map[string]interface{}{
-		"type": "MyEventType",
-	}, true)
-	require.NoError(t, err)
-	assert.Equal(t, "mypath", path)
-	assert.True(t, shouldProcess)
-	assert.True(t, dataAsPayload)
+	t.Run("with dataAsPayload", func(t *testing.T) {
+		r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath", true)
+		require.NoError(t, err)
+		route := Route{
+			rules: []*runtime_pubsub.Rule{r},
+		}
+		path, shouldProcess, dataAsPayload, err := findMatchingRoute(&route, map[string]interface{}{
+			"type": "MyEventType",
+		}, true)
+		require.NoError(t, err)
+		assert.Equal(t, "mypath", path)
+		assert.True(t, shouldProcess)
+		assert.True(t, dataAsPayload)
+	})
+
+	t.Run("without dataAsPayload", func(t *testing.T) {
+		r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath", false)
+		require.NoError(t, err)
+		route := Route{
+			rules: []*runtime_pubsub.Rule{r},
+		}
+		path, shouldProcess, dataAsPayload, err := findMatchingRoute(&route, map[string]interface{}{
+			"type": "MyEventType",
+		}, true)
+		require.NoError(t, err)
+		assert.Equal(t, "mypath", path)
+		assert.True(t, shouldProcess)
+		assert.False(t, dataAsPayload)
+	})
+
+	t.Run("invalid routing rule", func(t *testing.T) {
+		r, err := createRoutingRule(`"MyEventType"`, "mypath", false)
+		require.NoError(t, err)
+		route := Route{
+			rules: []*runtime_pubsub.Rule{r},
+		}
+		_, shouldProcess, dataAsPayload, err := findMatchingRoute(&route, map[string]interface{}{
+			"type": "MyEventType",
+		}, true)
+		require.Error(t, err)
+		assert.False(t, shouldProcess)
+		assert.False(t, dataAsPayload)
+	})
 }
 
 func createRoutingRule(match, path string, dataAsPayload bool) (*runtime_pubsub.Rule, error) {
