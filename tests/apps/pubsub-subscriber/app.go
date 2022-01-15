@@ -29,12 +29,13 @@ import (
 )
 
 const (
-	appPort   = 3000
-	pubsubA   = "pubsub-a-topic-http"
-	pubsubB   = "pubsub-b-topic-http"
-	pubsubC   = "pubsub-c-topic-http"
-	pubsubJob = "pubsub-job-topic-http"
-	pubsubRaw = "pubsub-raw-topic-http"
+	appPort       = 3000
+	pubsubA       = "pubsub-a-topic-http"
+	pubsubB       = "pubsub-b-topic-http"
+	pubsubC       = "pubsub-c-topic-http"
+	pubsubJob     = "pubsub-job-topic-http"
+	pubsubRaw     = "pubsub-raw-topic-http"
+	pubsubPayload = "pubsub-payload-topic-http"
 )
 
 type appResponse struct {
@@ -46,11 +47,12 @@ type appResponse struct {
 }
 
 type receivedMessagesResponse struct {
-	ReceivedByTopicA   []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
-	ReceivedByTopicJob []string `json:"pubsub-job-topic"`
-	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicA       []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB       []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC       []string `json:"pubsub-c-topic"`
+	ReceivedByTopicJob     []string `json:"pubsub-job-topic"`
+	ReceivedByTopicRaw     []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicPayload []string `json:"pubsub-payload-topic"`
 }
 
 type subscription struct {
@@ -78,13 +80,14 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesA   sets.String
-	receivedMessagesB   sets.String
-	receivedMessagesC   sets.String
-	receivedMessagesJob sets.String
-	receivedMessagesRaw sets.String
-	desiredResponse     respondWith
-	lock                sync.Mutex
+	receivedMessagesA       sets.String
+	receivedMessagesB       sets.String
+	receivedMessagesC       sets.String
+	receivedMessagesJob     sets.String
+	receivedMessagesRaw     sets.String
+	receivedMessagesPayload sets.String
+	desiredResponse         respondWith
+	lock                    sync.Mutex
 )
 
 // indexHandler is the handler for root path
@@ -127,6 +130,11 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			Metadata: map[string]string{
 				"rawPayload": "true",
 			},
+		},
+		{
+			PubsubName: pubsubName,
+			Topic:      pubsubPayload,
+			Route:      pubsubPayload,
 		},
 	}
 	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)
@@ -193,27 +201,33 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, err := extractMessage(body)
-	if err != nil {
-		log.Printf("Responding with DROP")
-		// Return success with DROP status to drop message
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(appResponse{
-			Message: err.Error(),
-			Status:  "DROP",
-		})
-		return
-	}
+	msg := string(body)
 
-	// Raw data does not have content-type, so it is handled as-is.
-	// Because the publisher encodes to JSON before publishing, we need to decode here.
-	if strings.HasSuffix(r.URL.String(), pubsubRaw) {
-		var actualMsg string
-		err = json.Unmarshal([]byte(msg), &actualMsg)
+	// Data as payload will only send the data instead of cloud event.
+	// If not we need to extract message from cloud event.
+	if !strings.HasSuffix(r.URL.String(), pubsubPayload) {
+		msg, err = extractMessage(body)
 		if err != nil {
-			log.Printf("Error extracing JSON from raw event: %v", err)
-		} else {
-			msg = actualMsg
+			log.Printf("Responding with DROP")
+			// Return success with DROP status to drop message
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(appResponse{
+				Message: err.Error(),
+				Status:  "DROP",
+			})
+			return
+		}
+
+		// Raw data does not have content-type, so it is handled as-is.
+		// Because the publisher encodes to JSON before publishing, we need to decode here.
+		if strings.HasSuffix(r.URL.String(), pubsubRaw) {
+			var actualMsg string
+			err = json.Unmarshal([]byte(msg), &actualMsg)
+			if err != nil {
+				log.Printf("Error extracing JSON from raw event: %v", err)
+			} else {
+				msg = actualMsg
+			}
 		}
 	}
 
@@ -229,6 +243,8 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesJob.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubRaw) && !receivedMessagesRaw.Has(msg) {
 		receivedMessagesRaw.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubPayload) && !receivedMessagesPayload.Has(msg) {
+		receivedMessagesPayload.Insert(msg)
 	} else {
 		// This case is triggered when there is multiple redelivery of same message or a message
 		// is thre for an unknown URL path
@@ -304,11 +320,12 @@ func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 	log.Println("Enter getReceivedMessages")
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicA:   unique(receivedMessagesA.List()),
-		ReceivedByTopicB:   unique(receivedMessagesB.List()),
-		ReceivedByTopicC:   unique(receivedMessagesC.List()),
-		ReceivedByTopicJob: unique(receivedMessagesJob.List()),
-		ReceivedByTopicRaw: unique(receivedMessagesRaw.List()),
+		ReceivedByTopicA:       unique(receivedMessagesA.List()),
+		ReceivedByTopicB:       unique(receivedMessagesB.List()),
+		ReceivedByTopicC:       unique(receivedMessagesC.List()),
+		ReceivedByTopicJob:     unique(receivedMessagesJob.List()),
+		ReceivedByTopicRaw:     unique(receivedMessagesRaw.List()),
+		ReceivedByTopicPayload: unique(receivedMessagesPayload.List()),
 	}
 
 	log.Printf("receivedMessagesResponse=%s", response)
@@ -344,6 +361,7 @@ func initializeSets() {
 	receivedMessagesC = sets.NewString()
 	receivedMessagesJob = sets.NewString()
 	receivedMessagesRaw = sets.NewString()
+	receivedMessagesPayload = sets.NewString()
 }
 
 // appRouter initializes restful api router

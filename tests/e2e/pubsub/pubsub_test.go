@@ -71,10 +71,11 @@ type callSubscriberMethodRequest struct {
 
 // data returned from the subscriber app.
 type receivedMessagesResponse struct {
-	ReceivedByTopicA   []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
-	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicA       []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB       []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC       []string `json:"pubsub-c-topic"`
+	ReceivedByTopicRaw     []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicPayload []string `json:"pubsub-payload-topic"`
 }
 
 type cloudEvent struct {
@@ -174,11 +175,15 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
 	require.NoError(t, err)
 
+	sentTopicPayloadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-payload-topic", protocol, nil, "")
+	require.NoError(t, err)
+
 	return receivedMessagesResponse{
-		ReceivedByTopicA:   sentTopicAMessages,
-		ReceivedByTopicB:   sentTopicBMessages,
-		ReceivedByTopicC:   sentTopicCMessages,
-		ReceivedByTopicRaw: sentTopicRawMessages,
+		ReceivedByTopicA:       sentTopicAMessages,
+		ReceivedByTopicB:       sentTopicBMessages,
+		ReceivedByTopicC:       sentTopicCMessages,
+		ReceivedByTopicRaw:     sentTopicRawMessages,
+		ReceivedByTopicPayload: sentTopicPayloadMessages,
 	}
 }
 
@@ -324,7 +329,8 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
 			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
 			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
-			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) {
+			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) ||
+			len(appResp.ReceivedByTopicPayload) != len(sentMessages.ReceivedByTopicPayload) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(5 * time.Second)
 		} else {
