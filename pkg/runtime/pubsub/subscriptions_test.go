@@ -494,7 +494,7 @@ type mockK8sSubscriptions struct {
 	operatorv1pb.OperatorClient
 }
 
-func (m *mockK8sSubscriptions) ListSubscriptions(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListSubscriptionsResponse, error) {
+func (m *mockK8sSubscriptions) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	v2 := testDeclarativeSubscriptionV2()
 	v2Bytes, err := yaml.Marshal(v2)
 	if err != nil {

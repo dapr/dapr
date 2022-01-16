@@ -42,7 +42,7 @@ func (o *mockOperator) ListComponents(ctx context.Context, in *operatorv1pb.List
 	}, nil
 }
 
-func (o *mockOperator) ListSubscriptions(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
+func (o *mockOperator) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	subscription := subscriptions.Subscription{}
 	subscription.ObjectMeta.Name = "test"
 	subscription.Spec = subscriptions.SubscriptionSpec{

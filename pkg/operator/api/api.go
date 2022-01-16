@@ -20,6 +20,8 @@ import (
 	"net"
 	"sync"
 
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	b64 "encoding/base64"
 
 	"github.com/google/uuid"
@@ -186,7 +188,12 @@ func processComponentSecrets(component *componentsapi.Component, namespace strin
 }
 
 // ListSubscriptions returns a list of Dapr pub/sub subscriptions.
-func (a *apiServer) ListSubscriptions(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
+func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
+	return a.ListSubscriptionsV2(ctx, &operatorv1pb.ListSubscriptionsRequest{})
+}
+
+// ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions. Use ListSubscriptionsRequest to expose pod info.
+func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	resp := &operatorv1pb.ListSubscriptionsResponse{
 		Subscriptions: [][]byte{},
 	}
