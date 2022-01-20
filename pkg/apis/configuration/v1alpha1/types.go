@@ -104,7 +104,7 @@ type HandlerSpec struct {
 	SelectorSpec SelectorSpec `json:"selector,omitempty"`
 }
 
-// GRPCPipelineSpec defines the gRPC middelware pipeline.
+// GRPCPipelineSpec defines the gRPC middleware pipeline.
 type GRPCPipelineSpec struct {
 	UnaryInterceptors []UnarySpec `json:"unary"`
 }
