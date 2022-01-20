@@ -38,6 +38,8 @@ type ConfigurationSpec struct {
 	// +optional
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
+	GRPCPipelineSpec GRPCPipelineSpec `json:"grpcPipeline,omitempty"`
+	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
 	// +kubebuilder:default={enabled:true}
 	MetricSpec MetricSpec `json:"metric,omitempty"`
@@ -99,6 +101,19 @@ type PipelineSpec struct {
 type HandlerSpec struct {
 	Name         string       `json:"name"`
 	Type         string       `json:"type"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty"`
+}
+
+// GRPCPipelineSpec defines the gRPC middelware pipeline.
+type GRPCPipelineSpec struct {
+	UnaryInterceptors []UnarySpec `json:"unary"`
+}
+
+// UnarySpec defines a gRPC unary middleware.
+type UnarySpec struct {
+	Name         string       `json:"name"`
+	Type         string       `json:"type"`
+	Version      string       `json:"version"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty"`
 }
 

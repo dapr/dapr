@@ -41,6 +41,7 @@ import (
 	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
+	go_grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -63,6 +64,7 @@ import (
 	http_channel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
+	grpc_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/grpc"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -76,6 +78,7 @@ import (
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	grpc_middleware "github.com/dapr/dapr/pkg/middleware/grpc"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -160,6 +163,7 @@ type DaprRuntime struct {
 	nameResolver           nr.Resolver
 	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
+	grpcMiddlewareRegistry grpc_middleware_loader.Registry
 	hostAddress            string
 	actorStateStoreName    string
 	actorStateStoreLock    *sync.RWMutex
@@ -235,6 +239,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretStoresRegistry:   secretstores_loader.NewRegistry(),
 		nameResolutionRegistry: nr_loader.NewRegistry(),
 		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
+		grpcMiddlewareRegistry: grpc_middleware_loader.NewRegistry(),
 
 		scopedSubscriptions: map[string][]string{},
 		scopedPublishings:   map[string][]string{},
@@ -352,6 +357,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
+	a.grpcMiddlewareRegistry.RegisterUnary(opts.grpcUnaryMiddleware...)
 
 	go a.processComponents()
 	err = a.beginComponentsUpdates()
@@ -366,9 +372,14 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.flushOutstandingComponents()
 
-	pipeline, err := a.buildHTTPPipeline()
+	httpPipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
+	}
+
+	grpcPipeline, err := a.buildGRPCPipeline()
+	if err != nil {
+		log.Warnf("failed to build gRPC pipeline: %s", err)
 	}
 
 	// Setup allow/deny list for secrets
@@ -380,7 +391,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
 
-	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
+	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort, grpcPipeline)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
@@ -391,7 +402,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.PublicPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
+	err = a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.PublicPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, httpPipeline)
 	if err != nil {
 		log.Fatalf("failed to start HTTP server: %s", err)
 	}
@@ -402,7 +413,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("The request body size parameter is: %v", a.runtimeConfig.MaxRequestBodySize)
 
-	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
+	// No configurable pipeline for internal gRPC server
+	internalGRPCPipeline := grpc_middleware.Pipeline{}
+	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort, internalGRPCPipeline)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
@@ -491,6 +504,31 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 		}
 	}
 	return http_middleware.Pipeline{Handlers: handlers}, nil
+}
+
+func (a *DaprRuntime) buildGRPCPipeline() (grpc_middleware.Pipeline, error) {
+	var grpcMiddleware []go_grpc.UnaryServerInterceptor
+
+	if a.globalConfig != nil {
+		for i := 0; i < len(a.globalConfig.Spec.GRPCPipelineSpec.UnaryInterceptors); i++ {
+			middlewareSpec := a.globalConfig.Spec.GRPCPipelineSpec.UnaryInterceptors[i]
+			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
+			if !exists {
+				return grpc_middleware.Pipeline{}, errors.Errorf("couldn't find grpc middleware component with name %s and type %s/%s",
+					middlewareSpec.Name,
+					middlewareSpec.Type,
+					middlewareSpec.Version)
+			}
+			middleware, err := a.grpcMiddlewareRegistry.CreateUnary(middlewareSpec.Type, middlewareSpec.Version,
+				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
+			if err != nil {
+				return grpc_middleware.Pipeline{}, err
+			}
+			log.Infof("enabled %s/%s grpc server middleware", middlewareSpec.Type, middlewareSpec.Version)
+			grpcMiddleware = append(grpcMiddleware, middleware)
+		}
+	}
+	return grpc_middleware.Pipeline{UnaryMiddleware: grpcMiddleware}, nil
 }
 
 func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
@@ -968,9 +1006,9 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
+func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int, pipeline grpc_middleware.Pipeline) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
-	serverConf := a.getNewServerConfig([]string{""}, port)
+	serverConf := a.getNewServerConfig([]string{""}, port, pipeline)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator, a.proxy)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
@@ -980,8 +1018,8 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
-	serverConf := a.getNewServerConfig(a.runtimeConfig.APIListenAddresses, port)
+func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int, pipeline grpc_middleware.Pipeline) error {
+	serverConf := a.getNewServerConfig(a.runtimeConfig.APIListenAddresses, port, pipeline)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
@@ -991,14 +1029,14 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	return nil
 }
 
-func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) grpc.ServerConfig {
+func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int, pipeline grpc_middleware.Pipeline) grpc.ServerConfig {
 	// Use the trust domain value from the access control policy spec to generate the cert
 	// If no access control policy has been specified, use a default value
 	trustDomain := config.DefaultTrustDomain
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize)
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, pipeline)
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {

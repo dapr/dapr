@@ -13,6 +13,10 @@ limitations under the License.
 
 package grpc
 
+import (
+	grpc_middleware "github.com/dapr/dapr/pkg/middleware/grpc"
+)
+
 // ServerConfig is the config object for a grpc server.
 type ServerConfig struct {
 	AppID              string
@@ -24,10 +28,11 @@ type ServerConfig struct {
 	MaxRequestBodySize int
 	UnixDomainSocket   string
 	ReadBufferSize     int
+	Pipeline           grpc_middleware.Pipeline
 }
 
 // NewServerConfig returns a new grpc server config.
-func NewServerConfig(appID string, hostAddress string, port int, apiListenAddresses []string, namespace string, trustDomain string, maxRequestBodySize int, unixDomainSocket string, readBufferSize int) ServerConfig {
+func NewServerConfig(appID string, hostAddress string, port int, apiListenAddresses []string, namespace string, trustDomain string, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, pipeline grpc_middleware.Pipeline) ServerConfig {
 	return ServerConfig{
 		AppID:              appID,
 		HostAddress:        hostAddress,
@@ -38,5 +43,6 @@ func NewServerConfig(appID string, hostAddress string, port int, apiListenAddres
 		MaxRequestBodySize: maxRequestBodySize,
 		UnixDomainSocket:   unixDomainSocket,
 		ReadBufferSize:     readBufferSize,
+		Pipeline:           pipeline,
 	}
 }

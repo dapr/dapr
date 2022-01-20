@@ -3,6 +3,7 @@ package runtime
 import (
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
+	"github.com/dapr/dapr/pkg/components/middleware/grpc"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pubsub"
@@ -13,14 +14,15 @@ import (
 type (
 	// runtimeOpts encapsulates the components to include in the runtime.
 	runtimeOpts struct {
-		secretStores    []secretstores.SecretStore
-		states          []state.State
-		configurations  []configuration.Configuration
-		pubsubs         []pubsub.PubSub
-		nameResolutions []nameresolution.NameResolution
-		inputBindings   []bindings.InputBinding
-		outputBindings  []bindings.OutputBinding
-		httpMiddleware  []http.Middleware
+		secretStores        []secretstores.SecretStore
+		states              []state.State
+		configurations      []configuration.Configuration
+		pubsubs             []pubsub.PubSub
+		nameResolutions     []nameresolution.NameResolution
+		inputBindings       []bindings.InputBinding
+		outputBindings      []bindings.OutputBinding
+		httpMiddleware      []http.Middleware
+		grpcUnaryMiddleware []grpc.UnaryMiddleware
 
 		componentsCallback ComponentsCallback
 	}
@@ -82,6 +84,12 @@ func WithOutputBindings(outputBindings ...bindings.OutputBinding) Option {
 func WithHTTPMiddleware(httpMiddleware ...http.Middleware) Option {
 	return func(o *runtimeOpts) {
 		o.httpMiddleware = append(o.httpMiddleware, httpMiddleware...)
+	}
+}
+
+func WithGRPCUnaryMiddleware(grpcUnaryMiddleware ...grpc.UnaryMiddleware) Option {
+	return func(o *runtimeOpts) {
+		o.grpcUnaryMiddleware = append(o.grpcUnaryMiddleware, grpcUnaryMiddleware...)
 	}
 }
 

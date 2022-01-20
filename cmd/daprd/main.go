@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"strings"
@@ -21,6 +22,10 @@ import (
 
 	"github.com/valyala/fasthttp"
 	"go.uber.org/automaxprocs/maxprocs"
+	"google.golang.org/grpc"
+	grpc_codes "google.golang.org/grpc/codes"
+	grpc_metadata "google.golang.org/grpc/metadata"
+	grpc_status "google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
@@ -146,6 +151,7 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
 
+	grpc_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/grpc"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 
@@ -501,6 +507,20 @@ func main() {
 			}),
 			http_middleware_loader.New("sentinel", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 				return sentinel.NewMiddleware(log).GetHandler(metadata)
+			}),
+		),
+		runtime.WithGRPCUnaryMiddleware(
+			grpc_middleware_loader.NewUnary("logRequest", func(metadata middleware.Metadata) (grpc.UnaryServerInterceptor, error) {
+				return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+					md, ok := grpc_metadata.FromIncomingContext(ctx)
+					if !ok {
+						return nil, grpc_status.Errorf(grpc_codes.InvalidArgument, "missing metadata")
+					}
+					log.Infof("grpc request metadata: %+v", md)
+					log.Infof("grpc request info: %+v", info)
+					log.Infof("grpc request: %+v", req)
+					return handler(ctx, req)
+				}, nil
 			}),
 		),
 	)

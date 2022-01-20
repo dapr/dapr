@@ -83,6 +83,7 @@ type AccessControlListOperationAction struct {
 }
 
 type ConfigurationSpec struct {
+	GRPCPipelineSpec   GRPCPipelineSpec   `json:"grpcPipeline,omitempty" yaml:"grpcPipeline,omitempty"`
 	HTTPPipelineSpec   PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
 	TracingSpec        TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
 	MTLSSpec           MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
@@ -110,6 +111,10 @@ type PipelineSpec struct {
 	Handlers []HandlerSpec `json:"handlers" yaml:"handlers"`
 }
 
+type GRPCPipelineSpec struct {
+	UnaryInterceptors []UnarySpec `json:"unary" yaml:"unary"`
+}
+
 // APISpec describes the configuration for Dapr APIs.
 type APISpec struct {
 	Allowed []APIAccessRule `json:"allowed,omitempty"`
@@ -123,6 +128,13 @@ type APIAccessRule struct {
 }
 
 type HandlerSpec struct {
+	Name         string       `json:"name" yaml:"name"`
+	Type         string       `json:"type" yaml:"type"`
+	Version      string       `json:"version" yaml:"version"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
+}
+
+type UnarySpec struct {
 	Name         string       `json:"name" yaml:"name"`
 	Type         string       `json:"type" yaml:"type"`
 	Version      string       `json:"version" yaml:"version"`
