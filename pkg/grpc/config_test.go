@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	grpc_middleware "github.com/dapr/dapr/pkg/middleware/grpc"
 )
 
 func TestServerConfig(t *testing.T) {
@@ -30,9 +32,10 @@ func TestServerConfig(t *testing.T) {
 		4,
 		"",
 		4,
+		grpc_middleware.Pipeline{},
 	}
 
-	c := NewServerConfig(vals[0].(string), vals[1].(string), vals[2].(int), []string{vals[3].(string)}, vals[4].(string), vals[5].(string), vals[6].(int), vals[7].(string), vals[8].(int))
+	c := NewServerConfig(vals[0].(string), vals[1].(string), vals[2].(int), []string{vals[3].(string)}, vals[4].(string), vals[5].(string), vals[6].(int), vals[7].(string), vals[8].(int), vals[9].(grpc_middleware.Pipeline))
 	assert.Equal(t, vals[0], c.AppID)
 	assert.Equal(t, vals[1], c.HostAddress)
 	assert.Equal(t, vals[2], c.Port)
@@ -41,4 +44,5 @@ func TestServerConfig(t *testing.T) {
 	assert.Equal(t, vals[5], c.TrustDomain)
 	assert.Equal(t, vals[6], c.MaxRequestBodySize)
 	assert.Equal(t, vals[8], c.ReadBufferSize)
+	assert.Equal(t, vals[9], c.Pipeline)
 }

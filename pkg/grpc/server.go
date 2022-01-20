@@ -219,7 +219,7 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	}
 
 	// Add the user defined unary middleware after the built in middleware.
-	if unary := s.config.Pipeline.GetUnary(); unary != nil {
+	if unary := s.config.Pipeline.GetUnary(); len(unary) > 0 {
 		intr = append(intr, unary...)
 	}
 
