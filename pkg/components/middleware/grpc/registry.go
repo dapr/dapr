@@ -16,82 +16,86 @@ package grpc
 import (
 	"strings"
 
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-
 	middleware "github.com/dapr/components-contrib/middleware"
 
 	"github.com/dapr/dapr/pkg/components"
+	grpc_middleware "github.com/dapr/dapr/pkg/middleware/grpc"
+)
+
+const (
+	UnaryServerMiddlewareTypePrefix = "middleware.grpc.server.unary."
 )
 
 type (
-	// UnaryMiddleware is a GRPC unary middleware component definition.
-	UnaryMiddleware struct {
+	// UnaryServerMiddleware is a GRPC unary server middleware component definition.
+	UnaryServerMiddleware struct {
 		Name          string
-		FactoryMethod UnaryFactoryMethod
+		FactoryMethod UnaryServerFactoryMethod
 	}
+
+	// UnaryServerFactoryMethod is the method creating middleware from metadata.
+	UnaryServerFactoryMethod func(metadata middleware.Metadata) (grpc_middleware.UnaryServerMiddleware, error)
 
 	// Registry is the interface for callers to get registered GRPC middleware.
 	Registry interface {
-		RegisterUnary(components ...UnaryMiddleware)
-		CreateUnary(name, version string, metadata middleware.Metadata) (grpc.UnaryServerInterceptor, error)
+		RegisterUnaryServer(components ...UnaryServerMiddleware)
+		CreateUnaryServer(name, version string, metadata middleware.Metadata) (grpc_middleware.UnaryServerMiddleware, error)
+
+		// Can extend to support other GRPC middleware types (i.e. StreamServer, UnaryClient, UnaryStream)
 	}
 
 	grpcMiddlewareRegistry struct {
-		unaryMiddleware map[string]UnaryFactoryMethod
+		unaryServerMiddleware map[string]UnaryServerFactoryMethod
 	}
-
-	// UnaryFactoryMethod is the method creating middleware from metadata.
-	UnaryFactoryMethod func(metadata middleware.Metadata) (grpc.UnaryServerInterceptor, error)
 )
 
-// NewUnary creates a Middleware.
-func NewUnary(name string, factoryMethod UnaryFactoryMethod) UnaryMiddleware {
-	return UnaryMiddleware{
+// NewRegistry returns a new GRPC middleware registry.
+func NewRegistry() Registry {
+	return &grpcMiddlewareRegistry{
+		unaryServerMiddleware: map[string]UnaryServerFactoryMethod{},
+	}
+}
+
+// Register registers one or more new GRPC unary server middlewares.
+func (p *grpcMiddlewareRegistry) RegisterUnaryServer(components ...UnaryServerMiddleware) {
+	for _, component := range components {
+		p.unaryServerMiddleware[createFullNameForUnaryServer(component.Name)] = component.FactoryMethod
+	}
+}
+
+// Create instantiates a GRPC unary server middleware based on `name`.
+func (p *grpcMiddlewareRegistry) CreateUnaryServer(name, version string, metadata middleware.Metadata) (grpc_middleware.UnaryServerMiddleware, error) {
+	if method, ok := p.getUnaryServerMiddleware(name, version); ok {
+		mid, err := method(metadata)
+		if err != nil {
+			return nil, &ErrUnaryServerBadCreate{Name: name, Version: version, Err: err}
+		}
+		return mid, nil
+	}
+	return nil, &ErrUnaryServerNotRegistered{Name: name, Version: version}
+}
+
+// NewUnaryServerMiddleware creates a Middleware.
+func NewUnaryServerMiddleware(name string, factoryMethod UnaryServerFactoryMethod) UnaryServerMiddleware {
+	return UnaryServerMiddleware{
 		Name:          name,
 		FactoryMethod: factoryMethod,
 	}
 }
 
-// NewRegistry returns a new GRPC middleware registry.
-func NewRegistry() Registry {
-	return &grpcMiddlewareRegistry{
-		unaryMiddleware: map[string]UnaryFactoryMethod{},
-	}
+func createFullNameForUnaryServer(name string) string {
+	return strings.ToLower(UnaryServerMiddlewareTypePrefix + name)
 }
 
-// Register registers one or more new GRPC unary middlewares.
-func (p *grpcMiddlewareRegistry) RegisterUnary(components ...UnaryMiddleware) {
-	for _, component := range components {
-		p.unaryMiddleware[createFullName(component.Name)] = component.FactoryMethod
-	}
-}
-
-// Create instantiates a GRPC middleware based on `name`.
-func (p *grpcMiddlewareRegistry) CreateUnary(name, version string, metadata middleware.Metadata) (grpc.UnaryServerInterceptor, error) {
-	if method, ok := p.getUnaryMiddleware(name, version); ok {
-		mid, err := method(metadata)
-		if err != nil {
-			return nil, errors.Errorf("error creating GRPC middleware %s/%s: %s", name, version, err)
-		}
-		return mid, nil
-	}
-	return nil, errors.Errorf("GRPC middleware %s/%s has not been registered", name, version)
-}
-
-func (p *grpcMiddlewareRegistry) getUnaryMiddleware(name, version string) (UnaryFactoryMethod, bool) {
+func (p *grpcMiddlewareRegistry) getUnaryServerMiddleware(name, version string) (UnaryServerFactoryMethod, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
-	middlewareFn, ok := p.unaryMiddleware[nameLower+"/"+versionLower]
+	middlewareFn, ok := p.unaryServerMiddleware[nameLower+"/"+versionLower]
 	if ok {
 		return middlewareFn, true
 	}
 	if components.IsInitialVersion(versionLower) {
-		middlewareFn, ok = p.unaryMiddleware[nameLower]
+		middlewareFn, ok = p.unaryServerMiddleware[nameLower]
 	}
 	return middlewareFn, ok
-}
-
-func createFullName(name string) string {
-	return strings.ToLower("middleware.grpc." + name)
 }

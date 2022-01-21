@@ -14,21 +14,18 @@ limitations under the License.
 package grpc
 
 import (
-	"google.golang.org/grpc"
+	grpc_go "google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/config"
 )
 
+// UnaryServerMiddleware is an alias of UnaryServerInterceptor to try and avoid the client
+// requiring google.golang.org/grpc if they don't need it and to try and align terminology
+// across the codebase.
+type UnaryServerMiddleware grpc_go.UnaryServerInterceptor
+
 // Pipeline defines the middleware pipeline to be plugged into Dapr sidecar.
 type Pipeline struct {
-	UnaryMiddleware []grpc.UnaryServerInterceptor
-}
-
-func BuildGRPCPipeline(spec config.PipelineSpec) (Pipeline, error) {
-	return Pipeline{}, nil
-}
-
-func (p Pipeline) GetUnary() []grpc.UnaryServerInterceptor {
 	// The first middleware will be the outer most whilst
 	// last middleware will wrap the actual call handler.
 	// The middleware are currently ordered based on how
@@ -42,5 +39,15 @@ func (p Pipeline) GetUnary() []grpc.UnaryServerInterceptor {
 	//    type: jwtAuth
 	//    ...
 	//
-	return p.UnaryMiddleware
+	UnaryServerMiddleware []UnaryServerMiddleware
+
+	// Can extend to support other GRPC middleware types (i.e. StreamServer, UnaryClient, UnaryStream)
+}
+
+func BuildGRPCPipeline(spec config.PipelineSpec) (Pipeline, error) {
+	return Pipeline{}, nil // nolint: exhaustivestruct
+}
+
+func (p Pipeline) GetUnaryServerMiddleware() []UnaryServerMiddleware {
+	return p.UnaryServerMiddleware
 }

@@ -106,11 +106,11 @@ type HandlerSpec struct {
 
 // GRPCPipelineSpec defines the gRPC middleware pipeline.
 type GRPCPipelineSpec struct {
-	UnaryInterceptors []UnarySpec `json:"unary"`
+	UnaryServerInterceptors []UnaryServerSpec `json:"unary"`
 }
 
-// UnarySpec defines a gRPC unary middleware.
-type UnarySpec struct {
+// UnaryServerSpec defines a gRPC unary server middleware.
+type UnaryServerSpec struct {
 	Name         string       `json:"name"`
 	Type         string       `json:"type"`
 	Version      string       `json:"version"`

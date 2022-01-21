@@ -218,9 +218,11 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 	}
 
-	// Add the user defined unary middleware after the built in middleware.
-	if unary := s.config.Pipeline.GetUnary(); len(unary) > 0 {
-		intr = append(intr, unary...)
+	// Add the user defined unaryServerMiddleware middleware after the built in middleware.
+	if unaryServerMiddleware := s.config.Pipeline.GetUnaryServerMiddleware(); len(unaryServerMiddleware) > 0 {
+		for _, middleware := range unaryServerMiddleware {
+			intr = append(intr, grpc_go.UnaryServerInterceptor(middleware))
+		}
 	}
 
 	chain := grpc_middleware.ChainUnaryServer(

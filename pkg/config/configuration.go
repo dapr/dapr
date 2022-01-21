@@ -112,7 +112,7 @@ type PipelineSpec struct {
 }
 
 type GRPCPipelineSpec struct {
-	UnaryInterceptors []UnarySpec `json:"unary" yaml:"unary"`
+	UnaryServerMiddleware []UnaryServerSpec `json:"unary" yaml:"unary"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -134,7 +134,7 @@ type HandlerSpec struct {
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
 }
 
-type UnarySpec struct {
+type UnaryServerSpec struct {
 	Name         string       `json:"name" yaml:"name"`
 	Type         string       `json:"type" yaml:"type"`
 	Version      string       `json:"version" yaml:"version"`

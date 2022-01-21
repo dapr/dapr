@@ -41,7 +41,6 @@ import (
 	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
-	go_grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -357,7 +356,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
-	a.grpcMiddlewareRegistry.RegisterUnary(opts.grpcUnaryMiddleware...)
+	a.grpcMiddlewareRegistry.RegisterUnaryServer(opts.grpcUnaryServerMiddleware...)
 
 	go a.processComponents()
 	err = a.beginComponentsUpdates()
@@ -507,11 +506,12 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 }
 
 func (a *DaprRuntime) buildGRPCPipeline() (grpc_middleware.Pipeline, error) {
-	var grpcMiddleware []go_grpc.UnaryServerInterceptor
+	var grpcMiddleware []grpc_middleware.UnaryServerMiddleware
 
 	if a.globalConfig != nil {
-		for i := 0; i < len(a.globalConfig.Spec.GRPCPipelineSpec.UnaryInterceptors); i++ {
-			middlewareSpec := a.globalConfig.Spec.GRPCPipelineSpec.UnaryInterceptors[i]
+		// Iterate through the unary server middleware.
+		for i := 0; i < len(a.globalConfig.Spec.GRPCPipelineSpec.UnaryServerMiddleware); i++ {
+			middlewareSpec := a.globalConfig.Spec.GRPCPipelineSpec.UnaryServerMiddleware[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
 				return grpc_middleware.Pipeline{}, errors.Errorf("couldn't find grpc middleware component with name %s and type %s/%s",
@@ -519,7 +519,7 @@ func (a *DaprRuntime) buildGRPCPipeline() (grpc_middleware.Pipeline, error) {
 					middlewareSpec.Type,
 					middlewareSpec.Version)
 			}
-			middleware, err := a.grpcMiddlewareRegistry.CreateUnary(middlewareSpec.Type, middlewareSpec.Version,
+			middleware, err := a.grpcMiddlewareRegistry.CreateUnaryServer(middlewareSpec.Type, middlewareSpec.Version,
 				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
 			if err != nil {
 				return grpc_middleware.Pipeline{}, err
@@ -528,7 +528,7 @@ func (a *DaprRuntime) buildGRPCPipeline() (grpc_middleware.Pipeline, error) {
 			grpcMiddleware = append(grpcMiddleware, middleware)
 		}
 	}
-	return grpc_middleware.Pipeline{UnaryMiddleware: grpcMiddleware}, nil
+	return grpc_middleware.Pipeline{UnaryServerMiddleware: grpcMiddleware}, nil
 }
 
 func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {

@@ -14,15 +14,15 @@ import (
 type (
 	// runtimeOpts encapsulates the components to include in the runtime.
 	runtimeOpts struct {
-		secretStores        []secretstores.SecretStore
-		states              []state.State
-		configurations      []configuration.Configuration
-		pubsubs             []pubsub.PubSub
-		nameResolutions     []nameresolution.NameResolution
-		inputBindings       []bindings.InputBinding
-		outputBindings      []bindings.OutputBinding
-		httpMiddleware      []http.Middleware
-		grpcUnaryMiddleware []grpc.UnaryMiddleware
+		secretStores              []secretstores.SecretStore
+		states                    []state.State
+		configurations            []configuration.Configuration
+		pubsubs                   []pubsub.PubSub
+		nameResolutions           []nameresolution.NameResolution
+		inputBindings             []bindings.InputBinding
+		outputBindings            []bindings.OutputBinding
+		httpMiddleware            []http.Middleware
+		grpcUnaryServerMiddleware []grpc.UnaryServerMiddleware
 
 		componentsCallback ComponentsCallback
 	}
@@ -87,9 +87,9 @@ func WithHTTPMiddleware(httpMiddleware ...http.Middleware) Option {
 	}
 }
 
-func WithGRPCUnaryMiddleware(grpcUnaryMiddleware ...grpc.UnaryMiddleware) Option {
+func WithGRPCUnaryServerMiddleware(grpcUnaryMiddleware ...grpc.UnaryServerMiddleware) Option {
 	return func(o *runtimeOpts) {
-		o.grpcUnaryMiddleware = append(o.grpcUnaryMiddleware, grpcUnaryMiddleware...)
+		o.grpcUnaryServerMiddleware = append(o.grpcUnaryServerMiddleware, grpcUnaryMiddleware...)
 	}
 }
 

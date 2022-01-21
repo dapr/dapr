@@ -153,6 +153,7 @@ import (
 
 	grpc_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/grpc"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
+	grpc_middleware "github.com/dapr/dapr/pkg/middleware/grpc"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/dapr/components-contrib/configuration"
@@ -509,18 +510,16 @@ func main() {
 				return sentinel.NewMiddleware(log).GetHandler(metadata)
 			}),
 		),
-		runtime.WithGRPCUnaryMiddleware(
-			grpc_middleware_loader.NewUnary("logRequest", func(metadata middleware.Metadata) (grpc.UnaryServerInterceptor, error) {
-				return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		runtime.WithGRPCUnaryServerMiddleware(
+			grpc_middleware_loader.NewUnaryServerMiddleware("logRequest", func(metadata middleware.Metadata) (grpc_middleware.UnaryServerMiddleware, error) {
+				return grpc_middleware.UnaryServerMiddleware(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 					md, ok := grpc_metadata.FromIncomingContext(ctx)
 					if !ok {
 						return nil, grpc_status.Errorf(grpc_codes.InvalidArgument, "missing metadata")
 					}
-					log.Infof("grpc request metadata: %+v", md)
-					log.Infof("grpc request info: %+v", info)
-					log.Infof("grpc request: %+v", req)
+					log.Infof("grpc request: %+v, info: %+v, metadata: %+v", req, info, md)
 					return handler(ctx, req)
-				}, nil
+				}), nil
 			}),
 		),
 	)
