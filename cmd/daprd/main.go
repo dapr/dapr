@@ -80,7 +80,6 @@ import (
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
-	"github.com/dapr/components-contrib/pubsub/rocketmq"
 	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
@@ -290,9 +289,6 @@ func main() {
 			}),
 			pubsub_loader.New("rabbitmq", func() pubs.PubSub {
 				return rabbitmq.NewRabbitMQ(logContrib)
-			}),
-			pubsub_loader.New("rocketmq", func() pubs.PubSub {
-				return rocketmq.NewRocketMQ(logContrib)
 			}),
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)
