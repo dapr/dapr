@@ -1674,6 +1674,13 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if encryption.EncryptedStateStore(storeName) {
+		msg := NewErrorResponse("ERR_STATE_QUERY", fmt.Sprintf(messages.ErrStateQuery, storeName, "cannot query encrypted store"))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
 	var req state.QueryRequest
 	if err = a.json.Unmarshal(reqCtx.PostBody(), &req.Query); err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
@@ -1695,8 +1702,6 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	encrypted := encryption.EncryptedStateStore(storeName)
-
 	qresp := QueryResponse{
 		Results:  make([]QueryItem, len(resp.Results)),
 		Token:    resp.Token,
@@ -1706,17 +1711,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		qresp.Results[i].Key = state_loader.GetOriginalStateKey(resp.Results[i].Key)
 		qresp.Results[i].ETag = resp.Results[i].ETag
 		qresp.Results[i].Error = resp.Results[i].Error
-		if encrypted {
-			val, err := encryption.TryDecryptValue(storeName, resp.Results[i].Data)
-			if err != nil {
-				log.Debugf("query error: %s", err)
-				qresp.Results[i].Error = err.Error()
-				continue
-			}
-			qresp.Results[i].Data = jsoniter.RawMessage(val)
-		} else {
-			qresp.Results[i].Data = jsoniter.RawMessage(resp.Results[i].Data)
-		}
+		qresp.Results[i].Data = jsoniter.RawMessage(resp.Results[i].Data)
 	}
 
 	b, _ := a.json.Marshal(qresp)

@@ -148,7 +148,8 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           make setup-helm-init
-          make setup-test-env
+          make setup-test-env-redis
+          make setup-test-env-kafka
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
