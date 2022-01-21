@@ -39,12 +39,6 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// Initiate mock object
-		// mock := func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (resp interface{}, err error) {
-		// 	return nil, nil
-		// }
-		// mockV2 := func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (resp interface{}, err error) {
-		// 	return nil, nil
-		// }
 		mock := grpc.UnaryServerMiddleware(func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (resp interface{}, err error) {
 			return nil, nil
 		})
