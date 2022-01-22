@@ -29,8 +29,10 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-var log = logger.NewLogger("dapr.injector")
-var healthzPort int
+var (
+	log         = logger.NewLogger("dapr.injector")
+	healthzPort int
+)
 
 func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
