@@ -30,10 +30,7 @@ import (
 )
 
 var log = logger.NewLogger("dapr.injector")
-
-const (
-	healthzPort = 8080
-)
+var healthzPort int
 
 func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
@@ -76,6 +73,8 @@ func init() {
 
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
+	flag.IntVar(&healthzPort, "healthz-port", 8080, "The port used for health checks")
 
 	flag.Parse()
 
