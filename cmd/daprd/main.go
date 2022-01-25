@@ -34,7 +34,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
-	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
+	secretstore_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstore_env "github.com/dapr/components-contrib/secretstores/local/env"
 	secretstore_file "github.com/dapr/components-contrib/secretstores/local/file"
 
@@ -170,7 +170,7 @@ func main() {
 	err = rt.Run(
 		runtime.WithSecretStores(
 			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
-				return sercetstores_kubernetes.NewKubernetesSecretStore(logContrib)
+				return secretstore_kubernetes.NewKubernetesSecretStore(logContrib)
 			}),
 			secretstores_loader.New("azure.keyvault", func() secretstores.SecretStore {
 				return keyvault.NewAzureKeyvaultSecretStore(logContrib)
