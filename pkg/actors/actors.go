@@ -105,6 +105,8 @@ type actorsRuntime struct {
 	tracingSpec              configuration.TracingSpec
 	reentrancyEnabled        bool
 	actorTypeMetadataEnabled bool
+	placementUpdated         chan struct{}
+	placementUpdatedOnce     *sync.Once
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -197,6 +199,9 @@ func (a *actorsRuntime) Init() error {
 	hostname := fmt.Sprintf("%s:%d", a.config.HostAddress, a.config.Port)
 
 	afterTableUpdateFn := func() {
+		a.placementUpdatedOnce.Do(func() {
+			close(a.placementUpdated)
+		})
 		a.drainRebalancedActors()
 		a.evaluateReminders()
 	}
@@ -964,6 +969,13 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
+	select {
+	case <-time.After(time.Second * 5):
+		return errors.New("error creating reminder: timed out after 5s while waiting for placement table to update")
+	case <-a.placementUpdated:
+		break
+	}
+
 	a.activeRemindersLock.Lock()
 	defer a.activeRemindersLock.Unlock()
 	if r, exists := a.getReminder(req.Name, req.ActorType, req.ActorID); exists {
@@ -1055,6 +1067,12 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		period              time.Duration
 		years, months, days int
 	)
+	select {
+	case <-time.After(time.Second * 5):
+		return errors.New("error creating reminder: timed out after 5s while waiting for placement table to update")
+	case <-a.placementUpdated:
+		break
+	}
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
 	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
@@ -1580,7 +1598,12 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
-
+	select {
+	case <-time.After(time.Second * 5):
+		return errors.New("error creating reminder: timed out after 5s while waiting for placement table to update")
+	case <-a.placementUpdated:
+		break
+	}
 	a.activeRemindersLock.Lock()
 	defer a.activeRemindersLock.Unlock()
 
@@ -1630,6 +1653,12 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 }
 
 func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, stopChannel chan bool) error {
+	select {
+	case <-time.After(time.Second * 5):
+		return errors.New("error creating reminder: timed out after 5s while waiting for placement table to update")
+	case <-a.placementUpdated:
+		break
+	}
 	// Store the reminder in active reminders list
 	actorKey := constructCompositeKey(reminder.ActorType, reminder.ActorID)
 	reminderKey := constructCompositeKey(actorKey, reminder.Name)
@@ -1676,6 +1705,12 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
+	select {
+	case <-time.After(time.Second * 5):
+		return nil, errors.New("error creating reminder: timed out after 5s while waiting for placement table to update")
+	case <-a.placementUpdated:
+		break
+	}
 	reminders, _, err := a.getRemindersForActorType(req.ActorType, false)
 	if err != nil {
 		return nil, err
@@ -1694,6 +1729,12 @@ func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest
 }
 
 func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error {
+	select {
+	case <-time.After(time.Second * 5):
+		return errors.New("error creating reminder: timed out after 5s while waiting for placement table to update")
+	case <-a.placementUpdated:
+		break
+	}
 	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := constructCompositeKey(actorKey, req.Name)
 
