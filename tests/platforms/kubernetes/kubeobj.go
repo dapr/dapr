@@ -74,7 +74,6 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-cpu-request":               appDesc.DaprCPURequest,
 			"dapr.io/sidecar-memory-limit":              appDesc.DaprMemoryLimit,
 			"dapr.io/sidecar-memory-request":            appDesc.DaprMemoryRequest,
-			"dapr.io/sidecar-listen-addresses":          "0.0.0.0",
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
