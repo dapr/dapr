@@ -79,7 +79,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 		resp, err = channel.InvokeMethod(ctx, req)
 		return err
 	}, backoff, func(err error, d time.Duration) {
-		log.Debug("failed getting gRPC subscriptions, starting retry")
+		log.Debug("failed getting http subscriptions, starting retry")
 	}, func() {})
 
 	switch resp.Status().Code {
