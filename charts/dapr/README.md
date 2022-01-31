@@ -163,7 +163,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
 | `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |
 | `dapr_sidecar_injector.hostNetwork` | Enable hostNetwork mode. This is helpful when working with overlay networks such as Calico CNI and admission webhooks fail | `false` |
-| `dapr_sidecar_injector.healthzPort` | The port used for health checks. Helpful in combination with hostNetwork to avoid port collisions | 8080 |
+| `dapr_sidecar_injector.healthzPort` | The port used for health checks. Helpful in combination with hostNetwork to avoid port collisions if the default port is already used by another app | 8080 |
 
 
 
