@@ -1,0 +1,47 @@
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: fossa
+
+on:
+  push:
+    branches:
+      - master
+      - release-*
+      - feature/*
+      - shubham1172/* # TODO: remove
+  pull_request:
+    branches:
+      - master
+      - release-*
+      - feature/*
+      - shubham1172/* # TODO: remove
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GOVER: 1.17
+      FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+    steps:
+      - name: Set up Go ${{ env.GOVER }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GOVER }}
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Install FOSSA CLI
+        run: |
+          curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | bash 
+      - name: Run FOSSA analysis
+        run: |
+          fossa analyze
