@@ -1959,6 +1959,55 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 		assert.Equal(t, "key1", r.Items[0].Key)
 		assert.Equal(t, "val1", r.Items[0].Value)
 	})
+
+	t.Run("get all configuration item for empty list", func(t *testing.T) {
+		port, err := freeport.GetFreePort()
+		assert.NoError(t, err)
+
+		server := startDaprAPIServer(
+			port,
+			&api{
+				id:                         "fakeAPI",
+				configurationStores:        map[string]configuration.Store{"store1": &mockConfigStore{}},
+				configurationSubscribe:     map[string]bool{},
+				configurationSubscribeLock: sync.Mutex{},
+			},
+			"")
+		defer server.Stop()
+
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		ctx := context.TODO()
+		client := runtimev1pb.NewDaprClient(clientConn)
+		s, err := client.SubscribeConfigurationAlpha1(ctx, &runtimev1pb.SubscribeConfigurationRequest{
+			StoreName: "store1",
+			Keys:      []string{},
+		})
+
+		assert.NoError(t, err)
+
+		r := &runtimev1pb.SubscribeConfigurationResponse{}
+
+		for {
+			update, err := s.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			if update != nil {
+				r = update
+				break
+			}
+		}
+
+		assert.NotNil(t, r)
+		assert.Len(t, r.Items, 2)
+		assert.Equal(t, "key1", r.Items[0].Key)
+		assert.Equal(t, "val1", r.Items[0].Value)
+		assert.Equal(t, "key2", r.Items[1].Key)
+		assert.Equal(t, "val2", r.Items[1].Value)
+	})
 }
 
 type mockConfigStore struct{}
@@ -1968,24 +2017,63 @@ func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
 }
 
 func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
-	return &configuration.GetResponse{
-		Items: []*configuration.Item{
-			{
-				Key:   req.Keys[0],
-				Value: "val1",
-			},
+	items := []*configuration.Item{
+		{
+			Key:   "key1",
+			Value: "val1",
+		}, {
+			Key:   "key2",
+			Value: "val2",
 		},
+	}
+
+	res := make([]*configuration.Item, 0, 16)
+
+	if len(req.Keys) == 0 {
+		res = items
+	} else {
+		for _, item := range items {
+			for _, key := range req.Keys {
+				if item.Key == key {
+					res = append(res, item)
+				}
+			}
+		}
+	}
+
+	return &configuration.GetResponse{
+		Items: res,
 	}, nil
 }
 
 func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) error {
-	handler(ctx, &configuration.UpdateEvent{
-		Items: []*configuration.Item{
-			{
-				Key:   "key1",
-				Value: "val1",
-			},
+	items := []*configuration.Item{
+		{
+			Key:   "key1",
+			Value: "val1",
+		}, {
+			Key:   "key2",
+			Value: "val2",
 		},
+	}
+
+	res := make([]*configuration.Item, 0, 16)
+
+	if len(req.Keys) == 0 {
+		res = items
+	} else {
+		for _, item := range items {
+			for _, key := range req.Keys {
+				if item.Key == key {
+					res = append(res, item)
+				}
+			}
+		}
+	}
+
+	handler(ctx, &configuration.UpdateEvent{
+		Items: res,
 	})
+
 	return nil
 }

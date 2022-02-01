@@ -1201,7 +1201,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 	return response, nil
 }
 
-// Sets value in extended metadata of the sidecar.
+// SetMetadata Sets value in extended metadata of the sidecar.
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
 	return &emptypb.Empty{}, nil
@@ -1308,9 +1308,32 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	unsubscribedKeys := make([]string, 0)
 	a.configurationSubscribeLock.Lock()
 
-	for _, k := range subscribeKeys {
-		if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
-			unsubscribedKeys = append(unsubscribedKeys, k)
+	newCtx := context.TODO()
+	// empty list means subscribing to all configuration keys
+	if len(subscribeKeys) == 0 {
+		getConfigurationReq := &runtimev1pb.GetConfigurationRequest{
+			StoreName: request.StoreName,
+			Keys:      []string{},
+			Metadata:  request.GetMetadata(),
+		}
+		resp, err2 := a.GetConfigurationAlpha1(newCtx, getConfigurationReq)
+		if err2 != nil {
+			err2 = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrConfigurationGet, request.Keys, request.StoreName, err2))
+			apiServerLogger.Debug(err2)
+			return err2
+		}
+
+		items := resp.GetItems()
+		for _, item := range items {
+			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, item.Key)]; !ok {
+				unsubscribedKeys = append(unsubscribedKeys, item.Key)
+			}
+		}
+	} else {
+		for _, k := range subscribeKeys {
+			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
+				unsubscribedKeys = append(unsubscribedKeys, k)
+			}
 		}
 	}
 
@@ -1325,9 +1348,8 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		serverStream: configurationServer,
 	}
 
-	ctx := context.TODO()
 	// TODO(@laurence) deal with failed subscription and retires
-	err = store.Subscribe(ctx, req, handler.updateEventHandler)
+	err = store.Subscribe(newCtx, req, handler.updateEventHandler)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		a.configurationSubscribeLock.Unlock()
@@ -1339,6 +1361,6 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	}
 	a.configurationSubscribeLock.Unlock()
 
-	<-ctx.Done()
+	<-newCtx.Done()
 	return nil
 }
