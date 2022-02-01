@@ -182,7 +182,7 @@ jobs:
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Update Helm chart files for release version ${{ env.REL_VERSION }}
-        run: ./.github/scripts/set_helm_dapr_version.sh
+        run: bash ./.github/scripts/set_helm_dapr_version.sh
       - name: Generate helm chart manifest
         run: make manifest-gen DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
       - name: move helm chart manifest to artifact
