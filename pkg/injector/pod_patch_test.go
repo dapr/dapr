@@ -25,7 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-const defaultTestConfig = "config"
+const (
+	defaultTestConfig     = "config"
+	defaultAPITokenSecret = "secret"
+	defaultAppTokenSecret = "appsecret"
+)
 
 func TestLogAsJSONEnabled(t *testing.T) {
 	t.Run("dapr.io/log-as-json is true", func(t *testing.T) {
@@ -102,8 +106,8 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
 		annotations[daprLogAsJSON] = trueString
-		annotations[daprAPITokenSecret] = "secret"
-		annotations[daprAppTokenSecret] = "appsecret"
+		annotations[daprAPITokenSecret] = defaultAPITokenSecret
+		annotations[daprAppTokenSecret] = defaultAppTokenSecret
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always",
 			"dapr-system", "controlplane:9000", "placement:50000",
 			nil, "", "", "", "sentry:50000", true,
@@ -137,9 +141,9 @@ func TestGetSideCarContainer(t *testing.T) {
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAPITokenSecret, container.Env[5].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAppTokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// default image
 		assert.Equal(t, "darpio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -151,8 +155,8 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
 		annotations[daprLogAsJSON] = trueString
-		annotations[daprAPITokenSecret] = "secret"
-		annotations[daprAppTokenSecret] = "appsecret"
+		annotations[daprAPITokenSecret] = defaultAPITokenSecret
+		annotations[daprAppTokenSecret] = defaultAppTokenSecret
 		annotations[daprEnableDebugKey] = trueString
 		annotations[daprDebugPortKey] = "55555"
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always",
@@ -197,9 +201,9 @@ func TestGetSideCarContainer(t *testing.T) {
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAPITokenSecret, container.Env[5].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAppTokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
@@ -209,8 +213,8 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
 		annotations[daprLogAsJSON] = trueString
-		annotations[daprAPITokenSecret] = "secret"
-		annotations[daprAppTokenSecret] = "appsecret"
+		annotations[daprAPITokenSecret] = defaultAPITokenSecret
+		annotations[daprAppTokenSecret] = defaultAppTokenSecret
 		annotations[daprEnableDebugKey] = trueString
 		annotations[daprPlacementAddressesKey] = "placement:6666"
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always",
@@ -255,9 +259,9 @@ func TestGetSideCarContainer(t *testing.T) {
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAPITokenSecret, container.Env[5].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAppTokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
@@ -267,8 +271,8 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
 		annotations[daprLogAsJSON] = trueString
-		annotations[daprAPITokenSecret] = "secret"
-		annotations[daprAppTokenSecret] = "appsecret"
+		annotations[daprAPITokenSecret] = defaultAPITokenSecret
+		annotations[daprAppTokenSecret] = defaultAppTokenSecret
 		annotations[daprEnableDebugKey] = trueString
 		annotations[daprPlacementAddressesKey] = ""
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always",
@@ -313,9 +317,9 @@ func TestGetSideCarContainer(t *testing.T) {
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAPITokenSecret, container.Env[5].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAppTokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
