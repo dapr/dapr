@@ -125,7 +125,7 @@ func TestActorActivation(t *testing.T) {
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 
-		// there is no longer an activate message
+		// there is no longer an activated message
 		require.False(t, findActorActivation(resp, actorID))
 
 		require.True(t, findActorMethodInvokation(resp, actorID))
@@ -137,7 +137,7 @@ func TestActorActivation(t *testing.T) {
 		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 
-		// there is no longer an activate message
+		// there is no longer an activated message
 		require.False(t, findActorActivation(resp, actorID))
 
 		require.True(t, findActorMethodInvokation(resp, actorID))

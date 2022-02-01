@@ -78,7 +78,6 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
-			"dapr.io/placement-addresses":               strings.Join(appDesc.PlacementAddresses, ","),
 		}
 		if !appDesc.IsJob {
 			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)
@@ -92,6 +91,10 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	}
 	if appDesc.Config != "" {
 		annotationObject["dapr.io/config"] = appDesc.Config
+	}
+
+	if len(appDesc.PlacementAddresses) != 0 {
+		annotationObject["dapr.io/placement-addresses"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}
 	return annotationObject
 }
