@@ -319,7 +319,11 @@ func getMetricsPort(annotations map[string]string) int {
 }
 
 func getPlacementAddresses(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprPlacementAddressesKey, "")
+	return getStringAnnotation(annotations, daprPlacementAddressesKey)
+}
+
+func existPlacementAddressesAnnotation(annotations map[string]string) bool {
+	return existAnnotation(annotations, daprPlacementAddressesKey)
 }
 
 func getEnableDebug(annotations map[string]string) bool {
@@ -397,6 +401,11 @@ func getStringAnnotationOrDefault(annotations map[string]string, key, defaultVal
 
 func getStringAnnotation(annotations map[string]string, key string) string {
 	return annotations[key]
+}
+
+func existAnnotation(annotations map[string]string, key string) bool {
+	_, exist := annotations[key]
+	return exist
 }
 
 func getInt32AnnotationOrDefault(annotations map[string]string, key string, defaultValue int) int32 {
@@ -557,9 +566,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
 
-	addresses := getPlacementAddresses(annotations)
-	if addresses != "" {
-		placementServiceAddress = addresses
+	if existPlacementAddressesAnnotation(annotations) {
+		placementServiceAddress = getPlacementAddresses(annotations)
 	}
 
 	ports := []corev1.ContainerPort{
