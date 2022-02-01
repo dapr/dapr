@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 syntax = "proto3";
 
@@ -66,6 +74,9 @@ service Dapr {
   // Unregister an actor reminder.
   rpc UnregisterActorReminder(UnregisterActorReminderRequest) returns (google.protobuf.Empty) {}
 
+  // Rename an actor reminder.
+  rpc RenameActorReminder(RenameActorReminderRequest) returns (google.protobuf.Empty) {}
+
   // Gets the state for a specific actor.
   rpc GetActorState(GetActorStateRequest) returns (GetActorStateResponse) {}
 
@@ -112,7 +123,7 @@ message GetStateRequest {
   common.v1.StateOptions.StateConsistency consistency = 3;
 
   // The metadata which will be sent to state store components.
-  map<string,string> metadata = 4;
+  map<string, string> metadata = 4;
 }
 
 // GetBulkStateRequest is the message to get a list of key-value states from specific state store.
@@ -127,7 +138,7 @@ message GetBulkStateRequest {
   int32 parallelism = 3;
 
   // The metadata which will be sent to state store components.
-  map<string,string> metadata = 4;
+  map<string, string> metadata = 4;
 }
 
 // GetBulkStateResponse is the response conveying the list of state values.
@@ -153,7 +164,7 @@ message BulkStateItem {
   string error = 4;
 
   // The metadata which will be sent to app.
-  map<string,string> metadata = 5;
+  map<string, string> metadata = 5;
 }
 
 // GetStateResponse is the response conveying the state value and etag.
@@ -166,7 +177,7 @@ message GetStateResponse {
   string etag = 2;
 
   // The metadata which will be sent to app.
-  map<string,string> metadata = 3;
+  map<string, string> metadata = 3;
 }
 
 // DeleteStateRequest is the message to delete key-value states in the specific state store.
@@ -186,7 +197,7 @@ message DeleteStateRequest {
   common.v1.StateOptions options = 4;
 
   // The metadata which will be sent to state store components.
-  map<string,string> metadata = 5;
+  map<string, string> metadata = 5;
 }
 
 // DeleteBulkStateRequest is the message to delete a list of key-value states from specific state store.
@@ -216,7 +227,7 @@ message QueryStateRequest {
   string query = 2;
 
   // The metadata which will be sent to state store components.
-  map<string,string> metadata = 3;
+  map<string, string> metadata = 3;
 }
 
 message QueryStateItem {
@@ -243,7 +254,7 @@ message QueryStateResponse {
   string token = 2;
 
   // The metadata which will be sent to app.
-  map<string,string> metadata = 3;
+  map<string, string> metadata = 3;
 }
 
 // PublishEventRequest is the message to publish event data to pubsub topic
@@ -264,7 +275,7 @@ message PublishEventRequest {
   //
   // metadata property:
   // - key : the key of the message.
-  map<string,string> metadata = 5;
+  map<string, string> metadata = 5;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings
@@ -282,7 +293,7 @@ message InvokeBindingRequest {
   // If set in the binding definition will cause all messages to 
   // have a default time to live. The message ttl overrides any value
   // in the binding definition.
-  map<string,string> metadata = 3;
+  map<string, string> metadata = 3;
 
   // The name of the operation type for the binding to invoke
   string operation = 4;
@@ -294,7 +305,7 @@ message InvokeBindingResponse {
   bytes data = 1;
 
   // The metadata returned from an external system
-  map<string,string> metadata = 2;
+  map<string, string> metadata = 2;
 }
 
 // GetSecretRequest is the message to get secret from secret store.
@@ -306,7 +317,7 @@ message GetSecretRequest {
   string key = 2;
 
   // The metadata which will be sent to secret store components.
-  map<string,string> metadata = 3;
+  map<string, string> metadata = 3;
 }
 
 // GetSecretResponse is the response message to convey the requested secret.
@@ -322,7 +333,7 @@ message GetBulkSecretRequest {
   string store_name = 1;
 
   // The metadata which will be sent to secret store components.
-  map<string,string> metadata = 2;
+  map<string, string> metadata = 2;
 }
 
 // SecretResponse is a map of decrypted string/string values
@@ -355,7 +366,7 @@ message ExecuteStateTransactionRequest {
   repeated TransactionalStateOperation operations = 2;
 
   // The metadata used for transactional operations.
-  map<string,string> metadata = 3;
+  map<string, string> metadata = 3;
 }
 
 // RegisterActorTimerRequest is the message to register a timer for an actor of a given type and id.
@@ -395,6 +406,14 @@ message UnregisterActorReminderRequest {
   string name = 3;
 }
 
+// RenameActorReminderRequest is the message to rename an actor reminder.
+message RenameActorReminderRequest {
+  string actor_type = 1;
+  string actor_id = 2;
+  string old_name = 3;
+  string new_name = 4;
+}
+
 // GetActorStateRequest is the message to get key-value states from specific actor.
 message GetActorStateRequest {
   string actor_type = 1;
@@ -414,7 +433,7 @@ message ExecuteActorStateTransactionRequest {
   repeated TransactionalActorStateOperation operations = 3;
 }
 
-// TransactionalAcorStateOperation is the message to execute a specified operation with a key-value pair.
+// TransactionalActorStateOperation is the message to execute a specified operation with a key-value pair.
 message TransactionalActorStateOperation {
   string operationType = 1;
   string key = 2;
@@ -439,7 +458,7 @@ message GetMetadataResponse {
   string id = 1;
   repeated ActiveActorsCount active_actors_count = 2;
   repeated RegisteredComponents registered_components = 3;
-  map<string,string> extended_metadata = 4;
+  map<string, string> extended_metadata = 4;
 }
 
 message ActiveActorsCount {
@@ -469,7 +488,7 @@ message GetConfigurationRequest {
   repeated string keys = 2;
 
   // Optional. The metadata which will be sent to configuration store components.
-  map<string,string> metadata = 3;
+  map<string, string> metadata = 3;
 }
 
 // GetConfigurationResponse is the response conveying the list of configuration values.
@@ -489,7 +508,7 @@ message SubscribeConfigurationRequest {
   repeated string keys = 2;
 
   // The metadata which will be sent to configuration store components.
-  map<string,string> metadata = 3;
+  map<string, string> metadata = 3;
 }
 
 message SubscribeConfigurationResponse {

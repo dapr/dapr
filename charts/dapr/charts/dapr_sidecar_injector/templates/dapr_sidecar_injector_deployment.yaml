@@ -30,19 +30,10 @@ spec:
         prometheus.io/path: "/"
 {{- end }}
     spec:
+      {{- if .Values.hostNetwork }}
+      hostNetwork: true
+      {{- end }}
       serviceAccountName: dapr-operator
-{{- if eq .Values.global.ha.enabled true }}
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - dapr-sidecar-injector
-            topologyKey: "kubernetes.io/hostname"
-{{- end }}
       containers:
       - name: dapr-sidecar-injector
         livenessProbe:
@@ -50,22 +41,22 @@ spec:
             path: /healthz
             port: 8080
           {{- if eq .Values.debug.enabled false }}
-          initialDelaySeconds: 3
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           {{- else }}
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
           {{- end }}
-          periodSeconds: 3
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
           failureThreshold: 5
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
           {{- if eq .Values.debug.enabled false }}
-          initialDelaySeconds: 3
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
           {{- else }}
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
           {{- end }}
-          periodSeconds: 3
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           failureThreshold: 5
 {{- if contains "/" .Values.injectorImage.name }}
         image: "{{ .Values.injectorImage.name }}"
