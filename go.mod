@@ -14,6 +14,7 @@ require (
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
+	github.com/go-logr/logr v0.3.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
 	github.com/google/cel-go v0.9.0
@@ -37,7 +38,7 @@ require (
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.32.1
-	github.com/sony/gobreaker v0.4.1
+	github.com/sony/gobreaker v0.4.2-0.20210216022020-dd874f9dd33b
 	github.com/stretchr/testify v1.7.0
 	github.com/trusch/grpc-proxy v0.0.0-20190529073533-02b64529f274
 	github.com/valyala/fasthttp v1.31.1-0.20211216042702-258a4c17b4f4
@@ -60,11 +61,6 @@ require (
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.20.0
 	sigs.k8s.io/controller-runtime v0.7.0
-)
-
-require (
-	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/go-logr/logr v0.3.0
 )
 
 require (
@@ -259,7 +255,6 @@ require (
 	github.com/sendgrid/sendgrid-go v3.5.0+incompatible // indirect
 	github.com/shirou/gopsutil/v3 v3.21.6 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
-	github.com/sony/gobreaker v0.4.2-0.20210216022020-dd874f9dd33b // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/cobra v1.1.3 // indirect
