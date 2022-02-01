@@ -179,10 +179,6 @@ func NewActors(
 }
 
 func (a *actorsRuntime) Init() error {
-	if !a.config.EnablePlacement {
-		log.Infof("actors: placement-server is disabled")
-		return nil
-	}
 
 	if len(a.config.PlacementAddresses) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")

@@ -2622,7 +2622,6 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewRuntimeConfig(
 		TestRuntimeConfigID,
-		true,
 		[]string{"10.10.10.12"},
 		"10.10.10.11",
 		cors.DefaultAllowedOrigins,
@@ -3054,7 +3053,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("placement enable = false", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{EnablePlacement: false}, &config.Configuration{}, &config.AccessControlList{})
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{})
 		defer stopRuntime(t, r)
 
 		err := r.initActors()
@@ -3062,7 +3061,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{EnablePlacement: false}, &config.Configuration{}, &config.AccessControlList{})
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{})
 		defer stopRuntime(t, r)
 
 		assert.Nil(t, r.actor)
@@ -3070,7 +3069,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
-		r := NewDaprRuntime(&Config{EnablePlacement: false}, &config.Configuration{}, &config.AccessControlList{})
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{})
 		defer stopRuntime(t, r)
 
 		assert.Equal(t, "", r.actorStateStoreName)

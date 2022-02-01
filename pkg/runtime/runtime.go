@@ -428,7 +428,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	grpcAPI.SetDirectMessaging(a.directMessaging)
 
-	if a.runtimeConfig.EnablePlacement {
+	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
 		if err != nil {
 			log.Warnf("failed to init actors: %s", err)
@@ -1184,8 +1184,8 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 			return err
 		}
 
-		// when placement is disabled, don't set specified actor store.
-		if a.runtimeConfig.EnablePlacement {
+		// when placement address list is not empty, set specified actor store.
+		if len(a.runtimeConfig.PlacementAddresses) != 0 {
 			// set specified actor store if "actorStateStore" is true in the spec.
 			actorStoreSpecified := props[actorStateStore]
 			if actorStoreSpecified == "true" {
@@ -1643,7 +1643,7 @@ func (a *DaprRuntime) initActors() error {
 	if a.actorStateStoreName == "" {
 		return errors.New("no actor state store defined")
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.EnablePlacement,
+	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID,
 		a.runtimeConfig.PlacementAddresses, a.appConfig.Entities, a.runtimeConfig.InternalGRPCPort,
 		a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout,
 		a.appConfig.DrainRebalancedActors, a.namespace, a.appConfig.Reentrancy, a.appConfig.RemindersStoragePartitions)

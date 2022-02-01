@@ -22,7 +22,7 @@ import (
 
 func TestNewConfig(t *testing.T) {
 	publicPort := DefaultDaprPublicPort
-	c := NewRuntimeConfig("app1", true, []string{"localhost:5050"},
+	c := NewRuntimeConfig("app1", []string{"localhost:5050"},
 		"localhost:5051", "*", "config",
 		"components", "http", "kubernetes",
 		3500, 50002, 50001,
@@ -32,7 +32,6 @@ func TestNewConfig(t *testing.T) {
 		"", 4, true, time.Second)
 
 	assert.Equal(t, "app1", c.ID)
-	assert.Equal(t, true, c.EnablePlacement)
 	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
 	assert.Equal(t, "localhost:5051", c.Kubernetes.ControlPlaneAddress)
 	assert.Equal(t, "*", c.AllowedOrigins)

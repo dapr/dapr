@@ -244,7 +244,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	}
 
 	if b.config == nil {
-		config := NewConfig("", TestAppID, true, []string{""},
+		config := NewConfig("", TestAppID, []string{"placement:5050"},
 			nil, 0, "", "", "",
 			false, "", config.ReentrancyConfig{}, 0)
 		b.config = &config
@@ -265,7 +265,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, true, []string{""},
+	config := NewConfig("", TestAppID, []string{"placement:5050"},
 		nil, 0, "", "", "",
 		false, "", config.ReentrancyConfig{}, 0)
 	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
@@ -275,7 +275,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 
 func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
-	config := NewConfig("", TestAppID, false, []string{""},
+	config := NewConfig("", TestAppID, []string{""},
 		nil, 0, "", "", "",
 		false, "", config.ReentrancyConfig{}, 0)
 	a := NewActors(nil, appChannel, nil, config, nil, spec, nil)
@@ -286,7 +286,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	c := NewConfig("", TestAppID, true, []string{""}, nil,
+	c := NewConfig("", TestAppID, []string{"placement:5050"}, nil,
 		0, "", "", "", false,
 		"", config.ReentrancyConfig{},
 		TestActorMetadataPartitionCount)
@@ -1723,7 +1723,7 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
-	c := NewConfig("localhost:5050", "app1", true, []string{"placement:5050"},
+	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"},
 		[]string{"1"}, 3500, "1s", "2s", "3s", true,
 		"default", config.ReentrancyConfig{}, 0)
 	assert.Equal(t, "localhost:5050", c.HostAddress)
@@ -1740,7 +1740,7 @@ func TestConfig(t *testing.T) {
 
 func TestReentrancyConfig(t *testing.T) {
 	t.Run("Test empty reentrancy values", func(t *testing.T) {
-		c := NewConfig("localhost:5050", "app1", true, []string{"placement:5050"},
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"},
 			[]string{"1"}, 3500, "1s", "2s", "3s",
 			true, "default", config.ReentrancyConfig{}, 0)
 		assert.False(t, c.Reentrancy.Enabled)
@@ -1749,7 +1749,7 @@ func TestReentrancyConfig(t *testing.T) {
 	})
 
 	t.Run("Test minimum reentrancy values", func(t *testing.T) {
-		c := NewConfig("localhost:5050", "app1", true, []string{"placement:5050"},
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"},
 			[]string{"1"}, 3500, "1s", "2s", "3s",
 			true, "default", config.ReentrancyConfig{Enabled: true}, 0)
 		assert.True(t, c.Reentrancy.Enabled)
@@ -1759,7 +1759,7 @@ func TestReentrancyConfig(t *testing.T) {
 
 	t.Run("Test full reentrancy values", func(t *testing.T) {
 		reentrancyLimit := 64
-		c := NewConfig("localhost:5050", "app1", true, []string{"placement:5050"},
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"},
 			[]string{"1"}, 3500, "1s", "2s", "3s",
 			true, "default", config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}, 0)
 		assert.True(t, c.Reentrancy.Enabled)
@@ -1895,7 +1895,7 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrant", "1")
 
-	reentrantConfig := NewConfig("", TestAppID, true, []string{""}, nil, 0,
+	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, nil, 0,
 		"", "", "", false, "",
 		config.ReentrancyConfig{Enabled: true}, 0)
 	reentrantAppChannel := new(reentrantAppChannel)
@@ -1923,7 +1923,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("other", "1")
 	req3 := invokev1.NewInvokeMethodRequest("third").WithActor("reentrant", "1")
 
-	reentrantConfig := NewConfig("", TestAppID, true, []string{""}, nil, 0,
+	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, nil, 0,
 		"", "", "", false, "",
 		config.ReentrancyConfig{Enabled: true}, 0)
 	reentrantAppChannel := new(reentrantAppChannel)
@@ -1951,7 +1951,7 @@ func TestReentrancyStackLimit(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 
 	stackDepth := 0
-	reentrantConfig := NewConfig("", TestAppID, true, []string{""}, nil, 0,
+	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, nil, 0,
 		"", "", "", false, "",
 		config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}, 0)
 	reentrantAppChannel := new(reentrantAppChannel)
