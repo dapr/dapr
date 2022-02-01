@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package v1alpha1
 
@@ -24,11 +32,11 @@ type Resiliency struct {
 }
 
 type ResiliencySpec struct {
-	Policies       Policy         `json:"policies"`
+	Policies       Policies       `json:"policies"`
 	BuildingBlocks BuildingBlocks `json:"buildingBlocks" yaml:"buildingBlocks"`
 }
 
-type Policy struct {
+type Policies struct {
 	Timeouts        map[string]string         `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
 	Retries         map[string]Retry          `json:"retries,omitempty" yaml:"retries,omitempty"`
 	CircuitBreakers map[string]CircuitBreaker `json:"circuitBreakers,omitempty" yaml:"circuitBreakers,omitempty"`
@@ -49,19 +57,26 @@ type CircuitBreaker struct {
 }
 
 type BuildingBlocks struct {
-	Services   map[string]Service   `json:"services,omitempty" yaml:"services,omitempty"`
-	Actors     map[string]Actor     `json:"actors,omitempty" yaml:"actors,omitempty"`
-	Components map[string]Component `json:"components,omitempty" yaml:"components,omitempty"`
-	Routes     map[string]Route     `json:"routes,omitempty" yaml:"routes,omitempty"`
+	Services   map[string]EndpointPolicyNames `json:"services,omitempty" yaml:"services,omitempty"`
+	Actors     map[string]ActorPolicyNames    `json:"actors,omitempty" yaml:"actors,omitempty"`
+	Components map[string]PolicyNames         `json:"components,omitempty" yaml:"components,omitempty"`
+	Routes     map[string]PolicyNames         `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
-type Service struct {
+type PolicyNames struct {
 	Timeout        string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Retry          string `json:"retry,omitempty" yaml:"retry,omitempty"`
 	CircuitBreaker string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
 }
 
-type Actor struct {
+type EndpointPolicyNames struct {
+	Timeout                 string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Retry                   string `json:"retry,omitempty" yaml:"retry,omitempty"`
+	CircuitBreaker          string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
+	CircuitBreakerCacheSize int    `json:"circuitBreakerCacheSize,omitempty" yaml:"circuitBreakerCacheSize,omitempty"`
+}
+
+type ActorPolicyNames struct {
 	Timeout                 string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Retry                   string `json:"retry,omitempty" yaml:"retry,omitempty"`
 	CircuitBreaker          string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
@@ -69,18 +84,7 @@ type Actor struct {
 	CircuitBreakerCacheSize int    `json:"circuitBreakerCacheSize,omitempty" yaml:"circuitBreakerCacheSize,omitempty"`
 }
 
-type Component struct {
-	Timeout        string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Retry          string `json:"retry,omitempty" yaml:"retry,omitempty"`
-	CircuitBreaker string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
-}
-
-type Route struct {
-	Timeout        string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Retry          string `json:"retry,omitempty" yaml:"retry,omitempty"`
-	CircuitBreaker string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
-}
-
+// ResiliencyList represents a list of `Resiliency` items.
 // +kubebuilder:object:root=true
 type ResiliencyList struct {
 	metav1.TypeMeta `json:",inline"`

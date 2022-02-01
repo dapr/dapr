@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/acl"
+	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	global_config "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
@@ -60,7 +61,6 @@ func FromFlags() (*DaprRuntime, error) {
 	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
 	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in KB to handle sending multi-KB headers. By default 4 KB.")
 	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
-	resiliency := flag.String("resiliency", "", "Path to a resiliency config file, or name of a resiliency config object.")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -219,8 +219,8 @@ func FromFlags() (*DaprRuntime, error) {
 
 	// Config and resiliency need the operator client, only initiate once and only if we will actually use it.
 	var operatorClient operator_v1.OperatorClient
-	if *mode == string(modes.KubernetesMode) && (*config != "" || *resiliency != "") {
-		log.Infof("Initializing the operator client (config: %s | resiliency: %s)", *config, *resiliency)
+	if *mode == string(modes.KubernetesMode) && *config != "" {
+		log.Infof("Initializing the operator client (config: %s | resiliency: %s)", *config)
 		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 		if clientErr != nil {
 			return nil, clientErr
@@ -248,22 +248,23 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
-	var resiliencyConfigs []resiliency_config.Resiliency
+	var resiliencyConfigs []*resiliency_v1alpha.Resiliency
 
 	switch modes.DaprMode(*mode) {
 	case modes.KubernetesMode:
 		namespace = os.Getenv("NAMESPACE")
-		resiliencyConfigs = resiliency_config.LoadKubernetesResiliency(*appID, namespace, operatorClient, log)
+		resiliencyConfigs = resiliency_config.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
 	case modes.StandaloneMode:
-		resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(*componentsPath, *appID, log)
+		resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(log, *appID, *componentsPath)
 	}
 	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
+	r := resiliency_config.FromConfigurations(log, resiliencyConfigs...)
 
 	accessControlList, err := acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyConfigs), nil
+	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, r), nil
 }
 
 func setEnvVariables(variables map[string]string) error {

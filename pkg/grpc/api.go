@@ -43,6 +43,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -93,6 +94,7 @@ type api struct {
 	actor                      actors.Actors
 	directMessaging            messaging.DirectMessaging
 	appChannel                 channel.AppChannel
+	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
 	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
@@ -114,6 +116,7 @@ type api struct {
 // NewAPI returns a new gRPC API.
 func NewAPI(
 	appID string, appChannel channel.AppChannel,
+	resiliency resiliency.Provider,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
@@ -138,6 +141,7 @@ func NewAPI(
 		directMessaging:          directMessaging,
 		actor:                    actor,
 		id:                       appID,
+		resiliency:               resiliency,
 		appChannel:               appChannel,
 		pubsubAdapter:            pubsubAdapter,
 		stateStores:              stateStores,

@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -59,6 +60,7 @@ type api struct {
 	directMessaging          messaging.DirectMessaging
 	appChannel               channel.AppChannel
 	getComponentsFn          func() []components_v1alpha1.Component
+	resiliency               resiliency.Provider
 	stateStores              map[string]state.Store
 	transactionalStateStores map[string]state.TransactionalStore
 	secretStores             map[string]secretstores.SecretStore
@@ -115,6 +117,7 @@ func NewAPI(
 	appChannel channel.AppChannel,
 	directMessaging messaging.DirectMessaging,
 	getComponentsFn func() []components_v1alpha1.Component,
+	resiliency resiliency.Provider,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
@@ -132,6 +135,7 @@ func NewAPI(
 	api := &api{
 		appChannel:               appChannel,
 		getComponentsFn:          getComponentsFn,
+		resiliency:               resiliency,
 		directMessaging:          directMessaging,
 		stateStores:              stateStores,
 		transactionalStateStores: transactionalStateStores,

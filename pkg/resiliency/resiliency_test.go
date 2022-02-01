@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package resiliency
 
@@ -26,10 +34,12 @@ type mockOperator struct {
 	operatorv1pb.UnimplementedOperatorServer
 }
 
+var log = logger.NewLogger("dapr.test")
+
 func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
 	resiliency := resiliency_v1alpha.Resiliency{
 		Spec: resiliency_v1alpha.ResiliencySpec{
-			Policies: resiliency_v1alpha.Policy{
+			Policies: resiliency_v1alpha.Policies{
 				Timeouts: map[string]string{
 					"general": "5s",
 				},
@@ -50,14 +60,15 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 				},
 			},
 			BuildingBlocks: resiliency_v1alpha.BuildingBlocks{
-				Services: map[string]resiliency_v1alpha.Service{
+				Services: map[string]resiliency_v1alpha.EndpointPolicyNames{
 					"appB": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
+						Timeout:                 "general",
+						Retry:                   "general",
+						CircuitBreaker:          "general",
+						CircuitBreakerCacheSize: 100,
 					},
 				},
-				Actors: map[string]resiliency_v1alpha.Actor{
+				Actors: map[string]resiliency_v1alpha.ActorPolicyNames{
 					"myActorType": {
 						Timeout:                 "general",
 						Retry:                   "general",
@@ -66,14 +77,14 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 						CircuitBreakerCacheSize: 5000,
 					},
 				},
-				Components: map[string]resiliency_v1alpha.Component{
+				Components: map[string]resiliency_v1alpha.PolicyNames{
 					"statestore1": {
 						Timeout:        "general",
 						Retry:          "general",
 						CircuitBreaker: "general",
 					},
 				},
-				Routes: map[string]resiliency_v1alpha.Route{
+				Routes: map[string]resiliency_v1alpha.PolicyNames{
 					"dsstatus.v3": {
 						Timeout:        "general",
 						Retry:          "general",
@@ -87,7 +98,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 
 	resiliencyWithScope := resiliency_v1alpha.Resiliency{
 		Spec: resiliency_v1alpha.ResiliencySpec{
-			Policies: resiliency_v1alpha.Policy{
+			Policies: resiliency_v1alpha.Policies{
 				Timeouts: map[string]string{
 					"general": "5s",
 				},
@@ -108,14 +119,15 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 				},
 			},
 			BuildingBlocks: resiliency_v1alpha.BuildingBlocks{
-				Services: map[string]resiliency_v1alpha.Service{
+				Services: map[string]resiliency_v1alpha.EndpointPolicyNames{
 					"appB": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
+						Timeout:                 "general",
+						Retry:                   "general",
+						CircuitBreaker:          "general",
+						CircuitBreakerCacheSize: 100,
 					},
 				},
-				Actors: map[string]resiliency_v1alpha.Actor{
+				Actors: map[string]resiliency_v1alpha.ActorPolicyNames{
 					"myActorType": {
 						Timeout:                 "general",
 						Retry:                   "general",
@@ -124,14 +136,14 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 						CircuitBreakerCacheSize: 5000,
 					},
 				},
-				Components: map[string]resiliency_v1alpha.Component{
+				Components: map[string]resiliency_v1alpha.PolicyNames{
 					"statestore1": {
 						Timeout:        "general",
 						Retry:          "general",
 						CircuitBreaker: "general",
 					},
 				},
-				Routes: map[string]resiliency_v1alpha.Route{
+				Routes: map[string]resiliency_v1alpha.PolicyNames{
 					"dsstatus.v3": {
 						Timeout:        "general",
 						Retry:          "general",
@@ -157,117 +169,54 @@ func getOperatorClient(address string) operatorv1pb.OperatorClient {
 	return operatorv1pb.NewOperatorClient(conn)
 }
 
-func TestLoadStandaloneResiliency(t *testing.T) {
-	resiliencies := LoadStandaloneResiliency("./testdata", "appId", logger.NewLogger("resiliencyTest"))
-	assert.NotNil(t, resiliencies)
-	assert.Len(t, resiliencies, 1)
-	resiliency := resiliencies[0]
+func TestPoliciesForBuildingBlocks(t *testing.T) {
+	ctx := context.Background()
+	configs := LoadStandaloneResiliency(log, "default", "./testdata")
+	assert.Len(t, configs, 1)
+	r := FromConfigurations(log, configs...)
 
-	// Assert the basics.
-	assert.NotNil(t, resiliency.Resiliency.Spec)
-	assert.NotNil(t, resiliency.Resiliency.Spec.Policies)
-	policies := resiliency.Resiliency.Spec.Policies
-	assert.NotNil(t, policies)
-	buildingBlocks := resiliency.Resiliency.Spec.BuildingBlocks
-	assert.NotNil(t, buildingBlocks)
+	tests := []struct {
+		name   string
+		create func(r *Resiliency) Runner
+	}{
+		{
+			name: "route",
+			create: func(r *Resiliency) Runner {
+				return r.RoutePolicy(ctx, "dsstatus.v3")
+			},
+		},
+		{
+			name: "component",
+			create: func(r *Resiliency) Runner {
+				return r.ComponentPolicy(ctx, "statestore1")
+			},
+		},
+		{
+			name: "endpoint",
+			create: func(r *Resiliency) Runner {
+				return r.EndpointPolicy(ctx, "appB", "127.0.0.1:3500")
+			},
+		},
+		{
+			name: "actor",
+			create: func(r *Resiliency) Runner {
+				return r.ActorPolicy(ctx, "myActorType", "id")
+			},
+		},
+	}
 
-	// Policy checks.
-	// Check timeouts.
-	timeouts := policies.Timeouts
-	assert.NotNil(t, timeouts)
-	assert.Len(t, timeouts, 3)
-	assert.Equal(t, resiliency.GetTimeoutOrDefault("general"), "5s")
-	assert.Equal(t, resiliency.GetTimeoutOrDefault("important"), "60s")
-	assert.Equal(t, resiliency.GetTimeoutOrDefault("largeResponse"), "10s")
-	assert.Equal(t, resiliency.GetTimeoutOrDefault("default"), "15s")
-
-	// Check retries.
-	retries := policies.Retries
-	assert.NotNil(t, retries)
-	assert.Contains(t, retries, "important")
-	importantRetry := resiliency.GetRetryPolicyOrDefault("important")
-	assert.Equal(t, importantRetry.Policy, "constant")
-	assert.Equal(t, importantRetry.Duration, "5s")
-	assert.Equal(t, importantRetry.MaxRetries, 30)
-	assert.Contains(t, retries, "largeResponse")
-	largeResponseRetry := resiliency.GetRetryPolicyOrDefault("largeResponse")
-	assert.Equal(t, largeResponseRetry.Policy, "constant")
-	assert.Equal(t, largeResponseRetry.Duration, "5s")
-	assert.Equal(t, largeResponseRetry.MaxRetries, 3)
-	assert.Contains(t, retries, "pubsubRetry")
-	pubsubRetry := resiliency.GetRetryPolicyOrDefault("pubsubRetry")
-	assert.Equal(t, pubsubRetry.Policy, "constant")
-	assert.Equal(t, pubsubRetry.Duration, "5s")
-	assert.Equal(t, pubsubRetry.MaxRetries, 10)
-	assert.Contains(t, retries, "retryForever")
-	retryForever := resiliency.GetRetryPolicyOrDefault("retryForever")
-	assert.Equal(t, retryForever.Policy, "exponential")
-	assert.Equal(t, retryForever.MaxInterval, "15s")
-	assert.Equal(t, retryForever.MaxRetries, 0)
-	assert.Contains(t, retries, "someOperation")
-	someOperationRetry := resiliency.GetRetryPolicyOrDefault("someOperation")
-	assert.Equal(t, someOperationRetry.Policy, "exponential")
-	assert.Equal(t, someOperationRetry.MaxInterval, "15s")
-	defaultRetry := resiliency.GetRetryPolicyOrDefault("default")
-	assert.Equal(t, defaultRetry.Policy, "constant")
-	assert.Equal(t, defaultRetry.Duration, "1s")
-	assert.Equal(t, defaultRetry.MaxInterval, "10s")
-	assert.Equal(t, defaultRetry.MaxRetries, 10)
-
-	// Check circuit breakers.
-	circuitBreakers := policies.CircuitBreakers
-	assert.NotNil(t, circuitBreakers)
-	pubsubCB := resiliency.GetCircuitBreakerOrDefault("pubsubCB")
-	assert.Equal(t, 1, pubsubCB.MaxRequests)
-	assert.Equal(t, "8s", pubsubCB.Interval)
-	assert.Equal(t, "45s", pubsubCB.Timeout)
-	assert.Equal(t, "consecutiveFailures > 8", pubsubCB.Trip)
-	defaultCB := resiliency.GetCircuitBreakerOrDefault("default")
-	assert.Equal(t, 10, defaultCB.MaxRequests)
-	assert.Equal(t, "5s", defaultCB.Interval)
-	assert.Equal(t, "10s", defaultCB.Timeout)
-	assert.Equal(t, "consecutiveFailures > 5", defaultCB.Trip)
-
-	// BuildingBlocks checks.
-	// Check services.
-	services := buildingBlocks.Services
-	assert.NotNil(t, services)
-	assert.Contains(t, services, "appB")
-	assert.Equal(t, "general", services["appB"].Timeout)
-	assert.Equal(t, "general", services["appB"].Retry)
-	assert.Equal(t, "general", services["appB"].CircuitBreaker)
-
-	// Check actors.
-	actors := buildingBlocks.Actors
-	assert.NotNil(t, actors)
-	assert.Contains(t, actors, "myActorType")
-	assert.Equal(t, "general", actors["myActorType"].Timeout)
-	assert.Equal(t, "general", actors["myActorType"].Retry)
-	assert.Equal(t, "general", actors["myActorType"].CircuitBreaker)
-	assert.Equal(t, "both", actors["myActorType"].CircuitBreakerScope)
-	assert.Equal(t, 5000, actors["myActorType"].CircuitBreakerCacheSize)
-
-	// Check components.
-	components := buildingBlocks.Components
-	assert.NotNil(t, components)
-	assert.Contains(t, components, "statestore1")
-	assert.Contains(t, components, "pubsub1")
-	assert.Contains(t, components, "pubsub2")
-	assert.Equal(t, "general", components["statestore1"].Timeout)
-	assert.Equal(t, "general", components["statestore1"].Retry)
-	assert.Equal(t, "general", components["statestore1"].CircuitBreaker)
-	assert.Equal(t, "pubsubRetry", components["pubsub1"].Retry)
-	assert.Equal(t, "pubsubCB", components["pubsub1"].CircuitBreaker)
-	assert.Equal(t, "pubsubRetry", components["pubsub2"].Retry)
-	assert.Equal(t, "pubsubCB", components["pubsub2"].CircuitBreaker)
-
-	// Check routes.
-	routes := buildingBlocks.Routes
-	assert.NotNil(t, routes)
-	assert.Contains(t, routes, "dsstatus.v3")
-	assert.Equal(t, "general", routes["dsstatus.v3"].Timeout)
-	assert.Equal(t, "general", routes["dsstatus.v3"].Retry)
-	assert.Equal(t, "general", routes["dsstatus.v3"].CircuitBreaker)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := tt.create(r)
+			called := false
+			err := p(func(ctx context.Context) error {
+				called = true
+				return nil
+			})
+			assert.NoError(t, err)
+			assert.True(t, called)
+		})
+	}
 }
 
 func TestLoadKubernetesResiliency(t *testing.T) {
@@ -285,60 +234,45 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	resiliencies := LoadKubernetesResiliency("appId", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)), logger.NewLogger("resiliencyTest"))
-	assert.NotNil(t, resiliencies)
-	assert.Len(t, resiliencies, 1)
-	resiliency := resiliencies[0]
+	resiliency := LoadKubernetesResiliency(log, "default", "default",
+		getOperatorClient(fmt.Sprintf("localhost:%d", port)))
+	assert.NotNil(t, resiliency)
+}
 
-	// Assert the policy section.
-	assert.Equal(t, resiliency.GetTimeoutOrDefault("general"), "5s")
-	pubsubRetry := resiliency.GetRetryPolicyOrDefault("pubsubRetry")
-	assert.Equal(t, pubsubRetry.Policy, "constant")
-	assert.Equal(t, pubsubRetry.Duration, "5s")
-	assert.Equal(t, pubsubRetry.MaxRetries, 10)
-	pubsubCB := resiliency.GetCircuitBreakerOrDefault("pubsubCB")
-	assert.Equal(t, 1, pubsubCB.MaxRequests)
-	assert.Equal(t, "8s", pubsubCB.Interval)
-	assert.Equal(t, "45s", pubsubCB.Timeout)
-	assert.Equal(t, "consecutiveFailures > 8", pubsubCB.Trip)
-
-	// Assert the building blocks.
-	buildingBlocks := resiliency.Resiliency.Spec.BuildingBlocks
-	assert.NotNil(t, buildingBlocks)
-	// BuildingBlocks checks.
-	// Check services.
-	services := buildingBlocks.Services
-	assert.NotNil(t, services)
-	assert.Contains(t, services, "appB")
-	assert.Equal(t, "general", services["appB"].Timeout)
-	assert.Equal(t, "general", services["appB"].Retry)
-	assert.Equal(t, "general", services["appB"].CircuitBreaker)
-
-	// Check actors.
-	actors := buildingBlocks.Actors
-	assert.NotNil(t, actors)
-	assert.Contains(t, actors, "myActorType")
-	assert.Equal(t, "general", actors["myActorType"].Timeout)
-	assert.Equal(t, "general", actors["myActorType"].Retry)
-	assert.Equal(t, "general", actors["myActorType"].CircuitBreaker)
-	assert.Equal(t, "both", actors["myActorType"].CircuitBreakerScope)
-	assert.Equal(t, 5000, actors["myActorType"].CircuitBreakerCacheSize)
-
-	// Check components.
-	components := buildingBlocks.Components
-	assert.NotNil(t, components)
-	assert.Contains(t, components, "statestore1")
-	assert.Equal(t, "general", components["statestore1"].Timeout)
-	assert.Equal(t, "general", components["statestore1"].Retry)
-	assert.Equal(t, "general", components["statestore1"].CircuitBreaker)
-
-	// Check routes.
-	routes := buildingBlocks.Routes
-	assert.NotNil(t, routes)
-	assert.Contains(t, routes, "dsstatus.v3")
-	assert.Equal(t, "general", routes["dsstatus.v3"].Timeout)
-	assert.Equal(t, "general", routes["dsstatus.v3"].Retry)
-	assert.Equal(t, "general", routes["dsstatus.v3"].CircuitBreaker)
+func TestParseActorCircuitBreakerScope(t *testing.T) {
+	tests := []struct {
+		input  string
+		output ActorCircuitBreakerScope
+		err    string
+	}{
+		{
+			input:  "type",
+			output: ActorCircuitBreakerScopeType,
+		},
+		{
+			input:  "id",
+			output: ActorCircuitBreakerScopeID,
+		},
+		{
+			input:  "both",
+			output: ActorCircuitBreakerScopeBoth,
+		},
+		{
+			input: "unknown",
+			err:   "unknown circuit breaker scope \"unknown\"",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			actual, err := ParseActorCircuitBreakerScope(tt.input)
+			if tt.err == "" {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.output, actual)
+			} else {
+				assert.EqualError(t, err, tt.err)
+			}
+		})
+	}
 }
 
 func TestResiliencyScopeIsRespected(t *testing.T) {
@@ -356,19 +290,15 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	resiliencies := LoadStandaloneResiliency("./testdata", "app1", logger.NewLogger("resiliencyTest"))
-	assert.NotNil(t, resiliencies)
+	resiliencies := LoadStandaloneResiliency(log, "app1", "./testdata")
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadKubernetesResiliency("app2", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)), logger.NewLogger("resiliencyTest"))
-	assert.NotNil(t, resiliencies)
+	resiliencies = LoadKubernetesResiliency(log, "app2", "default", getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadStandaloneResiliency("./testdata", "app2", logger.NewLogger("resiliencyTest"))
-	assert.NotNil(t, resiliencies)
+	resiliencies = LoadStandaloneResiliency(log, "app2", "./testdata")
 	assert.Len(t, resiliencies, 2)
 
-	resiliencies = LoadStandaloneResiliency("./testdata", "app3", logger.NewLogger("resiliencyTest"))
-	assert.NotNil(t, resiliencies)
+	resiliencies = LoadStandaloneResiliency(log, "app3", "./testdata")
 	assert.Len(t, resiliencies, 1)
 }
