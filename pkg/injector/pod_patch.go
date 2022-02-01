@@ -74,6 +74,7 @@ const (
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
 	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
+	daprPlacementAddressesKey         = "dapr.io/placement-addresses"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -317,6 +318,10 @@ func getMetricsPort(annotations map[string]string) int {
 	return int(getInt32AnnotationOrDefault(annotations, daprMetricsPortKey, defaultMetricsPort))
 }
 
+func getPlacementAddresses(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprPlacementAddressesKey, "")
+}
+
 func getEnableDebug(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprEnableDebugKey, defaultSidecarDebug)
 }
@@ -551,6 +556,11 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	}
 
 	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
+
+	addresses := getPlacementAddresses(annotations)
+	if addresses != "" {
+		placementServiceAddress = addresses
+	}
 
 	ports := []corev1.ContainerPort{
 		{

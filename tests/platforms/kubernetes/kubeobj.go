@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -77,7 +78,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
-			"dapr.io/placement-addresses":               appDesc.PlacementAddresses,
+			"dapr.io/placement-addresses":               strings.Join(appDesc.PlacementAddresses, ","),
 		}
 		if !appDesc.IsJob {
 			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)

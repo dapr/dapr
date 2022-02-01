@@ -38,5 +38,5 @@ type AppDescription struct {
 	DaprMemoryRequest  string
 	Namespace          *string
 	IsJob              bool
-	PlacementAddresses string
+	PlacementAddresses []string
 }
