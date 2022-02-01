@@ -306,21 +306,6 @@ func TestGetSideCarContainer(t *testing.T) {
 
 		assert.Equal(t, image, container.Image)
 	})
-
-	t.Run("get sidecar container with resiliency", func(t *testing.T) {
-		resiliency := "resiliencyConfig"
-		annotations := map[string]string{
-			daprResiliencyKey: resiliency,
-		}
-
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
-
-		for i, val := range container.Args {
-			if val == "--resiliency" {
-				assert.Equal(t, container.Args[i+1], resiliency)
-			}
-		}
-	})
 }
 
 func TestImagePullPolicy(t *testing.T) {

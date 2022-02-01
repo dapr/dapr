@@ -438,12 +438,6 @@ func TestAppSSL(t *testing.T) {
 	})
 }
 
-func TestGetResiliency(t *testing.T) {
-	m := map[string]string{daprResiliencyKey: "resiliency1"}
-	r := getResiliency(m)
-	assert.Equal(t, "resiliency1", r)
-}
-
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
 

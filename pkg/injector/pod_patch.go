@@ -305,10 +305,6 @@ func getConfig(annotations map[string]string) string {
 	return getStringAnnotation(annotations, daprConfigKey)
 }
 
-func getResiliency(annotations map[string]string) string {
-	return getStringAnnotation(annotations, daprResiliencyKey)
-}
-
 func getProtocol(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprAppProtocolKey, "http")
 }
