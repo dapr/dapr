@@ -116,9 +116,23 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 		return &config, nil
 	}
 
-	_, body := resp.RawData()
-	if err = h.json.Unmarshal(body, &config); err != nil {
-		return nil, err
+	// Get versioning info, currently only v1 is supported.
+	headers := resp.Headers()
+	var version string
+	if val, ok := headers["dapr-app-config-version"]; ok {
+		if len(val.Values) == 1 {
+			version = val.Values[0]
+		}
+	}
+
+	switch version {
+	case "v1":
+		fallthrough
+	default:
+		_, body := resp.RawData()
+		if err = h.json.Unmarshal(body, &config); err != nil {
+			return nil, err
+		}
 	}
 
 	return &config, nil
