@@ -71,6 +71,17 @@ type renameReminderRequest struct {
 	NewName   string `json:"newName,omitempty"`
 }
 
+type reminderResponse struct {
+	ActorID        string      `json:"actorID,omitempty"`
+	ActorType      string      `json:"actorType,omitempty"`
+	Name           string      `json:"name,omitempty"`
+	Data           interface{} `json:"data"`
+	Period         string      `json:"period"`
+	DueTime        string      `json:"dueTime"`
+	RegisteredTime string      `json:"registeredTime,omitempty"`
+	ExpirationTime string      `json:"expirationTime,omitempty"`
+}
+
 func parseLogEntries(resp []byte) []actorLogEntry {
 	logEntries := []actorLogEntry{}
 	err := json.Unmarshal(resp, &logEntries)
@@ -220,6 +231,9 @@ func TestActorReminder(t *testing.T) {
 			}
 		}
 
+		resp, err := utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
+
 		t.Log("Done.")
 	})
 
@@ -262,10 +276,10 @@ func TestActorReminder(t *testing.T) {
 						fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName),
 						reminderRenameBody)
 					require.NoError(t, err)
-
-					t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
-					time.Sleep(secondsToCheckReminderResult * time.Second)
 				}
+
+				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
+				time.Sleep(secondsToCheckReminderResult * time.Second)
 			}(iteration)
 		}
 		wg.Wait()
@@ -280,10 +294,26 @@ func TestActorReminder(t *testing.T) {
 			for i := 0; i < numActorsPerThread; i++ {
 				actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 
-				count := countActorAction(resp, actorID, newReminderName)
-				require.True(t, count != 0, "Reminder %s for Actor %s was invoked %d times.", newReminderName, actorID, count)
+				count := countActorAction(resp, actorID, reminderName)
+				require.True(t, count != 0, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
+
+				resp, err = utils.HTTPGet(
+					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+				require.Error(t, err)
+
+				resp, err = utils.HTTPGet(
+					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", newReminderName))
+				require.NoError(t, err)
+
+				var re reminderResponse
+				err = json.Unmarshal(resp, &re)
+				require.NoError(t, err)
+				require.True(t, re != nil, "Reminder %s does not exist", newReminderName)
 			}
 		}
+
+		_, err := utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
 
 		t.Log("Done.")
 	})
