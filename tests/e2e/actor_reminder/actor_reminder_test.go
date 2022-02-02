@@ -242,9 +242,6 @@ func TestActorReminder(t *testing.T) {
 					require.NoError(t, err)
 				}
 
-				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
-				time.Sleep(secondsToCheckReminderResult * time.Second)
-
 				for i := 0; i < numActorsPerThread; i++ {
 					_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 					require.NoError(t, err)
@@ -265,13 +262,13 @@ func TestActorReminder(t *testing.T) {
 						fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName),
 						reminderRenameBody)
 					require.NoError(t, err)
+
+					t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
+					time.Sleep(secondsToCheckReminderResult * time.Second)
 				}
 			}(iteration)
 		}
 		wg.Wait()
-
-		t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
-		time.Sleep(secondsToCheckReminderResult * time.Second)
 
 		t.Logf("Getting logs from %s to see if reminders rename succeed ...", logsURL)
 		resp, err := utils.HTTPGet(logsURL)

@@ -635,7 +635,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
 	router.HandleFunc("/actors/{actorType}/{id}/method/{reminderOrTimer}/{method}", actorMethodHandler).Methods("PUT")
 
-	router.HandleFunc("/actors/{actorType}/{id}", deactivateActorHandler).Methods("POST", "DELETE")
+	router.HandleFunc("/actors/{actorType}/{id}", deactivateActorHandler).Methods("POST", "DELETE", "PATCH")
 
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
 	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")
