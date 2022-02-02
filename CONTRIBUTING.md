@@ -2,19 +2,13 @@
 
 Thank you for your interest in Dapr!
 
-This project welcomes contributions and suggestions. Most contributions require you to
-agree to a Contributor License Agreement (CLA) declaring that you have the right to,
-and actually do, grant us the rights to use your contribution.
+This project welcomes contributions and suggestions. Most contributions require you to signoff on your commits via 
+the Developer Certificate of Origin (DCO). When you submit a pull request, a DCO-bot will automatically determine 
+whether you need to provide signoff for your commit. Please follow the instructions provided by DCO-bot, as pull 
+requests cannot be merged until the author(s) have provided signoff to fulfill the DCO requirement.
+You may find more information on the DCO requirements [below](#developer-certificate-of-origin-signing-your-work).
 
-For details, visit https://cla.microsoft.com.
-
-When you submit a pull request, a CLA-bot will automatically determine whether you need
-to provide a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the
-instructions provided by the bot. You will only need to do this once across all repositories using our CLA.
-
-This project has adopted the Microsoft Open Source Code of Conduct.
-For more information see the Code of Conduct FAQ
-or contact opencode@microsoft.com with any additional questions or comments.
+This project has adopted the [Contributor Covenant Code of Conduct](https://github.com/dapr/community/blob/master/CODE-OF-CONDUCT.md).
 
 Contributions come in many forms: submitting issues, writing code, participating in discussions and community calls.
 
@@ -64,13 +58,54 @@ All contributions come through pull requests. To submit a proposed change, we re
 1. Create your change
     - Code changes require tests
 1. Update relevant documentation for the change
-1. Commit and open a PR
+1. Commit with [DCO sign-off](#developer-certificate-of-origin-signing-your-work) and open a PR
 1. Wait for the CI process to finish and make sure all checks are green
 1. A maintainer of the project will be assigned, and you can expect a review within a few days
 
 #### Use work-in-progress PRs for early feedback
 
 A good way to communicate before investing too much time is to create a "Work-in-progress" PR and share it with your reviewers. The standard way of doing this is to add a "[WIP]" prefix in your PR's title and assign the **do-not-merge** label. This will let people looking at your PR know that it is not well baked yet.
+
+### Developer Certificate of Origin: Signing your work
+
+#### Every commit needs to be signed
+
+The Developer Certificate of Origin (DCO) is a lightweight way for contributors to certify that they wrote or otherwise have the right to submit the code they are contributing to the project. Here is the full text of the [DCO](https://developercertificate.org/), reformatted for readability:
+```
+By making a contribution to this project, I certify that:
+
+    (a) The contribution was created in whole or in part by me and I have the right to submit it under the open source license indicated in the file; or
+
+    (b) The contribution is based upon previous work that, to the best of my knowledge, is covered under an appropriate open source license and I have the right under that license to submit that work with modifications, whether created in whole or in part by me, under the same open source license (unless I am permitted to submit under a different license), as indicated in the file; or
+
+    (c) The contribution was provided directly to me by some other person who certified (a), (b) or (c) and I have not modified it.
+
+    (d) I understand and agree that this project and the contribution are public and that a record of the contribution (including all personal information I submit with it, including my sign-off) is maintained indefinitely and may be redistributed consistent with this project or the open source license(s) involved.
+```
+
+Contributors sign-off that they adhere to these requirements by adding a `Signed-off-by` line to commit messages.
+
+```
+This is my commit message
+
+Signed-off-by: Random J Developer <random@developer.example.org>
+```
+Git even has a `-s` command line option to append this automatically to your commit message:
+```
+$ git commit -s -m 'This is my commit message'
+```
+
+Each Pull Request is checked  whether or not commits in a Pull Request do contain a valid Signed-off-by line.
+
+#### I didn't sign my commit, now what?!
+
+No worries - You can easily replay your changes, sign them and force push them!
+
+```
+git checkout <branch-name>
+git commit --amend --no-edit --signoff
+git push --force-with-lease <remote-name> <branch-name>
+```
 
 ### Use of Third-party code
 
@@ -80,4 +115,4 @@ A good way to communicate before investing too much time is to create a "Work-in
 
 ## Code of Conduct
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+This project has adopted the [Contributor Covenant Code of Conduct](https://github.com/dapr/community/blob/master/CODE-OF-CONDUCT.md)

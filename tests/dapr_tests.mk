@@ -1,7 +1,15 @@
-# ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation and Dapr Contributors.
-# Licensed under the MIT License.
-# ------------------------------------------------------------
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
@@ -200,9 +208,9 @@ push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
 	# In golang >=1.16 there is a new way to do this with `go install gotest.tools/gotestsum@latest`
-	# But this doesn't work with <=1.15, so we do it the old way for now 
+	# But this doesn't work with <=1.15.
 	# (see: https://golang.org/ref/mod#go-install)
-	command -v gotestsum || GO111MODULE=off go get gotest.tools/gotestsum
+	command -v gotestsum || go install gotest.tools/gotestsum@latest
 
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
@@ -263,6 +271,10 @@ delete-test-env-mongodb:
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb
+
+save-dapr-control-plane-k8s-resources:
+	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
+	kubectl describe all -n $(DAPR_TEST_NAMESPACE) > '$(DAPR_CONTAINER_LOG_PATH)/control_plane_k8s_resources.txt'
 
 save-dapr-control-plane-k8s-logs:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
