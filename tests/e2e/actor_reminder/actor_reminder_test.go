@@ -280,7 +280,7 @@ func TestActorReminder(t *testing.T) {
 			for i := 0; i < numActorsPerThread; i++ {
 				actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 
-				count = countActorAction(resp, actorID, newReminderName)
+				count := countActorAction(resp, actorID, newReminderName)
 				require.True(t, count != 0, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
 			}
 		}
