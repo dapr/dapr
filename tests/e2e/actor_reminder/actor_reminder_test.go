@@ -35,6 +35,7 @@ const (
 	actorIDRestartTemplate       = "actor-reminder-restart-test-%d"     // Template for Actor ID
 	actorIDPartitionTemplate     = "actor-reminder-partition-test-%d"   // Template for Actor ID
 	reminderName                 = "RestartTestReminder"                // Reminder name
+	newReminderName              = "NewRestartTestReminder"             // New reminder name
 	numIterations                = 7                                    // Number of times each test should run.
 	numHealthChecks              = 60                                   // Number of get calls before starting tests.
 	numActorsPerThread           = 10                                   // Number of get calls before starting tests.
@@ -60,6 +61,14 @@ type actorReminder struct {
 	Period   string `json:"period,omitempty"`
 	TTL      string `json:"ttl,omitempty"`
 	Callback string `json:"callback,omitempty"`
+}
+
+// renameReminderRequest is the request object for rename a reminder.
+type renameReminderRequest struct {
+	OldName   string `json:"oldName,omitempty"`
+	ActorType string `json:"actorType,omitempty"`
+	ActorID   string `json:"actorID,omitempty"`
+	NewName   string `json:"newName,omitempty"`
 }
 
 func parseLogEntries(resp []byte) []actorLogEntry {
@@ -208,6 +217,73 @@ func TestActorReminder(t *testing.T) {
 				actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 				count := countActorAction(resp, actorID, reminderName)
 				require.True(t, count == 0, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
+			}
+		}
+
+		t.Log("Done.")
+	})
+
+	t.Run("Actor reminder rename should succeed.", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for iteration := 1; iteration <= numIterations; iteration++ {
+			wg.Add(1)
+			go func(iteration int) {
+				defer wg.Done()
+				t.Logf("Running iteration %d out of %d ...", iteration, numIterations)
+
+				for i := 0; i < numActorsPerThread; i++ {
+					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
+					// Deleting pre-existing reminder
+					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+					require.NoError(t, err)
+
+					// Registering reminder
+					_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reminderBody)
+					require.NoError(t, err)
+				}
+
+				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
+				time.Sleep(secondsToCheckReminderResult * time.Second)
+
+				for i := 0; i < numActorsPerThread; i++ {
+					_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+					require.NoError(t, err)
+
+					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
+
+					reminderRequest := renameReminderRequest{
+						OldName:   reminderName,
+						ActorType: actorName,
+						ActorID:   actorID,
+						NewName:   newReminderName,
+					}
+					reminderRenameBody, err := json.Marshal(reminderRequest)
+					require.NoError(t, err)
+
+					// rename reminder
+					_, err = utils.HTTPPatch(
+						fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName),
+						reminderRenameBody)
+					require.NoError(t, err)
+				}
+			}(iteration)
+		}
+		wg.Wait()
+
+		t.Logf("Getting logs from %s to see if reminders rename succeed ...", logsURL)
+		resp, err := utils.HTTPGet(logsURL)
+		require.NoError(t, err)
+
+		t.Log("Checking reminders rename succeed ...")
+		for iteration := 1; iteration <= numIterations; iteration++ {
+			// After the app rename a reminder, there should be all reminders are triggered normally and the name change is successful.
+			for i := 0; i < numActorsPerThread; i++ {
+				actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
+				count := countActorAction(resp, actorID, reminderName)
+				require.True(t, count == 0, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
+
+				count = countActorAction(resp, actorID, newReminderName)
+				require.True(t, count == 1, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
 			}
 		}
 
