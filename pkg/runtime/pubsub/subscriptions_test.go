@@ -265,10 +265,15 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 type mockUnstableHTTPSubscriptions struct {
 	channel.AppChannel
 	callCount        int
+	alwaysError      bool
 	successThreshold int
 }
 
 func (m *mockUnstableHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if m.alwaysError {
+		return nil, errors.New("error")
+	}
+
 	m.callCount++
 
 	if m.callCount < m.successThreshold {
@@ -385,6 +390,15 @@ func TestHTTPSubscriptions(t *testing.T) {
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
+	})
+
+	t.Run("error from app, retries exhausted", func(t *testing.T) {
+		m := mockUnstableHTTPSubscriptions{
+			alwaysError: true,
+		}
+
+		_, err := GetSubscriptionsHTTP(&m, log)
+		require.Error(t, err)
 	})
 }
 
