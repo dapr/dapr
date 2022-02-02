@@ -270,6 +270,9 @@ func TestActorReminder(t *testing.T) {
 		}
 		wg.Wait()
 
+		t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
+		time.Sleep(secondsToCheckReminderResult * time.Second)
+
 		t.Logf("Getting logs from %s to see if reminders rename succeed ...", logsURL)
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
@@ -281,7 +284,7 @@ func TestActorReminder(t *testing.T) {
 				actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 
 				count := countActorAction(resp, actorID, newReminderName)
-				require.True(t, count != 0, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
+				require.True(t, count != 0, "Reminder %s for Actor %s was invoked %d times.", newReminderName, actorID, count)
 			}
 		}
 
