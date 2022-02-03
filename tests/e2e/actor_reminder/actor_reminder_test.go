@@ -35,6 +35,7 @@ const (
 	actorIDRestartTemplate       = "actor-reminder-restart-test-%d"     // Template for Actor ID
 	actorIDPartitionTemplate     = "actor-reminder-partition-test-%d"   // Template for Actor ID
 	reminderName                 = "RestartTestReminder"                // Reminder name
+	actorIDRenameTemplate        = "actor-reminder-rename-test-%d"      // Template for Actor ID
 	reminderNameForRename        = "RenameTestReminder"                 // Reminder name for renaming tests
 	newReminderNameForRename     = "NewRenameTestReminder"              // New reminder name for renaming tests
 	numIterations                = 7                                    // Number of times each test should run.
@@ -247,7 +248,7 @@ func TestActorReminder(t *testing.T) {
 				t.Logf("Running iteration %d out of %d ...", iteration, numIterations)
 
 				for i := 0; i < numActorsPerThread; i++ {
-					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
+					actorID := fmt.Sprintf(actorIDRenameTemplate, i+(1000*iteration))
 					// Deleting pre-existing reminder
 					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForRename))
 					require.NoError(t, err)
@@ -261,7 +262,7 @@ func TestActorReminder(t *testing.T) {
 					_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 					require.NoError(t, err)
 
-					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
+					actorID := fmt.Sprintf(actorIDRenameTemplate, i+(1000*iteration))
 
 					reminderRequest := renameReminderRequest{
 						OldName:   reminderNameForRename,
@@ -293,19 +294,28 @@ func TestActorReminder(t *testing.T) {
 		for iteration := 1; iteration <= numIterations; iteration++ {
 			// After the app rename a reminder, there should be all reminders are triggered normally and the name change is successful.
 			for i := 0; i < numActorsPerThread; i++ {
-				actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
+				actorID := fmt.Sprintf(actorIDRenameTemplate, i+(1000*iteration))
 
 				count := countActorAction(resp, actorID, reminderNameForRename)
 				require.True(t, count != 0, "Reminder %s for Actor %s was invoked %d times.", reminderNameForRename, actorID, count)
 
 				resp, err = utils.HTTPGet(
+					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForRename))
+				require.NoError(t, err)
+
+				resp1 := reminderResponse{}
+				err = json.Unmarshal(resp, &resp1)
+				require.NoError(t, err)
+				require.True(t, resp1.DueTime == "", "Reminder %s exist", reminderNameForRename)
+
+				resp, err = utils.HTTPGet(
 					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", newReminderNameForRename))
 				require.NoError(t, err)
 
-				response := reminderResponse{}
+				var response reminderResponse
 				err = json.Unmarshal(resp, &response)
 				require.NoError(t, err)
-				require.True(t, response.DueTime != "", "Reminder %s does not exist", newReminderNameForRename)
+				require.NotNil(t, response, "Reminder %s does not exist", newReminderNameForRename)
 			}
 		}
 
