@@ -307,7 +307,7 @@ func TestActorReminder(t *testing.T) {
 				require.NoError(t, err)
 
 				response := reminderResponse{}
-				err = json.Unmarshal(resp, &re)
+				err = json.Unmarshal(resp, &response)
 				require.NoError(t, err)
 				require.True(t, response.Name == newReminderNameForRename, "Reminder %s does not exist", newReminderNameForRename)
 			}
