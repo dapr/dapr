@@ -299,17 +299,13 @@ func TestActorReminder(t *testing.T) {
 				require.True(t, count != 0, "Reminder %s for Actor %s was invoked %d times.", reminderNameForRename, actorID, count)
 
 				resp, err = utils.HTTPGet(
-					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForRename))
-				require.Error(t, err)
-
-				resp, err = utils.HTTPGet(
 					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", newReminderNameForRename))
 				require.NoError(t, err)
 
 				response := reminderResponse{}
 				err = json.Unmarshal(resp, &response)
 				require.NoError(t, err)
-				require.True(t, response.Name == newReminderNameForRename, "Reminder %s does not exist", newReminderNameForRename)
+				require.True(t, response.DueTime != "", "Reminder %s does not exist", newReminderNameForRename)
 			}
 		}
 
