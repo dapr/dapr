@@ -331,7 +331,11 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	case "timers":
 		fallthrough
 	case "reminders":
-		expectedHTTPCode = 204
+		if r.Method == "GET" {
+			expectedHTTPCode = 200
+		} else {
+			expectedHTTPCode = 204
+		}
 		body, err := io.ReadAll(r.Body)
 		defer r.Body.Close()
 		if err != nil {
@@ -630,10 +634,10 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 
-	// The POST method is used to register reminders
-	// The DELETE method is used to unregister reminders
-	// The PATCH method is used to rename reminders
-	// The GET method is used to get reminders
+	// The POST method is used to register reminder
+	// The DELETE method is used to unregister reminder
+	// The PATCH method is used to rename reminder
+	// The GET method is used to get reminder
 	router.HandleFunc("/test/{actorType}/{id}/{callType}/{method}", testCallActorHandler).Methods("POST", "DELETE", "PATCH", "GET")
 
 	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
