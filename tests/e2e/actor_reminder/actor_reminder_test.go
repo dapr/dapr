@@ -302,12 +302,12 @@ func TestActorReminder(t *testing.T) {
 				resp, err = utils.HTTPGet(
 					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForRename))
 				require.NoError(t, err)
-				require.Nil(t, resp, "Reminder %s exist", reminderNameForRename)
+				require.True(t, len(resp) == 0, "Reminder %s exist", reminderNameForRename)
 
 				resp, err = utils.HTTPGet(
 					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", newReminderNameForRename))
 				require.NoError(t, err)
-				require.NotNil(t, resp, "Reminder %s does not exist", newReminderNameForRename)
+				require.True(t, len(resp) != 0, "Reminder %s does not exist", newReminderNameForRename)
 			}
 		}
 
