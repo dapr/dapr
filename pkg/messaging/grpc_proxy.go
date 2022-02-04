@@ -31,11 +31,6 @@ import (
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
-const (
-	// GRPCFeatureName is the feature name for the Dapr configuration required to enable the proxy.
-	GRPCFeatureName = "proxy.grpc"
-)
-
 // Proxy is the interface for a gRPC transparent proxy.
 type Proxy interface {
 	Handler() grpc.StreamHandler
