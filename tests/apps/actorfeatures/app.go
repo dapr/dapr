@@ -80,11 +80,15 @@ type daprActorResponse struct {
 
 // request for timer or reminder.
 type timerReminderRequest struct {
-	Data     string `json:"data,omitempty"`
-	DueTime  string `json:"dueTime,omitempty"`
-	Period   string `json:"period,omitempty"`
-	TTL      string `json:"ttl,omitempty"`
-	Callback string `json:"callback,omitempty"`
+	OldName   string `json:"oldName,omitempty"`
+	ActorType string `json:"actorType,omitempty"`
+	ActorID   string `json:"actorID,omitempty"`
+	NewName   string `json:"newName,omitempty"`
+	Data      string `json:"data,omitempty"`
+	DueTime   string `json:"dueTime,omitempty"`
+	Period    string `json:"period,omitempty"`
+	TTL       string `json:"ttl,omitempty"`
+	Callback  string `json:"callback,omitempty"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.
