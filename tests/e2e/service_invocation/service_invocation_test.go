@@ -127,7 +127,6 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			Config:         "grpcproxyconfig",
 		},
 		{
 			AppName:        "grpcproxyserver",
@@ -137,7 +136,6 @@ func TestMain(m *testing.M) {
 			IngressEnabled: false,
 			MetricsEnabled: true,
 			AppProtocol:    "grpc",
-			Config:         "grpcproxyconfig",
 			AppPort:        50051,
 		},
 	}
