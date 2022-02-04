@@ -291,10 +291,11 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	req := pubsub.PublishRequest{
-		PubsubName: pubsubName,
-		Topic:      topic,
-		Data:       data,
-		Metadata:   in.Metadata,
+		PubsubName:  pubsubName,
+		Topic:       topic,
+		Data:        data,
+		Metadata:    in.Metadata,
+		ContentType: &in.DataContentType,
 	}
 
 	err := a.pubsubAdapter.Publish(&req)
@@ -372,6 +373,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	if resp != nil {
 		r.Data = resp.Data
 		r.Metadata = resp.Metadata
+		r.ContentType = stringValueOrEmpty(resp.ContentType)
 	}
 	return r, nil
 }
@@ -410,11 +412,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		}
 		for i := 0; i < len(responses); i++ {
 			item := &runtimev1pb.BulkStateItem{
-				Key:      state_loader.GetOriginalStateKey(responses[i].Key),
-				Data:     responses[i].Data,
-				Etag:     stringValueOrEmpty(responses[i].ETag),
-				Metadata: responses[i].Metadata,
-				Error:    responses[i].Error,
+				Key:         state_loader.GetOriginalStateKey(responses[i].Key),
+				Data:        responses[i].Data,
+				Etag:        stringValueOrEmpty(responses[i].ETag),
+				Metadata:    responses[i].Metadata,
+				Error:       responses[i].Error,
+				ContentType: stringValueOrEmpty(responses[i].ContentType),
 			}
 			bulkResp.Items = append(bulkResp.Items, item)
 		}
@@ -518,6 +521,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		response.Etag = stringValueOrEmpty(getResponse.ETag)
 		response.Data = getResponse.Data
 		response.Metadata = getResponse.Metadata
+		response.ContentType = stringValueOrEmpty(getResponse.ContentType)
 	}
 	return response, nil
 }
@@ -539,6 +543,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			Key:      key,
 			Metadata: s.Metadata,
 			Value:    s.Value,
+		}
+		if s.ContentType != nil {
+			req.ContentType = &s.ContentType.Value
 		}
 		if s.Etag != nil {
 			req.ETag = &s.Etag.Value

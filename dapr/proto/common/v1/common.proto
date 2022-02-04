@@ -106,6 +106,13 @@ message StateItem {
 
   // Options for concurrency and consistency to save the state.
   StateOptions options = 5;
+
+  // The content type of the value, as specified by the app.
+  ContentType contentType = 6;
+}
+
+message ContentType {
+  string value = 1;
 }
 
 // Etag represents a state item version

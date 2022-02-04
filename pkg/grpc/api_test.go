@@ -964,8 +964,9 @@ func TestGetState(t *testing.T) {
 		return req.Key == goodKey
 	})).Return(
 		&state.GetResponse{
-			Data: []byte("test-data"),
-			ETag: ptr.String("test-etag"),
+			Data:        []byte("test-data"),
+			ETag:        ptr.String("test-etag"),
+			ContentType: ptr.String("test-contenttype"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorKey
@@ -1000,8 +1001,9 @@ func TestGetState(t *testing.T) {
 			key:           "good-key",
 			errorExcepted: false,
 			expectedResponse: &runtimev1pb.GetStateResponse{
-				Data: []byte("test-data"),
-				Etag: "test-etag",
+				Data:        []byte("test-data"),
+				Etag:        "test-etag",
+				ContentType: "test-contenttype",
 			},
 			expectedError: codes.OK,
 		},
@@ -1035,6 +1037,7 @@ func TestGetState(t *testing.T) {
 				assert.NoError(t, err, "Expected no error")
 				assert.Equal(t, resp.Data, tt.expectedResponse.Data, "Expected response Data to be same")
 				assert.Equal(t, resp.Etag, tt.expectedResponse.Etag, "Expected response Etag to be same")
+				assert.Equal(t, resp.ContentType, tt.expectedResponse.ContentType)
 			} else {
 				assert.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
@@ -1962,6 +1965,11 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 }
 
 type mockConfigStore struct{}
+
+func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnSubscribeRequest) error {
+	// TODO implement me
+	panic("implement me")
+}
 
 func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
 	return nil

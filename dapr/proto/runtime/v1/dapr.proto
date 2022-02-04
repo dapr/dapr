@@ -165,6 +165,9 @@ message BulkStateItem {
 
   // The metadata which will be sent to app.
   map<string, string> metadata = 5;
+
+  // The content type of the data, as specified by the state store.
+  string contentType = 6;
 }
 
 // GetStateResponse is the response conveying the state value and etag.
@@ -178,6 +181,9 @@ message GetStateResponse {
 
   // The metadata which will be sent to app.
   map<string, string> metadata = 3;
+
+  // The content type of the data, as specified by the state store.
+  string contentType = 6;
 }
 
 // DeleteStateRequest is the message to delete key-value states in the specific state store.
@@ -255,6 +261,9 @@ message QueryStateResponse {
 
   // The metadata which will be sent to app.
   map<string, string> metadata = 3;
+
+  // The content type of the data, as specified by the state store.
+  string contentType = 5;
 }
 
 // PublishEventRequest is the message to publish event data to pubsub topic
@@ -297,6 +306,9 @@ message InvokeBindingRequest {
 
   // The name of the operation type for the binding to invoke
   string operation = 4;
+
+  // The content type of the data, as specified by the app.
+  common.v1.ContentType contentType = 5;
 }
 
 // InvokeBindingResponse is the message returned from an output binding invocation
@@ -306,6 +318,9 @@ message InvokeBindingResponse {
 
   // The metadata returned from an external system
   map<string, string> metadata = 2;
+
+  // The content type of the data, as specified by the binding.
+  string contentType = 3;
 }
 
 // GetSecretRequest is the message to get secret from secret store.
