@@ -21,6 +21,7 @@ on:
       - feature/*
     tags:
       - v*
+      - nightly*
   pull_request:
     branches:
       - master
@@ -244,7 +245,7 @@ jobs:
       - name: lists artifacts
         run: ls -l ${{ env.ARTIFACT_DIR }}
       - name: publish binaries to github
-        if: startswith(github.ref, 'refs/tags/v')
+        if:  contains(env.RELEASE_TO_GH, 'True')
         run: |
           echo "installing github-release-cli..."
           sudo npm install --silent --no-progress -g github-release-cli@1.3.1
@@ -266,8 +267,8 @@ jobs:
           echo "Uploading Dapr Runtime Binaries to GitHub Release"
           github-release upload \
             --owner $OWNER_NAME --repo $REPO_NAME \
-            --tag "v${REL_VERSION}" \
-            --name "Dapr Runtime v${REL_VERSION}" \
+            --tag "${REL_TAG}" \
+            --name "Dapr Runtime ${REL_TAG}" \
             --body "${RELEASE_BODY}" \
             --prerelease true \
             ${RELEASE_ARTIFACT[*]}

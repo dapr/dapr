@@ -1,0 +1,40 @@
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+
+name: dapr-nightly
+on:
+  schedule:
+    - cron:  '00 22 * * *'
+jobs:
+  tag-release:
+    name: Set-nightly-release-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'nightly-%Y-%m-%d')"
+      - name: Checkout branch "master"
+        uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.DAPR_BOT_TOKEN }}
+          ref: 'master'
+      - name: Tag snapshot
+        uses: tvdias/github-tagger@v0.0.1
+        with:
+          repo-token: ${{ secrets.DAPR_BOT_TOKEN }}
+          tag: ${{ steps.date.outputs.date }}
+
+# TODO
+# Check if there were changes since last release before tagging
+# Purge older releases
