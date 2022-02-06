@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 # This script parses release version from Git tag and set the parsed version to
 # environment variable, REL_VERSION. If the tag is the final version, it sets
 # LATEST_RELEASE to true to add 'latest' tag to docker image.
