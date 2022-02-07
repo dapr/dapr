@@ -852,8 +852,9 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		actor: nil,
-		json:  jsoniter.ConfigFastest,
+		actor:      nil,
+		json:       jsoniter.ConfigFastest,
+		resiliency: resiliency.New(nil),
 	}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())

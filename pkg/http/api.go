@@ -1246,14 +1246,22 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	req.WithHTTPExtension(verb, reqCtx.QueryArgs().String())
 	req.WithRawData(body, string(reqCtx.Request.Header.ContentType()))
 
-	// Save headers to metadata
+	// Save headers to metadata.
 	metadata := map[string][]string{}
 	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
 		metadata[string(key)] = []string{string(value)}
 	})
 	req.WithMetadata(metadata)
 
-	resp, err := a.actor.Call(reqCtx, req)
+	// Unlike other actor calls, resiliency is handled here for invocation.
+	// This is due to actor invocation involving a lookup for the host.
+	// Having the retry here allows us to capture that and be resilient to host failure.
+	policy := a.resiliency.ActorPolicy(reqCtx, actorType, actorID)
+	var resp *invokev1.InvokeMethodResponse
+	err := policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = a.actor.Call(ctx, req)
+		return rErr
+	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1265,7 +1273,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	contentType, body := resp.RawData()
 	reqCtx.Response.Header.SetContentType(contentType)
 
-	// Construct response
+	// Construct response.
 	statusCode := int(resp.Status().Code)
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
