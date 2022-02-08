@@ -1639,6 +1639,10 @@ func (a *DaprRuntime) initActors() error {
 	return err
 }
 
+func (a *DaprRuntime) hostingActors() bool {
+	return len(a.appConfig.Entities) > 0
+}
+
 func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {
 	authorized := []components_v1alpha1.Component{}
 
