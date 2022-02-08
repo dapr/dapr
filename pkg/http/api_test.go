@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 //nolint:goconst
 package http
@@ -47,6 +55,7 @@ import (
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/encryption"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -855,7 +864,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		apisAndMethods := map[string][]string{
 			"v1.0/actors/fakeActorType/fakeActorID/state/key1":          {"GET"},
 			"v1.0/actors/fakeActorType/fakeActorID/state":               {"POST", "PUT"},
-			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE", "PATCH"},
 			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
 		}
@@ -893,6 +902,24 @@ func TestV1ActorEndpoints(t *testing.T) {
 				assert.Equal(t, 400, resp.StatusCode, apiPath)
 				assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
 			}
+		}
+	})
+
+	t.Run("All PATCH APIs - 400 for invalid JSON", func(t *testing.T) {
+		testAPI.actor = new(daprt.MockActors)
+		apiPaths := []string{
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
+		}
+
+		for _, apiPath := range apiPaths {
+			inputBodyBytes := invalidJSON
+
+			// act
+			resp := fakeServer.DoRequest(fasthttp.MethodPatch, apiPath, inputBodyBytes, nil)
+
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, apiPath)
+			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -1188,6 +1215,59 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_CREATE", resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
+	})
+
+	t.Run("Reminder Rename - 204 when RenameReminderFails", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		reminderRequest := actors.RenameReminderRequest{
+			OldName:   "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			NewName:   "reminder2",
+		}
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 204, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
+	})
+
+	t.Run("Reminder Rename - 500 when RenameReminderFails", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		reminderRequest := actors.RenameReminderRequest{
+			OldName:   "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			NewName:   "reminder2",
+		}
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_RENAME", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
 	})
 
 	t.Run("Reminder Delete - 204 No Content", func(t *testing.T) {
@@ -1874,14 +1954,14 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
 	registry := http_middleware_loader.NewRegistry()
-	registry.Register(http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
+	registry.Register(http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 		return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 			return func(ctx *fasthttp.RequestCtx) {
 				body := string(ctx.PostBody())
 				ctx.Request.SetBody([]byte(strings.ToUpper(body)))
 				h(ctx)
 			}
-		}
+		}, nil
 	}))
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
@@ -2538,39 +2618,47 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	assert.Equal(t, 405, resp.StatusCode)
 }
 
+func TestStateStoreQuerierEncrypted(t *testing.T) {
+	storeName := "encrypted-store1"
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		stateStores: map[string]state.Store{storeName: fakeStateStoreQuerier{}},
+	}
+	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
+	fakeServer.StartServer(testAPI.constructStateEndpoints())
+
+	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/"+storeName+"/query", nil, nil)
+	// assert
+	assert.Equal(t, 400, resp.StatusCode)
+}
+
 const (
 	queryTestRequestOK = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"sort": [
-			{ "key": "a" }
-		],
-		"pagination": {
-			"limit": 2
-		}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"sort": [
+		{ "key": "a" }
+	],
+	"page": {
+		"limit": 2
 	}
 }`
 	queryTestRequestNoRes = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"pagination": {
-			"limit": 2
-		}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"page": {
+		"limit": 2
 	}
 }`
 	queryTestRequestErr = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"sort": [
-			{ "key": "a" }
-		]
-	}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"sort": [
+		{ "key": "a" }
+	]
 }`
 	queryTestRequestSyntaxErr = `syntax error`
 )

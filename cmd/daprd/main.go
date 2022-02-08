@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package main
 
@@ -15,19 +23,19 @@ import (
 	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/dapr/dapr/pkg/runtime"
-	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/kit/logger"
 
 	// Included components in compiled daprd.
 
 	// Secret stores.
 	"github.com/dapr/components-contrib/secretstores"
+	alicloud_paramstore "github.com/dapr/components-contrib/secretstores/alicloud/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
-	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
+	secretstore_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstore_env "github.com/dapr/components-contrib/secretstores/local/env"
 	secretstore_file "github.com/dapr/components-contrib/secretstores/local/file"
 
@@ -41,7 +49,6 @@ import (
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
-	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/couchbase"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
@@ -49,6 +56,7 @@ import (
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
 	state_mysql "github.com/dapr/components-contrib/state/mysql"
+	state_oci_objectstorage "github.com/dapr/components-contrib/state/oci/objectstorage"
 	"github.com/dapr/components-contrib/state/postgresql"
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/rethinkdb"
@@ -72,7 +80,6 @@ import (
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
-
 	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
@@ -155,7 +162,6 @@ func main() {
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
 
-	logger.DaprVersion = version.Version()
 	rt, err := runtime.FromFlags()
 	if err != nil {
 		log.Fatal(err)
@@ -164,7 +170,7 @@ func main() {
 	err = rt.Run(
 		runtime.WithSecretStores(
 			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
-				return sercetstores_kubernetes.NewKubernetesSecretStore(logContrib)
+				return secretstore_kubernetes.NewKubernetesSecretStore(logContrib)
 			}),
 			secretstores_loader.New("azure.keyvault", func() secretstores.SecretStore {
 				return keyvault.NewAzureKeyvaultSecretStore(logContrib)
@@ -186,6 +192,9 @@ func main() {
 			}),
 			secretstores_loader.New("local.env", func() secretstores.SecretStore {
 				return secretstore_env.NewEnvSecretStore(logContrib)
+			}),
+			secretstores_loader.New("alicloud.parameterstore", func() secretstores.SecretStore {
+				return alicloud_paramstore.NewParameterStore(logContrib)
 			}),
 		),
 		runtime.WithStates(
@@ -228,9 +237,6 @@ func main() {
 			state_loader.New("hazelcast", func() state.Store {
 				return hazelcast.NewHazelcastStore(logContrib)
 			}),
-			state_loader.New("cloudstate.crdt", func() state.Store {
-				return cloudstate.NewCRDT(logContrib)
-			}),
 			state_loader.New("couchbase", func() state.Store {
 				return couchbase.NewCouchbaseStateStore(logContrib)
 			}),
@@ -243,6 +249,9 @@ func main() {
 			state_loader.New("aws.dynamodb", state_dynamodb.NewDynamoDBStateStore),
 			state_loader.New("mysql", func() state.Store {
 				return state_mysql.NewMySQLStateStore(logContrib)
+			}),
+			state_loader.New("oci.objectstorage", func() state.Store {
+				return state_oci_objectstorage.NewOCIObjectStorageStore(logContrib)
 			}),
 		),
 		runtime.WithConfigurations(
@@ -466,38 +475,32 @@ func main() {
 			}),
 		),
 		runtime.WithHTTPMiddleware(
-			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
+			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 				return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 					return func(ctx *fasthttp.RequestCtx) {
 						body := string(ctx.PostBody())
 						ctx.Request.SetBody([]byte(strings.ToUpper(body)))
 						h(ctx)
 					}
-				}
+				}, nil
 			}),
-			http_middleware_loader.New("oauth2", func(metadata middleware.Metadata) http_middleware.Middleware {
-				handler, _ := oauth2.NewOAuth2Middleware().GetHandler(metadata)
-				return handler
+			http_middleware_loader.New("oauth2", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return oauth2.NewOAuth2Middleware().GetHandler(metadata)
 			}),
-			http_middleware_loader.New("oauth2clientcredentials", func(metadata middleware.Metadata) http_middleware.Middleware {
-				handler, _ := oauth2clientcredentials.NewOAuth2ClientCredentialsMiddleware(log).GetHandler(metadata)
-				return handler
+			http_middleware_loader.New("oauth2clientcredentials", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return oauth2clientcredentials.NewOAuth2ClientCredentialsMiddleware(log).GetHandler(metadata)
 			}),
-			http_middleware_loader.New("ratelimit", func(metadata middleware.Metadata) http_middleware.Middleware {
-				handler, _ := ratelimit.NewRateLimitMiddleware(log).GetHandler(metadata)
-				return handler
+			http_middleware_loader.New("ratelimit", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return ratelimit.NewRateLimitMiddleware(log).GetHandler(metadata)
 			}),
-			http_middleware_loader.New("bearer", func(metadata middleware.Metadata) http_middleware.Middleware {
-				handler, _ := bearer.NewBearerMiddleware(log).GetHandler(metadata)
-				return handler
+			http_middleware_loader.New("bearer", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return bearer.NewBearerMiddleware(log).GetHandler(metadata)
 			}),
-			http_middleware_loader.New("opa", func(metadata middleware.Metadata) http_middleware.Middleware {
-				handler, _ := opa.NewMiddleware(log).GetHandler(metadata)
-				return handler
+			http_middleware_loader.New("opa", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return opa.NewMiddleware(log).GetHandler(metadata)
 			}),
-			http_middleware_loader.New("sentinel", func(metadata middleware.Metadata) http_middleware.Middleware {
-				handler, _ := sentinel.NewMiddleware(log).GetHandler(metadata)
-				return handler
+			http_middleware_loader.New("sentinel", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return sentinel.NewMiddleware(log).GetHandler(metadata)
 			}),
 		),
 	)

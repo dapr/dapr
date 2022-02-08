@@ -1,7 +1,15 @@
-# ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation and Dapr Contributors.
-# Licensed under the MIT License.
-# ------------------------------------------------------------
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 ################################################################################
 # Variables                                                                    #
@@ -24,7 +32,8 @@ FORCE_INMEM ?= true
 LATEST_RELEASE ?=
 
 PROTOC ?=protoc
-
+# name of protoc-gen-go when protoc-gen-go --version is run.
+PROTOC_GEN_GO_NAME = "protoc-gen-go"
 ifdef REL_VERSION
 	DAPR_VERSION := $(REL_VERSION)
 else
@@ -58,8 +67,11 @@ else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
 else
    TARGET_OS_LOCAL ?= windows
+   PROTOC_GEN_GO_NAME := "protoc-gen-go.exe"
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
+
+PROTOC_GEN_GO_NAME+= "v1.26.0"
 
 # Default docker container and e2e test targst.
 TARGET_OS ?= linux
@@ -96,10 +108,12 @@ HELM_REGISTRY?=daprio.azurecr.io
 # Go build details                                                             #
 ################################################################################
 BASE_PACKAGE_NAME := github.com/dapr/dapr
+LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.gitcommit=$(GIT_COMMIT) \
   -X $(BASE_PACKAGE_NAME)/pkg/version.gitversion=$(GIT_VERSION) \
-  -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)
+  -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION) \
+  -X $(LOGGER_PACKAGE_NAME).DaprVersion=$(DAPR_VERSION)
 
 ifeq ($(origin DEBUG), undefined)
   BUILDTYPE_DIR:=release
@@ -250,7 +264,8 @@ modtidy:
 ################################################################################
 .PHONY: init-proto
 init-proto:
-	go get google.golang.org/protobuf/cmd/protoc-gen-go@v1.25.0 google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1.0
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.26
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1
 
 ################################################################################
 # Target: gen-proto                                                            #
@@ -299,8 +314,8 @@ check-proto-version: ## Checking the version of proto related tools
 	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc 1.1.0" \
 	|| { echo "please use protoc-gen-go-grpc 1.1.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
-	@test "$(shell protoc-gen-go --version 2>&1)" = "protoc-gen-go v1.25.0" \
-	|| { echo "please use protoc-gen-go v1.25.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	@test "$(shell protoc-gen-go --version 2>&1)" = "$(PROTOC_GEN_GO_NAME)" \
+	|| { echo "please use protoc-gen-go v1.26.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
 # Target: check-proto-diff                                                           #

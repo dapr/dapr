@@ -1,9 +1,18 @@
+//go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package actor_reminder_e2e
 
@@ -30,8 +39,10 @@ const (
 	numHealthChecks              = 60                                   // Number of get calls before starting tests.
 	numActorsPerThread           = 10                                   // Number of get calls before starting tests.
 	secondsToCheckReminderResult = 20                                   // How much time to wait to make sure the result is in logs.
-	actorInvokeURLFormat         = "%s/test/testactorreminder/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
+	actorName                    = "testactorreminder"                  // Actor name
+	actorInvokeURLFormat         = "%s/test/" + actorName + "/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat           = "%s/test/logs"                       // URL to fetch logs from test app.
+	shutdownURLFormat            = "%s/test/shutdown"                   // URL to shutdown sidecar and app.
 )
 
 // represents a response for the APIs in this app.
@@ -91,7 +102,7 @@ func TestMain(m *testing.M) {
 			AppCPULimit:    "2.0",
 			AppCPURequest:  "0.1",
 			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_TYPE": "testactorreminder",
+				"TEST_APP_ACTOR_TYPE": actorName,
 			},
 		},
 	}
@@ -172,16 +183,18 @@ func TestActorReminder(t *testing.T) {
 		wg.Wait()
 
 		t.Logf("Restarting %s ...", appName)
-		tr.Platform.Restart(appName)
+		// Shutdown the sidecar
+		_, err = utils.HTTPPost(fmt.Sprintf(shutdownURLFormat, externalURL), []byte(""))
+		require.NoError(t, err)
+
+		t.Logf("Sleeping for %d seconds to see if reminders will trigger ...", secondsToCheckReminderResult)
+		time.Sleep(secondsToCheckReminderResult * time.Second)
 
 		// This initial probe makes the test wait a little bit longer when needed,
 		// making this test less flaky due to delays in the deployment.
 		t.Logf("Checking if app is healthy ...")
 		_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
 		require.NoError(t, err)
-
-		t.Logf("Sleeping for %d seconds to see if reminders will trigger ...", secondsToCheckReminderResult)
-		time.Sleep(secondsToCheckReminderResult * time.Second)
 
 		t.Logf("Getting logs from %s ...", logsURL)
 		resp, err := utils.HTTPGet(logsURL)

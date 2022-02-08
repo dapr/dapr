@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation and Dapr Contributors.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package grpc
 
@@ -43,6 +51,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -1720,37 +1729,31 @@ type mockStateStoreQuerier struct {
 
 const (
 	queryTestRequestOK = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"sort": [
-			{ "key": "a" }
-		],
-		"pagination": {
-			"limit": 2
-		}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"sort": [
+		{ "key": "a" }
+	],
+	"page": {
+		"limit": 2
 	}
 }`
 	queryTestRequestNoRes = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"pagination": {
-			"limit": 2
-		}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"page": {
+		"limit": 2
 	}
 }`
 	queryTestRequestErr = `{
-	"query": {
-		"filter": {
-			"EQ": { "a": "b" }
-		},
-		"sort": [
-			{ "key": "a" }
-		]
-	}
+	"filter": {
+		"EQ": { "a": "b" }
+	},
+	"sort": [
+		{ "key": "a" }
+	]
 }`
 	queryTestRequestSyntaxErr = `syntax error`
 )
@@ -1801,6 +1804,9 @@ func TestQueryState(t *testing.T) {
 	})
 	assert.Equal(t, 1, len(resp.Results))
 	assert.Equal(t, codes.OK, status.Code(err))
+	if len(resp.Results) > 0 {
+		assert.NotNil(t, resp.Results[0].Data)
+	}
 
 	resp, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: "store1",
@@ -1843,6 +1849,32 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 		StoreName: "store1",
 	})
 	assert.Equal(t, codes.Unimplemented, status.Code(err))
+}
+
+func TestStateStoreQuerierEncrypted(t *testing.T) {
+	port, err := freeport.GetFreePort()
+	assert.NoError(t, err)
+
+	storeName := "encrypted-store1"
+	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
+
+	server := startDaprAPIServer(
+		port,
+		&api{
+			id:          "fakeAPI",
+			stateStores: map[string]state.Store{storeName: &mockStateStoreQuerier{}},
+		},
+		"")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
+		StoreName: storeName,
+	})
+	assert.Equal(t, codes.Aborted, status.Code(err))
 }
 
 func TestGetConfigurationAlpha1(t *testing.T) {

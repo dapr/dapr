@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -247,6 +250,54 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 	})
 }
 
+type mockUnstableHTTPSubscriptions struct {
+	channel.AppChannel
+	callCount        int
+	alwaysError      bool
+	successThreshold int
+}
+
+func (m *mockUnstableHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if m.alwaysError {
+		return nil, errors.New("error")
+	}
+
+	m.callCount++
+
+	if m.callCount < m.successThreshold {
+		return nil, errors.New("connection refused")
+	}
+
+	subs := []SubscriptionJSON{
+		{
+			PubsubName: "pubsub",
+			Topic:      "topic1",
+			Metadata: map[string]string{
+				"testName": "testValue",
+			},
+			Routes: RoutesJSON{
+				Rules: []*RuleJSON{
+					{
+						Match: `event.type == "myevent.v3"`,
+						Path:  "myroute.v3",
+					},
+					{
+						Match: `event.type == "myevent.v2"`,
+						Path:  "myroute.v2",
+					},
+				},
+				Default: "myroute",
+			},
+		},
+	}
+
+	responseBytes, _ := json.Marshal(subs)
+
+	response := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+	response.WithRawData(responseBytes, "content/json")
+	return response, nil
+}
+
 type mockHTTPSubscriptions struct {
 	channel.AppChannel
 }
@@ -283,19 +334,94 @@ func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.
 }
 
 func TestHTTPSubscriptions(t *testing.T) {
-	m := mockHTTPSubscriptions{}
-	subs, err := GetSubscriptionsHTTP(&m, log)
-	require.NoError(t, err)
-	if assert.Len(t, subs, 1) {
-		assert.Equal(t, "topic1", subs[0].Topic)
-		if assert.Len(t, subs[0].Rules, 3) {
-			assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
-			assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
-			assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+	t.Run("topics received, no errors", func(t *testing.T) {
+		m := mockHTTPSubscriptions{}
+		subs, err := GetSubscriptionsHTTP(&m, log)
+		require.NoError(t, err)
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 3) {
+				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
-		assert.Equal(t, "pubsub", subs[0].PubsubName)
-		assert.Equal(t, "testValue", subs[0].Metadata["testName"])
+	})
+
+	t.Run("error from app, success after retries", func(t *testing.T) {
+		m := mockUnstableHTTPSubscriptions{
+			successThreshold: 3,
+		}
+
+		subs, err := GetSubscriptionsHTTP(&m, log)
+		assert.Equal(t, m.successThreshold, m.callCount)
+		require.NoError(t, err)
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 3) {
+				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
+		}
+	})
+
+	t.Run("error from app, retries exhausted", func(t *testing.T) {
+		m := mockUnstableHTTPSubscriptions{
+			alwaysError: true,
+		}
+
+		_, err := GetSubscriptionsHTTP(&m, log)
+		require.Error(t, err)
+	})
+}
+
+type mockUnstableGRPCSubscriptions struct {
+	runtimev1pb.AppCallbackClient
+	callCount        int
+	successThreshold int
+	unimplemented    bool
+}
+
+func (m *mockUnstableGRPCSubscriptions) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+	m.callCount++
+
+	if m.unimplemented {
+		return nil, status.Error(codes.Unimplemented, "Unimplemented method")
 	}
+
+	if m.callCount < m.successThreshold {
+		return nil, errors.New("connection refused")
+	}
+
+	return &runtimev1pb.ListTopicSubscriptionsResponse{
+		Subscriptions: []*runtimev1pb.TopicSubscription{
+			{
+				PubsubName: "pubsub",
+				Topic:      "topic1",
+				Metadata: map[string]string{
+					"testName": "testValue",
+				},
+				Routes: &runtimev1pb.TopicRoutes{
+					Rules: []*runtimev1pb.TopicRule{
+						{
+							Match: `event.type == "myevent.v3"`,
+							Path:  "myroute.v3",
+						},
+						{
+							Match: `event.type == "myevent.v2"`,
+							Path:  "myroute.v2",
+						},
+					},
+					Default: "myroute",
+				},
+			},
+		},
+	}, nil
 }
 
 type mockGRPCSubscriptions struct {
@@ -330,19 +456,52 @@ func (m *mockGRPCSubscriptions) ListTopicSubscriptions(ctx context.Context, in *
 }
 
 func TestGRPCSubscriptions(t *testing.T) {
-	m := mockGRPCSubscriptions{}
-	subs, err := GetSubscriptionsGRPC(&m, log)
-	require.NoError(t, err)
-	if assert.Len(t, subs, 1) {
-		assert.Equal(t, "topic1", subs[0].Topic)
-		if assert.Len(t, subs[0].Rules, 3) {
-			assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
-			assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
-			assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+	t.Run("topics received, no errors", func(t *testing.T) {
+		m := mockGRPCSubscriptions{}
+		subs, err := GetSubscriptionsGRPC(&m, log)
+		require.NoError(t, err)
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 3) {
+				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
-		assert.Equal(t, "pubsub", subs[0].PubsubName)
-		assert.Equal(t, "testValue", subs[0].Metadata["testName"])
-	}
+	})
+
+	t.Run("error from app, success after retries", func(t *testing.T) {
+		m := mockUnstableGRPCSubscriptions{
+			successThreshold: 3,
+		}
+
+		subs, err := GetSubscriptionsGRPC(&m, log)
+		assert.Equal(t, m.successThreshold, m.callCount)
+		require.NoError(t, err)
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 3) {
+				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
+		}
+	})
+
+	t.Run("server is running, app returns unimplemented error, no retries", func(t *testing.T) {
+		m := mockUnstableGRPCSubscriptions{
+			successThreshold: 3,
+			unimplemented:    true,
+		}
+
+		_, err := GetSubscriptionsGRPC(&m, log)
+		require.Error(t, err)
+		assert.Equal(t, 1, m.callCount)
+	})
 }
 
 type mockK8sSubscriptions struct {
