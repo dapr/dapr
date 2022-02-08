@@ -665,13 +665,10 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 }
 
 func (a *DaprRuntime) initProxy() {
-	// TODO: remove feature check once stable
-	if config.IsFeatureEnabled(a.globalConfig.Spec.Features, messaging.GRPCFeatureName) {
-		a.proxy = messaging.NewProxy(a.grpc.GetGRPCConnection, a.runtimeConfig.ID,
-			fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList)
+	a.proxy = messaging.NewProxy(a.grpc.GetGRPCConnection, a.runtimeConfig.ID,
+		fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList)
 
-		log.Info("gRPC proxy enabled")
-	}
+	log.Info("gRPC proxy enabled")
 }
 
 func (a *DaprRuntime) beginComponentsUpdates() error {
@@ -693,7 +690,10 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 			}
 
 			log.Debugf("received component update. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
-			a.onComponentUpdated(component)
+			updated := a.onComponentUpdated(component)
+			if !updated {
+				log.Info("component update skipped: .spec field unchanged")
+			}
 		}
 
 		needList := false
@@ -752,12 +752,16 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 	return nil
 }
 
-func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component) {
+func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component) bool {
 	oldComp, exists := a.getComponent(component.Spec.Type, component.Name)
-	if exists && reflect.DeepEqual(oldComp.Spec.Metadata, component.Spec.Metadata) {
-		return
+	newComp, _ := a.processComponentSecrets(component)
+
+	if exists && reflect.DeepEqual(oldComp.Spec, newComp.Spec) {
+		return false
 	}
+
 	a.pendingComponents <- component
+	return true
 }
 
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
@@ -1645,10 +1649,6 @@ func (a *DaprRuntime) initActors() error {
 	err = act.Init()
 	a.actor = act
 	return err
-}
-
-func (a *DaprRuntime) hostingActors() bool {
-	return len(a.appConfig.Entities) > 0
 }
 
 func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {

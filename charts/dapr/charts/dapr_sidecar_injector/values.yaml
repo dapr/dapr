@@ -19,6 +19,7 @@ runAsNonRoot: true
 resources: {}
 kubeClusterDomain: cluster.local
 hostNetwork: false
+healthzPort: 8080
 
 livenessProbe:
   initialDelaySeconds: 3
