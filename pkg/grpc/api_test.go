@@ -67,6 +67,7 @@ const (
 	errorStoreKey       = "fakeAPI||error-key"
 	goodKey             = "good-key"
 	goodKey2            = "good-key2"
+	mockSubscribeID     = "mockId"
 )
 
 type mockGRPCAPI struct{}
@@ -1344,6 +1345,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	stop := make(chan struct{})
 	defer close(stop)
 	var tempReq *configuration.SubscribeRequest
+	fakeConfigurationStore.On("Unsubscribe",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *configuration.UnSubscribeRequest) bool {
+			return true
+		})).Return(nil)
 	fakeConfigurationStore.On("Subscribe",
 		mock.AnythingOfType("*context.cancelCtx"),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -1368,6 +1374,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 								Value: "test-data",
 							},
 						},
+						Id: mockSubscribeID,
 					}); err != nil {
 						return
 					}
@@ -1375,7 +1382,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				}
 			}()
 			return true
-		})).Return(nil)
+		})).Return(mockSubscribeID, nil)
 	fakeConfigurationStore.On("Subscribe",
 		mock.AnythingOfType("*context.cancelCtx"),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -1404,6 +1411,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 								Value: "test-data2",
 							},
 						},
+						Id: mockSubscribeID,
 					}); err != nil {
 						return
 					}
@@ -1411,7 +1419,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				}
 			}()
 			return true
-		})).Return(nil)
+		})).Return(mockSubscribeID, nil)
 
 	fakeAPI := &api{
 		configurationSubscribe: make(map[string]chan struct{}),
@@ -1475,6 +1483,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			assert.Nil(t, err, "Error should be nil")
 			retry := 3
 			count := 0
+			var subscribeID string
 			for {
 				if count > retry {
 					break
@@ -1485,11 +1494,12 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				assert.NotNil(t, rsp)
 				assert.Nil(t, recvErr)
 				assert.Equal(t, tt.expectedResponse, rsp.Items)
+				subscribeID = rsp.Id
 			}
 			assert.Nil(t, err, "Error should be nil")
 			_, err = client.UnSubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnSubscribeConfigurationRequest{
 				StoreName: tt.storeName,
-				Keys:      tt.keys,
+				Id:        subscribeID,
 			})
 			assert.Nil(t, err, "Error should be nil")
 			count = 0
@@ -2359,7 +2369,7 @@ func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest
 	}, nil
 }
 
-func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) error {
+func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
 	handler(ctx, &configuration.UpdateEvent{
 		Items: []*configuration.Item{
 			{
@@ -2368,7 +2378,7 @@ func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.Subs
 			},
 		},
 	})
-	return nil
+	return "", nil
 }
 
 func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnSubscribeRequest) error {

@@ -75,7 +75,7 @@ type API interface {
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
 	GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
 	SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error
-	UnSubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnSubscribeConfigurationRequest) (*runtimev1pb.UnSubscribeConfigurationResponse, error)
+	UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
 	QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
@@ -1292,6 +1292,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 
 	if err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
 		Items: items,
+		Id:    e.ID,
 	}); err != nil {
 		apiServerLogger.Debug(err)
 	}
@@ -1324,7 +1325,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	defer cancel()
 
 	// TODO(@laurence) deal with failed subscription and retires
-	err = store.Subscribe(ctx, req, handler.updateEventHandler)
+	id, err := store.Subscribe(ctx, req, handler.updateEventHandler)
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -1332,17 +1333,17 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	}
 	stop := make(chan struct{})
 	a.configurationSubscribeLock.Lock()
-	a.configurationSubscribe[getConfigSubscribeUniqueKey(request.GetStoreName(), request.GetKeys())] = stop
+	a.configurationSubscribe[id] = stop
 	a.configurationSubscribeLock.Unlock()
 	<-stop
 	return nil
 }
 
-func (a *api) UnSubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnSubscribeConfigurationRequest) (*runtimev1pb.UnSubscribeConfigurationResponse, error) {
-	store, err := a.getConfigurationStore(request.StoreName)
+func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
+	store, err := a.getConfigurationStore(request.GetStoreName())
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &runtimev1pb.UnSubscribeConfigurationResponse{
+		return &runtimev1pb.UnsubscribeConfigurationResponse{
 			Ok:      false,
 			Message: err.Error(),
 		}, err
@@ -1351,35 +1352,26 @@ func (a *api) UnSubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	a.configurationSubscribeLock.Lock()
 	defer a.configurationSubscribeLock.Unlock()
 
-	storeName := request.GetStoreName()
-	unsubscribeKeys := request.GetKeys()
+	subscribeID := request.GetId()
 
-	for _, unsubscribeKey := range unsubscribeKeys {
-		for k, stop := range a.configurationSubscribe {
-			subscribingKeys := getSubscribingKeys(storeName, k)
-			if afterRemovedSubscribingKeys, ok := keyInKeysAndRemove(unsubscribeKey, subscribingKeys); ok {
-				// key to unsubscribe is included in this subscription
-				if len(afterRemovedSubscribingKeys) == 0 {
-					// close subscription with no subscribing key
-					close(stop)
-				} else {
-					// set new key
-					a.configurationSubscribe[getConfigSubscribeUniqueKey(storeName, afterRemovedSubscribingKeys)] = a.configurationSubscribe[k]
-				}
-				delete(a.configurationSubscribe, k)
-			}
-		}
+	stop, ok := a.configurationSubscribe[subscribeID]
+	if !ok {
+		return &runtimev1pb.UnsubscribeConfigurationResponse{
+			Ok: true,
+		}, nil
 	}
+	delete(a.configurationSubscribe, subscribeID)
+	close(stop)
 
-	if err := store.Unsubscribe(ctx, &configuration.UnSubscribeRequest{
-		Keys: unsubscribeKeys,
+	if err := store.Unsubscribe(ctx, &configuration.UnsubscribeRequest{
+		ID: subscribeID,
 	}); err != nil {
-		return &runtimev1pb.UnSubscribeConfigurationResponse{
+		return &runtimev1pb.UnsubscribeConfigurationResponse{
 			Ok:      false,
 			Message: err.Error(),
 		}, err
 	}
-	return &runtimev1pb.UnSubscribeConfigurationResponse{
+	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
 }

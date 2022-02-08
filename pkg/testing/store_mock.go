@@ -58,17 +58,26 @@ func (_m *MockConfigurationStore) Init(metadata configuration.Metadata) error {
 }
 
 // Subscribe provides a mock function with given fields: ctx, req, handler
-func (_m *MockConfigurationStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) error {
+func (_m *MockConfigurationStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
 	ret := _m.Called(ctx, req, handler)
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *configuration.SubscribeRequest, configuration.UpdateHandler) error); ok {
+	var r0 string
+	if rf, ok := ret.Get(0).(func(context.Context, *configuration.SubscribeRequest, configuration.UpdateHandler) string); ok {
 		r0 = rf(ctx, req, handler)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(string)
+		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *configuration.SubscribeRequest, configuration.UpdateHandler) error); ok {
+		r1 = rf(ctx, req, handler)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // Unsubscribe provides a mock function with given fields: ctx, req

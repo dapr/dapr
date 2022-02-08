@@ -65,7 +65,7 @@ type DaprClient interface {
 	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
 	SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error)
 	// UnSubscribeConfiguration unsubscribe the subscription of configuration
-	UnSubscribeConfigurationAlpha1(ctx context.Context, in *UnSubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnSubscribeConfigurationResponse, error)
+	UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -303,9 +303,9 @@ func (x *daprSubscribeConfigurationAlpha1Client) Recv() (*SubscribeConfiguration
 	return m, nil
 }
 
-func (c *daprClient) UnSubscribeConfigurationAlpha1(ctx context.Context, in *UnSubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnSubscribeConfigurationResponse, error) {
-	out := new(UnSubscribeConfigurationResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnSubscribeConfigurationAlpha1", in, out, opts...)
+func (c *daprClient) UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error) {
+	out := new(UnsubscribeConfigurationResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnsubscribeConfigurationAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +388,7 @@ type DaprServer interface {
 	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
 	SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error
 	// UnSubscribeConfiguration unsubscribe the subscription of configuration
-	UnSubscribeConfigurationAlpha1(context.Context, *UnSubscribeConfigurationRequest) (*UnSubscribeConfigurationResponse, error)
+	UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -467,8 +467,8 @@ func (UnimplementedDaprServer) GetConfigurationAlpha1(context.Context, *GetConfi
 func (UnimplementedDaprServer) SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeConfigurationAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) UnSubscribeConfigurationAlpha1(context.Context, *UnSubscribeConfigurationRequest) (*UnSubscribeConfigurationResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UnSubscribeConfigurationAlpha1 not implemented")
+func (UnimplementedDaprServer) UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeConfigurationAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
@@ -890,20 +890,20 @@ func (x *daprSubscribeConfigurationAlpha1Server) Send(m *SubscribeConfigurationR
 	return x.ServerStream.SendMsg(m)
 }
 
-func _Dapr_UnSubscribeConfigurationAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UnSubscribeConfigurationRequest)
+func _Dapr_UnsubscribeConfigurationAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnsubscribeConfigurationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaprServer).UnSubscribeConfigurationAlpha1(ctx, in)
+		return srv.(DaprServer).UnsubscribeConfigurationAlpha1(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnSubscribeConfigurationAlpha1",
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnsubscribeConfigurationAlpha1",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).UnSubscribeConfigurationAlpha1(ctx, req.(*UnSubscribeConfigurationRequest))
+		return srv.(DaprServer).UnsubscribeConfigurationAlpha1(ctx, req.(*UnsubscribeConfigurationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1054,8 +1054,8 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_GetConfigurationAlpha1_Handler,
 		},
 		{
-			MethodName: "UnSubscribeConfigurationAlpha1",
-			Handler:    _Dapr_UnSubscribeConfigurationAlpha1_Handler,
+			MethodName: "UnsubscribeConfigurationAlpha1",
+			Handler:    _Dapr_UnsubscribeConfigurationAlpha1_Handler,
 		},
 		{
 			MethodName: "GetMetadata",
