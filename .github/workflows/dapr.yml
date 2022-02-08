@@ -151,13 +151,13 @@ jobs:
         uses: docker/login-action@v1
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push docker images to GitHub container registry
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
         run: |
           echo "Build docker image and push image..."
-          make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=ghcr.io/${{ github.actor }} DAPR_TAG=${{ env.REL_VERSION }}
+          make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=ghcr.io/${{ github.repository_owner }} DAPR_TAG=${{ env.REL_VERSION }}
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@master
@@ -295,13 +295,13 @@ jobs:
         uses: docker/login-action@v1
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push docker multiarch manifest to ghcr
         if: matrix.target_os != 'darwin'
         run: |
           echo "Build docker multiarch image manifest and push it"
-          make docker-publish DAPR_REGISTRY=ghcr.io/${{ github.actor }} DAPR_TAG=${{ env.REL_VERSION }}
+          make docker-publish DAPR_REGISTRY=ghcr.io/${{ github.repository_owner }} DAPR_TAG=${{ env.REL_VERSION }}
       - name: Save release version
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
