@@ -2,7 +2,7 @@ package logging
 
 import "github.com/go-logr/logr"
 
-// NullLogSink is a logr.LogSink that does nothing
+// NullLogSink is a logr.LogSink that does nothing.
 type NullLogSink struct{}
 
 func (NullLogSink) Init(_ logr.RuntimeInfo) {

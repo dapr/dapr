@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/dapr/dapr/pkg/testing/logging"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+
+	"github.com/dapr/dapr/pkg/testing/logging"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
