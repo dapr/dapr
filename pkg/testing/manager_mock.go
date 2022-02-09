@@ -23,7 +23,7 @@ import (
 func NewMockManager() *MockManager {
 	mgr := &MockManager{
 		sc:        runtime.NewScheme(),
-		log:       logging.NullLogger,
+		log:       logr.New(logging.NullLogSink{}),
 		runnables: []manager.Runnable{},
 		indexer: &MockFieldIndexer{
 			typeMap: map[reflect.Type]client.IndexerFunc{},
