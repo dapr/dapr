@@ -276,11 +276,12 @@ func (a *api) constructBindingsEndpoints() []Endpoint {
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{router.MethodWild},
-			Route:   "invoke/{id}/method/{method:*}",
-			Alias:   "{method:*}",
-			Version: apiVersionV1,
-			Handler: a.onDirectMessage,
+			Methods:           []string{router.MethodWild},
+			Route:             "invoke/{id}/method/{method:*}",
+			Alias:             "{method:*}",
+			Version:           apiVersionV1,
+			KeepParamUnescape: true,
+			Handler:           a.onDirectMessage,
 		},
 	}
 }

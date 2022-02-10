@@ -538,6 +538,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 		log.Debugf("subscribing to topic=%s on pubsub=%s", topic, name)
 
 		routeMetadata := route.metadata
+		routeRules := route.rules
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic:    topic,
 			Metadata: route.metadata,
@@ -577,8 +578,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				return nil
 			}
 
-			route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
-			routePath, shouldProcess, err := findMatchingRoute(&route, cloudEvent, a.featureRoutingEnabled)
+			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
 			if err != nil {
 				return err
 			}
@@ -605,13 +605,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(route *Route, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess bool, err error) {
-	hasRules := len(route.rules) > 0
+func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess bool, err error) {
+	hasRules := len(rules) > 0
 	if hasRules {
 		data := map[string]interface{}{
 			"event": cloudEvent,
 		}
-		rule, err := matchRoutingRule(route, data, routingEnabled)
+		rule, err := matchRoutingRule(rules, data, routingEnabled)
 		if err != nil {
 			return "", false, err
 		}
@@ -623,8 +623,8 @@ func findMatchingRoute(route *Route, cloudEvent interface{}, routingEnabled bool
 	return "", false, nil
 }
 
-func matchRoutingRule(route *Route, data map[string]interface{}, routingEnabled bool) (*runtime_pubsub.Rule, error) {
-	for _, rule := range route.rules {
+func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{}, routingEnabled bool) (*runtime_pubsub.Rule, error) {
+	for _, rule := range rules {
 		if rule.Match == nil {
 			return rule, nil
 		}
@@ -692,7 +692,10 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 			}
 
 			log.Debugf("received component update. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
-			a.onComponentUpdated(component)
+			updated := a.onComponentUpdated(component)
+			if !updated {
+				log.Info("component update skipped: .spec field unchanged")
+			}
 		}
 
 		needList := false
@@ -751,12 +754,16 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 	return nil
 }
 
-func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component) {
+func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component) bool {
 	oldComp, exists := a.getComponent(component.Spec.Type, component.Name)
-	if exists && reflect.DeepEqual(oldComp.Spec.Metadata, component.Spec.Metadata) {
-		return
+	newComp, _ := a.processComponentSecrets(component)
+
+	if exists && reflect.DeepEqual(oldComp.Spec, newComp.Spec) {
+		return false
 	}
+
 	a.pendingComponents <- component
+	return true
 }
 
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
@@ -1649,10 +1656,6 @@ func (a *DaprRuntime) initActors() error {
 	err = act.Init()
 	a.actor = act
 	return err
-}
-
-func (a *DaprRuntime) hostingActors() bool {
-	return len(a.appConfig.Entities) > 0
 }
 
 func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {

@@ -861,6 +861,106 @@ func TestMetadataUUID(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestOnComponentUpdated(t *testing.T) {
+	t.Run("component spec changed, component is updated", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		rt.components = append(rt.components, components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:    "pubsub.mockPubSub",
+				Version: "v1",
+				Metadata: []components_v1alpha1.MetadataItem{
+					{
+						Name: "name1",
+						Value: components_v1alpha1.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("value1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		go func() {
+			<-rt.pendingComponents
+		}()
+
+		updated := rt.onComponentUpdated(components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:    "pubsub.mockPubSub",
+				Version: "v1",
+				Metadata: []components_v1alpha1.MetadataItem{
+					{
+						Name: "name1",
+						Value: components_v1alpha1.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("value2"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		assert.True(t, updated)
+	})
+
+	t.Run("component spec unchanged, component is skipped", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		rt.components = append(rt.components, components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:    "pubsub.mockPubSub",
+				Version: "v1",
+				Metadata: []components_v1alpha1.MetadataItem{
+					{
+						Name: "name1",
+						Value: components_v1alpha1.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("value1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		go func() {
+			<-rt.pendingComponents
+		}()
+
+		updated := rt.onComponentUpdated(components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:    "pubsub.mockPubSub",
+				Version: "v1",
+				Metadata: []components_v1alpha1.MetadataItem{
+					{
+						Name: "name1",
+						Value: components_v1alpha1.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("value1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		assert.False(t, updated)
+	})
+}
+
 func TestConsumerID(t *testing.T) {
 	metadata := []components_v1alpha1.MetadataItem{
 		{
@@ -3040,7 +3140,7 @@ func TestInitActors(t *testing.T) {
 			Entities: []string{"actor1"},
 		}
 
-		hosted := r.hostingActors()
+		hosted := len(r.appConfig.Entities) > 0
 		assert.True(t, hosted)
 	})
 
@@ -3048,7 +3148,7 @@ func TestInitActors(t *testing.T) {
 		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
 		defer stopRuntime(t, r)
 
-		hosted := r.hostingActors()
+		hosted := len(r.appConfig.Entities) > 0
 		assert.False(t, hosted)
 	})
 
@@ -3424,10 +3524,8 @@ func stopRuntime(t *testing.T, rt *DaprRuntime) {
 func TestFindMatchingRoute(t *testing.T) {
 	r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath")
 	require.NoError(t, err)
-	route := Route{
-		rules: []*runtime_pubsub.Rule{r},
-	}
-	path, shouldProcess, err := findMatchingRoute(&route, map[string]interface{}{
+	rules := []*runtime_pubsub.Rule{r}
+	path, shouldProcess, err := findMatchingRoute(rules, map[string]interface{}{
 		"type": "MyEventType",
 	}, true)
 	require.NoError(t, err)
