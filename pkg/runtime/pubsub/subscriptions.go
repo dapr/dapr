@@ -79,8 +79,12 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 		resp, err = channel.InvokeMethod(ctx, req)
 		return err
 	}, backoff, func(err error, d time.Duration) {
-		log.Debug("failed getting gRPC subscriptions, starting retry")
+		log.Debug("failed getting http subscriptions, starting retry")
 	}, func() {})
+
+	if err != nil {
+		return nil, err
+	}
 
 	switch resp.Status().Code {
 	case http.StatusOK:
@@ -151,6 +155,9 @@ func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subs
 
 func getSubscriptionsBackoff() backoff.BackOff {
 	config := retry.DefaultConfig()
+	config.MaxRetries = 3
+	config.Duration = time.Second * 2
+	config.MaxElapsedTime = time.Second * 10
 	config.Policy = retry.PolicyExponential
 	return config.NewBackOff()
 }
