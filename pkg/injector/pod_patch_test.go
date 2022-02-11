@@ -263,9 +263,9 @@ func TestGetSideCarContainer(t *testing.T) {
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, defaultAPITokenSecret, container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAPITokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, defaultAppTokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAppTokenSecret, container.Env[7].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
