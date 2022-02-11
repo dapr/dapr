@@ -140,10 +140,12 @@ func TestGetSideCarContainer(t *testing.T) {
 
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
+		// POD_NAME
+		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
 		// DAPR_API_TOKEN
-		assert.Equal(t, defaultAPITokenSecret, container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAPITokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, defaultAppTokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAppTokenSecret, container.Env[7].ValueFrom.SecretKeyRef.Name)
 		// default image
 		assert.Equal(t, "darpio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -200,68 +202,12 @@ func TestGetSideCarContainer(t *testing.T) {
 		assert.Equal(t, "/dlv", container.Command[0])
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
+		// POD_NAME
+		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
 		// DAPR_API_TOKEN
-		assert.Equal(t, defaultAPITokenSecret, container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAPITokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, defaultAppTokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
-		assert.EqualValues(t, expectedArgs, container.Args)
-		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
-	})
-
-	t.Run("get sidecar container with placement addresses", func(t *testing.T) {
-		annotations := map[string]string{}
-		annotations[daprConfigKey] = defaultTestConfig
-		annotations[daprAppPortKey] = "5000"
-		annotations[daprLogAsJSON] = trueString
-		annotations[daprAPITokenSecret] = defaultAPITokenSecret
-		annotations[daprAppTokenSecret] = defaultAppTokenSecret
-		annotations[daprEnableDebugKey] = trueString
-		annotations[daprPlacementAddressesKey] = "placement:6666"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always",
-			"dapr-system", "controlplane:9000", "placement:50000",
-			nil, "", "", "", "sentry:50000", true,
-			"pod_identity")
-
-		expectedArgs := []string{
-			"--listen=:40000",
-			"--accept-multiclient",
-			"--headless=true",
-			"--log",
-			"--api-version=2",
-			"exec",
-			"/daprd",
-			"--",
-			"--mode", "kubernetes",
-			"--dapr-http-port", "3500",
-			"--dapr-grpc-port", "50001",
-			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-addresses", "[::1],127.0.0.1",
-			"--dapr-public-port", "3501",
-			"--app-port", "5000",
-			"--app-id", "app_id",
-			"--control-plane-address", "controlplane:9000",
-			"--app-protocol", "http",
-			"--placement-host-address", "placement:6666",
-			"--config", defaultTestConfig,
-			"--log-level", "info",
-			"--app-max-concurrency", "-1",
-			"--sentry-address", "sentry:50000",
-			"--enable-metrics=true",
-			"--metrics-port", "9090",
-			"--dapr-http-max-request-size", "-1",
-			"--dapr-http-read-buffer-size", "-1",
-			"--dapr-graceful-shutdown-seconds", "-1",
-			"--log-as-json",
-			"--enable-mtls",
-		}
-
-		assert.Equal(t, "/dlv", container.Command[0])
-		// NAMESPACE
-		assert.Equal(t, "dapr-system", container.Env[0].Value)
-		// DAPR_API_TOKEN
-		assert.Equal(t, defaultAPITokenSecret, container.Env[5].ValueFrom.SecretKeyRef.Name)
-		// DAPR_APP_TOKEN
-		assert.Equal(t, defaultAppTokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAppTokenSecret, container.Env[7].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})

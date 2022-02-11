@@ -235,6 +235,7 @@ func FromFlags() (*DaprRuntime, error) {
 
 	var accessControlList *global_config.AccessControlList
 	var namespace string
+	var podName string
 
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
@@ -245,7 +246,8 @@ func FromFlags() (*DaprRuntime, error) {
 			}
 			defer conn.Close()
 			namespace = os.Getenv("NAMESPACE")
-			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, client)
+			podName = os.Getenv("POD_NAME")
+			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, podName, client)
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}

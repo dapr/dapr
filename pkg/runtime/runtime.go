@@ -165,6 +165,7 @@ type DaprRuntime struct {
 	actorStateStoreLock    *sync.RWMutex
 	authenticator          security.Authenticator
 	namespace              string
+	podName                string
 	scopedSubscriptions    map[string][]string
 	scopedPublishings      map[string][]string
 	allowedTopics          map[string][]string
@@ -282,6 +283,10 @@ func (a *DaprRuntime) getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
 
+func (a *DaprRuntime) getPodName() string {
+	return os.Getenv("POD_NAME")
+}
+
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
@@ -327,6 +332,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 	a.namespace = a.getNamespace()
+	a.podName = a.getPodName()
 	a.operatorClient, err = a.getOperatorClient()
 	if err != nil {
 		return err
@@ -707,6 +713,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 				var err error
 				stream, err = a.operatorClient.ComponentUpdate(context.Background(), &operatorv1pb.ComponentUpdateRequest{
 					Namespace: a.namespace,
+					PodName:   a.podName,
 				})
 				if err != nil {
 					log.Errorf("error from operator stream: %s", err)
@@ -1214,7 +1221,7 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		subs = runtime_pubsub.DeclarativeKubernetes(a.operatorClient, log)
+		subs = runtime_pubsub.DeclarativeKubernetes(a.operatorClient, a.podName, a.namespace, log)
 	case modes.StandaloneMode:
 		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
 	}
@@ -1691,7 +1698,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.namespace, a.operatorClient)
+		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.namespace, a.operatorClient, a.podName)
 	case modes.StandaloneMode:
 		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	default:
