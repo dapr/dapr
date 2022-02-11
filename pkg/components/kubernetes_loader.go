@@ -39,14 +39,16 @@ type KubernetesComponents struct {
 	config    config.KubernetesConfig
 	client    operatorv1pb.OperatorClient
 	namespace string
+	podName   string
 }
 
 // NewKubernetesComponents returns a new kubernetes loader.
-func NewKubernetesComponents(configuration config.KubernetesConfig, namespace string, operatorClient operatorv1pb.OperatorClient) *KubernetesComponents {
+func NewKubernetesComponents(configuration config.KubernetesConfig, namespace string, operatorClient operatorv1pb.OperatorClient, podName string) *KubernetesComponents {
 	return &KubernetesComponents{
 		config:    configuration,
 		client:    operatorClient,
 		namespace: namespace,
+		podName:   podName,
 	}
 }
 
@@ -54,6 +56,7 @@ func NewKubernetesComponents(configuration config.KubernetesConfig, namespace st
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	resp, err := k.client.ListComponents(context.Background(), &operatorv1pb.ListComponentsRequest{
 		Namespace: k.namespace,
+		PodName:   k.podName,
 	}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
 		return nil, err
