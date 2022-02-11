@@ -170,6 +170,32 @@ var serviceinvocationTests = []struct {
 	},
 }
 
+var serviceinvocationPathTests = []struct {
+	in               string
+	remoteApp        string
+	appMethod        string
+	expectedResponse string
+}{
+	{
+		"Test call double encoded path",
+		"serviceinvocation-callee",
+		"path/value%252F123",
+		"/path/value%252F123",
+	},
+	{
+		"Test call encoded path",
+		"serviceinvocation-callee",
+		"path/value%2F123",
+		"/path/value%2F123",
+	},
+	{
+		"Test call normal path",
+		"serviceinvocation-callee",
+		"path/value/123",
+		"/path/value/123",
+	},
+}
+
 var moreServiceinvocationTests = []struct {
 	in               string
 	remoteApp        string
@@ -297,6 +323,31 @@ func TestServiceInvocation(t *testing.T) {
 				url,
 				body)
 
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
+
+	// make sure dapr do not auto unescape path
+	for _, tt := range serviceinvocationPathTests {
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			t.Logf("url is '%s'\n", url)
+			resp, err := utils.HTTPPost(
+				url,
+				body)
 			t.Log("checking err...")
 			require.NoError(t, err)
 

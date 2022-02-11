@@ -357,6 +357,9 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/tests/v1_grpctohttptest", testV1RequestGRPCToHTTP).Methods("POST")
 	router.HandleFunc("/retrieve_request_object", retrieveRequestObject).Methods("POST")
 
+	// test path for Dapr method invocation decode
+	router.PathPrefix("/path/").HandlerFunc(testPathHttpCall)
+
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
@@ -1214,6 +1217,11 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 	}
 
 	json.NewEncoder(w).Encode(results)
+}
+
+// testPathHttpCall return the path received form request.
+func testPathHttpCall(w http.ResponseWriter, r *http.Request) {
+	logAndSetResponse(w, http.StatusOK, r.RequestURI)
 }
 
 func main() {

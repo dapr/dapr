@@ -1,0 +1,18 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: mqtt-pubsub
+spec:
+  type: pubsub.mqtt
+  version: v1
+  metadata:
+  - name: url
+    value: "tcp://mosquitto.dapr-tests.svc.cluster.local:1883"
+  - name: qos
+    value: 1
+  - name: retain
+    value: "false"
+  - name: cleanSession
+    value: "true"
+  - name: backOffMaxRetries
+    value: "-1"
