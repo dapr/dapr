@@ -22,9 +22,10 @@ import "github.com/valyala/fasthttp"
 // "/v1.0/invoke/app-id/method/hello", one another URL "/hello" is provided for the Alias. When Alias URL is used,
 // extra infos are required to pass through HTTP headers, for example, application's ID.
 type Endpoint struct {
-	Methods []string
-	Route   string
-	Version string
-	Alias   string
-	Handler fasthttp.RequestHandler
+	Methods           []string
+	Route             string
+	Version           string
+	Alias             string
+	KeepParamUnescape bool // keep the param in path unescaped
+	Handler           fasthttp.RequestHandler
 }
