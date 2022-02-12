@@ -266,6 +266,8 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
 	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
 
+	close(a.(*actorsRuntime).placementUpdated)
+
 	return a.(*actorsRuntime)
 }
 
@@ -281,6 +283,7 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 		},
 	})
 
+	close(a.(*actorsRuntime).placementUpdated)
 	return a.(*actorsRuntime)
 }
 
@@ -351,7 +354,7 @@ func TestActorIsDeactivated(t *testing.T) {
 	assert.False(t, exists)
 }
 
-func TestActorIsNotDeactivated(t *testing.T) {
+func testActorIsNotDeactivated(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	idleTimeout := time.Second * 5
 	actorType, actorID := getTestActorTypeAndID()

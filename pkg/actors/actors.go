@@ -177,6 +177,8 @@ func NewActors(
 		tracingSpec:              tracingSpec,
 		reentrancyEnabled:        configuration.IsFeatureEnabled(features, configuration.ActorReentrancy) && config.Reentrancy.Enabled,
 		actorTypeMetadataEnabled: configuration.IsFeatureEnabled(features, configuration.ActorTypeMetadata),
+		placementUpdated:         make(chan struct{}),
+		placementUpdatedOnce:     &sync.Once{},
 	}
 }
 
