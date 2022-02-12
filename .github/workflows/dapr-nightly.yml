@@ -17,6 +17,17 @@ on:
   schedule:
     - cron:  '00 22 * * *'
 jobs:
+  remove-old-builds:
+      name: Remove-old-releases
+      runs-on: ubuntu-latest
+      steps:
+        - uses: dev-drprasad/delete-older-releases@v0.2.0
+          with:
+            repo: dapr/dapr
+            keep_latest: 7
+            delete_tag_pattern: nightly
+          env:
+            GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
   tag-release:
     name: Set-nightly-release-tag
     runs-on: ubuntu-latest
@@ -34,7 +45,3 @@ jobs:
         with:
           repo-token: ${{ secrets.DAPR_BOT_TOKEN }}
           tag: ${{ steps.date.outputs.date }}
-
-# TODO
-# Check if there were changes since last release before tagging
-# Purge older releases
