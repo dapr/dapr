@@ -1,0 +1,36 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: mosquitto
+spec:
+  ports:
+  - protocol: TCP
+    port: 1883
+    targetPort: 1883
+  selector:
+    run: mosquitto
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+spec:
+  selector:
+    matchLabels:
+      run: mosquitto
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        run: mosquitto
+    spec:
+      containers:
+        - args:
+            - mosquitto
+            - -c
+            - /mosquitto-no-auth.conf
+          image: eclipse-mosquitto
+          name: mosquitto
+          ports:
+            - containerPort: 1883
