@@ -112,6 +112,14 @@ var allowListsForServiceInvocationTests = []struct {
 		200,
 	},
 	{
+		"Test allow with callee side grpc without http verb",
+		"allowlists-callee-grpc",
+		"grpcwithouthttpverbtogrpctest",
+		"success",
+		"grpc",
+		200,
+	},
+	{
 		"Test deny with callee side grpc",
 		"allowlists-callee-grpc",
 		"httptogrpctest",
