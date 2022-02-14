@@ -16,18 +16,32 @@ package config
 // ApplicationConfig is an optional config supplied by user code.
 type ApplicationConfig struct {
 	Entities []string `json:"entities"`
-	// Duration. example: "1h"
+	// Duration. example: "1h".
 	ActorIdleTimeout string `json:"actorIdleTimeout"`
-	// Duration. example: "30s"
+	// Duration. example: "30s". This value is global.
 	ActorScanInterval string `json:"actorScanInterval"`
-	// Duration. example: "30s"
+	// Duration. example: "30s".
 	DrainOngoingCallTimeout    string           `json:"drainOngoingCallTimeout"`
 	DrainRebalancedActors      bool             `json:"drainRebalancedActors"`
 	Reentrancy                 ReentrancyConfig `json:"reentrancy,omitempty"`
 	RemindersStoragePartitions int              `json:"remindersStoragePartitions"`
+
+	// Duplicate of the above config so we can assign it to individual entities.
+	EntityConfigs []EntityConfig `json:"entitiesConfig,omitempty"`
 }
 
 type ReentrancyConfig struct {
 	Enabled       bool `json:"enabled"`
 	MaxStackDepth *int `json:"maxStackDepth,omitempty"`
+}
+
+type EntityConfig struct {
+	Entities []string `json:"entities"`
+	// Duration. example: "1h".
+	ActorIdleTimeout string `json:"actorIdleTimeout"`
+	// Duration. example: "30s".
+	DrainOngoingCallTimeout    string           `json:"drainOngoingCallTimeout"`
+	DrainRebalancedActors      bool             `json:"drainRebalancedActors"`
+	Reentrancy                 ReentrancyConfig `json:"reentrancy,omitempty"`
+	RemindersStoragePartitions int              `json:"remindersStoragePartitions"`
 }
