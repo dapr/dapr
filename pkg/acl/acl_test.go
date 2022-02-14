@@ -26,6 +26,7 @@ const (
 	app1    = "app1"
 	app2    = "app2"
 	app3    = "app3"
+	app4    = "app4"
 	app1Ns1 = "app1||ns1"
 	app2Ns2 = "app2||ns2"
 	app3Ns1 = "app3||ns1"
@@ -82,6 +83,26 @@ func initializeAccessControlList(protocol string) (*config.AccessControlList, er
 						Action:    config.AllowAccess,
 						HTTPVerb:  []string{"POST"},
 						Operation: "/op5",
+					},
+				},
+			},
+			{
+				AppName:       app4,
+				DefaultAction: config.DenyAccess,
+				TrustDomain:   "domain1",
+				Namespace:     "ns2",
+				AppOperationActions: []config.AppOperation{
+					{
+						Action:    config.AllowAccess,
+						Operation: "/op6",
+					},
+					{
+						Action:    config.AllowAccess,
+						Operation: "/op7/a/*",
+					},
+					{
+						Action:    config.AllowAccess,
+						Operation: "/op7/a/b*",
 					},
 				},
 			},
@@ -595,6 +616,32 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			AppID:       srcAppID,
 		}
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_NONE, config.GRPCProtocol, accessControlList)
+		// Action = Default action for the app
+		assert.True(t, isAllowed)
+	})
+
+	t.Run("when testing grpc calls, acl is not configured with http verb", func(t *testing.T) {
+		srcAppID := app4
+		accessControlList, _ := initializeAccessControlList(config.GRPCProtocol)
+		spiffeID := config.SpiffeID{
+			TrustDomain: "domain1",
+			Namespace:   "ns2",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op6", common.HTTPExtension_NONE, config.GRPCProtocol, accessControlList)
+		// Action = Default action for the app
+		assert.True(t, isAllowed)
+	})
+
+	t.Run("when testing grpc calls, acl is configured with wildcards", func(t *testing.T) {
+		srcAppID := app4
+		accessControlList, _ := initializeAccessControlList(config.GRPCProtocol)
+		spiffeID := config.SpiffeID{
+			TrustDomain: "domain1",
+			Namespace:   "ns2",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op7/a/bc", common.HTTPExtension_NONE, config.GRPCProtocol, accessControlList)
 		// Action = Default action for the app
 		assert.True(t, isAllowed)
 	})
