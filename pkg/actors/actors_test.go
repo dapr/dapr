@@ -354,7 +354,7 @@ func TestActorIsDeactivated(t *testing.T) {
 	assert.False(t, exists)
 }
 
-func testActorIsNotDeactivated(t *testing.T) {
+func TestActorIsNotDeactivated(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	idleTimeout := time.Second * 5
 	actorType, actorID := getTestActorTypeAndID()
