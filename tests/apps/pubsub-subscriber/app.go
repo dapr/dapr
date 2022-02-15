@@ -29,13 +29,12 @@ import (
 )
 
 const (
-	appPort    = 3000
-	pubsubA    = "pubsub-a-topic-http"
-	pubsubB    = "pubsub-b-topic-http"
-	pubsubC    = "pubsub-c-topic-http"
-	pubsubJob  = "pubsub-job-topic-http"
-	pubsubRaw  = "pubsub-raw-topic-http"
-	pubsubMqtt = "pubsub-mqtt-topic-http"
+	appPort   = 3000
+	pubsubA   = "pubsub-a-topic-http"
+	pubsubB   = "pubsub-b-topic-http"
+	pubsubC   = "pubsub-c-topic-http"
+	pubsubJob = "pubsub-job-topic-http"
+	pubsubRaw = "pubsub-raw-topic-http"
 )
 
 type appResponse struct {
@@ -47,12 +46,11 @@ type appResponse struct {
 }
 
 type receivedMessagesResponse struct {
-	ReceivedByTopicA    []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB    []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC    []string `json:"pubsub-c-topic"`
-	ReceivedByTopicJob  []string `json:"pubsub-job-topic"`
-	ReceivedByTopicRaw  []string `json:"pubsub-raw-topic"`
-	ReceivedByTopicMqtt []string `json:"pubsub-mqtt-topic"`
+	ReceivedByTopicA   []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
+	ReceivedByTopicJob []string `json:"pubsub-job-topic"`
+	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
 }
 
 type subscription struct {
@@ -80,14 +78,13 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesA    sets.String
-	receivedMessagesB    sets.String
-	receivedMessagesC    sets.String
-	receivedMessagesJob  sets.String
-	receivedMessagesRaw  sets.String
-	receivedMessagesMqtt sets.String
-	desiredResponse      respondWith
-	lock                 sync.Mutex
+	receivedMessagesA   sets.String
+	receivedMessagesB   sets.String
+	receivedMessagesC   sets.String
+	receivedMessagesJob sets.String
+	receivedMessagesRaw sets.String
+	desiredResponse     respondWith
+	lock                sync.Mutex
 )
 
 // indexHandler is the handler for root path
@@ -130,11 +127,6 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			Metadata: map[string]string{
 				"rawPayload": "true",
 			},
-		},
-		{
-			PubsubName: "mqtt-pubsub",
-			Topic:      "#",
-			Route:      pubsubMqtt,
 		},
 	}
 	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)
@@ -237,8 +229,6 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesJob.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubRaw) && !receivedMessagesRaw.Has(msg) {
 		receivedMessagesRaw.Insert(msg)
-	} else if strings.HasSuffix(r.URL.String(), pubsubMqtt) && !receivedMessagesMqtt.Has(msg) {
-		receivedMessagesMqtt.Insert(msg)
 	} else {
 		// This case is triggered when there is multiple redelivery of same message or a message
 		// is thre for an unknown URL path
@@ -314,12 +304,11 @@ func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 	log.Println("Enter getReceivedMessages")
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicA:    unique(receivedMessagesA.List()),
-		ReceivedByTopicB:    unique(receivedMessagesB.List()),
-		ReceivedByTopicC:    unique(receivedMessagesC.List()),
-		ReceivedByTopicJob:  unique(receivedMessagesJob.List()),
-		ReceivedByTopicRaw:  unique(receivedMessagesRaw.List()),
-		ReceivedByTopicMqtt: unique(receivedMessagesMqtt.List()),
+		ReceivedByTopicA:   unique(receivedMessagesA.List()),
+		ReceivedByTopicB:   unique(receivedMessagesB.List()),
+		ReceivedByTopicC:   unique(receivedMessagesC.List()),
+		ReceivedByTopicJob: unique(receivedMessagesJob.List()),
+		ReceivedByTopicRaw: unique(receivedMessagesRaw.List()),
 	}
 
 	log.Printf("receivedMessagesResponse=%s", response)
@@ -355,7 +344,6 @@ func initializeSets() {
 	receivedMessagesC = sets.NewString()
 	receivedMessagesJob = sets.NewString()
 	receivedMessagesRaw = sets.NewString()
-	receivedMessagesMqtt = sets.NewString()
 }
 
 // appRouter initializes restful api router
@@ -385,7 +373,6 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/"+pubsubC, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubJob, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubRaw, subscribeHandler).Methods("POST")
-	router.HandleFunc("/"+pubsubMqtt, subscribeHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
