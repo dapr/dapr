@@ -24,6 +24,7 @@ import (
 
 	grpc_proxy "github.com/dapr/dapr/pkg/grpc/proxy"
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
+	"github.com/dapr/dapr/pkg/resiliency"
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
@@ -47,10 +48,11 @@ type proxy struct {
 	localAppAddress   string
 	acl               *config.AccessControlList
 	sslEnabled        bool
+	resiliency        resiliency.Provider
 }
 
 // NewProxy returns a new proxy.
-func NewProxy(connectionFactory messageClientConnection, appID string, localAppAddress string, remoteDaprPort int, acl *config.AccessControlList, sslEnabled bool) Proxy {
+func NewProxy(connectionFactory messageClientConnection, appID string, localAppAddress string, remoteDaprPort int, acl *config.AccessControlList, sslEnabled bool, resiliency resiliency.Provider) Proxy {
 	return &proxy{
 		appID:             appID,
 		connectionFactory: connectionFactory,
@@ -58,12 +60,13 @@ func NewProxy(connectionFactory messageClientConnection, appID string, localAppA
 		remotePort:        remoteDaprPort,
 		acl:               acl,
 		sslEnabled:        sslEnabled,
+		resiliency:        resiliency,
 	}
 }
 
 // Handler returns a Stream Handler for handling requests that arrive for services that are not recognized by the server.
 func (p *proxy) Handler() grpc.StreamHandler {
-	return grpc_proxy.TransparentHandler(p.intercept)
+	return grpc_proxy.TransparentHandler(p.intercept, p.resiliency)
 }
 
 func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, error) {
