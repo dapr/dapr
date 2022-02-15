@@ -90,7 +90,7 @@ func TestFormatProbePath(t *testing.T) {
 func TestGetProbeHttpHandler(t *testing.T) {
 	pathElements := []string{"api", "v1", "healthz"}
 	expectedPath := "/api/v1/healthz"
-	expectedHandler := corev1.Handler{
+	expectedHandler := corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: expectedPath,
 			Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
