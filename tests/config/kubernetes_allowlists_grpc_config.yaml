@@ -18,5 +18,5 @@ spec:
           - name: httpToGrpcTest
             httpVerb: [ "*" ]
             action: deny
-          - name: grpcToGrpcWithoutHttpVerbTest
+          - name: grpcToGrpcWithoutVerbTest
             action: allow
