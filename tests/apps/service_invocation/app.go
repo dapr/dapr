@@ -344,7 +344,6 @@ func appRouter() *mux.Router {
 	// called by test to run some cases - these will themselves make calls
 	router.HandleFunc("/httptohttptest", httpTohttpTest).Methods("POST")
 	router.HandleFunc("/grpctogrpctest", grpcToGrpcTest).Methods("POST")
-	router.HandleFunc("/grpcwithouthttpverbtogrpctest", grpcWithoutHttpVerbToGrpcTest).Methods("POST")
 	router.HandleFunc("/httptogrpctest", httpToGrpcTest).Methods("POST")
 	router.HandleFunc("/grpctohttptest", grpcToHTTPTest).Methods("POST")
 	router.HandleFunc("/badservicecalltesthttp", badServiceCallTestHTTP).Methods("POST")
@@ -741,7 +740,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("grpcToGrpcTest - target app: %s\n", commandBody.RemoteApp)
+	fmt.Printf("%s - target app: %s\n", commandBody.Method, commandBody.RemoteApp)
 
 	testMessage := guuid.New().String()
 	b, err := json.Marshal(testMessage)
@@ -751,65 +750,9 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("grpcToGrpcTest calling with message %s\n", string(b))
+	fmt.Printf("%s calling with message %s\n", commandBody.Method, string(b))
 
-	var req = constructRequest(commandBody.RemoteApp, "grpcToGrpcTest", "", b)
-	resp, err := daprClient.InvokeService(context.Background(), req)
-
-	if err != nil {
-		logAndSetResponse(w, http.StatusInternalServerError, "grpc call failed with "+err.Error())
-		return
-	}
-
-	body := resp.Data.GetValue()
-	fmt.Printf("resp was %s\n", string(body))
-
-	var responseMessage appResponse
-	err = json.Unmarshal(body, &responseMessage)
-	if err != nil {
-		onDeserializationFailed(w, err)
-		return
-	}
-
-	// validate response ends with "[testMessage] | [httpMethod]"
-	if testMessage != responseMessage.Message {
-		errorMessage := "Expected " + testMessage + " received " + responseMessage.Message
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(appResponse{
-			Message: errorMessage,
-		})
-		logAndSetResponse(w, http.StatusInternalServerError, errorMessage)
-		return
-	}
-
-	// caller of this method doesn't inspect response, it only looks for status
-	logAndSetResponse(w, http.StatusOK, "success")
-}
-
-// Performs calls from grpc client to grpc server.  It sends a random string to the other app
-// and expects the response to contain the same string inside an appResponse.
-func grpcWithoutHttpVerbToGrpcTest(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Enter grpcWithoutHttpVerbToGrpcTest")
-	var commandBody testCommandRequest
-	err := json.NewDecoder(r.Body).Decode(&commandBody)
-	if err != nil {
-		onBadRequest(w, err)
-		return
-	}
-
-	fmt.Printf("grpcWithoutHttpVerbToGrpcTest - target app: %s\n", commandBody.RemoteApp)
-
-	testMessage := guuid.New().String()
-	b, err := json.Marshal(testMessage)
-	if err != nil {
-		fmt.Printf("marshal had error %s\n", err)
-		onSerializationFailed(w, err)
-		return
-	}
-
-	fmt.Printf("grpcWithoutHttpVerbToGrpcTest calling with message %s\n", string(b))
-
-	var req = constructRequest(commandBody.RemoteApp, "grpcWithoutHttpVerbToGrpcTest", "", b)
+	var req = constructRequest(commandBody.RemoteApp, commandBody.Method, "", b)
 	resp, err := daprClient.InvokeService(context.Background(), req)
 
 	if err != nil {

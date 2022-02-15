@@ -81,6 +81,7 @@ func TestMain(m *testing.M) {
 
 var allowListsForServiceInvocationTests = []struct {
 	in                 string
+	path               string
 	remoteApp          string
 	appMethod          string
 	expectedResponse   string
@@ -89,6 +90,7 @@ var allowListsForServiceInvocationTests = []struct {
 }{
 	{
 		"Test allow with callee side http",
+		"opAllow",
 		"allowlists-callee-http",
 		"opAllow",
 		"opAllow is called",
@@ -97,6 +99,7 @@ var allowListsForServiceInvocationTests = []struct {
 	},
 	{
 		"Test deny with callee side http",
+		"opDeny",
 		"allowlists-callee-http",
 		"opDeny",
 		"fail to invoke, id: allowlists-callee-http, err: rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: opDeny verb: POST",
@@ -105,16 +108,18 @@ var allowListsForServiceInvocationTests = []struct {
 	},
 	{
 		"Test allow with callee side grpc",
-		"allowlists-callee-grpc",
 		"grpctogrpctest",
+		"allowlists-callee-grpc",
+		"grpcToGrpcTest",
 		"success",
 		"grpc",
 		200,
 	},
 	{
 		"Test allow with callee side grpc without http verb",
+		"grpctogrpctest",
 		"allowlists-callee-grpc",
-		"grpcwithouthttpverbtogrpctest",
+		"grpcToGrpcWithoutVerbTest",
 		"success",
 		"grpc",
 		200,
@@ -152,7 +157,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			if tt.calleeSide == "http" {
 				url = fmt.Sprintf("%s/tests/invoke_test", externalURL)
 			} else {
-				url = fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+				url = fmt.Sprintf("http://%s/%s", externalURL, tt.path)
 			}
 			resp, statusCode, err := utils.HTTPPostWithStatus(
 				url,
