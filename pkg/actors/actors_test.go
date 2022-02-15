@@ -281,9 +281,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 
 func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
-	config := NewConfig("", TestAppID, []string{""},
-		nil, 0, "", "", "",
-		false, "", config.ReentrancyConfig{}, 0)
+	config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
 	a := NewActors(nil, appChannel, nil, config, nil, spec, nil)
 
 	return a.(*actorsRuntime)
