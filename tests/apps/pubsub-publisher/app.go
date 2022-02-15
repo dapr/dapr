@@ -44,7 +44,6 @@ type publishCommand struct {
 	Data        interface{}       `json:"data"`
 	Protocol    string            `json:"protocol"`
 	Metadata    map[string]string `json:"metadata"`
-	PubSubName  string            `json:"pubsubname"`
 }
 
 type appResponse struct {
@@ -86,16 +85,12 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if len(commandBody.PubSubName) == 0 {
-		commandBody.PubSubName = pubsubName
-	}
 
 	log.Printf("    commandBody.ContentType=%s", commandBody.ContentType)
 	log.Printf("    commandBody.Topic=%s", commandBody.Topic)
 	log.Printf("    commandBody.Data=%v", commandBody.Data)
 	log.Printf("    commandBody.Protocol=%s", commandBody.Protocol)
 	log.Printf("    commandBody.Metadata=%s", commandBody.Metadata)
-	log.Printf("    commandBody.PubSubName=%s", commandBody.PubSubName)
 
 	// based on commandBody.Topic, send to the appropriate topic
 	resp := appResponse{Message: fmt.Sprintf("%s is not supported", commandBody.Topic)}
@@ -120,9 +115,9 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	// publish to dapr
 	var status int
 	if commandBody.Protocol == "grpc" {
-		status, err = performPublishGRPC(commandBody.Topic, jsonValue, contentType, commandBody)
+		status, err = performPublishGRPC(commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
 	} else {
-		status, err = performPublishHTTP(commandBody.Topic, jsonValue, contentType, commandBody)
+		status, err = performPublishHTTP(commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
 	}
 
 	if err != nil {
@@ -152,11 +147,11 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 }
 
 // nolint:gosec
-func performPublishHTTP(topic string, jsonValue []byte, contentType string, commandBody publishCommand) (int, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, commandBody.PubSubName, topic)
-	if len(commandBody.Metadata) > 0 {
+func performPublishHTTP(topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
+	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, pubsubName, topic)
+	if len(metadata) > 0 {
 		params := net_url.Values{}
-		for k, v := range commandBody.Metadata {
+		for k, v := range metadata {
 			params.Set(fmt.Sprintf("metadata.%s", k), v)
 		}
 		url = url + "?" + params.Encode()
@@ -178,16 +173,16 @@ func performPublishHTTP(topic string, jsonValue []byte, contentType string, comm
 	return resp.StatusCode, nil
 }
 
-func performPublishGRPC(topic string, jsonValue []byte, contentType string, commandBody publishCommand) (int, error) {
+func performPublishGRPC(topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
 	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
 	log.Printf("Connecting to dapr using url %s", url)
 
 	req := &runtimev1pb.PublishEventRequest{
-		PubsubName:      commandBody.PubSubName,
+		PubsubName:      pubsubName,
 		Topic:           topic,
 		Data:            jsonValue,
 		DataContentType: contentType,
-		Metadata:        commandBody.Metadata,
+		Metadata:        metadata,
 	}
 	_, err := grpcClient.PublishEvent(context.Background(), req)
 
