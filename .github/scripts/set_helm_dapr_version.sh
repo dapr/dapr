@@ -21,5 +21,11 @@ fi
 FILES=`grep -Hrl DAPR_VERSION charts`
 for file in $FILES; do
   echo "Setting \"version: $REL_VERSION\" in $file ..."
-  sed -e "s/DAPR_VERSION/$REL_VERSION/" -i "$file"
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    # Mac OSX
+    sed -i '' -e "s/DAPR_VERSION/$REL_VERSION/" "$file"
+  else
+    # Linux
+    sed -e "s/DAPR_VERSION/$REL_VERSION/" -i "$file"
+  fi
 done
