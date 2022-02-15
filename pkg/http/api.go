@@ -460,7 +460,15 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// merge metadata from URL query parameters
 	metadata := getMetadataFromRequest(reqCtx)
+	if req.Metadata == nil {
+		req.Metadata = metadata
+	} else {
+		for k, v := range metadata {
+			req.Metadata[k] = v
+		}
+	}
 
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
 	if len(req.Keys) == 0 {
@@ -809,7 +817,18 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	metadata := getMetadataFromRequest(reqCtx)
+
 	for i, r := range reqs {
+		// merge metadata from URL query parameters
+		if reqs[i].Metadata == nil {
+			reqs[i].Metadata = metadata
+		} else {
+			for k, v := range metadata {
+				reqs[i].Metadata[k] = v
+			}
+		}
+
 		reqs[i].Key, err = state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
 		if err != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
@@ -1567,6 +1586,16 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if len(req.Operations) == 0 {
 		respond(reqCtx, withEmpty())
 		return
+	}
+
+	// merge metadata from URL query parameters
+	metadata := getMetadataFromRequest(reqCtx)
+	if req.Metadata == nil {
+		req.Metadata = metadata
+	} else {
+		for k, v := range metadata {
+			req.Metadata[k] = v
+		}
 	}
 
 	operations := []state.TransactionalStateOperation{}
