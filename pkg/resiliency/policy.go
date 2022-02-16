@@ -38,7 +38,7 @@ func Policy(ctx context.Context, log logger.Logger, operationName string, t time
 	return func(oper Operation) error {
 		operation := oper
 		if t > 0 {
-			// Handle timeout
+			// Handle timeout.
 			operCopy := operation
 			operation = func(ctx context.Context) error {
 				ctx, cancel := context.WithTimeout(ctx, t)
@@ -66,7 +66,7 @@ func Policy(ctx context.Context, log logger.Logger, operationName string, t time
 			return operation(ctx)
 		}
 
-		// Use retry/back off
+		// Use retry/back off.
 		b := r.NewBackOffWithContext(ctx)
 		return retry.NotifyRecover(func() error {
 			return operation(ctx)

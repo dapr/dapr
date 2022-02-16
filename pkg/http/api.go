@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"strconv"
@@ -717,7 +718,13 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	resp, err := store.GetSecret(req)
+	policy := a.resiliency.ComponentPolicy(reqCtx, secretStoreName)
+	resp := secretstores.GetSecretResponse{}
+	err = policy(func(ctx context.Context) error {
+		r, rErr := store.GetSecret(req)
+		resp = r
+		return rErr
+	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrSecretGet, req.Name, secretStoreName, err.Error()))
@@ -748,7 +755,13 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	resp, err := store.BulkGetSecret(req)
+	policy := a.resiliency.ComponentPolicy(reqCtx, secretStoreName)
+	resp := secretstores.BulkGetSecretResponse{}
+	err = policy(func(ctx context.Context) error {
+		r, rErr := store.BulkGetSecret(req)
+		resp = r
+		return rErr
+	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrBulkSecretGet, secretStoreName, err.Error()))

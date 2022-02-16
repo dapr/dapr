@@ -58,6 +58,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/resiliency"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
@@ -2804,6 +2805,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		secretsConfiguration: secretsConfiguration,
 		secretStores:         fakeStores,
 		json:                 jsoniter.ConfigFastest,
+		resiliency:           resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"

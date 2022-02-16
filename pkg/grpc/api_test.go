@@ -57,6 +57,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
@@ -763,6 +764,7 @@ func TestGetSecret(t *testing.T) {
 		id:                   "fakeAPI",
 		secretStores:         fakeStores,
 		secretsConfiguration: secretsConfiguration,
+		resiliency:           resiliency.New(nil),
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -829,6 +831,7 @@ func TestGetBulkSecret(t *testing.T) {
 		id:                   "fakeAPI",
 		secretStores:         fakeStores,
 		secretsConfiguration: secretsConfiguration,
+		resiliency:           resiliency.New(nil),
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()

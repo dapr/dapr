@@ -741,7 +741,13 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		Metadata: in.Metadata,
 	}
 
-	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
+	policy := a.resiliency.ComponentPolicy(ctx, secretStoreName)
+	getResponse := secretstores.GetSecretResponse{}
+	err := policy(func(ctx context.Context) error {
+		resp, rErr := a.secretStores[secretStoreName].GetSecret(req)
+		getResponse = resp
+		return rErr
+	})
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrSecretGet, req.Name, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -774,7 +780,13 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		Metadata: in.Metadata,
 	}
 
-	getResponse, err := a.secretStores[secretStoreName].BulkGetSecret(req)
+	policy := a.resiliency.ComponentPolicy(ctx, secretStoreName)
+	getResponse := secretstores.BulkGetSecretResponse{}
+	err := policy(func(ctx context.Context) error {
+		resp, rErr := a.secretStores[secretStoreName].BulkGetSecret(req)
+		getResponse = resp
+		return rErr
+	})
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrBulkSecretGet, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)

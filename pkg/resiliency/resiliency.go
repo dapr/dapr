@@ -54,7 +54,7 @@ const (
 	// ActorCircuitBreakerScopeID indicates the type+id scope (more granular).
 	ActorCircuitBreakerScopeID
 	// ActorCircuitBreakerScopeBoth indicates both type and type+id are used for scope.
-	ActorCircuitBreakerScopeBoth // Usage is TODO
+	ActorCircuitBreakerScopeBoth // Usage is TODO.
 )
 
 type (
@@ -92,7 +92,7 @@ type (
 	}
 
 	// circuitBreakerInstances stores circuit breaker state for components
-	// that have ephemeral instances (actors, service endpoints)
+	// that have ephemeral instances (actors, service endpoints).
 	circuitBreakerInstances struct {
 		sync.RWMutex
 		cbs map[string]*breaker.CircuitBreaker
