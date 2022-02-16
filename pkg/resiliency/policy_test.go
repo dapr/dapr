@@ -82,7 +82,7 @@ func TestPolicyTimeout(t *testing.T) {
 		{
 			name:      "Timeout OK",
 			sleepTime: time.Millisecond * 5,
-			timeout:   time.Millisecond * 10,
+			timeout:   time.Millisecond * 50,
 			expected:  true,
 		},
 	}

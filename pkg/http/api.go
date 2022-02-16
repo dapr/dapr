@@ -719,10 +719,9 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	policy := a.resiliency.ComponentPolicy(reqCtx, secretStoreName)
-	resp := secretstores.GetSecretResponse{}
-	err = policy(func(ctx context.Context) error {
-		r, rErr := store.GetSecret(req)
-		resp = r
+	var resp secretstores.GetSecretResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = store.GetSecret(req)
 		return rErr
 	})
 	if err != nil {
@@ -756,10 +755,9 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	policy := a.resiliency.ComponentPolicy(reqCtx, secretStoreName)
-	resp := secretstores.BulkGetSecretResponse{}
-	err = policy(func(ctx context.Context) error {
-		r, rErr := store.BulkGetSecret(req)
-		resp = r
+	var resp secretstores.BulkGetSecretResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = store.BulkGetSecret(req)
 		return rErr
 	})
 	if err != nil {
