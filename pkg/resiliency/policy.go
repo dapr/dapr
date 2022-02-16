@@ -38,13 +38,25 @@ func Policy(ctx context.Context, log logger.Logger, operationName string, t time
 	return func(oper Operation) error {
 		operation := oper
 		if t > 0 {
+			log.Infof("Setting up timeout: %+v", t)
 			// Handle timeout.
+			// TODO: This should ideally be handled by the underlying service/component. Revisit once those understand contexts.
 			operCopy := operation
 			operation = func(ctx context.Context) error {
 				ctx, cancel := context.WithTimeout(ctx, t)
 				defer cancel()
 
-				return operCopy(ctx)
+				done := make(chan error, 1)
+				go func() {
+					done <- operCopy(ctx)
+				}()
+
+				select {
+				case err := <-done:
+					return err
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 			}
 		}
 
