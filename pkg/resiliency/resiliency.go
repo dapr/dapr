@@ -333,6 +333,7 @@ func (r *Resiliency) RoutePolicy(ctx context.Context, name string) Runner {
 	}
 	policyNames, ok := r.routes[name]
 	if ok {
+		r.log.Infof("Found route policy: %+v", policyNames)
 		if policyNames.Timeout != "" {
 			t = r.timeouts[policyNames.Timeout]
 		}
