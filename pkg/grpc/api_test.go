@@ -1064,6 +1064,7 @@ func TestGetConfiguration(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1890,6 +1891,7 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 			&api{
 				id:                  "fakeAPI",
 				configurationStores: map[string]configuration.Store{"store1": &mockConfigStore{}},
+				resiliency:          resiliency.New(nil),
 			},
 			"")
 		defer server.Stop()
@@ -1925,6 +1927,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 				configurationStores:        map[string]configuration.Store{"store1": &mockConfigStore{}},
 				configurationSubscribe:     map[string]bool{},
 				configurationSubscribeLock: sync.Mutex{},
+				resiliency:                 resiliency.New(nil),
 			},
 			"")
 		defer server.Stop()

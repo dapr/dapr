@@ -1263,7 +1263,12 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 		Metadata: in.Metadata,
 	}
 
-	getResponse, err := store.Get(ctx, &req)
+	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	var getResponse *configuration.GetResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		getResponse, rErr = store.Get(ctx, &req)
+		return rErr
+	})
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, req.Keys, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -1342,8 +1347,11 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	}
 
 	ctx := context.TODO()
-	// TODO(@laurence) deal with failed subscription and retires
-	err = store.Subscribe(ctx, req, handler.updateEventHandler)
+	// TODO(@laurence) deal with failed subscription and retires (provide alternate to resiliency?).
+	policy := a.resiliency.ComponentPolicy(ctx, request.StoreName)
+	err = policy(func(ctx context.Context) error {
+		return store.Subscribe(ctx, req, handler.updateEventHandler)
+	})
 	if err != nil {
 		apiServerLogger.Debug(err)
 		a.configurationSubscribeLock.Unlock()
