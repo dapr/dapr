@@ -865,7 +865,7 @@ func TestGetBulkSecret(t *testing.T) {
 
 func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
+	server := startDaprAPIServer(port, &api{id: "fakeAPI", resiliency: resiliency.New(nil)}, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -894,6 +894,7 @@ func TestSaveState(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -979,6 +980,7 @@ func TestGetState(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1064,6 +1066,7 @@ func TestGetConfiguration(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1149,6 +1152,7 @@ func TestGetBulkState(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1260,6 +1264,7 @@ func TestDeleteState(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1495,6 +1500,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		transactionalStateStores: map[string]state.TransactionalStore{
 			"store1": fakeTransactionalStore,
 		},
+		resiliency: resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1793,6 +1799,7 @@ func TestQueryState(t *testing.T) {
 	server := startTestServerAPI(port, &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	})
 	defer server.Stop()
 
@@ -1840,6 +1847,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 		&api{
 			id:          "fakeAPI",
 			stateStores: map[string]state.Store{"store1": &daprt.MockStateStore{}},
+			resiliency:  resiliency.New(nil),
 		},
 		"")
 	defer server.Stop()
@@ -1866,6 +1874,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 		&api{
 			id:          "fakeAPI",
 			stateStores: map[string]state.Store{storeName: &mockStateStoreQuerier{}},
+			resiliency:  resiliency.New(nil),
 		},
 		"")
 	defer server.Stop()
