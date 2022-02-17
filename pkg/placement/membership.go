@@ -307,9 +307,11 @@ func (p *Service) performTableDissemination() {
 func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1pb.PlacementTables) {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
-	p.disseminateOperation(hosts, "lock", nil)
-	p.disseminateOperation(hosts, "update", newTable)
-	p.disseminateOperation(hosts, "unlock", nil)
+	for _, host := range hosts {
+		p.disseminateOperation([]placementGRPCStream{host}, "lock", nil)
+		p.disseminateOperation([]placementGRPCStream{host}, "update", nil)
+		p.disseminateOperation([]placementGRPCStream{host}, "unlock", nil)
+	}
 }
 
 func (p *Service) disseminateOperation(targets []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
