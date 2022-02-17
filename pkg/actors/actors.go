@@ -56,7 +56,7 @@ import (
 )
 
 const (
-	daprSeparator        = "||"
+	DaprSeparator        = "||"
 	metadataPartitionKey = "partitionKey"
 	metadataZeroID       = "00000000-0000-0000-0000-000000000000"
 )
@@ -240,11 +240,11 @@ func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
 }
 
 func constructCompositeKey(keys ...string) string {
-	return strings.Join(keys, daprSeparator)
+	return strings.Join(keys, DaprSeparator)
 }
 
 func decomposeCompositeKey(compositeKey string) []string {
-	return strings.Split(compositeKey, daprSeparator)
+	return strings.Split(compositeKey, DaprSeparator)
 }
 
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {

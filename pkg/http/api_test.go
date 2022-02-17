@@ -22,7 +22,9 @@ import (
 	"io"
 	"net"
 	gohttp "net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -1389,6 +1391,28 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
+	t.Run("Reminder Create - 400 Contains ||", func(t *testing.T) {
+		apiPath := "v1.0/actors/a||b/c||d/reminders/reminder1"
+		reminderRequest := actors.CreateReminderRequest{
+			Name:      "reminder1",
+			ActorType: "a||b",
+			ActorID:   "c||d",
+		}
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+		assert.Equal(t, 400, resp.StatusCode)
+		assert.Contains(t, string(resp.RawBody), "actorType or actorID can't contains ||")
+	})
+
 	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 
@@ -2126,6 +2150,45 @@ type fakeHTTPResponse struct {
 	ErrorBody   map[string]string
 }
 
+func (f *fakeHTTPServer) unescapeRequestParametersHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		parseError := false
+		unescapeRequestParameters := func(parameter []byte, value interface{}) {
+			switch value.(type) {
+			case string:
+				if !parseError {
+					parameterValue := fmt.Sprintf("%v", value)
+					parameterUnescapedValue, err := url.QueryUnescape(parameterValue)
+					if err == nil {
+						ctx.SetUserValueBytes(parameter, parameterUnescapedValue)
+					} else {
+						parseError = true
+						errorMessage := fmt.Sprintf("Failed to unescape request parameter %s with value %v. Error: %s", parameter, value, err.Error())
+						log.Debug(errorMessage)
+						ctx.Error(errorMessage, fasthttp.StatusBadRequest)
+					}
+				}
+			}
+		}
+		ctx.VisitUserValues(unescapeRequestParameters)
+
+		if !parseError {
+			next(ctx)
+		}
+	}
+}
+
+func (f *fakeHTTPServer) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
+	for _, m := range e.Methods {
+		pathIncludesParameters := parameterFinder.MatchString(path)
+		if pathIncludesParameters {
+			router.Handle(m, path, f.unescapeRequestParametersHandler(e.Handler))
+		} else {
+			router.Handle(m, path, e.Handler)
+		}
+	}
+}
+
 func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
@@ -2201,19 +2264,17 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 
 func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 	router := routing.New()
-
+	parameterFinder, _ := regexp.Compile("/{.*}")
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-		for _, m := range e.Methods {
-			router.Handle(m, path, e.Handler)
-		}
+		f.handle(e, parameterFinder, path, router)
+
 		if e.Alias != "" {
 			path = fmt.Sprintf("/%s", e.Alias)
-			for _, m := range e.Methods {
-				router.Handle(m, path, e.Handler)
-			}
+			f.handle(e, parameterFinder, path, router)
 		}
 	}
+
 	return router
 }
 
