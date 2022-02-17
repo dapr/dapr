@@ -3545,8 +3545,10 @@ func stopRuntime(t *testing.T, rt *DaprRuntime) {
 func TestFindMatchingRoute(t *testing.T) {
 	r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath")
 	require.NoError(t, err)
-	rules := []*runtime_pubsub.Rule{r}
-	path, shouldProcess, err := findMatchingRoute(rules, map[string]interface{}{
+	route := Route{
+		rules: []*runtime_pubsub.Rule{r},
+	}
+	path, shouldProcess, err := findMatchingRoute(&route, map[string]interface{}{
 		"type": "MyEventType",
 	}, true)
 	require.NoError(t, err)

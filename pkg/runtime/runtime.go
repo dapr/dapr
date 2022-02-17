@@ -544,7 +544,6 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 		log.Debugf("subscribing to topic=%s on pubsub=%s", topic, name)
 
 		routeMetadata := route.metadata
-		routeRules := route.rules
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic:    topic,
 			Metadata: route.metadata,
@@ -584,7 +583,8 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				return nil
 			}
 
-			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
+			route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
+			routePath, shouldProcess, err := findMatchingRoute(&route, cloudEvent, a.featureRoutingEnabled)
 			if err != nil {
 				return err
 			}
@@ -611,13 +611,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess bool, err error) {
-	hasRules := len(rules) > 0
+func findMatchingRoute(route *Route, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess bool, err error) {
+	hasRules := len(route.rules) > 0
 	if hasRules {
 		data := map[string]interface{}{
 			"event": cloudEvent,
 		}
-		rule, err := matchRoutingRule(rules, data, routingEnabled)
+		rule, err := matchRoutingRule(route, data, routingEnabled)
 		if err != nil {
 			return "", false, err
 		}
@@ -629,8 +629,8 @@ func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}, rou
 	return "", false, nil
 }
 
-func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{}, routingEnabled bool) (*runtime_pubsub.Rule, error) {
-	for _, rule := range rules {
+func matchRoutingRule(route *Route, data map[string]interface{}, routingEnabled bool) (*runtime_pubsub.Rule, error) {
+	for _, rule := range route.rules {
 		if rule.Match == nil {
 			return rule, nil
 		}
@@ -674,7 +674,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 
 func (a *DaprRuntime) initProxy() {
 	a.proxy = messaging.NewProxy(a.grpc.GetGRPCConnection, a.runtimeConfig.ID,
-		fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList)
+		fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList, a.runtimeConfig.AppSSL)
 
 	log.Info("gRPC proxy enabled")
 }
