@@ -233,6 +233,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
 SkipPatch:
 	diagAppID := getAppIDFromRequest(ar.Request)
 
