@@ -212,6 +212,16 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
+		var pod corev1.Pod
+		if err = json.Unmarshal(ar.Request.Object.Raw, &pod); err != nil {
+			log.Warnf("could not unmarshal raw object: %v", err)
+		} else {
+			if pod.Spec.DNSPolicy != "" && pod.Spec.DNSPolicy != corev1.DNSClusterFirst {
+				log.Warnf("%q's DNSPolicy is not %q. Services may not be called", pod.Namespace+"/"+pod.Name, corev1.DNSClusterFirst)
+				goto SkipPatch
+			}
+		}
+
 		if !(utils.StringSliceContains(ar.Request.UserInfo.UID, i.authUIDs) || utils.StringSliceContains(systemGroup, ar.Request.UserInfo.Groups)) {
 			log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)
 		} else if ar.Request.Kind.Kind != "Pod" {
@@ -223,7 +233,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
+SkipPatch:
 	diagAppID := getAppIDFromRequest(ar.Request)
 
 	if err != nil {
