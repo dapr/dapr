@@ -25,6 +25,15 @@ import (
 	"github.com/dapr/dapr/pkg/diagnostics"
 )
 
+type sslEnabledConnection struct {
+	sslEnabled bool
+}
+
+func (s *sslEnabledConnection) connectionSslFn(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	s.sslEnabled = enableSSL
+	return grpc.Dial(id, grpc.WithInsecure())
+}
+
 func connectionFn(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	return grpc.Dial(id, grpc.WithInsecure())
 }
@@ -201,5 +210,26 @@ func TestIntercept(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, conn)
+	})
+
+	t.Run("ssl enabled", func(t *testing.T) {
+		connFn := sslEnabledConnection{}
+
+		p := NewProxy(connFn.connectionSslFn, "a", "a:123", 50005, nil, true)
+		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
+			return remoteApp{
+				id:      "a",
+				address: "a:123",
+			}, nil
+		})
+		p.SetTelemetryFn(func(ctx context.Context) context.Context {
+			return ctx
+		})
+
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		proxy := p.(*proxy)
+		proxy.intercept(ctx, "/test")
+
+		assert.True(t, connFn.sslEnabled)
 	})
 }
