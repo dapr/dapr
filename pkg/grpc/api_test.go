@@ -1205,7 +1205,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 				})
 			}
 			return true
-		})).Return(nil)
+		})).Return("id", nil)
 	fakeConfigurationStore.On("Subscribe",
 		mock.AnythingOfType("*context.cancelCtx"),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -1228,13 +1228,13 @@ func TestSubscribeConfiguration(t *testing.T) {
 				})
 			}
 			return true
-		})).Return(nil)
+		})).Return("id", nil)
 	fakeConfigurationStore.On("Subscribe",
 		mock.AnythingOfType("*context.cancelCtx"),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			return req.Keys[0] == "error-key"
 		}),
-		mock.AnythingOfType("configuration.UpdateHandler")).Return(errors.New("failed to get state with error-key"))
+		mock.AnythingOfType("configuration.UpdateHandler")).Return(nil, errors.New("failed to get state with error-key"))
 
 	fakeAPI := &api{
 		configurationSubscribe: make(map[string]chan struct{}),
