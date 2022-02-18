@@ -45,6 +45,16 @@ const (
 	TestActorMetadataPartitionCount = 3
 )
 
+var DefaultAppConfig = config.ApplicationConfig{
+	Entities:                   []string{"1", "reentrantActor"},
+	ActorIdleTimeout:           "1s",
+	ActorScanInterval:          "2s",
+	DrainOngoingCallTimeout:    "3s",
+	DrainRebalancedActors:      true,
+	Reentrancy:                 config.ReentrancyConfig{},
+	RemindersStoragePartitions: 0,
+}
+
 // testRequest is the request object that encapsulates the `data` field of a request.
 type testRequest struct {
 	Data interface{} `json:"data"`
@@ -244,7 +254,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	}
 
 	if b.config == nil {
-		config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
+		config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
 		b.config = &config
 	}
 
@@ -263,7 +273,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
+	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
 	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
 
 	return a.(*actorsRuntime)
@@ -272,8 +282,17 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	c := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{},
-		TestActorMetadataPartitionCount)
+	appConfig := config.ApplicationConfig{
+		Entities:                   []string{"cat", "actor2"},
+		RemindersStoragePartitions: TestActorMetadataPartitionCount,
+		EntityConfigs: []config.EntityConfig{
+			{
+				Entities:                   []string{"actor2"},
+				RemindersStoragePartitions: 20,
+			},
+		},
+	}
+	c := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
 	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{
 		{
 			Name:    config.ActorTypeMetadata,
@@ -306,10 +325,9 @@ func fakeCallAndActivateActor(actors *actorsRuntime, actorType, actorID string) 
 	actors.actorsTable.LoadOrStore(actorKey, newActor(actorType, actorID, &reentrancyStackDepth))
 }
 
-func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorType, actorID string, actorIdleTimeout time.Duration) {
+func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorType, actorID string) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
-	scanInterval := time.Second * 1
-	testActorsRuntime.startDeactivationTicker(scanInterval, actorIdleTimeout)
+	testActorsRuntime.startDeactivationTicker(testActorsRuntime.config)
 }
 
 func createReminderData(actorID, actorType, name, period, dueTime, ttl, data string) CreateReminderRequest {
@@ -339,11 +357,13 @@ func createTimerData(actorID, actorType, name, period, dueTime, ttl, callback, d
 
 func TestActorIsDeactivated(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
-	idleTimeout := time.Second * 2
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := constructCompositeKey(actorType, actorID)
 
-	deactivateActorWithDuration(testActorsRuntime, actorType, actorID, idleTimeout)
+	testActorsRuntime.config.ActorIdleTimeout = time.Second * 2
+	testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
+
+	deactivateActorWithDuration(testActorsRuntime, actorType, actorID)
 	time.Sleep(time.Second * 3)
 
 	_, exists := testActorsRuntime.actorsTable.Load(actorKey)
@@ -353,15 +373,38 @@ func TestActorIsDeactivated(t *testing.T) {
 
 func TestActorIsNotDeactivated(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
-	idleTimeout := time.Second * 5
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := constructCompositeKey(actorType, actorID)
 
-	deactivateActorWithDuration(testActorsRuntime, actorType, actorID, idleTimeout)
+	testActorsRuntime.config.ActorIdleTimeout = time.Second * 5
+	testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
+
+	deactivateActorWithDuration(testActorsRuntime, actorType, actorID)
 	time.Sleep(time.Second * 3)
 
 	_, exists := testActorsRuntime.actorsTable.Load(actorKey)
 
+	assert.True(t, exists)
+}
+
+func TestPerActorTimeout(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	firstType := "a"
+	secondType := "b"
+	actorID := "1"
+
+	testActorsRuntime.config.EntityConfigs[firstType] = EntityConfig{Entities: []string{firstType}, ActorIdleTimeout: time.Second * 2}
+	testActorsRuntime.config.EntityConfigs[secondType] = EntityConfig{Entities: []string{secondType}, ActorIdleTimeout: time.Second * 5}
+	testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
+
+	deactivateActorWithDuration(testActorsRuntime, firstType, actorID)
+	deactivateActorWithDuration(testActorsRuntime, secondType, actorID)
+	time.Sleep(time.Second * 3)
+
+	_, exists := testActorsRuntime.actorsTable.Load(constructCompositeKey(firstType, actorID))
+	assert.False(t, exists)
+
+	_, exists = testActorsRuntime.actorsTable.Load(constructCompositeKey(secondType, actorID))
 	assert.True(t, exists)
 }
 
@@ -487,10 +530,22 @@ func TestCreateReminder(t *testing.T) {
 	appChannel := new(mockAppChannel)
 	testActorsRuntime := newTestActorsRuntimeWithMock(appChannel)
 	actorType, actorID := getTestActorTypeAndID()
+	secondActorType := "actor2"
 	ctx := context.Background()
 	err := testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
+		Name:      "reminder0",
+		Period:    "1s",
+		DueTime:   "1s",
+		TTL:       "PT10M",
+		Data:      nil,
+	})
+	assert.Nil(t, err)
+
+	err = testActorsRuntime.CreateReminder(ctx, &CreateReminderRequest{
+		ActorID:   actorID,
+		ActorType: secondActorType,
 		Name:      "reminder0",
 		Period:    "1s",
 		DueTime:   "1s",
@@ -504,20 +559,28 @@ func TestCreateReminder(t *testing.T) {
 	testActorsRuntimeWithPartition.store = testActorsRuntime.store
 	testActorsRuntimeWithPartition.transactionalStore = testActorsRuntime.transactionalStore
 	for i := 1; i < numReminders; i++ {
-		err = testActorsRuntimeWithPartition.CreateReminder(ctx, &CreateReminderRequest{
-			ActorID:   actorID,
-			ActorType: actorType,
-			Name:      "reminder" + strconv.Itoa(i),
-			Period:    "1s",
-			DueTime:   "1s",
-			TTL:       "10m",
-			Data:      nil,
-		})
-		assert.Nil(t, err)
+		for _, reminderActorType := range []string{actorType, secondActorType} {
+			err = testActorsRuntimeWithPartition.CreateReminder(ctx, &CreateReminderRequest{
+				ActorID:   actorID,
+				ActorType: reminderActorType,
+				Name:      "reminder" + strconv.Itoa(i),
+				Period:    "1s",
+				DueTime:   "1s",
+				TTL:       "10m",
+				Data:      nil,
+			})
+			assert.Nil(t, err)
+		}
 	}
 
 	// Does not migrate yet
 	_, actorTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(actorType, false)
+	assert.Nil(t, err)
+	assert.True(t, len(actorTypeMetadata.ID) > 0)
+	assert.Equal(t, 0, actorTypeMetadata.RemindersMetadata.PartitionCount)
+
+	// Check for 2nd type.
+	_, actorTypeMetadata, err = testActorsRuntimeWithPartition.getRemindersForActorType(secondActorType, false)
 	assert.Nil(t, err)
 	assert.True(t, len(actorTypeMetadata.ID) > 0)
 	assert.Equal(t, 0, actorTypeMetadata.RemindersMetadata.PartitionCount)
@@ -538,6 +601,24 @@ func TestCreateReminder(t *testing.T) {
 	}
 	assert.Equal(t, TestActorMetadataPartitionCount, len(partitions))
 	assert.Equal(t, numReminders, len(reminderReferences))
+	assert.Equal(t, numReminders, len(reminders))
+
+	// Check for 2nd type.
+	secondReminderReferences, secondTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(secondActorType, true)
+	assert.Nil(t, err)
+	assert.True(t, len(secondTypeMetadata.ID) > 0)
+	assert.Equal(t, 20, secondTypeMetadata.RemindersMetadata.PartitionCount)
+
+	partitions = map[uint32]bool{}
+	reminders = map[string]bool{}
+	for _, reminderRef := range secondReminderReferences {
+		partition := reminderRef.actorRemindersPartitionID
+		partitions[partition] = true
+		reminders[reminderRef.reminder.Name] = true
+		assert.Equal(t, secondTypeMetadata.ID, reminderRef.actorMetadataID)
+	}
+	assert.Equal(t, 20, len(partitions))
+	assert.Equal(t, numReminders, len(secondReminderReferences))
 	assert.Equal(t, numReminders, len(reminders))
 }
 
@@ -1701,8 +1782,16 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
-	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500,
-		"1s", "2s", "3s", true, "default", config.ReentrancyConfig{}, 0)
+	appConfig := config.ApplicationConfig{
+		Entities:                   []string{"1"},
+		ActorScanInterval:          "1s",
+		ActorIdleTimeout:           "2s",
+		DrainOngoingCallTimeout:    "3s",
+		DrainRebalancedActors:      true,
+		Reentrancy:                 config.ReentrancyConfig{},
+		RemindersStoragePartitions: 0,
+	}
+	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
 	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
@@ -1716,17 +1805,33 @@ func TestConfig(t *testing.T) {
 }
 
 func TestReentrancyConfig(t *testing.T) {
+	appConfig := DefaultAppConfig
 	t.Run("Test empty reentrancy values", func(t *testing.T) {
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
-			config.ReentrancyConfig{}, 0)
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
 		assert.False(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
 	})
 
+	t.Run("Test per type reentrancy", func(t *testing.T) {
+		appConfig.EntityConfigs = []config.EntityConfig{
+			{
+				Entities: []string{"reentrantActor"},
+				Reentrancy: config.ReentrancyConfig{
+					Enabled: true,
+				},
+			},
+		}
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+		assert.False(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
+		assert.True(t, c.EntityConfigs["reentrantActor"].ReentrancyConfig.Enabled)
+	})
+
 	t.Run("Test minimum reentrancy values", func(t *testing.T) {
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
-			config.ReentrancyConfig{Enabled: true}, 0)
+		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
 		assert.True(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
@@ -1734,8 +1839,8 @@ func TestReentrancyConfig(t *testing.T) {
 
 	t.Run("Test full reentrancy values", func(t *testing.T) {
 		reentrancyLimit := 64
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
-			config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}, 0)
+		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
 		assert.True(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 64, *c.Reentrancy.MaxStackDepth)
@@ -1869,7 +1974,9 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrant", "1")
 
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true}, 0)
+	appConfig := DefaultAppConfig
+	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
@@ -1895,7 +2002,9 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("other", "1")
 	req3 := invokev1.NewInvokeMethodRequest("third").WithActor("reentrant", "1")
 
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true}, 0)
+	appConfig := DefaultAppConfig
+	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
 	reentrantAppChannel.callLog = []string{}
@@ -1921,7 +2030,76 @@ func TestReentrancyStackLimit(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
 
 	stackDepth := 0
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}, 0)
+	appConfig := DefaultAppConfig
+	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantAppChannel := new(reentrantAppChannel)
+	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
+	reentrantAppChannel.callLog = []string{}
+	builder := runtimeBuilder{
+		appChannel:  reentrantAppChannel,
+		config:      &reentrantConfig,
+		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+	}
+	testActorRuntime := builder.buildActorRuntime()
+	reentrantAppChannel.a = testActorRuntime
+
+	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+}
+
+func TestReentrancyPerActor(t *testing.T) {
+	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
+	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrantActor", "1")
+
+	appConfig := DefaultAppConfig
+	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: false}
+	appConfig.EntityConfigs = []config.EntityConfig{
+		{
+			Entities: []string{"reentrantActor"},
+			Reentrancy: config.ReentrancyConfig{
+				Enabled: true,
+			},
+		},
+	}
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantAppChannel := new(reentrantAppChannel)
+	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
+	reentrantAppChannel.callLog = []string{}
+	builder := runtimeBuilder{
+		appChannel:  reentrantAppChannel,
+		config:      &reentrantConfig,
+		featureSpec: []config.FeatureSpec{{Name: "Actor.Reentrancy", Enabled: true}},
+	}
+	testActorRuntime := builder.buildActorRuntime()
+	reentrantAppChannel.a = testActorRuntime
+
+	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, []string{
+		"Entering actors/reentrantActor/1/method/first", "Entering actors/reentrantActor/1/method/second",
+		"Exiting actors/reentrantActor/1/method/second", "Exiting actors/reentrantActor/1/method/first",
+	}, reentrantAppChannel.callLog)
+}
+
+func TestReentrancyStackLimitPerActor(t *testing.T) {
+	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
+
+	stackDepth := 0
+	appConfig := DefaultAppConfig
+	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: false}
+	appConfig.EntityConfigs = []config.EntityConfig{
+		{
+			Entities: []string{"reentrantActor"},
+			Reentrancy: config.ReentrancyConfig{
+				Enabled:       true,
+				MaxStackDepth: &stackDepth,
+			},
+		},
+	}
+	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
