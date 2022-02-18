@@ -92,6 +92,9 @@ service Dapr {
   // SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
   rpc SubscribeConfigurationAlpha1(SubscribeConfigurationRequest) returns (stream SubscribeConfigurationResponse) {}
 
+  // UnSubscribeConfiguration unsubscribe the subscription of configuration
+  rpc UnsubscribeConfigurationAlpha1(UnsubscribeConfigurationRequest) returns (UnsubscribeConfigurationResponse) {}
+
   // Gets metadata of the sidecar
   rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
 
@@ -511,8 +514,25 @@ message SubscribeConfigurationRequest {
   map<string, string> metadata = 3;
 }
 
+// UnSubscribeConfigurationRequest is the message to stop watching the key-value configuration.
+message UnsubscribeConfigurationRequest {
+  // The name of configuration store.
+  string store_name = 1;
+
+  // The id to unsubscribe.
+  string id = 2;
+}
+
 message SubscribeConfigurationResponse {
+  // Subscribe id, used to stop subscription.
+  string id = 1;
+
   // The list of items containing configuration values
-  repeated common.v1.ConfigurationItem items = 1;
+  repeated common.v1.ConfigurationItem items = 2;
+}
+
+message UnsubscribeConfigurationResponse {
+  bool ok = 1;
+  string message = 2;
 }
 

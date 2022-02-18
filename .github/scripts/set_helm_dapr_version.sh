@@ -13,19 +13,33 @@
 
 set -e
 
+replace_all() {
+  SUBSTRING=$1
+  CONTENT=$2
+  FILES=`grep -Hrl $SUBSTRING charts`
+  for file in $FILES; do
+    echo "Replacing \"$SUBSTRING\" with \"$CONTENT\" in $file ..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      # Mac OSX
+      sed -i '' -e "s/$SUBSTRING/$CONTENT/" "$file"
+    else
+      # Linux
+      sed -e "s/$SUBSTRING/$CONTENT/" -i "$file"
+    fi
+  done
+}
+
+
 if [ -z $REL_VERSION ]; then
   echo "REL_VERSION is not set. Exiting ..."
   exit 1
 fi
 
-FILES=`grep -Hrl DAPR_VERSION charts`
-for file in $FILES; do
-  echo "Setting \"version: $REL_VERSION\" in $file ..."
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    # Mac OSX
-    sed -i '' -e "s/DAPR_VERSION/$REL_VERSION/" "$file"
-  else
-    # Linux
-    sed -e "s/DAPR_VERSION/$REL_VERSION/" -i "$file"
-  fi
-done
+DAPR_VERSION_HELM="${REL_VERSION}"
+DAPR_VERSION_TAG="${REL_VERSION}"
+if [ "$REL_VERSION" == "edge" ]; then
+  DAPR_VERSION_HELM="0.0.0"
+fi
+
+replace_all "DAPR_VERSION_TAG" "$DAPR_VERSION_TAG"
+replace_all "DAPR_VERSION_HELM" "$DAPR_VERSION_HELM"
