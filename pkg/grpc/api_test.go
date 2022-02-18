@@ -1347,7 +1347,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	var tempReq *configuration.SubscribeRequest
 	fakeConfigurationStore.On("Unsubscribe",
 		mock.AnythingOfType("*context.valueCtx"),
-		mock.MatchedBy(func(req *configuration.UnSubscribeRequest) bool {
+		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return true
 		})).Return(nil)
 	fakeConfigurationStore.On("Subscribe",
@@ -1374,7 +1374,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 								Value: "test-data",
 							},
 						},
-						Id: mockSubscribeID,
+						ID: mockSubscribeID,
 					}); err != nil {
 						return
 					}
@@ -1411,7 +1411,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 								Value: "test-data2",
 							},
 						},
-						Id: mockSubscribeID,
+						ID: mockSubscribeID,
 					}); err != nil {
 						return
 					}
@@ -1497,7 +1497,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				subscribeID = rsp.Id
 			}
 			assert.Nil(t, err, "Error should be nil")
-			_, err = client.UnSubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnSubscribeConfigurationRequest{
+			_, err = client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 				StoreName: tt.storeName,
 				Id:        subscribeID,
 			})
@@ -2381,10 +2381,6 @@ func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.Subs
 	return "", nil
 }
 
-func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnSubscribeRequest) error {
-	return nil
-}
-
-func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnSubscribeRequest) error {
+func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
 	return nil
 }
