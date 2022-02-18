@@ -31,11 +31,6 @@ import (
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
-const (
-	// GRPCFeatureName is the feature name for the Dapr configuration required to enable the proxy.
-	GRPCFeatureName = "proxy.grpc"
-)
-
 // Proxy is the interface for a gRPC transparent proxy.
 type Proxy interface {
 	Handler() grpc.StreamHandler
@@ -51,16 +46,18 @@ type proxy struct {
 	telemetryFn       func(context.Context) context.Context
 	localAppAddress   string
 	acl               *config.AccessControlList
+	sslEnabled        bool
 }
 
 // NewProxy returns a new proxy.
-func NewProxy(connectionFactory messageClientConnection, appID string, localAppAddress string, remoteDaprPort int, acl *config.AccessControlList) Proxy {
+func NewProxy(connectionFactory messageClientConnection, appID string, localAppAddress string, remoteDaprPort int, acl *config.AccessControlList, sslEnabled bool) Proxy {
 	return &proxy{
 		appID:             appID,
 		connectionFactory: connectionFactory,
 		localAppAddress:   localAppAddress,
 		remotePort:        remoteDaprPort,
 		acl:               acl,
+		sslEnabled:        sslEnabled,
 	}
 }
 
@@ -98,12 +95,13 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 			}
 		}
 
-		conn, cErr := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+		conn, cErr := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, p.sslEnabled, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 		return outCtx, conn, cErr
 	}
 
 	// proxy to a remote daprd
-	conn, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+	// connection is recreated because its certification may have already been expired
+	conn, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, true, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 	outCtx = p.telemetryFn(outCtx)
 
 	return outCtx, conn, cErr
