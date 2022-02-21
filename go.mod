@@ -257,6 +257,7 @@ require (
 	github.com/sendgrid/rest v2.6.3+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.5.0+incompatible // indirect
 	github.com/shirou/gopsutil/v3 v3.21.6 // indirect
+	github.com/sijms/go-ora/v2 v2.2.22 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/sony/gobreaker v0.4.2-0.20210216022020-dd874f9dd33b // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
