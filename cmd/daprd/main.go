@@ -58,6 +58,7 @@ import (
 	"github.com/dapr/components-contrib/state/mongodb"
 	state_mysql "github.com/dapr/components-contrib/state/mysql"
 	state_oci_objectstorage "github.com/dapr/components-contrib/state/oci/objectstorage"
+	state_oracledatabase "github.com/dapr/components-contrib/state/oracledatabase"
 	"github.com/dapr/components-contrib/state/postgresql"
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/rethinkdb"
@@ -256,6 +257,9 @@ func main() {
 			}),
 			state_loader.New("jetstream", func() state.Store {
 				return state_jetstream.NewJetstreamStateStore(logContrib)
+			}),
+			state_loader.New("oracledatabase", func() state.Store {
+				return state_oracledatabase.NewOracleDatabaseStateStore(logContrib)
 			}),
 		),
 		runtime.WithConfigurations(

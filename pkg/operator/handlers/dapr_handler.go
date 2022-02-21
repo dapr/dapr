@@ -194,7 +194,8 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	}
 
 	if enableMetrics {
-		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/probe"] = "true"
+		annotations["prometheus.io/scrape"] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
 		annotations["prometheus.io/port"] = strconv.Itoa(metricsPort)
 		annotations["prometheus.io/path"] = "/"
 	}
