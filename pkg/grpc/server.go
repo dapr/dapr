@@ -14,6 +14,7 @@ limitations under the License.
 package grpc
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -218,6 +219,8 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 	}
 
+	intr = append(intr, s.getGRPCAPILogging())
+
 	chain := grpc_middleware.ChainUnaryServer(
 		intr...,
 	)
@@ -300,4 +303,11 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 
 	percentagePassed := 100 - ((expiresInSeconds / certDurationSeconds) * 100)
 	return percentagePassed >= renewWhenPercentagePassed
+}
+
+func (s *server) getGRPCAPILogging() grpc_go.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (interface{}, error) {
+		s.logger.Debugf("Dapr gRPC API logging: , %s", info)
+		return handler(ctx, req)
+	}
 }
