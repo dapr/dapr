@@ -3000,6 +3000,27 @@ func TestNamespace(t *testing.T) {
 	})
 }
 
+func TestPodName(t *testing.T) {
+	t.Run("empty podName", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		podName := rt.getPodName()
+
+		assert.Empty(t, podName)
+	})
+
+	t.Run("non-empty podName", func(t *testing.T) {
+		os.Setenv("POD_NAME", "testPodName")
+		defer os.Unsetenv("POD_NAME")
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		podName := rt.getPodName()
+
+		assert.Equal(t, "testPodName", podName)
+	})
+}
+
 func TestAuthorizedComponents(t *testing.T) {
 	testCompName := "fakeComponent"
 
@@ -3499,10 +3520,8 @@ func stopRuntime(t *testing.T, rt *DaprRuntime) {
 func TestFindMatchingRoute(t *testing.T) {
 	r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath")
 	require.NoError(t, err)
-	route := Route{
-		rules: []*runtime_pubsub.Rule{r},
-	}
-	path, shouldProcess, err := findMatchingRoute(&route, map[string]interface{}{
+	rules := []*runtime_pubsub.Rule{r}
+	path, shouldProcess, err := findMatchingRoute(rules, map[string]interface{}{
 		"type": "MyEventType",
 	}, true)
 	require.NoError(t, err)

@@ -24,9 +24,11 @@ healthzPort: 8080
 livenessProbe:
   initialDelaySeconds: 3
   periodSeconds: 3
+  failureThreshold: 5
 readinessProbe:
   initialDelaySeconds: 3
   periodSeconds: 3
+  failureThreshold: 5
 
 debug:
   enabled: false

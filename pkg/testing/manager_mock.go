@@ -6,14 +6,16 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
-	"github.com/go-logr/logr/testing"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 
+	"github.com/dapr/dapr/pkg/testing/logging"
+
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -22,7 +24,7 @@ import (
 func NewMockManager() *MockManager {
 	mgr := &MockManager{
 		sc:        runtime.NewScheme(),
-		log:       testing.NullLogger{},
+		log:       logr.New(logging.NullLogSink{}),
 		runnables: []manager.Runnable{},
 		indexer: &MockFieldIndexer{
 			typeMap: map[reflect.Type]client.IndexerFunc{},
@@ -78,6 +80,10 @@ func (m *MockManager) Start(ctx context.Context) error {
 
 func (m *MockManager) GetConfig() *rest.Config {
 	return nil
+}
+
+func (m *MockManager) GetControllerOptions() v1alpha1.ControllerConfigurationSpec {
+	return v1alpha1.ControllerConfigurationSpec{}
 }
 
 func (m *MockManager) GetScheme() *runtime.Scheme {
