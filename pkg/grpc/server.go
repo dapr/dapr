@@ -307,7 +307,7 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 
 func (s *server) getGRPCAPILogging() grpc_go.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (interface{}, error) {
-		s.logger.Infof("Dapr gRPC API logging: , %s", info)
+		s.logger.Debugf("Dapr gRPC API logging: , %s", info)
 		return handler(ctx, req)
 	}
 }

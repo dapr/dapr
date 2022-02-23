@@ -211,7 +211,7 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 
 func (s *server) apiLogging(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		log.Infof("Dapr http API logging: , %s", string(ctx.Path()))
+		log.Debugf("Dapr http API logging: , %s", string(ctx.Path()))
 		next(ctx)
 	}
 }
