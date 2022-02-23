@@ -414,7 +414,14 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		}
 		reqs[i] = r
 	}
-	bulkGet, responses, err := store.BulkGet(reqs)
+
+	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	var bulkGet bool
+	var responses []state.BulkGetResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		bulkGet, responses, rErr = store.BulkGet(reqs)
+		return rErr
+	})
 
 	// if store supports bulk get
 	if bulkGet {
@@ -441,7 +448,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	for i := 0; i < n; i++ {
 		fn := func(param interface{}) {
 			req := param.(*state.GetRequest)
-			r, err := store.Get(req)
+			var r *state.GetResponse
+			err = policy(func(ctx context.Context) (rErr error) {
+				r, rErr = store.Get(req)
+				return rErr
+			})
+
 			item := &runtimev1pb.BulkStateItem{
 				Key: state_loader.GetOriginalStateKey(req.Key),
 			}
@@ -508,7 +520,13 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		},
 	}
 
-	getResponse, err := store.Get(&req)
+	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	var getResponse *state.GetResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		getResponse, rErr = store.Get(&req)
+		return rErr
+	})
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -575,7 +593,10 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		reqs = append(reqs, req)
 	}
 
-	err = store.BulkSet(reqs)
+	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	err = policy(func(ctx context.Context) error {
+		return store.BulkSet(reqs)
+	})
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateSave, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -614,7 +635,12 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	}
 	req.Metadata = in.GetMetadata()
 
-	resp, err := querier.Query(&req)
+	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	var resp *state.QueryResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = querier.Query(&req)
+		return rErr
+	})
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateQuery, in.GetStoreName(), err.Error())
 		apiServerLogger.Debug(err)
@@ -679,7 +705,10 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		}
 	}
 
-	err = store.Delete(&req)
+	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	err = policy(func(ctx context.Context) error {
+		return store.Delete(&req)
+	})
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
@@ -716,7 +745,10 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 		}
 		reqs = append(reqs, req)
 	}
-	err = store.BulkDelete(reqs)
+	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	err = policy(func(ctx context.Context) error {
+		return store.BulkDelete(reqs)
+	})
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -932,9 +964,12 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		}
 	}
 
-	err := transactionalStore.Multi(&state.TransactionalStateRequest{
-		Operations: operations,
-		Metadata:   in.Metadata,
+	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	err := policy(func(ctx context.Context) error {
+		return transactionalStore.Multi(&state.TransactionalStateRequest{
+			Operations: operations,
+			Metadata:   in.Metadata,
+		})
 	})
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())

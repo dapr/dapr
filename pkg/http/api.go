@@ -489,11 +489,18 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		}
 		reqs[i] = r
 	}
-	bulkGet, responses, err := store.BulkGet(reqs)
+	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+
+	var bulkGet bool
+	var responses []state.BulkGetResponse
+	rErr := policy(func(ctx context.Context) (rErr error) {
+		bulkGet, responses, rErr = store.BulkGet(reqs)
+		return rErr
+	})
 
 	if bulkGet {
 		// if store supports bulk get
-		if err != nil {
+		if rErr != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 			log.Debug(msg)
@@ -531,7 +538,11 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 					Metadata: metadata,
 				}
 
-				resp, err := store.Get(gr)
+				var resp *state.GetResponse
+				err = policy(func(ctx context.Context) (rErr error) {
+					resp, rErr = store.Get(gr)
+					return rErr
+				})
 				if err != nil {
 					log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
 					r.Error = err.Error()
@@ -609,7 +620,12 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	resp, err := store.Get(&req)
+	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	var resp *state.GetResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = store.Get(&req)
+		return rErr
+	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -684,7 +700,10 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		req.ETag = &etag
 	}
 
-	err = store.Delete(&req)
+	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	err = policy(func(ctx context.Context) error {
+		return store.Delete(&req)
+	})
 	if err != nil {
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_DELETE")
 		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
@@ -848,7 +867,10 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
-	err = store.BulkSet(reqs)
+	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	err = policy(func(ctx context.Context) error {
+		return store.BulkSet(reqs)
+	})
 	if err != nil {
 		storeName := a.getStateStoreName(reqCtx)
 
@@ -1667,11 +1689,13 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
-	err := transactionalStore.Multi(&state.TransactionalStateRequest{
-		Operations: operations,
-		Metadata:   req.Metadata,
+	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	err := policy(func(ctx context.Context) error {
+		return transactionalStore.Multi(&state.TransactionalStateRequest{
+			Operations: operations,
+			Metadata:   req.Metadata,
+		})
 	})
-
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_TRANSACTION", fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1712,7 +1736,12 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	}
 	req.Metadata = getMetadataFromRequest(reqCtx)
 
-	resp, err := querier.Query(&req)
+	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	var resp *state.QueryResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = querier.Query(&req)
+		return rErr
+	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_QUERY", fmt.Sprintf(messages.ErrStateQuery, storeName, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))

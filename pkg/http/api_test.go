@@ -1655,6 +1655,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		actor:       nil,
 		json:        jsoniter.ConfigFastest,
 		tracingSpec: spec,
+		resiliency:  resiliency.New(nil),
 	}
 
 	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
@@ -2305,6 +2306,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		stateStores:              fakeStores,
 		transactionalStateStores: fakeTransactionalStores,
 		json:                     jsoniter.ConfigFastest,
+		resiliency:               resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -2599,6 +2601,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		stateStores: map[string]state.Store{"store1": fakeStateStore{}},
+		resiliency:  resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
@@ -2612,6 +2615,7 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		stateStores: map[string]state.Store{"store1": fakeStateStoreQuerier{}},
+		resiliency:  resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
@@ -2625,6 +2629,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		stateStores: map[string]state.Store{storeName: fakeStateStoreQuerier{}},
+		resiliency:  resiliency.New(nil),
 	}
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
@@ -2961,6 +2966,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		stateStores:              fakeStores,
 		transactionalStateStores: fakeTransactionalStores,
 		json:                     jsoniter.ConfigFastest,
+		resiliency:               resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
