@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 const (
@@ -255,7 +256,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	tracingSpec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 
-	a := NewActors(store, b.appChannel, nil, *b.config, nil, tracingSpec, b.featureSpec)
+	a := NewActors(store, b.appChannel, nil, *b.config, nil, tracingSpec, b.featureSpec, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
 }
@@ -264,7 +265,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
-	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
+	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
 }
@@ -279,7 +280,7 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 			Name:    config.ActorTypeMetadata,
 			Enabled: true,
 		},
-	})
+	}, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
 }

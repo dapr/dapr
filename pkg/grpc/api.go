@@ -211,7 +211,16 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
 
-	resp, err := a.actor.Call(ctx, req)
+	// Unlike other actor calls, resiliency is handled here for invocation.
+	// This is due to actor invocation involving a lookup for the host.
+	// Having the retry here allows us to capture that and be resilient to host failure.
+	policy := a.resiliency.ActorPolicy(ctx, in.Actor.ActorType, in.Actor.ActorId)
+	var resp *invokev1.InvokeMethodResponse
+	err = policy(func(ctx context.Context) error {
+		retryResp, rErr := a.actor.Call(ctx, req)
+		resp = retryResp
+		return rErr
+	})
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
