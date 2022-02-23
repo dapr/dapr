@@ -7,7 +7,7 @@ const (
 	ErrMalformedRequestData = "can't serialize request data field: %s"
 
 	// State.
-	ErrStateStoresNotConfigured = "state store is not configured"
+	ErrStateStoresNotConfigured = "The state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: \"true\" in your state store component file?"
 	ErrStateStoreNotFound       = "state store %s is not found"
 	ErrStateGet                 = "fail to get %s from state store %s: %s"
 	ErrStateDelete              = "failed deleting state with key %s: %s"
