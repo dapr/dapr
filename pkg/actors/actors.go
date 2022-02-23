@@ -103,7 +103,7 @@ type actorsRuntime struct {
 	appHealthy               *atomic.Bool
 	certChain                *dapr_credentials.CertChain
 	tracingSpec              configuration.TracingSpec
-	reentrancyEnabled        bool
+	reentrancyFeatureEnabled bool
 	actorTypeMetadataEnabled bool
 }
 
@@ -173,7 +173,7 @@ func NewActors(
 		appHealthy:               atomic.NewBool(true),
 		certChain:                certChain,
 		tracingSpec:              tracingSpec,
-		reentrancyEnabled:        configuration.IsFeatureEnabled(features, configuration.ActorReentrancy) && config.Reentrancy.Enabled,
+		reentrancyFeatureEnabled: configuration.IsFeatureEnabled(features, configuration.ActorReentrancy),
 		actorTypeMetadataEnabled: configuration.IsFeatureEnabled(features, configuration.ActorTypeMetadata),
 	}
 }
@@ -209,7 +209,7 @@ func (a *actorsRuntime) Init() error {
 		afterTableUpdateFn)
 
 	go a.placement.Start()
-	a.startDeactivationTicker(a.config.ActorDeactivationScanInterval, a.config.ActorIdleTimeout)
+	a.startDeactivationTicker(a.config)
 
 	log.Infof("actor runtime started. actor idle timeout: %s. actor scan interval: %s",
 		a.config.ActorIdleTimeout.String(), a.config.ActorDeactivationScanInterval.String())
@@ -252,7 +252,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	req.WithHTTPExtension(nethttp.MethodDelete, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
 
-	// TODO Propagate context
+	// TODO Propagate context.
 	ctx := context.Background()
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
@@ -279,8 +279,8 @@ func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
 	return arr[0], arr[1]
 }
 
-func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.Duration) {
-	ticker := time.NewTicker(interval)
+func (a *actorsRuntime) startDeactivationTicker(configuration Config) {
+	ticker := time.NewTicker(configuration.ActorDeactivationScanInterval)
 	go func() {
 		for t := range ticker.C {
 			a.actorsTable.Range(func(key, value interface{}) bool {
@@ -291,7 +291,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 				}
 
 				durationPassed := t.Sub(actorInstance.lastUsedTime)
-				if durationPassed >= actorIdleTimeout {
+				if durationPassed >= configuration.GetIdleTimeoutForType(actorInstance.actorType) {
 					go func(actorKey string) {
 						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
 						err := a.deactivateActor(actorType, actorID)
@@ -366,7 +366,7 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.Reentrancy.MaxStackDepth))
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.GetReentrancyForType(actorType).MaxStackDepth))
 	}
 
 	return val.(*actor)
@@ -379,7 +379,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// Reentrancy to determine how we lock.
 	var reentrancyID *string
-	if a.reentrancyEnabled {
+	if a.reentrancyFeatureEnabled && a.config.GetReentrancyForType(act.actorType).Enabled {
 		if headerValue, ok := req.Metadata()["Dapr-Reentrancy-Id"]; ok {
 			reentrancyID = &headerValue.GetValues()[0]
 		} else {
@@ -397,7 +397,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	}
 	defer act.unlock()
 
-	// Replace method to actors method
+	// Replace method to actors method.
 	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)
 	// Original code overrides method with PUT. Why?
 	if req.Message().GetHttpExtension() == nil {
@@ -456,9 +456,6 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	resp, err := a.store.Get(&state.GetRequest{
 		Key:      key,
 		Metadata: metadata,
-		Options: state.GetStateOption{
-			Consistency: state.Strong,
-		},
 	})
 	if err != nil {
 		return nil, err
@@ -532,7 +529,7 @@ func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) s
 }
 
 func (a *actorsRuntime) drainRebalancedActors() {
-	// visit all currently active actors
+	// visit all currently active actors.
 	var wg sync.WaitGroup
 
 	a.actorsTable.Range(func(key interface{}, value interface{}) bool {
@@ -562,7 +559,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				}
 
 				actor := value.(*actor)
-				if a.config.DrainRebalancedActors {
+				if a.config.GetDrainRebalancedActorsForType(actorType) {
 					// wait until actor isn't busy or timeout hits
 					if actor.isBusy() {
 						select {
@@ -670,9 +667,6 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: constructCompositeKey(actorKey, name),
-		Options: state.GetStateOption{
-			Consistency: state.Strong,
-		},
 	})
 	if err != nil {
 		return nil, err
@@ -698,9 +692,6 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 	err := a.store.Set(&state.SetRequest{
 		Key:   constructCompositeKey(actorKey, name),
 		Value: track,
-		Options: state.SetStateOption{
-			Consistency: state.Strong,
-		},
 	})
 	return err
 }
@@ -1218,7 +1209,6 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 		ETag:  actorMetadata.Etag,
 		Options: state.SetStateOption{
 			Concurrency: state.FirstWrite,
-			Consistency: state.Strong,
 		},
 	})
 }
@@ -1251,9 +1241,6 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 		metadataKey := constructCompositeKey("actors", actorType, "metadata")
 		resp, err := a.store.Get(&state.GetRequest{
 			Key: metadataKey,
-			Options: state.GetStateOption{
-				Consistency: state.Strong,
-			},
 		})
 		if err != nil {
 			return err
@@ -1296,11 +1283,12 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 		return nil
 	}
 
-	if actorMetadata.RemindersMetadata.PartitionCount == a.config.RemindersStoragePartitions {
+	reminderPartitionCount := a.config.GetRemindersPartitionCountForType(actorType)
+	if actorMetadata.RemindersMetadata.PartitionCount == reminderPartitionCount {
 		return nil
 	}
 
-	if actorMetadata.RemindersMetadata.PartitionCount > a.config.RemindersStoragePartitions {
+	if actorMetadata.RemindersMetadata.PartitionCount > reminderPartitionCount {
 		log.Warnf("cannot decrease number of partitions for reminders of actor type %s", actorType)
 		return nil
 	}
@@ -1324,7 +1312,7 @@ func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMeta
 
 	// Recreate as a new metadata identifier.
 	actorMetadata.ID = uuid.NewString()
-	actorMetadata.RemindersMetadata.PartitionCount = a.config.RemindersStoragePartitions
+	actorMetadata.RemindersMetadata.PartitionCount = reminderPartitionCount
 	actorRemindersPartitions := make([][]Reminder, actorMetadata.RemindersMetadata.PartitionCount)
 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
 		actorRemindersPartitions[i] = make([]Reminder, 0)
@@ -1385,9 +1373,6 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			getRequests = append(getRequests, state.GetRequest{
 				Key:      key,
 				Metadata: metadata,
-				Options: state.GetStateOption{
-					Consistency: state.Strong,
-				},
 			})
 		}
 
@@ -1468,9 +1453,6 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	key := constructCompositeKey("actors", actorType)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
-		Options: state.GetStateOption{
-			Consistency: state.Strong,
-		},
 	})
 	if err != nil {
 		return nil, nil, err
@@ -1516,7 +1498,6 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 		Metadata: map[string]string{metadataPartitionKey: databasePartitionKey},
 		Options: state.SetStateOption{
 			Concurrency: state.FirstWrite,
-			Consistency: state.Strong,
 		},
 	})
 }

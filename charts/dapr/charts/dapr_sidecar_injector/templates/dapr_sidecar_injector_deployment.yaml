@@ -39,25 +39,25 @@ spec:
         livenessProbe:
           httpGet:
             path: /healthz
-            port: 8080
+            port: {{ .Values.healthzPort }}
           {{- if eq .Values.debug.enabled false }}
           initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
           {{- else }}
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
           {{- end }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
-          failureThreshold: 5
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
         readinessProbe:
           httpGet:
             path: /healthz
-            port: 8080
+            port: {{ .Values.healthzPort }}
           {{- if eq .Values.debug.enabled false }}
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
           {{- else }}
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
           {{- end }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
-          failureThreshold: 5
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
 {{- if contains "/" .Values.injectorImage.name }}
         image: "{{ .Values.injectorImage.name }}"
 {{- else }}
@@ -106,6 +106,8 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
+        - "--healthz-port"
+        - "{{ .Values.healthzPort }}"
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt

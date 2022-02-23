@@ -57,6 +57,7 @@ type daprConfig struct {
 	DrainOngoingCallTimeout string                  `json:"drainOngoingCallTimeout,omitempty"`
 	DrainRebalancedActors   bool                    `json:"drainRebalancedActors,omitempty"`
 	Reentrancy              config.ReentrancyConfig `json:"reentrancy,omitempty"`
+	EntitiesConfig          []config.EntityConfig   `json:"entitiesConfig,omitempty"`
 }
 
 type reentrantRequest struct {
@@ -78,12 +79,21 @@ var (
 )
 
 var daprConfigResponse = daprConfig{
-	[]string{defaultActorType},
-	actorIdleTimeout,
-	actorScanInterval,
-	drainOngoingCallTimeout,
-	drainRebalancedActors,
-	config.ReentrancyConfig{Enabled: true, MaxStackDepth: &maxStackDepth},
+	Entities:                []string{defaultActorType},
+	ActorIdleTimeout:        actorIdleTimeout,
+	ActorScanInterval:       actorScanInterval,
+	DrainOngoingCallTimeout: drainOngoingCallTimeout,
+	DrainRebalancedActors:   drainRebalancedActors,
+	Reentrancy:              config.ReentrancyConfig{Enabled: false},
+	EntitiesConfig: []config.EntityConfig{
+		{
+			Entities: []string{defaultActorType},
+			Reentrancy: config.ReentrancyConfig{
+				Enabled:       true,
+				MaxStackDepth: &maxStackDepth,
+			},
+		},
+	},
 }
 
 func resetLogs() {

@@ -14,8 +14,7 @@ github.com/
 **/.factorypath
 google
 
-test_report_e2e.json
-test_report_unit.json
+test_report*
 
 # Go Workspaces (introduced in Go 1.18+)
 go.work
