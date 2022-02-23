@@ -135,6 +135,12 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_placement.debug.enabled`            | Boolean value for enabling debug mode | `{}` |
 
+### Dapr RBAC options:
+| Parameter                                 | Description                                                             | Default                 |
+|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
+| `dapr_rbac.secretReader.enabled`          | Deploys a default secret reader Role and RoleBinding                    | `true`                  |
+| `dapr_rbac.secretReader.namespace`        | Namespace for the default secret reader                                 | `default`               |
+
 ### Dapr Sentry options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
