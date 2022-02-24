@@ -18,6 +18,8 @@ E2E tests are designed for verifying the functional correctness by replicating e
     export DAPR_TAG=dev
     export DAPR_NAMESPACE=dapr-tests
     export DAPR_MTLS_ENABLED=true
+    # Used when helm installs dapr
+    export REL_VERSION=x.x.x
 
     # If you want to run tests against Windows or arm kubernetes clusters, uncomment and set these
     # export TARGET_OS=linux
@@ -55,6 +57,9 @@ make delete-test-namespace
 ```
 3. Build, deploy, run tests from start to finish
 ```bash
+# Replace version placeholders in helm configuration files
+sh .github/scripts/set_helm_dapr_version.sh
+
 make e2e-build-deploy-run
 ```
 
@@ -90,8 +95,14 @@ make docker-build
 # Push docker image to your dockerhub registry
 make docker-push
 
+# Replace version placeholders in helm configuration files
+sh .github/scripts/set_helm_dapr_version.sh
+
 # Deploy Dapr runtime to your cluster
 make docker-deploy-k8s
+
+# Revert version placeholders in helm config files
+sh .github/scripts/revert_helm_dapr_version.sh
 ```
 
 ### Optional: Apply this configuration to disable mTLS
