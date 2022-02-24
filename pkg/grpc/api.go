@@ -1343,7 +1343,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	}
 
 	req := &configuration.SubscribeRequest{
-		Keys:     request.Keys,
+		Keys:     unsubscribedKeys,
 		Metadata: request.GetMetadata(),
 	}
 
