@@ -1,0 +1,18 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: allowlistsgrpcproxyappconfig
+spec:
+  accessControl:
+    defaultAction: deny
+    trustDomain: "public"
+    policies:
+      - appId: "grpcproxyclient"
+        defaultAction: deny
+        trustDomain: 'public'
+        namespace: "dapr-tests"
+        operations:
+          - name: /helloworld.Greeter/SayHello
+            action: allow
+          - name: /helloworld.Greeter/SayGoodbye
+            action: allow
