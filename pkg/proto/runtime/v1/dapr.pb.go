@@ -2680,19 +2680,79 @@ func (x *SubscribeConfigurationRequest) GetMetadata() map[string]string {
 	return nil
 }
 
+// UnSubscribeConfigurationRequest is the message to stop watching the key-value configuration.
+type UnsubscribeConfigurationRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The name of configuration store.
+	StoreName string `protobuf:"bytes,1,opt,name=store_name,json=storeName,proto3" json:"store_name,omitempty"`
+	// The id to unsubscribe.
+	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *UnsubscribeConfigurationRequest) Reset() {
+	*x = UnsubscribeConfigurationRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[40]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *UnsubscribeConfigurationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnsubscribeConfigurationRequest) ProtoMessage() {}
+
+func (x *UnsubscribeConfigurationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[40]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnsubscribeConfigurationRequest.ProtoReflect.Descriptor instead.
+func (*UnsubscribeConfigurationRequest) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *UnsubscribeConfigurationRequest) GetStoreName() string {
+	if x != nil {
+		return x.StoreName
+	}
+	return ""
+}
+
+func (x *UnsubscribeConfigurationRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 type SubscribeConfigurationResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Subscribe id, used to stop subscription.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// The list of items containing configuration values
-	Items []*v1.ConfigurationItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	Items []*v1.ConfigurationItem `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
 }
 
 func (x *SubscribeConfigurationResponse) Reset() {
 	*x = SubscribeConfigurationResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[40]
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[41]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2705,7 +2765,7 @@ func (x *SubscribeConfigurationResponse) String() string {
 func (*SubscribeConfigurationResponse) ProtoMessage() {}
 
 func (x *SubscribeConfigurationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[40]
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[41]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2718,7 +2778,14 @@ func (x *SubscribeConfigurationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeConfigurationResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeConfigurationResponse) Descriptor() ([]byte, []int) {
-	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{40}
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *SubscribeConfigurationResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
 }
 
 func (x *SubscribeConfigurationResponse) GetItems() []*v1.ConfigurationItem {
@@ -2726,6 +2793,61 @@ func (x *SubscribeConfigurationResponse) GetItems() []*v1.ConfigurationItem {
 		return x.Items
 	}
 	return nil
+}
+
+type UnsubscribeConfigurationResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Ok      bool   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+}
+
+func (x *UnsubscribeConfigurationResponse) Reset() {
+	*x = UnsubscribeConfigurationResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[42]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *UnsubscribeConfigurationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnsubscribeConfigurationResponse) ProtoMessage() {}
+
+func (x *UnsubscribeConfigurationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[42]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnsubscribeConfigurationResponse.ProtoReflect.Descriptor instead.
+func (*UnsubscribeConfigurationResponse) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *UnsubscribeConfigurationResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *UnsubscribeConfigurationResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
 }
 
 var File_dapr_proto_runtime_v1_dapr_proto protoreflect.FileDescriptor
@@ -3178,13 +3300,24 @@ var file_dapr_proto_runtime_v1_dapr_proto_rawDesc = []byte{
 	0x61, 0x74, 0x61, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18,
 	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61,
 	0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65,
-	0x3a, 0x02, 0x38, 0x01, 0x22, 0x5f, 0x0a, 0x1e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62,
-	0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3d, 0x0a, 0x05, 0x69, 0x74, 0x65, 0x6d, 0x73, 0x18,
-	0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6e,
-	0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x74, 0x65, 0x6d, 0x52, 0x05,
-	0x69, 0x74, 0x65, 0x6d, 0x73, 0x32, 0xe3, 0x13, 0x0a, 0x04, 0x44, 0x61, 0x70, 0x72, 0x12, 0x64,
+	0x3a, 0x02, 0x38, 0x01, 0x22, 0x50, 0x0a, 0x1f, 0x55, 0x6e, 0x73, 0x75, 0x62, 0x73, 0x63, 0x72,
+	0x69, 0x62, 0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x73, 0x74, 0x6f, 0x72, 0x65,
+	0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x73, 0x74, 0x6f,
+	0x72, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x22, 0x6f, 0x0a, 0x1e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72,
+	0x69, 0x62, 0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x3d, 0x0a, 0x05, 0x69, 0x74, 0x65, 0x6d,
+	0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x43,
+	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x74, 0x65, 0x6d,
+	0x52, 0x05, 0x69, 0x74, 0x65, 0x6d, 0x73, 0x22, 0x4c, 0x0a, 0x20, 0x55, 0x6e, 0x73, 0x75, 0x62,
+	0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x6f,
+	0x6b, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x02, 0x6f, 0x6b, 0x12, 0x18, 0x0a, 0x07, 0x6d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x32, 0xf9, 0x14, 0x0a, 0x04, 0x44, 0x61, 0x70, 0x72, 0x12, 0x64,
 	0x0a, 0x0d, 0x49, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12,
 	0x2b, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
 	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x53, 0x65,
@@ -3328,28 +3461,38 @@ var file_dapr_proto_runtime_v1_dapr_proto_rawDesc = []byte{
 	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76,
 	0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69,
 	0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x22, 0x00, 0x30, 0x01, 0x12, 0x53, 0x0a, 0x0b, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64,
-	0x61, 0x74, 0x61, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x2a, 0x2e, 0x64, 0x61,
-	0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65,
-	0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x52, 0x0a, 0x0b, 0x53, 0x65, 0x74,
-	0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x12, 0x29, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22, 0x00, 0x12, 0x3c, 0x0a,
-	0x08, 0x53, 0x68, 0x75, 0x74, 0x64, 0x6f, 0x77, 0x6e, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
+	0x22, 0x00, 0x30, 0x01, 0x12, 0x93, 0x01, 0x0a, 0x1e, 0x55, 0x6e, 0x73, 0x75, 0x62, 0x73, 0x63,
+	0x72, 0x69, 0x62, 0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x36, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e,
+	0x55, 0x6e, 0x73, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69,
+	0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
+	0x37, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
+	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x73, 0x75, 0x62, 0x73, 0x63, 0x72,
+	0x69, 0x62, 0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x53, 0x0a, 0x0b, 0x47, 0x65,
+	0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
 	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74,
-	0x79, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22, 0x00, 0x42, 0x69, 0x0a, 0x0a, 0x69,
-	0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0a, 0x44, 0x61, 0x70, 0x72, 0x50,
-	0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f,
-	0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31,
-	0x3b, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e,
-	0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47,
-	0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x79, 0x1a, 0x2a, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72,
+	0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x65, 0x74,
+	0x61, 0x64, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12,
+	0x52, 0x0a, 0x0b, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x12, 0x29,
+	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74,
+	0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61,
+	0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
+	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74,
+	0x79, 0x22, 0x00, 0x12, 0x3c, 0x0a, 0x08, 0x53, 0x68, 0x75, 0x74, 0x64, 0x6f, 0x77, 0x6e, 0x12,
+	0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75,
+	0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22,
+	0x00, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42,
+	0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x31, 0x67, 0x69, 0x74,
+	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70,
+	0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72, 0x75, 0x6e, 0x74,
+	0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0xaa, 0x02,
+	0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74,
+	0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -3364,7 +3507,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescData
 }
 
-var file_dapr_proto_runtime_v1_dapr_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
+var file_dapr_proto_runtime_v1_dapr_proto_msgTypes = make([]protoimpl.MessageInfo, 62)
 var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
 	(*InvokeServiceRequest)(nil),                // 0: dapr.proto.runtime.v1.InvokeServiceRequest
 	(*GetStateRequest)(nil),                     // 1: dapr.proto.runtime.v1.GetStateRequest
@@ -3406,72 +3549,74 @@ var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
 	(*GetConfigurationRequest)(nil),             // 37: dapr.proto.runtime.v1.GetConfigurationRequest
 	(*GetConfigurationResponse)(nil),            // 38: dapr.proto.runtime.v1.GetConfigurationResponse
 	(*SubscribeConfigurationRequest)(nil),       // 39: dapr.proto.runtime.v1.SubscribeConfigurationRequest
-	(*SubscribeConfigurationResponse)(nil),      // 40: dapr.proto.runtime.v1.SubscribeConfigurationResponse
-	nil,                                         // 41: dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
-	nil,                                         // 42: dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
-	nil,                                         // 43: dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
-	nil,                                         // 44: dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
-	nil,                                         // 45: dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
-	nil,                                         // 46: dapr.proto.runtime.v1.QueryStateRequest.MetadataEntry
-	nil,                                         // 47: dapr.proto.runtime.v1.QueryStateResponse.MetadataEntry
-	nil,                                         // 48: dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
-	nil,                                         // 49: dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
-	nil,                                         // 50: dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
-	nil,                                         // 51: dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
-	nil,                                         // 52: dapr.proto.runtime.v1.GetSecretResponse.DataEntry
-	nil,                                         // 53: dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
-	nil,                                         // 54: dapr.proto.runtime.v1.SecretResponse.SecretsEntry
-	nil,                                         // 55: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
-	nil,                                         // 56: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
-	nil,                                         // 57: dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
-	nil,                                         // 58: dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
-	nil,                                         // 59: dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
-	(*v1.InvokeRequest)(nil),                    // 60: dapr.proto.common.v1.InvokeRequest
-	(v1.StateOptions_StateConsistency)(0),       // 61: dapr.proto.common.v1.StateOptions.StateConsistency
-	(*v1.Etag)(nil),                             // 62: dapr.proto.common.v1.Etag
-	(*v1.StateOptions)(nil),                     // 63: dapr.proto.common.v1.StateOptions
-	(*v1.StateItem)(nil),                        // 64: dapr.proto.common.v1.StateItem
-	(*anypb.Any)(nil),                           // 65: google.protobuf.Any
-	(*v1.ConfigurationItem)(nil),                // 66: dapr.proto.common.v1.ConfigurationItem
-	(*emptypb.Empty)(nil),                       // 67: google.protobuf.Empty
-	(*v1.InvokeResponse)(nil),                   // 68: dapr.proto.common.v1.InvokeResponse
+	(*UnsubscribeConfigurationRequest)(nil),     // 40: dapr.proto.runtime.v1.UnsubscribeConfigurationRequest
+	(*SubscribeConfigurationResponse)(nil),      // 41: dapr.proto.runtime.v1.SubscribeConfigurationResponse
+	(*UnsubscribeConfigurationResponse)(nil),    // 42: dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
+	nil,                                         // 43: dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
+	nil,                                         // 44: dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
+	nil,                                         // 45: dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
+	nil,                                         // 46: dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
+	nil,                                         // 47: dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
+	nil,                                         // 48: dapr.proto.runtime.v1.QueryStateRequest.MetadataEntry
+	nil,                                         // 49: dapr.proto.runtime.v1.QueryStateResponse.MetadataEntry
+	nil,                                         // 50: dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
+	nil,                                         // 51: dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
+	nil,                                         // 52: dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
+	nil,                                         // 53: dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
+	nil,                                         // 54: dapr.proto.runtime.v1.GetSecretResponse.DataEntry
+	nil,                                         // 55: dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
+	nil,                                         // 56: dapr.proto.runtime.v1.SecretResponse.SecretsEntry
+	nil,                                         // 57: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
+	nil,                                         // 58: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
+	nil,                                         // 59: dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
+	nil,                                         // 60: dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
+	nil,                                         // 61: dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
+	(*v1.InvokeRequest)(nil),                    // 62: dapr.proto.common.v1.InvokeRequest
+	(v1.StateOptions_StateConsistency)(0),       // 63: dapr.proto.common.v1.StateOptions.StateConsistency
+	(*v1.Etag)(nil),                             // 64: dapr.proto.common.v1.Etag
+	(*v1.StateOptions)(nil),                     // 65: dapr.proto.common.v1.StateOptions
+	(*v1.StateItem)(nil),                        // 66: dapr.proto.common.v1.StateItem
+	(*anypb.Any)(nil),                           // 67: google.protobuf.Any
+	(*v1.ConfigurationItem)(nil),                // 68: dapr.proto.common.v1.ConfigurationItem
+	(*emptypb.Empty)(nil),                       // 69: google.protobuf.Empty
+	(*v1.InvokeResponse)(nil),                   // 70: dapr.proto.common.v1.InvokeResponse
 }
 var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
-	60, // 0: dapr.proto.runtime.v1.InvokeServiceRequest.message:type_name -> dapr.proto.common.v1.InvokeRequest
-	61, // 1: dapr.proto.runtime.v1.GetStateRequest.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency
-	41, // 2: dapr.proto.runtime.v1.GetStateRequest.metadata:type_name -> dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
-	42, // 3: dapr.proto.runtime.v1.GetBulkStateRequest.metadata:type_name -> dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
+	62, // 0: dapr.proto.runtime.v1.InvokeServiceRequest.message:type_name -> dapr.proto.common.v1.InvokeRequest
+	63, // 1: dapr.proto.runtime.v1.GetStateRequest.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency
+	43, // 2: dapr.proto.runtime.v1.GetStateRequest.metadata:type_name -> dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
+	44, // 3: dapr.proto.runtime.v1.GetBulkStateRequest.metadata:type_name -> dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
 	4,  // 4: dapr.proto.runtime.v1.GetBulkStateResponse.items:type_name -> dapr.proto.runtime.v1.BulkStateItem
-	43, // 5: dapr.proto.runtime.v1.BulkStateItem.metadata:type_name -> dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
-	44, // 6: dapr.proto.runtime.v1.GetStateResponse.metadata:type_name -> dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
-	62, // 7: dapr.proto.runtime.v1.DeleteStateRequest.etag:type_name -> dapr.proto.common.v1.Etag
-	63, // 8: dapr.proto.runtime.v1.DeleteStateRequest.options:type_name -> dapr.proto.common.v1.StateOptions
-	45, // 9: dapr.proto.runtime.v1.DeleteStateRequest.metadata:type_name -> dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
-	64, // 10: dapr.proto.runtime.v1.DeleteBulkStateRequest.states:type_name -> dapr.proto.common.v1.StateItem
-	64, // 11: dapr.proto.runtime.v1.SaveStateRequest.states:type_name -> dapr.proto.common.v1.StateItem
-	46, // 12: dapr.proto.runtime.v1.QueryStateRequest.metadata:type_name -> dapr.proto.runtime.v1.QueryStateRequest.MetadataEntry
+	45, // 5: dapr.proto.runtime.v1.BulkStateItem.metadata:type_name -> dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
+	46, // 6: dapr.proto.runtime.v1.GetStateResponse.metadata:type_name -> dapr.proto.runtime.v1.GetStateResponse.MetadataEntry
+	64, // 7: dapr.proto.runtime.v1.DeleteStateRequest.etag:type_name -> dapr.proto.common.v1.Etag
+	65, // 8: dapr.proto.runtime.v1.DeleteStateRequest.options:type_name -> dapr.proto.common.v1.StateOptions
+	47, // 9: dapr.proto.runtime.v1.DeleteStateRequest.metadata:type_name -> dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry
+	66, // 10: dapr.proto.runtime.v1.DeleteBulkStateRequest.states:type_name -> dapr.proto.common.v1.StateItem
+	66, // 11: dapr.proto.runtime.v1.SaveStateRequest.states:type_name -> dapr.proto.common.v1.StateItem
+	48, // 12: dapr.proto.runtime.v1.QueryStateRequest.metadata:type_name -> dapr.proto.runtime.v1.QueryStateRequest.MetadataEntry
 	10, // 13: dapr.proto.runtime.v1.QueryStateResponse.results:type_name -> dapr.proto.runtime.v1.QueryStateItem
-	47, // 14: dapr.proto.runtime.v1.QueryStateResponse.metadata:type_name -> dapr.proto.runtime.v1.QueryStateResponse.MetadataEntry
-	48, // 15: dapr.proto.runtime.v1.PublishEventRequest.metadata:type_name -> dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
-	49, // 16: dapr.proto.runtime.v1.InvokeBindingRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
-	50, // 17: dapr.proto.runtime.v1.InvokeBindingResponse.metadata:type_name -> dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
-	51, // 18: dapr.proto.runtime.v1.GetSecretRequest.metadata:type_name -> dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
-	52, // 19: dapr.proto.runtime.v1.GetSecretResponse.data:type_name -> dapr.proto.runtime.v1.GetSecretResponse.DataEntry
-	53, // 20: dapr.proto.runtime.v1.GetBulkSecretRequest.metadata:type_name -> dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
-	54, // 21: dapr.proto.runtime.v1.SecretResponse.secrets:type_name -> dapr.proto.runtime.v1.SecretResponse.SecretsEntry
-	55, // 22: dapr.proto.runtime.v1.GetBulkSecretResponse.data:type_name -> dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
-	64, // 23: dapr.proto.runtime.v1.TransactionalStateOperation.request:type_name -> dapr.proto.common.v1.StateItem
+	49, // 14: dapr.proto.runtime.v1.QueryStateResponse.metadata:type_name -> dapr.proto.runtime.v1.QueryStateResponse.MetadataEntry
+	50, // 15: dapr.proto.runtime.v1.PublishEventRequest.metadata:type_name -> dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry
+	51, // 16: dapr.proto.runtime.v1.InvokeBindingRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry
+	52, // 17: dapr.proto.runtime.v1.InvokeBindingResponse.metadata:type_name -> dapr.proto.runtime.v1.InvokeBindingResponse.MetadataEntry
+	53, // 18: dapr.proto.runtime.v1.GetSecretRequest.metadata:type_name -> dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry
+	54, // 19: dapr.proto.runtime.v1.GetSecretResponse.data:type_name -> dapr.proto.runtime.v1.GetSecretResponse.DataEntry
+	55, // 20: dapr.proto.runtime.v1.GetBulkSecretRequest.metadata:type_name -> dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry
+	56, // 21: dapr.proto.runtime.v1.SecretResponse.secrets:type_name -> dapr.proto.runtime.v1.SecretResponse.SecretsEntry
+	57, // 22: dapr.proto.runtime.v1.GetBulkSecretResponse.data:type_name -> dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry
+	66, // 23: dapr.proto.runtime.v1.TransactionalStateOperation.request:type_name -> dapr.proto.common.v1.StateItem
 	20, // 24: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.operations:type_name -> dapr.proto.runtime.v1.TransactionalStateOperation
-	56, // 25: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.metadata:type_name -> dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
+	58, // 25: dapr.proto.runtime.v1.ExecuteStateTransactionRequest.metadata:type_name -> dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry
 	30, // 26: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest.operations:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation
-	65, // 27: dapr.proto.runtime.v1.TransactionalActorStateOperation.value:type_name -> google.protobuf.Any
+	67, // 27: dapr.proto.runtime.v1.TransactionalActorStateOperation.value:type_name -> google.protobuf.Any
 	34, // 28: dapr.proto.runtime.v1.GetMetadataResponse.active_actors_count:type_name -> dapr.proto.runtime.v1.ActiveActorsCount
 	35, // 29: dapr.proto.runtime.v1.GetMetadataResponse.registered_components:type_name -> dapr.proto.runtime.v1.RegisteredComponents
-	57, // 30: dapr.proto.runtime.v1.GetMetadataResponse.extended_metadata:type_name -> dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
-	58, // 31: dapr.proto.runtime.v1.GetConfigurationRequest.metadata:type_name -> dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
-	66, // 32: dapr.proto.runtime.v1.GetConfigurationResponse.items:type_name -> dapr.proto.common.v1.ConfigurationItem
-	59, // 33: dapr.proto.runtime.v1.SubscribeConfigurationRequest.metadata:type_name -> dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
-	66, // 34: dapr.proto.runtime.v1.SubscribeConfigurationResponse.items:type_name -> dapr.proto.common.v1.ConfigurationItem
+	59, // 30: dapr.proto.runtime.v1.GetMetadataResponse.extended_metadata:type_name -> dapr.proto.runtime.v1.GetMetadataResponse.ExtendedMetadataEntry
+	60, // 31: dapr.proto.runtime.v1.GetConfigurationRequest.metadata:type_name -> dapr.proto.runtime.v1.GetConfigurationRequest.MetadataEntry
+	68, // 32: dapr.proto.runtime.v1.GetConfigurationResponse.items:type_name -> dapr.proto.common.v1.ConfigurationItem
+	61, // 33: dapr.proto.runtime.v1.SubscribeConfigurationRequest.metadata:type_name -> dapr.proto.runtime.v1.SubscribeConfigurationRequest.MetadataEntry
+	68, // 34: dapr.proto.runtime.v1.SubscribeConfigurationResponse.items:type_name -> dapr.proto.common.v1.ConfigurationItem
 	18, // 35: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry.value:type_name -> dapr.proto.runtime.v1.SecretResponse
 	0,  // 36: dapr.proto.runtime.v1.Dapr.InvokeService:input_type -> dapr.proto.runtime.v1.InvokeServiceRequest
 	1,  // 37: dapr.proto.runtime.v1.Dapr.GetState:input_type -> dapr.proto.runtime.v1.GetStateRequest
@@ -3495,36 +3640,38 @@ var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
 	31, // 55: dapr.proto.runtime.v1.Dapr.InvokeActor:input_type -> dapr.proto.runtime.v1.InvokeActorRequest
 	37, // 56: dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1:input_type -> dapr.proto.runtime.v1.GetConfigurationRequest
 	39, // 57: dapr.proto.runtime.v1.Dapr.SubscribeConfigurationAlpha1:input_type -> dapr.proto.runtime.v1.SubscribeConfigurationRequest
-	67, // 58: dapr.proto.runtime.v1.Dapr.GetMetadata:input_type -> google.protobuf.Empty
-	36, // 59: dapr.proto.runtime.v1.Dapr.SetMetadata:input_type -> dapr.proto.runtime.v1.SetMetadataRequest
-	67, // 60: dapr.proto.runtime.v1.Dapr.Shutdown:input_type -> google.protobuf.Empty
-	68, // 61: dapr.proto.runtime.v1.Dapr.InvokeService:output_type -> dapr.proto.common.v1.InvokeResponse
-	5,  // 62: dapr.proto.runtime.v1.Dapr.GetState:output_type -> dapr.proto.runtime.v1.GetStateResponse
-	3,  // 63: dapr.proto.runtime.v1.Dapr.GetBulkState:output_type -> dapr.proto.runtime.v1.GetBulkStateResponse
-	67, // 64: dapr.proto.runtime.v1.Dapr.SaveState:output_type -> google.protobuf.Empty
-	11, // 65: dapr.proto.runtime.v1.Dapr.QueryStateAlpha1:output_type -> dapr.proto.runtime.v1.QueryStateResponse
-	67, // 66: dapr.proto.runtime.v1.Dapr.DeleteState:output_type -> google.protobuf.Empty
-	67, // 67: dapr.proto.runtime.v1.Dapr.DeleteBulkState:output_type -> google.protobuf.Empty
-	67, // 68: dapr.proto.runtime.v1.Dapr.ExecuteStateTransaction:output_type -> google.protobuf.Empty
-	67, // 69: dapr.proto.runtime.v1.Dapr.PublishEvent:output_type -> google.protobuf.Empty
-	14, // 70: dapr.proto.runtime.v1.Dapr.InvokeBinding:output_type -> dapr.proto.runtime.v1.InvokeBindingResponse
-	16, // 71: dapr.proto.runtime.v1.Dapr.GetSecret:output_type -> dapr.proto.runtime.v1.GetSecretResponse
-	19, // 72: dapr.proto.runtime.v1.Dapr.GetBulkSecret:output_type -> dapr.proto.runtime.v1.GetBulkSecretResponse
-	67, // 73: dapr.proto.runtime.v1.Dapr.RegisterActorTimer:output_type -> google.protobuf.Empty
-	67, // 74: dapr.proto.runtime.v1.Dapr.UnregisterActorTimer:output_type -> google.protobuf.Empty
-	67, // 75: dapr.proto.runtime.v1.Dapr.RegisterActorReminder:output_type -> google.protobuf.Empty
-	67, // 76: dapr.proto.runtime.v1.Dapr.UnregisterActorReminder:output_type -> google.protobuf.Empty
-	67, // 77: dapr.proto.runtime.v1.Dapr.RenameActorReminder:output_type -> google.protobuf.Empty
-	28, // 78: dapr.proto.runtime.v1.Dapr.GetActorState:output_type -> dapr.proto.runtime.v1.GetActorStateResponse
-	67, // 79: dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction:output_type -> google.protobuf.Empty
-	32, // 80: dapr.proto.runtime.v1.Dapr.InvokeActor:output_type -> dapr.proto.runtime.v1.InvokeActorResponse
-	38, // 81: dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.GetConfigurationResponse
-	40, // 82: dapr.proto.runtime.v1.Dapr.SubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.SubscribeConfigurationResponse
-	33, // 83: dapr.proto.runtime.v1.Dapr.GetMetadata:output_type -> dapr.proto.runtime.v1.GetMetadataResponse
-	67, // 84: dapr.proto.runtime.v1.Dapr.SetMetadata:output_type -> google.protobuf.Empty
-	67, // 85: dapr.proto.runtime.v1.Dapr.Shutdown:output_type -> google.protobuf.Empty
-	61, // [61:86] is the sub-list for method output_type
-	36, // [36:61] is the sub-list for method input_type
+	40, // 58: dapr.proto.runtime.v1.Dapr.UnsubscribeConfigurationAlpha1:input_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationRequest
+	69, // 59: dapr.proto.runtime.v1.Dapr.GetMetadata:input_type -> google.protobuf.Empty
+	36, // 60: dapr.proto.runtime.v1.Dapr.SetMetadata:input_type -> dapr.proto.runtime.v1.SetMetadataRequest
+	69, // 61: dapr.proto.runtime.v1.Dapr.Shutdown:input_type -> google.protobuf.Empty
+	70, // 62: dapr.proto.runtime.v1.Dapr.InvokeService:output_type -> dapr.proto.common.v1.InvokeResponse
+	5,  // 63: dapr.proto.runtime.v1.Dapr.GetState:output_type -> dapr.proto.runtime.v1.GetStateResponse
+	3,  // 64: dapr.proto.runtime.v1.Dapr.GetBulkState:output_type -> dapr.proto.runtime.v1.GetBulkStateResponse
+	69, // 65: dapr.proto.runtime.v1.Dapr.SaveState:output_type -> google.protobuf.Empty
+	11, // 66: dapr.proto.runtime.v1.Dapr.QueryStateAlpha1:output_type -> dapr.proto.runtime.v1.QueryStateResponse
+	69, // 67: dapr.proto.runtime.v1.Dapr.DeleteState:output_type -> google.protobuf.Empty
+	69, // 68: dapr.proto.runtime.v1.Dapr.DeleteBulkState:output_type -> google.protobuf.Empty
+	69, // 69: dapr.proto.runtime.v1.Dapr.ExecuteStateTransaction:output_type -> google.protobuf.Empty
+	69, // 70: dapr.proto.runtime.v1.Dapr.PublishEvent:output_type -> google.protobuf.Empty
+	14, // 71: dapr.proto.runtime.v1.Dapr.InvokeBinding:output_type -> dapr.proto.runtime.v1.InvokeBindingResponse
+	16, // 72: dapr.proto.runtime.v1.Dapr.GetSecret:output_type -> dapr.proto.runtime.v1.GetSecretResponse
+	19, // 73: dapr.proto.runtime.v1.Dapr.GetBulkSecret:output_type -> dapr.proto.runtime.v1.GetBulkSecretResponse
+	69, // 74: dapr.proto.runtime.v1.Dapr.RegisterActorTimer:output_type -> google.protobuf.Empty
+	69, // 75: dapr.proto.runtime.v1.Dapr.UnregisterActorTimer:output_type -> google.protobuf.Empty
+	69, // 76: dapr.proto.runtime.v1.Dapr.RegisterActorReminder:output_type -> google.protobuf.Empty
+	69, // 77: dapr.proto.runtime.v1.Dapr.UnregisterActorReminder:output_type -> google.protobuf.Empty
+	69, // 78: dapr.proto.runtime.v1.Dapr.RenameActorReminder:output_type -> google.protobuf.Empty
+	28, // 79: dapr.proto.runtime.v1.Dapr.GetActorState:output_type -> dapr.proto.runtime.v1.GetActorStateResponse
+	69, // 80: dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction:output_type -> google.protobuf.Empty
+	32, // 81: dapr.proto.runtime.v1.Dapr.InvokeActor:output_type -> dapr.proto.runtime.v1.InvokeActorResponse
+	38, // 82: dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.GetConfigurationResponse
+	41, // 83: dapr.proto.runtime.v1.Dapr.SubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.SubscribeConfigurationResponse
+	42, // 84: dapr.proto.runtime.v1.Dapr.UnsubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
+	33, // 85: dapr.proto.runtime.v1.Dapr.GetMetadata:output_type -> dapr.proto.runtime.v1.GetMetadataResponse
+	69, // 86: dapr.proto.runtime.v1.Dapr.SetMetadata:output_type -> google.protobuf.Empty
+	69, // 87: dapr.proto.runtime.v1.Dapr.Shutdown:output_type -> google.protobuf.Empty
+	62, // [62:88] is the sub-list for method output_type
+	36, // [36:62] is the sub-list for method input_type
 	36, // [36:36] is the sub-list for extension type_name
 	36, // [36:36] is the sub-list for extension extendee
 	0,  // [0:36] is the sub-list for field type_name
@@ -4017,7 +4164,31 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[40].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UnsubscribeConfigurationRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[41].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SubscribeConfigurationResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[42].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UnsubscribeConfigurationResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4035,7 +4206,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_runtime_v1_dapr_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   60,
+			NumMessages:   62,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
