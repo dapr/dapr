@@ -83,7 +83,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
-			Config:         "allowlistsgrpcproxyappconfig",
+			Config:         "allowlistsgrpcappconfig",
 			AppName:        "grpcproxyserver",
 			DaprEnabled:    true,
 			ImageName:      "e2e-service_invocation_grpc_proxy_server",
