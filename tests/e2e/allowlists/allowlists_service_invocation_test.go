@@ -73,6 +73,26 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
+		{
+			AppName:        "grpcproxyclient",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_client",
+			Replicas:       1,
+			AppProtocol:    "grpc",
+			IngressEnabled: true,
+			MetricsEnabled: true,
+		},
+		{
+			Config:         "allowlistsgrpcproxyappconfig",
+			AppName:        "grpcproxyserver",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_server",
+			Replicas:       1,
+			IngressEnabled: false,
+			MetricsEnabled: true,
+			AppProtocol:    "grpc",
+			AppPort:        50051,
+		},
 	}
 
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
@@ -133,6 +153,59 @@ var allowListsForServiceInvocationTests = []struct {
 		"grpc",
 		403,
 	},
+}
+
+var allowListsForServiceInvocationForProxyTests = []struct {
+	in                 string
+	path               string
+	remoteApp          string
+	appMethod          string
+	expectedResponse   string
+	calleeSide         string
+	expectedStatusCode int
+}{
+	{
+		"Test allow with callee side grpc without http verb by grpc proxy",
+		"",
+		"grpcproxyclient",
+		"",
+		"success",
+		"grpc",
+		200,
+	},
+}
+
+func TestServiceInvocationWithAllowListsForGrpcProxy(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("grpcproxyclient")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+	var err error
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	for _, tt := range allowListsForServiceInvocationForProxyTests {
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			resp, err := utils.HTTPPost(
+				fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
 }
 
 func TestServiceInvocationWithAllowLists(t *testing.T) {
