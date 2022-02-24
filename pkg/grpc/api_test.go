@@ -2360,7 +2360,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 			&api{
 				id:                         "fakeAPI",
 				configurationStores:        map[string]configuration.Store{"store1": &mockConfigStore{}},
-				configurationSubscribe:     map[string]bool{},
+				configurationSubscribe:     make(map[string]chan struct{}),
 				configurationSubscribeLock: sync.Mutex{},
 			},
 			"")

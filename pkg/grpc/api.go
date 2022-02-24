@@ -1311,7 +1311,6 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	subscribeKeys := request.Keys
 	unsubscribedKeys := make([]string, 0)
-	a.configurationSubscribeLock.Lock()
 
 	newCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
