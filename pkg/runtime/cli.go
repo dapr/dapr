@@ -265,17 +265,26 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
-	var resiliencyConfigs []*resiliency_v1alpha.Resiliency
+	features := globalConfig.Spec.Features
+	resiliencyEnabled := global_config.IsFeatureEnabled(features, global_config.Resiliency)
 
-	switch modes.DaprMode(*mode) {
-	case modes.KubernetesMode:
-		namespace = os.Getenv("NAMESPACE")
-		resiliencyConfigs = resiliency_config.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
-	case modes.StandaloneMode:
-		resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(log, *appID, *componentsPath)
+	var r *resiliency_config.Resiliency
+
+	if resiliencyEnabled {
+		var resiliencyConfigs []*resiliency_v1alpha.Resiliency
+		switch modes.DaprMode(*mode) {
+		case modes.KubernetesMode:
+			namespace = os.Getenv("NAMESPACE")
+			resiliencyConfigs = resiliency_config.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+		case modes.StandaloneMode:
+			resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(log, *appID, *componentsPath)
+		}
+		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
+		r = resiliency_config.FromConfigurations(log, resiliencyConfigs...)
+	} else {
+		log.Debug("Resiliency is not enabled.")
+		r = resiliency_config.New(log)
 	}
-	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-	r := resiliency_config.FromConfigurations(log, resiliencyConfigs...)
 
 	accessControlList, err := acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
