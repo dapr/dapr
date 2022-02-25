@@ -205,6 +205,9 @@ jobs:
       run: |
         make test-e2e-all
 
+    - name: Upload coverage to Codecov
+      run: bash <(curl -s https://codecov.io/bash)
+
     - name: Save control plane logs
       if: always()
       run: |
