@@ -601,7 +601,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				return nil
 			}
 
-			policy := a.resiliency.ComponentInboundPolicy(ctx, pubsubName)
+			policy := a.resiliency.ComponentInboundPolicy(ctx, name)
 			return policy(func(ctx context.Context) error {
 				return publishFunc(ctx, &pubsubSubscribedMessage{
 					cloudEvent: cloudEvent,

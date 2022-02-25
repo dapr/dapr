@@ -136,3 +136,60 @@ func (_m *MockStateStore) Features() []state.Feature {
 func (_m *MockStateStore) Close() error {
 	return nil
 }
+
+type FailingStatestore struct {
+	Failure Failure
+}
+
+func (f *FailingStatestore) BulkDelete(req []state.DeleteRequest) error {
+	for _, val := range req {
+		err := f.Failure.PerformFailure(val.Key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *FailingStatestore) BulkSet(req []state.SetRequest) error {
+	for _, val := range req {
+		err := f.Failure.PerformFailure(val.Key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *FailingStatestore) Delete(req *state.DeleteRequest) error {
+	return f.Failure.PerformFailure(req.Key)
+}
+
+func (f *FailingStatestore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+	err := f.Failure.PerformFailure(req.Key)
+	if err != nil {
+		return nil, err
+	}
+	return &state.GetResponse{}, nil
+}
+
+func (f *FailingStatestore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+	// This makes the code fall back to individual gets, which is basically what we'd mimic here anyway.
+	return false, nil, nil
+}
+
+func (f *FailingStatestore) Init(metadata state.Metadata) error {
+	return nil
+}
+
+func (f *FailingStatestore) Ping() error {
+	return nil
+}
+
+func (f *FailingStatestore) Set(req *state.SetRequest) error {
+	return f.Failure.PerformFailure(req.Key)
+}
+
+func (f *FailingStatestore) Close() error {
+	return nil
+}
