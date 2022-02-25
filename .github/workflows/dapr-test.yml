@@ -180,6 +180,8 @@ jobs:
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
+      - name: Upload coverage to Codecov
+        run: bash <(curl -s https://codecov.io/bash)
       - name: Save control plane K8s resources
         if: always() && env.TEST_CLUSTER != ''
         run: |
