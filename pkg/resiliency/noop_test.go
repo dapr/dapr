@@ -15,6 +15,7 @@ package resiliency
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,6 +28,7 @@ func TestNoOp(t *testing.T) {
 	tests := []struct {
 		name string
 		fn   func(ctx context.Context) Runner
+		err  error
 	}{
 		{
 			name: "route",
@@ -35,10 +37,24 @@ func TestNoOp(t *testing.T) {
 			},
 		},
 		{
+			name: "route error",
+			fn: func(ctx context.Context) Runner {
+				return policy.RoutePolicy(ctx, "test")
+			},
+			err: errors.New("route error"),
+		},
+		{
 			name: "endpoint",
 			fn: func(ctx context.Context) Runner {
 				return policy.EndpointPolicy(ctx, "test", "test")
 			},
+		},
+		{
+			name: "endpoint error",
+			fn: func(ctx context.Context) Runner {
+				return policy.EndpointPolicy(ctx, "test", "test")
+			},
+			err: errors.New("endpoint error"),
 		},
 		{
 			name: "actor",
@@ -47,22 +63,38 @@ func TestNoOp(t *testing.T) {
 			},
 		},
 		{
+			name: "actor error",
+			fn: func(ctx context.Context) Runner {
+				return policy.ActorPolicy(ctx, "test", "test")
+			},
+			err: errors.New("actor error"),
+		},
+		{
 			name: "component",
 			fn: func(ctx context.Context) Runner {
 				return policy.ComponentPolicy(ctx, "test")
 			},
 		},
+		{
+			name: "component error",
+			fn: func(ctx context.Context) Runner {
+				return policy.ComponentPolicy(ctx, "test")
+			},
+			err: errors.New("component error"),
+		},
 	}
 
 	for _, tt := range tests {
-		runner := tt.fn(ctx)
-		called := false
-		err := runner(func(passedCtx context.Context) error {
-			assert.Equal(t, ctx, passedCtx)
-			called = true
-			return nil
+		t.Run(tt.name, func(t *testing.T) {
+			runner := tt.fn(ctx)
+			called := false
+			err := runner(func(passedCtx context.Context) error {
+				assert.Equal(t, ctx, passedCtx)
+				called = true
+				return tt.err
+			})
+			assert.Equal(t, tt.err, err)
+			assert.True(t, called)
 		})
-		assert.NoError(t, err)
-		assert.True(t, called)
 	}
 }
