@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// NoOp is a true bypass implementation of `Provider``.
+// NoOp is a true bypass implementation of `Provider`.
 type NoOp struct{}
 
 // Ensure `*NoOp` satisfies the `Provider` interface.
