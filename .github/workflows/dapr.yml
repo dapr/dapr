@@ -122,6 +122,8 @@ jobs:
       - name: Codecov
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         uses: codecov/codecov-action@v1
+        with:
+          flags: unit
       - name: Run make release to build and archive binaries
         run: |
           mkdir -p ${{ env.ARCHIVE_OUTDIR }}
