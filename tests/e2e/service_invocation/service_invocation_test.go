@@ -198,6 +198,7 @@ var serviceinvocationPathTests = []struct {
 
 var moreServiceinvocationTests = []struct {
 	in               string
+	path             string
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
@@ -205,32 +206,37 @@ var moreServiceinvocationTests = []struct {
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
 		"Test HTTP to HTTP",
+		"httptohttptest",
 		"serviceinvocation-callee-1",
 		"httptohttptest",
 		"success",
 	},
 	{
 		"Test HTTP to gRPC",
+		"httptogrpctest",
 		"grpcapp",
 		"httptogrpctest",
 		"success",
 	},
 	{
 		"Test gRPC to HTTP",
+		"grpctohttptest",
 		"serviceinvocation-callee-1",
 		"grpctohttptest",
 		"success",
 	},
 	{
 		"Test gRPC to gRPC",
-		"grpcapp",
 		"grpctogrpctest",
+		"grpcapp",
+		"grpcToGrpcTest",
 		"success",
 	},
 }
 
 var crossNamespaceTests = []struct {
 	in               string
+	path             string
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
@@ -238,26 +244,30 @@ var crossNamespaceTests = []struct {
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
 		"Test HTTP to HTTP",
+		"httptohttptest",
 		"secondary-ns-http",
 		"httptohttptest",
 		"success",
 	},
 	{
 		"Test HTTP to gRPC",
+		"httptogrpctest",
 		"secondary-ns-grpc",
 		"httptogrpctest",
 		"success",
 	},
 	{
 		"Test gRPC to HTTP",
+		"grpctohttptest",
 		"secondary-ns-http",
 		"grpctohttptest",
 		"success",
 	},
 	{
 		"Test gRPC to gRPC",
-		"secondary-ns-grpc",
 		"grpctogrpctest",
+		"secondary-ns-grpc",
+		"grpcToGrpcTest",
 		"success",
 	},
 }
@@ -316,7 +326,7 @@ func TestServiceInvocation(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.path)
 
 			t.Logf("url is '%s'\n", url)
 			resp, err := utils.HTTPPost(
@@ -1099,7 +1109,7 @@ func TestCrossNamespaceCases(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.path)
 
 			t.Logf("url is '%s'\n", url)
 			resp, err := utils.HTTPPost(
