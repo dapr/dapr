@@ -46,6 +46,7 @@ const (
 	ActorTypeMetadata   Feature = "Actor.TypeMetadata"
 	PubSubRouting       Feature = "PubSub.Routing"
 	StateEncryption     Feature = "State.Encryption"
+	Resiliency          Feature = "Resiliency"
 )
 
 type Feature string
