@@ -166,7 +166,10 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 		return err
 	}
 
-	h.patchDaprService(ctx, mayDaprService, wrapper)
+	if err := h.patchDaprService(ctx, mayDaprService, wrapper); err != nil {
+		log.Errorf("unable to update service, %s, err: %s", mayDaprService, err)
+		return err
+	}
 
 	return nil
 }
