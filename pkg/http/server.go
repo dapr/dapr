@@ -81,7 +81,14 @@ func (s *server) StartNonBlocking() error {
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
-	handler = s.apiLogging(handler)
+
+	apiLogLevel := s.config.APILoglevel
+
+	if strings.EqualFold(apiLogLevel, "info") {
+		handler = s.apiLoggingInfo(handler)
+	} else if strings.EqualFold(apiLogLevel, "debug") {
+		handler = s.apiLoggingDebug(handler)
+	}
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -209,9 +216,16 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 	return next
 }
 
-func (s *server) apiLogging(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		log.Debugf("Dapr http API logging: , %s", string(ctx.Path()))
+		log.Infof("HTTP API Called: %s %s", ctx.Method(), ctx.Path())
+		next(ctx)
+	}
+}
+
+func (s *server) apiLoggingDebug(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		log.Debugf("HTTP API Called: %s %s", ctx.Method(), ctx.Path())
 		next(ctx)
 	}
 }
