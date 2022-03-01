@@ -2745,7 +2745,8 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		"",
 		4,
 		false,
-		time.Second)
+		time.Second,
+		"info")
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 }

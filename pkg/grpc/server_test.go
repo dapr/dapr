@@ -93,7 +93,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 func TestClose(t *testing.T) {
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
-	serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4)
+	serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4, "info")
 	a := &api{}
 	server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
 	require.NoError(t, server.StartNonBlocking())
