@@ -268,7 +268,7 @@ func FromFlags() (*DaprRuntime, error) {
 	features := globalConfig.Spec.Features
 	resiliencyEnabled := global_config.IsFeatureEnabled(features, global_config.Resiliency)
 
-	var r *resiliency_config.Resiliency
+	var resiliencyProvider resiliency_config.Provider
 
 	if resiliencyEnabled {
 		var resiliencyConfigs []*resiliency_v1alpha.Resiliency
@@ -280,17 +280,17 @@ func FromFlags() (*DaprRuntime, error) {
 			resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(log, *appID, *componentsPath)
 		}
 		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-		r = resiliency_config.FromConfigurations(log, resiliencyConfigs...)
+		resiliencyProvider = resiliency_config.FromConfigurations(log, resiliencyConfigs...)
 	} else {
 		log.Debug("Resiliency is not enabled.")
-		r = resiliency_config.New(log)
+		resiliencyProvider = &resiliency_config.NoOp{}
 	}
 
 	accessControlList, err := acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, r), nil
+	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
 }
 
 func setEnvVariables(variables map[string]string) error {
