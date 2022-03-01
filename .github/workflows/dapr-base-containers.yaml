@@ -19,7 +19,7 @@ on:
 jobs:
   build:
     name: Build base windows images
-    runs-on: windows-latest
+    runs-on: windows-2019
     env:
       WINDOWS_VERSION: 1809
       TARGET_OS: windows

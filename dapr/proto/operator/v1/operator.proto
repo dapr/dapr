@@ -32,16 +32,20 @@ service Operator {
   rpc GetResiliency (GetResiliencyRequest) returns (GetResiliencyResponse) {}
   // Returns a list of resiliency configurations
   rpc ListResiliency (ListResiliencyRequest) returns (ListResiliencyResponse) {}
+  // Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
+  rpc ListSubscriptionsV2 (ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {}
 }
 
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
 message ListComponentsRequest {
   string namespace = 1;
+  string podName = 2;
 }
 
 // ComponentUpdateRequest is the request to get updates about new components for a given namespace.
 message ComponentUpdateRequest {
   string namespace = 1;
+  string podName = 2;
 }
 
 // ComponentUpdateEvent includes the updated component event.
@@ -58,6 +62,7 @@ message ListComponentResponse {
 message GetConfigurationRequest {
   string name = 1;
   string namespace = 2;
+  string podName = 3;
 }
 
 // GetConfigurationResponse includes the requested configuration.
@@ -89,4 +94,9 @@ message ListResiliencyRequest {
 // ListResiliencyResponse includes the list of available resiliency configurations.
 message ListResiliencyResponse {
     repeated bytes resiliencies = 1;
+}
+
+message ListSubscriptionsRequest {
+  string podName = 1;
+  string namespace = 2;
 }

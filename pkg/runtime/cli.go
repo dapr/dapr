@@ -246,12 +246,16 @@ func FromFlags() (*DaprRuntime, error) {
 		operatorClient = client
 	}
 
+	var accessControlList *global_config.AccessControlList
 	var namespace string
+	var podName string
+
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
 			namespace = os.Getenv("NAMESPACE")
-			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, operatorClient)
+			podName = os.Getenv("POD_NAME")
+			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
@@ -277,7 +281,7 @@ func FromFlags() (*DaprRuntime, error) {
 	log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
 	r := resiliency_config.FromConfigurations(log, resiliencyConfigs...)
 
-	accessControlList, err := acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
+	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
