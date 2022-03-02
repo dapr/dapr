@@ -29,46 +29,141 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-operator-admin
 rules:
-- apiGroups: ["*"]
-  resources: ["customresourcedefinitions", "serviceaccounts", "deployments", "statefulsets", "services", "configmaps", "secrets", "components", "configurations", "subscriptions", "leases"]
-  verbs: ["get"]
-- apiGroups: ["*"]
-  resources: ["deployments", "statefulsets", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
-  verbs: ["list"]
-- apiGroups: ["*"]
-  resources: ["deployments", "statefulsets", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
-  verbs: ["watch"]
-- apiGroups: ["*"]
-  resources: ["services", "secrets", "subscriptions", "configmaps", "leases", "services/finalizers", "deployments/finalizers", "statefulsets/finalizers"]
-  verbs: ["update"]
-- apiGroups: ["*"]
-  resources: ["customresourcedefinitions"]
-  verbs: ["patch"]
-- apiGroups: ["*"]
-  resources: ["services", "leases"]
-  verbs: ["delete"]
-- apiGroups: ["*"]
-  resources: ["deployments", "statefulsets", "services", "configmaps", "events", "leases"]
-  verbs: ["create"]
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs:
+      - list
+      - get
+      - update
+      - create
+      - delete
+      - watch
+
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - list
+      - get
+      - update
+      - create
+      - delete
+
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+      - services
+      - configmaps
+    verbs:
+      - get
+      - list
+      - update
+      - create
+
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - update
+      - create
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+  - apiGroups:
+      - dapr.io
+    resources:
+      - components
+      - configurations
+    verbs:
+      - get
+
+  - apiGroups:
+      - dapr.io
+    resources:
+      - components
+      - components/status
+      - components/scale
+      - components/finalizers
+    verbs:
+      - create
+      - get
+      - list
+      - update
+      - patch
+      - watch
+      - delete
+      - deletecollection
+
+  - apiGroups:
+      - dapr.io
+    resources:
+      - configurations
+      - configurations/status
+      - configurations/scale
+      - configurations/finalizers
+    verbs:
+      - create
+      - get
+      - list
+      - update
+      - patch
+      - watch
+      - delete
+      - deletecollection
+
+  - apiGroups:
+      - dapr.io
+    resources:
+      - subscriptions
+      - subscriptions/status
+      - subscriptions/scale
+      - subscriptions/finalizers
+    verbs:
+      - create
+      - get
+      - list
+      - update
+      - patch
+      - watch
+      - delete
+      - deletecollection
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: secret-reader
-  namespace: default
+  namespace: {{ .Release.Namespace }}
 rules:
-- apiGroups: [""]
-  resources: ["secrets"]
-  verbs: ["get"]
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - update
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-secret-reader
-  namespace: default
+  namespace:  {{ .Release.Namespace }}
 subjects:
 - kind: ServiceAccount
   name: default
+- kind: ServiceAccount
+  name: dapr-operator
+  namespace: {{ .Release.Namespace }}   
 roleRef:
   kind: Role
   name: secret-reader
@@ -79,9 +174,27 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dashboard-reader
 rules:
-- apiGroups: ["", "dapr.io", "apps", "extensions"]
-  resources: ["deployments", "pods", "pods/log", "components", "configurations", "namespaces"]
-  verbs: ["get", "list"]
+  - apiGroups:
+      - dapr.io
+    resources:
+      - components
+      - configurations
+    verbs:
+      - get
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+      - namespaces
+    verbs:
+      - get
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
