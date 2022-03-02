@@ -51,18 +51,6 @@ spec:
         prometheus.io/path: "/"
 {{- end }}
     spec:
-{{- if eq .Values.global.ha.enabled true }}
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - dapr-sentry
-            topologyKey: "kubernetes.io/hostname"
-{{- end }}
       containers:
       - name: dapr-sentry
         livenessProbe:
@@ -75,7 +63,7 @@ spec:
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
           {{- end }}
           periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
-          failureThreshold: 5
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
         readinessProbe:
           httpGet:
             path: /healthz
@@ -86,7 +74,7 @@ spec:
           initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
           {{- end }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
-          failureThreshold: 5
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}

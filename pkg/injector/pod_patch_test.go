@@ -86,7 +86,7 @@ func TestFormatProbePath(t *testing.T) {
 func TestGetProbeHttpHandler(t *testing.T) {
 	pathElements := []string{"api", "v1", "healthz"}
 	expectedPath := "/api/v1/healthz"
-	expectedHandler := corev1.Handler{
+	expectedHandler := corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: expectedPath,
 			Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
@@ -133,10 +133,12 @@ func TestGetSideCarContainer(t *testing.T) {
 
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
+		// POD_NAME
+		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
 		// default image
 		assert.Equal(t, "darpio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -190,10 +192,12 @@ func TestGetSideCarContainer(t *testing.T) {
 		assert.Equal(t, "/dlv", container.Command[0])
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
+		// POD_NAME
+		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})

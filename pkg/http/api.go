@@ -279,11 +279,12 @@ func (a *api) constructBindingsEndpoints() []Endpoint {
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{router.MethodWild},
-			Route:   "invoke/{id}/method/{method:*}",
-			Alias:   "{method:*}",
-			Version: apiVersionV1,
-			Handler: a.onDirectMessage,
+			Methods:           []string{router.MethodWild},
+			Route:             "invoke/{id}/method/{method:*}",
+			Alias:             "{method:*}",
+			Version:           apiVersionV1,
+			KeepParamUnescape: true,
+			Handler:           a.onDirectMessage,
 		},
 	}
 }
@@ -337,6 +338,12 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Handler: a.onGetActorReminder,
+		},
+		{
+			Methods: []string{fasthttp.MethodPatch},
+			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
+			Version: apiVersionV1,
+			Handler: a.onRenameActorReminder,
 		},
 	}
 }
@@ -456,7 +463,15 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// merge metadata from URL query parameters
 	metadata := getMetadataFromRequest(reqCtx)
+	if req.Metadata == nil {
+		req.Metadata = metadata
+	} else {
+		for k, v := range metadata {
+			req.Metadata[k] = v
+		}
+	}
 
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
 	if len(req.Keys) == 0 {
@@ -821,7 +836,18 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	metadata := getMetadataFromRequest(reqCtx)
+
 	for i, r := range reqs {
+		// merge metadata from URL query parameters
+		if reqs[i].Metadata == nil {
+			reqs[i].Metadata = metadata
+		} else {
+			for k, v := range metadata {
+				reqs[i].Metadata[k] = v
+			}
+		}
+
 		reqs[i].Key, err = state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
 		if err != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
@@ -1009,6 +1035,40 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	err = a.actor.CreateReminder(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", fmt.Sprintf(messages.ErrActorReminderCreate, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+	} else {
+		respond(reqCtx, withEmpty())
+	}
+}
+
+func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
+	if a.actor == nil {
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		return
+	}
+
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	name := reqCtx.UserValue(nameParam).(string)
+
+	var req actors.RenameReminderRequest
+	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	req.OldName = name
+	req.ActorType = actorType
+	req.ActorID = actorID
+
+	err = a.actor.RenameReminder(reqCtx, &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_ACTOR_REMINDER_RENAME", fmt.Sprintf(messages.ErrActorReminderRename, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {
@@ -1547,6 +1607,16 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// merge metadata from URL query parameters
+	metadata := getMetadataFromRequest(reqCtx)
+	if req.Metadata == nil {
+		req.Metadata = metadata
+	} else {
+		for k, v := range metadata {
+			req.Metadata[k] = v
+		}
+	}
+
 	operations := []state.TransactionalStateOperation{}
 	for _, o := range req.Operations {
 		switch o.Operation {
@@ -1652,6 +1722,13 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if encryption.EncryptedStateStore(storeName) {
+		msg := NewErrorResponse("ERR_STATE_QUERY", fmt.Sprintf(messages.ErrStateQuery, storeName, "cannot query encrypted store"))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
 	var req state.QueryRequest
 	if err = a.json.Unmarshal(reqCtx.PostBody(), &req.Query); err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
@@ -1673,8 +1750,6 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	encrypted := encryption.EncryptedStateStore(storeName)
-
 	qresp := QueryResponse{
 		Results:  make([]QueryItem, len(resp.Results)),
 		Token:    resp.Token,
@@ -1684,17 +1759,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		qresp.Results[i].Key = state_loader.GetOriginalStateKey(resp.Results[i].Key)
 		qresp.Results[i].ETag = resp.Results[i].ETag
 		qresp.Results[i].Error = resp.Results[i].Error
-		if encrypted {
-			val, err := encryption.TryDecryptValue(storeName, resp.Results[i].Data)
-			if err != nil {
-				log.Debugf("query error: %s", err)
-				qresp.Results[i].Error = err.Error()
-				continue
-			}
-			qresp.Results[i].Data = jsoniter.RawMessage(val)
-		} else {
-			qresp.Results[i].Data = jsoniter.RawMessage(resp.Results[i].Data)
-		}
+		qresp.Results[i].Data = jsoniter.RawMessage(resp.Results[i].Data)
 	}
 
 	b, _ := a.json.Marshal(qresp)
