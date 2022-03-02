@@ -176,7 +176,7 @@ docker-windows-base-push: check-windows-version
 ################################################################################
 
 # Update whenever you upgrade dev container image
-DEV_CONTAINER_VERSION_TAG?=0.1.6
+DEV_CONTAINER_VERSION_TAG?=0.1.6a
 
 # Use this to pin a specific version of the Dapr CLI to a devcontainer
 DEV_CONTAINER_CLI_TAG?=1.6.0
