@@ -179,7 +179,6 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 	service := h.createDaprServiceValues(ctx, expectedService, wrapper, appID)
 
 	if err := h.Update(ctx, service); err != nil {
-		log.Errorf("unable to update service, %s, err: %s", service.Name, err)
 		return err
 	}
 
