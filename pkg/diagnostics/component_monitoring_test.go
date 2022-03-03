@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 )
 
 const (
@@ -21,75 +22,65 @@ func componentsMetrics() *componentMetrics {
 	return c
 }
 
+func allTagsPresent(t *testing.T, v *view.View, tags []tag.Tag) {
+	for _, k := range v.TagKeys {
+		found := false
+
+		if k.Name() == "" {
+			continue
+		}
+
+		for _, tag := range tags {
+			if tag.Key.Name() == "" {
+				continue
+			}
+
+			if k.Name() == tag.Key.Name() {
+				found = true
+				break
+			}
+		}
+
+		assert.True(t, found)
+	}
+}
+
 func TestPubSub(t *testing.T) {
 	t.Run("record ingress count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubIngressEvent(context.Background(), componentName, "", "", 0)
+		c.PubsubIngressEvent(context.Background(), componentName, "retry", "A", 0)
 
-		views, _ := view.RetrieveData("component/pubsub_ingress/event_count")
+		viewData, _ := view.RetrieveData("component/pubsub_ingress/count")
+		v := view.Find("component/pubsub_ingress/count")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
-
-		assert.True(t, recorded)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record ingress latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubIngressEvent(context.Background(), componentName, "", "", 1)
+		c.PubsubIngressEvent(context.Background(), componentName, "retry", "A", 1)
 
-		views, _ := view.RetrieveData("component/pubsub_ingress/event_latencies")
+		viewData, _ := view.RetrieveData("component/pubsub_ingress/latencies")
+		v := view.Find("component/pubsub_ingress/latencies")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
+		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), views[0].Data.(*view.DistributionData).Min)
-		assert.True(t, recorded)
-	})
-
-	t.Run("record egress count", func(t *testing.T) {
-		c := componentsMetrics()
-
-		c.PubsubEgressEvent(context.Background(), componentName, "", false, 0)
-
-		views, _ := view.RetrieveData("component/pubsub_egress/event_count")
-
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
-
-		assert.True(t, recorded)
+		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
 
 	t.Run("record egress latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubEgressEvent(context.Background(), componentName, "", false, 1)
+		c.PubsubEgressEvent(context.Background(), componentName, "A", true, 1)
 
-		views, _ := view.RetrieveData("component/pubsub_egress/event_latencies")
+		viewData, _ := view.RetrieveData("component/pubsub_egress/latencies")
+		v := view.Find("component/pubsub_egress/latencies")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
+		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), views[0].Data.(*view.DistributionData).Min)
-		assert.True(t, recorded)
+		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
 }
 
@@ -99,16 +90,10 @@ func TestBindings(t *testing.T) {
 
 		c.InputBindingEvent(context.Background(), componentName, false, 0)
 
-		views, _ := view.RetrieveData("component/input_binding/event_count")
+		viewData, _ := view.RetrieveData("component/input_binding/count")
+		v := view.Find("component/input_binding/count")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
-
-		assert.True(t, recorded)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record input binding latency", func(t *testing.T) {
@@ -116,52 +101,36 @@ func TestBindings(t *testing.T) {
 
 		c.InputBindingEvent(context.Background(), componentName, false, 1)
 
-		views, _ := view.RetrieveData("component/input_binding/event_latencies")
+		viewData, _ := view.RetrieveData("component/input_binding/latencies")
+		v := view.Find("component/input_binding/count")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
+		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), views[0].Data.(*view.DistributionData).Min)
-		assert.True(t, recorded)
+		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
 
 	t.Run("record output binding count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.OutputBindingEvent(context.Background(), componentName, "", false, 0)
+		c.OutputBindingEvent(context.Background(), componentName, "set", false, 0)
 
-		views, _ := view.RetrieveData("component/output_binding/event_count")
+		viewData, _ := view.RetrieveData("component/output_binding/count")
+		v := view.Find("component/input_binding/count")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
-
-		assert.True(t, recorded)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record output binding latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.OutputBindingEvent(context.Background(), componentName, "", false, 1)
+		c.OutputBindingEvent(context.Background(), componentName, "set", false, 1)
 
-		views, _ := view.RetrieveData("component/output_binding/event_latencies")
+		viewData, _ := view.RetrieveData("component/output_binding/latencies")
+		v := view.Find("component/output_binding/latencies")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
+		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), views[0].Data.(*view.DistributionData).Min)
-		assert.True(t, recorded)
+		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
 }
 
@@ -171,16 +140,10 @@ func TestState(t *testing.T) {
 
 		c.StateInvoked(context.Background(), componentName, "get", false, 0)
 
-		views, _ := view.RetrieveData("component/state/state_count")
+		viewData, _ := view.RetrieveData("component/state/count")
+		v := view.Find("component/state/count")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
-
-		assert.True(t, recorded)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record state latency", func(t *testing.T) {
@@ -188,17 +151,11 @@ func TestState(t *testing.T) {
 
 		c.StateInvoked(context.Background(), componentName, "get", false, 1)
 
-		views, _ := view.RetrieveData("component/state/state_latencies")
+		viewData, _ := view.RetrieveData("component/state/count")
+		v := view.Find("component/state/count")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
-
-		assert.Equal(t, float64(1), views[0].Data.(*view.DistributionData).Min)
-		assert.True(t, recorded)
+		allTagsPresent(t, v, viewData[0].Tags)
+		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
 }
 
@@ -208,16 +165,10 @@ func TestConfiguration(t *testing.T) {
 
 		c.ConfigurationInvoked(context.Background(), componentName, "get", false, 0)
 
-		views, _ := view.RetrieveData("component/configuration/configuration_count")
+		viewData, _ := view.RetrieveData("component/configuration/count")
+		v := view.Find("component/configuration/count")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
-
-		assert.True(t, recorded)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record configuration latency", func(t *testing.T) {
@@ -225,17 +176,12 @@ func TestConfiguration(t *testing.T) {
 
 		c.ConfigurationInvoked(context.Background(), componentName, "get", false, 1)
 
-		views, _ := view.RetrieveData("component/configuration/configuration_latencies")
+		viewData, _ := view.RetrieveData("component/configuration/latencies")
+		v := view.Find("component/configuration/latencies")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
+		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), views[0].Data.(*view.DistributionData).Min)
-		assert.True(t, recorded)
+		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
 }
 
@@ -245,16 +191,10 @@ func TestSecrets(t *testing.T) {
 
 		c.SecretInvoked(context.Background(), componentName, "get", false, 0)
 
-		views, _ := view.RetrieveData("component/secret/secret_count")
+		viewData, _ := view.RetrieveData("component/secret/count")
+		v := view.Find("component/secret/count")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
-
-		assert.True(t, recorded)
+		allTagsPresent(t, v, viewData[0].Tags)
 	})
 
 	t.Run("record secret latency", func(t *testing.T) {
@@ -262,17 +202,12 @@ func TestSecrets(t *testing.T) {
 
 		c.SecretInvoked(context.Background(), componentName, "get", false, 1)
 
-		views, _ := view.RetrieveData("component/secret/secret_latencies")
+		viewData, _ := view.RetrieveData("component/secret/latencies")
+		v := view.Find("component/secret/latencies")
 
-		recorded := false
-		for _, t := range views[0].Tags {
-			if t.Key.Name() == componentLabel && t.Value == componentName {
-				recorded = true
-			}
-		}
+		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), views[0].Data.(*view.DistributionData).Min)
-		assert.True(t, recorded)
+		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 	})
 }
 
