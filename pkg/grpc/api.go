@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/dapr/components-contrib/configuration"
 
@@ -299,7 +300,12 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		Metadata:   in.Metadata,
 	}
 
+	start := time.Now()
 	err := a.pubsubAdapter.Publish(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
+
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
@@ -312,6 +318,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		apiServerLogger.Debug(nerr)
 		return &emptypb.Empty{}, nerr
 	}
+
 	return &emptypb.Empty{}, nil
 }
 
@@ -364,7 +371,12 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	}
 
 	r := &runtimev1pb.InvokeBindingResponse{}
+	start := time.Now()
 	resp, err := a.sendToOutputBindingFn(in.Name, req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), in.Name, in.Operation, err == nil, elapsed)
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrInvokeOutputBinding, in.Name, err.Error())
 		apiServerLogger.Debug(err)
@@ -403,7 +415,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		}
 		reqs[i] = r
 	}
+
+	start := time.Now()
 	bulkGet, responses, err := store.BulkGet(reqs)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
 
 	// if store supports bulk get
 	if bulkGet {
@@ -497,7 +514,12 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		},
 	}
 
+	start := time.Now()
 	getResponse, err := store.Get(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -564,7 +586,12 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		reqs = append(reqs, req)
 	}
 
+	start := time.Now()
 	err = store.BulkSet(reqs)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.Set, err == nil, elapsed)
+
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateSave, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -603,7 +630,12 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	}
 	req.Metadata = in.GetMetadata()
 
+	start := time.Now()
 	resp, err := querier.Query(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.StateQuery, err == nil, elapsed)
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateQuery, in.GetStoreName(), err.Error())
 		apiServerLogger.Debug(err)
@@ -668,7 +700,12 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		}
 	}
 
+	start := time.Now()
 	err = store.Delete(&req)
+	elasped := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.Delete, err == nil, elasped)
+
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
@@ -705,7 +742,13 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 		}
 		reqs = append(reqs, req)
 	}
+
+	start := time.Now()
 	err = store.BulkDelete(reqs)
+	elasped := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkDelete, err == nil, elasped)
+
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -739,7 +782,12 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		Metadata: in.Metadata,
 	}
 
+	start := time.Now()
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
+	elasped := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.Get, err == nil, elasped)
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrSecretGet, req.Name, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -772,7 +820,12 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		Metadata: in.Metadata,
 	}
 
+	start := time.Now()
 	getResponse, err := a.secretStores[secretStoreName].BulkGetSecret(req)
+	elasped := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elasped)
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrBulkSecretGet, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -911,10 +964,15 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		}
 	}
 
+	start := time.Now()
 	err := transactionalStore.Multi(&state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   in.Metadata,
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.StateTransaction, err == nil, elapsed)
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
 		apiServerLogger.Debug(err)
@@ -1249,7 +1307,12 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 		Metadata: in.Metadata,
 	}
 
+	start := time.Now()
 	getResponse, err := store.Get(ctx, &req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, req.Keys, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -1325,7 +1388,12 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	defer cancel()
 
 	// TODO(@laurence) deal with failed subscription and retires
+	start := time.Now()
 	id, err := store.Subscribe(ctx, req, handler.updateEventHandler)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationSubscribe, err == nil, elapsed)
+
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -1363,9 +1431,15 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	delete(a.configurationSubscribe, subscribeID)
 	close(stop)
 
-	if err := store.Unsubscribe(ctx, &configuration.UnsubscribeRequest{
+	start := time.Now()
+	err = store.Unsubscribe(ctx, &configuration.UnsubscribeRequest{
 		ID: subscribeID,
-	}); err != nil {
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
+
+	if err != nil {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
 			Ok:      false,
 			Message: err.Error(),
