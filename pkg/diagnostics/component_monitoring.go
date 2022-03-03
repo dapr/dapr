@@ -261,5 +261,4 @@ func (c *componentMetrics) SecretInvoked(ctx context.Context, component, operati
 
 func ElapsedSince(start time.Time) float64 {
 	return float64(time.Since(start) / time.Millisecond)
-
 }
