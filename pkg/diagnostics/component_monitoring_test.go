@@ -150,8 +150,8 @@ func TestState(t *testing.T) {
 
 		c.StateInvoked(context.Background(), componentName, "get", false, 1)
 
-		viewData, _ := view.RetrieveData("component/state/count")
-		v := view.Find("component/state/count")
+		viewData, _ := view.RetrieveData("component/state/latencies")
+		v := view.Find("component/state/latencies")
 
 		allTagsPresent(t, v, viewData[0].Tags)
 		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
