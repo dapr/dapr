@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.opencensus.io/stats"
@@ -59,59 +60,59 @@ type componentMetrics struct {
 func newComponentMetrics() *componentMetrics {
 	return &componentMetrics{
 		pubsubIngressCount: stats.Int64(
-			"component/pubsub_ingress/event_count",
+			"component/pubsub_ingress/count",
 			"The number of incoming messages arriving from the pub/sub component.",
 			stats.UnitDimensionless),
 		pubsubIngressLatency: stats.Float64(
-			"component/pubsub_ingress/event_latencies",
+			"component/pubsub_ingress/latencies",
 			"The consuming app event processing latency.",
 			stats.UnitMilliseconds),
 		pubsubEgressCount: stats.Int64(
-			"component/pubsub_egress/event_count",
+			"component/pubsub_egress/count",
 			"The number of outgoing messages published to the pub/sub component.",
 			stats.UnitDimensionless),
 		pubsubEgressLatency: stats.Float64(
-			"component/pubsub_egress/event_latencies",
+			"component/pubsub_egress/latencies",
 			"The latency of the response from the pub/sub component.",
 			stats.UnitMilliseconds),
 		inputBindingCount: stats.Int64(
-			"component/input_binding/event_count",
+			"component/input_binding/count",
 			"The number of incoming events arriving from the input binding component.",
 			stats.UnitDimensionless),
 		inputBindingLatency: stats.Float64(
-			"component/input_binding/event_latencies",
+			"component/input_binding/latencies",
 			"The triggered app event processing latency.",
 			stats.UnitMilliseconds),
 		outputBindingCount: stats.Int64(
-			"component/output_binding/event_count",
+			"component/output_binding/count",
 			"The number of operations invoked on the output binding component.",
 			stats.UnitDimensionless),
 		outputBindingLatency: stats.Float64(
-			"component/output_binding/event_latencies",
+			"component/output_binding/latencies",
 			"The latency of the response from the output binding component.",
 			stats.UnitMilliseconds),
 		stateCount: stats.Int64(
-			"component/state/state_count",
+			"component/state/count",
 			"The number of operations performed on the state component.",
 			stats.UnitDimensionless),
 		stateLatency: stats.Float64(
-			"component/state/state_latencies",
+			"component/state/latencies",
 			"The latency of the response from the state component.",
 			stats.UnitMilliseconds),
 		configurationCount: stats.Int64(
-			"component/configuration/configuration_count",
+			"component/configuration/count",
 			"The number of operations performed on the configuration component.",
 			stats.UnitDimensionless),
 		configurationLatency: stats.Float64(
-			"component/configuration/configuration_latencies",
+			"component/configuration/latencies",
 			"The latency of the response from the configuration component.",
 			stats.UnitMilliseconds),
 		secretCount: stats.Int64(
-			"component/secret/secret_count",
+			"component/secret/count",
 			"The number of operations performed on the secret component.",
 			stats.UnitDimensionless),
 		secretLatency: stats.Float64(
-			"component/secret/secret_latencies",
+			"component/secret/latencies",
 			"The latency of the response from the secret component.",
 			stats.UnitMilliseconds),
 	}
@@ -146,13 +147,13 @@ func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, pr
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, processStatusKey, processStatus, topicKey, topic),
+			diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
 			c.pubsubIngressCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, processStatusKey, processStatus, topicKey, topic),
+				diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
 				c.pubsubIngressLatency.M(elapsed))
 		}
 	}
@@ -163,13 +164,13 @@ func (c *componentMetrics) PubsubEgressEvent(ctx context.Context, component, top
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success, topicKey, topic),
+			diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success), topicKey, topic),
 			c.pubsubEgressCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success, topicKey, topic),
+				diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success), topicKey, topic),
 				c.pubsubEgressLatency.M(elapsed))
 		}
 	}
@@ -180,13 +181,13 @@ func (c *componentMetrics) InputBindingEvent(ctx context.Context, component stri
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success),
+			diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success)),
 			c.inputBindingCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success),
+				diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success)),
 				c.inputBindingLatency.M(elapsed))
 		}
 	}
@@ -197,13 +198,13 @@ func (c *componentMetrics) OutputBindingEvent(ctx context.Context, component, op
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, operationKey, operation, successKey, success),
+			diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
 			c.outputBindingCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, operationKey, operation, successKey, success),
+				diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
 				c.outputBindingLatency.M(elapsed))
 		}
 	}
@@ -214,13 +215,13 @@ func (c *componentMetrics) StateInvoked(ctx context.Context, component, operatio
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success, operationKey, operation),
+			diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
 			c.stateCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success, operationKey, operation),
+				diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
 				c.stateLatency.M(elapsed))
 		}
 	}
@@ -231,13 +232,13 @@ func (c *componentMetrics) ConfigurationInvoked(ctx context.Context, component, 
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success, operationKey, operation),
+			diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
 			c.configurationCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success, operationKey, operation),
+				diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
 				c.configurationLatency.M(elapsed))
 		}
 	}
@@ -248,13 +249,13 @@ func (c *componentMetrics) SecretInvoked(ctx context.Context, component, operati
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success, operationKey, operation),
+			diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
 			c.secretCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diag_utils.WithTags(appIDKey, c.appID, namespaceKey, c.namespace, componentKey, component, successKey, success, operationKey, operation),
+				diag_utils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, fmt.Sprintf("%v", success)),
 				c.secretLatency.M(elapsed))
 		}
 	}
