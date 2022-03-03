@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	componentName = "test"
+	componentName  = "test"
+	componentLabel = "component"
 )
 
 func componentsMetrics() *componentMetrics {
@@ -30,7 +31,7 @@ func TestPubSub(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -47,7 +48,7 @@ func TestPubSub(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -65,7 +66,7 @@ func TestPubSub(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -82,7 +83,7 @@ func TestPubSub(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -102,7 +103,7 @@ func TestBindings(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -119,7 +120,7 @@ func TestBindings(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -137,7 +138,7 @@ func TestBindings(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -154,7 +155,7 @@ func TestBindings(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -174,7 +175,7 @@ func TestState(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -191,7 +192,7 @@ func TestState(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -211,7 +212,7 @@ func TestConfiguration(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -228,7 +229,7 @@ func TestConfiguration(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -248,7 +249,7 @@ func TestSecrets(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}
@@ -265,7 +266,7 @@ func TestSecrets(t *testing.T) {
 
 		recorded := false
 		for _, t := range views[0].Tags {
-			if t.Key.Name() == "component" && t.Value == componentName {
+			if t.Key.Name() == componentLabel && t.Value == componentName {
 				recorded = true
 			}
 		}

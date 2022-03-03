@@ -140,7 +140,7 @@ func (c *componentMetrics) Init(appID, namespace string) error {
 	)
 }
 
-// PubsubIngressEvent records the metrics for a pub/sub ingress event
+// PubsubIngressEvent records the metrics for a pub/sub ingress event.
 func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, processStatus, topic string, elapsed float64) {
 	if c.enabled {
 		stats.RecordWithTags(
@@ -157,7 +157,7 @@ func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, pr
 	}
 }
 
-// PubsubEgressEvent records the metris for a pub/sub egress event
+// PubsubEgressEvent records the metris for a pub/sub egress event.
 func (c *componentMetrics) PubsubEgressEvent(ctx context.Context, component, topic string, success bool, elapsed float64) {
 	if c.enabled {
 		stats.RecordWithTags(
@@ -174,7 +174,7 @@ func (c *componentMetrics) PubsubEgressEvent(ctx context.Context, component, top
 	}
 }
 
-// InputBindingEvent records the metrics for an input binding event
+// InputBindingEvent records the metrics for an input binding event.
 func (c *componentMetrics) InputBindingEvent(ctx context.Context, component string, success bool, elapsed float64) {
 	if c.enabled {
 		stats.RecordWithTags(
@@ -191,7 +191,7 @@ func (c *componentMetrics) InputBindingEvent(ctx context.Context, component stri
 	}
 }
 
-// OutputBindingEvent records the metrics for an output binding event
+// OutputBindingEvent records the metrics for an output binding event.
 func (c *componentMetrics) OutputBindingEvent(ctx context.Context, component, operation string, success bool, elapsed float64) {
 	if c.enabled {
 		stats.RecordWithTags(
@@ -208,7 +208,7 @@ func (c *componentMetrics) OutputBindingEvent(ctx context.Context, component, op
 	}
 }
 
-// StateInvoked records the metrics for a state event
+// StateInvoked records the metrics for a state event.
 func (c *componentMetrics) StateInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
 	if c.enabled {
 		stats.RecordWithTags(
@@ -225,7 +225,7 @@ func (c *componentMetrics) StateInvoked(ctx context.Context, component, operatio
 	}
 }
 
-// ConfigurationInvoked records the metrics for a configuration event
+// ConfigurationInvoked records the metrics for a configuration event.
 func (c *componentMetrics) ConfigurationInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
 	if c.enabled {
 		stats.RecordWithTags(
@@ -242,7 +242,7 @@ func (c *componentMetrics) ConfigurationInvoked(ctx context.Context, component, 
 	}
 }
 
-// SecretInvoked records the metrics for a secret event
+// SecretInvoked records the metrics for a secret event.
 func (c *componentMetrics) SecretInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
 	if c.enabled {
 		stats.RecordWithTags(
