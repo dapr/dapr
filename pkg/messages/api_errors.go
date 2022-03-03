@@ -7,7 +7,7 @@ const (
 	ErrMalformedRequestData = "can't serialize request data field: %s"
 
 	// State.
-	ErrStateStoresNotConfigured = "the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: \"true\" in your state store component file?"
+	ErrStateStoresNotConfigured = "state store is not configured"
 	ErrStateStoreNotFound       = "state store %s is not found"
 	ErrStateGet                 = "fail to get %s from state store %s: %s"
 	ErrStateDelete              = "failed deleting state with key %s: %s"
@@ -38,7 +38,7 @@ const (
 	ErrChannelInvoke         = "error invoking app channel: %s"
 
 	// Actor.
-	ErrActorRuntimeNotFound      = "actor runtime is not configured"
+	ErrActorRuntimeNotFound      = "the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: \"true\" in your state store component file?"
 	ErrActorInstanceMissing      = "actor instance is missing"
 	ErrActorInvoke               = "error invoke actor method: %s"
 	ErrActorReminderCreate       = "error creating actor reminder: %s"
