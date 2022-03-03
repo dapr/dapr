@@ -31,6 +31,8 @@ type OperatorClient interface {
 	GetResiliency(ctx context.Context, in *GetResiliencyRequest, opts ...grpc.CallOption) (*GetResiliencyResponse, error)
 	// Returns a list of resiliency configurations
 	ListResiliency(ctx context.Context, in *ListResiliencyRequest, opts ...grpc.CallOption) (*ListResiliencyResponse, error)
+	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
+	ListSubscriptionsV2(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
 }
 
 type operatorClient struct {
@@ -118,6 +120,15 @@ func (c *operatorClient) ListResiliency(ctx context.Context, in *ListResiliencyR
 	return out, nil
 }
 
+func (c *operatorClient) ListSubscriptionsV2(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
+	out := new(ListSubscriptionsResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListSubscriptionsV2", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OperatorServer is the server API for Operator service.
 // All implementations should embed UnimplementedOperatorServer
 // for forward compatibility
@@ -134,6 +145,8 @@ type OperatorServer interface {
 	GetResiliency(context.Context, *GetResiliencyRequest) (*GetResiliencyResponse, error)
 	// Returns a list of resiliency configurations
 	ListResiliency(context.Context, *ListResiliencyRequest) (*ListResiliencyResponse, error)
+	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
+	ListSubscriptionsV2(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
 }
 
 // UnimplementedOperatorServer should be embedded to have forward compatible implementations.
@@ -157,6 +170,9 @@ func (UnimplementedOperatorServer) GetResiliency(context.Context, *GetResiliency
 }
 func (UnimplementedOperatorServer) ListResiliency(context.Context, *ListResiliencyRequest) (*ListResiliencyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListResiliency not implemented")
+}
+func (UnimplementedOperatorServer) ListSubscriptionsV2(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptionsV2 not implemented")
 }
 
 // UnsafeOperatorServer may be embedded to opt out of forward compatibility for this service.
@@ -281,6 +297,24 @@ func _Operator_ListResiliency_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Operator_ListSubscriptionsV2_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSubscriptionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OperatorServer).ListSubscriptionsV2(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.operator.v1.Operator/ListSubscriptionsV2",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OperatorServer).ListSubscriptionsV2(ctx, req.(*ListSubscriptionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Operator_ServiceDesc is the grpc.ServiceDesc for Operator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -307,6 +341,10 @@ var Operator_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListResiliency",
 			Handler:    _Operator_ListResiliency_Handler,
+		},
+		{
+			MethodName: "ListSubscriptionsV2",
+			Handler:    _Operator_ListSubscriptionsV2_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

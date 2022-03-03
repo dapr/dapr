@@ -313,7 +313,7 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
 	for _, m := range e.Methods {
 		pathIncludesParameters := parameterFinder.MatchString(path)
-		if pathIncludesParameters {
+		if pathIncludesParameters && !e.KeepParamUnescape {
 			router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
 		} else {
 			router.Handle(m, path, e.Handler)
