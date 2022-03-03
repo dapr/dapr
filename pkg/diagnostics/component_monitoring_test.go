@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	componentName  = "test"
-	componentLabel = "component"
+	componentName = "test"
 )
 
 func componentsMetrics() *componentMetrics {
