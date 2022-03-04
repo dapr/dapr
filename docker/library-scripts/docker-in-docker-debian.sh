@@ -170,10 +170,10 @@ if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
 	# move the init process (PID 1) from the root group to the /init group,
 	# otherwise writing subtree_control fails with EBUSY.
 	sudoIf mkdir -p /sys/fs/cgroup/init
-	sudoIf echo 1 > /sys/fs/cgroup/init/cgroup.procs
+	sudoIf sh -c "xargs -rn1 < /sys/fs/cgroup/cgroup.procs > /sys/fs/cgroup/init/cgroup.procs || : "
 	# enable controllers
-	sudoIf sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers \
-		> /sys/fs/cgroup/cgroup.subtree_control
+	sudoIf sh -c "sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers \
+		> /sys/fs/cgroup/cgroup.subtree_control"
 fi
 ## Dind wrapper over.
 
