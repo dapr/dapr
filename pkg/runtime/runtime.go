@@ -1480,7 +1480,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	elapsed := diag.ElapsedSince(start)
 
 	if err != nil {
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, elapsed)
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 		return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
 	}
 
@@ -1501,7 +1501,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		err := a.json.Unmarshal(body, &appResponse)
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, elapsed)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 			// Return no error so message does not get reprocessed.
 			return nil // nolint:nilerr
 		}
@@ -1511,18 +1511,18 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 			// Consider empty status field as success
 			fallthrough
 		case pubsub.Success:
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Success), msg.topic, elapsed)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
 			return nil
 		case pubsub.Retry:
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, elapsed)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 			return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 		case pubsub.Drop:
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Drop), msg.topic, elapsed)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 			return nil
 		}
 		// Consider unknown status field as error and retry
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, elapsed)
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
 	}
 
@@ -1531,13 +1531,13 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
 		// https://cloud.google.com/apis/design/errors#handling_errors
 		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Drop), msg.topic, elapsed)
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 		return nil
 	}
 
 	// Every error from now on is a retriable error.
 	log.Warnf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
-	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, elapsed)
+	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 	return errors.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
 }
 
@@ -1560,14 +1560,14 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 			decoded, decodeErr := base64.StdEncoding.DecodeString(dataAsString)
 			if decodeErr != nil {
 				log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
 
 				return decodeErr
 			}
 
 			envelope.Data = decoded
 		} else {
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
 			return ErrUnexpectedEnvelopeData
 		}
 	} else if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
@@ -1580,7 +1580,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 			case []byte:
 				envelope.Data = v
 			default:
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
 				return ErrUnexpectedEnvelopeData
 			}
 		} else if contenttype.IsJSONContentType(envelope.DataContentType) {
@@ -1622,14 +1622,14 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
 			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField], err)
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Drop), msg.topic, elapsed)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 
 			return nil
 		}
 
 		err = errors.Errorf("error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField], err)
 		log.Debug(err)
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, elapsed)
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 
 		// on error from application, return error for redelivery of event
 		return err
@@ -1639,20 +1639,20 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	case runtimev1pb.TopicEventResponse_SUCCESS:
 		// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 		// success from protobuf definition
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Success), msg.topic, elapsed)
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
 		return nil
 	case runtimev1pb.TopicEventResponse_RETRY:
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, elapsed)
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 		return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 	case runtimev1pb.TopicEventResponse_DROP:
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Drop), msg.topic, elapsed)
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 
 		return nil
 	}
 
 	// Consider unknown status field as error and retry
-	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, string(pubsub.Retry), msg.topic, elapsed)
+	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 	return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], res.GetStatus())
 }
 
