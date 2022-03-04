@@ -601,7 +601,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				return nil
 			}
 
-			policy := a.resiliency.RoutePolicy(ctx, routePath)
+			policy := a.resiliency.ComponentPolicy(ctx, pubsubName)
 			return policy(func(ctx context.Context) error {
 				return publishFunc(ctx, &pubsubSubscribedMessage{
 					cloudEvent: cloudEvent,
@@ -890,7 +890,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		start := time.Now()
 
 		var resp *runtimev1pb.BindingEventResponse
-		policy := a.resiliency.RoutePolicy(ctx, path)
+		policy := a.resiliency.ComponentPolicy(ctx, bindingName)
 		err := policy(func(ctx context.Context) (err error) {
 			resp, err = client.OnBindingEvent(ctx, req)
 			return err
@@ -949,7 +949,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req.WithMetadata(reqMetadata)
 
 		var resp *invokev1.InvokeMethodResponse
-		policy := a.resiliency.RoutePolicy(ctx, path)
+		policy := a.resiliency.ComponentPolicy(ctx, bindingName)
 		err := policy(func(ctx context.Context) (err error) {
 			resp, err = a.appChannel.InvokeMethod(ctx, req)
 			return err

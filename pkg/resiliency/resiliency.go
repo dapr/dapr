@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -61,8 +60,6 @@ type (
 	// Provider is the interface for returning a `Runner` for the various
 	// resiliency scenarios in the runtime.
 	Provider interface {
-		// RoutePolicy returns the policy for a route.
-		RoutePolicy(ctx context.Context, name string) Runner
 		// EndpointPolicy returns the policy for a service endpoint.
 		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
 		// ActorPolicy returns the policy for an actor instance.
@@ -309,43 +306,7 @@ func (r *Resiliency) decodeBuildingBlocks(c *resiliency_v1alpha.Resiliency) (err
 		}
 	}
 
-	for name, t := range buildingBlocks.Routes {
-		name = strings.TrimPrefix(name, "/") // Ignore slash prefix.
-		r.routes[name] = PolicyNames{
-			Timeout:        t.Timeout,
-			Retry:          t.Retry,
-			CircuitBreaker: t.CircuitBreaker,
-		}
-	}
-
 	return nil
-}
-
-// RoutePolicy returns the policy for a route.
-func (r *Resiliency) RoutePolicy(ctx context.Context, name string) Runner {
-	var t time.Duration
-	var rc *retry.Config
-	var cb *breaker.CircuitBreaker
-	name = strings.TrimPrefix(name, "/") // Ignore slash prefix.
-	operationName := fmt.Sprintf("route[%s]", name)
-	if r == nil {
-		return Policy(ctx, r.log, operationName, t, rc, cb)
-	}
-	policyNames, ok := r.routes[name]
-	if ok {
-		r.log.Infof("Found route policy: %+v", policyNames)
-		if policyNames.Timeout != "" {
-			t = r.timeouts[policyNames.Timeout]
-		}
-		if policyNames.Retry != "" {
-			rc = r.retries[policyNames.Retry]
-		}
-		if policyNames.CircuitBreaker != "" {
-			cb = r.circuitBreakers[policyNames.CircuitBreaker]
-		}
-	}
-
-	return Policy(ctx, r.log, operationName, t, rc, cb)
 }
 
 // EndpointPolicy returns the policy for a service endpoint.

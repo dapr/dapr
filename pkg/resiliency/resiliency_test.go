@@ -84,13 +84,6 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 						CircuitBreaker: "general",
 					},
 				},
-				Routes: map[string]resiliency_v1alpha.PolicyNames{
-					"dsstatus.v3": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
-					},
-				},
 			},
 		},
 	}
@@ -143,13 +136,6 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 						CircuitBreaker: "general",
 					},
 				},
-				Routes: map[string]resiliency_v1alpha.PolicyNames{
-					"dsstatus.v3": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
-					},
-				},
 			},
 		},
 		Scopes: []string{"app1", "app2"},
@@ -179,12 +165,6 @@ func TestPoliciesForBuildingBlocks(t *testing.T) {
 		name   string
 		create func(r *Resiliency) Runner
 	}{
-		{
-			name: "route",
-			create: func(r *Resiliency) Runner {
-				return r.RoutePolicy(ctx, "dsstatus.v3")
-			},
-		},
 		{
 			name: "component",
 			create: func(r *Resiliency) Runner {

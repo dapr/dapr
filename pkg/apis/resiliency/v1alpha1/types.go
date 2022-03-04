@@ -60,7 +60,6 @@ type BuildingBlocks struct {
 	Services   map[string]EndpointPolicyNames `json:"services,omitempty" yaml:"services,omitempty"`
 	Actors     map[string]ActorPolicyNames    `json:"actors,omitempty" yaml:"actors,omitempty"`
 	Components map[string]PolicyNames         `json:"components,omitempty" yaml:"components,omitempty"`
-	Routes     map[string]PolicyNames         `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
 type PolicyNames struct {
