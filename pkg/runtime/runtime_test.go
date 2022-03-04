@@ -612,12 +612,6 @@ func TestInitState(t *testing.T) {
 		// setup
 		initMockStateStoreForRuntime(rt, nil)
 
-		// act
-		rt.globalConfig.Spec.Features = append(rt.globalConfig.Spec.Features, config.FeatureSpec{
-			Name:    config.StateEncryption,
-			Enabled: true,
-		})
-
 		rt.secretStores["mockSecretStore"] = &mockSecretStore{}
 
 		err := rt.initState(mockStateComponent)
