@@ -91,12 +91,13 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 				log.Warn("could not determine Dapr root certificate expiration time")
 				continue
 			}
-			if cert.NotAfter.Before(time.Now()) {
+			if cert.NotAfter.Before(time.Now().UTC()) {
 				log.Warn("Dapr root certificate expiration warning: certificate has expired.")
 				continue
 			}
-			if (cert.NotAfter.Add(-30 * 24 * time.Hour)).Before(time.Now()) {
-				log.Warnf("Dapr root certificate expiration warning: certificate expires in %s hours", time.Until(cert.NotAfter).Hours())
+			if (cert.NotAfter.Add(-30 * 24 * time.Hour)).Before(time.Now().UTC()) {
+				expiryDurationHours := int(cert.NotAfter.Sub(time.Now().UTC()).Hours())
+				log.Warnf("Dapr root certificate expiration warning: certificate expires in %s days and %s hours", expiryDurationHours/24, expiryDurationHours%24)
 			}
 		}
 	}()
