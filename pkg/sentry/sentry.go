@@ -2,6 +2,9 @@ package sentry
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -76,6 +79,27 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 	if err != nil {
 		log.Fatalf("error starting gRPC server: %s", err)
 	}
+
+	certExpiryCheckTicker := time.NewTicker(time.Hour)
+	go func() {
+		for {
+			<-certExpiryCheckTicker.C
+			caCrt := certAuth.GetCACertBundle().GetRootCertPem()
+			block, _ := pem.Decode(caCrt)
+			cert, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				log.Warn("could not determine Dapr root certificate expiration time")
+				continue
+			}
+			if cert.NotAfter.Before(time.Now()) {
+				log.Warn("Dapr root certificate expiration warning: certificate has expired.")
+				continue
+			}
+			if (cert.NotAfter.Add(-30 * 24 * time.Hour)).Before(time.Now()) {
+				log.Warnf("Dapr root certificate expiration warning: certificate expires in %s hours", time.Until(cert.NotAfter).Hours())
+			}
+		}
+	}()
 }
 
 func createValidator() (identity.Validator, error) {
