@@ -74,6 +74,7 @@ const (
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
 	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
+	daprAPILogLevel                   = "dapr.io/api-log-level"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -111,6 +112,7 @@ const (
 	defaultMtlsEnabled                = true
 	trueString                        = "true"
 	defaultDaprHTTPStreamRequestBody  = false
+	defaultAPILogLevel                = ""
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -418,8 +420,8 @@ func getInt32Annotation(annotations map[string]string, key string) (int32, error
 	return int32(value), nil
 }
 
-func getProbeHTTPHandler(port int32, pathElements ...string) corev1.Handler {
-	return corev1.Handler{
+func getProbeHTTPHandler(port int32, pathElements ...string) corev1.ProbeHandler {
+	return corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: formatProbePath(pathElements...),
 			Port: intstr.IntOrString{IntVal: port},
@@ -490,6 +492,10 @@ func getResourceRequirements(annotations map[string]string) (*corev1.ResourceReq
 
 func isResourceDaprEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprEnabledKey, false)
+}
+
+func getAPILogLevel(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprAPILogLevel, defaultAPILogLevel)
 }
 
 func getServiceAddress(name, namespace, clusterDomain string, port int) string {
@@ -594,6 +600,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
 		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
+		"--api-log-level", getAPILogLevel(annotations),
 	}
 
 	debugEnabled := getEnableDebug(annotations)
@@ -647,14 +654,14 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		},
 		Args: args,
 		ReadinessProbe: &corev1.Probe{
-			Handler:             httpHandler,
+			ProbeHandler:        httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
 			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprReadinessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprReadinessProbePeriodKey, defaultHealthzProbePeriodSeconds),
 			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprReadinessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
 		LivenessProbe: &corev1.Probe{
-			Handler:             httpHandler,
+			ProbeHandler:        httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprLivenessProbeDelayKey, defaultHealthzProbeDelaySeconds),
 			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprLivenessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprLivenessProbePeriodKey, defaultHealthzProbePeriodSeconds),

@@ -1,0 +1,3 @@
+secretReader:
+  enabled: true
+  namespace: default
