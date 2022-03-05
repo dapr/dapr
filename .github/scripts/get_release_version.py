@@ -24,7 +24,6 @@ tagRefPrefix = "refs/tags/v"
 
 with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
 
-    print(sys.argv)
     if "schedule" in sys.argv:
         dateTag = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         githubEnv.write("REL_VERSION=nightly-{}\n".format(dateTag))

@@ -194,7 +194,7 @@ jobs:
           sudo apt install docker-ce
           docker -v
       - name: Parse release version and set REL_VERSION
-        run: run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Update Helm chart files for release version ${{ env.REL_VERSION }}
         run: bash ./.github/scripts/set_helm_dapr_version.sh
       - name: Generate helm chart manifest
