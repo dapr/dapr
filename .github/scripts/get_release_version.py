@@ -17,12 +17,18 @@
 
 import os
 import sys
+import datetime
 
 gitRef = os.getenv("GITHUB_REF")
 tagRefPrefix = "refs/tags/v"
 nightlyTagPrefix = "refs/tags/nightly"
 
 with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
+    if "schedule" in sys.argv:
+        dateTag = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        githubEnv.write("REL_VERSION=nightly-{}\n".format(dateTag))
+        print ("Nightly release build nightly-{}".format(dateTag))
+        sys.exit(0)
 
     if gitRef is None or not gitRef.startswith((tagRefPrefix, nightlyTagPrefix)):
         githubEnv.write("REL_VERSION=edge\n")
