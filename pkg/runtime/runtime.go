@@ -558,6 +558,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			rawPayload, err := contrib_metadata.IsRawPayload(routeMetadata)
 			if err != nil {
 				log.Errorf("error deserializing pubsub metadata: %s", err)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 				return err
 			}
 
@@ -568,29 +569,34 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				data, err = a.json.Marshal(cloudEvent)
 				if err != nil {
 					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 					return err
 				}
 			} else {
 				err = a.json.Unmarshal(msg.Data, &cloudEvent)
 				if err != nil {
 					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 					return err
 				}
 			}
 
 			if pubsub.HasExpired(cloudEvent) {
 				log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 
 				return nil
 			}
 
 			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
 			if err != nil {
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 				return err
 			}
 			if !shouldProcess {
 				// The event does not match any route specified so ignore it.
 				log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msg.Topic)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 				return nil
 			}
 
@@ -1602,11 +1608,11 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
-	start := time.Now()
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-	elapsed := diag.ElapsedSince(start)
 
+	start := time.Now()
 	res, err := clientV1.OnTopicEvent(ctx, envelope)
+	elapsed := diag.ElapsedSince(start)
 
 	if span != nil {
 		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
