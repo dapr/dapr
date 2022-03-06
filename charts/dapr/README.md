@@ -76,7 +76,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Docker image registry                                                   | `docker.io/daprio`      |
-| `global.tag`                              | Docker image version tag                                                | `1.5.1`            |
+| `global.tag`                              | Docker image version tag                                                | latest release          |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
 | `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry            | `""`                   |
@@ -126,7 +126,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.replicationFactor`        | Number of consistent hashing virtual node | `100`   |
 | `dapr_placement.logLevel`                 | Service Log level                                                       | `info`                  |
 | `dapr_placement.image.name`               | Service docker image name (`global.registry/dapr_placement.image.name`) | `dapr`   |
-| `dapr_placement.cluster.forceInMemoryLog` | Use in-memeory log store and disable volume attach when `global.ha.enabled` is true | `false`   |
+| `dapr_placement.cluster.forceInMemoryLog` | Use in-memory log store and disable volume attach when `global.ha.enabled` is true | `false`   |
 | `dapr_placement.cluster.logStorePath`     | Mount path for persistent volume for log store in unix-like system when `global.ha.enabled` is true | `/var/run/dapr/raft-log`   |
 | `dapr_placement.cluster.logStoreWinPath`  | Mount path for persistent volume for log store in windows when `global.ha.enabled` is true | `C:\\raft-log`   |
 | `dapr_placement.volumeclaims.storageSize` | Attached volume size | `1Gi`   |
@@ -134,6 +134,12 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. Does not apply unless `forceInMemoryLog` is set to `true`. You may have to set this to `false` when running in Minikube | `false` |
 | `dapr_placement.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_placement.debug.enabled`            | Boolean value for enabling debug mode | `{}` |
+
+### Dapr RBAC options:
+| Parameter                                 | Description                                                             | Default                 |
+|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
+| `dapr_rbac.secretReader.enabled`          | Deploys a default secret reader Role and RoleBinding                    | `true`                  |
+| `dapr_rbac.secretReader.namespace`        | Namespace for the default secret reader                                 | `default`               |
 
 ### Dapr Sentry options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -162,7 +168,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.resources`         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
 | `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |
-
+| `dapr_sidecar_injector.hostNetwork` | Enable hostNetwork mode. This is helpful when working with overlay networks such as Calico CNI and admission webhooks fail | `false` |
+| `dapr_sidecar_injector.healthzPort` | The port used for health checks. Helpful in combination with hostNetwork to avoid port collisions | 8080 |
 
 
 

@@ -29,12 +29,13 @@ import (
 
 	// Secret stores.
 	"github.com/dapr/components-contrib/secretstores"
+	alicloud_paramstore "github.com/dapr/components-contrib/secretstores/alicloud/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/parameterstore"
 	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
-	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
+	secretstore_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstore_env "github.com/dapr/components-contrib/secretstores/local/env"
 	secretstore_file "github.com/dapr/components-contrib/secretstores/local/file"
 
@@ -52,9 +53,12 @@ import (
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
 	"github.com/dapr/components-contrib/state/hazelcast"
+	state_jetstream "github.com/dapr/components-contrib/state/jetstream"
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
 	state_mysql "github.com/dapr/components-contrib/state/mysql"
+	state_oci_objectstorage "github.com/dapr/components-contrib/state/oci/objectstorage"
+	state_oracledatabase "github.com/dapr/components-contrib/state/oracledatabase"
 	"github.com/dapr/components-contrib/state/postgresql"
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/rethinkdb"
@@ -78,7 +82,6 @@ import (
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
-
 	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
@@ -169,7 +172,7 @@ func main() {
 	err = rt.Run(
 		runtime.WithSecretStores(
 			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
-				return sercetstores_kubernetes.NewKubernetesSecretStore(logContrib)
+				return secretstore_kubernetes.NewKubernetesSecretStore(logContrib)
 			}),
 			secretstores_loader.New("azure.keyvault", func() secretstores.SecretStore {
 				return keyvault.NewAzureKeyvaultSecretStore(logContrib)
@@ -191,6 +194,9 @@ func main() {
 			}),
 			secretstores_loader.New("local.env", func() secretstores.SecretStore {
 				return secretstore_env.NewEnvSecretStore(logContrib)
+			}),
+			secretstores_loader.New("alicloud.parameterstore", func() secretstores.SecretStore {
+				return alicloud_paramstore.NewParameterStore(logContrib)
 			}),
 		),
 		runtime.WithStates(
@@ -245,6 +251,15 @@ func main() {
 			state_loader.New("aws.dynamodb", state_dynamodb.NewDynamoDBStateStore),
 			state_loader.New("mysql", func() state.Store {
 				return state_mysql.NewMySQLStateStore(logContrib)
+			}),
+			state_loader.New("oci.objectstorage", func() state.Store {
+				return state_oci_objectstorage.NewOCIObjectStorageStore(logContrib)
+			}),
+			state_loader.New("jetstream", func() state.Store {
+				return state_jetstream.NewJetstreamStateStore(logContrib)
+			}),
+			state_loader.New("oracledatabase", func() state.Store {
+				return state_oracledatabase.NewOracleDatabaseStateStore(logContrib)
 			}),
 		),
 		runtime.WithConfigurations(

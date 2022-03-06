@@ -69,6 +69,7 @@ var (
 	daprHTTPReadBufferSize      = flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in KB to handle sending multi-KB headers. By default 4 KB.")
 	daprHTTPStreamRequestBody   = flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
 	daprGracefulShutdownSeconds = flag.Int("dapr-graceful-shutdown-seconds", -1, "Graceful shutdown time in seconds.")
+	apiLogLevel                 = flag.String("api-log-level", "", "API log type for API calls")
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
@@ -206,6 +207,7 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig *global_config.Configuration
 		configErr    error
 		namespace    string
+		podName      string
 	)
 
 	if *daprConfig != "" {
@@ -221,7 +223,8 @@ func FromFlags() (*DaprRuntime, error) {
 			}
 			defer conn.Close()
 			namespace = os.Getenv("NAMESPACE")
-			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*daprConfig, namespace, client)
+			podName = os.Getenv("POD_NAME")
+			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*daprConfig, namespace, podName, client)
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*daprConfig)
 		}
@@ -252,7 +255,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *daprConfig, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration, *apiLogLevel)
 	runtimeConfig.CertChain = certChain
 
 	// set environment variables
