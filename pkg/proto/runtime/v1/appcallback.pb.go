@@ -19,14 +19,12 @@
 package runtime
 
 import (
-	reflect "reflect"
-	sync "sync"
-
+	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	reflect "reflect"
+	sync "sync"
 )
 
 const (
