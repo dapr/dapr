@@ -15,7 +15,6 @@ package injector
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +31,7 @@ import (
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const (

@@ -14,10 +14,11 @@ limitations under the License.
 package pubsub
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 func TestNewCloudEvent(t *testing.T) {

@@ -15,7 +15,6 @@ package injector
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,6 +31,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/dapr/dapr/utils"
 )
 

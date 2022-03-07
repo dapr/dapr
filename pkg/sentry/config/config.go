@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"os"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	dapr_config "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/dapr/dapr/utils"
 )
 

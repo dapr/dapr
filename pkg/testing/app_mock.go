@@ -16,7 +16,6 @@ package testing
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -25,6 +24,8 @@ import (
 	"os/signal"
 	"strconv"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 // KeyValState is a key value struct for state.

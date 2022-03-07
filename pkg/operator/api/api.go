@@ -15,7 +15,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
@@ -32,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/dapr/kit/logger"
 
 	corev1 "k8s.io/api/core/v1"
