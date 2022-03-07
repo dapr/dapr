@@ -349,6 +349,7 @@ func TestAPIToken(t *testing.T) {
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: mockDirectMessaging,
+		resiliency:      resiliency.New(nil),
 	}
 
 	t.Run("valid token", func(t *testing.T) {
@@ -489,6 +490,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: mockDirectMessaging,
+		resiliency:      resiliency.New(nil),
 	}
 
 	httpResponseTests := []struct {
@@ -592,6 +594,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: mockDirectMessaging,
+		resiliency:      resiliency.New(nil),
 	}
 
 	t.Run("handle grpc response code", func(t *testing.T) {

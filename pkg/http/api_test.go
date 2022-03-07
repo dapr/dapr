@@ -447,6 +447,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		json:            jsoniter.ConfigFastest,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
@@ -764,6 +765,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
 
@@ -1780,6 +1782,7 @@ func TestAPIToken(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithAPIToken(testAPI.constructDirectMessagingEndpoints())
 
@@ -1922,6 +1925,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
 
@@ -2011,6 +2015,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
@@ -2077,6 +2082,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 

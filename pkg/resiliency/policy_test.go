@@ -75,14 +75,14 @@ func TestPolicyTimeout(t *testing.T) {
 	}{
 		{
 			name:      "Timeout expires",
-			sleepTime: time.Millisecond * 20,
+			sleepTime: time.Millisecond * 100,
 			timeout:   time.Millisecond * 10,
 			expected:  false,
 		},
 		{
 			name:      "Timeout OK",
-			sleepTime: time.Millisecond * 5,
-			timeout:   time.Millisecond * 50,
+			sleepTime: time.Millisecond * 10,
+			timeout:   time.Millisecond * 100,
 			expected:  true,
 		},
 	}

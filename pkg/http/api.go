@@ -967,35 +967,55 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Save headers to internal metadata
 	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
 
-	resp, err := a.directMessaging.Invoke(reqCtx, targetID, req)
-	// err does not represent user application response
-	if err != nil {
-		// Allowlists policies that are applied on the callee side can return a Permission Denied error.
-		// For everything else, treat it as a gRPC transport error
-		statusCode := fasthttp.StatusInternalServerError
-		if status.Code(err) == codes.PermissionDenied {
-			statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
+	policy := a.resiliency.EndpointPolicy(reqCtx, targetID, fmt.Sprintf("%s:%s", targetID, invokeMethodName))
+	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
+	var resp *invokev1.InvokeMethodResponse
+	var body []byte
+	var statusCode int
+	var msg ErrorResponse
+	errorOccurred := false
+	policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = a.directMessaging.Invoke(ctx, targetID, req)
+
+		if rErr != nil {
+			// Allowlists policies that are applied on the callee side can return a Permission Denied error.
+			// For everything else, treat it as a gRPC transport error
+			errorOccurred = true
+			statusCode = fasthttp.StatusInternalServerError
+			if status.Code(rErr) == codes.PermissionDenied {
+				statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
+			}
+			msg = NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr))
+			return rErr
 		}
-		msg := NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, err))
+
+		errorOccurred = false
+		invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
+		var contentType string
+		contentType, body = resp.RawData()
+		reqCtx.Response.Header.SetContentType(contentType)
+
+		// Construct response
+		statusCode = int(resp.Status().Code)
+		if !resp.IsHTTPResponse() {
+			statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
+			if statusCode != fasthttp.StatusOK {
+				if body, rErr = invokev1.ProtobufToJSON(resp.Status()); rErr != nil {
+					errorOccurred = true
+					msg = NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error())
+					statusCode = fasthttp.StatusInternalServerError
+					return rErr
+				}
+			}
+		} else if statusCode != fasthttp.StatusOK {
+			return errors.Errorf("Received non-successful status code: %d", statusCode)
+		}
+		return nil
+	})
+
+	if errorOccurred {
 		respond(reqCtx, withError(statusCode, msg))
 		return
-	}
-
-	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
-	contentType, body := resp.RawData()
-	reqCtx.Response.Header.SetContentType(contentType)
-
-	// Construct response
-	statusCode := int(resp.Status().Code)
-	if !resp.IsHTTPResponse() {
-		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
-		if statusCode != fasthttp.StatusOK {
-			if body, err = invokev1.ProtobufToJSON(resp.Status()); err != nil {
-				msg := NewErrorResponse("ERR_MALFORMED_RESPONSE", err.Error())
-				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-				return
-			}
-		}
 	}
 	respond(reqCtx, with(statusCode, body))
 }

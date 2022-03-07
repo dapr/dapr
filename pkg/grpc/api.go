@@ -339,31 +339,45 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, err)
-		return nil, err
-	}
+	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
+	var resp *invokev1.InvokeMethodResponse
+	requestErr := false
+	respError := policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = a.directMessaging.Invoke(ctx, in.Id, req)
 
-	headerMD := invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
-
-	var respError error
-	if resp.IsHTTPResponse() {
-		errorMessage := []byte("")
-		if resp != nil {
-			_, errorMessage = resp.RawData()
+		if rErr != nil {
+			requestErr = true
+			rErr = status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
+			return rErr
 		}
-		respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
-		// Populate http status code to header
-		headerMD.Set(daprHTTPStatusHeader, strconv.Itoa(int(resp.Status().Code)))
-	} else {
-		respError = invokev1.ErrorFromInternalStatus(resp.Status())
-		// ignore trailer if appchannel uses HTTP
-		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Trailers(), false))
+
+		headerMD := invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
+
+		// If the status is OK, respError will be nil.
+		var respError error
+		if resp.IsHTTPResponse() {
+			errorMessage := []byte("")
+			if resp != nil {
+				_, errorMessage = resp.RawData()
+			}
+			respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
+			// Populate http status code to header
+			headerMD.Set(daprHTTPStatusHeader, strconv.Itoa(int(resp.Status().Code)))
+		} else {
+			respError = invokev1.ErrorFromInternalStatus(resp.Status())
+			// ignore trailer if appchannel uses HTTP
+			grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Trailers(), false))
+		}
+
+		grpc.SetHeader(ctx, headerMD)
+
+		return respError
+	})
+
+	// In this case, there was an error with the actual request.
+	if requestErr {
+		return nil, respError
 	}
-
-	grpc.SetHeader(ctx, headerMD)
-
 	return resp.Message(), respError
 }
 
