@@ -15,7 +15,7 @@ package grpc
 
 import (
 	"context"
-	"encoding/json"
+
 	"fmt"
 	"io"
 	"net"
@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/json"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"

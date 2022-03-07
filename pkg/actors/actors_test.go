@@ -15,7 +15,6 @@ package actors
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,7 +23,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -35,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/json"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 )
@@ -1479,7 +1478,7 @@ func TestGetState(t *testing.T) {
 	fakeData := strconv.Quote("fakeData")
 
 	var val interface{}
-	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
+	json.Unmarshal([]byte(fakeData), &val)
 
 	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
 
@@ -1516,7 +1515,7 @@ func TestDeleteState(t *testing.T) {
 	fakeData := strconv.Quote("fakeData")
 
 	var val interface{}
-	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
+	json.Unmarshal([]byte(fakeData), &val)
 
 	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
 

@@ -15,12 +15,12 @@ package config
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/dapr/dapr/pkg/json"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"

@@ -15,7 +15,6 @@ package actors
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	nethttp "net/http"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
@@ -38,6 +36,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/json"
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
@@ -1406,7 +1405,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 						return
 					}
 
-					r.Data = jsoniter.RawMessage(resp.Data)
+					r.Data = json.RawMessage(resp.Data)
 					r.ETag = resp.ETag
 					r.Metadata = resp.Metadata
 				}
