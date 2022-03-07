@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/dapr/dapr v0.0.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2 // indirect
 	golang.org/x/sys v0.0.0-20220111092808-5a964db01320 // indirect
@@ -15,3 +16,5 @@ require (
 	google.golang.org/genproto v0.0.0-20210831024726-fe130286e0e2 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 )
+
+replace github.com/dapr/dapr v0.0.0 => ../../../
