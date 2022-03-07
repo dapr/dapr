@@ -3,7 +3,6 @@ module app
 go 1.17
 
 require (
-	github.com/dapr/dapr v1.6.0
 	google.golang.org/grpc v1.40.0
 	google.golang.org/grpc/examples v0.0.0-20210610163306-6351a55c3895
 )
