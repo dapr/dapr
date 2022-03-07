@@ -14,13 +14,14 @@ limitations under the License.
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"sync"
 
 	"github.com/gorilla/mux"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const appPort = 3000

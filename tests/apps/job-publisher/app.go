@@ -15,12 +15,13 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const (

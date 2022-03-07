@@ -15,7 +15,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -29,6 +28,8 @@ import (
 	actor_rt "actorload/pkg/actor/runtime"
 
 	"github.com/go-chi/chi"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 type ActorActivationHandler func(actorType, actorID string) error

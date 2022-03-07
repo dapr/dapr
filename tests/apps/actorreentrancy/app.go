@@ -15,7 +15,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -28,6 +27,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const (

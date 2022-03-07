@@ -18,8 +18,8 @@ package serviceinvocation_tests
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"os"
 	"strings"
 	"testing"

@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +27,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	guuid "github.com/google/uuid"
 	"github.com/gorilla/mux"

@@ -18,7 +18,6 @@ package utils
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -26,6 +25,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	guuid "github.com/google/uuid"
 

@@ -15,7 +15,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +27,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const (

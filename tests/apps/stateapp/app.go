@@ -16,7 +16,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -26,6 +25,8 @@ import (
 	"os"
 	"path"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/gorilla/mux"
 	jsoniter "github.com/json-iterator/go"

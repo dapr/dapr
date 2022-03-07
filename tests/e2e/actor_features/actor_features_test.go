@@ -17,8 +17,8 @@ limitations under the License.
 package features
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/json"
 	"os"
 	"strconv"
 	"testing"

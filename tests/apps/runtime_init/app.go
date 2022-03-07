@@ -15,7 +15,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -23,6 +22,8 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/dapr/dapr/pkg/json"
 )
 
 const (
