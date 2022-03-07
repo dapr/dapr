@@ -20,12 +20,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dapr/dapr/pkg/json"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+
+	"github.com/dapr/dapr/pkg/json"
 
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )

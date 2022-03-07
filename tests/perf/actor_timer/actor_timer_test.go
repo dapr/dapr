@@ -17,16 +17,18 @@ package actor_timer_with_state_perf
 
 import (
 	"fmt"
-	"github.com/dapr/dapr/pkg/json"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/dapr/dapr/pkg/json"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/require"
 )
 
 const (

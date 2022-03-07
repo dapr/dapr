@@ -26,10 +26,11 @@ import (
 
 	"github.com/dapr/dapr/pkg/json"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 const (

@@ -19,22 +19,24 @@ package metrics_e2e
 import (
 	"context"
 	"fmt"
-	"github.com/dapr/dapr/pkg/json"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/json"
+
+	io_prometheus_client "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	io_prometheus_client "github.com/prometheus/client_model/go"
-	"github.com/prometheus/common/expfmt"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 type testCommandRequest struct {

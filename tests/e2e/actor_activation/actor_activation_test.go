@@ -17,16 +17,18 @@ package activation
 
 import (
 	"fmt"
-	"github.com/dapr/dapr/pkg/json"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/json"
+
+	guuid "github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	guuid "github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 )
 
 const (

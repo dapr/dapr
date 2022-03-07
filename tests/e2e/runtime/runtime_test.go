@@ -17,17 +17,19 @@ package runtime_e2e
 
 import (
 	"fmt"
-	"github.com/dapr/dapr/pkg/json"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/json"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/require"
 )
 
 const numHealthChecks = 60 // Number of get calls before starting tests.
