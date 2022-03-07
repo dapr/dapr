@@ -16,5 +16,3 @@ require (
 	google.golang.org/genproto v0.0.0-20210831024726-fe130286e0e2 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 )
-
-replace github.com/dapr/dapr => ../../../
