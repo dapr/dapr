@@ -142,7 +142,8 @@ func NewActors(
 	config Config,
 	certChain *dapr_credentials.CertChain,
 	tracingSpec configuration.TracingSpec,
-	features []configuration.FeatureSpec) Actors {
+	features []configuration.FeatureSpec,
+) Actors {
 	var transactionalStore state.TransactionalStore
 	if stateStore != nil {
 		features := stateStore.Features()
@@ -334,7 +335,8 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	numRetries int,
 	backoffInterval time.Duration,
 	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
-	targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	targetAddress, targetID string, req *invokev1.InvokeMethodRequest,
+) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
 		resp, err := fn(ctx, targetAddress, targetID, req)
 		if err == nil {
@@ -419,7 +421,8 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
 	targetAddress, targetID string,
-	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	req *invokev1.InvokeMethodRequest,
+) (*invokev1.InvokeMethodResponse, error) {
 	conn, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, false, false)
 	if err != nil {
 		return nil, err

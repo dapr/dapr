@@ -162,7 +162,6 @@ func performPublishHTTP(topic string, jsonValue []byte, contentType string, meta
 	log.Printf("Publishing using url %s and body '%s'", url, jsonValue)
 
 	resp, err := http.Post(url, contentType, bytes.NewBuffer(jsonValue))
-
 	if err != nil {
 		if resp != nil {
 			return resp.StatusCode, err
@@ -187,7 +186,6 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 		Metadata:        metadata,
 	}
 	_, err := grpcClient.PublishEvent(context.Background(), req)
-
 	if err != nil {
 		log.Printf("Publish failed: %s", err.Error())
 
@@ -253,14 +251,12 @@ func callMethodGRPC(appName, method string) ([]byte, error) {
 func callMethodHTTP(appName, method string) ([]byte, error) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", daprPortHTTP, appName, method)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer([]byte{})) //nolint: gosec
-
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
-
 	if err != nil {
 		return nil, err
 	}

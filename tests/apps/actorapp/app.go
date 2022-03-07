@@ -69,8 +69,10 @@ var daprConfigResponse = daprConfig{
 	drainRebalancedActors,
 }
 
-var actorLogs = []actorLogEntry{}
-var actorLogsMutex = &sync.Mutex{}
+var (
+	actorLogs      = []actorLogEntry{}
+	actorLogsMutex = &sync.Mutex{}
+)
 
 var actors sync.Map
 

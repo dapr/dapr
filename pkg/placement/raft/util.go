@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const defaultDirPermission = 0755
+const defaultDirPermission = 0o755
 
 func ensureDir(dirName string) error {
 	info, err := os.Stat(dirName)

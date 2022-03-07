@@ -80,7 +80,8 @@ func (t *TelemetryClient) RecordLoadRequestCount(actorType, actorID string, elap
 			label.String("hostname", t.hostname),
 			label.Int("code", code),
 			label.Bool("success", code == 200),
-			label.String("actor", fmt.Sprintf("%s.%s", actorType, actorID))},
+			label.String("actor", fmt.Sprintf("%s.%s", actorType, actorID)),
+		},
 		t.reqCounter.Measurement(1))
 
 	t.reqLatency.Record(
@@ -90,5 +91,4 @@ func (t *TelemetryClient) RecordLoadRequestCount(actorType, actorID string, elap
 		label.Int("code", code),
 		label.Bool("success", code == 200),
 		label.String("actor", fmt.Sprintf("%s.%s", actorType, actorID)))
-
 }

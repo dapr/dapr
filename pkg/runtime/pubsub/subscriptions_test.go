@@ -110,12 +110,12 @@ func testDeclarativeSubscriptionV2() subscriptionsapi_v2alpha1.Subscription {
 
 func writeSubscriptionToDisk(subscription interface{}, filePath string) {
 	b, _ := yaml.Marshal(subscription)
-	os.WriteFile(filePath, b, 0600)
+	os.WriteFile(filePath, b, 0o600)
 }
 
 func TestDeclarativeSubscriptionsV1(t *testing.T) {
 	dir := filepath.Join(".", "components")
-	os.Mkdir(dir, 0777)
+	os.Mkdir(dir, 0o777)
 	defer os.RemoveAll(dir)
 
 	t.Run("load single valid subscription", func(t *testing.T) {
@@ -180,7 +180,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 
 func TestDeclarativeSubscriptionsV2(t *testing.T) {
 	dir := filepath.Join(".", "componentsV2")
-	os.Mkdir(dir, 0777)
+	os.Mkdir(dir, 0o777)
 	defer os.RemoveAll(dir)
 
 	t.Run("load single valid subscription", func(t *testing.T) {

@@ -213,7 +213,7 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 
 func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
 	b, _ := yaml.Marshal(subscription)
-	os.WriteFile(filePath, b, 0600)
+	os.WriteFile(filePath, b, 0o600)
 }
 
 func TestProcessComponentsAndDependents(t *testing.T) {
@@ -221,7 +221,6 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	incorrectComponentType := components_v1alpha1.Component{
-
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
 		},
@@ -244,7 +243,6 @@ func TestDoProcessComponent(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	pubsubComponent := components_v1alpha1.Component{
-
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
 		},
@@ -1194,7 +1192,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1219,7 +1217,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1246,7 +1244,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()

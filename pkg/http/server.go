@@ -73,11 +73,10 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, met
 
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
-	handler :=
-		useAPIAuthentication(
-			s.useCors(
-				s.useComponents(
-					s.useRouter())))
+	handler := useAPIAuthentication(
+		s.useCors(
+			s.useComponents(
+				s.useRouter())))
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
