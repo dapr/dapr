@@ -151,6 +151,12 @@ jobs:
           make setup-test-env-redis
           make setup-test-env-kafka
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
+      - name: Upload Helm charts folder
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_helm_charts
+          path: ./charts/
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: make docker-deploy-k8s
