@@ -80,28 +80,23 @@ spec:
       # For state stores, policies apply to saving and retrieving state.
       # Watching, which is not implemented yet, is out of scope.
       statestore1:
-        timeout: general
-        retry: general
-        # Circuit breakers for components are scoped per component configuration/instance (e.g. redis1).
-        # When this breaker is tripped, all interaction to that component is prevented for the configured `timeout` duration.
-        circuitBreaker: general
+        output:
+          timeout: general
+          retry: general
+          # Circuit breakers for components are scoped per component configuration/instance (e.g. redis1).
+          # When this breaker is tripped, all interaction to that component is prevented for the configured `timeout` duration.
+          circuitBreaker: general
 
-      # For Pub/Sub, policies apply only to publishing.
-      # Subscribing/consuming is handled by routes.
       pubsub1:
-        retry: pubsubRetry
-        circuitBreaker: pubsubCB
+        output:
+          retry: pubsubRetry
+          circuitBreaker: pubsubCB
 
       pubsub2:
-        retry: pubsubRetry
-        circuitBreaker: pubsubCB
-    
-    # Routes represent the application's URI/paths that receive incoming events from both
-    # PubSub and Input binding components. The route values correspond to the value configured
-    # in the Subscription configuration or programmatic call. For input bindings, this is
-    # configured in the component metadata via #3566.
-    routes:
-      'dsstatus.v3':
-        timeout: general
-        retry: general
-        circuitBreaker: general
+        output:
+          retry: pubsubRetry
+          circuitBreaker: pubsubCB
+        input:
+          timeout: general
+          retry: general
+          circuitBreaker: general
