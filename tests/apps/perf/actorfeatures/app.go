@@ -14,12 +14,11 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-
-	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/gorilla/mux"
 )
