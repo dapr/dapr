@@ -103,7 +103,6 @@ type actorsRuntime struct {
 	appHealthy               *atomic.Bool
 	certChain                *dapr_credentials.CertChain
 	tracingSpec              configuration.TracingSpec
-	reentrancyFeatureEnabled bool
 	actorTypeMetadataEnabled bool
 }
 
@@ -173,7 +172,6 @@ func NewActors(
 		appHealthy:               atomic.NewBool(true),
 		certChain:                certChain,
 		tracingSpec:              tracingSpec,
-		reentrancyFeatureEnabled: configuration.IsFeatureEnabled(features, configuration.ActorReentrancy),
 		actorTypeMetadataEnabled: configuration.IsFeatureEnabled(features, configuration.ActorTypeMetadata),
 	}
 }
@@ -379,7 +377,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// Reentrancy to determine how we lock.
 	var reentrancyID *string
-	if a.reentrancyFeatureEnabled && a.config.GetReentrancyForType(act.actorType).Enabled {
+	if a.config.GetReentrancyForType(act.actorType).Enabled {
 		if headerValue, ok := req.Metadata()["Dapr-Reentrancy-Id"]; ok {
 			reentrancyID = &headerValue.GetValues()[0]
 		} else {

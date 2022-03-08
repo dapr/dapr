@@ -35,6 +35,11 @@ const (
 	actorIDRestartTemplate       = "actor-reminder-restart-test-%d"     // Template for Actor ID
 	actorIDPartitionTemplate     = "actor-reminder-partition-test-%d"   // Template for Actor ID
 	reminderName                 = "RestartTestReminder"                // Reminder name
+	actorIDGetTemplate           = "actor-reminder-get-test-%d"         // Template for Actor ID
+	reminderNameForGet           = "GetTestReminder"                    // Reminder name for getting tests
+	actorIDRenameTemplate        = "actor-reminder-rename-test-%d"      // Template for Actor ID
+	reminderNameForRename        = "RenameTestReminder"                 // Reminder name for renaming tests
+	newReminderNameForRename     = "NewRenameTestReminder"              // New reminder name for renaming tests
 	numIterations                = 7                                    // Number of times each test should run.
 	numHealthChecks              = 60                                   // Number of get calls before starting tests.
 	numActorsPerThread           = 10                                   // Number of get calls before starting tests.
@@ -60,6 +65,25 @@ type actorReminder struct {
 	Period   string `json:"period,omitempty"`
 	TTL      string `json:"ttl,omitempty"`
 	Callback string `json:"callback,omitempty"`
+}
+
+// renameReminderRequest is the request object for rename a reminder.
+type renameReminderRequest struct {
+	OldName   string
+	ActorType string
+	ActorID   string
+	NewName   string
+}
+
+type reminderResponse struct {
+	ActorID        string      `json:"actorID,omitempty"`
+	ActorType      string      `json:"actorType,omitempty"`
+	Name           string      `json:"name,omitempty"`
+	Data           interface{} `json:"data"`
+	Period         string      `json:"period"`
+	DueTime        string      `json:"dueTime"`
+	RegisteredTime string      `json:"registeredTime,omitempty"`
+	ExpirationTime string      `json:"expirationTime,omitempty"`
 }
 
 func parseLogEntries(resp []byte) []actorLogEntry {
@@ -210,6 +234,123 @@ func TestActorReminder(t *testing.T) {
 				require.True(t, count == 0, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
 			}
 		}
+
+		_, err = utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
+
+		t.Log("Done.")
+	})
+
+	t.Run("Actor reminder register and get should succeed.", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for iteration := 1; iteration <= numIterations; iteration++ {
+			wg.Add(1)
+			go func(iteration int) {
+				defer wg.Done()
+				t.Logf("Running iteration %d out of %d ...", iteration, numIterations)
+
+				for i := 0; i < numActorsPerThread; i++ {
+					actorID := fmt.Sprintf(actorIDGetTemplate, i+(1000*iteration))
+					// Deleting pre-existing reminder
+					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForGet))
+					require.NoError(t, err)
+
+					// Registering reminder
+					_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForGet), reminderBody)
+					require.NoError(t, err)
+				}
+
+				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
+				time.Sleep(secondsToCheckReminderResult * time.Second)
+			}(iteration)
+		}
+		wg.Wait()
+
+		t.Log("Checking reminders get succeed ...")
+		for iteration := 1; iteration <= numIterations; iteration++ {
+			for i := 0; i < numActorsPerThread; i++ {
+				actorID := fmt.Sprintf(actorIDGetTemplate, i+(1000*iteration))
+
+				resp, err := utils.HTTPGet(
+					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForGet))
+				require.NoError(t, err)
+				require.True(t, len(resp) != 0, "Reminder %s does not exist", reminderNameForGet)
+			}
+		}
+
+		_, err = utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
+
+		t.Log("Done.")
+	})
+
+	t.Run("Actor reminder rename should succeed.", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for iteration := 1; iteration <= numIterations; iteration++ {
+			wg.Add(1)
+			go func(iteration int) {
+				defer wg.Done()
+				t.Logf("Running iteration %d out of %d ...", iteration, numIterations)
+
+				for i := 0; i < numActorsPerThread; i++ {
+					actorID := fmt.Sprintf(actorIDRenameTemplate, i+(1000*iteration))
+					// Deleting pre-existing reminder
+					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForRename))
+					require.NoError(t, err)
+
+					// Registering reminder
+					_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForRename), reminderBody)
+					require.NoError(t, err)
+				}
+
+				for i := 0; i < numActorsPerThread; i++ {
+					_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+					require.NoError(t, err)
+
+					actorID := fmt.Sprintf(actorIDRenameTemplate, i+(1000*iteration))
+
+					reminderRequest := renameReminderRequest{
+						OldName:   reminderNameForRename,
+						ActorType: actorName,
+						ActorID:   actorID,
+						NewName:   newReminderNameForRename,
+					}
+					reminderRenameBody, err := json.Marshal(reminderRequest)
+					require.NoError(t, err)
+
+					// rename reminder
+					_, err = utils.HTTPPatch(
+						fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForRename),
+						reminderRenameBody)
+					require.NoError(t, err)
+				}
+
+				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
+				time.Sleep(secondsToCheckReminderResult * time.Second)
+			}(iteration)
+		}
+		wg.Wait()
+
+		t.Log("Checking reminders rename succeed ...")
+		for iteration := 1; iteration <= numIterations; iteration++ {
+			// After the app rename a reminder, there should be all reminders are triggered normally and the name change is successful.
+			for i := 0; i < numActorsPerThread; i++ {
+				actorID := fmt.Sprintf(actorIDRenameTemplate, i+(1000*iteration))
+
+				resp, err := utils.HTTPGet(
+					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderNameForRename))
+				require.NoError(t, err)
+				require.True(t, len(resp) == 0, "Reminder %s exist", reminderNameForRename)
+
+				resp, err = utils.HTTPGet(
+					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", newReminderNameForRename))
+				require.NoError(t, err)
+				require.True(t, len(resp) != 0, "Reminder %s does not exist", newReminderNameForRename)
+			}
+		}
+
+		_, err = utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
 
 		t.Log("Done.")
 	})

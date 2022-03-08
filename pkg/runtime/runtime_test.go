@@ -612,12 +612,6 @@ func TestInitState(t *testing.T) {
 		// setup
 		initMockStateStoreForRuntime(rt, nil)
 
-		// act
-		rt.globalConfig.Spec.Features = append(rt.globalConfig.Spec.Features, config.FeatureSpec{
-			Name:    config.StateEncryption,
-			Enabled: true,
-		})
-
 		rt.secretStores["mockSecretStore"] = &mockSecretStore{}
 
 		err := rt.initState(mockStateComponent)
@@ -2745,7 +2739,8 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		"",
 		4,
 		false,
-		time.Second)
+		time.Second,
+		"info")
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 }
@@ -3520,10 +3515,8 @@ func stopRuntime(t *testing.T, rt *DaprRuntime) {
 func TestFindMatchingRoute(t *testing.T) {
 	r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath")
 	require.NoError(t, err)
-	route := Route{
-		rules: []*runtime_pubsub.Rule{r},
-	}
-	path, shouldProcess, err := findMatchingRoute(&route, map[string]interface{}{
+	rules := []*runtime_pubsub.Rule{r}
+	path, shouldProcess, err := findMatchingRoute(rules, map[string]interface{}{
 		"type": "MyEventType",
 	}, true)
 	require.NoError(t, err)
