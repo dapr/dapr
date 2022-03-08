@@ -608,38 +608,40 @@ func TestQueryStateStore(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	// Populate store.
-	url := fmt.Sprintf("%s/test/%s/%s/querystatestore", externalURL, "http", "load")
-	body, err := os.ReadFile("query-data/dataset.json")
-	require.NoError(t, err)
-
-	_, status, err := utils.HTTPPostWithStatus(url, body)
-	require.NoError(t, err)
-	require.Equal(t, 204, status)
-
-	tests := []struct {
-		path string
-		keys int
-	}{
-		{
-			path: "./query-data/query.json",
-			keys: 3,
-		},
-	}
-	for _, test := range tests {
-		body, err := os.ReadFile(test.path)
+	for _, storename := range []string{"querystatestore", "querystatestore2"} {
+		// Populate store.
+		body, err := os.ReadFile("query-data/dataset.json")
 		require.NoError(t, err)
 
-		for _, protocol := range []string{"http", "grpc"} {
-			url := fmt.Sprintf("%s/test/%s/%s/querystatestore", externalURL, protocol, "query")
-			resp, status, err := utils.HTTPPostWithStatus(url, body)
-			require.NoError(t, err)
-			require.Equal(t, 200, status)
+		url := fmt.Sprintf("%s/test/http/load/%s?contentType=application/json", externalURL, storename)
+		_, status, err := utils.HTTPPostWithStatus(url, body)
+		require.NoError(t, err)
+		require.Equal(t, 204, status)
 
-			var states requestResponse
-			err = json.Unmarshal(resp, &states)
+		tests := []struct {
+			path string
+			keys int
+		}{
+			{
+				path: "./query-data/query.json",
+				keys: 3,
+			},
+		}
+		for _, test := range tests {
+			body, err := os.ReadFile(test.path)
 			require.NoError(t, err)
-			require.Equal(t, test.keys, len(states.States))
+
+			for _, protocol := range []string{"http", "grpc"} {
+				url := fmt.Sprintf("%s/test/%s/query/%s?contentType=application/json&queryIndexName=orgIndx", externalURL, protocol, storename)
+				resp, status, err := utils.HTTPPostWithStatus(url, body)
+				require.NoError(t, err)
+				require.Equal(t, 200, status)
+
+				var states requestResponse
+				err = json.Unmarshal(resp, &states)
+				require.NoError(t, err)
+				require.Equal(t, test.keys, len(states.States))
+			}
 		}
 	}
 }
