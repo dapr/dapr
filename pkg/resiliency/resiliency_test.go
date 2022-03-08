@@ -159,7 +159,7 @@ func getOperatorClient(address string) operatorv1pb.OperatorClient {
 	return operatorv1pb.NewOperatorClient(conn)
 }
 
-func TestPoliciesForBuildingBlocks(t *testing.T) {
+func TestPoliciesForTargets(t *testing.T) {
 	ctx := context.Background()
 	configs := LoadStandaloneResiliency(log, "default", "./testdata")
 	assert.Len(t, configs, 1)
