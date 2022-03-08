@@ -211,8 +211,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 	})
 }
 
-type fakeStream struct {
-}
+type fakeStream struct{}
 
 func (f *fakeStream) Context() context.Context {
 	return context.TODO()
@@ -227,7 +226,6 @@ func (f *fakeStream) SendHeader(metadata.MD) error {
 }
 
 func (f *fakeStream) SetTrailer(metadata.MD) {
-
 }
 
 func (f *fakeStream) SendMsg(m interface{}) error {
