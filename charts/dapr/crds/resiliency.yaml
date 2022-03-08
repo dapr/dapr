@@ -14,6 +14,8 @@ spec:
     listKind: ResiliencyList
     plural: resiliencies
     singular: resiliency
+    categories:
+    - dapr
   scope: Namespaced
   versions:
   - name: v1alpha1
@@ -134,9 +136,3 @@ spec:
         type: object
     served: true
     storage: true
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
