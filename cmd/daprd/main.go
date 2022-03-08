@@ -49,6 +49,7 @@ import (
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
+	"github.com/dapr/components-contrib/state/cockroachdb"
 	"github.com/dapr/components-contrib/state/couchbase"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
@@ -260,6 +261,9 @@ func main() {
 			}),
 			state_loader.New("oracledatabase", func() state.Store {
 				return state_oracledatabase.NewOracleDatabaseStateStore(logContrib)
+			}),
+			state_loader.New("cockroachdb", func() state.Store {
+				return cockroachdb.New(logContrib)
 			}),
 		),
 		runtime.WithConfigurations(
