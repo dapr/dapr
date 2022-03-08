@@ -173,7 +173,7 @@ jobs:
       HELM_PACKAGE_DIR: helm
       DAPR_VERSION_ARTIFACT: dapr_version
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-      HELMVER: v3.2.1
+      HELMVER: v3.7.2
     runs-on: ubuntu-latest
     steps:
       - name: Set up Helm ${{ env.HELMVER }}
