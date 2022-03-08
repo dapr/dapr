@@ -2698,7 +2698,7 @@ func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
-			Data: []byte("\"bGlmZSBpcyBnb29k\""),
+			Data: []byte("life is good"),
 			ETag: ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 		}, nil
 	}
