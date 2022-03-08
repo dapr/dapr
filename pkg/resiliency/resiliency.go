@@ -64,9 +64,9 @@ type (
 		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
 		// ActorPolicy returns the policy for an actor instance.
 		ActorPolicy(ctx context.Context, actorType string, id string) Runner
-		// ComponentOutboundPolicy returns the output policy for a component.
+		// ComponentOutboundPolicy returns the outbound policy for a component.
 		ComponentOutboundPolicy(ctx context.Context, name string) Runner
-		// ComponentInboundPolicy returns the input policy for a component.
+		// ComponentInboundPolicy returns the inbound policy for a component.
 		ComponentInboundPolicy(ctx context.Context, name string) Runner
 	}
 
@@ -99,8 +99,8 @@ type (
 
 	// ComponentPolicyNames contains the policies for component input and output.
 	ComponentPolicyNames struct {
-		Input  PolicyNames
-		Output PolicyNames
+		Inbound  PolicyNames
+		Outbound PolicyNames
 	}
 
 	// PolicyNames contains the policy names for a timeout, retry, and circuit breaker.
@@ -308,12 +308,12 @@ func (r *Resiliency) decodeTargets(c *resiliency_v1alpha.Resiliency) (err error)
 
 	for name, t := range targets.Components {
 		r.components[name] = ComponentPolicyNames{
-			Input: PolicyNames{
+			Inbound: PolicyNames{
 				Timeout:        t.Inbound.Timeout,
 				Retry:          t.Inbound.Retry,
 				CircuitBreaker: t.Inbound.CircuitBreaker,
 			},
-			Output: PolicyNames{
+			Outbound: PolicyNames{
 				Timeout:        t.Outbound.Timeout,
 				Retry:          t.Outbound.Retry,
 				CircuitBreaker: t.Outbound.CircuitBreaker,
@@ -430,14 +430,14 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) R
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
-		if componentPolicies.Output.Timeout != "" {
-			t = r.timeouts[componentPolicies.Output.Timeout]
+		if componentPolicies.Outbound.Timeout != "" {
+			t = r.timeouts[componentPolicies.Outbound.Timeout]
 		}
-		if componentPolicies.Output.Retry != "" {
-			rc = r.retries[componentPolicies.Output.Retry]
+		if componentPolicies.Outbound.Retry != "" {
+			rc = r.retries[componentPolicies.Outbound.Retry]
 		}
-		if componentPolicies.Output.CircuitBreaker != "" {
-			template := r.circuitBreakers[componentPolicies.Output.CircuitBreaker]
+		if componentPolicies.Outbound.CircuitBreaker != "" {
+			template := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]
 			cb = r.componentCBs.Get(name, template)
 		}
 	}
@@ -456,14 +456,14 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
-		if componentPolicies.Input.Timeout != "" {
-			t = r.timeouts[componentPolicies.Input.Timeout]
+		if componentPolicies.Inbound.Timeout != "" {
+			t = r.timeouts[componentPolicies.Inbound.Timeout]
 		}
-		if componentPolicies.Input.Retry != "" {
-			rc = r.retries[componentPolicies.Input.Retry]
+		if componentPolicies.Inbound.Retry != "" {
+			rc = r.retries[componentPolicies.Inbound.Retry]
 		}
-		if componentPolicies.Input.CircuitBreaker != "" {
-			template := r.circuitBreakers[componentPolicies.Input.CircuitBreaker]
+		if componentPolicies.Inbound.CircuitBreaker != "" {
+			template := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]
 			cb = r.componentCBs.Get(name, template)
 		}
 	}
