@@ -63,8 +63,8 @@ type Targets struct {
 }
 
 type ComponentPolicyNames struct {
-	Input  PolicyNames `json:"input,omitempty" yaml:"input,omitempty"`
-	Output PolicyNames `json:"output,omitempty" yaml:"output,omitempty"`
+	Inbound  PolicyNames `json:"inbound,omitempty" yaml:"inbound,omitempty"`
+	Outbound PolicyNames `json:"outbound,omitempty" yaml:"outbound,omitempty"`
 }
 
 type PolicyNames struct {

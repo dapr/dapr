@@ -601,7 +601,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				return nil
 			}
 
-			policy := a.resiliency.ComponentInputPolicy(ctx, pubsubName)
+			policy := a.resiliency.ComponentInboundPolicy(ctx, pubsubName)
 			return policy(func(ctx context.Context) error {
 				return publishFunc(ctx, &pubsubSubscribedMessage{
 					cloudEvent: cloudEvent,
@@ -820,7 +820,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		for _, o := range ops {
 			if o == req.Operation {
 				var resp *bindings.InvokeResponse
-				policy := a.resiliency.ComponentOutputPolicy(a.ctx, name)
+				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name)
 				err := policy(func(ctx context.Context) (err error) {
 					resp, err = binding.Invoke(req)
 					return err
@@ -841,7 +841,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
-				policy := a.resiliency.ComponentOutputPolicy(a.ctx, response.StoreName)
+				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName)
 				err := policy(func(ctx context.Context) (err error) {
 					return a.stateStores[response.StoreName].BulkSet(reqs)
 				})
@@ -890,7 +890,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		start := time.Now()
 
 		var resp *runtimev1pb.BindingEventResponse
-		policy := a.resiliency.ComponentInputPolicy(ctx, bindingName)
+		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName)
 		err := policy(func(ctx context.Context) (err error) {
 			resp, err = client.OnBindingEvent(ctx, req)
 			return err
@@ -949,7 +949,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req.WithMetadata(reqMetadata)
 
 		var resp *invokev1.InvokeMethodResponse
-		policy := a.resiliency.ComponentInputPolicy(ctx, bindingName)
+		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName)
 		err := policy(func(ctx context.Context) (err error) {
 			resp, err = a.appChannel.InvokeMethod(ctx, req)
 			return err
@@ -1394,7 +1394,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	policy := a.resiliency.ComponentOutputPolicy(a.ctx, req.PubsubName)
+	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName)
 	return policy(func(ctx context.Context) (err error) {
 		return a.pubSubs[req.PubsubName].Publish(req)
 	})

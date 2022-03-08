@@ -107,7 +107,7 @@ spec:
       # For state stores, policies apply to saving and retrieving state.
       # Watching, which is not implemented yet, is out of scope.
       statestore1:
-        output:
+        outbound:
           timeout: general
           retry: stateRetry
           # Circuit breakers for components are scoped per component configuration/instance (e.g. redis1).
@@ -115,15 +115,15 @@ spec:
           circuitBreaker: stateCB
 
       pubsub1:
-        output:
+        outbound:
           retry: pubsubRetry
           circuitBreaker: pubsubCB
 
       pubsub2:
-        output:
+        outbound:
           retry: pubsubRetry
           circuitBreaker: pubsubCB
-        input:
+        inbound:
           timeout: general
           retry: pubsubRetry
           circuitBreaker: pubsubCB

@@ -72,26 +72,26 @@ func TestNoOp(t *testing.T) {
 		{
 			name: "component output",
 			fn: func(ctx context.Context) Runner {
-				return policy.ComponentOutputPolicy(ctx, "test")
+				return policy.ComponentOutboundPolicy(ctx, "test")
 			},
 		},
 		{
 			name: "component output error",
 			fn: func(ctx context.Context) Runner {
-				return policy.ComponentOutputPolicy(ctx, "test")
+				return policy.ComponentOutboundPolicy(ctx, "test")
 			},
 			err: errors.New("component output error"),
 		},
 		{
 			name: "component input",
 			fn: func(ctx context.Context) Runner {
-				return policy.ComponentInputPolicy(ctx, "test")
+				return policy.ComponentInboundPolicy(ctx, "test")
 			},
 		},
 		{
 			name: "component input error",
 			fn: func(ctx context.Context) Runner {
-				return policy.ComponentInputPolicy(ctx, "test")
+				return policy.ComponentInboundPolicy(ctx, "test")
 			},
 			err: errors.New("component input error"),
 		},

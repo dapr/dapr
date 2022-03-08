@@ -64,10 +64,10 @@ type (
 		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
 		// ActorPolicy returns the policy for an actor instance.
 		ActorPolicy(ctx context.Context, actorType string, id string) Runner
-		// ComponentOutputPolicy returns the output policy for a component.
-		ComponentOutputPolicy(ctx context.Context, name string) Runner
-		// ComponentInputPolicy returns the input policy for a component.
-		ComponentInputPolicy(ctx context.Context, name string) Runner
+		// ComponentOutboundPolicy returns the output policy for a component.
+		ComponentOutboundPolicy(ctx context.Context, name string) Runner
+		// ComponentInboundPolicy returns the input policy for a component.
+		ComponentInboundPolicy(ctx context.Context, name string) Runner
 	}
 
 	// Resiliency encapsulates configuration for timeouts, retries, and circuit breakers.
@@ -309,14 +309,14 @@ func (r *Resiliency) decodeTargets(c *resiliency_v1alpha.Resiliency) (err error)
 	for name, t := range targets.Components {
 		r.components[name] = ComponentPolicyNames{
 			Input: PolicyNames{
-				Timeout:        t.Input.Timeout,
-				Retry:          t.Input.Retry,
-				CircuitBreaker: t.Input.CircuitBreaker,
+				Timeout:        t.Inbound.Timeout,
+				Retry:          t.Inbound.Retry,
+				CircuitBreaker: t.Inbound.CircuitBreaker,
 			},
 			Output: PolicyNames{
-				Timeout:        t.Output.Timeout,
-				Retry:          t.Output.Retry,
-				CircuitBreaker: t.Output.CircuitBreaker,
+				Timeout:        t.Outbound.Timeout,
+				Retry:          t.Outbound.Retry,
+				CircuitBreaker: t.Outbound.CircuitBreaker,
 			},
 		}
 	}
@@ -420,7 +420,7 @@ func (r *Resiliency) ActorPolicy(ctx context.Context, actorType string, id strin
 }
 
 // ComponentPolicy returns the output policy for a component.
-func (r *Resiliency) ComponentOutputPolicy(ctx context.Context, name string) Runner {
+func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) Runner {
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
@@ -446,7 +446,7 @@ func (r *Resiliency) ComponentOutputPolicy(ctx context.Context, name string) Run
 }
 
 // ComponentPolicy returns the policy for a component.
-func (r *Resiliency) ComponentInputPolicy(ctx context.Context, name string) Runner {
+func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Runner {
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
