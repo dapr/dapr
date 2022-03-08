@@ -100,6 +100,8 @@ spec:
                   components:
                     additionalProperties:
                       properties:
+                        circuitBreaker:
+                          type: string
                         input:
                           properties:
                             circuitBreaker:
@@ -118,6 +120,10 @@ spec:
                             timeout:
                               type: string
                           type: object
+                        retry:
+                          type: string
+                        timeout:
+                          type: string
                       type: object
                     type: object
                 type: object

@@ -101,6 +101,7 @@ type (
 	ComponentPolicyNames struct {
 		Input  PolicyNames
 		Output PolicyNames
+		PolicyNames
 	}
 
 	// PolicyNames contains the policy names for a timeout, retry, and circuit breaker.
@@ -307,6 +308,18 @@ func (r *Resiliency) decodeTargets(c *resiliency_v1alpha.Resiliency) (err error)
 	}
 
 	for name, t := range targets.Components {
+		if (t.Input == resiliency_v1alpha.PolicyNames{}) && (t.Output == resiliency_v1alpha.PolicyNames{}) {
+			r.components[name] = ComponentPolicyNames{
+				Input: PolicyNames{},
+				Output: PolicyNames{
+					Timeout:        t.Timeout,
+					Retry:          t.Retry,
+					CircuitBreaker: t.CircuitBreaker,
+				},
+			}
+			continue
+		}
+
 		r.components[name] = ComponentPolicyNames{
 			Input: PolicyNames{
 				Timeout:        t.Input.Timeout,
