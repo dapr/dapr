@@ -1,22 +1,31 @@
+
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.5.0
+  creationTimestamp: null
   name: components.dapr.io
 spec:
   group: dapr.io
+  names:
+    kind: Component
+    listKind: ComponentList
+    plural: components
+    singular: component
+  scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Component describes an Dapr component type
+        description: Component describes an Dapr component type.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           auth:
-            description: Auth represents authentication details for the component
+            description: Auth represents authentication details for the component.
             properties:
               secretStore:
                 type: string
@@ -24,9 +33,7 @@ spec:
             - secretStore
             type: object
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
@@ -35,22 +42,20 @@ spec:
               type: string
             type: array
           spec:
-            description: ComponentSpec is the spec for a component
+            description: ComponentSpec is the spec for a component.
             properties:
-              initTimeout:
-                type: string
               ignoreErrors:
                 type: boolean
+              initTimeout:
+                type: string
               metadata:
                 items:
-                  description: MetadataItem is a name/value pair for a metadata
+                  description: MetadataItem is a name/value pair for a metadata.
                   properties:
                     name:
                       type: string
                     secretKeyRef:
-                      description: SecretKeyRef is a reference to a secret holding
-                        the value for the metadata item. Name is the secret name,
-                        and key is the field in the secret.
+                      description: SecretKeyRef is a reference to a secret holding the value for the metadata item. Name is the secret name, and key is the field in the secret.
                       properties:
                         key:
                           type: string
@@ -61,6 +66,8 @@ spec:
                       - name
                       type: object
                     value:
+                      description: DynamicValue is a dynamic value struct for the component.metadata pair value.
+                      type: object
                       x-kubernetes-preserve-unknown-fields: true
                   required:
                   - name
@@ -78,11 +85,9 @@ spec:
         type: object
     served: true
     storage: true
-  names:
-    kind: Component
-    plural: components
-    singular: component
-    categories:
-    - all
-    - dapr
-  scope: Namespaced
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
