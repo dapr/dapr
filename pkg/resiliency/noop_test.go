@@ -70,17 +70,30 @@ func TestNoOp(t *testing.T) {
 			err: errors.New("actor error"),
 		},
 		{
-			name: "component",
+			name: "component output",
 			fn: func(ctx context.Context) Runner {
-				return policy.ComponentPolicy(ctx, "test")
+				return policy.ComponentOutputPolicy(ctx, "test")
 			},
 		},
 		{
-			name: "component error",
+			name: "component output error",
 			fn: func(ctx context.Context) Runner {
-				return policy.ComponentPolicy(ctx, "test")
+				return policy.ComponentOutputPolicy(ctx, "test")
 			},
-			err: errors.New("component error"),
+			err: errors.New("component output error"),
+		},
+		{
+			name: "component input",
+			fn: func(ctx context.Context) Runner {
+				return policy.ComponentInputPolicy(ctx, "test")
+			},
+		},
+		{
+			name: "component input error",
+			fn: func(ctx context.Context) Runner {
+				return policy.ComponentInputPolicy(ctx, "test")
+			},
+			err: errors.New("component input error"),
 		},
 	}
 

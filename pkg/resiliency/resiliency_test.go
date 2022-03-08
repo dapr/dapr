@@ -59,8 +59,8 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					},
 				},
 			},
-			BuildingBlocks: resiliency_v1alpha.BuildingBlocks{
-				Services: map[string]resiliency_v1alpha.EndpointPolicyNames{
+			Targets: resiliency_v1alpha.Targets{
+				Apps: map[string]resiliency_v1alpha.EndpointPolicyNames{
 					"appB": {
 						Timeout:                 "general",
 						Retry:                   "general",
@@ -77,11 +77,13 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 						CircuitBreakerCacheSize: 5000,
 					},
 				},
-				Components: map[string]resiliency_v1alpha.PolicyNames{
+				Components: map[string]resiliency_v1alpha.ComponentPolicyNames{
 					"statestore1": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
+						Output: map[string]resiliency_v1alpha.PolicyNames{
+							Timeout:        "general",
+							Retry:          "general",
+							CircuitBreaker: "general",
+						},
 					},
 				},
 			},
@@ -111,8 +113,8 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					},
 				},
 			},
-			BuildingBlocks: resiliency_v1alpha.BuildingBlocks{
-				Services: map[string]resiliency_v1alpha.EndpointPolicyNames{
+			Targets: resiliency_v1alpha.Targets{
+				Apps: map[string]resiliency_v1alpha.EndpointPolicyNames{
 					"appB": {
 						Timeout:                 "general",
 						Retry:                   "general",
@@ -129,11 +131,13 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 						CircuitBreakerCacheSize: 5000,
 					},
 				},
-				Components: map[string]resiliency_v1alpha.PolicyNames{
+				Components: map[string]resiliency_v1alpha.ComponentPolicyNames{
 					"statestore1": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
+						Output: map[string]resiliency_v1alpha.PolicyNames{
+							Timeout:        "general",
+							Retry:          "general",
+							CircuitBreaker: "general",
+						},
 					},
 				},
 			},
@@ -168,7 +172,7 @@ func TestPoliciesForBuildingBlocks(t *testing.T) {
 		{
 			name: "component",
 			create: func(r *Resiliency) Runner {
-				return r.ComponentPolicy(ctx, "statestore1")
+				return r.ComponentOutputPolicy(ctx, "statestore1")
 			},
 		},
 		{

@@ -44,8 +44,15 @@ func (*NoOp) ActorPolicy(ctx context.Context, actorType string, id string) Runne
 	}
 }
 
-// ComponentPolicy returns a NoOp policy runner for a component.
-func (*NoOp) ComponentPolicy(ctx context.Context, name string) Runner {
+// ComponentInputPolicy returns a NoOp policy runner for a component input.
+func (*NoOp) ComponentInputPolicy(ctx context.Context, name string) Runner {
+	return func(oper Operation) error {
+		return oper(ctx)
+	}
+}
+
+// ComponentOutputPolicy returns a NoOp policy runner for a component output.
+func (*NoOp) ComponentOutputPolicy(ctx context.Context, name string) Runner {
 	return func(oper Operation) error {
 		return oper(ctx)
 	}
