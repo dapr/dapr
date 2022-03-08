@@ -88,8 +88,9 @@ spec:
           circuitBreaker: general
 
       pubsub1:
-        retry: pubsubRetry
-        circuitBreaker: pubsubCB
+        output:
+          retry: pubsubRetry
+          circuitBreaker: pubsubCB
 
       pubsub2:
         output:
