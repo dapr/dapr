@@ -59,6 +59,7 @@ RUN apt-get update \
     && unzip -o $PROTOC_ZIP -d /usr/local bin/protoc \
     && chmod -R 755 /usr/local/bin/protoc \
     && unzip -o $PROTOC_ZIP -d /usr/local 'include/*' \
+    && chmod -R 755 /usr/local/include/google/protobuf \
     && rm -f $PROTOC_ZIP \
     #
     # Install Dapr CLI.
