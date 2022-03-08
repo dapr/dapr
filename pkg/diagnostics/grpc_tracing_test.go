@@ -196,7 +196,11 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
 
-		err := interceptor(ctx, nil, fakeInfo, nil)
+		h := func(srv interface{}, stream grpc.ServerStream) error {
+			return nil
+		}
+
+		err := interceptor(ctx, nil, fakeInfo, h)
 		assert.Nil(t, err)
 	})
 

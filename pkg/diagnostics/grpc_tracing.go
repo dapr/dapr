@@ -102,7 +102,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		if strings.Index(info.FullMethod, daprPackagePrefix) == 0 {
-			return nil
+			return handler(srv, ss)
 		}
 
 		var span *trace.Span
