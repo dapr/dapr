@@ -60,21 +60,25 @@ spec:
                       properties:
                         input:
                           additionalProperties:
-                            circuitBreaker:
-                              type: string
-                            retry:
-                              type: string
-                            timeout:
-                              type: string
+                            properties:
+                              circuitBreaker:
+                                type: string
+                              retry:
+                                type: string
+                              timeout:
+                                type: string
+                            type: object    
                           type: object
                         output:
                           additionalProperties:
-                            circuitBreaker:
-                              type: string
-                            retry:
-                              type: string
-                            timeout:
-                              type: string
+                            properties:
+                              circuitBreaker:
+                                type: string
+                              retry:
+                                type: string
+                              timeout:
+                                type: string
+                            type: object
                           type: object
                       type: object
                     type: object
