@@ -307,17 +307,17 @@ func (r *Resiliency) decodeTargets(c *resiliency_v1alpha.Resiliency) (err error)
 	}
 
 	for name, t := range targets.Components {
-
-		r.components[name].Output = PolicyNames{
-			Timeout:        t.Input.Timeout,
-			Retry:          t.Input.Retry,
-			CircuitBreaker: t.Input.CircuitBreaker,
-		}
-
-		r.components[name].Output = PolicyNames{
-			Timeout:        t.Output.Timeout,
-			Retry:          t.Output.Retry,
-			CircuitBreaker: t.Output.CircuitBreaker,
+		r.components[name] = ComponentPolicyNames{
+			Input: PolicyNames{
+				Timeout:        t.Input.Timeout,
+				Retry:          t.Input.Retry,
+				CircuitBreaker: t.Input.CircuitBreaker,
+			},
+			Output: PolicyNames{
+				Timeout:        t.Output.Timeout,
+				Retry:          t.Output.Retry,
+				CircuitBreaker: t.Output.CircuitBreaker,
+			},
 		}
 	}
 

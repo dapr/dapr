@@ -498,7 +498,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		}
 		reqs[i] = r
 	}
-	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	policy := a.resiliency.ComponentOutputPolicy(reqCtx, storeName)
 
 	var bulkGet bool
 	var responses []state.BulkGetResponse
@@ -629,7 +629,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	policy := a.resiliency.ComponentOutputPolicy(reqCtx, storeName)
 	var resp *state.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = store.Get(&req)
@@ -709,7 +709,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		req.ETag = &etag
 	}
 
-	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	policy := a.resiliency.ComponentOutputPolicy(reqCtx, storeName)
 	err = policy(func(ctx context.Context) error {
 		return store.Delete(&req)
 	})
@@ -746,7 +746,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	policy := a.resiliency.ComponentPolicy(reqCtx, secretStoreName)
+	policy := a.resiliency.ComponentOutputPolicy(reqCtx, secretStoreName)
 	var resp secretstores.GetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = store.GetSecret(req)
@@ -782,7 +782,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	policy := a.resiliency.ComponentPolicy(reqCtx, secretStoreName)
+	policy := a.resiliency.ComponentOutputPolicy(reqCtx, secretStoreName)
 	var resp secretstores.BulkGetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = store.BulkGetSecret(req)
@@ -887,7 +887,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
-	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	policy := a.resiliency.ComponentOutputPolicy(reqCtx, storeName)
 	err = policy(func(ctx context.Context) error {
 		return store.BulkSet(reqs)
 	})
@@ -1739,7 +1739,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
-	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	policy := a.resiliency.ComponentOutputPolicy(reqCtx, storeName)
 	err := policy(func(ctx context.Context) error {
 		return transactionalStore.Multi(&state.TransactionalStateRequest{
 			Operations: operations,
@@ -1786,7 +1786,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	}
 	req.Metadata = getMetadataFromRequest(reqCtx)
 
-	policy := a.resiliency.ComponentPolicy(reqCtx, storeName)
+	policy := a.resiliency.ComponentOutputPolicy(reqCtx, storeName)
 	var resp *state.QueryResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = querier.Query(&req)

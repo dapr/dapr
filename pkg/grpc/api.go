@@ -431,7 +431,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		reqs[i] = r
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, in.StoreName)
 	var bulkGet bool
 	var responses []state.BulkGetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
@@ -536,7 +536,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		},
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, in.StoreName)
 	var getResponse *state.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = store.Get(&req)
@@ -609,7 +609,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		reqs = append(reqs, req)
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, in.StoreName)
 	err = policy(func(ctx context.Context) error {
 		return store.BulkSet(reqs)
 	})
@@ -651,7 +651,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	}
 	req.Metadata = in.GetMetadata()
 
-	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, in.StoreName)
 	var resp *state.QueryResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = querier.Query(&req)
@@ -721,7 +721,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		}
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, in.StoreName)
 	err = policy(func(ctx context.Context) error {
 		return store.Delete(&req)
 	})
@@ -761,7 +761,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 		}
 		reqs = append(reqs, req)
 	}
-	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, in.StoreName)
 	err = policy(func(ctx context.Context) error {
 		return store.BulkDelete(reqs)
 	})
@@ -798,7 +798,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		Metadata: in.Metadata,
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, secretStoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, secretStoreName)
 	var getResponse secretstores.GetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(req)
@@ -836,7 +836,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		Metadata: in.Metadata,
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, secretStoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, secretStoreName)
 	var getResponse secretstores.BulkGetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(req)
@@ -980,7 +980,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		}
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, in.StoreName)
 	err := policy(func(ctx context.Context) error {
 		return transactionalStore.Multi(&state.TransactionalStateRequest{
 			Operations: operations,
@@ -1321,7 +1321,7 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 		Metadata: in.Metadata,
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, in.StoreName)
 	var getResponse *configuration.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = store.Get(ctx, &req)
@@ -1403,7 +1403,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	defer cancel()
 
 	// TODO(@laurence) deal with failed subscription and retires.
-	policy := a.resiliency.ComponentPolicy(ctx, request.StoreName)
+	policy := a.resiliency.ComponentOutputPolicy(ctx, request.StoreName)
 	var id string
 	err = policy(func(ctx context.Context) (rErr error) {
 		id, rErr = store.Subscribe(ctx, req, handler.updateEventHandler)

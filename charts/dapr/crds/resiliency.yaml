@@ -38,7 +38,7 @@ spec:
             type: array
           spec:
             properties:
-              buildingBlocks:
+              targets:
                 properties:
                   actors:
                     additionalProperties:
@@ -58,26 +58,27 @@ spec:
                   components:
                     additionalProperties:
                       properties:
-                        circuitBreaker:
-                          type: string
-                        retry:
-                          type: string
-                        timeout:
-                          type: string
+                        input:
+                          additionalProperties:
+                            circuitBreaker:
+                              type: string
+                            retry:
+                              type: string
+                            timeout:
+                              type: string
+                          type: object
+                        output:
+                          additionalProperties:
+                            circuitBreaker:
+                              type: string
+                            retry:
+                              type: string
+                            timeout:
+                              type: string
+                          type: object
                       type: object
                     type: object
-                  routes:
-                    additionalProperties:
-                      properties:
-                        circuitBreaker:
-                          type: string
-                        retry:
-                          type: string
-                        timeout:
-                          type: string
-                      type: object
-                    type: object
-                  services:
+                  apps:
                     additionalProperties:
                       properties:
                         circuitBreaker:
@@ -125,7 +126,7 @@ spec:
                     type: object
                 type: object
             required:
-            - buildingBlocks
+            - targets
             - policies
             type: object
         type: object

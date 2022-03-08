@@ -79,7 +79,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 				},
 				Components: map[string]resiliency_v1alpha.ComponentPolicyNames{
 					"statestore1": {
-						Output: map[string]resiliency_v1alpha.PolicyNames{
+						Output: resiliency_v1alpha.PolicyNames{
 							Timeout:        "general",
 							Retry:          "general",
 							CircuitBreaker: "general",
@@ -133,7 +133,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 				},
 				Components: map[string]resiliency_v1alpha.ComponentPolicyNames{
 					"statestore1": {
-						Output: map[string]resiliency_v1alpha.PolicyNames{
+						Output: resiliency_v1alpha.PolicyNames{
 							Timeout:        "general",
 							Retry:          "general",
 							CircuitBreaker: "general",
