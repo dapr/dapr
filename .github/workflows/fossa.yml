@@ -28,6 +28,8 @@ on:
   workflow_dispatch: {}
 jobs:
   fossa-scan:
+    env:
+      FossaPushOnlyToken: b88e1f4287c3108c8751bf106fb46db6
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout code"
@@ -36,10 +38,10 @@ jobs:
       - name: "Run FOSSA Scan"
         uses: fossas/fossa-action@main # Use a specific version if locking is preferred
         with:
-          api-key: ${{secrets.FOSSA_API_KEY}}
+          api-key: $FossaPushOnlyToken
 
       - name: "Run FOSSA Test"
         uses: fossas/fossa-action@main # Use a specific version if locking is preferred
         with:
-          api-key: ${{secrets.FOSSA_API_KEY}}
+          api-key: $FossaPushOnlyToken
           run-tests: true
