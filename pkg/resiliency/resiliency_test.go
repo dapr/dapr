@@ -59,8 +59,8 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					},
 				},
 			},
-			BuildingBlocks: resiliency_v1alpha.BuildingBlocks{
-				Services: map[string]resiliency_v1alpha.EndpointPolicyNames{
+			Targets: resiliency_v1alpha.Targets{
+				Apps: map[string]resiliency_v1alpha.EndpointPolicyNames{
 					"appB": {
 						Timeout:                 "general",
 						Retry:                   "general",
@@ -77,18 +77,13 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 						CircuitBreakerCacheSize: 5000,
 					},
 				},
-				Components: map[string]resiliency_v1alpha.PolicyNames{
+				Components: map[string]resiliency_v1alpha.ComponentPolicyNames{
 					"statestore1": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
-					},
-				},
-				Routes: map[string]resiliency_v1alpha.PolicyNames{
-					"dsstatus.v3": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
+						Outbound: resiliency_v1alpha.PolicyNames{
+							Timeout:        "general",
+							Retry:          "general",
+							CircuitBreaker: "general",
+						},
 					},
 				},
 			},
@@ -118,8 +113,8 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 					},
 				},
 			},
-			BuildingBlocks: resiliency_v1alpha.BuildingBlocks{
-				Services: map[string]resiliency_v1alpha.EndpointPolicyNames{
+			Targets: resiliency_v1alpha.Targets{
+				Apps: map[string]resiliency_v1alpha.EndpointPolicyNames{
 					"appB": {
 						Timeout:                 "general",
 						Retry:                   "general",
@@ -136,18 +131,13 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 						CircuitBreakerCacheSize: 5000,
 					},
 				},
-				Components: map[string]resiliency_v1alpha.PolicyNames{
+				Components: map[string]resiliency_v1alpha.ComponentPolicyNames{
 					"statestore1": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
-					},
-				},
-				Routes: map[string]resiliency_v1alpha.PolicyNames{
-					"dsstatus.v3": {
-						Timeout:        "general",
-						Retry:          "general",
-						CircuitBreaker: "general",
+						Outbound: resiliency_v1alpha.PolicyNames{
+							Timeout:        "general",
+							Retry:          "general",
+							CircuitBreaker: "general",
+						},
 					},
 				},
 			},
@@ -169,7 +159,7 @@ func getOperatorClient(address string) operatorv1pb.OperatorClient {
 	return operatorv1pb.NewOperatorClient(conn)
 }
 
-func TestPoliciesForBuildingBlocks(t *testing.T) {
+func TestPoliciesForTargets(t *testing.T) {
 	ctx := context.Background()
 	configs := LoadStandaloneResiliency(log, "default", "./testdata")
 	assert.Len(t, configs, 1)
@@ -180,15 +170,9 @@ func TestPoliciesForBuildingBlocks(t *testing.T) {
 		create func(r *Resiliency) Runner
 	}{
 		{
-			name: "route",
-			create: func(r *Resiliency) Runner {
-				return r.RoutePolicy(ctx, "dsstatus.v3")
-			},
-		},
-		{
 			name: "component",
 			create: func(r *Resiliency) Runner {
-				return r.ComponentPolicy(ctx, "statestore1")
+				return r.ComponentOutboundPolicy(ctx, "statestore1")
 			},
 		},
 		{

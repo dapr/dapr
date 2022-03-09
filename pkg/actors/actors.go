@@ -466,7 +466,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 
-	policy := a.resiliency.ComponentPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
 	var resp *state.GetResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.store.Get(&state.GetRequest{
@@ -529,7 +529,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		}
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
 	return policy(func(ctx context.Context) error {
 		return a.transactionalStore.Multi(&state.TransactionalStateRequest{
 			Operations: operations,
@@ -685,7 +685,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
-	policy := a.resiliency.ComponentPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
 	var resp *state.GetResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.store.Get(&state.GetRequest{
@@ -714,7 +714,7 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 		RepetitionLeft: repetition,
 	}
 
-	policy := a.resiliency.ComponentPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
 	return policy(func(ctx context.Context) error {
 		return a.store.Set(&state.SetRequest{
 			Key:   constructCompositeKey(actorKey, name),
@@ -1239,7 +1239,7 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 	}
 
 	metadataKey := constructCompositeKey("actors", actorType, "metadata")
-	policy := a.resiliency.ComponentPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
 	return policy(func(ctx context.Context) error {
 		return a.store.Set(&state.SetRequest{
 			Key:   metadataKey,
@@ -1395,7 +1395,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		return nil, nil, fmt.Errorf("could not read actor type metadata: %w", merr)
 	}
 
-	policy := a.resiliency.ComponentPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
 
 	log.Debugf(
 		"starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
@@ -1545,7 +1545,7 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
 	log.Debugf("saving %d reminders in %s ...", len(reminders), stateKey)
-	policy := a.resiliency.ComponentPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
 	return policy(func(ctx context.Context) error {
 		return a.store.Set(&state.SetRequest{
 			Key:      stateKey,
@@ -1624,7 +1624,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		return err
 	}
 
-	policy := a.resiliency.ComponentPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
 	return policy(func(ctx context.Context) error {
 		return a.store.Delete(&state.DeleteRequest{
 			Key: reminderKey,

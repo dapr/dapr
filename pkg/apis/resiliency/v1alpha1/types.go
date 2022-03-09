@@ -32,8 +32,8 @@ type Resiliency struct {
 }
 
 type ResiliencySpec struct {
-	Policies       Policies       `json:"policies"`
-	BuildingBlocks BuildingBlocks `json:"buildingBlocks" yaml:"buildingBlocks"`
+	Policies Policies `json:"policies"`
+	Targets  Targets  `json:"targets" yaml:"targets"`
 }
 
 type Policies struct {
@@ -56,11 +56,15 @@ type CircuitBreaker struct {
 	Trip        string `json:"trip,omitempty" yaml:"trip,omitempty"`
 }
 
-type BuildingBlocks struct {
-	Services   map[string]EndpointPolicyNames `json:"services,omitempty" yaml:"services,omitempty"`
-	Actors     map[string]ActorPolicyNames    `json:"actors,omitempty" yaml:"actors,omitempty"`
-	Components map[string]PolicyNames         `json:"components,omitempty" yaml:"components,omitempty"`
-	Routes     map[string]PolicyNames         `json:"routes,omitempty" yaml:"routes,omitempty"`
+type Targets struct {
+	Apps       map[string]EndpointPolicyNames  `json:"apps,omitempty" yaml:"apps,omitempty"`
+	Actors     map[string]ActorPolicyNames     `json:"actors,omitempty" yaml:"actors,omitempty"`
+	Components map[string]ComponentPolicyNames `json:"components,omitempty" yaml:"components,omitempty"`
+}
+
+type ComponentPolicyNames struct {
+	Inbound  PolicyNames `json:"inbound,omitempty" yaml:"inbound,omitempty"`
+	Outbound PolicyNames `json:"outbound,omitempty" yaml:"outbound,omitempty"`
 }
 
 type PolicyNames struct {

@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -61,14 +60,14 @@ type (
 	// Provider is the interface for returning a `Runner` for the various
 	// resiliency scenarios in the runtime.
 	Provider interface {
-		// RoutePolicy returns the policy for a route.
-		RoutePolicy(ctx context.Context, name string) Runner
 		// EndpointPolicy returns the policy for a service endpoint.
 		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
 		// ActorPolicy returns the policy for an actor instance.
 		ActorPolicy(ctx context.Context, actorType string, id string) Runner
-		// ComponentPolicy returns the policy for a component.
-		ComponentPolicy(ctx context.Context, name string) Runner
+		// ComponentOutboundPolicy returns the outbound policy for a component.
+		ComponentOutboundPolicy(ctx context.Context, name string) Runner
+		// ComponentInboundPolicy returns the inbound policy for a component.
+		ComponentInboundPolicy(ctx context.Context, name string) Runner
 	}
 
 	// Resiliency encapsulates configuration for timeouts, retries, and circuit breakers.
@@ -85,9 +84,9 @@ type (
 		serviceCBs    map[string]*lru.Cache
 		componentCBs  *circuitBreakerInstances
 
-		services   map[string]PolicyNames
+		apps       map[string]PolicyNames
 		actors     map[string]ActorPolicyNames
-		components map[string]PolicyNames
+		components map[string]ComponentPolicyNames
 		routes     map[string]PolicyNames
 	}
 
@@ -96,6 +95,12 @@ type (
 	circuitBreakerInstances struct {
 		sync.RWMutex
 		cbs map[string]*breaker.CircuitBreaker
+	}
+
+	// ComponentPolicyNames contains the policies for component input and output.
+	ComponentPolicyNames struct {
+		Inbound  PolicyNames
+		Outbound PolicyNames
 	}
 
 	// PolicyNames contains the policy names for a timeout, retry, and circuit breaker.
@@ -204,9 +209,9 @@ func New(log logger.Logger) *Resiliency {
 		componentCBs: &circuitBreakerInstances{
 			cbs: make(map[string]*breaker.CircuitBreaker, 10),
 		},
-		services:   make(map[string]PolicyNames),
+		apps:       make(map[string]PolicyNames),
 		actors:     make(map[string]ActorPolicyNames),
-		components: make(map[string]PolicyNames),
+		components: make(map[string]ComponentPolicyNames),
 		routes:     make(map[string]PolicyNames),
 	}
 }
@@ -220,7 +225,7 @@ func (r *Resiliency) DecodeConfiguration(c *resiliency_v1alpha.Resiliency) error
 	if err := r.decodePolicies(c); err != nil {
 		return err
 	}
-	return r.decodeBuildingBlocks(c)
+	return r.decodeTargets(c)
 }
 
 func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error) {
@@ -261,11 +266,11 @@ func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error
 	return nil
 }
 
-func (r *Resiliency) decodeBuildingBlocks(c *resiliency_v1alpha.Resiliency) (err error) {
-	buildingBlocks := c.Spec.BuildingBlocks
+func (r *Resiliency) decodeTargets(c *resiliency_v1alpha.Resiliency) (err error) {
+	targets := c.Spec.Targets
 
-	for name, t := range buildingBlocks.Services {
-		r.services[name] = PolicyNames{
+	for name, t := range targets.Apps {
+		r.apps[name] = PolicyNames{
 			Timeout:        t.Timeout,
 			Retry:          t.Retry,
 			CircuitBreaker: t.CircuitBreaker,
@@ -279,7 +284,7 @@ func (r *Resiliency) decodeBuildingBlocks(c *resiliency_v1alpha.Resiliency) (err
 		}
 	}
 
-	for name, t := range buildingBlocks.Actors {
+	for name, t := range targets.Actors {
 		scope, err := ParseActorCircuitBreakerScope(t.CircuitBreakerScope)
 		if err != nil {
 			return err
@@ -301,63 +306,34 @@ func (r *Resiliency) decodeBuildingBlocks(c *resiliency_v1alpha.Resiliency) (err
 		}
 	}
 
-	for name, t := range buildingBlocks.Components {
-		r.components[name] = PolicyNames{
-			Timeout:        t.Timeout,
-			Retry:          t.Retry,
-			CircuitBreaker: t.CircuitBreaker,
-		}
-	}
-
-	for name, t := range buildingBlocks.Routes {
-		name = strings.TrimPrefix(name, "/") // Ignore slash prefix.
-		r.routes[name] = PolicyNames{
-			Timeout:        t.Timeout,
-			Retry:          t.Retry,
-			CircuitBreaker: t.CircuitBreaker,
+	for name, t := range targets.Components {
+		r.components[name] = ComponentPolicyNames{
+			Inbound: PolicyNames{
+				Timeout:        t.Inbound.Timeout,
+				Retry:          t.Inbound.Retry,
+				CircuitBreaker: t.Inbound.CircuitBreaker,
+			},
+			Outbound: PolicyNames{
+				Timeout:        t.Outbound.Timeout,
+				Retry:          t.Outbound.Retry,
+				CircuitBreaker: t.Outbound.CircuitBreaker,
+			},
 		}
 	}
 
 	return nil
 }
 
-// RoutePolicy returns the policy for a route.
-func (r *Resiliency) RoutePolicy(ctx context.Context, name string) Runner {
-	var t time.Duration
-	var rc *retry.Config
-	var cb *breaker.CircuitBreaker
-	name = strings.TrimPrefix(name, "/") // Ignore slash prefix.
-	operationName := fmt.Sprintf("route[%s]", name)
-	if r == nil {
-		return Policy(ctx, r.log, operationName, t, rc, cb)
-	}
-	policyNames, ok := r.routes[name]
-	if ok {
-		r.log.Infof("Found route policy: %+v", policyNames)
-		if policyNames.Timeout != "" {
-			t = r.timeouts[policyNames.Timeout]
-		}
-		if policyNames.Retry != "" {
-			rc = r.retries[policyNames.Retry]
-		}
-		if policyNames.CircuitBreaker != "" {
-			cb = r.circuitBreakers[policyNames.CircuitBreaker]
-		}
-	}
-
-	return Policy(ctx, r.log, operationName, t, rc, cb)
-}
-
 // EndpointPolicy returns the policy for a service endpoint.
-func (r *Resiliency) EndpointPolicy(ctx context.Context, service string, endpoint string) Runner {
+func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint string) Runner {
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("endpoint[%s, %s]", service, endpoint)
+	operationName := fmt.Sprintf("endpoint[%s, %s]", app, endpoint)
 	if r == nil {
 		return Policy(ctx, r.log, operationName, t, rc, cb)
 	}
-	policyNames, ok := r.services[service]
+	policyNames, ok := r.apps[app]
 	if ok {
 		if policyNames.Timeout != "" {
 			t = r.timeouts[policyNames.Timeout]
@@ -368,7 +344,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, service string, endpoin
 		if policyNames.CircuitBreaker != "" {
 			template := r.circuitBreakers[policyNames.CircuitBreaker]
 			if ok {
-				cache, ok := r.serviceCBs[service]
+				cache, ok := r.serviceCBs[app]
 				if ok {
 					cbi, ok := cache.Get(endpoint)
 					if ok {
@@ -443,25 +419,51 @@ func (r *Resiliency) ActorPolicy(ctx context.Context, actorType string, id strin
 	return Policy(ctx, r.log, operationName, t, rc, cb)
 }
 
-// ComponentPolicy returns the policy for a component.
-func (r *Resiliency) ComponentPolicy(ctx context.Context, name string) Runner {
+// ComponentPolicy returns the output policy for a component.
+func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) Runner {
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
-	operationName := fmt.Sprintf("component[%s]", name)
+	operationName := fmt.Sprintf("component[%s] output", name)
 	if r == nil {
 		return Policy(ctx, r.log, operationName, t, rc, cb)
 	}
-	policyNames, ok := r.components[name]
+	componentPolicies, ok := r.components[name]
 	if ok {
-		if policyNames.Timeout != "" {
-			t = r.timeouts[policyNames.Timeout]
+		if componentPolicies.Outbound.Timeout != "" {
+			t = r.timeouts[componentPolicies.Outbound.Timeout]
 		}
-		if policyNames.Retry != "" {
-			rc = r.retries[policyNames.Retry]
+		if componentPolicies.Outbound.Retry != "" {
+			rc = r.retries[componentPolicies.Outbound.Retry]
 		}
-		if policyNames.CircuitBreaker != "" {
-			template := r.circuitBreakers[policyNames.CircuitBreaker]
+		if componentPolicies.Outbound.CircuitBreaker != "" {
+			template := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]
+			cb = r.componentCBs.Get(name, template)
+		}
+	}
+
+	return Policy(ctx, r.log, operationName, t, rc, cb)
+}
+
+// ComponentPolicy returns the policy for a component.
+func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Runner {
+	var t time.Duration
+	var rc *retry.Config
+	var cb *breaker.CircuitBreaker
+	operationName := fmt.Sprintf("component[%s] input", name)
+	if r == nil {
+		return Policy(ctx, r.log, operationName, t, rc, cb)
+	}
+	componentPolicies, ok := r.components[name]
+	if ok {
+		if componentPolicies.Inbound.Timeout != "" {
+			t = r.timeouts[componentPolicies.Inbound.Timeout]
+		}
+		if componentPolicies.Inbound.Retry != "" {
+			rc = r.retries[componentPolicies.Inbound.Retry]
+		}
+		if componentPolicies.Inbound.CircuitBreaker != "" {
+			template := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]
 			cb = r.componentCBs.Get(name, template)
 		}
 	}
