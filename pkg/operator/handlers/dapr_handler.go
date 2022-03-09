@@ -117,7 +117,7 @@ func (h *DaprHandler) daprServiceName(appID string) string {
 
 // Reconcile the expected services for deployments | statefulset annotated for Dapr.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// var wrapper appsv1.Deployment | appsv1.StatefulSet
+	// var wrapper appsv1.Deployment | appsv1.StatefulSet.
 	wrapper := r.newWrapper()
 
 	expectedService := false

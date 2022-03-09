@@ -12,5 +12,5 @@ limitations under the License.
 */
 
 // +kubebuilder:object:generate=true
-// +groupName=dapr.io
+// +groupName=dapr.io.
 package v1alpha1

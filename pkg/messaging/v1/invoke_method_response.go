@@ -62,7 +62,7 @@ func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *I
 
 	imr.r.Message.ContentType = contentType
 
-	// Clone data to prevent GC from deallocating data
+	// Clone data to prevent GC from deallocating data.
 	imr.r.Message.Data = &anypb.Any{Value: cloneBytes(data)}
 
 	return imr
@@ -137,7 +137,7 @@ func (imr *InvokeMethodResponse) RawData() (string, []byte) {
 	dataTypeURL := m.GetData().GetTypeUrl()
 	dataValue := m.GetData().GetValue()
 
-	// set content_type to application/json only if typeurl is unset and data is given
+	// set content_type to application/json only if typeurl is unset and data is given.
 	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
 		contentType = JSONContentType
 	}

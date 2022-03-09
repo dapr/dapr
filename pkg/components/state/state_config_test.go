@@ -15,7 +15,7 @@ func TestMain(m *testing.M) {
 	SaveStateConfiguration("store3", map[string]string{strategyKey: strategyDefault})
 	SaveStateConfiguration("store4", map[string]string{strategyKey: strategyStoreName})
 	SaveStateConfiguration("store5", map[string]string{strategyKey: "other-fixed-prefix"})
-	// if strategyKey not set
+	// if strategyKey not set.
 	SaveStateConfiguration("store6", map[string]string{})
 	os.Exit(m.Run())
 }
@@ -39,7 +39,7 @@ func TestSaveStateConfiguration(t *testing.T) {
 }
 
 func TestGetModifiedStateKey(t *testing.T) {
-	// use custom prefix key
+	// use custom prefix key.
 	testIllegalKeys := []struct {
 		storename string
 		prefix    string
@@ -120,7 +120,7 @@ func TestLegacyPrefix(t *testing.T) {
 }
 
 func TestPrefix_StoreNotInitial(t *testing.T) {
-	// no config for store999
+	// no config for store999.
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store999", "appid99")
 	require.Equal(t, "appid99||state-key-1234567", modifiedStateKey)
 

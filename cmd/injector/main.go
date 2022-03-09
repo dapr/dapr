@@ -80,19 +80,19 @@ func init() {
 
 	flag.Parse()
 
-	// Apply options to all loggers
+	// Apply options to all loggers.
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		log.Fatal(err)
 	} else {
 		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 	}
 
-	// Initialize dapr metrics exporter
+	// Initialize dapr metrics exporter.
 	if err := metricsExporter.Init(); err != nil {
 		log.Fatal(err)
 	}
 
-	// Initialize injector service metrics
+	// Initialize injector service metrics.
 	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}

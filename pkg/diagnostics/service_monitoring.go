@@ -23,18 +23,18 @@ var (
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
 type serviceMetrics struct {
-	// component metrics
+	// component metrics.
 	componentLoaded        *stats.Int64Measure
 	componentInitCompleted *stats.Int64Measure
 	componentInitFailed    *stats.Int64Measure
 
-	// mTLS metrics
+	// mTLS metrics.
 	mtlsInitCompleted             *stats.Int64Measure
 	mtlsInitFailed                *stats.Int64Measure
 	mtlsWorkloadCertRotated       *stats.Int64Measure
 	mtlsWorkloadCertRotatedFailed *stats.Int64Measure
 
-	// Actor metrics
+	// Actor metrics.
 	actorStatusReportTotal       *stats.Int64Measure
 	actorStatusReportFailedTotal *stats.Int64Measure
 	actorTableOperationRecvTotal *stats.Int64Measure
@@ -43,7 +43,7 @@ type serviceMetrics struct {
 	actorDeactivationFailedTotal *stats.Int64Measure
 	actorPendingCalls            *stats.Int64Measure
 
-	// Access Control Lists for Service Invocation metrics
+	// Access Control Lists for Service Invocation metrics.
 	appPolicyActionAllowed    *stats.Int64Measure
 	globalPolicyActionAllowed *stats.Int64Measure
 	appPolicyActionBlocked    *stats.Int64Measure
@@ -57,7 +57,7 @@ type serviceMetrics struct {
 // newServiceMetrics returns serviceMetrics instance with default service metric stats.
 func newServiceMetrics() *serviceMetrics {
 	return &serviceMetrics{
-		// Runtime Component metrics
+		// Runtime Component metrics.
 		componentLoaded: stats.Int64(
 			"runtime/component/loaded",
 			"The number of successfully loaded components.",
@@ -71,7 +71,7 @@ func newServiceMetrics() *serviceMetrics {
 			"The number of component initialization failures.",
 			stats.UnitDimensionless),
 
-		// mTLS
+		// mTLS.
 		mtlsInitCompleted: stats.Int64(
 			"runtime/mtls/init_total",
 			"The number of successful mTLS authenticator initialization.",
@@ -89,7 +89,7 @@ func newServiceMetrics() *serviceMetrics {
 			"The number of the failed workload certificate rotations.",
 			stats.UnitDimensionless),
 
-		// Actor
+		// Actor.
 		actorStatusReportTotal: stats.Int64(
 			"runtime/actor/status_report_total",
 			"The number of the successful status reports to placement service.",
@@ -119,7 +119,7 @@ func newServiceMetrics() *serviceMetrics {
 			"The number of pending actor calls waiting to acquire the per-actor lock.",
 			stats.UnitDimensionless),
 
-		// Access Control Lists for service invocation
+		// Access Control Lists for service invocation.
 		appPolicyActionAllowed: stats.Int64(
 			"runtime/acl/app_policy_action_allowed_total",
 			"The number of requests allowed by the app specific action specified in the access control policy.",
@@ -137,7 +137,7 @@ func newServiceMetrics() *serviceMetrics {
 			"The number of requests blocked by the global action specified in the access control policy.",
 			stats.UnitDimensionless),
 
-		// TODO: use the correct context for each request
+		// TODO: use the correct context for each request.
 		ctx:     context.Background(),
 		enabled: false,
 	}

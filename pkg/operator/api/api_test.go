@@ -196,19 +196,19 @@ func TestComponentUpdate(t *testing.T) {
 		api := NewAPIServer(client).(*apiServer)
 
 		go func() {
-			// Send a component update, give sidecar time to register
+			// Send a component update, give sidecar time to register.
 			time.Sleep(time.Millisecond * 500)
 
 			for _, connUpdateChan := range api.allConnUpdateChan {
 				connUpdateChan <- &c
 
-				// Give sidecar time to register update
+				// Give sidecar time to register update.
 				time.Sleep(time.Millisecond * 500)
 				close(connUpdateChan)
 			}
 		}()
 
-		// Start sidecar update loop
+		// Start sidecar update loop.
 		api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
 			Namespace: "ns2",
 		}, mockSidecar)
@@ -238,19 +238,19 @@ func TestComponentUpdate(t *testing.T) {
 		api := NewAPIServer(client).(*apiServer)
 
 		go func() {
-			// Send a component update, give sidecar time to register
+			// Send a component update, give sidecar time to register.
 			time.Sleep(time.Millisecond * 500)
 
 			for _, connUpdateChan := range api.allConnUpdateChan {
 				connUpdateChan <- &c
 
-				// Give sidecar time to register update
+				// Give sidecar time to register update.
 				time.Sleep(time.Millisecond * 500)
 				close(connUpdateChan)
 			}
 		}()
 
-		// Start sidecar update loop
+		// Start sidecar update loop.
 		api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
 			Namespace: "ns1",
 		}, mockSidecar)

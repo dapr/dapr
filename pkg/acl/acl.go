@@ -38,7 +38,7 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 	if accessControlSpec.TrustDomain == "" &&
 		accessControlSpec.DefaultAction == "" &&
 		(accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) == 0) {
-		// No ACL has been specified
+		// No ACL has been specified.
 		log.Debugf("No Access control policy specified")
 		return nil, nil
 	}
@@ -55,11 +55,11 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 	accessControlList.DefaultAction = accessControlSpec.DefaultAction
 	if accessControlSpec.DefaultAction == "" {
 		if accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) > 0 {
-			// Some app level policies have been specified but not default global action is set. Default to more secure option - Deny
+			// Some app level policies have been specified but not default global action is set. Default to more secure option - Deny.
 			log.Warnf("No global default action has been specified. Setting default global action as Deny")
 			accessControlList.DefaultAction = config.DenyAccess
 		} else {
-			// An empty ACL has been specified. Set default global action to Allow
+			// An empty ACL has been specified. Set default global action to Allow.
 			accessControlList.DefaultAction = config.AllowAccess
 		}
 	}
@@ -83,17 +83,17 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 		}
 
 		if invalid || invalidAppName {
-			// An invalid config was found for this app. No need to continue parsing the spec for this app
+			// An invalid config was found for this app. No need to continue parsing the spec for this app.
 			continue
 		}
 
 		operationPolicy := config.NewTrie()
 
-		// Iterate over all the operations and create a map for fast lookup
+		// Iterate over all the operations and create a map for fast lookup.
 		for _, appPolicy := range appPolicySpec.AppOperationActions {
 			// The operation name might be specified as /invoke/*
 			// Store the prefix as the key and use the remainder as post fix for faster lookups
-			// Also, prepend "/" in case it is missing in the operation name
+			// Also, prepend "/" in case it is missing in the operation name.
 			operationName := appPolicy.Operation
 			if !strings.HasPrefix(operationName, "/") {
 				operationName = "/" + operationName
@@ -108,12 +108,12 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 				VerbAction:    make(map[string]string),
 			}
 
-			// Iterate over all the http verbs and create a map and set the action for fast lookup
+			// Iterate over all the http verbs and create a map and set the action for fast lookup.
 			for _, verb := range appPolicy.HTTPVerb {
 				operationActions.VerbAction[verb] = appPolicy.Action
 			}
 
-			// Store the operation action for grpc invocations where no http verb is specified
+			// Store the operation action for grpc invocations where no http verb is specified.
 			operationActions.OperationAction = appPolicy.Action
 
 			operationPolicy.PutOperationAction(operationName, &operationActions)
@@ -126,7 +126,7 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 			AppOperationActions: operationPolicy,
 		}
 
-		// The policy spec can have the same appID which belongs to different namespaces
+		// The policy spec can have the same appID which belongs to different namespaces.
 		key := getKeyForAppID(aclPolicySpec.AppName, aclPolicySpec.Namespace)
 		accessControlList.PolicySpec[key] = aclPolicySpec
 	}
@@ -237,10 +237,10 @@ func normalizeOperation(operation string) (string, error) {
 }
 
 func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string, acl *config.AccessControlList) (bool, string) {
-	// Apply access control list filter
+	// Apply access control list filter.
 	spiffeID, err := GetAndParseSpiffeID(ctx)
 	if err != nil {
-		// Apply the default action
+		// Apply the default action.
 		log.Debugf("error while reading spiffe id from client cert: %v. applying default global policy action", err.Error())
 	}
 	var appID, trustDomain, namespace string
@@ -291,7 +291,7 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app.
 func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID string, inputOperation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string, accessControlList *config.AccessControlList) (bool, string) {
 	if accessControlList == nil {
-		// No access control list is provided. Do nothing
+		// No access control list is provided. Do nothing.
 		return isActionAllowed(config.AllowAccess), ""
 	}
 
@@ -299,48 +299,48 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID
 	actionPolicy := config.ActionPolicyGlobal
 
 	if srcAppID == "" {
-		// Did not receive the src app id correctly
+		// Did not receive the src app id correctly.
 		return isActionAllowed(action), actionPolicy
 	}
 
 	if spiffeID == nil {
-		// Could not retrieve spiffe id or it is invalid. Apply global default action
+		// Could not retrieve spiffe id or it is invalid. Apply global default action.
 		return isActionAllowed(action), actionPolicy
 	}
 
-	// Look up the src app id in the in-memory table. The key is appID||namespace
+	// Look up the src app id in the in-memory table. The key is appID||namespace.
 	key := getKeyForAppID(srcAppID, spiffeID.Namespace)
 	appPolicy, found := accessControlList.PolicySpec[key]
 
 	if !found {
-		// no policies found for this src app id. Apply global default action
+		// no policies found for this src app id. Apply global default action.
 		return isActionAllowed(action), actionPolicy
 	}
 
-	// Match trust domain
+	// Match trust domain.
 	if appPolicy.TrustDomain != spiffeID.TrustDomain {
 		return isActionAllowed(action), actionPolicy
 	}
 
-	// Match namespace
+	// Match namespace.
 	if appPolicy.Namespace != spiffeID.Namespace {
 		return isActionAllowed(action), actionPolicy
 	}
 
 	if appPolicy.DefaultAction != "" {
 		// Since the app has specified a default action, this point onwards,
-		// default action is the default action specified in the spec for the app
+		// default action is the default action specified in the spec for the app.
 		action = appPolicy.DefaultAction
 		actionPolicy = config.ActionPolicyApp
 	}
 
 	// the in-memory table has operations stored in the format "/operation name".
-	// Prepend a "/" in case missing so that the match works
+	// Prepend a "/" in case missing so that the match works.
 	if !strings.HasPrefix(inputOperation, "/") {
 		inputOperation = "/" + inputOperation
 	}
 
-	// If HTTP, make case-insensitive
+	// If HTTP, make case-insensitive.
 	if appProtocol == config.HTTPProtocol {
 		inputOperation = strings.ToLower(inputOperation)
 	}
@@ -348,17 +348,17 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID
 	operationPolicy := appPolicy.AppOperationActions.Search(inputOperation)
 
 	if operationPolicy != nil {
-		// Operation prefix and postfix match. Now check the operation specific policy
+		// Operation prefix and postfix match. Now check the operation specific policy.
 		if appProtocol == config.HTTPProtocol {
 			if httpVerb != commonv1pb.HTTPExtension_NONE {
 				verbAction, found := operationPolicy.VerbAction[httpVerb.String()]
 				if found {
-					// An action for a specific verb is matched
+					// An action for a specific verb is matched.
 					action = verbAction
 				} else {
 					verbAction, found = operationPolicy.VerbAction["*"]
 					if found {
-						// The verb matched the wildcard "*"
+						// The verb matched the wildcard "*".
 						action = verbAction
 					}
 				}

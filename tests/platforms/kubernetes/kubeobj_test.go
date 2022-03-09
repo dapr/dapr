@@ -34,10 +34,10 @@ func TestBuildDeploymentObject(t *testing.T) {
 	t.Run("Dapr Enabled", func(t *testing.T) {
 		testApp.DaprEnabled = true
 
-		// act
+		// act.
 		obj := buildDeploymentObject("testNamespace", testApp)
 
-		// assert
+		// assert.
 		assert.NotNil(t, obj)
 		assert.Equal(t, "true", obj.Spec.Template.Annotations["dapr.io/enabled"])
 	})
@@ -45,10 +45,10 @@ func TestBuildDeploymentObject(t *testing.T) {
 	t.Run("Dapr disabled", func(t *testing.T) {
 		testApp.DaprEnabled = false
 
-		// act
+		// act.
 		obj := buildDeploymentObject("testNamespace", testApp)
 
-		// assert
+		// assert.
 		assert.NotNil(t, obj)
 		assert.Empty(t, obj.Spec.Template.Annotations)
 	})
@@ -67,10 +67,10 @@ func TestBuildJobObject(t *testing.T) {
 	t.Run("Dapr Enabled", func(t *testing.T) {
 		testApp.DaprEnabled = true
 
-		// act
+		// act.
 		obj := buildJobObject("testNamespace", testApp)
 
-		// assert
+		// assert.
 		assert.NotNil(t, obj)
 		assert.Equal(t, "true", obj.Spec.Template.Annotations["dapr.io/enabled"])
 	})
@@ -78,10 +78,10 @@ func TestBuildJobObject(t *testing.T) {
 	t.Run("Dapr disabled", func(t *testing.T) {
 		testApp.DaprEnabled = false
 
-		// act
+		// act.
 		obj := buildJobObject("testNamespace", testApp)
 
-		// assert
+		// assert.
 		assert.NotNil(t, obj)
 		assert.Empty(t, obj.Spec.Template.Annotations)
 	})
@@ -101,10 +101,10 @@ func TestBuildServiceObject(t *testing.T) {
 	t.Run("Ingress is enabled", func(t *testing.T) {
 		testApp.IngressEnabled = true
 
-		// act
+		// act.
 		obj := buildServiceObject("testNamespace", testApp)
 
-		// assert
+		// assert.
 		assert.NotNil(t, obj)
 		assert.Equal(t, apiv1.ServiceTypeLoadBalancer, obj.Spec.Type)
 	})
@@ -112,10 +112,10 @@ func TestBuildServiceObject(t *testing.T) {
 	t.Run("Ingress is disabled", func(t *testing.T) {
 		testApp.IngressEnabled = false
 
-		// act
+		// act.
 		obj := buildServiceObject("testNamespace", testApp)
 
-		// assert
+		// assert.
 		assert.NotNil(t, obj)
 		assert.Equal(t, apiv1.ServiceTypeClusterIP, obj.Spec.Type)
 	})

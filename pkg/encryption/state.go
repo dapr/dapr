@@ -60,7 +60,7 @@ func TryEncryptValue(storeName string, value []byte) ([]byte, error) {
 // If no encryption keys exist, the function will return the bytes unmodified.
 func TryDecryptValue(storeName string, value []byte) ([]byte, error) {
 	keys := encryptedStateStores[storeName]
-	// extract the decryption key that should be appended to the value
+	// extract the decryption key that should be appended to the value.
 	ind := bytes.LastIndex(value, []byte(separator))
 	keyName := string(value[ind+len(separator):])
 

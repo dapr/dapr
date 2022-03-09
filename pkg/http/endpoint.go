@@ -26,6 +26,6 @@ type Endpoint struct {
 	Route             string
 	Version           string
 	Alias             string
-	KeepParamUnescape bool // keep the param in path unescaped
+	KeepParamUnescape bool // keep the param in path unescaped.
 	Handler           fasthttp.RequestHandler
 }

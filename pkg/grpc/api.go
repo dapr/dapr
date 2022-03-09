@@ -62,11 +62,11 @@ const (
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
-	// DaprInternal Service methods
+	// DaprInternal Service methods.
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 
-	// Dapr Service methods
+	// Dapr Service methods.
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
@@ -93,11 +93,11 @@ type API interface {
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
-	// Gets metadata of the sidecar
+	// Gets metadata of the sidecar.
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
-	// Sets value in extended metadata of the sidecar
+	// Sets value in extended metadata of the sidecar.
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
-	// Shutdown the sidecar
+	// Shutdown the sidecar.
 	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
 }
 
@@ -110,7 +110,7 @@ type api struct {
 	secretStores               map[string]secretstores.SecretStore
 	secretsConfiguration       map[string]config.SecretsScope
 	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
+	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan.
 	configurationSubscribeLock sync.Mutex
 	pubsubAdapter              runtime_pubsub.Adapter
 	id                         string
@@ -181,7 +181,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		// An access control policy has been specified for the app. Apply the policies.
 		operation := req.Message().Method
 		var httpVerb commonv1pb.HTTPExtension_Verb
-		// Get the http verb in case the application protocol is http
+		// Get the http verb in case the application protocol is http.
 		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {
@@ -254,9 +254,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	span := diag_utils.SpanFromContext(ctx)
-	// Populate W3C traceparent to cloudevent envelope
+	// Populate W3C traceparent to cloudevent envelope.
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
+	// Populate W3C tracestate to cloudevent envelope.
 	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
 	body := []byte{}
@@ -348,11 +348,11 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			_, errorMessage = resp.RawData()
 		}
 		respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
-		// Populate http status code to header
+		// Populate http status code to header.
 		headerMD.Set(daprHTTPStatusHeader, strconv.Itoa(int(resp.Status().Code)))
 	} else {
 		respError = invokev1.ErrorFromInternalStatus(resp.Status())
-		// ignore trailer if appchannel uses HTTP
+		// ignore trailer if appchannel uses HTTP.
 		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Trailers(), false))
 	}
 
@@ -402,7 +402,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		return bulkResp, nil
 	}
 
-	// try bulk get first
+	// try bulk get first.
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
 		key, err1 := state_loader.GetModifiedStateKey(k, in.StoreName, a.id)
@@ -422,7 +422,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
 
-	// if store supports bulk get
+	// if store supports bulk get.
 	if bulkGet {
 		if err != nil {
 			return bulkResp, err
@@ -440,7 +440,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		return bulkResp, nil
 	}
 
-	// if store doesn't support bulk get, fallback to call get() method one by one
+	// if store doesn't support bulk get, fallback to call get() method one by one.
 	limiter := concurrency.NewLimiter(int(in.Parallelism))
 	n := len(reqs)
 	resultCh := make(chan *runtimev1pb.BulkStateItem, n)
@@ -463,7 +463,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		limiter.Execute(fn, &reqs[i])
 	}
 	limiter.Wait()
-	// collect result
+	// collect result.
 	resultLen := len(resultCh)
 	for i := 0; i < resultLen; i++ {
 		item := <-resultCh
@@ -1387,7 +1387,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// TODO(@laurence) deal with failed subscription and retires
+	// TODO(@laurence) deal with failed subscription and retires.
 	start := time.Now()
 	id, err := store.Subscribe(ctx, req, handler.updateEventHandler)
 	elapsed := diag.ElapsedSince(start)

@@ -161,7 +161,7 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 		}
 	}()
 
-	// wait until server starts
+	// wait until server starts.
 	time.Sleep(maxGRPCServerUptime)
 
 	return server, &buffer
@@ -178,7 +178,7 @@ func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 		}
 	}()
 
-	// wait until server starts
+	// wait until server starts.
 	time.Sleep(maxGRPCServerUptime)
 
 	return server
@@ -195,7 +195,7 @@ func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 		}
 	}()
 
-	// wait until server starts
+	// wait until server starts.
 	time.Sleep(maxGRPCServerUptime)
 
 	return server
@@ -219,7 +219,7 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 		}
 	}()
 
-	// wait until server starts
+	// wait until server starts.
 	time.Sleep(maxGRPCServerUptime)
 
 	return server
@@ -344,7 +344,7 @@ func mustMarshalAny(msg proto.Message) *anypb.Any {
 func TestAPIToken(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
-	// Setup Dapr API server
+	// Setup Dapr API server.
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: mockDirectMessaging,
@@ -356,23 +356,23 @@ func TestAPIToken(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
 		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
 
-		// Set up direct messaging mock
-		mockDirectMessaging.Calls = nil // reset call count
+		// Set up direct messaging mock.
+		mockDirectMessaging.Calls = nil // reset call count.
 		mockDirectMessaging.On("Invoke",
 			mock.AnythingOfType("*context.valueCtx"),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
-		// Run test server
+		// Run test server.
 		port, _ := freeport.GetFreePort()
 		server := startDaprAPIServer(port, fakeAPI, token)
 		defer server.Stop()
 
-		// Create gRPC test client
+		// Create gRPC test client.
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
+		// act.
 		client := runtimev1pb.NewDaprClient(clientConn)
 		req := &runtimev1pb.InvokeServiceRequest{
 			Id: "fakeAppID",
@@ -385,7 +385,7 @@ func TestAPIToken(t *testing.T) {
 		ctx := metadata.NewOutgoingContext(context.Background(), md)
 		_, err := client.InvokeService(ctx, req)
 
-		// assert
+		// assert.
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		s, ok := status.FromError(err)
 		assert.True(t, ok)
@@ -404,23 +404,23 @@ func TestAPIToken(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
 		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
 
-		// Set up direct messaging mock
-		mockDirectMessaging.Calls = nil // reset call count
+		// Set up direct messaging mock.
+		mockDirectMessaging.Calls = nil // reset call count.
 		mockDirectMessaging.On("Invoke",
 			mock.AnythingOfType("*context.valueCtx"),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
-		// Run test server
+		// Run test server.
 		port, _ := freeport.GetFreePort()
 		server := startDaprAPIServer(port, fakeAPI, token)
 		defer server.Stop()
 
-		// Create gRPC test client
+		// Create gRPC test client.
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
+		// act.
 		client := runtimev1pb.NewDaprClient(clientConn)
 		req := &runtimev1pb.InvokeServiceRequest{
 			Id: "fakeAppID",
@@ -433,7 +433,7 @@ func TestAPIToken(t *testing.T) {
 		ctx := metadata.NewOutgoingContext(context.Background(), md)
 		_, err := client.InvokeService(ctx, req)
 
-		// assert
+		// assert.
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
 		s, ok := status.FromError(err)
 		assert.True(t, ok)
@@ -446,23 +446,23 @@ func TestAPIToken(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
 		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
 
-		// Set up direct messaging mock
-		mockDirectMessaging.Calls = nil // reset call count
+		// Set up direct messaging mock.
+		mockDirectMessaging.Calls = nil // reset call count.
 		mockDirectMessaging.On("Invoke",
 			mock.AnythingOfType("*context.valueCtx"),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
-		// Run test server
+		// Run test server.
 		port, _ := freeport.GetFreePort()
 		server := startDaprAPIServer(port, fakeAPI, token)
 		defer server.Stop()
 
-		// Create gRPC test client
+		// Create gRPC test client.
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
+		// act.
 		client := runtimev1pb.NewDaprClient(clientConn)
 		req := &runtimev1pb.InvokeServiceRequest{
 			Id: "fakeAppID",
@@ -473,7 +473,7 @@ func TestAPIToken(t *testing.T) {
 		}
 		_, err := client.InvokeService(context.Background(), req)
 
-		// assert
+		// assert.
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 0)
 		s, ok := status.FromError(err)
 		assert.True(t, ok)
@@ -484,7 +484,7 @@ func TestAPIToken(t *testing.T) {
 func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
-	// Setup Dapr API server
+	// Setup Dapr API server.
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: mockDirectMessaging,
@@ -537,23 +537,23 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil)
 			fakeResp.WithRawData([]byte(tt.errHTTPMessage), "application/json")
 
-			// Set up direct messaging mock
-			mockDirectMessaging.Calls = nil // reset call count
+			// Set up direct messaging mock.
+			mockDirectMessaging.Calls = nil // reset call count.
 			mockDirectMessaging.On("Invoke",
 				mock.AnythingOfType("*context.valueCtx"),
 				"fakeAppID",
 				mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
-			// Run test server
+			// Run test server.
 			port, _ := freeport.GetFreePort()
 			server := startDaprAPIServer(port, fakeAPI, "")
 			defer server.Stop()
 
-			// Create gRPC test client
+			// Create gRPC test client.
 			clientConn := createTestClient(port)
 			defer clientConn.Close()
 
-			// act
+			// act.
 			client := runtimev1pb.NewDaprClient(clientConn)
 			req := &runtimev1pb.InvokeServiceRequest{
 				Id: "fakeAppID",
@@ -565,7 +565,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 			var header metadata.MD
 			_, err := client.InvokeService(context.Background(), req, grpc.Header(&header))
 
-			// assert
+			// assert.
 			mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 			s, ok := status.FromError(err)
 			assert.True(t, ok)
@@ -587,7 +587,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
-	// Setup Dapr API server
+	// Setup Dapr API server.
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: mockDirectMessaging,
@@ -606,23 +606,23 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 		)
 		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
 
-		// Set up direct messaging mock
-		mockDirectMessaging.Calls = nil // reset call count
+		// Set up direct messaging mock.
+		mockDirectMessaging.Calls = nil // reset call count.
 		mockDirectMessaging.On("Invoke",
 			mock.AnythingOfType("*context.valueCtx"),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
-		// Run test server
+		// Run test server.
 		port, _ := freeport.GetFreePort()
 		server := startDaprAPIServer(port, fakeAPI, "")
 		defer server.Stop()
 
-		// Create gRPC test client
+		// Create gRPC test client.
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		// act
+		// act.
 		client := runtimev1pb.NewDaprClient(clientConn)
 		req := &runtimev1pb.InvokeServiceRequest{
 			Id: "fakeAppID",
@@ -633,7 +633,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 		}
 		_, err := client.InvokeService(context.Background(), req)
 
-		// assert
+		// assert.
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		s, ok := status.FromError(err)
 		assert.True(t, ok)
@@ -687,8 +687,8 @@ func TestGetSecret(t *testing.T) {
 	storeName := "store1"
 	deniedStoreName := "store2"
 	restrictedStore := "store3"
-	unrestrictedStore := "store4"     // No configuration defined for the store
-	nonExistingStore := "nonexistent" // Non-existing store
+	unrestrictedStore := "store4"     // No configuration defined for the store.
+	nonExistingStore := "nonexistent" // Non-existing store.
 
 	testCases := []struct {
 		testName         string
@@ -760,22 +760,22 @@ func TestGetSecret(t *testing.T) {
 			expectedError:    codes.InvalidArgument,
 		},
 	}
-	// Setup Dapr API server
+	// Setup Dapr API server.
 	fakeAPI := &api{
 		id:                   "fakeAPI",
 		secretStores:         fakeStores,
 		secretsConfiguration: secretsConfiguration,
 	}
-	// Run test server
+	// Run test server.
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
 	defer server.Stop()
 
-	// Create gRPC test client
+	// Create gRPC test client.
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
-	// act
+	// act.
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	for _, tt := range testCases {
@@ -826,22 +826,22 @@ func TestGetBulkSecret(t *testing.T) {
 			expectedResponse: expectedResponse,
 		},
 	}
-	// Setup Dapr API server
+	// Setup Dapr API server.
 	fakeAPI := &api{
 		id:                   "fakeAPI",
 		secretStores:         fakeStores,
 		secretsConfiguration: secretsConfiguration,
 	}
-	// Run test server
+	// Run test server.
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
 	defer server.Stop()
 
-	// Create gRPC test client
+	// Create gRPC test client.
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
-	// act
+	// act.
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	for _, tt := range testCases {
@@ -2154,7 +2154,7 @@ func TestQueryState(t *testing.T) {
 	assert.NoError(t, err)
 
 	fakeStore := &mockStateStoreQuerier{}
-	// simulate full result
+	// simulate full result.
 	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
 		return len(req.Query.Sort) != 0 && req.Query.Page.Limit != 0
 	})).Return(
@@ -2166,14 +2166,14 @@ func TestQueryState(t *testing.T) {
 				},
 			},
 		}, nil)
-	// simulate empty data
+	// simulate empty data.
 	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
 		return len(req.Query.Sort) == 0 && req.Query.Page.Limit != 0
 	})).Return(
 		&state.QueryResponse{
 			Results: []state.QueryItem{},
 		}, nil)
-	// simulate error
+	// simulate error.
 	fakeStore.MockQuerier.On("Query", mock.MatchedBy(func(req *state.QueryRequest) bool {
 		return len(req.Query.Sort) != 0 && req.Query.Page.Limit == 0
 	})).Return(nil, errors.New("Query error"))

@@ -45,7 +45,7 @@ func waitUntilDaprOutboundReady(daprHTTPPort string) {
 		}
 
 		if time.Now().After(lastPrintErrorTime) {
-			// print the error once in one seconds to avoid too many errors
+			// print the error once in one seconds to avoid too many errors.
 			lastPrintErrorTime = time.Now().Add(time.Second)
 			println(fmt.Sprintf("Dapr outbound NOT ready yet: %v", err))
 		}

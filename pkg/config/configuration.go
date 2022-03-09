@@ -230,7 +230,7 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 		return nil, "", err
 	}
 
-	// Parse environment variables from yaml
+	// Parse environment variables from yaml.
 	b = []byte(os.ExpandEnv(string(b)))
 
 	conf := LoadDefaultConfiguration()
@@ -278,7 +278,7 @@ func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 	scopes := conf.Spec.Secrets.Scopes
 	set := sets.NewString()
 	for _, scope := range scopes {
-		// validate scope
+		// validate scope.
 		if set.Has(scope.StoreName) {
 			return errors.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
 		}
@@ -289,7 +289,7 @@ func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 		}
 		set.Insert(scope.StoreName)
 
-		// modify scope
+		// modify scope.
 		sort.Strings(scope.AllowedSecrets)
 		sort.Strings(scope.DeniedSecrets)
 	}

@@ -67,7 +67,7 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 			}
 		}
 
-		// Check if response has traceparent header and add if absent
+		// Check if response has traceparent header and add if absent.
 		if ctx.Response.Header.Peek(traceparentHeader) == nil {
 			span = diag_utils.SpanFromContext(ctx)
 			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
@@ -202,18 +202,18 @@ func getContextValue(ctx *fasthttp.RequestCtx, key string) string {
 
 func getAPIComponent(apiPath string) (string, string) {
 	// Dapr API reference : https://docs.dapr.io/reference/api/
-	// example : apiPath /v1.0/state/statestore
+	// example : apiPath /v1.0/state/statestore.
 	if apiPath == "" {
 		return "", ""
 	}
 
-	// Split up to 4 delimiters in '/v1.0/state/statestore/key' to get component api type and value
+	// Split up to 4 delimiters in '/v1.0/state/statestore/key' to get component api type and value.
 	tokens := strings.SplitN(apiPath, "/", 4)
 	if len(tokens) < 3 {
 		return "", ""
 	}
 
-	// return 'state', 'statestore' from the parsed tokens in apiComponent type
+	// return 'state', 'statestore' from the parsed tokens in apiComponent type.
 	return tokens[1], tokens[2]
 }
 
@@ -279,7 +279,7 @@ func populateActorParams(ctx *fasthttp.RequestCtx, m map[string]string) string {
 
 	path := string(ctx.Request.URI().Path())
 	// Split up to 7 delimiters in '/v1.0/actors/{actorType}/{actorId}/method/{method}'
-	// to get component api type and value
+	// to get component api type and value.
 	tokens := strings.SplitN(path, "/", 7)
 	if len(tokens) < 7 {
 		return ""

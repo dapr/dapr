@@ -40,7 +40,7 @@ func (m *MockSnapShotSink) Close() error {
 }
 
 func TestPersist(t *testing.T) {
-	// arrange
+	// arrange.
 	fsm := newFSM()
 	testMember := DaprHostMember{
 		Name:     "127.0.0.1:3030",
@@ -58,12 +58,12 @@ func TestPersist(t *testing.T) {
 	buf := bytes.NewBuffer(nil)
 	fakeSink := &MockSnapShotSink{buf, false}
 
-	// act
+	// act.
 	snap, err := fsm.Snapshot()
 	assert.NoError(t, err)
 	snap.Persist(fakeSink)
 
-	// assert
+	// assert.
 	restoredState := newDaprHostMemberState()
 	err = restoredState.restore(buf)
 	assert.NoError(t, err)

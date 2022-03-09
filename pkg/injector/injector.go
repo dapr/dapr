@@ -77,10 +77,10 @@ func toAdmissionResponse(err error) *v1.AdmissionResponse {
 }
 
 func getAppIDFromRequest(req *v1.AdmissionRequest) string {
-	// default App ID
+	// default App ID.
 	appID := ""
 
-	// if req is not given
+	// if req is not given.
 	if req == nil {
 		return appID
 	}
@@ -122,7 +122,7 @@ func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient kuberne
 	allowedUids := []string{}
 	for i, allowedControllersServiceAccount := range allowedControllersServiceAccounts {
 		saUUID, err := getServiceAccount(ctx, kubeClient, allowedControllersServiceAccount)
-		// i == 0 => "replicaset-controller" is the only one mandatory
+		// i == 0 => "replicaset-controller" is the only one mandatory.
 		if err != nil {
 			if i == 0 {
 				return nil, err
@@ -220,7 +220,6 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			log.Warnf("%q's DNSPolicy is not %q. Services may not be called", pod.Namespace+"/"+pod.Name, corev1.DNSClusterFirst)
 			isDNSClusterFirst = false
 		}
-
 	}
 	if isDNSClusterFirst {
 		if !(utils.StringSliceContains(ar.Request.UserInfo.UID, i.authUIDs) || utils.StringSliceContains(systemGroup, ar.Request.UserInfo.Groups)) {

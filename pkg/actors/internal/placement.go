@@ -52,7 +52,7 @@ const (
 type ActorPlacement struct {
 	actorTypes []string
 	appID      string
-	// runtimeHostname is the address and port of the runtime
+	// runtimeHostname is the address and port of the runtime.
 	runtimeHostName string
 
 	// serverAddr is the list of placement addresses.
@@ -96,7 +96,7 @@ type ActorPlacement struct {
 
 	// shutdown is the flag when runtime is being shutdown.
 	shutdown atomic.Bool
-	// shutdownConnLoop is the wait group to wait until all connection loop are done
+	// shutdownConnLoop is the wait group to wait until all connection loop are done.
 	shutdownConnLoop sync.WaitGroup
 }
 
@@ -170,7 +170,7 @@ func (p *ActorPlacement) Start() {
 		p.streamConnectedCond.Broadcast()
 	}()
 
-	// Establish receive channel to retrieve placement table update
+	// Establish receive channel to retrieve placement table update.
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
@@ -253,12 +253,12 @@ func (p *ActorPlacement) Start() {
 				Name:     p.runtimeHostName,
 				Entities: p.actorTypes,
 				Id:       p.appID,
-				Load:     1, // Not used yet
-				// Port is redundant because Name should include port number
+				Load:     1, // Not used yet.
+				// Port is redundant because Name should include port number.
 			}
 
 			var err error
-			// Do lock to avoid being called with CloseSend concurrently
+			// Do lock to avoid being called with CloseSend concurrently.
 			func() {
 				p.clientLock.RLock()
 				defer p.clientLock.RUnlock()
@@ -317,7 +317,7 @@ func (p *ActorPlacement) closeStream() {
 		defer p.streamConnectedCond.L.Unlock()
 
 		p.streamConnAlive = false
-		// Let waiters wake up from block
+		// Let waiters wake up from block.
 		p.streamConnectedCond.Broadcast()
 	}()
 }
@@ -381,7 +381,7 @@ func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 	log.Debugf("placement order received: %s", in.Operation)
 	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
 
-	// lock all incoming calls when an updated table arrives
+	// lock all incoming calls when an updated table arrives.
 	p.operationUpdateLock.Lock()
 	defer p.operationUpdateLock.Unlock()
 

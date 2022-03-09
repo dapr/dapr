@@ -234,7 +234,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default deny all secrets empty key",
 			scope: SecretsScope{
 				StoreName:     "testName",
-				DefaultAccess: "DeNy", // check case-insensitivity
+				DefaultAccess: "DeNy", // check case-insensitivity.
 			},
 			secretKey:      "",
 			expectedResult: false,
@@ -243,7 +243,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default allow all secrets empty key",
 			scope: SecretsScope{
 				StoreName:     "testName",
-				DefaultAccess: "AllOw", // check case-insensitivity
+				DefaultAccess: "AllOw", // check case-insensitivity.
 			},
 			secretKey:      "",
 			expectedResult: true,

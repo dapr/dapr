@@ -44,8 +44,8 @@ type (
 		PubsubName string            `json:"pubsubname"`
 		Topic      string            `json:"topic"`
 		Metadata   map[string]string `json:"metadata,omitempty"`
-		Route      string            `json:"route"`  // Single route from v1alpha1
-		Routes     RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
+		Route      string            `json:"route"`  // Single route from v1alpha1.
+		Routes     RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1.
 	}
 
 	RoutesJSON struct {
@@ -67,7 +67,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 	req.WithHTTPExtension(http.MethodGet, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
 
-	// TODO Propagate Context
+	// TODO Propagate Context.
 	ctx := context.Background()
 
 	var resp *invokev1.InvokeMethodResponse

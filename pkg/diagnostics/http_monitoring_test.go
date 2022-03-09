@@ -21,16 +21,16 @@ func TestFastHTTPMiddleware(t *testing.T) {
 		ctx.Response.SetBodyRaw([]byte(responseBody))
 	}
 
-	// create test httpMetrics
+	// create test httpMetrics.
 	testHTTP := newHTTPMetrics()
 	testHTTP.Init("fakeID")
 
 	handler := testHTTP.FastHTTPMiddleware(fakeHandler)
 
-	// act
+	// act.
 	handler(testRequestCtx)
 
-	// assert
+	// assert.
 	rows, err := view.RetrieveData("http/server/request_count")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
@@ -70,7 +70,7 @@ func TestFastHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 		ctx.Response.SetBodyRaw([]byte(responseBody))
 	}
 
-	// create test httpMetrics
+	// create test httpMetrics.
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
 
@@ -81,10 +81,10 @@ func TestFastHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 
 	handler := testHTTP.FastHTTPMiddleware(fakeHandler)
 
-	// act
+	// act.
 	handler(testRequestCtx)
 
-	// assert
+	// assert.
 	rows, err := view.RetrieveData("http/server/request_count")
 	assert.Error(t, err)
 	assert.Nil(t, rows)

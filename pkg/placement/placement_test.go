@@ -69,7 +69,7 @@ func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) 
 		testServer.Run(strconv.Itoa(port), nil)
 	}()
 
-	// Wait until test server starts
+	// Wait until test server starts.
 	time.Sleep(100 * time.Millisecond)
 
 	cleanUpFn := func() {
@@ -97,11 +97,11 @@ func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_Repor
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
-	// set up
+	// set up.
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
 	testServer.hasLeadership.Store(false)
 
-	// arrange
+	// arrange.
 	conn, stream, err := newTestClient(serverAddress)
 	assert.NoError(t, err)
 
@@ -109,21 +109,21 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 		Name:     "127.0.0.1:50102",
 		Entities: []string{"DogActor", "CatActor"},
 		Id:       "testAppID",
-		Load:     1, // Not used yet
-		// Port is redundant because Name should include port number
+		Load:     1, // Not used yet.
+		// Port is redundant because Name should include port number.
 	}
 
-	// act
+	// act.
 	stream.Send(host)
 	_, err = stream.Recv()
 	s, ok := status.FromError(err)
 
-	// assert
+	// assert.
 	assert.True(t, ok)
 	assert.Equal(t, codes.FailedPrecondition, s.Code())
 	stream.CloseSend()
 
-	// tear down
+	// tear down.
 	conn.Close()
 	cleanup()
 }
@@ -133,7 +133,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 	testServer.hasLeadership.Store(true)
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
-		// arrange
+		// arrange.
 		conn, stream, err := newTestClient(serverAddress)
 		assert.NoError(t, err)
 
@@ -141,14 +141,14 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			Name:     "127.0.0.1:50102",
 			Entities: []string{"DogActor", "CatActor"},
 			Id:       "testAppID",
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
+			Load:     1, // Not used yet.
+			// Port is redundant because Name should include port number.
 		}
 
-		// act
+		// act.
 		stream.Send(host)
 
-		// assert
+		// assert.
 		select {
 		case memberChange := <-testServer.membershipCh:
 			assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
@@ -166,7 +166,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// in the next flush time window.
 		stream.CloseSend()
 
-		// assert
+		// assert.
 		select {
 		case memberChange := <-testServer.membershipCh:
 			assert.Equal(t, raft.MemberRemove, memberChange.cmdType)
@@ -180,21 +180,21 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 	})
 
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
-		// arrange
+		// arrange.
 		conn, stream, err := newTestClient(serverAddress)
 		assert.NoError(t, err)
 
-		// act
+		// act.
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50103",
 			Entities: []string{"DogActor", "CatActor"},
 			Id:       "testAppID",
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
+			Load:     1, // Not used yet.
+			// Port is redundant because Name should include port number.
 		}
 		stream.Send(host)
 
-		// assert
+		// assert.
 		select {
 		case memberChange := <-testServer.membershipCh:
 			assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
@@ -212,7 +212,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
 		conn.Close()
 
-		// assert
+		// assert.
 		select {
 		case <-testServer.membershipCh:
 			require.True(t, false, "should not have any member change message because faulty host detector time will clean up")
@@ -226,21 +226,21 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 	})
 
 	t.Run("non actor host", func(t *testing.T) {
-		// arrange
+		// arrange.
 		conn, stream, err := newTestClient(serverAddress)
 		assert.NoError(t, err)
 
-		// act
+		// act.
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50104",
 			Entities: []string{},
 			Id:       "testAppID",
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
+			Load:     1, // Not used yet.
+			// Port is redundant because Name should include port number.
 		}
 		stream.Send(host)
 
-		// assert
+		// assert.
 		select {
 		case <-testServer.membershipCh:
 			require.True(t, false, "should not have any membership change")

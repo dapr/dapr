@@ -165,7 +165,7 @@ func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	// Actor methods are individually bound so we can experiment with missing messages
+	// Actor methods are individually bound so we can experiment with missing messages.
 	router.HandleFunc("/actors/{actorType}/{actorId}/method/logCall", logCall).Methods("POST", "PUT")
 	router.HandleFunc("/actors/{actorType}/{actorId}/method/callDifferentActor", callDifferentActor).Methods("POST", "PUT")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")

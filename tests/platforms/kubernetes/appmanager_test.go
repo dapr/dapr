@@ -69,11 +69,11 @@ func TestDeployApp(t *testing.T) {
 	testApp := testAppDescription()
 	appManager := NewAppManager(client, testNamespace, testApp)
 
-	// act
+	// act.
 	_, err := appManager.Deploy()
 	assert.NoError(t, err)
 
-	// assert
+	// assert.
 	deploymentClient := client.Deployments(testNamespace)
 	deployment, _ := deploymentClient.Get(context.TODO(), testApp.AppName, metav1.GetOptions{})
 	assert.NotNil(t, deployment)
@@ -95,7 +95,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 		getVerbCalled := 0
 		const expectedGetVerbCalled = 2
 
-		// Set up reactor to fake verb
+		// Set up reactor to fake verb.
 		client.ClientSet.(*fake.Clientset).AddReactor(
 			"*",
 			"deployments",
@@ -105,14 +105,14 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 
 				switch action.GetVerb() {
 				case createVerb:
-					// return the same deployment object
+					// return the same deployment object.
 					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
 					createdDeploymentObj.Status.ReadyReplicas = 0
 					createdDeploymentObj.Status.AvailableReplicas = 0
 
 				case getVerb:
 					// set Replicas to the target replicas when WaitUntilDeploymentState called
-					// get verb 'expectedGetVerbCalled' times
+					// get verb 'expectedGetVerbCalled' times.
 					if getVerbCalled == expectedGetVerbCalled {
 						createdDeploymentObj.Status.ReadyReplicas = testApp.Replicas
 						createdDeploymentObj.Status.AvailableReplicas = testApp.Replicas
@@ -125,11 +125,11 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 
 		appManager := NewAppManager(client, testNamespace, testApp)
 
-		// act
+		// act.
 		_, err := appManager.Deploy()
 		assert.NoError(t, err)
 
-		// assert
+		// assert.
 		d, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone)
 
 		assert.NoError(t, err)
@@ -142,7 +142,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 		getVerbCalled := 0
 		const expectedGetVerbCalled = 2
 
-		// Set up reactor to fake verb
+		// Set up reactor to fake verb.
 		client.ClientSet.(*fake.Clientset).AddReactor(
 			"*",
 			"deployments",
@@ -152,13 +152,13 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 
 				switch action.GetVerb() {
 				case createVerb:
-					// return the same deployment object
+					// return the same deployment object.
 					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
 					createdDeploymentObj.Status.Replicas = testApp.Replicas
 
 				case getVerb:
 					// return notfound error when WaitUntilDeploymentState called
-					// get verb 'expectedGetVerbCalled' times
+					// get verb 'expectedGetVerbCalled' times.
 					if getVerbCalled == expectedGetVerbCalled {
 						err := errors.NewNotFound(
 							schema.GroupResource{
@@ -178,11 +178,11 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 
 		appManager := NewAppManager(client, testNamespace, testApp)
 
-		// act
+		// act.
 		_, err := appManager.Deploy()
 		assert.NoError(t, err)
 
-		// assert
+		// assert.
 		d, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDeleted)
 
 		assert.NoError(t, err)
@@ -194,7 +194,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 func TestScaleDeploymentReplica(t *testing.T) {
 	testApp := testAppDescription()
 	client := newFakeKubeClient()
-	// Set up reactor to fake verb
+	// Set up reactor to fake verb.
 	client.ClientSet.(*fake.Clientset).AddReactor(
 		"*",
 		"deployments",
@@ -261,7 +261,7 @@ func TestValidateSidecar(t *testing.T) {
 
 	t.Run("Sidecar is injected", func(t *testing.T) {
 		client := newFakeKubeClient()
-		// Set up reactor to fake verb
+		// Set up reactor to fake verb.
 		client.ClientSet.(*fake.Clientset).AddReactor(
 			"list",
 			"pods",
@@ -300,7 +300,7 @@ func TestValidateSidecar(t *testing.T) {
 
 	t.Run("Sidecar is not injected", func(t *testing.T) {
 		client := newFakeKubeClient()
-		// Set up reactor to fake verb
+		// Set up reactor to fake verb.
 		client.ClientSet.(*fake.Clientset).AddReactor(
 			"list",
 			"pods",
@@ -334,7 +334,7 @@ func TestValidateSidecar(t *testing.T) {
 
 	t.Run("Pod is not found", func(t *testing.T) {
 		client := newFakeKubeClient()
-		// Set up reactor to fake verb
+		// Set up reactor to fake verb.
 		client.ClientSet.(*fake.Clientset).AddReactor(
 			"list",
 			"pods",
@@ -365,7 +365,7 @@ func TestCreateIngressService(t *testing.T) {
 
 		_, err := appManager.CreateIngressService()
 		assert.NoError(t, err)
-		// assert
+		// assert.
 		serviceClient := client.Services(testNamespace)
 		obj, _ := serviceClient.Get(context.TODO(), testApp.AppName, metav1.GetOptions{})
 		assert.NotNil(t, obj)
@@ -381,7 +381,7 @@ func TestCreateIngressService(t *testing.T) {
 
 		_, err := appManager.CreateIngressService()
 		assert.NoError(t, err)
-		// assert
+		// assert.
 		serviceClient := client.Services(testNamespace)
 		obj, _ := serviceClient.Get(context.TODO(), testApp.AppName, metav1.GetOptions{})
 		assert.NotNil(t, obj)
@@ -392,20 +392,20 @@ func TestCreateIngressService(t *testing.T) {
 }
 
 func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
-	// fake test values
+	// fake test values.
 	fakeMinikubeNodeIP := "192.168.0.12"
 	fakeNodePort := int32(3000)
 	fakeExternalIP := "10.10.10.100"
 	testApp := testAppDescription()
 
-	// Set fake minikube node IP address
+	// Set fake minikube node IP address.
 	oldMinikubeIP := os.Getenv(MiniKubeIPEnvVar)
 
 	t.Run("Minikube environment", func(t *testing.T) {
 		os.Setenv(MiniKubeIPEnvVar, fakeMinikubeNodeIP)
 
 		client := newFakeKubeClient()
-		// Set up reactor to fake verb
+		// Set up reactor to fake verb.
 		client.ClientSet.(*fake.Clientset).AddReactor(
 			getVerb,
 			"services",
@@ -438,7 +438,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 		os.Setenv(MiniKubeIPEnvVar, "")
 
 		client := newFakeKubeClient()
-		// Set up reactor to fake verb
+		// Set up reactor to fake verb.
 		client.ClientSet.(*fake.Clientset).AddReactor(
 			getVerb,
 			"services",
@@ -484,15 +484,15 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 		assert.Equal(t, expectedGetVerbCalled, getVerbCalled)
 	})
 
-	// Recover minikube ip environment variable
+	// Recover minikube ip environment variable.
 	os.Setenv(MiniKubeIPEnvVar, oldMinikubeIP)
 }
 
 func TestWaitUntilServiceStateDeleted(t *testing.T) {
-	// fake test values
+	// fake test values.
 	testApp := testAppDescription()
 	client := newFakeKubeClient()
-	// Set up reactor to fake verb
+	// Set up reactor to fake verb.
 	client.ClientSet.(*fake.Clientset).AddReactor(
 		getVerb,
 		"services",
@@ -516,20 +516,20 @@ func TestWaitUntilServiceStateDeleted(t *testing.T) {
 }
 
 func TestGetOrCreateNamespace(t *testing.T) {
-	// fake test values
+	// fake test values.
 	testApp := testAppDescription()
 
 	t.Run("create namespace", func(t *testing.T) {
 		client := newFakeKubeClient()
 		var fakeNsObj *apiv1.Namespace
-		// Set up reactor to fake verb
+		// Set up reactor to fake verb.
 		client.ClientSet.(*fake.Clientset).AddReactor(
 			"*",
 			"namespaces",
 			func(action core.Action) (bool, runtime.Object, error) {
 				switch action.GetVerb() {
 				case createVerb:
-					// return the same namespace object
+					// return the same namespace object.
 					fakeNsObj = action.(core.CreateAction).GetObject().(*apiv1.Namespace)
 
 				case getVerb:
@@ -555,7 +555,7 @@ func TestGetOrCreateNamespace(t *testing.T) {
 	t.Run("get namespace", func(t *testing.T) {
 		client := newFakeKubeClient()
 		var fakeNsObj *apiv1.Namespace
-		// Set up reactor to fake verb
+		// Set up reactor to fake verb.
 		client.ClientSet.(*fake.Clientset).AddReactor(
 			"*",
 			"namespaces",
@@ -613,7 +613,7 @@ func TestDeleteDeployment(t *testing.T) {
 	for _, tt := range testSets {
 		t.Run(tt.tc, func(t *testing.T) {
 			client := newFakeKubeClient()
-			// Set up reactor to fake verb
+			// Set up reactor to fake verb.
 			client.ClientSet.(*fake.Clientset).AddReactor("delete", "deployments", tt.actionFunc)
 			appManager := NewAppManager(client, testNamespace, testApp)
 			err := appManager.DeleteDeployment(false)
@@ -656,7 +656,7 @@ func TestDeleteService(t *testing.T) {
 	for _, tt := range testSets {
 		t.Run(tt.tc, func(t *testing.T) {
 			client := newFakeKubeClient()
-			// Set up reactor to fake verb
+			// Set up reactor to fake verb.
 			client.ClientSet.(*fake.Clientset).AddReactor("delete", "services", tt.actionFunc)
 			appManager := NewAppManager(client, testNamespace, testApp)
 			err := appManager.DeleteService(false)

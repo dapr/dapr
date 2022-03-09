@@ -91,12 +91,12 @@ func (m *AppManager) App() AppDescription {
 
 // Init installs app by AppDescription.
 func (m *AppManager) Init() error {
-	// Get or create test namespaces
+	// Get or create test namespaces.
 	if _, err := m.GetOrCreateNamespace(); err != nil {
 		return err
 	}
 
-	// TODO: Dispose app if option is required
+	// TODO: Dispose app if option is required.
 	if err := m.Dispose(true); err != nil {
 		return err
 	}
@@ -114,12 +114,12 @@ func (m *AppManager) Init() error {
 
 	log.Printf("Deploying app %v ...", m.app.AppName)
 	if m.app.IsJob {
-		// Deploy app and wait until deployment is done
+		// Deploy app and wait until deployment is done.
 		if _, err := m.ScheduleJob(); err != nil {
 			return err
 		}
 
-		// Wait until app is deployed completely
+		// Wait until app is deployed completely.
 		if _, err := m.WaitUntilJobState(m.IsJobCompleted); err != nil {
 			return err
 		}
@@ -130,12 +130,12 @@ func (m *AppManager) Init() error {
 			}
 		}
 	} else {
-		// Deploy app and wait until deployment is done
+		// Deploy app and wait until deployment is done.
 		if _, err := m.Deploy(); err != nil {
 			return err
 		}
 
-		// Wait until app is deployed completely
+		// Wait until app is deployed completely.
 		if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
 			return err
 		}
@@ -152,7 +152,7 @@ func (m *AppManager) Init() error {
 		// Job cannot have side car validated because it is shutdown on successful completion.
 		log.Printf("Validating sidecar for app %v ....", m.app.AppName)
 		for i := 0; i <= maxSideCarDetectionRetries; i++ {
-			// Validate daprd side car is injected
+			// Validate daprd side car is injected.
 			if err := m.ValidateSidecar(); err != nil {
 				if i == maxSideCarDetectionRetries {
 					return err
@@ -167,7 +167,7 @@ func (m *AppManager) Init() error {
 		}
 		log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
 
-		// Create Ingress endpoint
+		// Create Ingress endpoint.
 		log.Printf("Creating ingress for app %v ....", m.app.AppName)
 		if _, err := m.CreateIngressService(); err != nil {
 			return err
@@ -287,9 +287,9 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 	})
 
 	if waitErr != nil {
-		// get deployment's Pods detail status info
+		// get deployment's Pods detail status info.
 		podClient := m.client.Pods(m.namespace)
-		// Filter only 'testapp=appName' labeled Pods
+		// Filter only 'testapp=appName' labeled Pods.
 		podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 		})
@@ -357,7 +357,7 @@ func (m *AppManager) ValidateSidecar() error {
 	}
 
 	podClient := m.client.Pods(m.namespace)
-	// Filter only 'testapp=appName' labeled Pods
+	// Filter only 'testapp=appName' labeled Pods.
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -369,7 +369,7 @@ func (m *AppManager) ValidateSidecar() error {
 		return fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
 	}
 
-	// Each pod must have daprd sidecar
+	// Each pod must have daprd sidecar.
 	for _, pod := range podList.Items {
 		daprdFound := false
 		for _, container := range pod.Spec.Containers {
@@ -393,7 +393,7 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 
 	podClient := m.client.Pods(m.namespace)
 
-	// Filter only 'testapp=appName' labeled Pods
+	// Filter only 'testapp=appName' labeled Pods.
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -401,7 +401,7 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 		return false, 0, 0, err
 	}
 
-	// Each pod must have daprd sidecar
+	// Each pod must have daprd sidecar.
 	minContainerCount := -1
 	maxContainerCount := 0
 	allDaprd := true && (len(podList.Items) > 0)
@@ -436,7 +436,7 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 // DoPortForwarding performs port forwarding for given podname to access test apps in the cluster.
 func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int, error) {
 	podClient := m.client.Pods(m.namespace)
-	// Filter only 'testapp=appName' labeled Pods
+	// Filter only 'testapp=appName' labeled Pods.
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -446,7 +446,7 @@ func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int
 
 	name := podName
 
-	// if given pod name is empty , pick the first matching pod name
+	// if given pod name is empty , pick the first matching pod name.
 	if name == "" {
 		for _, pod := range podList.Items {
 			name = pod.Name
@@ -579,9 +579,9 @@ func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 		return fmt.Sprintf("%s:%d", address, svc.Spec.Ports[0].Port)
 	}
 
-	// TODO: Support the other local k8s clusters
+	// TODO: Support the other local k8s clusters.
 	if minikubeExternalIP := m.minikubeNodeIP(); minikubeExternalIP != "" {
-		// if test cluster is minikube, external ip address is minikube node address
+		// if test cluster is minikube, external ip address is minikube node address.
 		if len(svc.Spec.Ports) > 0 {
 			return fmt.Sprintf("%s:%d", minikubeExternalIP, svc.Spec.Ports[0].NodePort)
 		}
@@ -600,7 +600,7 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 		return true
 	}
 
-	// TODO: Support the other local k8s clusters
+	// TODO: Support the other local k8s clusters.
 	if m.minikubeNodeIP() != "" {
 		if len(svc.Spec.Ports) > 0 {
 			return true
@@ -617,9 +617,9 @@ func (m *AppManager) IsServiceDeleted(svc *apiv1.Service, err error) bool {
 
 func (m *AppManager) minikubeNodeIP() string {
 	// if you are running the test in minikube environment, DAPR_TEST_MINIKUBE_IP environment variable must be
-	// minikube cluster IP address from the output of `minikube ip` command
+	// minikube cluster IP address from the output of `minikube ip` command.
 
-	// TODO: Use the better way to get the node ip of minikube
+	// TODO: Use the better way to get the node ip of minikube.
 	return os.Getenv(MiniKubeIPEnvVar)
 }
 
@@ -687,7 +687,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 
 	podClient := m.client.Pods(m.namespace)
 
-	// Filter only 'testapp=appName' labeled Pods
+	// Filter only 'testapp=appName' labeled Pods.
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -714,7 +714,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 func (m *AppManager) StreamContainerLogs() error {
 	podClient := m.client.Pods(m.namespace)
 
-	// Filter only 'testapp=appName' labeled Pods
+	// Filter only 'testapp=appName' labeled Pods.
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -825,7 +825,7 @@ func (m *AppManager) GetTotalRestarts() (int, error) {
 
 	podClient := m.client.Pods(m.namespace)
 
-	// Filter only 'testapp=appName' labeled Pods
+	// Filter only 'testapp=appName' labeled Pods.
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})

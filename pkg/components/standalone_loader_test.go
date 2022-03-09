@@ -14,7 +14,7 @@ import (
 const configPrefix = "."
 
 func writeTempConfig(path, content string) error {
-	return os.WriteFile(filepath.Join(configPrefix, path), []byte(content), fs.FileMode(0644))
+	return os.WriteFile(filepath.Join(configPrefix, path), []byte(content), fs.FileMode(0o644))
 }
 
 func TestLoadComponentsFromFile(t *testing.T) {
@@ -39,7 +39,7 @@ spec:
     value: value2
 `
 		err := writeTempConfig(filename, yaml)
-		// defer os.Remove(filename)
+		// defer os.Remove(filename).
 		assert.Nil(t, err)
 		components := request.loadComponentsFromFile(filename)
 		assert.Len(t, components, 1)

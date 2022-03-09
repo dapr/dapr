@@ -52,7 +52,7 @@ func NewKubeTestPlatform() *KubeTestPlatform {
 }
 
 func (c *KubeTestPlatform) setup() (err error) {
-	// TODO: KubeClient will be properly configured by go test arguments
+	// TODO: KubeClient will be properly configured by go test arguments.
 	c.KubeClient, err = kube.NewKubeClient("", "")
 
 	return
@@ -67,7 +67,7 @@ func (c *KubeTestPlatform) tearDown() error {
 		fmt.Fprintf(os.Stderr, "failed to tear down ComponentResources. got: %q", err)
 	}
 
-	// TODO: clean up kube cluster
+	// TODO: clean up kube cluster.
 
 	return nil
 }
@@ -82,7 +82,7 @@ func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) erro
 		c.ComponentResources.Add(kube.NewDaprComponent(c.KubeClient, getNamespaceOrDefault(comp.Namespace), comp))
 	}
 
-	// setup component resources
+	// setup component resources.
 	if err := c.ComponentResources.setup(); err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		c.AppResources.Add(kube.NewAppManager(c.KubeClient, getNamespaceOrDefault(app.Namespace), app))
 	}
 
-	// installApps installs the apps in AppResource queue sequentially
+	// installApps installs the apps in AppResource queue sequentially.
 	log.Printf("Installing apps ...")
 	if err := c.AppResources.setup(); err != nil {
 		return err

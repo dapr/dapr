@@ -105,7 +105,7 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	req.WithHTTPExtension(nethttp.MethodGet, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
 
-	// TODO Propagate context
+	// TODO Propagate context.
 	ctx := context.Background()
 	resp, err := h.InvokeMethod(ctx, req)
 	if err != nil {
@@ -158,7 +158,7 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 		rsp, err = h.invokeMethodV1(ctx, req)
 
 	default:
-		// Reject unsupported version
+		// Reject unsupported version.
 		err = status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
 	}
 
@@ -172,12 +172,12 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		h.ch <- 1
 	}
 
-	// Emit metric when request is sent
+	// Emit metric when request is sent.
 	verb := string(channelReq.Header.Method())
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, verb, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
-	// Send request to user application
+	// Send request to user application.
 	resp := fasthttp.AcquireResponse()
 	err := h.client.Do(channelReq, resp)
 	defer func() {
@@ -218,7 +218,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	channelReq.URI().SetQueryString(req.EncodeHTTPQueryString())
 	channelReq.Header.SetMethod(req.Message().HttpExtension.Verb.String())
 
-	// Recover headers
+	// Recover headers.
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
@@ -234,7 +234,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		channelReq.Header.Set(auth.APITokenHeader, h.appHeaderToken)
 	}
 
-	// Set Content body and types
+	// Set Content body and types.
 	contentType, body := req.RawData()
 	channelReq.Header.SetContentType(contentType)
 	channelReq.SetBody(body)
@@ -251,7 +251,7 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *
 	contentType = (string)(resp.Header.ContentType())
 	body = resp.Body()
 
-	// Convert status code
+	// Convert status code.
 	rsp := invokev1.NewInvokeMethodResponse(int32(statusCode), "", nil)
 	rsp.WithFastHTTPHeaders(&resp.Header).WithRawData(body, contentType)
 

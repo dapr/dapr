@@ -28,13 +28,13 @@ func (s *Subscription) ConvertTo(dstRaw conversion.Hub) error {
 		return errors.New("expected to to convert to *v1alpha1.Subscription")
 	}
 
-	// Copy scopes
+	// Copy scopes.
 	dst.Scopes = s.Scopes
 
-	// ObjectMeta
+	// ObjectMeta.
 	dst.ObjectMeta = s.ObjectMeta
 
-	// Spec
+	// Spec.
 	dst.Spec.Pubsubname = s.Spec.Pubsubname
 	dst.Spec.Topic = s.Spec.Topic
 	dst.Spec.Metadata = s.Spec.Metadata
@@ -55,13 +55,13 @@ func (s *Subscription) ConvertFrom(srcRaw conversion.Hub) error {
 		return errors.New("expected to to convert from *v1alpha1.Subscription")
 	}
 
-	// Copy scopes
+	// Copy scopes.
 	s.Scopes = src.Scopes
 
-	// ObjectMeta
+	// ObjectMeta.
 	s.ObjectMeta = src.ObjectMeta
 
-	// Spec
+	// Spec.
 	s.Spec.Pubsubname = src.Spec.Pubsubname
 	s.Spec.Topic = src.Spec.Topic
 	s.Spec.Metadata = src.Spec.Metadata

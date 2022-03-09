@@ -31,14 +31,14 @@ const (
 )
 
 type config struct {
-	// Raft protocol configurations
+	// Raft protocol configurations.
 	raftID           string
 	raftPeerString   string
 	raftPeers        []raft.PeerInfo
 	raftInMemEnabled bool
 	raftLogStorePath string
 
-	// Placement server configurations
+	// Placement server configurations.
 	placementPort int
 	healthzPort   int
 	certChainPath string
@@ -46,13 +46,13 @@ type config struct {
 
 	replicationFactor int
 
-	// Log and metrics configurations
+	// Log and metrics configurations.
 	loggerOptions   logger.Options
 	metricsExporter metrics.Exporter
 }
 
 func newConfig() *config {
-	// Default configuration
+	// Default configuration.
 	cfg := config{
 		raftID:           "dapr-placement-0",
 		raftPeerString:   "dapr-placement-0=127.0.0.1:8201",

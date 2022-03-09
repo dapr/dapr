@@ -63,7 +63,7 @@ type Server interface {
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client client.Client
-	// notify all dapr runtime
+	// notify all dapr runtime.
 	connLock          sync.Mutex
 	allConnUpdateChan map[string]chan *componentsapi.Component
 }

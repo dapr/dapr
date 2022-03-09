@@ -534,18 +534,18 @@ func (a *actorsRuntime) drainRebalancedActors() {
 		wg.Add(1)
 		go func(key interface{}, value interface{}, wg *sync.WaitGroup) {
 			defer wg.Done()
-			// for each actor, deactivate if no longer hosted locally
+			// for each actor, deactivate if no longer hosted locally.
 			actorKey := key.(string)
 			actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
 			address, _ := a.placement.LookupActor(actorType, actorID)
 			if address != "" && !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
 				// actor has been moved to a different host, deactivate when calls are done cancel any reminders
-				// each item in reminders contain a struct with some metadata + the actual reminder struct
+				// each item in reminders contain a struct with some metadata + the actual reminder struct.
 				a.remindersLock.RLock()
 				reminders := a.reminders[actorType]
 				a.remindersLock.RUnlock()
 				for _, r := range reminders {
-					// r.reminder refers to the actual reminder struct that is saved in the db
+					// r.reminder refers to the actual reminder struct that is saved in the db.
 					if r.reminder.ActorType == actorType && r.reminder.ActorID == actorID {
 						reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 						stopChan, exists := a.activeReminders.Load(reminderKey)
@@ -558,25 +558,25 @@ func (a *actorsRuntime) drainRebalancedActors() {
 
 				actor := value.(*actor)
 				if a.config.GetDrainRebalancedActorsForType(actorType) {
-					// wait until actor isn't busy or timeout hits
+					// wait until actor isn't busy or timeout hits.
 					if actor.isBusy() {
 						select {
 						case <-time.After(a.config.DrainOngoingCallTimeout):
 							break
 						case <-actor.channel():
-							// if a call comes in from the actor for state changes, that's still allowed
+							// if a call comes in from the actor for state changes, that's still allowed.
 							break
 						}
 					}
 				}
 
-				// don't allow state changes
+				// don't allow state changes.
 				a.actorsTable.Delete(key)
 
 				diag.DefaultMonitoring.ActorRebalanced(actorType)
 
 				for {
-					// wait until actor is not busy, then deactivate
+					// wait until actor is not busy, then deactivate.
 					if !actor.isBusy() {
 						err := a.deactivateActor(actorType, actorID)
 						if err != nil {
@@ -715,7 +715,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		}
 	}
 
-	repeats = -1 // set to default
+	repeats = -1 // set to default.
 	if len(reminder.Period) != 0 {
 		if years, months, days, period, repeats, err = parseDuration(reminder.Period); err != nil {
 			return errors.Wrap(err, "error parsing reminder period")
@@ -762,13 +762,13 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		for {
 			select {
 			case <-nextTimer.C:
-				// noop
+				// noop.
 			case <-ttlTimerC:
-				// proceed with reminder deletion
+				// proceed with reminder deletion.
 				log.Infof("reminder %s has expired", reminder.Name)
 				break L
 			case <-stop:
-				// reminder has been already deleted
+				// reminder has been already deleted.
 				log.Infof("reminder %s with parameters: dueTime: %s, period: %s, data: %v has been deleted.", reminder.Name, reminder.RegisteredTime, reminder.Period, reminder.Data)
 				return
 			}
@@ -778,7 +778,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				log.Errorf("could not find active reminder with key: %s", reminderKey)
 				return
 			}
-			// if all repetitions are completed, proceed with reminder deletion
+			// if all repetitions are completed, proceed with reminder deletion.
 			if repetitionsLeft == 0 {
 				log.Infof("reminder %q has completed %d repetitions", reminder.Name, repeats)
 				break L
@@ -793,7 +793,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime); err != nil {
 				log.Errorf("error updating reminder track: %v", err)
 			}
-			// if reminder is not repetitive, proceed with reminder deletion
+			// if reminder is not repetitive, proceed with reminder deletion.
 			if years == 0 && months == 0 && days == 0 && period == 0 {
 				break L
 			}
@@ -906,7 +906,7 @@ func (m *ActorMetadata) calculateEtag(partitionID uint32) *string {
 }
 
 func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminderReference, actorType, actorID, reminderName string) ([]Reminder, string, *string) {
-	// First, we find the partition
+	// First, we find the partition.
 	var partitionID uint32 = 0
 	if m.RemindersMetadata.PartitionCount > 0 {
 		for _, reminderRef := range reminderRefs {
@@ -998,7 +998,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		DueTime:   req.DueTime,
 	}
 
-	// check input correctness
+	// check input correctness.
 	var (
 		dueTime, ttl time.Time
 		repeats      int
@@ -1018,17 +1018,17 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		if err != nil {
 			return errors.Wrap(err, "error parsing reminder period")
 		}
-		// error on timers with zero repetitions
+		// error on timers with zero repetitions.
 		if repeats == 0 {
 			return errors.Errorf("reminder %s has zero repetitions", reminder.Name)
 		}
 	}
-	// set expiration time if configured
+	// set expiration time if configured.
 	if len(req.TTL) > 0 {
 		if ttl, err = parseTime(req.TTL, &dueTime); err != nil {
 			return errors.Wrap(err, "error parsing reminder TTL")
 		}
-		// check if already expired
+		// check if already expired.
 		if now.After(ttl) || dueTime.After(ttl) {
 			return errors.Errorf("reminder %s has already expired: registeredTime: %s TTL:%s",
 				reminder.Name, reminder.RegisteredTime, req.TTL)
@@ -1079,12 +1079,12 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		dueTime = time.Now()
 	}
 
-	repeats = -1 // set to default
+	repeats = -1 // set to default.
 	if len(req.Period) != 0 {
 		if years, months, days, period, repeats, err = parseDuration(req.Period); err != nil {
 			return errors.Wrap(err, "error parsing timer period")
 		}
-		// error on timers with zero repetitions
+		// error on timers with zero repetitions.
 		if repeats == 0 {
 			return errors.Errorf("timer %s has zero repetitions", timerKey)
 		}
@@ -1128,13 +1128,13 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		for {
 			select {
 			case <-nextTimer.C:
-				// noop
+				// noop.
 			case <-ttlTimerC:
-				// timer has expired; proceed with deletion
+				// timer has expired; proceed with deletion.
 				log.Infof("timer %s with parameters: dueTime: %s, period: %s, TTL: %s, data: %v has expired.", timerKey, req.DueTime, req.Period, req.TTL, req.Data)
 				break L
 			case <-stop:
-				// timer has been already deleted
+				// timer has been already deleted.
 				log.Infof("timer %s with parameters: dueTime: %s, period: %s, TTL: %s, data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.TTL, req.Data)
 				return
 			}
@@ -1381,7 +1381,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 			}
 		} else {
 			// TODO(artursouza): refactor this fallback into default implementation in contrib.
-			// if store doesn't support bulk get, fallback to call get() method one by one
+			// if store doesn't support bulk get, fallback to call get() method one by one.
 			limiter := concurrency.NewLimiter(actorMetadata.RemindersMetadata.PartitionCount)
 			bulkResponse = make([]state.BulkGetResponse, len(getRequests))
 			for i := range getRequests {
@@ -1540,7 +1540,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 			}
 		}
 
-		// Get the database partiton key (needed for CosmosDB)
+		// Get the database partiton key (needed for CosmosDB).
 		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
 
 		// Then, save the partition to the database.
@@ -1588,7 +1588,7 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 		return nil
 	}
 
-	// delete old reminder
+	// delete old reminder.
 	err := a.DeleteReminder(ctx, &DeleteReminderRequest{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
@@ -1629,7 +1629,7 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 }
 
 func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, stopChannel chan bool) error {
-	// Store the reminder in active reminders list
+	// Store the reminder in active reminders list.
 	actorKey := constructCompositeKey(reminder.ActorType, reminder.ActorID)
 	reminderKey := constructCompositeKey(actorKey, reminder.Name)
 
@@ -1644,7 +1644,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 		// First we add it to the partition list.
 		remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, reminder)
 
-		// Get the database partition key (needed for CosmosDB)
+		// Get the database partition key (needed for CosmosDB).
 		databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
 
 		// Now we can add it to the "global" list.
@@ -1749,7 +1749,7 @@ func parseISO8601Duration(from string) (int, int, int, time.Duration, int, error
 		return 0, 0, 0, 0, 0, errors.Errorf("unsupported ISO8601 duration format %q", from)
 	}
 	years, months, days, duration := 0, 0, 0, time.Duration(0)
-	// -1 signifies infinite repetition
+	// -1 signifies infinite repetition.
 	repetition := -1
 	for i, name := range pattern.SubexpNames() {
 		part := match[i]

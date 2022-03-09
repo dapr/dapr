@@ -162,7 +162,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 
 // buildDeploymentObject creates the Kubernetes Deployment object for dapr test app.
 func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
-	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly
+	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly.
 		appDesc.AppPort = DefaultContainerPort
 	}
 
@@ -185,7 +185,7 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 
 // buildJobObject creates the Kubernetes Job object for dapr test app.
 func buildJobObject(namespace string, appDesc AppDescription) *batchv1.Job {
-	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly
+	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly.
 		appDesc.AppPort = DefaultContainerPort
 	}
 	job := batchv1.Job{

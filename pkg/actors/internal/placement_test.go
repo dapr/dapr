@@ -73,10 +73,10 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		appHealthFunc, noopTableUpdateFunc)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
-		// set leader for leaderServer[0]
+		// set leader for leaderServer[0].
 		testSrv[leaderServer[0]].setLeader(true)
 
-		// act
+		// act.
 		testPlacement.Start()
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[0], testPlacement.serverIndex.Load())
@@ -84,21 +84,21 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	})
 
 	t.Run("shutdown leader and find the next leader", func(t *testing.T) {
-		// shutdown server
+		// shutdown server.
 		cleanup[leaderServer[0]]()
 
 		time.Sleep(statusReportHeartbeatInterval)
 
-		// set the second leader
+		// set the second leader.
 		testSrv[leaderServer[1]].setLeader(true)
 
-		// wait until placement connect to the second leader node
+		// wait until placement connect to the second leader node.
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[1], testPlacement.serverIndex.Load())
 		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 1)
 	})
 
-	// tear down
+	// tear down.
 	testPlacement.Stop()
 	time.Sleep(statusReportHeartbeatInterval)
 	assert.True(t, testSrv[testPlacement.serverIndex.Load()].isGracefulShutdown.Load())
@@ -109,10 +109,10 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 }
 
 func TestAppHealthyStatus(t *testing.T) {
-	// arrange
+	// arrange.
 	address, testSrv, cleanup := newTestServer()
 
-	// set leader
+	// set leader.
 	testSrv.setLeader(true)
 
 	appHealth := atomic.Bool{}
@@ -124,20 +124,20 @@ func TestAppHealthyStatus(t *testing.T) {
 		[]string{address}, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
 		appHealthFunc, noopTableUpdateFunc)
 
-	// act
+	// act.
 	testPlacement.Start()
 
-	// wait until client sends heartbeat to the test server
+	// wait until client sends heartbeat to the test server.
 	time.Sleep(statusReportHeartbeatInterval * 3)
 	oldCount := testSrv.recvCount.Load()
 	assert.True(t, oldCount >= 2, "client must send at least twice")
 
-	// Mark app unhealthy
+	// Mark app unhealthy.
 	appHealth.Store(false)
 	time.Sleep(statusReportHeartbeatInterval * 2)
 	assert.True(t, testSrv.recvCount.Load() <= oldCount+1, "no more +1 heartbeat because app is unhealthy")
 
-	// clean up
+	// clean up.
 	testPlacement.Stop()
 	cleanup()
 }
@@ -172,7 +172,7 @@ func TestOnPlacementOrder(t *testing.T) {
 
 		assert.Equal(t, 1, tableUpdateCount)
 
-		// no update with the same table version
+		// no update with the same table version.
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
 			Operation: "update",
 			Tables: &placementv1pb.PlacementTables{
@@ -213,10 +213,10 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	assert.False(t, asserted.Load())
 
-	// unlock
+	// unlock.
 	testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "unlock"})
 
-	// ensure that it is unlocked
+	// ensure that it is unlocked.
 	time.Sleep(50 * time.Millisecond)
 	assert.True(t, asserted.Load())
 }
@@ -243,18 +243,18 @@ func TestLookupActor(t *testing.T) {
 			Entries: map[string]*hashing.Consistent{},
 		}
 
-		// set vnode size
+		// set vnode size.
 		hashing.SetReplicationFactor(10)
 		actorOneHashing := hashing.NewConsistentHash()
 		actorOneHashing.Add(testPlacement.runtimeHostName, testPlacement.appID, 0)
 		testPlacement.placementTables.Entries[testActorType] = actorOneHashing
 
-		// existing actor type
+		// existing actor type.
 		name, appID := testPlacement.LookupActor(testActorType, "id0")
 		assert.Equal(t, testPlacement.runtimeHostName, name)
 		assert.Equal(t, testPlacement.appID, appID)
 
-		// non existing actor type
+		// non existing actor type.
 		name, appID = testPlacement.LookupActor("nonExistingActorType", "id0")
 		assert.Empty(t, name)
 		assert.Empty(t, appID)
@@ -283,7 +283,7 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 				testPlacement.unblockPlacements()
 				wg.Done()
 			}()
-			// Waiting for the goroutines to finish
+			// Waiting for the goroutines to finish.
 			wg.Wait()
 		}
 	})
@@ -303,7 +303,7 @@ func newTestServer() (string, *testServer, func()) {
 		server.Serve(listener)
 	}()
 
-	// wait until test server starts
+	// wait until test server starts.
 	time.Sleep(100 * time.Millisecond)
 
 	cleanup := func() {

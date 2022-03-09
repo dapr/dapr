@@ -45,11 +45,11 @@ func TestRegistry(t *testing.T) {
 			componentName      = "bindings." + inputBindingName
 		)
 
-		// Initiate mock object
+		// Initiate mock object.
 		mockInput := &mockInputBinding{}
 		mockInputV2 := &mockInputBinding{}
 
-		// act
+		// act.
 		testRegistry.RegisterInputBindings(bindings.NewInput(inputBindingName, func() b.InputBinding {
 			return mockInput
 		}))
@@ -57,7 +57,7 @@ func TestRegistry(t *testing.T) {
 			return mockInputV2
 		}))
 
-		// assert v0 and v1
+		// assert v0 and v1.
 		assert.True(t, testRegistry.HasInputBinding(componentName, "v0"))
 		p, e := testRegistry.CreateInputBinding(componentName, "v0")
 		assert.NoError(t, e)
@@ -66,13 +66,13 @@ func TestRegistry(t *testing.T) {
 		assert.NoError(t, e)
 		assert.Same(t, mockInput, p)
 
-		// assert v2
+		// assert v2.
 		assert.True(t, testRegistry.HasInputBinding(componentName, "v2"))
 		pV2, e := testRegistry.CreateInputBinding(componentName, "v2")
 		assert.NoError(t, e)
 		assert.Same(t, mockInputV2, pV2)
 
-		// check case-insensitivity
+		// check case-insensitivity.
 		pV2, e = testRegistry.CreateInputBinding(strings.ToUpper(componentName), "V2")
 		assert.NoError(t, e)
 		assert.Same(t, mockInputV2, pV2)
@@ -84,14 +84,14 @@ func TestRegistry(t *testing.T) {
 			componentName    = "bindings." + inputBindingName
 		)
 
-		// act
+		// act.
 		assert.False(t, testRegistry.HasInputBinding(componentName, "v0"))
 		assert.False(t, testRegistry.HasInputBinding(componentName, "v1"))
 		assert.False(t, testRegistry.HasInputBinding(componentName, "v2"))
 		p, actualError := testRegistry.CreateInputBinding(componentName, "v1")
 		expectedError := errors.Errorf("couldn't find input binding %s/v1", componentName)
 
-		// assert
+		// assert.
 		assert.Nil(t, p)
 		assert.Equal(t, expectedError.Error(), actualError.Error())
 	})
@@ -103,11 +103,11 @@ func TestRegistry(t *testing.T) {
 			componentName       = "bindings." + outputBindingName
 		)
 
-		// Initiate mock object
+		// Initiate mock object.
 		mockOutput := &mockOutputBinding{}
 		mockOutputV2 := &mockOutputBinding{}
 
-		// act
+		// act.
 		testRegistry.RegisterOutputBindings(bindings.NewOutput(outputBindingName, func() b.OutputBinding {
 			return mockOutput
 		}))
@@ -115,7 +115,7 @@ func TestRegistry(t *testing.T) {
 			return mockOutputV2
 		}))
 
-		// assert v0 and v1
+		// assert v0 and v1.
 		assert.True(t, testRegistry.HasOutputBinding(componentName, "v0"))
 		p, e := testRegistry.CreateOutputBinding(componentName, "v0")
 		assert.NoError(t, e)
@@ -125,7 +125,7 @@ func TestRegistry(t *testing.T) {
 		assert.NoError(t, e)
 		assert.Same(t, mockOutput, p)
 
-		// assert v2
+		// assert v2.
 		assert.True(t, testRegistry.HasOutputBinding(componentName, "v2"))
 		pV2, e := testRegistry.CreateOutputBinding(componentName, "v2")
 		assert.NoError(t, e)
@@ -138,14 +138,14 @@ func TestRegistry(t *testing.T) {
 			componentName     = "bindings." + outputBindingName
 		)
 
-		// act
+		// act.
 		assert.False(t, testRegistry.HasOutputBinding(componentName, "v0"))
 		assert.False(t, testRegistry.HasOutputBinding(componentName, "v1"))
 		assert.False(t, testRegistry.HasOutputBinding(componentName, "v2"))
 		p, actualError := testRegistry.CreateOutputBinding(componentName, "v1")
 		expectedError := errors.Errorf("couldn't find output binding %s/v1", componentName)
 
-		// assert
+		// assert.
 		assert.Nil(t, p)
 		assert.Equal(t, expectedError.Error(), actualError.Error())
 	})

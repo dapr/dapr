@@ -77,7 +77,7 @@ type hostMemberChange struct {
 type Service struct {
 	// serverListener is the TCP listener for placement gRPC server.
 	serverListener net.Listener
-	// grpcServerLock is the lock fro grpcServer
+	// grpcServerLock is the lock fro grpcServer.
 	grpcServerLock *sync.Mutex
 	// grpcServer is the gRPC server for placement service.
 	grpcServer *grpc.Server
@@ -101,7 +101,7 @@ type Service struct {
 	// consistent hashing table. Only actor runtime's heartbeat will increase this.
 	memberUpdateCount atomic.Uint32
 
-	// faultyHostDetectDuration
+	// faultyHostDetectDuration.
 	faultyHostDetectDuration *atomic.Int64
 
 	// hasLeadership indicates the state for leadership.
@@ -111,7 +111,7 @@ type Service struct {
 	// This waits until all stream connections are drained when revoking leadership.
 	streamConnGroup sync.WaitGroup
 
-	// shutdownLock is the mutex to lock shutdown
+	// shutdownLock is the mutex to lock shutdown.
 	shutdownLock *sync.Mutex
 	// shutdownCh is the channel to be used for the graceful shutdown.
 	shutdownCh chan struct{}
@@ -163,7 +163,7 @@ func (p *Service) Shutdown() {
 
 	close(p.shutdownCh)
 
-	// wait until hasLeadership is false by revokeLeadership()
+	// wait until hasLeadership is false by revokeLeadership().
 	for p.hasLeadership.Load() {
 		select {
 		case <-time.After(5 * time.Second):

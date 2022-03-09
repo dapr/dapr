@@ -31,7 +31,7 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 )
 
-// TODO: Add APIVersion testing
+// TODO: Add APIVersion testing.
 
 func TestInvokeMethod(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:9998")

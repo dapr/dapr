@@ -122,7 +122,7 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 		c.hosts[h] = host
 		c.sortedSet = append(c.sortedSet, h)
 	}
-	// sort hashes ascendingly
+	// sort hashes ascendingly.
 	sort.Slice(c.sortedSet, func(i int, j int) bool {
 		return c.sortedSet[i] < c.sortedSet[j]
 	})
@@ -293,7 +293,7 @@ func (c *Consistent) MaxLoad() int64 {
 }
 
 func (c *Consistent) loadOK(host string) bool {
-	// a safety check if someone performed c.Done more than needed
+	// a safety check if someone performed c.Done more than needed.
 	if c.totalLoad < 0 {
 		c.totalLoad = 0
 	}

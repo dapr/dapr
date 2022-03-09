@@ -171,7 +171,7 @@ func TraceStateFromW3CString(h string) *tracestate.Tracestate {
 
 	entries := make([]tracestate.Entry, 0, len(h))
 	pairs := strings.Split(h, ",")
-	hdrLenWithoutOWS := len(pairs) - 1 // Number of commas
+	hdrLenWithoutOWS := len(pairs) - 1 // Number of commas.
 	for _, pair := range pairs {
 		matches := trimOWSRegExp.FindStringSubmatch(pair)
 		if matches == nil {

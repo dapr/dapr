@@ -25,10 +25,10 @@ import (
 // Subscription describes an pub/sub event subscription.
 type Subscription struct {
 	metav1.TypeMeta `json:",inline"`
-	// +optional
+	// +optional.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	Spec              SubscriptionSpec `json:"spec,omitempty"`
-	// +optional
+	// +optional.
 	Scopes []string `json:"scopes,omitempty"`
 }
 
@@ -39,7 +39,7 @@ type SubscriptionSpec struct {
 	// The topic name to subscribe to.
 	Topic string `json:"topic"`
 	// The optional metadata to provide the the subscription.
-	// +optional
+	// +optional.
 	Metadata map[string]string `json:"metadata,omitempty"`
 	// The Routes configuration for this topic.
 	Routes Routes `json:"routes"`
@@ -48,10 +48,10 @@ type SubscriptionSpec struct {
 // Routes encapsulates the rules and optional default path for a topic.
 type Routes struct {
 	// The list of rules for this topic.
-	// +optional
+	// +optional.
 	Rules []Rule `json:"rules,omitempty"`
 	// The default path for this topic.
-	// +optional
+	// +optional.
 	Default string `json:"default,omitempty"`
 }
 

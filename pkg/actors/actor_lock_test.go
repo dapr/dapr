@@ -69,7 +69,7 @@ func TestLockHoldsUntilStackIsZero(t *testing.T) {
 	assert.Equal(t, *requestID, *lock.activeRequest)
 	assert.Equal(t, int32(2), lock.stackDepth.Load())
 
-	// Unlock until request is nil
+	// Unlock until request is nil.
 	lock.Unlock()
 	assert.Equal(t, *requestID, *lock.activeRequest)
 	assert.Equal(t, int32(1), lock.stackDepth.Load())

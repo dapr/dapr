@@ -25,26 +25,26 @@ func TestNewDaprHandler(t *testing.T) {
 func TestGetAppID(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 	t.Run("WithValidId", func(t *testing.T) {
-		// Arrange
+		// Arrange.
 		expected := "test_id"
 		deployment := getDeployment(expected, "true")
 
-		// Act
+		// Act.
 		got := testDaprHandler.getAppID(deployment)
 
-		// Assert
+		// Assert.
 		assert.Equal(t, expected, got)
 	})
 
 	t.Run("WithEmptyId", func(t *testing.T) {
-		// Arrange
+		// Arrange.
 		expected := ""
 		deployment := getDeployment(expected, "true")
 
-		// Act
+		// Act.
 		got := testDaprHandler.getAppID(deployment)
 
-		// Assert
+		// Assert.
 		assert.Equal(t, expected, got)
 	})
 }
@@ -52,38 +52,38 @@ func TestGetAppID(t *testing.T) {
 func TestIsAnnotatedForDapr(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 	t.Run("Enabled", func(t *testing.T) {
-		// Arrange
+		// Arrange.
 		expected := "true"
 		deployment := getDeployment("test_id", expected)
 
-		// Act
+		// Act.
 		got := testDaprHandler.isAnnotatedForDapr(deployment)
 
-		// Assert
+		// Assert.
 		assert.True(t, got)
 	})
 
 	t.Run("Disabled", func(t *testing.T) {
-		// Arrange
+		// Arrange.
 		expected := "false"
 		deployment := getDeployment("test_id", expected)
 
-		// Act
+		// Act.
 		got := testDaprHandler.isAnnotatedForDapr(deployment)
 
-		// Assert
+		// Assert.
 		assert.False(t, got)
 	})
 
 	t.Run("Invalid", func(t *testing.T) {
-		// Arrange
+		// Arrange.
 		expected := "0"
 		deployment := getDeployment("test_id", expected)
 
-		// Act
+		// Act.
 		got := testDaprHandler.isAnnotatedForDapr(deployment)
 
-		// Assert
+		// Assert.
 		assert.False(t, got)
 	})
 }
@@ -132,33 +132,33 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 func TestGetMetricsPort(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 	t.Run("metrics port override", func(t *testing.T) {
-		// Arrange
+		// Arrange.
 		deployment := getDeploymentWithMetricsPortAnnotation("test_id", "true", "5050")
 
-		// Act
+		// Act.
 		p := testDaprHandler.getMetricsPort(deployment)
 
-		// Assert
+		// Assert.
 		assert.Equal(t, 5050, p)
 	})
 	t.Run("invalid metrics port override", func(t *testing.T) {
-		// Arrange
+		// Arrange.
 		deployment := getDeploymentWithMetricsPortAnnotation("test_id", "true", "abc")
 
-		// Act
+		// Act.
 		p := testDaprHandler.getMetricsPort(deployment)
 
-		// Assert
+		// Assert.
 		assert.Equal(t, defaultMetricsPort, p)
 	})
 	t.Run("no metrics port override", func(t *testing.T) {
-		// Arrange
+		// Arrange.
 		deployment := getDeployment("test_id", "true")
 
-		// Act
+		// Act.
 		p := testDaprHandler.getMetricsPort(deployment)
 
-		// Assert
+		// Assert.
 		assert.Equal(t, defaultMetricsPort, p)
 	})
 }
@@ -227,7 +227,7 @@ func TestInit(t *testing.T) {
 		deploymentCtl := mgr.GetRunnables()[0]
 		statefulsetCtl := mgr.GetRunnables()[1]
 
-		// the runnable is sigs.k8s.io/controller-runtime/pkg/internal/controller.Controller
+		// the runnable is sigs.k8s.io/controller-runtime/pkg/internal/controller.Controller.
 		reconciler := reflect.Indirect(reflect.ValueOf(deploymentCtl)).FieldByName("Do").Interface().(*Reconciler)
 
 		wrapper := reconciler.newWrapper()
@@ -253,7 +253,7 @@ func getDeploymentWithMetricsPortAnnotation(daprID string, daprEnabled string, m
 }
 
 func getDeployment(appID string, daprEnabled string) ObjectWrapper {
-	// Arrange
+	// Arrange.
 	metadata := meta_v1.ObjectMeta{
 		Name:   "app",
 		Labels: map[string]string{"app": "test_app"},
@@ -287,7 +287,7 @@ func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 }
 
 func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
-	// Arrange
+	// Arrange.
 	metadata := meta_v1.ObjectMeta{
 		Name:   "app",
 		Labels: map[string]string{"app": "test_app"},

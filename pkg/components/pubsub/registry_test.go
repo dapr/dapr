@@ -52,11 +52,11 @@ func TestCreatePubSub(t *testing.T) {
 			componentName = "pubsub." + pubSubName
 		)
 
-		// Initiate mock object
+		// Initiate mock object.
 		mockPubSub := new(daprt.MockPubSub)
 		mockPubSubV2 := new(daprt.MockPubSub)
 
-		// act
+		// act.
 		testRegistry.Register(New(pubSubName, func() pubsub.PubSub {
 			return mockPubSub
 		}))
@@ -64,7 +64,7 @@ func TestCreatePubSub(t *testing.T) {
 			return mockPubSubV2
 		}))
 
-		// assert v0 and v1
+		// assert v0 and v1.
 		p, e := testRegistry.Create(componentName, "v0")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSub, p)
@@ -73,12 +73,12 @@ func TestCreatePubSub(t *testing.T) {
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSub, p)
 
-		// assert v2
+		// assert v2.
 		pV2, e := testRegistry.Create(componentName, "v2")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSubV2, pV2)
 
-		// check case-insensitivity
+		// check case-insensitivity.
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSubV2, pV2)
@@ -87,10 +87,10 @@ func TestCreatePubSub(t *testing.T) {
 	t.Run("pubsub messagebus is not registered", func(t *testing.T) {
 		const PubSubName = "fakePubSub"
 
-		// act
+		// act.
 		p, actualError := testRegistry.Create(createFullName(PubSubName), "v1")
 		expectedError := errors.Errorf("couldn't find message bus %s/v1", createFullName(PubSubName))
-		// assert
+		// assert.
 		assert.Nil(t, p)
 		assert.Equal(t, expectedError.Error(), actualError.Error())
 	})

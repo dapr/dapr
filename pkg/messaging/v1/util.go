@@ -146,7 +146,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 	md := metadata.MD{}
 	for k, listVal := range internalMD {
 		keyName := strings.ToLower(k)
-		// get both the trace headers for HTTP/GRPC and continue
+		// get both the trace headers for HTTP/GRPC and continue.
 		switch keyName {
 		case traceparentHeader:
 			traceparentValue = listVal.Values[0]
@@ -166,7 +166,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 		}
 
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
-			// decoded base64 encoded key binary
+			// decoded base64 encoded key binary.
 			for _, val := range listVal.Values {
 				decoded, err := base64.StdEncoding.DecodeString(val)
 				if err == nil {
@@ -181,7 +181,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 	if IsGRPCProtocol(internalMD) {
 		processGRPCToGRPCTraceHeader(ctx, md, grpctracebinValue)
 	} else {
-		// if httpProtocol, then pass HTTP traceparent and HTTP tracestate header values, attach it in grpc-trace-bin header
+		// if httpProtocol, then pass HTTP traceparent and HTTP tracestate header values, attach it in grpc-trace-bin header.
 		processHTTPToGRPCTraceHeader(ctx, md, traceparentValue, tracestateValue)
 	}
 	return md
@@ -213,7 +213,7 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 	var traceparentValue, tracestateValue, grpctracebinValue string
 	for k, listVal := range internalMD {
 		keyName := strings.ToLower(k)
-		// get both the trace headers for HTTP/GRPC and continue
+		// get both the trace headers for HTTP/GRPC and continue.
 		switch keyName {
 		case traceparentHeader:
 			traceparentValue = listVal.Values[0]
@@ -234,7 +234,7 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		setHeader(reservedGRPCMetadataToDaprPrefixHeader(keyName), listVal.Values[0])
 	}
 	if IsGRPCProtocol(internalMD) {
-		// if grpcProtocol, then get grpc-trace-bin value, and attach it in HTTP traceparent and HTTP tracestate header
+		// if grpcProtocol, then get grpc-trace-bin value, and attach it in HTTP traceparent and HTTP tracestate header.
 		processGRPCToHTTPTraceHeaders(ctx, grpctracebinValue, setHeader)
 	} else {
 		processHTTPToHTTPTraceHeaders(ctx, traceparentValue, tracestateValue, setHeader)
@@ -330,7 +330,7 @@ func ErrorFromHTTPResponseCode(code int, detail string) error {
 	httpStatusText := http.StatusText(code)
 	respStatus := grpc_status.New(grpcCode, httpStatusText)
 
-	// Truncate detail string longer than 64 characters
+	// Truncate detail string longer than 64 characters.
 	if len(detail) >= maxMetadataValueLen {
 		detail = detail[:maxMetadataValueLen]
 	}
@@ -364,7 +364,7 @@ func ErrorFromInternalStatus(internalStatus *internalv1pb.Status) error {
 }
 
 func processGRPCToHTTPTraceHeaders(ctx context.Context, traceContext string, setHeader func(string, string)) {
-	// attach grpc-trace-bin value in traceparent and tracestate header
+	// attach grpc-trace-bin value in traceparent and tracestate header.
 	decoded, _ := base64.StdEncoding.DecodeString(traceContext)
 	sc, ok := propagation.FromBinary(decoded)
 	if !ok {

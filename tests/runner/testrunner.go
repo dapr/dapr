@@ -56,18 +56,18 @@ type AppUsage struct {
 // TestRunner holds initial test apps and testing platform instance
 // maintains apps and platform for e2e test.
 type TestRunner struct {
-	// id is test runner id which will be used for logging
+	// id is test runner id which will be used for logging.
 	id string
 
 	components []kube.ComponentDescription
 
-	// Initialization apps to be deployed before the test apps
+	// Initialization apps to be deployed before the test apps.
 	initApps []kube.AppDescription
 
-	// TODO: Needs to define kube.AppDescription more general struct for Dapr app
+	// TODO: Needs to define kube.AppDescription more general struct for Dapr app.
 	testApps []kube.AppDescription
 
-	// Platform is the testing platform instances
+	// Platform is the testing platform instances.
 	Platform PlatformInterface
 }
 
@@ -86,9 +86,9 @@ func NewTestRunner(id string, apps []kube.AppDescription,
 
 // Start is the entry point of Dapr test runner.
 func (tr *TestRunner) Start(m runnable) int {
-	// TODO: Add logging and reporting initialization
+	// TODO: Add logging and reporting initialization.
 
-	// Setup testing platform
+	// Setup testing platform.
 	log.Println("Running setup...")
 	err := tr.Platform.setup()
 	defer func() {
@@ -129,14 +129,14 @@ func (tr *TestRunner) Start(m runnable) int {
 		}
 	}
 
-	// Executes Test* methods in *_test.go
+	// Executes Test* methods in *_test.go.
 	log.Println("Running tests...")
 	return m.Run()
 }
 
 func (tr *TestRunner) tearDown() {
-	// Tearing down platform
+	// Tearing down platform.
 	tr.Platform.tearDown()
 
-	// TODO: Add the resources which will be tearing down
+	// TODO: Add the resources which will be tearing down.
 }

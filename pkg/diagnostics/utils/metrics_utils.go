@@ -46,7 +46,7 @@ func WithTags(opts ...interface{}) []tag.Mutator {
 		if !ok {
 			break
 		}
-		// skip if value is empty
+		// skip if value is empty.
 		if value != "" {
 			tagMutators = append(tagMutators, tag.Upsert(key, value))
 		}
@@ -56,7 +56,7 @@ func WithTags(opts ...interface{}) []tag.Mutator {
 
 // AddTagKeyToCtx assigns opencensus tag key value to context.
 func AddTagKeyToCtx(ctx context.Context, key tag.Key, value string) context.Context {
-	// return if value is not given
+	// return if value is not given.
 	if value == "" {
 		return ctx
 	}

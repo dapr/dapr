@@ -97,10 +97,10 @@ func TestInvokeMethod(t *testing.T) {
 		fakeReq := invokev1.NewInvokeMethodRequest("method")
 		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 
-		// act
+		// act.
 		response, err := c.InvokeMethod(ctx, fakeReq)
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 		_, body := response.RawData()
 		assert.Equal(t, "param1=val1&param2=val2", string(body))
@@ -118,10 +118,10 @@ func TestInvokeMethod(t *testing.T) {
 		fakeReq := invokev1.NewInvokeMethodRequest("method")
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 
-		// act
+		// act.
 		response, err := c.InvokeMethod(ctx, fakeReq)
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 		_, body := response.RawData()
 		assert.Equal(t, "", string(body))
@@ -141,7 +141,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
 		c.ch = make(chan int, 1)
 
-		// act
+		// act.
 		var wg sync.WaitGroup
 		wg.Add(5)
 		for i := 0; i < 5; i++ {
@@ -155,7 +155,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		}
 		wg.Wait()
 
-		// assert
+		// assert.
 		assert.False(t, handler.testFailed)
 		server.Close()
 	})
@@ -169,7 +169,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
 		c.ch = make(chan int, 1)
 
-		// act
+		// act.
 		var wg sync.WaitGroup
 		wg.Add(20)
 		for i := 0; i < 20; i++ {
@@ -182,7 +182,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		}
 		wg.Wait()
 
-		// assert
+		// assert.
 		assert.False(t, handler.testFailed)
 		server.Close()
 	})
@@ -201,10 +201,10 @@ func TestInvokeWithHeaders(t *testing.T) {
 	req.WithMetadata(md)
 	req.WithHTTPExtension(http.MethodPost, "")
 
-	// act
+	// act.
 	response, err := c.InvokeMethod(ctx, req)
 
-	// assert
+	// assert.
 	assert.NoError(t, err)
 	_, body := response.RawData()
 
@@ -227,10 +227,10 @@ func TestContentType(t *testing.T) {
 		req.WithRawData(nil, "")
 		req.WithHTTPExtension(http.MethodPost, "")
 
-		// act
+		// act.
 		resp, err := c.InvokeMethod(ctx, req)
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 		contentType, body := resp.RawData()
 		assert.Equal(t, "text/plain; charset=utf-8", contentType)
@@ -246,10 +246,10 @@ func TestContentType(t *testing.T) {
 		req.WithRawData(nil, "application/json")
 		req.WithHTTPExtension(http.MethodPost, "")
 
-		// act
+		// act.
 		resp, err := c.InvokeMethod(ctx, req)
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 		contentType, body := resp.RawData()
 		assert.Equal(t, "text/plain; charset=utf-8", contentType)
@@ -265,10 +265,10 @@ func TestContentType(t *testing.T) {
 		req.WithRawData(nil, "text/plain")
 		req.WithHTTPExtension(http.MethodPost, "")
 
-		// act
+		// act.
 		resp, err := c.InvokeMethod(ctx, req)
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 		contentType, body := resp.RawData()
 		assert.Equal(t, "text/plain; charset=utf-8", contentType)
@@ -286,10 +286,10 @@ func TestAppToken(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("method")
 		req.WithHTTPExtension(http.MethodPost, "")
 
-		// act
+		// act.
 		response, err := c.InvokeMethod(ctx, req)
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 		_, body := response.RawData()
 
@@ -310,10 +310,10 @@ func TestAppToken(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("method")
 		req.WithHTTPExtension(http.MethodPost, "")
 
-		// act
+		// act.
 		response, err := c.InvokeMethod(ctx, req)
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 		_, body := response.RawData()
 

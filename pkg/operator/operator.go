@@ -153,7 +153,7 @@ func (o *operator) Run(ctx context.Context) {
 
 	var certChain *credentials.CertChain
 	log.Info("getting tls certificates")
-	// try to load certs from disk, if not yet there, start a watch on the local filesystem
+	// try to load certs from disk, if not yet there, start a watch on the local filesystem.
 	chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
 	if err != nil {
 		fsevent := make(chan struct{})

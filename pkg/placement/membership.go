@@ -82,7 +82,7 @@ func (p *Service) leaderLoop(stopCh chan struct{}) {
 	// This loop is to ensure the FSM reflects all queued writes by applying Barrier
 	// and completes leadership establishment before becoming a leader.
 	for !p.hasLeadership.Load() {
-		// for earlier stop
+		// for earlier stop.
 		select {
 		case <-stopCh:
 			return

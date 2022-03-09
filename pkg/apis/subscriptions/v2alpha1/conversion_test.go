@@ -11,7 +11,7 @@ import (
 )
 
 func TestConversion(t *testing.T) {
-	// Test converting to and from v1alpha1
+	// Test converting to and from v1alpha1.
 	subscriptionV2 := v2alpha1.Subscription{
 		Scopes: []string{"app1", "app2"},
 		Spec: v2alpha1.SubscriptionSpec{

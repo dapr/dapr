@@ -37,7 +37,7 @@ func TestToISO8601DateTimeString(t *testing.T) {
 		assert.Equal(t, "2021-06-10T06:26:51.000123Z", isoString)
 		parsed, err := time.Parse(time.RFC3339, isoString)
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 		assert.Equal(t, currentTime.UTC().Year(), parsed.Year())
 		assert.Equal(t, currentTime.UTC().Month(), parsed.Month())

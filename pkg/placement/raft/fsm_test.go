@@ -75,7 +75,7 @@ func TestFSMApply(t *testing.T) {
 }
 
 func TestRestore(t *testing.T) {
-	// arrange
+	// arrange.
 	fsm := newFSM()
 
 	s := newDaprHostMemberState()
@@ -88,10 +88,10 @@ func TestRestore(t *testing.T) {
 	err := s.persist(buf)
 	assert.NoError(t, err)
 
-	// act
+	// act.
 	err = fsm.Restore(io.NopCloser(buf))
 
-	// assert
+	// assert.
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(fsm.State().Members()))
 	assert.Equal(t, 2, len(fsm.State().hashingTableMap()))

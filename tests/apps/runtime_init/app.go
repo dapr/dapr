@@ -76,17 +76,17 @@ func publishMessagesToBinding(wg *sync.WaitGroup) {
 func main() {
 	var wg sync.WaitGroup
 
-	// Push messages onto pubsub
+	// Push messages onto pubsub.
 	wg.Add(1)
 	go publishMessagesToPubsub(&wg)
 
-	// Push messages onto binding
+	// Push messages onto binding.
 	wg.Add(1)
 	go publishMessagesToBinding(&wg)
 
 	wg.Wait()
 
-	// Block until signalled to close
+	// Block until signalled to close.
 	exit := make(chan os.Signal, 1)
 	signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
 	<-exit

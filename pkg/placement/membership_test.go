@@ -59,7 +59,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			}
 		}
 
-		// wait until all host member change requests are flushed
+		// wait until all host member change requests are flushed.
 		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
 		assert.Equal(t, 3, len(testServer.raftNode.FSM().State().Members()))
 	}
@@ -70,7 +70,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 	t.Run("successful dissemination", func(t *testing.T) {
 		setupEach(t)
-		// arrange
+		// arrange.
 		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
 
 		conn, stream, err := newTestClient(serverAddress)
@@ -92,11 +92,11 @@ func TestMembershipChangeWorker(t *testing.T) {
 			Name:     "127.0.0.1:50100",
 			Entities: []string{"DogActor", "CatActor"},
 			Id:       "testAppID",
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
+			Load:     1, // Not used yet.
+			// Port is redundant because Name should include port number.
 		}
 
-		// act
+		// act.
 		err = stream.Send(host)
 		assert.NoError(t, err)
 
@@ -127,11 +127,11 @@ func TestMembershipChangeWorker(t *testing.T) {
 	})
 
 	t.Run("faulty host detector", func(t *testing.T) {
-		// arrange
+		// arrange.
 		setupEach(t)
 		arrangeFakeMembers(t)
 
-		// faulty host detector removes all members if heartbeat does not happen
+		// faulty host detector removes all members if heartbeat does not happen.
 		time.Sleep(faultyHostDetectInitialDuration + 10*time.Millisecond)
 		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members()))
 
@@ -171,7 +171,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
 	testServer.hasLeadership.Store(true)
 
-	// arrange
+	// arrange.
 	clientConns := []*grpc.ClientConn{}
 	clientStreams := []v1pb.Placement_ReportDaprStatusClient{}
 	clientRecvDataLock := &sync.RWMutex{}
@@ -219,21 +219,21 @@ func TestPerformTableUpdate(t *testing.T) {
 		}(i, stream)
 	}
 
-	// act
+	// act.
 	for i := 0; i < testClients; i++ {
 		host := &v1pb.Host{
 			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
 			Entities: []string{"DogActor", "CatActor"},
 			Id:       "testAppID",
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
+			Load:     1, // Not used yet.
+			// Port is redundant because Name should include port number.
 		}
 
-		// act
+		// act.
 		assert.NoError(t, clientStreams[i].Send(host))
 	}
 
-	// Wait until clientStreams[clientID].Recv() in client go routine received new table
+	// Wait until clientStreams[clientID].Recv() in client go routine received new table.
 	waitCnt := testClients
 	timeoutC := time.After(time.Second * 10)
 	for {
@@ -259,7 +259,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	testServer.streamConnPoolLock.RUnlock()
 	testServer.performTablesUpdate(streamConnPool, nil)
 
-	// assert
+	// assert.
 	for i := 0; i < testClients; i++ {
 		clientRecvDataLock.RLock()
 		lockTime, ok := clientRecvData[i]["lock"]
@@ -278,7 +278,7 @@ func TestPerformTableUpdate(t *testing.T) {
 		assert.True(t, lockTime <= updateTime && updateTime <= unlockTime)
 	}
 
-	// clean up resources
+	// clean up resources.
 	for i := 0; i < testClients; i++ {
 		clientStreams[i].CloseSend()
 		clientConns[i].Close()

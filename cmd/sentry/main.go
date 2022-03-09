@@ -57,7 +57,7 @@ func main() {
 
 	flag.Parse()
 
-	// Apply options to all loggers
+	// Apply options to all loggers.
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		log.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func main() {
 	log.Infof("starting sentry certificate authority -- version %s -- commit %s", version.Version(), version.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
-	// Initialize dapr metrics exporter
+	// Initialize dapr metrics exporter.
 	if err := metricsExporter.Init(); err != nil {
 		log.Fatal(err)
 	}

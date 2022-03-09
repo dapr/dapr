@@ -10,7 +10,7 @@ type Bundle struct {
 // NewBundle returns a new identity bundle.
 // namespace and trustDomain are optional parameters. When empty, a nil value is returned.
 func NewBundle(id, namespace, trustDomain string) *Bundle {
-	// Empty namespace and trust domain result in an empty bundle
+	// Empty namespace and trust domain result in an empty bundle.
 	if namespace == "" || trustDomain == "" {
 		return nil
 	}

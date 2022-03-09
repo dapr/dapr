@@ -27,13 +27,13 @@ import (
 // Component describes an Dapr component type.
 type Component struct {
 	metav1.TypeMeta `json:",inline"`
-	// +optional
+	// +optional.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
+	// +optional.
 	Spec ComponentSpec `json:"spec,omitempty"`
-	// +optional
+	// +optional.
 	Auth `json:"auth,omitempty"`
-	// +optional
+	// +optional.
 	Scopes []string `json:"scopes,omitempty"`
 }
 
@@ -41,19 +41,19 @@ type Component struct {
 type ComponentSpec struct {
 	Type    string `json:"type"`
 	Version string `json:"version"`
-	// +optional
+	// +optional.
 	IgnoreErrors bool           `json:"ignoreErrors"`
 	Metadata     []MetadataItem `json:"metadata"`
-	// +optional
+	// +optional.
 	InitTimeout string `json:"initTimeout"`
 }
 
 // MetadataItem is a name/value pair for a metadata.
 type MetadataItem struct {
 	Name string `json:"name"`
-	// +optional
+	// +optional.
 	Value DynamicValue `json:"value,omitempty"`
-	// +optional
+	// +optional.
 	SecretKeyRef SecretKeyRef `json:"secretKeyRef,omitempty"`
 }
 

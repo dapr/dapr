@@ -40,7 +40,7 @@ func NewConfigWithDefaults() Config {
 
 // GetConfig returns configuration derived from environment variables.
 func GetConfig() (Config, error) {
-	// get config from environment variables
+	// get config from environment variables.
 	c := NewConfigWithDefaults()
 	err := envconfig.Process("", &c)
 	if err != nil {
@@ -48,7 +48,7 @@ func GetConfig() (Config, error) {
 	}
 
 	if c.KubeClusterDomain == "" {
-		// auto-detect KubeClusterDomain from resolv.conf file
+		// auto-detect KubeClusterDomain from resolv.conf file.
 		clusterDomain, err := utils.GetKubeClusterDomain()
 		if err != nil {
 			log.Errorf("failed to get clusterDomain err:%s, set default:%s", err, utils.DefaultKubeClusterDomain)

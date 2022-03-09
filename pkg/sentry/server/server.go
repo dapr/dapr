@@ -74,7 +74,7 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 	// nolint:gosec
 	config := &tls.Config{
 		ClientCAs: cp,
-		// Require cert verification
+		// Require cert verification.
 		ClientAuth: tls.RequireAndVerifyClientCert,
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 			if s.certificate == nil || needsRefresh(s.certificate, serverCertExpiryBuffer) {

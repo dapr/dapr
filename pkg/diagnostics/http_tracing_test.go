@@ -392,10 +392,10 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		testRequestCtx.SetUserValue("id", "callee")
 		testRequestCtx.SetUserValue("method", "method1")
 
-		// act
+		// act.
 		handler(testRequestCtx)
 
-		// assert
+		// assert.
 		span := diag_utils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
 		assert.True(t, strings.Contains(span.String(), "CallLocal/callee/method1"))

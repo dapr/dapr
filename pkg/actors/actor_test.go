@@ -34,14 +34,14 @@ func TestIsBusy(t *testing.T) {
 func TestTurnBasedConcurrencyLocks(t *testing.T) {
 	testActor := newActor("testType", "testID", &reentrancyStackDepth)
 
-	// first lock
+	// first lock.
 	testActor.lock(nil)
 	assert.Equal(t, true, testActor.isBusy())
 	firstLockTime := testActor.lastUsedTime
 
 	waitCh := make(chan bool)
 
-	// second lock
+	// second lock.
 	go func() {
 		waitCh <- false
 		testActor.lock(nil)
@@ -57,13 +57,13 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 	assert.True(t, testActor.isBusy())
 	assert.Equal(t, firstLockTime, testActor.lastUsedTime)
 
-	// unlock the first lock
+	// unlock the first lock.
 	testActor.unlock()
 
 	assert.Equal(t, int32(1), testActor.pendingActorCalls.Load())
 	assert.True(t, testActor.isBusy())
 
-	// unlock the second lock
+	// unlock the second lock.
 	<-waitCh
 	assert.Equal(t, int32(0), testActor.pendingActorCalls.Load())
 	assert.False(t, testActor.isBusy())

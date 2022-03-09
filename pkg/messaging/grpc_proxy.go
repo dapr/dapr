@@ -87,7 +87,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	}
 
 	if target.id == p.appID {
-		// proxy locally to the app
+		// proxy locally to the app.
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl)
 			if !ok {
@@ -100,7 +100,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	}
 
 	// proxy to a remote daprd
-	// connection is recreated because its certification may have already been expired
+	// connection is recreated because its certification may have already been expired.
 	conn, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, true, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 	outCtx = p.telemetryFn(outCtx)
 

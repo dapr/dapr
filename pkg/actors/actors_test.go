@@ -205,7 +205,7 @@ func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	// First we check all eTags
+	// First we check all eTags.
 	for _, o := range request.Operations {
 		var eTag *string
 		key := ""
@@ -573,7 +573,7 @@ func TestCreateReminder(t *testing.T) {
 		}
 	}
 
-	// Does not migrate yet
+	// Does not migrate yet.
 	_, actorTypeMetadata, err := testActorsRuntimeWithPartition.getRemindersForActorType(actorType, false)
 	assert.Nil(t, err)
 	assert.True(t, len(actorTypeMetadata.ID) > 0)
@@ -639,7 +639,7 @@ func TestRenameReminder(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
 
-	// rename reminder
+	// rename reminder.
 	err = testActorsRuntime.RenameReminder(ctx, &RenameReminderRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -649,7 +649,7 @@ func TestRenameReminder(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
 
-	// verify that the reminder retrieved with the old name no longer exists
+	// verify that the reminder retrieved with the old name no longer exists.
 	oldReminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -658,7 +658,7 @@ func TestRenameReminder(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, oldReminder)
 
-	// verify that the reminder retrieved with the new name already exists
+	// verify that the reminder retrieved with the new name already exists.
 	newReminder, err := testActorsRuntime.GetReminder(ctx, &GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -755,7 +755,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
-		// Check reminder is updated
+		// Check reminder is updated.
 		assert.Equal(t, "9s", reminders[0].reminder.Period)
 		assert.Equal(t, "1s", reminders[0].reminder.DueTime)
 		assert.Equal(t, "b", reminders[0].reminder.Data)
@@ -764,14 +764,14 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		testActorsRuntime.CreateReminder(ctx, &reminder3)
 		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
-		// Check reminder is updated
+		// Check reminder is updated.
 		assert.Equal(t, "8s", reminders[0].reminder.Period)
 		assert.Equal(t, "2s", reminders[0].reminder.DueTime)
 		assert.Equal(t, "c", reminders[0].reminder.Data)
 
 		select {
 		case request := <-requestC:
-			// Test that the last reminder update fired
+			// Test that the last reminder update fired.
 			assert.Equal(t, reminders[0].reminder.Data, request.Data)
 		case <-time.After(15 * time.Second):
 			assert.Fail(t, "request channel timed out")
@@ -803,11 +803,11 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 
 		time.Sleep(2 * time.Second)
 
-		// Check reminder is updated
+		// Check reminder is updated.
 		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType, false)
 		assert.Nil(t, err)
 		// The statestore could have either reminder2 or reminder3 based on the timing.
-		// Therefore, not verifying data field
+		// Therefore, not verifying data field.
 		assert.Equal(t, "8s", reminders[0].reminder.Period)
 		assert.Equal(t, "4s", reminders[0].reminder.DueTime)
 
@@ -820,10 +820,10 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 
 		select {
 		case request := <-requestC:
-			// Test that the last reminder update fired
+			// Test that the last reminder update fired.
 			assert.Equal(t, reminders[0].reminder.Data, request.Data)
 
-			// Check reminder is updated
+			// Check reminder is updated.
 			assert.Equal(t, "7s", reminders[0].reminder.Period)
 			assert.Equal(t, "2s", reminders[0].reminder.DueTime)
 			assert.Equal(t, "d", reminders[0].reminder.Data)
@@ -1138,7 +1138,7 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 
 		select {
 		case request := <-requestC:
-			// Test that the last reminder update fired
+			// Test that the last reminder update fired.
 			assert.Equal(t, timer3.Data, request.Data)
 		case <-time.After(15 * time.Second):
 			assert.Fail(t, "request channel timed out")
@@ -1176,7 +1176,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 
 		select {
 		case request := <-requestC:
-			// Test that the last reminder update fired
+			// Test that the last reminder update fired.
 			assert.Equal(t, timer4.Data, request.Data)
 		case <-time.After(15 * time.Second):
 			assert.Fail(t, "request channel timed out")
@@ -1457,13 +1457,13 @@ func TestConstructActorStateKey(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	expected := strings.Join([]string{TestAppID, actorType, actorID, TestKeyName}, delim)
 
-	// act
+	// act.
 	stateKey := testActorsRuntime.constructActorStateKey(actorType, actorID, TestKeyName)
 
-	// assert
+	// assert.
 	assert.Equal(t, expected, stateKey)
 
-	// Check split
+	// Check split.
 	keys := strings.Split(stateKey, delim)
 	assert.Equal(t, 4, len(keys))
 	assert.Equal(t, TestAppID, keys[0])
@@ -1497,14 +1497,14 @@ func TestGetState(t *testing.T) {
 		},
 	})
 
-	// act
+	// act.
 	response, err := testActorRuntime.GetState(ctx, &GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       TestKeyName,
 	})
 
-	// assert
+	// assert.
 	assert.NoError(t, err)
 	assert.Equal(t, fakeData, string(response.Data))
 }
@@ -1520,7 +1520,7 @@ func TestDeleteState(t *testing.T) {
 
 	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
 
-	// insert state
+	// insert state.
 	testActorRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -1535,7 +1535,7 @@ func TestDeleteState(t *testing.T) {
 		},
 	})
 
-	// save state
+	// save state.
 	response, err := testActorRuntime.GetState(ctx, &GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -1546,7 +1546,7 @@ func TestDeleteState(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, fakeData, string(response.Data))
 
-	// delete state
+	// delete state.
 	testActorRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -1560,14 +1560,14 @@ func TestDeleteState(t *testing.T) {
 		},
 	})
 
-	// act
+	// act.
 	response, err = testActorRuntime.GetState(ctx, &GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       TestKeyName,
 	})
 
-	// assert
+	// assert.
 	assert.NoError(t, err)
 	assert.Nil(t, response.Data)
 }
@@ -1589,27 +1589,27 @@ func TestCallLocalActor(t *testing.T) {
 	})
 
 	t.Run("actor is already disposed", func(t *testing.T) {
-		// arrange
+		// arrange.
 		testActorRuntime := newTestActorsRuntime()
 		actorKey := constructCompositeKey(testActorType, testActorID)
 		act := newActor(testActorType, testActorID, &reentrancyStackDepth)
 
-		// add test actor
+		// add test actor.
 		testActorRuntime.actorsTable.LoadOrStore(actorKey, act)
 		act.lock(nil)
 		assert.True(t, act.isBusy())
 
-		// get dispose channel for test actor
+		// get dispose channel for test actor.
 		ch := act.channel()
 		act.unlock()
 
 		_, closed := <-ch
 		assert.False(t, closed, "dispose channel must be closed after unlock")
 
-		// act
+		// act.
 		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 
-		// assert
+		// assert.
 		s, _ := status.FromError(err)
 		assert.Equal(t, codes.ResourceExhausted, s.Code())
 		assert.Nil(t, resp)
@@ -1767,7 +1767,7 @@ func TestShutdown(t *testing.T) {
 	t.Run("no panic when placement is nil", func(t *testing.T) {
 		testActorRuntime.placement = nil
 		testActorRuntime.Stop()
-		// No panic
+		// No panic.
 	})
 }
 
@@ -1906,13 +1906,13 @@ func TestParseDuration(t *testing.T) {
 		y, m, d, dur, _, err := parseDuration("P1Y2M3D")
 		assert.Nil(t, err)
 
-		// 2020 is a leap year
+		// 2020 is a leap year.
 		start, _ := time.Parse("2006-01-02 15:04:05", "2020-02-03 11:12:13")
 		target := start.AddDate(y, m, d).Add(dur)
 		expect, _ := time.Parse("2006-01-02 15:04:05", "2021-04-06 11:12:13")
 		assert.Equal(t, expect, target)
 
-		// 2019 is not a leap year
+		// 2019 is not a leap year.
 		start, _ = time.Parse("2006-01-02 15:04:05", "2019-02-03 11:12:13")
 		target = start.AddDate(y, m, d).Add(dur)
 		expect, _ = time.Parse("2006-01-02 15:04:05", "2020-04-06 11:12:13")

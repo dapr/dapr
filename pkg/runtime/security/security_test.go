@@ -58,7 +58,7 @@ func TestGetTrustAnchors(t *testing.T) {
 }
 
 func TestGenerateSidecarCSR(t *testing.T) {
-	// can't run this on Windows build agents, GH actions fails with "CryptAcquireContext: Provider DLL failed to initialize correctly."
+	// can't run this on Windows build agents, GH actions fails with "CryptAcquireContext: Provider DLL failed to initialize correctly.".
 	if runtime.GOOS == "windows" {
 		return
 	}

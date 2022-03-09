@@ -42,7 +42,7 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 		":path":          testValue,
 		":authority":     testValue,
 		"grpc-timeout":   testValue,
-		"content-type":   testValue, // skip
+		"content-type":   testValue, // skip.
 		"grpc-trace-bin": testValue,
 	}
 
@@ -129,7 +129,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 
 	t.Run("without http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, false)
-		// always trace header is returned
+		// always trace header is returned.
 		assert.Equal(t, 11, convertedMD.Len())
 
 		testHeaders := []struct {
@@ -155,7 +155,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 
 	t.Run("with http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, true)
-		// always trace header is returned
+		// always trace header is returned.
 		assert.Equal(t, 11, convertedMD.Len())
 
 		testHeaders := []struct {
@@ -232,26 +232,26 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 
 func TestErrorFromHTTPResponseCode(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		// act
+		// act.
 		err := ErrorFromHTTPResponseCode(200, "OK")
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 	})
 
 	t.Run("Created", func(t *testing.T) {
-		// act
+		// act.
 		err := ErrorFromHTTPResponseCode(201, "Created")
 
-		// assert
+		// assert.
 		assert.NoError(t, err)
 	})
 
 	t.Run("NotFound", func(t *testing.T) {
-		// act
+		// act.
 		err := ErrorFromHTTPResponseCode(404, "Not Found")
 
-		// assert
+		// assert.
 		s, ok := status.FromError(err)
 		assert.True(t, ok)
 		assert.Equal(t, codes.NotFound, s.Code())
@@ -262,10 +262,10 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 	})
 
 	t.Run("Internal Server Error", func(t *testing.T) {
-		// act
+		// act.
 		err := ErrorFromHTTPResponseCode(500, "HTTPExtensions is not given")
 
-		// assert
+		// assert.
 		s, ok := status.FromError(err)
 		assert.True(t, ok)
 		assert.Equal(t, codes.Unknown, s.Code())
@@ -278,10 +278,10 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 	t.Run("Truncate error message", func(t *testing.T) {
 		longMessage := strings.Repeat("test", 30)
 
-		// act
+		// act.
 		err := ErrorFromHTTPResponseCode(500, longMessage)
 
-		// assert
+		// assert.
 		s, _ := status.FromError(err)
 		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
 		assert.Equal(t, 63, len(errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]))
@@ -307,10 +307,10 @@ func TestErrorFromInternalStatus(t *testing.T) {
 
 	expected.Message()
 
-	// act
+	// act.
 	statusError := ErrorFromInternalStatus(internal)
 
-	// assert
+	// assert.
 	actual, ok := status.FromError(statusError)
 	assert.True(t, ok)
 	assert.Equal(t, expected.Code(), actual.Code())
@@ -351,9 +351,9 @@ func TestProtobufToJSON(t *testing.T) {
 	t.Log(string(jsonBody))
 
 	// protojson produces different indentation space based on OS
-	// For linux
+	// For linux.
 	comp1 := string(jsonBody) == "{\"stackEntries\":[\"first stack\",\"second stack\"]}"
-	// For mac and windows
+	// For mac and windows.
 	comp2 := string(jsonBody) == "{\"stackEntries\":[\"first stack\", \"second stack\"]}"
 	assert.True(t, comp1 || comp2)
 }

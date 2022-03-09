@@ -32,7 +32,7 @@ func TestEnsureDir(t *testing.T) {
 	})
 
 	t.Run("ensure the existing directory", func(t *testing.T) {
-		err := os.Mkdir(testDir, 0700)
+		err := os.Mkdir(testDir, 0o700)
 		assert.NoError(t, err)
 		err = ensureDir(testDir)
 		assert.NoError(t, err)
@@ -109,17 +109,17 @@ func TestMarshalAndUnmarshalMsgpack(t *testing.T) {
 }
 
 func TestMakeRaftLogCommand(t *testing.T) {
-	// arrange
+	// arrange.
 	testMember := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
 	}
 
-	// act
+	// act.
 	cmdLog, _ := makeRaftLogCommand(MemberUpsert, testMember)
 
-	// assert
+	// assert.
 	assert.Equal(t, uint8(MemberUpsert), cmdLog[0])
 	unmarshaled := DaprHostMember{}
 	unmarshalMsgPack(cmdLog[1:], &unmarshaled)

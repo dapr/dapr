@@ -77,7 +77,7 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 		rsp, err = g.invokeMethodV1(ctx, req)
 
 	default:
-		// Reject unsupported version
+		// Reject unsupported version.
 		rsp = nil
 		err = status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
 	}
@@ -98,7 +98,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		grpcMetadata.Set(auth.APITokenHeader, g.appMetadataToken)
 	}
 
-	// Prepare gRPC Metadata
+	// Prepare gRPC Metadata.
 	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
 
 	var header, trailer metadata.MD
@@ -115,9 +115,9 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	var rsp *invokev1.InvokeMethodResponse
 	if err != nil {
-		// Convert status code
+		// Convert status code.
 		respStatus := status.Convert(err)
-		// Prepare response
+		// Prepare response.
 		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().Details)
 	} else {
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)

@@ -58,12 +58,12 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 	var cek ComponentEncryptionKeys
 
 	for _, m := range component.Spec.Metadata {
-		// search for primary encryption key
+		// search for primary encryption key.
 		var valid bool
 
 		if m.Name == primaryEncryptionKey {
 			if len(m.Value.Raw) > 0 {
-				// encryption key is already extracted by the Operator
+				// encryption key is already extracted by the Operator.
 				cek.Primary = Key{
 					Key:  m.Value.String(),
 					Name: m.SecretKeyRef.Name,

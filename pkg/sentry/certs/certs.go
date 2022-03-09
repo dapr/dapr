@@ -74,7 +74,7 @@ func DecodePEMCertificates(crtb []byte) ([]*x509.Certificate, error) {
 			return nil, err
 		}
 		if cert != nil {
-			// it's a cert, add to pool
+			// it's a cert, add to pool.
 			certs = append(certs, cert)
 		}
 	}

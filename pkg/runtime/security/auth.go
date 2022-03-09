@@ -159,7 +159,7 @@ func getToken() string {
 }
 
 func getSentryIdentifier(appID string) string {
-	// return injected identity, default id if not present
+	// return injected identity, default id if not present.
 	localID := os.Getenv("SENTRY_LOCAL_IDENTITY")
 	if localID != "" {
 		return localID

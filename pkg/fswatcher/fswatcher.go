@@ -23,12 +23,12 @@ func Watch(ctx context.Context, dir string, eventCh chan<- struct{}) error {
 LOOP:
 	for {
 		select {
-		// watch for events
+		// watch for events.
 		case event := <-watcher.Events:
 			if event.Op&fsnotify.Create == fsnotify.Create ||
 				event.Op&fsnotify.Write == fsnotify.Write {
 				if strings.Contains(event.Name, dir) {
-					// give time for other updates to occur
+					// give time for other updates to occur.
 					time.Sleep(time.Second * 1)
 					eventCh <- struct{}{}
 				}

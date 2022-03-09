@@ -59,7 +59,7 @@ type handler struct {
 // It is invoked like any gRPC server stream and uses the gRPC server framing to get and receive bytes from the wire,
 // forwarding it to a ClientStream established against the relevant ClientConn.
 func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error {
-	// little bit of gRPC internals never hurt anyone
+	// little bit of gRPC internals never hurt anyone.
 	fullMethodName, ok := grpc.MethodFromServerStream(serverStream)
 	if !ok {
 		return status.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
@@ -93,7 +93,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 			} else {
 				// however, we may have gotten a receive error (stream disconnected, a read error etc) in which case we need
 				// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
-				// exit with an error to the stack
+				// exit with an error to the stack.
 				clientCancel()
 				return status.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 			}
@@ -118,7 +118,7 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 		f := &codec.Frame{}
 		for i := 0; ; i++ {
 			if err := src.RecvMsg(f); err != nil {
-				ret <- err // this can be io.EOF which is happy case
+				ret <- err // this can be io.EOF which is happy case.
 				break
 			}
 			if i == 0 {
@@ -150,7 +150,7 @@ func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientSt
 		f := &codec.Frame{}
 		for i := 0; ; i++ {
 			if err := src.RecvMsg(f); err != nil {
-				ret <- err // this can be io.EOF which is happy case
+				ret <- err // this can be io.EOF which is happy case.
 				break
 			}
 			if err := dst.SendMsg(f); err != nil {

@@ -413,7 +413,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// pass the trace context to output binding in metadata
+	// pass the trace context to output binding in metadata.
 	if span := diag_utils.SpanFromContext(reqCtx); span != nil {
 		sc := span.SpanContext()
 		if req.Metadata == nil {
@@ -468,7 +468,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// merge metadata from URL query parameters
+	// merge metadata from URL query parameters.
 	metadata := getMetadataFromRequest(reqCtx)
 	if req.Metadata == nil {
 		req.Metadata = metadata
@@ -485,7 +485,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// try bulk get first
+	// try bulk get first.
 	reqs := make([]state.GetRequest, len(req.Keys))
 	for i, k := range req.Keys {
 		key, err1 := state_loader.GetModifiedStateKey(k, storeName, a.id)
@@ -509,7 +509,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
 	if bulkGet {
-		// if store supports bulk get
+		// if store supports bulk get.
 		if err != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -529,7 +529,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 			}
 		}
 	} else {
-		// if store doesn't support bulk get, fallback to call get() method one by one
+		// if store doesn't support bulk get, fallback to call get() method one by one.
 		limiter := concurrency.NewLimiter(req.Parallelism)
 
 		for i, k := range req.Keys {
@@ -853,7 +853,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 
 	for i, r := range reqs {
-		// merge metadata from URL query parameters
+		// merge metadata from URL query parameters.
 		if reqs[i].Metadata == nil {
 			reqs[i].Metadata = metadata
 		} else {
@@ -962,17 +962,17 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Construct internal invoke method request
+	// Construct internal invoke method request.
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, reqCtx.QueryArgs().String())
 	req.WithRawData(reqCtx.Request.Body(), string(reqCtx.Request.Header.ContentType()))
-	// Save headers to internal metadata
+	// Save headers to internal metadata.
 	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
 
 	resp, err := a.directMessaging.Invoke(reqCtx, targetID, req)
-	// err does not represent user application response
+	// err does not represent user application response.
 	if err != nil {
 		// Allowlists policies that are applied on the callee side can return a Permission Denied error.
-		// For everything else, treat it as a gRPC transport error
+		// For everything else, treat it as a gRPC transport error.
 		statusCode := fasthttp.StatusInternalServerError
 		if status.Code(err) == codes.PermissionDenied {
 			statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
@@ -986,7 +986,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	contentType, body := resp.RawData()
 	reqCtx.Response.Header.SetContentType(contentType)
 
-	// Construct response
+	// Construct response.
 	statusCode := int(resp.Status().Code)
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
@@ -1287,7 +1287,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	req.WithHTTPExtension(verb, reqCtx.QueryArgs().String())
 	req.WithRawData(body, string(reqCtx.Request.Header.ContentType()))
 
-	// Save headers to metadata
+	// Save headers to metadata.
 	metadata := map[string][]string{}
 	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
 		metadata[string(key)] = []string{string(value)}
@@ -1306,7 +1306,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	contentType, body := resp.RawData()
 	reqCtx.Response.Header.SetContentType(contentType)
 
-	// Construct response
+	// Construct response.
 	statusCode := int(resp.Status().Code)
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
@@ -1471,9 +1471,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
-	// Populate W3C traceparent to cloudevent envelope
+	// Populate W3C traceparent to cloudevent envelope.
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
+	// Populate W3C tracestate to cloudevent envelope.
 	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
 	data := body
@@ -1629,7 +1629,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// merge metadata from URL query parameters
+	// merge metadata from URL query parameters.
 	metadata := getMetadataFromRequest(reqCtx)
 	if req.Metadata == nil {
 		req.Metadata = metadata
@@ -1736,7 +1736,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
-		// error has been already logged
+		// error has been already logged.
 		return
 	}
 

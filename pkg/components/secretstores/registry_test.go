@@ -39,11 +39,11 @@ func TestRegistry(t *testing.T) {
 			componentName     = "secretstores." + secretStoreName
 		)
 
-		// Initiate mock object
+		// Initiate mock object.
 		mock := &mockSecretStore{}
 		mockV2 := &mockSecretStore{}
 
-		// act
+		// act.
 		testRegistry.Register(secretstores.New(secretStoreName, func() ss.SecretStore {
 			return mock
 		}))
@@ -51,7 +51,7 @@ func TestRegistry(t *testing.T) {
 			return mockV2
 		}))
 
-		// assert v0 and v1
+		// assert v0 and v1.
 		p, e := testRegistry.Create(componentName, "v0")
 		assert.NoError(t, e)
 		assert.Same(t, mock, p)
@@ -59,12 +59,12 @@ func TestRegistry(t *testing.T) {
 		assert.NoError(t, e)
 		assert.Same(t, mock, p)
 
-		// assert v2
+		// assert v2.
 		pV2, e := testRegistry.Create(componentName, "v2")
 		assert.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 
-		// check case-insensitivity
+		// check case-insensitivity.
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2")
 		assert.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
@@ -76,11 +76,11 @@ func TestRegistry(t *testing.T) {
 			componentName = "secretstores." + resolverName
 		)
 
-		// act
+		// act.
 		p, actualError := testRegistry.Create(componentName, "v1")
 		expectedError := errors.Errorf("couldn't find secret store %s/v1", componentName)
 
-		// assert
+		// assert.
 		assert.Nil(t, p)
 		assert.Equal(t, expectedError.Error(), actualError.Error())
 	})

@@ -27,31 +27,31 @@ import (
 // Configuration describes an Dapr configuration setting.
 type Configuration struct {
 	metav1.TypeMeta `json:",inline"`
-	// +optional
+	// +optional.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
+	// +optional.
 	Spec ConfigurationSpec `json:"spec,omitempty"`
 }
 
 // ConfigurationSpec is the spec for an configuration.
 type ConfigurationSpec struct {
-	// +optional
+	// +optional.
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
-	// +optional
+	// +optional.
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
 	// +kubebuilder:default={enabled:true}
 	MetricSpec MetricSpec `json:"metric,omitempty"`
-	// +optional
+	// +optional.
 	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
-	// +optional
+	// +optional.
 	Secrets SecretsSpec `json:"secrets,omitempty"`
-	// +optional
+	// +optional.
 	AccessControlSpec AccessControlSpec `json:"accessControl,omitempty"`
-	// +optional
+	// +optional.
 	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty"`
-	// +optional
+	// +optional.
 	Features []FeatureSpec `json:"features,omitempty"`
-	// +optional
+	// +optional.
 	APISpec APISpec `json:"api,omitempty"`
 }
 
@@ -81,12 +81,12 @@ type SecretsSpec struct {
 
 // SecretsScope defines the scope for secrets.
 type SecretsScope struct {
-	// +optional
+	// +optional.
 	DefaultAccess string `json:"defaultAccess,omitempty"`
 	StoreName     string `json:"storeName"`
-	// +optional
+	// +optional.
 	AllowedSecrets []string `json:"allowedSecrets,omitempty"`
-	// +optional
+	// +optional.
 	DeniedSecrets []string `json:"deniedSecrets,omitempty"`
 }
 
@@ -105,9 +105,9 @@ type HandlerSpec struct {
 // MTLSSpec defines mTLS configuration.
 type MTLSSpec struct {
 	Enabled bool `json:"enabled"`
-	// +optional
+	// +optional.
 	WorkloadCertTTL string `json:"workloadCertTTL"`
-	// +optional
+	// +optional.
 	AllowedClockSkew string `json:"allowedClockSkew"`
 }
 
@@ -141,31 +141,31 @@ type MetricSpec struct {
 // AppPolicySpec defines the policy data structure for each app.
 type AppPolicySpec struct {
 	AppName string `json:"appId" yaml:"appId"`
-	// +optional
+	// +optional.
 	DefaultAction string `json:"defaultAction" yaml:"defaultAction"`
-	// +optional
+	// +optional.
 	TrustDomain string `json:"trustDomain" yaml:"trustDomain"`
-	// +optional
+	// +optional.
 	Namespace string `json:"namespace" yaml:"namespace"`
-	// +optional
+	// +optional.
 	AppOperationActions []AppOperationAction `json:"operations" yaml:"operations"`
 }
 
 // AppOperationAction defines the data structure for each app operation.
 type AppOperationAction struct {
 	Operation string `json:"name" yaml:"name"`
-	// +optional
+	// +optional.
 	HTTPVerb []string `json:"httpVerb" yaml:"httpVerb"`
 	Action   string   `json:"action" yaml:"action"`
 }
 
 // AccessControlSpec is the spec object in ConfigurationSpec.
 type AccessControlSpec struct {
-	// +optional
+	// +optional.
 	DefaultAction string `json:"defaultAction" yaml:"defaultAction"`
-	// +optional
+	// +optional.
 	TrustDomain string `json:"trustDomain" yaml:"trustDomain"`
-	// +optional
+	// +optional.
 	AppPolicies []AppPolicySpec `json:"policies" yaml:"policies"`
 }
 

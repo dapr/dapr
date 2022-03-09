@@ -89,7 +89,7 @@ func newHTTPClient() http.Client {
 		defaultClient = http.Client{
 			Timeout: time.Second * 15,
 			Transport: &http.Transport{
-				// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
+				// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS).
 				Dial: (&net.Dialer{
 					Timeout:   5 * time.Minute,
 					KeepAlive: 6 * time.Minute,
@@ -138,7 +138,7 @@ func httpGet(url string, timeout time.Duration) ([]byte, error) {
 
 // HTTPGet is a helper to make GET request call to url.
 func HTTPGet(url string) ([]byte, error) {
-	return httpGet(url, 0 /* no timeout */)
+	return httpGet(url, 0 /* no timeout. */)
 }
 
 // HTTPGetRawNTimes calls the url n times and returns the first

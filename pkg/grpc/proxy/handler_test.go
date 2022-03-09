@@ -125,7 +125,7 @@ func (s *ProxyHappySuite) ctx() context.Context {
 }
 
 func (s *ProxyHappySuite) TestPingEmptyCarriesClientMetadata() {
-	// s.T().Skip()
+	// s.T().Skip().
 	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
 	out, err := s.testClient.PingEmpty(ctx, &pb.Empty{})
 	require.NoError(s.T(), err, "PingEmpty should succeed without errors")
@@ -139,7 +139,7 @@ func (s *ProxyHappySuite) TestPingEmpty_StressTest() {
 }
 
 func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
-	// s.T().Skip()
+	// s.T().Skip().
 	headerMd := make(metadata.MD)
 	trailerMd := make(metadata.MD)
 	// This is an awkward calling convention... but meh.

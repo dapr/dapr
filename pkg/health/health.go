@@ -56,7 +56,7 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 		time.Sleep(options.initialDelay)
 
 		client := &fasthttp.Client{
-			MaxConnsPerHost:           5, // Limit Keep-Alive connections
+			MaxConnsPerHost:           5, // Limit Keep-Alive connections.
 			ReadTimeout:               options.requestTimeout,
 			MaxIdemponentCallAttempts: 1,
 		}

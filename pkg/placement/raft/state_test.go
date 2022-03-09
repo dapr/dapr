@@ -20,17 +20,17 @@ import (
 )
 
 func TestNewDaprHostMemberState(t *testing.T) {
-	// act
+	// act.
 	s := newDaprHostMemberState()
 
-	// assert
+	// assert.
 	assert.Equal(t, uint64(0), s.Index())
 	assert.Equal(t, 0, len(s.Members()))
 	assert.Equal(t, 0, len(s.hashingTableMap()))
 }
 
 func TestClone(t *testing.T) {
-	// arrange
+	// arrange.
 	s := newDaprHostMemberState()
 	s.upsertMember(&DaprHostMember{
 		Name:     "127.0.0.1:8080",
@@ -38,10 +38,10 @@ func TestClone(t *testing.T) {
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
 	})
 
-	// act
+	// act.
 	newState := s.clone()
 
-	// assert
+	// assert.
 	assert.NotSame(t, s, newState)
 	assert.Nil(t, newState.hashingTableMap())
 	assert.Equal(t, s.Index(), newState.Index())
@@ -49,11 +49,11 @@ func TestClone(t *testing.T) {
 }
 
 func TestUpsertMember(t *testing.T) {
-	// arrange
+	// arrange.
 	s := newDaprHostMemberState()
 
 	t.Run("add new actor member", func(t *testing.T) {
-		// act
+		// act.
 		updated := s.upsertMember(&DaprHostMember{
 			Name:      "127.0.0.1:8080",
 			AppID:     "FakeID",
@@ -61,14 +61,14 @@ func TestUpsertMember(t *testing.T) {
 			UpdatedAt: 1,
 		})
 
-		// assert
+		// assert.
 		assert.Equal(t, 1, len(s.Members()))
 		assert.Equal(t, 2, len(s.hashingTableMap()))
 		assert.True(t, updated)
 	})
 
 	t.Run("no hashing table update required", func(t *testing.T) {
-		// act
+		// act.
 		updated := s.upsertMember(&DaprHostMember{
 			Name:      "127.0.0.1:8081",
 			AppID:     "FakeID_2",
@@ -76,12 +76,12 @@ func TestUpsertMember(t *testing.T) {
 			UpdatedAt: 1,
 		})
 
-		// assert
+		// assert.
 		assert.Equal(t, 2, len(s.Members()))
 		assert.Equal(t, 2, len(s.hashingTableMap()))
 		assert.True(t, updated)
 
-		// act
+		// act.
 		updated = s.upsertMember(&DaprHostMember{
 			Name:      "127.0.0.1:8081",
 			AppID:     "FakeID_2",
@@ -89,7 +89,7 @@ func TestUpsertMember(t *testing.T) {
 			UpdatedAt: 2,
 		})
 
-		// assert
+		// assert.
 		assert.False(t, updated)
 	})
 
@@ -101,9 +101,9 @@ func TestUpsertMember(t *testing.T) {
 			UpdatedAt: 100,
 		}
 
-		// act
+		// act.
 		updated := s.upsertMember(testMember)
-		// assert
+		// assert.
 		assert.False(t, updated)
 	})
 
@@ -121,7 +121,7 @@ func TestUpsertMember(t *testing.T) {
 		// it will delete empty consistent hashing table.
 		updated := s.upsertMember(testMember)
 
-		// assert
+		// assert.
 		assert.Equal(t, 2, len(s.Members()))
 		assert.True(t, updated)
 		assert.Equal(t, 1, len(s.Members()[testMember.Name].Entities))
@@ -130,40 +130,40 @@ func TestUpsertMember(t *testing.T) {
 }
 
 func TestRemoveMember(t *testing.T) {
-	// arrange
+	// arrange.
 	s := newDaprHostMemberState()
 
 	t.Run("remove member and clean up consistent hashing table", func(t *testing.T) {
-		// act
+		// act.
 		updated := s.upsertMember(&DaprHostMember{
 			Name:     "127.0.0.1:8080",
 			AppID:    "FakeID",
 			Entities: []string{"actorTypeOne", "actorTypeTwo"},
 		})
 
-		// assert
+		// assert.
 		assert.Equal(t, 1, len(s.Members()))
 		assert.True(t, updated)
 		assert.Equal(t, 2, len(s.hashingTableMap()))
 
-		// act
+		// act.
 		updated = s.removeMember(&DaprHostMember{
 			Name: "127.0.0.1:8080",
 		})
 
-		// assert
+		// assert.
 		assert.Equal(t, 0, len(s.Members()))
 		assert.True(t, updated)
 		assert.Equal(t, 0, len(s.hashingTableMap()))
 	})
 
 	t.Run("no table update required", func(t *testing.T) {
-		// act
+		// act.
 		updated := s.removeMember(&DaprHostMember{
 			Name: "127.0.0.1:8080",
 		})
 
-		// assert
+		// assert.
 		assert.Equal(t, 0, len(s.Members()))
 		assert.False(t, updated)
 		assert.Equal(t, 0, len(s.hashingTableMap()))
@@ -171,9 +171,9 @@ func TestRemoveMember(t *testing.T) {
 }
 
 func TestUpdateHashingTable(t *testing.T) {
-	// each subtest has dependency on the state
+	// each subtest has dependency on the state.
 
-	// arrange
+	// arrange.
 	s := newDaprHostMemberState()
 
 	t.Run("add new hashing table per actor types", func(t *testing.T) {
@@ -183,7 +183,7 @@ func TestUpdateHashingTable(t *testing.T) {
 			Entities: []string{"actorTypeOne", "actorTypeTwo"},
 		}
 
-		// act
+		// act.
 		s.updateHashingTables(testMember)
 
 		assert.Equal(t, 2, len(s.hashingTableMap()))
@@ -199,7 +199,7 @@ func TestUpdateHashingTable(t *testing.T) {
 			Entities: []string{"actorTypeOne", "actorTypeTwo", "actorTypeThree"},
 		}
 
-		// act
+		// act.
 		s.updateHashingTables(testMember)
 
 		assert.Equal(t, 3, len(s.hashingTableMap()))
@@ -210,9 +210,9 @@ func TestUpdateHashingTable(t *testing.T) {
 }
 
 func TestRemoveHashingTable(t *testing.T) {
-	// each subtest has dependency on the state
+	// each subtest has dependency on the state.
 
-	// arrange
+	// arrange.
 	testMember := &DaprHostMember{
 		Name:     "fakeName",
 		AppID:    "fakeID",
@@ -233,7 +233,7 @@ func TestRemoveHashingTable(t *testing.T) {
 		s.updateHashingTables(testMember)
 	}
 
-	// act
+	// act.
 	for _, tc := range testcases {
 		t.Run("remove host "+tc.name, func(t *testing.T) {
 			testMember.Name = tc.name
@@ -245,7 +245,7 @@ func TestRemoveHashingTable(t *testing.T) {
 }
 
 func TestRestoreHashingTables(t *testing.T) {
-	// arrange
+	// arrange.
 	testnames := []string{
 		"127.0.0.1:8080",
 		"127.0.0.1:8081",
@@ -269,9 +269,9 @@ func TestRestoreHashingTables(t *testing.T) {
 	}
 	assert.Equal(t, 0, len(s.hashingTableMap()))
 
-	// act
+	// act.
 	s.restoreHashingTables()
 
-	// assert
+	// assert.
 	assert.Equal(t, 2, len(s.hashingTableMap()))
 }

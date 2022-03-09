@@ -38,7 +38,7 @@ func TestRegistry(t *testing.T) {
 			componentName    = "middleware.http." + middlewareName
 		)
 
-		// Initiate mock object
+		// Initiate mock object.
 		mock := http_middleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 			return nil
 		})
@@ -47,7 +47,7 @@ func TestRegistry(t *testing.T) {
 		})
 		metadata := h.Metadata{}
 
-		// act
+		// act.
 		testRegistry.Register(http.New(middlewareName, func(h.Metadata) (http_middleware.Middleware, error) {
 			return mock, nil
 		}))
@@ -60,7 +60,7 @@ func TestRegistry(t *testing.T) {
 		// the fmt package, it prints its address. So you can use fmt.Sprintf()
 		// to get the address of a function value.
 
-		// assert v0 and v1
+		// assert v0 and v1.
 		p, e := testRegistry.Create(componentName, "v0", metadata)
 		assert.NoError(t, e)
 		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p))
@@ -68,12 +68,12 @@ func TestRegistry(t *testing.T) {
 		assert.NoError(t, e)
 		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p))
 
-		// assert v2
+		// assert v2.
 		pV2, e := testRegistry.Create(componentName, "v2", metadata)
 		assert.NoError(t, e)
 		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2))
 
-		// check case-insensitivity
+		// check case-insensitivity.
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", metadata)
 		assert.NoError(t, e)
 		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2))
@@ -87,11 +87,11 @@ func TestRegistry(t *testing.T) {
 
 		metadata := h.Metadata{}
 
-		// act
+		// act.
 		p, actualError := testRegistry.Create(componentName, "v1", metadata)
 		expectedError := errors.Errorf("HTTP middleware %s/v1 has not been registered", componentName)
 
-		// assert
+		// assert.
 		assert.Nil(t, p)
 		assert.Equal(t, expectedError.Error(), actualError.Error())
 	})

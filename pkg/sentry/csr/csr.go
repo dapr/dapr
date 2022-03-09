@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	blockTypeECPrivateKey = "EC PRIVATE KEY" // EC private key
-	blockTypePrivateKey   = "PRIVATE KEY"    // PKCS#8 plain private key
+	blockTypeECPrivateKey = "EC PRIVATE KEY" // EC private key.
+	blockTypePrivateKey   = "PRIVATE KEY"    // PKCS#8 plain private key.
 	encodeMsgCSR          = "CERTIFICATE REQUEST"
 	encodeMsgCert         = "CERTIFICATE"
 )

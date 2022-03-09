@@ -19,7 +19,7 @@ func CreateSPIFFEID(trustDomain, namespace, appID string) (string, error) {
 		return "", errors.New("can't create spiffe id: app id is empty")
 	}
 
-	// Validate according to the SPIFFE spec
+	// Validate according to the SPIFFE spec.
 	if strings.Contains(trustDomain, ":") {
 		return "", errors.New("trust domain cannot contain the : character")
 	}

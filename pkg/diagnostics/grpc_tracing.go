@@ -72,7 +72,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		resp, err := handler(ctx, req)
 
 		if isSampled {
-			// Populates dapr- prefixed header first
+			// Populates dapr- prefixed header first.
 			for key, value := range reqSpanAttr {
 				prefixedMetadata[key] = value
 			}
@@ -84,7 +84,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			}
 		}
 
-		// Add grpc-trace-bin header for all non-invocation api's
+		// Add grpc-trace-bin header for all non-invocation api's.
 		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
 			traceContextBinary := propagation.Binary(span.SpanContext())
 			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
@@ -145,7 +145,7 @@ func addSpanMetadataAndUpdateStatus(ctx context.Context, span *trace.Span, fullM
 	}
 
 	if span.SpanContext().TraceOptions.IsSampled() {
-		// Populates dapr- prefixed header first
+		// Populates dapr- prefixed header first.
 		AddAttributesToSpan(span, prefixedMetadata)
 
 		spanAttr := map[string]string{}
@@ -246,11 +246,11 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 
 	var dbType string
 	switch s := req.(type) {
-	// Internal service invocation request
+	// Internal service invocation request.
 	case *internalv1pb.InternalInvokeRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 
-		// Rename spanname
+		// Rename spanname.
 		if s.GetActor() == nil {
 			m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", appID, s.Message.GetMethod())
 			m[daprAPIInvokeMethod] = s.Message.GetMethod()
@@ -259,7 +259,7 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 			m[daprAPIActorTypeID] = fmt.Sprintf("%s.%s", s.GetActor().GetActorType(), s.GetActor().GetActorId())
 		}
 
-	// Dapr APIs
+	// Dapr APIs.
 	case *runtimev1pb.InvokeServiceRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		m[netPeerNameSpanAttributeKey] = s.GetId()

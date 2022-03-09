@@ -173,7 +173,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		issuerCertBytes []byte
 	)
 
-	// certs exist on disk or getting created, load them when ready
+	// certs exist on disk or getting created, load them when ready.
 	if !shouldCreateCerts(c.config) {
 		err := detectCertificates(c.config.RootCertPath)
 		if err != nil {
@@ -193,7 +193,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		rootCertBytes = certChain.RootCA
 		issuerCertBytes = certChain.Cert
 	} else {
-		// create self signed root and issuer certs
+		// create self signed root and issuer certs.
 		log.Info("root and issuer certs not found: generating self signed CA")
 		var err error
 		issuerCreds, rootCertBytes, issuerCertBytes, err = c.generateRootAndIssuerCerts()
@@ -204,7 +204,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		log.Info("self signed certs generated and persisted successfully")
 	}
 
-	// load trust anchors
+	// load trust anchors.
 	trustAnchors, err := certs.CertPoolFromPEM(rootCertBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "error parsing cert pool for trust anchors")
@@ -269,7 +269,7 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 		return nil, nil, nil, err
 	}
 
-	// store credentials so that next time sentry restarts it'll load normally
+	// store credentials so that next time sentry restarts it'll load normally.
 	err = certs.StoreCredentials(c.config, rootCertPem, issuerCertPem, issuerKeyPem)
 	if err != nil {
 		return nil, nil, nil, err

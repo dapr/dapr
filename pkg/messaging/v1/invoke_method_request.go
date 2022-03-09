@@ -175,7 +175,7 @@ func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 	dataTypeURL := m.GetData().GetTypeUrl()
 	dataValue := m.GetData().GetValue()
 
-	// set content_type to application/json only if typeurl is unset and data is given
+	// set content_type to application/json only if typeurl is unset and data is given.
 	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
 		contentType = JSONContentType
 	}
@@ -196,7 +196,7 @@ func (imr *InvokeMethodRequest) AddHeaders(header *fasthttp.RequestHeader) {
 		imr.r.Metadata = internalMd
 	} else {
 		for key, val := range internalMd {
-			// We're only adding new values, not overwriting existing
+			// We're only adding new values, not overwriting existing.
 			if _, ok := imr.r.Metadata[key]; !ok {
 				imr.r.Metadata[key] = val
 			}

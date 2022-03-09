@@ -24,10 +24,10 @@ import (
 // Subscription describes an pub/sub event subscription.
 type Subscription struct {
 	metav1.TypeMeta `json:",inline"`
-	// +optional
+	// +optional.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	Spec              SubscriptionSpec `json:"spec,omitempty"`
-	// +optional
+	// +optional.
 	Scopes []string `json:"scopes,omitempty"`
 }
 
@@ -35,7 +35,7 @@ type Subscription struct {
 type SubscriptionSpec struct {
 	Topic      string `json:"topic"`
 	Pubsubname string `json:"pubsubname"`
-	// +optional
+	// +optional.
 	Metadata map[string]string `json:"metadata,omitempty"`
 	Route    string            `json:"route"`
 }

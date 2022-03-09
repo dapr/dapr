@@ -102,7 +102,7 @@ func TestSetup(t *testing.T) {
 
 func TestTearDown(t *testing.T) {
 	t.Run("tear down successfully", func(t *testing.T) {
-		// adding 3 mock resources
+		// adding 3 mock resources.
 		resource := new(TestResources)
 		for i := 0; i < 3; i++ {
 			r := new(MockDisposable)
@@ -112,11 +112,11 @@ func TestTearDown(t *testing.T) {
 			resource.Add(r)
 		}
 
-		// setup resources
+		// setup resources.
 		err := resource.setup()
 		assert.NoError(t, err)
 
-		// tear down all resources
+		// tear down all resources.
 		err = resource.tearDown()
 		assert.NoError(t, err)
 
@@ -125,7 +125,7 @@ func TestTearDown(t *testing.T) {
 	})
 
 	t.Run("ignore failures of disposing resources", func(t *testing.T) {
-		// adding 3 mock resources
+		// adding 3 mock resources.
 		resource := new(TestResources)
 		for i := 0; i < 3; i++ {
 			r := new(MockDisposable)
@@ -139,11 +139,11 @@ func TestTearDown(t *testing.T) {
 			resource.Add(r)
 		}
 
-		// setup resources
+		// setup resources.
 		err := resource.setup()
 		assert.NoError(t, err)
 
-		// tear down all resources
+		// tear down all resources.
 		err = resource.tearDown()
 		assert.Error(t, err)
 

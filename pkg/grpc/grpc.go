@@ -92,7 +92,7 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 
 	g.lock.Lock()
 	defer g.lock.Unlock()
-	// read the value once again, as a concurrent writer could create it
+	// read the value once again, as a concurrent writer could create it.
 	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
 		return val, nil
 	}

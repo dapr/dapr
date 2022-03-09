@@ -18,31 +18,31 @@ import (
 
 // PodPortFowarder implements the PortForwarder interface for Kubernetes.
 type PodPortForwarder struct {
-	// Kubernetes client
+	// Kubernetes client.
 	client *KubeClient
-	// Kubernetes namespace
+	// Kubernetes namespace.
 	namespace string
-	// stopChannel is the channel used to manage the port forward lifecycle
+	// stopChannel is the channel used to manage the port forward lifecycle.
 	stopChannel chan struct{}
-	// readyChannel communicates when the tunnel is ready to receive traffic
+	// readyChannel communicates when the tunnel is ready to receive traffic.
 	readyChannel chan struct{}
 }
 
 // PortForwardRequest encapsulates data required to establish a Kuberentes tunnel.
 type PortForwardRequest struct {
-	// restConfig is the kubernetes config
+	// restConfig is the kubernetes config.
 	restConfig *rest.Config
-	// pod is the selected pod for this port forwarding
+	// pod is the selected pod for this port forwarding.
 	pod apiv1.Pod
-	// localPort is the local port that will be selected to forward the PodPort
+	// localPort is the local port that will be selected to forward the PodPort.
 	localPorts []int
-	// podPort is the target port for the pod
+	// podPort is the target port for the pod.
 	podPorts []int
-	// streams configures where to write or read input from
+	// streams configures where to write or read input from.
 	streams genericclioptions.IOStreams
-	// stopChannel is the channel used to manage the port forward lifecycle
+	// stopChannel is the channel used to manage the port forward lifecycle.
 	stopChannel chan struct{}
-	// stopChannel communicates when the tunnel is ready to receive traffic
+	// stopChannel communicates when the tunnel is ready to receive traffic.
 	readyChannel chan struct{}
 }
 
@@ -119,7 +119,7 @@ func (p *PodPortForwarder) Close() error {
 }
 
 func startPortForwarding(req PortForwardRequest) error {
-	// create spdy roundtripper
+	// create spdy roundtripper.
 	roundTripper, upgrader, err := spdy.RoundTripperFor(req.restConfig)
 	if err != nil {
 		return err

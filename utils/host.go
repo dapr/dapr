@@ -22,7 +22,7 @@ func GetHostAddress() (string, error) {
 	// Any IP can be used, since connection is not established, but we used a known DNS IP.
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
-		// Could not find one via a  UDP connection, so we fallback to the "old" way: try first non-loopback IPv4:
+		// Could not find one via a  UDP connection, so we fallback to the "old" way: try first non-loopback IPv4:.
 		addrs, err := net.InterfaceAddrs()
 		if err != nil {
 			return "", errors.Wrap(err, "error getting interface IP addresses")

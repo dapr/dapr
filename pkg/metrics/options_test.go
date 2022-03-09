@@ -46,7 +46,7 @@ func TestOptions(t *testing.T) {
 
 		o.AttachCmdFlags(testStringVarFn, testBoolVarFn)
 
-		// assert
+		// assert.
 		assert.True(t, metricsPortAsserted)
 		assert.True(t, metricsEnabledAsserted)
 	})
@@ -83,7 +83,7 @@ func TestOptions(t *testing.T) {
 
 		o.AttachCmdFlag(testStringVarFn)
 
-		// assert
+		// assert.
 		assert.True(t, metricsPortAsserted)
 	})
 }

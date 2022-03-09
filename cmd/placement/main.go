@@ -82,7 +82,7 @@ func main() {
 	// Start Healthz endpoint.
 	go startHealthzServer(cfg.healthzPort)
 
-	// Relay incoming process signal to exit placement gracefully
+	// Relay incoming process signal to exit placement gracefully.
 	signalCh := make(chan os.Signal, 10)
 	gracefulExitCh := make(chan struct{})
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
@@ -90,7 +90,7 @@ func main() {
 
 	<-signalCh
 
-	// Shutdown servers
+	// Shutdown servers.
 	go func() {
 		apiServer.Shutdown()
 		raftServer.Shutdown()
@@ -121,7 +121,7 @@ func loadCertChains(certChainPath string) *credentials.CertChain {
 	tlsCreds := credentials.NewTLSCredentials(certChainPath)
 
 	log.Info("mTLS enabled, getting tls certificates")
-	// try to load certs from disk, if not yet there, start a watch on the local filesystem
+	// try to load certs from disk, if not yet there, start a watch on the local filesystem.
 	chain, err := credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
 	if err != nil {
 		fsevent := make(chan struct{})

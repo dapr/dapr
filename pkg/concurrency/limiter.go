@@ -12,7 +12,7 @@ limitations under the License.
 */
 
 // CODE ATTRIBUTION: https://github.com/korovkin/limiter
-// Modified to accept a parameter to the executed job
+// Modified to accept a parameter to the executed job.
 package concurrency
 
 import (
@@ -37,13 +37,13 @@ func NewLimiter(limit int) *Limiter {
 		limit = DefaultLimit
 	}
 
-	// allocate a limiter instance
+	// allocate a limiter instance.
 	c := &Limiter{
 		limit:   limit,
 		tickets: make(chan int, limit),
 	}
 
-	// allocate the tickets:
+	// allocate the tickets:.
 	for i := 0; i < c.limit; i++ {
 		c.tickets <- i
 	}
@@ -64,7 +64,7 @@ func (c *Limiter) Execute(job func(param interface{}), param interface{}) int {
 			atomic.AddInt32(&c.numInProgress, -1)
 		}()
 
-		// run the job
+		// run the job.
 		job(param)
 	}(param)
 	return ticket

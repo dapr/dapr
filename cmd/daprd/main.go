@@ -161,7 +161,7 @@ var (
 )
 
 func main() {
-	// set GOMAXPROCS
+	// set GOMAXPROCS.
 	_, _ = maxprocs.Set()
 
 	rt, err := runtime.FromFlags()

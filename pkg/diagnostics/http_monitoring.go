@@ -213,14 +213,14 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 		p = path[1:]
 	}
 
-	// Split up to 6 delimiters in 'v1/actors/DemoActor/1/timer/name'
+	// Split up to 6 delimiters in 'v1/actors/DemoActor/1/timer/name'.
 	parsedPath := strings.SplitN(p, "/", 6)
 
 	if len(parsedPath) < 3 {
 		return path
 	}
 
-	// Replace actor id with {id} for appcallback url - 'actors/DemoActor/1/method/method1'
+	// Replace actor id with {id} for appcallback url - 'actors/DemoActor/1/method/method1'.
 	if parsedPath[0] == "actors" {
 		parsedPath[2] = "{id}"
 		return strings.Join(parsedPath, "/")
@@ -229,16 +229,16 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 	switch parsedPath[1] {
 	case "state", "secrets":
 		// state api: Concat 3 items(v1, state, statestore) in /v1/state/statestore/key
-		// secrets api: Concat 3 items(v1, secrets, keyvault) in /v1/secrets/keyvault/name
+		// secrets api: Concat 3 items(v1, secrets, keyvault) in /v1/secrets/keyvault/name.
 		return "/" + strings.Join(parsedPath[0:3], "/")
 
 	case "actors":
 		if len(parsedPath) < 5 {
 			return path
 		}
-		// ignore id part
+		// ignore id part.
 		parsedPath[3] = "{id}"
-		// Concat 5 items(v1, actors, DemoActor, {id}, timer) in /v1/actors/DemoActor/1/timer/name
+		// Concat 5 items(v1, actors, DemoActor, {id}, timer) in /v1/actors/DemoActor/1/timer/name.
 		return "/" + strings.Join(parsedPath[0:5], "/")
 	}
 

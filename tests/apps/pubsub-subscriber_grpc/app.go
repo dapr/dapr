@@ -204,17 +204,17 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 			Status: pb.TopicEventResponse_RETRY,
 		}, nil
 	} else if respondWithError {
-		// do not store received messages, respond with error
+		// do not store received messages, respond with error.
 		return nil, errors.New("error response")
 	} else if respondWithInvalidStatus {
-		// do not store received messages, respond with success but an invalid status
+		// do not store received messages, respond with success but an invalid status.
 		return &pb.TopicEventResponse{
 			Status: 4,
 		}, nil
 	}
 
 	if in.Data == nil {
-		// Return success with DROP status to drop message
+		// Return success with DROP status to drop message.
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_DROP,
 		}, nil
@@ -223,7 +223,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	var msg string
 	err := json.Unmarshal(in.Data, &msg)
 	if err != nil {
-		// Return success with DROP status to drop message
+		// Return success with DROP status to drop message.
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_DROP,
 		}, nil

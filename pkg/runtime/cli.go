@@ -98,7 +98,7 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, errors.New("app-id parameter cannot be empty")
 	}
 
-	// Apply options to all loggers
+	// Apply options to all loggers.
 	loggerOptions.SetAppID(*appID)
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func FromFlags() (*DaprRuntime, error) {
 	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
-	// Initialize dapr metrics exporter
+	// Initialize dapr metrics exporter.
 	if err := metricsExporter.Init(); err != nil {
 		log.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func FromFlags() (*DaprRuntime, error) {
 		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration, *apiLogLevel)
 
 	// set environment variables
-	// TODO - consider adding host address to runtime config and/or caching result in utils package
+	// TODO - consider adding host address to runtime config and/or caching result in utils package.
 	host, err := utils.GetHostAddress()
 	if err != nil {
 		log.Warnf("failed to get host address, env variable %s will not be set", env.HostAddress)
@@ -214,7 +214,7 @@ func FromFlags() (*DaprRuntime, error) {
 		env.DaprPort:        strconv.Itoa(daprInternalGRPC),
 		env.DaprGRPCPort:    *daprAPIGRPCPort,
 		env.DaprHTTPPort:    *daprHTTPPort,
-		env.DaprMetricsPort: metricsExporter.Options().Port, // TODO - consider adding to runtime config
+		env.DaprMetricsPort: metricsExporter.Options().Port, // TODO - consider adding to runtime config.
 		env.DaprProfilePort: *profilePort,
 	}
 

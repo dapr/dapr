@@ -24,7 +24,7 @@ const (
 
 // Options defines the sets of options for Dapr logging.
 type Options struct {
-	// OutputLevel is the level of logging
+	// OutputLevel is the level of logging.
 	MetricsEnabled bool
 
 	Port string
@@ -41,7 +41,7 @@ func defaultMetricOptions() *Options {
 func (o *Options) MetricsPort() uint64 {
 	port, err := strconv.ParseUint(o.Port, 10, 64)
 	if err != nil {
-		// Use default metrics port as a fallback
+		// Use default metrics port as a fallback.
 		port, _ = strconv.ParseUint(defaultMetricsPort, 10, 64)
 	}
 

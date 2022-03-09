@@ -35,14 +35,14 @@ func NewSentryCA() CertificateAuthority {
 
 // Run loads the trust anchors and issuer certs, creates a new CA and runs the CA server.
 func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan bool) {
-	// Create CA
+	// Create CA.
 	certAuth, err := ca.NewCertificateAuthority(conf)
 	if err != nil {
 		log.Fatalf("error getting certificate authority: %s", err)
 	}
 	log.Info("certificate authority loaded")
 
-	// Load the trust bundle
+	// Load the trust bundle.
 	err = certAuth.LoadOrStoreTrustBundle()
 	if err != nil {
 		log.Fatalf("error loading trust root bundle: %s", err)
@@ -50,14 +50,14 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 	log.Infof("trust root bundle loaded. issuer cert expiry: %s", certAuth.GetCACertBundle().GetIssuerCertExpiry().String())
 	monitoring.IssuerCertExpiry(certAuth.GetCACertBundle().GetIssuerCertExpiry())
 
-	// Create identity validator
+	// Create identity validator.
 	v, err := createValidator()
 	if err != nil {
 		log.Fatalf("error creating validator: %s", err)
 	}
 	log.Info("validator created")
 
-	// Run the CA server
+	// Run the CA server.
 	s.server = server.NewCAServer(certAuth, v)
 
 	go func() {
@@ -80,7 +80,7 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 
 func createValidator() (identity.Validator, error) {
 	if config.IsKubernetesHosted() {
-		// we're in Kubernetes, create client and init a new serviceaccount token validator
+		// we're in Kubernetes, create client and init a new serviceaccount token validator.
 		kubeClient, err := k8s.GetClient()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create kubernetes client")

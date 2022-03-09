@@ -166,7 +166,7 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 	defer s.lock.Unlock()
 
 	if m, ok := s.data.Members[host.Name]; ok {
-		// No need to update consistent hashing table if the same dapr host member exists
+		// No need to update consistent hashing table if the same dapr host member exists.
 		if m.AppID == host.AppID && m.Name == host.Name && cmp.Equal(m.Entities, host.Entities) {
 			m.UpdatedAt = host.UpdatedAt
 			return false
@@ -183,7 +183,7 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 		UpdatedAt: host.UpdatedAt,
 	}
 
-	// Update hashing table only when host reports actor types
+	// Update hashing table only when host reports actor types.
 	s.data.Members[host.Name].Entities = make([]string, len(host.Entities))
 	copy(s.data.Members[host.Name].Entities, host.Entities)
 

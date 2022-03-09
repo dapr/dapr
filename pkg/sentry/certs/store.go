@@ -45,7 +45,7 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 		Type: v1.SecretTypeOpaque,
 	}
 
-	// We update and not create because sentry expects a secret to already exist
+	// We update and not create because sentry expects a secret to already exist.
 	_, err = kubeClient.CoreV1().Secrets(namespace).Update(context.TODO(), secret, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "failed saving secret to kubernetes")
@@ -81,17 +81,17 @@ func CredentialsExist(conf config.SentryConfig) (bool, error) {
 
 /* #nosec. */
 func storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem []byte, rootCertPath, issuerCertPath, issuerKeyPath string) error {
-	err := os.WriteFile(rootCertPath, rootCertPem, 0644)
+	err := os.WriteFile(rootCertPath, rootCertPem, 0o644)
 	if err != nil {
 		return errors.Wrapf(err, "failed saving file to %s", rootCertPath)
 	}
 
-	err = os.WriteFile(issuerCertPath, issuerCertPem, 0644)
+	err = os.WriteFile(issuerCertPath, issuerCertPem, 0o644)
 	if err != nil {
 		return errors.Wrapf(err, "failed saving file to %s", issuerCertPath)
 	}
 
-	err = os.WriteFile(issuerKeyPath, issuerKeyPem, 0644)
+	err = os.WriteFile(issuerKeyPath, issuerKeyPem, 0o644)
 	if err != nil {
 		return errors.Wrapf(err, "failed saving file to %s", issuerKeyPath)
 	}

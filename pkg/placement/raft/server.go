@@ -156,7 +156,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 
 	// Setup Raft configuration.
 	if config == nil {
-		// Set default configuration for raft
+		// Set default configuration for raft.
 		s.config = &raft.Config{
 			ProtocolVersion:    raft.ProtocolVersionMax,
 			HeartbeatTimeout:   1000 * time.Millisecond,

@@ -142,7 +142,7 @@ func onPubsub(w http.ResponseWriter, r *http.Request) {
 
 	wg.Wait()
 
-	// Always return success as we want to release the messages
+	// Always return success as we want to release the messages.
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{
 		Message: "success",

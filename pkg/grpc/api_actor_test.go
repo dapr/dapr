@@ -123,14 +123,14 @@ func TestGetActorState(t *testing.T) {
 
 		client := runtimev1pb.NewDaprClient(clientConn)
 
-		// act
+		// act.
 		res, err := client.GetActorState(context.TODO(), &runtimev1pb.GetActorStateRequest{
 			ActorId:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
 		})
 
-		// assert
+		// assert.
 		assert.Nil(t, err)
 		assert.Equal(t, data, res.Data)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
@@ -193,7 +193,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 
 		client := runtimev1pb.NewDaprClient(clientConn)
 
-		// act
+		// act.
 		res, err := client.ExecuteActorStateTransaction(context.TODO(),
 			&runtimev1pb.ExecuteActorStateTransactionRequest{
 				ActorId:   "fakeActorID",
@@ -211,7 +211,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 				},
 			})
 
-		// assert
+		// assert.
 		assert.Nil(t, err)
 		assert.NotNil(t, res)
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)

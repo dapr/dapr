@@ -27,7 +27,7 @@ func Register() {
 func codec() encoding.Codec {
 	// since we have registered the default codec by importing it,
 	// we can fetch it from the registry and use it as our parent
-	// and overwrite the existing codec in the registry
+	// and overwrite the existing codec in the registry.
 	return codecWithParent(&protoCodec{})
 }
 
