@@ -949,12 +949,22 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req.WithMetadata(reqMetadata)
 
 		var resp *invokev1.InvokeMethodResponse
+		respErr := false
 		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName)
 		err := policy(func(ctx context.Context) (err error) {
+			respErr = false
 			resp, err = a.appChannel.InvokeMethod(ctx, req)
-			return err
+			if err != nil {
+				return err
+			}
+
+			if resp != nil && resp.Status().Code != nethttp.StatusOK {
+				respErr = true
+				return errors.Errorf("Error sending binding event to application, status %d", resp.Status().Code)
+			}
+			return nil
 		})
-		if err != nil {
+		if err != nil && !respErr {
 			return nil, errors.Wrap(err, "error invoking app")
 		}
 
