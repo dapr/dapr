@@ -3,6 +3,3 @@ kind: Configuration
 metadata:
   name: reentrantconfig
 spec:
-  features:
-    - name: Actor.Reentrancy
-      enabled: true
