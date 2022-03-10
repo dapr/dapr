@@ -73,9 +73,9 @@ type bulkGetRequest struct {
 
 // bulkGetResponse is the response object from Dapr for a bulk get operation.
 type bulkGetResponse struct {
-	Key  string          `json:"key"`
-	Data json.RawMessage `json:"data"`
-	ETag string          `json:"etag"`
+	Key   string     `json:"key"`
+	Value []appState `json:"value"`
+	ETag  string     `json:"etag"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.
@@ -254,9 +254,9 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 
 	for _, i := range resp {
 		var as appState
-		b, err := json.Marshal(i.Data)
+		b, err := json.Marshal(i.Value)
 		if err != nil {
-			return nil, fmt.Errorf("could not marshal return data: %s", err)
+			return nil, fmt.Errorf("could not marshal return value: %s", err)
 		}
 		json.Unmarshal(b, &as)
 
