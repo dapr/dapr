@@ -73,9 +73,9 @@ type bulkGetRequest struct {
 
 // bulkGetResponse is the response object from Dapr for a bulk get operation.
 type bulkGetResponse struct {
-	Key  string      `json:"key"`
-	Data interface{} `json:"data"`
-	ETag string      `json:"etag"`
+	Key  string          `json:"key"`
+	Data json.RawMessage `json:"data"`
+	ETag string          `json:"etag"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.
@@ -615,7 +615,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res.EndTime = epoch()
-	if statusCode != http.StatusOK || statusCode != http.StatusNoContent {
+	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
 	}
 
