@@ -74,6 +74,7 @@ const (
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
 	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
+	daprAPILogLevel                   = "dapr.io/api-log-level"
 	daprPlacementAddressesKey         = "dapr.io/placement-addresses"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
@@ -112,6 +113,7 @@ const (
 	defaultMtlsEnabled                = true
 	trueString                        = "true"
 	defaultDaprHTTPStreamRequestBody  = false
+	defaultAPILogLevel                = ""
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -506,6 +508,10 @@ func isResourceDaprEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprEnabledKey, false)
 }
 
+func getAPILogLevel(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprAPILogLevel, defaultAPILogLevel)
+}
+
 func getServiceAddress(name, namespace, clusterDomain string, port int) string {
 	return fmt.Sprintf("%s.%s.svc.%s:%d", name, namespace, clusterDomain, port)
 }
@@ -612,6 +618,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
 		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
+		"--api-log-level", getAPILogLevel(annotations),
 	}
 
 	debugEnabled := getEnableDebug(annotations)

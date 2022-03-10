@@ -75,6 +75,7 @@ type Config struct {
 	ReadBufferSize           int
 	StreamRequestBody        bool
 	GracefulShutdownDuration time.Duration
+	APILogLevel              string
 }
 
 // NewRuntimeConfig returns a new runtime config.
@@ -83,7 +84,7 @@ func NewRuntimeConfig(
 	appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort int, apiListenAddresses []string, publicPort *int,
 	appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string,
 	appSSL bool, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, streamRequestBody bool,
-	gracefulShutdownDuration time.Duration) *Config {
+	gracefulShutdownDuration time.Duration, apiLogLevel string) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
@@ -114,5 +115,6 @@ func NewRuntimeConfig(
 		ReadBufferSize:           readBufferSize,
 		StreamRequestBody:        streamRequestBody,
 		GracefulShutdownDuration: gracefulShutdownDuration,
+		APILogLevel:              apiLogLevel,
 	}
 }

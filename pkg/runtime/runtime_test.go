@@ -612,12 +612,6 @@ func TestInitState(t *testing.T) {
 		// setup
 		initMockStateStoreForRuntime(rt, nil)
 
-		// act
-		rt.globalConfig.Spec.Features = append(rt.globalConfig.Spec.Features, config.FeatureSpec{
-			Name:    config.StateEncryption,
-			Enabled: true,
-		})
-
 		rt.secretStores["mockSecretStore"] = &mockSecretStore{}
 
 		err := rt.initState(mockStateComponent)
@@ -2745,7 +2739,8 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		"",
 		4,
 		false,
-		time.Second)
+		time.Second,
+		"info")
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 }
