@@ -439,7 +439,9 @@ func TestStateApp(t *testing.T) {
 							if er.Value != nil {
 								areEqual := reflect.DeepEqual(er.Value.Data, ri.Value.Data)
 								if !areEqual {
-									t.Logf("Not equal! Test name: %s, Expected: %+v, Found %+v, URL: %s, Body: %+v, Response: %+v\n", step.command, er.Value.Data, ri.Value.Data, externalURL, body, resp)
+									t.Logf("Not equal! Test name: %s, Expected: %+v, Found %+v, URL: %s, Body: %+v, Response: %+v\n", step.command, er.Value.Data, ri.Value.Data, url, body, resp)
+								} else {
+									t.Logf("Equal! Test name: %s, Expected: %+v, Found %+v, URL: %s, Body: %+v, Response: %+v\n", step.command, er.Value.Data, ri.Value.Data, url, body, resp)
 								}
 								require.True(t, reflect.DeepEqual(er.Value.Data, ri.Value.Data))
 							}
