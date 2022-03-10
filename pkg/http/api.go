@@ -974,7 +974,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	var statusCode int
 	var msg ErrorResponse
 	errorOccurred := false
-	policy(func(ctx context.Context) (rErr error) {
+	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.directMessaging.Invoke(ctx, targetID, req)
 
 		if rErr != nil {
@@ -1012,6 +1012,12 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		}
 		return nil
 	})
+
+	// Special case for timeouts since they won't go through the rest of the logic.
+	if errors.Is(err, context.DeadlineExceeded) {
+		respond(reqCtx, withError(500, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
+		return
+	}
 
 	if errorOccurred {
 		respond(reqCtx, withError(statusCode, msg))
