@@ -28,6 +28,7 @@ on:
   workflow_dispatch: {}
 jobs:
   fossa-scan:
+    if: github.repository_owner == 'dapr' # FOSSA is not intended to run on forks.
     runs-on: ubuntu-latest
     env:
       FOSSA_API_KEY: b88e1f4287c3108c8751bf106fb46db6 # This is a push-only token that is safe to be exposed.
