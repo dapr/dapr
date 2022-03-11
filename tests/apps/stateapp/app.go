@@ -614,7 +614,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res.EndTime = epoch()
-	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
+	if statusCode != http.StatusOK || statusCode != http.StatusNoContent {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
 	}
 
