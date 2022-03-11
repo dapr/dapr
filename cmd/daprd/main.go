@@ -53,6 +53,7 @@ import (
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
 	"github.com/dapr/components-contrib/state/hazelcast"
+	state_jetstream "github.com/dapr/components-contrib/state/jetstream"
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
 	state_mysql "github.com/dapr/components-contrib/state/mysql"
@@ -253,6 +254,9 @@ func main() {
 			}),
 			state_loader.New("oci.objectstorage", func() state.Store {
 				return state_oci_objectstorage.NewOCIObjectStorageStore(logContrib)
+			}),
+			state_loader.New("jetstream", func() state.Store {
+				return state_jetstream.NewJetstreamStateStore(logContrib)
 			}),
 			state_loader.New("oracledatabase", func() state.Store {
 				return state_oracledatabase.NewOracleDatabaseStateStore(logContrib)

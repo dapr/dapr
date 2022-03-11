@@ -193,6 +193,21 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 	return extractBody(resp.Body)
 }
 
+// HTTPPatch is a helper to make PATCH request call to url.
+func HTTPPatch(url string, data []byte) ([]byte, error) {
+	req, err := http.NewRequest("PATCH", sanitizeHTTPURL(url), bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req) //nolint
+	if err != nil {
+		return nil, err
+	}
+
+	return extractBody(resp.Body)
+}
+
 // HTTPPostWithStatus is a helper to make POST request call to url.
 func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
 	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint

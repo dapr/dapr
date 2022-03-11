@@ -87,27 +87,25 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 			continue
 		}
 
-		operationPolicy := make(map[string]config.AccessControlListOperationAction)
+		operationPolicy := config.NewTrie()
 
 		// Iterate over all the operations and create a map for fast lookup
 		for _, appPolicy := range appPolicySpec.AppOperationActions {
 			// The operation name might be specified as /invoke/*
 			// Store the prefix as the key and use the remainder as post fix for faster lookups
 			// Also, prepend "/" in case it is missing in the operation name
-			operation := appPolicy.Operation
-			if !strings.HasPrefix(operation, "/") {
-				operation = "/" + operation
+			operationName := appPolicy.Operation
+			if !strings.HasPrefix(operationName, "/") {
+				operationName = "/" + operationName
 			}
-			operationPrefix, operationPostfix := getOperationPrefixAndPostfix(operation)
 
 			if protocol == config.HTTPProtocol {
-				operationPrefix = strings.ToLower(operationPrefix)
-				operationPostfix = strings.ToLower(operationPostfix)
+				operationName = strings.ToLower(operationName)
 			}
 
 			operationActions := config.AccessControlListOperationAction{
-				OperationPostFix: operationPostfix,
-				VerbAction:       make(map[string]string),
+				OperationName: operationName,
+				VerbAction:    make(map[string]string),
 			}
 
 			// Iterate over all the http verbs and create a map and set the action for fast lookup
@@ -118,7 +116,7 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 			// Store the operation action for grpc invocations where no http verb is specified
 			operationActions.OperationAction = appPolicy.Action
 
-			operationPolicy[operationPrefix] = operationActions
+			operationPolicy.PutOperationAction(operationName, &operationActions)
 		}
 		aclPolicySpec := config.AccessControlListPolicySpec{
 			AppName:             appPolicySpec.AppName,
@@ -342,30 +340,14 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID
 		inputOperation = "/" + inputOperation
 	}
 
-	inputOperationPrefix, inputOperationPostfix := getOperationPrefixAndPostfix(inputOperation)
-
 	// If HTTP, make case-insensitive
 	if appProtocol == config.HTTPProtocol {
-		inputOperationPrefix = strings.ToLower(inputOperationPrefix)
-		inputOperationPostfix = strings.ToLower(inputOperationPostfix)
+		inputOperation = strings.ToLower(inputOperation)
 	}
 
-	// The acl may specify the operation in a format /invoke/*, get and match only the prefix first
-	operationPolicy, found := appPolicy.AppOperationActions[inputOperationPrefix]
-	if found {
-		// The ACL might have the operation specified as /invoke/*. Here "/*" is stored as the postfix.
-		// Match postfix
+	operationPolicy := appPolicy.AppOperationActions.Search(inputOperation)
 
-		if strings.Contains(operationPolicy.OperationPostFix, "/*") {
-			if !strings.HasPrefix(inputOperationPostfix, strings.ReplaceAll(operationPolicy.OperationPostFix, "/*", "")) {
-				return isActionAllowed(action), actionPolicy
-			}
-		} else {
-			if operationPolicy.OperationPostFix != inputOperationPostfix {
-				return isActionAllowed(action), actionPolicy
-			}
-		}
-
+	if operationPolicy != nil {
 		// Operation prefix and postfix match. Now check the operation specific policy
 		if appProtocol == config.HTTPProtocol {
 			if httpVerb != commonv1pb.HTTPExtension_NONE {
@@ -400,15 +382,4 @@ func isActionAllowed(action string) bool {
 func getKeyForAppID(appID, namespace string) string {
 	key := appID + "||" + namespace
 	return key
-}
-
-// getOperationPrefixAndPostfix returns an app operation prefix and postfix.
-// The prefix can be stored in the in-memory ACL for fast lookup.
-// e.g.: /invoke/*, prefix = /invoke, postfix = /*.
-func getOperationPrefixAndPostfix(operation string) (string, string) {
-	operationParts := strings.Split(operation, "/")
-	operationPrefix := "/" + operationParts[1]
-	operationPostfix := "/" + strings.Join(operationParts[2:], "/")
-
-	return operationPrefix, operationPostfix
 }
