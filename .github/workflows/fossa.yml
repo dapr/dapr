@@ -1,0 +1,47 @@
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: fossa
+on:
+  push:
+    branches:
+      - master
+      - release-*
+      - feature/*
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - master
+      - release-*
+      - feature/*
+  workflow_dispatch: {}
+jobs:
+  fossa-scan:
+    runs-on: ubuntu-latest
+    env:
+      FOSSA_API_KEY: b88e1f4287c3108c8751bf106fb46db6 # This is a push-only token that is safe to be exposed.
+    steps:
+      - name: "Checkout code"
+        uses: actions/checkout@v2
+
+      - name: "Run FOSSA Scan"
+        uses: fossas/fossa-action@main # Use a specific version if locking is preferred
+        with:
+          api-key: ${{ env.FOSSA_API_KEY }}
+
+      - name: "Run FOSSA Test"
+        uses: fossas/fossa-action@main # Use a specific version if locking is preferred
+        with:
+          api-key: ${{ env.FOSSA_API_KEY }}
+          run-tests: true
