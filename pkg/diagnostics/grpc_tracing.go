@@ -36,6 +36,7 @@ import (
 const (
 	grpcTraceContextKey = "grpc-trace-bin"
 	GRPCProxyAppIDKey   = "dapr-app-id"
+	daprPackagePrefix   = "/dapr.proto"
 )
 
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
@@ -100,6 +101,10 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 // GRPCTraceStreamServerInterceptor sets the trace context or starts the trace client span based on request.
 func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if strings.Index(info.FullMethod, daprPackagePrefix) == 0 {
+			return handler(srv, ss)
+		}
+
 		var span *trace.Span
 		spanName := info.FullMethod
 
