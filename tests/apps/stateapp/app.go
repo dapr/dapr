@@ -16,6 +16,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -26,8 +27,6 @@ import (
 	"path"
 	"strings"
 	"time"
-
-	"github.com/dapr/dapr/pkg/json"
 
 	"github.com/gorilla/mux"
 	jsoniter "github.com/json-iterator/go"
@@ -73,9 +72,9 @@ type bulkGetRequest struct {
 
 // bulkGetResponse is the response object from Dapr for a bulk get operation.
 type bulkGetResponse struct {
-	Key  string   `json:"key"`
-	Data appState `json:"data"`
-	ETag string   `json:"etag"`
+	Key  string      `json:"key"`
+	Data interface{} `json:"data"`
+	ETag string      `json:"etag"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.

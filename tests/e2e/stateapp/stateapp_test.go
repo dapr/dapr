@@ -17,13 +17,12 @@ limitations under the License.
 package stateapp_e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/dapr/dapr/pkg/json"
 
 	guuid "github.com/google/uuid"
 	"github.com/stretchr/testify/require"
