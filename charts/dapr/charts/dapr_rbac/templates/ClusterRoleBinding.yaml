@@ -137,12 +137,13 @@ rules:
       - watch
       - delete
       - deletecollection
+{{- if .Values.secretReader.enabled }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: secret-reader
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.secretReader.namespace }}
 rules:
   - apiGroups:
       - ""
@@ -157,7 +158,7 @@ kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-secret-reader
-  namespace:  {{ .Release.Namespace }}
+  namespace: {{ .Values.secretReader.namespace }}
 subjects:
 - kind: ServiceAccount
   name: default 
@@ -165,6 +166,7 @@ roleRef:
   kind: Role
   name: secret-reader
   apiGroup: rbac.authorization.k8s.io
+{{- end }}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
