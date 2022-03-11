@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
@@ -45,6 +46,12 @@ type CallRecord struct {
 	TimeSeen time.Time
 }
 
+type PubsubResponse struct {
+	// Status field for proper handling of errors form pubsub
+	Status  string `json:"status,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 var (
 	daprClient   runtimev1pb.DaprClient
 	callTracking map[string][]CallRecord
@@ -54,6 +61,28 @@ var (
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler() called")
 	w.WriteHeader(http.StatusOK)
+}
+
+func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("/dapr/subscribe called")
+
+	subscriptions := []struct {
+		PubsubName string
+		Topic      string
+		Route      string
+	}{
+		{
+			PubsubName: "dapr-resiliency-pubsub",
+			Topic:      "resiliency-topic-http",
+			Route:      "resiliency-topic-http",
+		},
+	}
+	b, err := json.Marshal(subscriptions)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Write(b)
 }
 
 func resiliencyBindingHandler(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +96,7 @@ func resiliencyBindingHandler(w http.ResponseWriter, r *http.Request) {
 	var message FailureMessage
 	json.NewDecoder(r.Body).Decode(&message)
 
-	log.Printf("Received message %+v\n", message)
+	log.Printf("Binding received message %+v\n", message)
 
 	callCount := 0
 	if records, ok := callTracking[message.ID]; ok {
@@ -87,6 +116,60 @@ func resiliencyBindingHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func resiliencyPubsubHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Body == nil {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(PubsubResponse{
+			Message: "No body",
+			Status:  "DROP",
+		})
+	}
+	defer r.Body.Close()
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(PubsubResponse{
+			Message: "Couldn't read body",
+			Status:  "DROP",
+		})
+	}
+
+	log.Printf("Raw body: %s", string(body))
+
+	var rawBody map[string]interface{}
+	json.Unmarshal(body, &rawBody)
+
+	rawData := rawBody["data"].(map[string]interface{})
+	rawDataBytes, _ := json.Marshal(rawData)
+	var message FailureMessage
+	json.Unmarshal(rawDataBytes, &message)
+	log.Printf("Pubsub received message %+v\n", message)
+
+	callCount := 0
+	if records, ok := callTracking[message.ID]; ok {
+		callCount = records[len(records)-1].Count + 1
+	}
+
+	log.Printf("Seen %s %d times.", message.ID, callCount)
+
+	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
+		if message.Timeout != nil {
+			// This request can still succeed if the resiliency policy timeout is longer than this sleep.
+			time.Sleep(*message.Timeout)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(PubsubResponse{
+		Message: "consumed",
+		Status:  "SUCCESS",
+	})
 }
 
 // App startup/endpoint setup.
@@ -117,10 +200,19 @@ func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
+
+	// Calls from dapr.
+	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
+
+	// Handling events/methods.
 	router.HandleFunc("/resiliencybinding", resiliencyBindingHandler).Methods("POST", "OPTIONS")
+	router.HandleFunc("/resiliency-topic-http", resiliencyPubsubHandler).Methods("POST")
+
+	// Test functions.
 	router.HandleFunc("/tests/getCallCount", TestGetCallCount).Methods("GET")
 	router.HandleFunc("/tests/getCallCountGRPC", TestGetCallCountGRPC).Methods("GET")
 	router.HandleFunc("/tests/invokeBinding/{binding}", TestInvokeOutputBinding).Methods("POST")
+	router.HandleFunc("/tests/publishMessage/{pubsub}/{topic}", TestPublishMessage).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
@@ -194,6 +286,35 @@ func TestInvokeOutputBinding(w http.ResponseWriter, r *http.Request) {
 	_, err = daprClient.InvokeBinding(context.Background(), req)
 	if err != nil {
 		log.Printf("Error invoking binding: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+func TestPublishMessage(w http.ResponseWriter, r *http.Request) {
+	pubsub := mux.Vars(r)["pubsub"]
+	topic := mux.Vars(r)["topic"]
+
+	var message FailureMessage
+	err := json.NewDecoder(r.Body).Decode(&message)
+	if err != nil {
+		log.Println("Could not parse message.")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Publishing to %s/%s - %+v", pubsub, topic, message)
+	b, _ := json.Marshal(message)
+
+	req := &runtimev1pb.PublishEventRequest{
+		PubsubName:      pubsub,
+		Topic:           topic,
+		Data:            b,
+		DataContentType: "application/json",
+	}
+
+	_, err = daprClient.PublishEvent(context.Background(), req)
+	if err != nil {
+		log.Printf("Error publishing event: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }

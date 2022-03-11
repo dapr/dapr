@@ -14,26 +14,31 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: dapr-resiliency-binding
+  name: dapr-resiliency-pubsub
 spec:
-  type: bindings.kafka
+  type: pubsub.azure.servicebus
   initTimeout: 1m
   version: v1
   metadata:
-  # Kafka broker connection setting
-  - name: brokers
-    value: dapr-kafka:9092
-  # consumer configuration: topic and consumer group
-  - name: topics
-    value: resiliency-binding
-  - name: consumerGroup
-    value: group1
-  - name: route
-    value: /resiliencybinding
-  # publisher configuration: topic
-  - name: publishTopic
-    value: resiliency-binding
-  - name: authRequired
-    value: "false"
-  - name: initialOffset
-    value: oldest
+  - name: connectionString
+    secretKeyRef:
+      name: servicebus-secret
+      key: connectionString
+  - name: handlerTimeoutInSec
+    value: 60
+  - name: timeoutInSec
+    value: 60
+  - name: lockDurationInSec
+    value: 5
+  - name: lockRenewalInSec
+    value: 5
+  - name: defaultMessageTimeToLiveInSec
+    value: 120
+  - name: maxConcurrentHandlers
+    value: 5
+  - name: prefetchCount
+    value: 20
+  - name: maxDeliveryCount
+    value: 1
+  - name: maxActiveMessages
+    value: 100

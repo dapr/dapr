@@ -43,3 +43,12 @@ spec:
         outbound:
           timeout: fast
           retry: fiveRetries
+
+      dapr-resiliency-pubsub:
+        inbound:
+          timeout: fast
+          retry: fiveRetries
+          circuitBreaker: simpleCB
+        outbound:
+          timeout: fast
+          retry: fiveRetries

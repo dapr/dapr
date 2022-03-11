@@ -35,3 +35,5 @@ spec:
     value: resiliency-binding-grpc
   - name: authRequired
     value: "false"
+  - name: initialOffset
+    value: oldest

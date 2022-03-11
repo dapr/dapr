@@ -180,6 +180,107 @@ func TestInputBindingResiliency(t *testing.T) {
 	}
 }
 
+func TestPubsubSubscriptionResiliency(t *testing.T) {
+	recoverableErrorCount := 3
+	failingErrorCount := 10
+	recoverableTimeout := time.Second * 2
+	testCases := []struct {
+		Name         string
+		FailureCount *int
+		Timeout      *time.Duration
+		shouldFail   bool
+		pubsub       string
+		topic        string
+	}{
+		{
+			Name:         "Test sending input binding to app recovers from failure",
+			FailureCount: &recoverableErrorCount,
+			shouldFail:   false,
+			pubsub:       "dapr-resiliency-pubsub",
+			topic:        "resiliency-topic-http",
+		},
+		{
+			Name:         "Test sending input binding to app recovers from timeout",
+			FailureCount: &recoverableErrorCount,
+			Timeout:      &recoverableTimeout,
+			shouldFail:   false,
+			pubsub:       "dapr-resiliency-pubsub",
+			topic:        "resiliency-topic-http",
+		},
+		{
+			Name:         "Test exhausting retries leads to failure",
+			FailureCount: &failingErrorCount,
+			shouldFail:   true,
+			pubsub:       "dapr-resiliency-pubsub",
+			topic:        "resiliency-topic-http",
+		},
+		{
+			Name:         "Test sending input binding to grpc app recovers from failure",
+			FailureCount: &recoverableErrorCount,
+			shouldFail:   false,
+			pubsub:       "dapr-resiliency-pubsub",
+			topic:        "resiliency-topic-grpc",
+		},
+		{
+			Name:         "Test sending input binding to grpc app recovers from timeout",
+			FailureCount: &recoverableErrorCount,
+			Timeout:      &recoverableTimeout,
+			shouldFail:   false,
+			pubsub:       "dapr-resiliency-pubsub",
+			topic:        "resiliency-topic-grpc",
+		},
+		{
+			Name:         "Test exhausting retries leads to failure in grpc app",
+			FailureCount: &failingErrorCount,
+			shouldFail:   true,
+			pubsub:       "dapr-resiliency-pubsub",
+			topic:        "resiliency-topic-grpc",
+		},
+	}
+
+	// Get application URLs/wait for healthy.
+	externalURL := tr.Platform.AcquireAppExternalURL("resiliencyapp")
+	require.NotEmpty(t, externalURL, "resiliency external URL must not be empty!")
+	externalURLGRPC := tr.Platform.AcquireAppExternalURL("resiliencyappgrpc")
+	require.NotEmpty(t, externalURLGRPC, "resiliencygrpc external URL must not be empty!")
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	for _, tc := range testCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			message := createFailureMessage(tc.FailureCount, tc.Timeout)
+			b, _ := json.Marshal(message)
+			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/publishMessage/%s/%s", externalURL, tc.pubsub, tc.topic), b)
+			require.NoError(t, err)
+			require.Equal(t, 200, code)
+
+			// Let the binding propagate and give time for retries/timeout.
+			time.Sleep(time.Second * 10)
+
+			var callCount map[string][]CallRecord
+			var getCallsURL string
+			if strings.Contains(tc.topic, "grpc") {
+				getCallsURL = "tests/getCallCountGRPC"
+			} else {
+				getCallsURL = "tests/getCallCount"
+			}
+			resp, err := utils.HTTPGet(fmt.Sprintf("%s/%s", externalURL, getCallsURL))
+			require.NoError(t, err)
+
+			json.Unmarshal(resp, &callCount)
+			if tc.shouldFail {
+				// First call + 5 retries and no more.
+				require.Equal(t, 6, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+			} else {
+				// First call + 3 retries and recovery.
+				require.Equal(t, 4, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+			}
+		})
+	}
+}
+
 func createFailureMessage(maxFailure *int, timeout *time.Duration) FailureMessage {
 	message := FailureMessage{
 		ID: uuid.New().String(),

@@ -80,13 +80,44 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &runtimev1pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*runtimev1pb.TopicSubscription{},
+		Subscriptions: []*runtimev1pb.TopicSubscription{
+			{
+				PubsubName: "dapr-resiliency-pubsub",
+				Topic:      "resiliency-topic-grpc",
+			},
+		},
 	}, nil
 }
 
 // This method is fired whenever a message has been published to a topic that has been subscribed. Dapr sends published messages in a CloudEvents 1.0 envelope.
 func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
 	log.Printf("Message arrived - Topic: %s, Message: %s\n", in.Topic, string(in.Data))
+
+	var message FailureMessage
+	err := json.Unmarshal(in.Data, &message)
+	if err != nil {
+		return nil, errors.New("failed to decode message")
+	}
+
+	callCount := 0
+	if records, ok := s.callTracking[message.ID]; ok {
+		callCount = records[len(records)-1].Count + 1
+	}
+
+	log.Printf("Seen %s %d times.", message.ID, callCount)
+
+	s.callTracking[message.ID] = append(s.callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+
+	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
+		if message.Timeout != nil {
+			// This request can still succeed if the resiliency policy timeout is longer than this sleep.
+			log.Println("Sleeping.")
+			time.Sleep(*message.Timeout)
+		} else {
+			log.Println("Forcing failure.")
+			return nil, errors.New("forced failure")
+		}
+	}
 
 	return &runtimev1pb.TopicEventResponse{
 		Status: runtimev1pb.TopicEventResponse_SUCCESS,

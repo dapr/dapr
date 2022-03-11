@@ -14,26 +14,19 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: dapr-resiliency-binding
+  name: dapr-resiliency-pubsub
 spec:
-  type: bindings.kafka
+  type: pubsub.redis
   initTimeout: 1m
   version: v1
   metadata:
-  # Kafka broker connection setting
-  - name: brokers
-    value: dapr-kafka:9092
-  # consumer configuration: topic and consumer group
-  - name: topics
-    value: resiliency-binding
-  - name: consumerGroup
-    value: group1
-  - name: route
-    value: /resiliencybinding
-  # publisher configuration: topic
-  - name: publishTopic
-    value: resiliency-binding
-  - name: authRequired
-    value: "false"
-  - name: initialOffset
-    value: oldest
+  - name: redisHost
+    secretKeyRef:
+      name: redissecret
+      key: host
+  - name: redisPassword
+    value: ""
+  - name: processingTimeout
+    value: "0"
+  - name: redeliverInterval
+    value: "0"
