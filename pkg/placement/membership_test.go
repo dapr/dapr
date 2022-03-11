@@ -286,3 +286,88 @@ func TestPerformTableUpdate(t *testing.T) {
 
 	cleanup()
 }
+func PerformTableUpdateCostTime() (wastedTime int) {
+	const testClients = 1000
+	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	testServer.hasLeadership.Store(true)
+	var wastedTimeLock sync.Mutex
+	var overChan = make(chan bool, testClients)
+
+	// arrange.
+	var clientConns []*grpc.ClientConn
+	var clientStreams []v1pb.Placement_ReportDaprStatusClient
+
+	for i := 0; i < testClients; i++ {
+		conn, stream, err := newTestClient(serverAddress)
+		if err != nil {
+			panic(err)
+		}
+		clientConns = append(clientConns, conn)
+		clientStreams = append(clientStreams, stream)
+		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {
+			var start time.Time
+			for {
+				placementOrder, streamErr := clientStream.Recv()
+				if streamErr != nil {
+					return
+				}
+				if placementOrder != nil {
+					if placementOrder.Operation == "lock" {
+						time.Sleep(time.Millisecond * 100) // Analog network delay
+					}
+					if placementOrder.Operation == "update" {
+						time.Sleep(time.Millisecond * 100) // Analog network delay
+					}
+					if placementOrder.Operation == "unlock" {
+						time.Sleep(time.Millisecond * 100) // Analog network delay
+						cost := time.Now().Nanosecond() - start.Nanosecond()
+						wastedTimeLock.Lock()
+						wastedTime += cost
+						wastedTimeLock.Unlock()
+						overChan <- true
+					}
+				}
+			}
+		}(i, stream)
+
+	}
+
+	// register
+	for i := 0; i < testClients; i++ {
+		host := &v1pb.Host{
+			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
+			Entities: []string{"DogActor", "CatActor"},
+			Id:       "testAppID",
+			Load:     1, // Not used yet.
+		}
+		clientStreams[i].Send(host)
+	}
+	// Wait until clientStreams[clientID].Recv() in client go routine received new table.
+	for {
+		if len(testServer.streamConnPool) == testClients {
+			break
+		}
+	}
+	testServer.streamConnPoolLock.RLock()
+	streamConnPool := make([]placementGRPCStream, len(testServer.streamConnPool))
+	copy(streamConnPool, testServer.streamConnPool)
+	testServer.streamConnPoolLock.RUnlock()
+	testServer.performTablesUpdate(streamConnPool, nil)
+	for i := 0; i < testClients; i++ {
+		<-overChan
+	}
+	// clean up resources.
+	for i := 0; i < testClients; i++ {
+		clientStreams[i].CloseSend()
+		clientConns[i].Close()
+	}
+	cleanup()
+	return
+}
+
+//func TestPerformTableUpdatePerf(t *testing.T) {
+func BenchmarkPerformTableUpdatePerf(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		PerformTableUpdateCostTime()
+	}
+}
