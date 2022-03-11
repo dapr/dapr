@@ -14,6 +14,8 @@
 name: dapr
 
 on:
+  schedule:
+      - cron: '00 22 * * *'
   push:
     branches:
       - master
@@ -74,7 +76,7 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
       - name: Parse release version and set REL_VERSION
-        run: python ./.github/scripts/get_release_version.py
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Check white space in .md files
         if: matrix.target_os == 'linux' && github.event_name == 'pull_request'
         run: |
@@ -192,7 +194,7 @@ jobs:
           sudo apt install docker-ce
           docker -v
       - name: Parse release version and set REL_VERSION
-        run: python ./.github/scripts/get_release_version.py
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Update Helm chart files for release version ${{ env.REL_VERSION }}
         run: bash ./.github/scripts/set_helm_dapr_version.sh
       - name: Generate helm chart manifest
@@ -239,13 +241,10 @@ jobs:
       - name: tar release binaries
         run: |
           IMAGE_ARCHS=(amd64 arm arm64)
-
           for img_arch in "${IMAGE_ARCHS[@]}"; do
             echo "Preparing linux_${img_arch} image..."
-
             RELEASE_DIR=dist/linux_${img_arch}/release/
             mkdir -p $RELEASE_DIR
-
             for tgzfile in $ARTIFACT_DIR/*linux_${img_arch}.tar.gz; do
               echo "Extracting $tgzfile ..."
               tar xzvf $tgzfile -C $RELEASE_DIR
@@ -260,20 +259,16 @@ jobs:
         run: |
           echo "installing github-release-cli..."
           sudo npm install --silent --no-progress -g github-release-cli@1.3.1
-
           if [ "$LATEST_RELEASE" = "true" ]; then
             export RELEASE_BODY=`cat ./docs/release_notes/v${REL_VERSION}.md`
           else
             export RELEASE_BODY="This is the release candidate ${REL_VERSION}"
           fi
-
           # Get the list of files
           RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
-
           # Parse repository to get owner and repo names
           OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
-
           export GITHUB_TOKEN=${{ secrets.DAPR_BOT_TOKEN }}
           echo "Uploading Dapr Runtime Binaries to GitHub Release"
           github-release upload \
@@ -363,7 +358,6 @@ jobs:
             git config --global user.email "daprweb@microsoft.com"
             git config --global user.name "dapr-bot"
             git add --all
-
             # Check if the dapr-${daprVersion}.tgz file is modified.
             if git diff --name-only --staged | grep -q ${daprVersion}; then
               # If it is, we update the Helm chart, since this is an intentional update.

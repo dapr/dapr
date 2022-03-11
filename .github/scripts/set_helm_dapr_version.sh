@@ -37,7 +37,7 @@ fi
 
 DAPR_VERSION_HELM="${REL_VERSION}"
 DAPR_VERSION_TAG="${REL_VERSION}"
-if [ "$REL_VERSION" == "edge" ]; then
+if [[ "$REL_VERSION" == "edge" || "$REL_VERSION" == "nightly"* ]]; then
   DAPR_VERSION_HELM="0.0.0"
 fi
 
