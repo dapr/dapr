@@ -567,7 +567,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		}
 
 		if contentType, ok := req.Metadata[contrib_metadata.ContentType]; ok && contentType == contenttype.JSONContentType {
-			if err1 = jsoniter.Unmarshal(s.Value, &req.Value); err1 != nil {
+			if err1 = json.Unmarshal(s.Value, &req.Value); err1 != nil {
 				return &emptypb.Empty{}, err1
 			}
 		} else {
