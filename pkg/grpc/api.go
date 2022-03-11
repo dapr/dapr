@@ -33,6 +33,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/contenttype"
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -562,8 +563,16 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		req := state.SetRequest{
 			Key:      key,
 			Metadata: s.Metadata,
-			Value:    s.Value,
 		}
+
+		if contentType, ok := req.Metadata[contrib_metadata.ContentType]; ok && contentType == contenttype.JSONContentType {
+			if err1 = jsoniter.Unmarshal(s.Value, &req.Value); err1 != nil {
+				return &emptypb.Empty{}, err1
+			}
+		} else {
+			req.Value = s.Value
+		}
+
 		if s.Etag != nil {
 			req.ETag = &s.Etag.Value
 		}
