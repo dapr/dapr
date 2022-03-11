@@ -73,9 +73,9 @@ type bulkGetRequest struct {
 
 // bulkGetResponse is the response object from Dapr for a bulk get operation.
 type bulkGetResponse struct {
-	Key  string `json:"key"`
-	Data string `json:"data"`
-	ETag string `json:"etag"`
+	Key  string   `json:"key"`
+	Data appState `json:"data"`
+	ETag string   `json:"etag"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.
