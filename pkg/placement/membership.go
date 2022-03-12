@@ -314,6 +314,7 @@ func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1p
 	}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 	// p.disseminateOperation(hosts, "lock", nil)
 	// p.disseminateOperation(hosts, "update", newTable)
 	// p.disseminateOperation(hosts, "unlock", nil)
@@ -330,6 +331,11 @@ func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1p
 	//p.disseminateOperation(hosts, "unlock", nil)
 
 >>>>>>> cf9c9c16 (Optimized block time)
+=======
+	// p.disseminateOperation(hosts, "lock", nil)
+	// p.disseminateOperation(hosts, "update", newTable)
+	// p.disseminateOperation(hosts, "unlock", nil)
+>>>>>>> 88d74ed5 (code style fix)
 }
 
 func (p *Service) disseminateOperation(targets []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {

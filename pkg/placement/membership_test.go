@@ -15,7 +15,6 @@ package placement
 
 import (
 	"fmt"
-	"go.uber.org/atomic"
 	"sync"
 	"testing"
 	"time"
@@ -361,6 +360,7 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 								fmt.Println("client 1 unlock", time.Now())
 							}
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> 0b872e91 (time)
@@ -388,6 +388,9 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 								fmt.Println("client 1 unlock", time.Now())
 							}
 							overArr[clientID] = time.Now().Sub(start).Milliseconds()
+=======
+							overArr[clientID] = time.Since(start).Milliseconds()
+>>>>>>> 88d74ed5 (code style fix)
 						}
 >>>>>>> c200a55e (add test)
 					}
@@ -395,9 +398,12 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 			}
 		}(i, stream)
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> cf9c9c16 (Optimized block time)
+=======
+>>>>>>> 88d74ed5 (code style fix)
 	}
 
 	// register
@@ -469,7 +475,7 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 	startFlag.Store(false)
 	time.Sleep(time.Second) // wait client recv
 	var max int64
-	for _, cost := range overArr {
+	for _, cost := range &overArr {
 		if cost > max {
 			max = cost
 		}
@@ -501,6 +507,7 @@ func BenchmarkPerformTableUpdatePerf(b *testing.B) {
 =======
 	return max
 }
+
 func TestPerformTableUpdatePerf(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime())
