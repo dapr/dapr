@@ -208,9 +208,9 @@ push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
 	# In golang >=1.16 there is a new way to do this with `go install gotest.tools/gotestsum@latest`
-	# But this doesn't work with <=1.15, so we do it the old way for now 
+	# But this doesn't work with <=1.15.
 	# (see: https://golang.org/ref/mod#go-install)
-	command -v gotestsum || GO111MODULE=off go get gotest.tools/gotestsum
+	command -v gotestsum || go install gotest.tools/gotestsum@latest
 
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
@@ -219,8 +219,13 @@ test-e2e-all: check-e2e-env test-deps
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
 	# test
 	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
+     ifeq ($(DAPR_E2E_TEST),)
 	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
-
+     else
+	for app in $(DAPR_E2E_TEST); do \
+		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -p 2 -count=1 -v -tags=e2e ./tests/e2e/$$app/...; \
+	done
+     endif
 
 define genPerfTestRun
 .PHONY: test-perf-$(1)
@@ -248,7 +253,7 @@ setup-helm-init:
 
 # install redis to the cluster without password
 setup-test-env-redis:
-	$(HELM) install dapr-redis stable/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
+	$(HELM) install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
 
 delete-test-env-redis:
 	${HELM} del dapr-redis --namespace ${DAPR_TEST_NAMESPACE}
@@ -271,6 +276,10 @@ delete-test-env-mongodb:
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb
+
+save-dapr-control-plane-k8s-resources:
+	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
+	kubectl describe all -n $(DAPR_TEST_NAMESPACE) > '$(DAPR_CONTAINER_LOG_PATH)/control_plane_k8s_resources.txt'
 
 save-dapr-control-plane-k8s-logs:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -300,6 +309,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_pubsub_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_grpc_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_query.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badhost.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -309,7 +319,6 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_pubsub_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/kubernetes_grpc_proxy_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)

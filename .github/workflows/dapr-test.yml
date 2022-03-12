@@ -32,7 +32,7 @@ jobs:
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       TEST_CLOUD_ENV: azure
-      HELMVER: v3.4.0
+      HELMVER: v3.7.2
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
       TARGET_OS: ${{ matrix.target_os }}
@@ -42,12 +42,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-2019]
         target_arch: [amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
-          - os: windows-latest
+          - os: windows-2019
             target_os: windows
     steps:
       - name: Set up container log path
@@ -148,7 +148,8 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           make setup-helm-init
-          make setup-test-env
+          make setup-test-env-redis
+          make setup-test-env-kafka
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
@@ -179,6 +180,10 @@ jobs:
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
+      - name: Save control plane K8s resources
+        if: always() && env.TEST_CLUSTER != ''
+        run: |
+          make save-dapr-control-plane-k8s-resources || true
       - name: Save control plane logs
         if: always() && env.TEST_CLUSTER != ''
         run: |

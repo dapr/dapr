@@ -14,16 +14,20 @@
 name: dapr
 
 on:
+  schedule:
+      - cron: '00 22 * * *'
   push:
     branches:
       - master
       - release-*
+      - feature/*
     tags:
       - v*
   pull_request:
     branches:
       - master
       - release-*
+      - feature/*
 jobs:
   build:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
@@ -38,19 +42,19 @@ jobs:
       TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest, windows-2019, macOS-latest]
         target_arch: [arm, arm64, amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
-          - os: windows-latest
+          - os: windows-2019
             target_os: windows
           - os: macOS-latest
             target_os: darwin
         exclude:
-          - os: windows-latest
+          - os: windows-2019
             target_arch: arm
-          - os: windows-latest
+          - os: windows-2019
             target_arch: arm64
           - os: macOS-latest
             target_arch: arm
@@ -72,7 +76,7 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
       - name: Parse release version and set REL_VERSION
-        run: python ./.github/scripts/get_release_version.py
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Check white space in .md files
         if: matrix.target_os == 'linux' && github.event_name == 'pull_request'
         run: |
@@ -144,6 +148,18 @@ jobs:
         run: |
           echo "Build docker image and push image..."
           make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }} DAPR_TAG=${{ env.REL_VERSION }}
+      - name: GitHub container registry login
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push docker images to GitHub container registry
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
+        run: |
+          echo "Build docker image and push image..."
+          make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=ghcr.io/${{ github.repository_owner }} DAPR_TAG=${{ env.REL_VERSION }}
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@master
@@ -159,7 +175,7 @@ jobs:
       HELM_PACKAGE_DIR: helm
       DAPR_VERSION_ARTIFACT: dapr_version
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-      HELMVER: v3.2.1
+      HELMVER: v3.7.2
     runs-on: ubuntu-latest
     steps:
       - name: Set up Helm ${{ env.HELMVER }}
@@ -178,7 +194,9 @@ jobs:
           sudo apt install docker-ce
           docker -v
       - name: Parse release version and set REL_VERSION
-        run: python ./.github/scripts/get_release_version.py
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Update Helm chart files for release version ${{ env.REL_VERSION }}
+        run: bash ./.github/scripts/set_helm_dapr_version.sh
       - name: Generate helm chart manifest
         run: make manifest-gen DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
       - name: move helm chart manifest to artifact
@@ -223,13 +241,10 @@ jobs:
       - name: tar release binaries
         run: |
           IMAGE_ARCHS=(amd64 arm arm64)
-
           for img_arch in "${IMAGE_ARCHS[@]}"; do
             echo "Preparing linux_${img_arch} image..."
-
             RELEASE_DIR=dist/linux_${img_arch}/release/
             mkdir -p $RELEASE_DIR
-
             for tgzfile in $ARTIFACT_DIR/*linux_${img_arch}.tar.gz; do
               echo "Extracting $tgzfile ..."
               tar xzvf $tgzfile -C $RELEASE_DIR
@@ -244,20 +259,16 @@ jobs:
         run: |
           echo "installing github-release-cli..."
           sudo npm install --silent --no-progress -g github-release-cli@1.3.1
-
           if [ "$LATEST_RELEASE" = "true" ]; then
             export RELEASE_BODY=`cat ./docs/release_notes/v${REL_VERSION}.md`
           else
             export RELEASE_BODY="This is the release candidate ${REL_VERSION}"
           fi
-
           # Get the list of files
           RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
-
           # Parse repository to get owner and repo names
           OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
-
           export GITHUB_TOKEN=${{ secrets.DAPR_BOT_TOKEN }}
           echo "Uploading Dapr Runtime Binaries to GitHub Release"
           github-release upload \
@@ -275,6 +286,17 @@ jobs:
         run: |
           echo "Build docker multiarch image manifest and push it"
           make docker-publish DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }} DAPR_TAG=${{ env.REL_VERSION }}
+      - name: GitHub container registry login
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push docker multiarch manifest to ghcr
+        if: matrix.target_os != 'darwin'
+        run: |
+          echo "Build docker multiarch image manifest and push it"
+          make docker-publish DAPR_REGISTRY=ghcr.io/${{ github.repository_owner }} DAPR_TAG=${{ env.REL_VERSION }}
       - name: Save release version
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
@@ -336,7 +358,6 @@ jobs:
             git config --global user.email "daprweb@microsoft.com"
             git config --global user.name "dapr-bot"
             git add --all
-
             # Check if the dapr-${daprVersion}.tgz file is modified.
             if git diff --name-only --staged | grep -q ${daprVersion}; then
               # If it is, we update the Helm chart, since this is an intentional update.

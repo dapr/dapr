@@ -51,6 +51,11 @@ type DaprHandler struct {
 	Scheme *runtime.Scheme
 }
 
+type Reconciler struct {
+	*DaprHandler
+	newWrapper func() ObjectWrapper
+}
+
 // NewDaprHandler returns a new Dapr handler.
 func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 	return &DaprHandler{
@@ -65,10 +70,12 @@ func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 func (h *DaprHandler) Init() error {
 	if err := h.mgr.GetFieldIndexer().IndexField(
 		context.TODO(),
-		&corev1.Service{}, daprServiceOwnerField, func(rawObj client.Object) []string {
+		&corev1.Service{},
+		daprServiceOwnerField,
+		func(rawObj client.Object) []string {
 			svc := rawObj.(*corev1.Service)
 			owner := meta_v1.GetControllerOf(svc)
-			if owner == nil || owner.APIVersion != appsv1.SchemeGroupVersion.String() || owner.Kind != "Deployment" {
+			if owner == nil || owner.APIVersion != appsv1.SchemeGroupVersion.String() || (owner.Kind != "Deployment" && owner.Kind != "StatefulSet") {
 				return nil
 			}
 			return []string{owner.Name}
@@ -76,24 +83,45 @@ func (h *DaprHandler) Init() error {
 		return err
 	}
 
-	return ctrl.NewControllerManagedBy(h.mgr).
+	if err := ctrl.NewControllerManagedBy(h.mgr).
 		For(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 100,
 		}).
-		Complete(h)
+		Complete(&Reconciler{
+			DaprHandler: h,
+			newWrapper: func() ObjectWrapper {
+				return &DeploymentWrapper{}
+			},
+		}); err != nil {
+		return err
+	}
+	return ctrl.NewControllerManagedBy(h.mgr).
+		For(&appsv1.StatefulSet{}).
+		Owns(&corev1.Service{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 100,
+		}).
+		Complete(&Reconciler{
+			DaprHandler: h,
+			newWrapper: func() ObjectWrapper {
+				return &StatefulSetWrapper{}
+			},
+		})
 }
 
 func (h *DaprHandler) daprServiceName(appID string) string {
 	return fmt.Sprintf("%s-dapr", appID)
 }
 
-// Reconcile the expected services for deployments annotated for Dapr.
-func (h *DaprHandler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var deployment appsv1.Deployment
+// Reconcile the expected services for deployments | statefulset annotated for Dapr.
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// var wrapper appsv1.Deployment | appsv1.StatefulSet
+	wrapper := r.newWrapper()
+
 	expectedService := false
-	if err := h.Get(ctx, req.NamespacedName, &deployment); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, wrapper.GetObject()); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Debugf("deployment has be deleted, %s", req.NamespacedName)
 		} else {
@@ -101,15 +129,15 @@ func (h *DaprHandler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Res
 			return ctrl.Result{}, err
 		}
 	} else {
-		if deployment.DeletionTimestamp != nil {
+		if wrapper.GetObject().GetDeletionTimestamp() != nil {
 			log.Debugf("deployment is being deleted, %s", req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
-		expectedService = h.isAnnotatedForDapr(&deployment)
+		expectedService = r.isAnnotatedForDapr(wrapper)
 	}
 
 	if expectedService {
-		if err := h.ensureDaprServicePresent(ctx, req.Namespace, &deployment); err != nil {
+		if err := r.ensureDaprServicePresent(ctx, req.Namespace, wrapper); err != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
@@ -117,8 +145,8 @@ func (h *DaprHandler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Res
 	return ctrl.Result{}, nil
 }
 
-func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, deployment *appsv1.Deployment) error {
-	appID := h.getAppID(deployment)
+func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, wrapper ObjectWrapper) error {
+	appID := h.getAppID(wrapper)
 	err := validation.ValidateKubernetesAppID(appID)
 	if err != nil {
 		return err
@@ -131,8 +159,8 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	var daprSvc corev1.Service
 	if err := h.Get(ctx, mayDaprService, &daprSvc); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Debugf("no service for deployment found, deployment: %s/%s", namespace, deployment.Name)
-			return h.createDaprService(ctx, mayDaprService, deployment)
+			log.Debugf("no service for wrapper found, wrapper: %s/%s", namespace, mayDaprService.Name)
+			return h.createDaprService(ctx, mayDaprService, wrapper)
 		}
 		log.Errorf("unable to get service, %s, err: %s", mayDaprService, err)
 		return err
@@ -140,15 +168,15 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	return nil
 }
 
-func (h *DaprHandler) createDaprService(ctx context.Context, expectedService types.NamespacedName, deployment *appsv1.Deployment) error {
-	appID := h.getAppID(deployment)
-	service := h.createDaprServiceValues(ctx, expectedService, deployment, appID)
+func (h *DaprHandler) createDaprService(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper) error {
+	appID := h.getAppID(wrapper)
+	service := h.createDaprServiceValues(ctx, expectedService, wrapper, appID)
 
-	if err := ctrl.SetControllerReference(deployment, service, h.Scheme); err != nil {
+	if err := ctrl.SetControllerReference(wrapper.GetObject(), service, h.Scheme); err != nil {
 		return err
 	}
 	if err := h.Create(ctx, service); err != nil {
-		log.Errorf("unable to create Dapr service for deployment, service: %s, err: %s", expectedService, err)
+		log.Errorf("unable to create Dapr service for wrapper, service: %s, err: %s", expectedService, err)
 		return err
 	}
 	log.Debugf("created service: %s", expectedService)
@@ -156,9 +184,9 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 	return nil
 }
 
-func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedService types.NamespacedName, deployment *appsv1.Deployment, appID string) *corev1.Service {
-	enableMetrics := h.getEnableMetrics(deployment)
-	metricsPort := h.getMetricsPort(deployment)
+func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper, appID string) *corev1.Service {
+	enableMetrics := h.getEnableMetrics(wrapper)
+	metricsPort := h.getMetricsPort(wrapper)
 	log.Debugf("enableMetrics: %v", enableMetrics)
 
 	annotations := map[string]string{
@@ -166,7 +194,8 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	}
 
 	if enableMetrics {
-		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/probe"] = "true"
+		annotations["prometheus.io/scrape"] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
 		annotations["prometheus.io/port"] = strconv.Itoa(metricsPort)
 		annotations["prometheus.io/path"] = "/"
 	}
@@ -179,7 +208,7 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector:  deployment.Spec.Selector.MatchLabels,
+			Selector:  wrapper.GetMatchLabels(),
 			ClusterIP: clusterIPNone,
 			Ports: []corev1.ServicePort{
 				{
@@ -211,16 +240,16 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	}
 }
 
-func (h *DaprHandler) getAppID(deployment *appsv1.Deployment) string {
-	annotations := deployment.Spec.Template.ObjectMeta.Annotations
+func (h *DaprHandler) getAppID(wrapper ObjectWrapper) string {
+	annotations := wrapper.GetTemplateAnnotations()
 	if val, ok := annotations[appIDAnnotationKey]; ok && val != "" {
 		return val
 	}
 	return ""
 }
 
-func (h *DaprHandler) isAnnotatedForDapr(deployment *appsv1.Deployment) bool {
-	annotations := deployment.Spec.Template.ObjectMeta.Annotations
+func (h *DaprHandler) isAnnotatedForDapr(wrapper ObjectWrapper) bool {
+	annotations := wrapper.GetTemplateAnnotations()
 	enabled, ok := annotations[daprEnabledAnnotationKey]
 	if !ok {
 		return false
@@ -233,8 +262,8 @@ func (h *DaprHandler) isAnnotatedForDapr(deployment *appsv1.Deployment) bool {
 	}
 }
 
-func (h *DaprHandler) getEnableMetrics(deployment *appsv1.Deployment) bool {
-	annotations := deployment.Spec.Template.ObjectMeta.Annotations
+func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {
+	annotations := wrapper.GetTemplateAnnotations()
 	enableMetrics := defaultMetricsEnabled
 	if val, ok := annotations[daprEnableMetricsKey]; ok {
 		if v, err := strconv.ParseBool(val); err == nil {
@@ -244,8 +273,8 @@ func (h *DaprHandler) getEnableMetrics(deployment *appsv1.Deployment) bool {
 	return enableMetrics
 }
 
-func (h *DaprHandler) getMetricsPort(deployment *appsv1.Deployment) int {
-	annotations := deployment.Spec.Template.ObjectMeta.Annotations
+func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int {
+	annotations := wrapper.GetTemplateAnnotations()
 	metricsPort := defaultMetricsPort
 	if val, ok := annotations[daprMetricsPortKey]; ok {
 		if v, err := strconv.Atoi(val); err == nil {

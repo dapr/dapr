@@ -52,6 +52,8 @@ type DaprClient interface {
 	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Unregister an actor reminder.
 	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Rename an actor reminder.
+	RenameActorReminder(ctx context.Context, in *RenameActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
@@ -62,6 +64,8 @@ type DaprClient interface {
 	GetConfigurationAlpha1(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
 	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
 	SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error)
+	// UnSubscribeConfiguration unsubscribe the subscription of configuration
+	UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -222,6 +226,15 @@ func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *Unregister
 	return out, nil
 }
 
+func (c *daprClient) RenameActorReminder(ctx context.Context, in *RenameActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RenameActorReminder", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error) {
 	out := new(GetActorStateResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetActorState", in, out, opts...)
@@ -290,6 +303,15 @@ func (x *daprSubscribeConfigurationAlpha1Client) Recv() (*SubscribeConfiguration
 	return m, nil
 }
 
+func (c *daprClient) UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error) {
+	out := new(UnsubscribeConfigurationResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnsubscribeConfigurationAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error) {
 	out := new(GetMetadataResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetMetadata", in, out, opts...)
@@ -353,6 +375,8 @@ type DaprServer interface {
 	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*emptypb.Empty, error)
 	// Unregister an actor reminder.
 	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error)
+	// Rename an actor reminder.
+	RenameActorReminder(context.Context, *RenameActorReminderRequest) (*emptypb.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
@@ -363,6 +387,8 @@ type DaprServer interface {
 	GetConfigurationAlpha1(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
 	SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error
+	// UnSubscribeConfiguration unsubscribe the subscription of configuration
+	UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -423,6 +449,9 @@ func (UnimplementedDaprServer) RegisterActorReminder(context.Context, *RegisterA
 func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorReminder not implemented")
 }
+func (UnimplementedDaprServer) RenameActorReminder(context.Context, *RenameActorReminderRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RenameActorReminder not implemented")
+}
 func (UnimplementedDaprServer) GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorState not implemented")
 }
@@ -437,6 +466,9 @@ func (UnimplementedDaprServer) GetConfigurationAlpha1(context.Context, *GetConfi
 }
 func (UnimplementedDaprServer) SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeConfigurationAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeConfigurationAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
@@ -747,6 +779,24 @@ func _Dapr_UnregisterActorReminder_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_RenameActorReminder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenameActorReminderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).RenameActorReminder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/RenameActorReminder",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).RenameActorReminder(ctx, req.(*RenameActorReminderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_GetActorState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetActorStateRequest)
 	if err := dec(in); err != nil {
@@ -838,6 +888,24 @@ type daprSubscribeConfigurationAlpha1Server struct {
 
 func (x *daprSubscribeConfigurationAlpha1Server) Send(m *SubscribeConfigurationResponse) error {
 	return x.ServerStream.SendMsg(m)
+}
+
+func _Dapr_UnsubscribeConfigurationAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnsubscribeConfigurationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).UnsubscribeConfigurationAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnsubscribeConfigurationAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).UnsubscribeConfigurationAlpha1(ctx, req.(*UnsubscribeConfigurationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Dapr_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -966,6 +1034,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_UnregisterActorReminder_Handler,
 		},
 		{
+			MethodName: "RenameActorReminder",
+			Handler:    _Dapr_RenameActorReminder_Handler,
+		},
+		{
 			MethodName: "GetActorState",
 			Handler:    _Dapr_GetActorState_Handler,
 		},
@@ -980,6 +1052,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetConfigurationAlpha1",
 			Handler:    _Dapr_GetConfigurationAlpha1_Handler,
+		},
+		{
+			MethodName: "UnsubscribeConfigurationAlpha1",
+			Handler:    _Dapr_UnsubscribeConfigurationAlpha1_Handler,
 		},
 		{
 			MethodName: "GetMetadata",
