@@ -321,6 +321,7 @@ func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1p
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> a15edb2a (gofumpt)
@@ -342,6 +343,8 @@ func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1p
 
 >>>>>>> a15edb2a (gofumpt)
 >>>>>>> f5cd654f (gofumpt)
+=======
+>>>>>>> ab3fcb2c (code style fix)
 }
 
 func (p *Service) disseminateOperation(targets []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
