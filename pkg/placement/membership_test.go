@@ -15,6 +15,7 @@ package placement
 
 import (
 	"fmt"
+	"go.uber.org/atomic"
 	"sync"
 	"testing"
 	"time"
@@ -290,6 +291,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	cleanup()
 }
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 func PerformTableUpdateCostTime() (wastedTime int64) {
 	const testClients = 100
@@ -304,16 +306,24 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 =======
 func PerformTableUpdateCostTime() (wastedTime int) {
 	const testClients = 1000
+=======
+
+func PerformTableUpdateCostTime() (wastedTime int64) {
+	const testClients = 100
+>>>>>>> c200a55e (add test)
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
 	testServer.hasLeadership.Store(true)
-	var wastedTimeLock sync.Mutex
-	var overChan = make(chan bool, testClients)
-
+	var overArr [testClients]int64
 	// arrange.
 	var clientConns []*grpc.ClientConn
 	var clientStreams []v1pb.Placement_ReportDaprStatusClient
+<<<<<<< HEAD
 
 >>>>>>> cf9c9c16 (Optimized block time)
+=======
+	startFlag := atomic.Bool{}
+	startFlag.Store(false)
+>>>>>>> c200a55e (add test)
 	for i := 0; i < testClients; i++ {
 		conn, stream, err := newTestClient(serverAddress)
 		if err != nil {
@@ -331,12 +341,16 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 				if placementOrder != nil {
 					if placementOrder.Operation == "lock" {
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> c200a55e (add test)
 						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
 							if clientID == 1 {
 								fmt.Println("client 1 lock", time.Now())
 							}
 							start = time.Now()
 						}
+<<<<<<< HEAD
 					}
 					if placementOrder.Operation == "update" {
 						continue
@@ -354,11 +368,13 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 						}
 =======
 						time.Sleep(time.Millisecond * 100) // Analog network delay
+=======
+>>>>>>> c200a55e (add test)
 					}
 					if placementOrder.Operation == "update" {
-						time.Sleep(time.Millisecond * 100) // Analog network delay
 					}
 					if placementOrder.Operation == "unlock" {
+<<<<<<< HEAD
 						time.Sleep(time.Millisecond * 100) // Analog network delay
 						cost := time.Now().Nanosecond() - start.Nanosecond()
 						wastedTimeLock.Lock()
@@ -366,6 +382,14 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 						wastedTimeLock.Unlock()
 						overChan <- true
 >>>>>>> cf9c9c16 (Optimized block time)
+=======
+						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
+							if clientID == 1 {
+								fmt.Println("client 1 unlock", time.Now())
+							}
+							overArr[clientID] = time.Now().Sub(start).Milliseconds()
+						}
+>>>>>>> c200a55e (add test)
 					}
 				}
 			}
@@ -397,6 +421,9 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 	copy(streamConnPool, testServer.streamConnPool)
 	testServer.streamConnPoolLock.RUnlock()
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> c200a55e (add test)
 	startFlag.Store(true)
 	mockMessage := &v1pb.PlacementTables{Version: "demo"}
 
@@ -405,6 +432,7 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 		testServer.disseminateOperation([]placementGRPCStream{host}, "update", mockMessage)
 		testServer.disseminateOperation([]placementGRPCStream{host}, "unlock", mockMessage)
 	}
+<<<<<<< HEAD
 	// fmt.Println("start lock ", time.Now())
 	// testServer.disseminateOperation(streamConnPool, "lock", mockMessage)
 	// fmt.Println("all lock  ", time.Now())
@@ -424,6 +452,22 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 	for i := 0; i < testClients; i++ {
 		<-overChan
 >>>>>>> cf9c9c16 (Optimized block time)
+=======
+	//fmt.Println("start lock ", time.Now())
+	//testServer.disseminateOperation(streamConnPool, "lock", mockMessage)
+	//fmt.Println("all lock  ", time.Now())
+	//testServer.disseminateOperation(streamConnPool, "update", mockMessage)
+	//fmt.Println("all update", time.Now())
+	//testServer.disseminateOperation(streamConnPool, "unlock", mockMessage)
+	//fmt.Println("all unlock", time.Now())
+	startFlag.Store(false)
+	time.Sleep(time.Second) // wait client recv
+	var max int64
+	for _, cost := range overArr {
+		if cost > max {
+			max = cost
+		}
+>>>>>>> c200a55e (add test)
 	}
 	// clean up resources.
 	for i := 0; i < testClients; i++ {
@@ -431,6 +475,7 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 		clientConns[i].Close()
 	}
 	cleanup()
+<<<<<<< HEAD
 <<<<<<< HEAD
 	return max
 }
@@ -447,5 +492,12 @@ func BenchmarkPerformTableUpdatePerf(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		PerformTableUpdateCostTime()
 >>>>>>> cf9c9c16 (Optimized block time)
+=======
+	return max
+}
+func TestPerformTableUpdatePerf(t *testing.T) {
+	for i := 0; i < 3; i++ {
+		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime())
+>>>>>>> c200a55e (add test)
 	}
 }
