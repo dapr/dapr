@@ -15,10 +15,11 @@ package placement
 
 import (
 	"fmt"
-	"go.uber.org/atomic"
 	"sync"
 	"testing"
 	"time"
+
+	"go.uber.org/atomic"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -323,19 +324,19 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 						}
 					}
 					if placementOrder.Operation == "update" {
+						continue
 					}
 					if placementOrder.Operation == "unlock" {
 						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
 							if clientID == 1 {
 								fmt.Println("client 1 unlock", time.Now())
 							}
-							overArr[clientID] = time.Now().Sub(start).Milliseconds()
+							overArr[clientID] = time.Since(start).Milliseconds()
 						}
 					}
 				}
 			}
 		}(i, stream)
-
 	}
 
 	// register
@@ -376,7 +377,7 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 	startFlag.Store(false)
 	time.Sleep(time.Second) // wait client recv
 	var max int64
-	for _, cost := range overArr {
+	for _, cost := range &overArr {
 		if cost > max {
 			max = cost
 		}
@@ -389,6 +390,7 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 	cleanup()
 	return max
 }
+
 func TestPerformTableUpdatePerf(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime())
