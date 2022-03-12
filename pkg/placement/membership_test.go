@@ -289,6 +289,7 @@ func TestPerformTableUpdate(t *testing.T) {
 
 	cleanup()
 }
+<<<<<<< HEAD
 
 func PerformTableUpdateCostTime() (wastedTime int64) {
 	const testClients = 100
@@ -300,6 +301,19 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 	var clientStreams []v1pb.Placement_ReportDaprStatusClient
 	startFlag := atomic.Bool{}
 	startFlag.Store(false)
+=======
+func PerformTableUpdateCostTime() (wastedTime int) {
+	const testClients = 1000
+	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	testServer.hasLeadership.Store(true)
+	var wastedTimeLock sync.Mutex
+	var overChan = make(chan bool, testClients)
+
+	// arrange.
+	var clientConns []*grpc.ClientConn
+	var clientStreams []v1pb.Placement_ReportDaprStatusClient
+
+>>>>>>> cf9c9c16 (Optimized block time)
 	for i := 0; i < testClients; i++ {
 		conn, stream, err := newTestClient(serverAddress)
 		if err != nil {
@@ -316,6 +330,7 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 				}
 				if placementOrder != nil {
 					if placementOrder.Operation == "lock" {
+<<<<<<< HEAD
 						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
 							if clientID == 1 {
 								fmt.Println("client 1 lock", time.Now())
@@ -337,10 +352,28 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 >>>>>>> 0b872e91 (time)
 							overArr[clientID] = time.Since(start).Milliseconds()
 						}
+=======
+						time.Sleep(time.Millisecond * 100) // Analog network delay
+					}
+					if placementOrder.Operation == "update" {
+						time.Sleep(time.Millisecond * 100) // Analog network delay
+					}
+					if placementOrder.Operation == "unlock" {
+						time.Sleep(time.Millisecond * 100) // Analog network delay
+						cost := time.Now().Nanosecond() - start.Nanosecond()
+						wastedTimeLock.Lock()
+						wastedTime += cost
+						wastedTimeLock.Unlock()
+						overChan <- true
+>>>>>>> cf9c9c16 (Optimized block time)
 					}
 				}
 			}
 		}(i, stream)
+<<<<<<< HEAD
+=======
+
+>>>>>>> cf9c9c16 (Optimized block time)
 	}
 
 	// register
@@ -363,6 +396,7 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 	streamConnPool := make([]placementGRPCStream, len(testServer.streamConnPool))
 	copy(streamConnPool, testServer.streamConnPool)
 	testServer.streamConnPoolLock.RUnlock()
+<<<<<<< HEAD
 	startFlag.Store(true)
 	mockMessage := &v1pb.PlacementTables{Version: "demo"}
 
@@ -385,6 +419,11 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 		if cost > max {
 			max = cost
 		}
+=======
+	testServer.performTablesUpdate(streamConnPool, nil)
+	for i := 0; i < testClients; i++ {
+		<-overChan
+>>>>>>> cf9c9c16 (Optimized block time)
 	}
 	// clean up resources.
 	for i := 0; i < testClients; i++ {
@@ -392,11 +431,21 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 		clientConns[i].Close()
 	}
 	cleanup()
+<<<<<<< HEAD
 	return max
 }
 
 func TestPerformTableUpdatePerf(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime())
+=======
+	return
+}
+
+//func TestPerformTableUpdatePerf(t *testing.T) {
+func BenchmarkPerformTableUpdatePerf(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		PerformTableUpdateCostTime()
+>>>>>>> cf9c9c16 (Optimized block time)
 	}
 }
