@@ -15,10 +15,11 @@ package placement
 
 import (
 	"fmt"
-	"go.uber.org/atomic"
 	"sync"
 	"testing"
 	"time"
+
+	"go.uber.org/atomic"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -389,6 +390,7 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 	cleanup()
 	return max
 }
+
 func TestPerformTableUpdatePerf(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime())
