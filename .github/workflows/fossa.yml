@@ -30,6 +30,7 @@ jobs:
   fossa-scan:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     if: github.repository_owner == 'dapr' # FOSSA is not intended to run on forks.
 =======
     env:
@@ -41,6 +42,11 @@ jobs:
 =======
     runs-on: ubuntu-latest
 >>>>>>> 1b2b0ac6 (add workflow)
+=======
+    runs-on: ubuntu-latest
+    env:
+      FOSSA_API_KEY: b88e1f4287c3108c8751bf106fb46db6 # This is a push-only token that is safe to be exposed.
+>>>>>>> fe50c444 (Update environement variable naming)
     steps:
       - name: "Checkout code"
         uses: actions/checkout@v2
@@ -50,6 +56,7 @@ jobs:
         with:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
           api-key: ${{ env.FOSSA_API_KEY }}
 =======
           api-key: ${{secrets.FOSSA_API_KEY}}
@@ -57,12 +64,16 @@ jobs:
 =======
           api-key: $FossaPushOnlyToken
 >>>>>>> 39f0dc45 (Update with token)
+=======
+          api-key: ${{ env.FOSSA_API_KEY }}
+>>>>>>> fe50c444 (Update environement variable naming)
 
       - name: "Run FOSSA Test"
         uses: fossas/fossa-action@main # Use a specific version if locking is preferred
         with:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
           api-key: ${{ env.FOSSA_API_KEY }}
           run-tests: true
 =======
@@ -73,3 +84,7 @@ jobs:
           api-key: $FossaPushOnlyToken
           run-tests: true
 >>>>>>> 39f0dc45 (Update with token)
+=======
+          api-key: ${{ env.FOSSA_API_KEY }}
+          run-tests: true
+>>>>>>> fe50c444 (Update environement variable naming)
