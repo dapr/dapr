@@ -372,9 +372,12 @@ github.com/dapr/components-contrib v1.6.0-rc.1.0.20220211230043-7fdebda09b71/go.
 =======
 github.com/dapr/components-contrib v1.6.0-rc.1.0.20220208234648-4302917ee5b7 h1:L4YGXNZ8ECeVIIID2OMMQRJxhjz+OI3GdUQ55lM1Ph0=
 github.com/dapr/components-contrib v1.6.0-rc.1.0.20220208234648-4302917ee5b7/go.mod h1:TRzETe3Ls7evnuvQDhcxUvc5NJubCfuaZRrl0j4/olo=
+<<<<<<< HEAD
 github.com/dapr/components-contrib v1.6.0-rc.2 h1:Net/iaeHR+JIXKY4sHnn0tKaT7AAQUkYiT1nMA9wI3Q=
 github.com/dapr/components-contrib v1.6.0-rc.2/go.mod h1:30BaLseZXoK+UPD5E93dCTGZwlG3nWLNJazoJ9bKGlU=
 >>>>>>> 74aa4c64 (adding updated go.mod and go.sum)
+=======
+>>>>>>> e09bf736 (after mod tidy)
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233 h1:M0dWIG8kUxEFU57IqTWeqptNqlBsfosFgsA5Ov7rJ8g=
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233/go.mod h1:y8r0VqUNKyd6xBXp7gQjwA59wlCLGfKzL5J8iJsN09w=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
