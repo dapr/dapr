@@ -197,14 +197,20 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 		}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> ee3a16db (update test, execute handler)
 		h := func(srv interface{}, stream grpc.ServerStream) error {
 			return nil
 		}
 
 		err := interceptor(ctx, nil, fakeInfo, h)
+<<<<<<< HEAD
 =======
 		err := interceptor(ctx, nil, fakeInfo, nil)
 >>>>>>> 4abd5672 (stream tracing: ignore dapr api calls)
+=======
+>>>>>>> ee3a16db (update test, execute handler)
 		assert.Nil(t, err)
 	})
 
