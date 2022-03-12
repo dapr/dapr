@@ -28,29 +28,10 @@ on:
   workflow_dispatch: {}
 jobs:
   fossa-scan:
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
     if: github.repository_owner == 'dapr' # FOSSA is not intended to run on forks.
-=======
-    env:
-      FossaPushOnlyToken: b88e1f4287c3108c8751bf106fb46db6
->>>>>>> 39f0dc45 (Update with token)
-=======
-    if: github.repository_owner == 'dapr' # FOSSA is not intended to run on forks.
->>>>>>> 5ea97502 (Add condition (#4354))
     runs-on: ubuntu-latest
     env:
       FOSSA_API_KEY: b88e1f4287c3108c8751bf106fb46db6 # This is a push-only token that is safe to be exposed.
-=======
-    runs-on: ubuntu-latest
->>>>>>> 1b2b0ac6 (add workflow)
-=======
-    runs-on: ubuntu-latest
-    env:
-      FOSSA_API_KEY: b88e1f4287c3108c8751bf106fb46db6 # This is a push-only token that is safe to be exposed.
->>>>>>> fe50c444 (Update environement variable naming)
     steps:
       - name: "Checkout code"
         uses: actions/checkout@v2
@@ -58,40 +39,10 @@ jobs:
       - name: "Run FOSSA Scan"
         uses: fossas/fossa-action@main # Use a specific version if locking is preferred
         with:
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
           api-key: ${{ env.FOSSA_API_KEY }}
-=======
-          api-key: ${{secrets.FOSSA_API_KEY}}
->>>>>>> 1b2b0ac6 (add workflow)
-=======
-          api-key: $FossaPushOnlyToken
->>>>>>> 39f0dc45 (Update with token)
-=======
-          api-key: ${{ env.FOSSA_API_KEY }}
->>>>>>> fe50c444 (Update environement variable naming)
 
       - name: "Run FOSSA Test"
         uses: fossas/fossa-action@main # Use a specific version if locking is preferred
         with:
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
           api-key: ${{ env.FOSSA_API_KEY }}
           run-tests: true
-=======
-          api-key: ${{secrets.FOSSA_API_KEY}}
-          run-tests: true
->>>>>>> 1b2b0ac6 (add workflow)
-=======
-          api-key: $FossaPushOnlyToken
-          run-tests: true
->>>>>>> 39f0dc45 (Update with token)
-=======
-          api-key: ${{ env.FOSSA_API_KEY }}
-          run-tests: true
-<<<<<<< HEAD
->>>>>>> fe50c444 (Update environement variable naming)
-=======
->>>>>>> 5ea97502 (Add condition (#4354))

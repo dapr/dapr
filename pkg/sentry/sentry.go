@@ -91,8 +91,6 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 				log.Warn("could not determine Dapr root certificate expiration time")
 				continue
 			}
-<<<<<<< HEAD
-<<<<<<< HEAD
 			if cert.NotAfter.Before(time.Now().UTC()) {
 				log.Warn("Dapr root certificate expiration warning: certificate has expired.")
 				continue
@@ -100,23 +98,6 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 			if (cert.NotAfter.Add(-30 * 24 * time.Hour)).Before(time.Now().UTC()) {
 				expiryDurationHours := int(cert.NotAfter.Sub(time.Now().UTC()).Hours())
 				log.Warnf("Dapr root certificate expiration warning: certificate expires in %s days and %s hours", expiryDurationHours/24, expiryDurationHours%24)
-=======
-			if cert.NotAfter.Before(time.Now()) {
-				log.Warn("Dapr root certificate expiration warning: certificate has expired.")
-				continue
-			}
-			if (cert.NotAfter.Add(-30 * 24 * time.Hour)).Before(time.Now()) {
-				log.Warnf("Dapr root certificate expiration warning: certificate expires in %s hours", time.Until(cert.NotAfter).Hours())
->>>>>>> b8c868bd (Add Sentry monitoring of certificate expiry)
-=======
-			if cert.NotAfter.Before(time.Now().UTC()) {
-				log.Warn("Dapr root certificate expiration warning: certificate has expired.")
-				continue
-			}
-			if (cert.NotAfter.Add(-30 * 24 * time.Hour)).Before(time.Now().UTC()) {
-				expiryDurationHours := int(cert.NotAfter.Sub(time.Now().UTC()).Hours())
-				log.Warnf("Dapr root certificate expiration warning: certificate expires in %s days and %s hours", expiryDurationHours/24, expiryDurationHours%24)
->>>>>>> 14bb766b (Cert expiry warning time format changes)
 			}
 		}
 	}()

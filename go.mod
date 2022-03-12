@@ -9,19 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-	github.com/dapr/components-contrib v1.6.0-rc.1.0.20220211230043-7fdebda09b71
-=======
-	github.com/dapr/components-contrib v1.6.0-rc.1.0.20220208234648-4302917ee5b7
->>>>>>> 74aa4c64 (adding updated go.mod and go.sum)
-=======
-	github.com/dapr/components-contrib v1.6.0-rc.1.0.20220217181903-80c2bbe28485
->>>>>>> bdd702c4 (unsubscribe api (#4130))
-=======
 	github.com/dapr/components-contrib v1.6.0-rc.1.0.20220307041340-f1209fb068c7
->>>>>>> 18076905 (redis state store: implement state query API and add e2e tests (#4251))
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.1

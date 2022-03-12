@@ -255,13 +255,11 @@ func main() {
 			state_loader.New("oci.objectstorage", func() state.Store {
 				return state_oci_objectstorage.NewOCIObjectStorageStore(logContrib)
 			}),
-<<<<<<< HEAD
-			state_loader.New("oracledatabase", func() state.Store {
-				return state_oracledatabase.NewOracleDatabaseStateStore(logContrib)
-=======
 			state_loader.New("jetstream", func() state.Store {
 				return state_jetstream.NewJetstreamStateStore(logContrib)
->>>>>>> e8d5ad8b (Add jetstream kv state store)
+			}),
+			state_loader.New("oracledatabase", func() state.Store {
+				return state_oracledatabase.NewOracleDatabaseStateStore(logContrib)
 			}),
 		),
 		runtime.WithConfigurations(

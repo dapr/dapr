@@ -307,44 +307,9 @@ func (p *Service) performTableDissemination() {
 func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1pb.PlacementTables) {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
-	for _, host := range hosts {
-		p.disseminateOperation([]placementGRPCStream{host}, "lock", nil)
-		p.disseminateOperation([]placementGRPCStream{host}, "update", newTable)
-		p.disseminateOperation([]placementGRPCStream{host}, "unlock", nil)
-	}
-
-<<<<<<< HEAD
-<<<<<<< HEAD
-	// p.disseminateOperation(hosts, "lock", nil)
-	// p.disseminateOperation(hosts, "update", newTable)
-	// p.disseminateOperation(hosts, "unlock", nil)
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-
->>>>>>> a15edb2a (gofumpt)
-=======
->>>>>>> 962eda15 (gofumpt)
-=======
-	//p.disseminateOperation(hosts, "lock", nil)
-	//p.disseminateOperation(hosts, "update", newTable)
-	//p.disseminateOperation(hosts, "unlock", nil)
-
->>>>>>> cf9c9c16 (Optimized block time)
-=======
-	// p.disseminateOperation(hosts, "lock", nil)
-	// p.disseminateOperation(hosts, "update", newTable)
-	// p.disseminateOperation(hosts, "unlock", nil)
->>>>>>> 88d74ed5 (code style fix)
-=======
-=======
-
->>>>>>> a15edb2a (gofumpt)
->>>>>>> f5cd654f (gofumpt)
-=======
->>>>>>> ab3fcb2c (code style fix)
+	p.disseminateOperation(hosts, "lock", nil)
+	p.disseminateOperation(hosts, "update", newTable)
+	p.disseminateOperation(hosts, "unlock", nil)
 }
 
 func (p *Service) disseminateOperation(targets []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
@@ -352,23 +317,17 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 		Operation: operation,
 		Tables:    tables,
 	}
+
 	var err error
 	for _, s := range targets {
 		config := retry.DefaultConfig()
 		config.MaxRetries = 3
 		backoff := config.NewBackOff()
+
 		retry.NotifyRecover(
 			func() error {
-<<<<<<< HEAD
-<<<<<<< HEAD
-				// time.Sleep(time.Millisecond * 100) // mock Analog network delay
-=======
-				//time.Sleep(time.Millisecond * 100) // mock Analog network delay
->>>>>>> c200a55e (add test)
-=======
-				// time.Sleep(time.Millisecond * 100) // mock Analog network delay
->>>>>>> a651e6a8 (add space)
 				err = s.Send(o)
+
 				if err != nil {
 					remoteAddr := "n/a"
 					if peer, ok := peer.FromContext(s.Context()); ok {
