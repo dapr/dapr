@@ -15,6 +15,7 @@ package placement
 
 import (
 	"fmt"
+	"go.uber.org/atomic"
 	"sync"
 	"testing"
 	"time"
@@ -221,9 +222,10 @@ func TestPerformTableUpdate(t *testing.T) {
 
 	// act
 	for i := 0; i < testClients; i++ {
+		time.Sleep(time.Millisecond)
 		host := &v1pb.Host{
 			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
-			Entities: []string{"DogActor", "CatActor"},
+			Entities: []string{"DogActor", "CatActor", fmt.Sprintf("127.0.0.1:5010%d", i)},
 			Id:       "testAppID",
 			Load:     1, // Not used yet
 			// Port is redundant because Name should include port number
@@ -286,17 +288,17 @@ func TestPerformTableUpdate(t *testing.T) {
 
 	cleanup()
 }
-func PerformTableUpdateCostTime() (wastedTime int) {
-	const testClients = 1000
+
+func PerformTableUpdateCostTime() (wastedTime int64) {
+	const testClients = 100
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
 	testServer.hasLeadership.Store(true)
-	var wastedTimeLock sync.Mutex
-	var overChan = make(chan bool, testClients)
-
+	var overArr [testClients]int64
 	// arrange.
 	var clientConns []*grpc.ClientConn
 	var clientStreams []v1pb.Placement_ReportDaprStatusClient
-
+	startFlag := atomic.Bool{}
+	startFlag.Store(false)
 	for i := 0; i < testClients; i++ {
 		conn, stream, err := newTestClient(serverAddress)
 		if err != nil {
@@ -313,18 +315,22 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 				}
 				if placementOrder != nil {
 					if placementOrder.Operation == "lock" {
-						time.Sleep(time.Millisecond * 100) // Analog network delay
+						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
+							if clientID == 1 {
+								fmt.Println("client 1 lock", time.Now())
+							}
+							start = time.Now()
+						}
 					}
 					if placementOrder.Operation == "update" {
-						time.Sleep(time.Millisecond * 100) // Analog network delay
 					}
 					if placementOrder.Operation == "unlock" {
-						time.Sleep(time.Millisecond * 100) // Analog network delay
-						cost := time.Now().Nanosecond() - start.Nanosecond()
-						wastedTimeLock.Lock()
-						wastedTime += cost
-						wastedTimeLock.Unlock()
-						overChan <- true
+						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
+							if clientID == 1 {
+								fmt.Println("client 1 unlock", time.Now())
+							}
+							overArr[clientID] = time.Now().Sub(start).Milliseconds()
+						}
 					}
 				}
 			}
@@ -352,9 +358,28 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 	streamConnPool := make([]placementGRPCStream, len(testServer.streamConnPool))
 	copy(streamConnPool, testServer.streamConnPool)
 	testServer.streamConnPoolLock.RUnlock()
-	testServer.performTablesUpdate(streamConnPool, nil)
-	for i := 0; i < testClients; i++ {
-		<-overChan
+	startFlag.Store(true)
+	mockMessage := &v1pb.PlacementTables{Version: "demo"}
+
+	for _, host := range streamConnPool {
+		testServer.disseminateOperation([]placementGRPCStream{host}, "lock", mockMessage)
+		testServer.disseminateOperation([]placementGRPCStream{host}, "update", mockMessage)
+		testServer.disseminateOperation([]placementGRPCStream{host}, "unlock", mockMessage)
+	}
+	//fmt.Println("start lock ", time.Now())
+	//testServer.disseminateOperation(streamConnPool, "lock", mockMessage)
+	//fmt.Println("all lock  ", time.Now())
+	//testServer.disseminateOperation(streamConnPool, "update", mockMessage)
+	//fmt.Println("all update", time.Now())
+	//testServer.disseminateOperation(streamConnPool, "unlock", mockMessage)
+	//fmt.Println("all unlock", time.Now())
+	startFlag.Store(false)
+	time.Sleep(time.Second) // wait client recv
+	var max int64
+	for _, cost := range overArr {
+		if cost > max {
+			max = cost
+		}
 	}
 	// clean up resources.
 	for i := 0; i < testClients; i++ {
@@ -362,12 +387,10 @@ func PerformTableUpdateCostTime() (wastedTime int) {
 		clientConns[i].Close()
 	}
 	cleanup()
-	return
+	return max
 }
-
-//func TestPerformTableUpdatePerf(t *testing.T) {
-func BenchmarkPerformTableUpdatePerf(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		PerformTableUpdateCostTime()
+func TestPerformTableUpdatePerf(t *testing.T) {
+	for i := 0; i < 3; i++ {
+		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime())
 	}
 }
