@@ -433,6 +433,9 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 		testServer.disseminateOperation([]placementGRPCStream{host}, "unlock", mockMessage)
 	}
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a651e6a8 (add space)
 	// fmt.Println("start lock ", time.Now())
 	// testServer.disseminateOperation(streamConnPool, "lock", mockMessage)
 	// fmt.Println("all lock  ", time.Now())
@@ -440,6 +443,7 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 	// fmt.Println("all update", time.Now())
 	// testServer.disseminateOperation(streamConnPool, "unlock", mockMessage)
 	// fmt.Println("all unlock", time.Now())
+<<<<<<< HEAD
 	startFlag.Store(false)
 	time.Sleep(time.Second) // wait client recv
 	var max int64
@@ -460,6 +464,8 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 	//fmt.Println("all update", time.Now())
 	//testServer.disseminateOperation(streamConnPool, "unlock", mockMessage)
 	//fmt.Println("all unlock", time.Now())
+=======
+>>>>>>> a651e6a8 (add space)
 	startFlag.Store(false)
 	time.Sleep(time.Second) // wait client recv
 	var max int64

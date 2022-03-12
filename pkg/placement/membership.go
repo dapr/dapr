@@ -345,10 +345,14 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 		retry.NotifyRecover(
 			func() error {
 <<<<<<< HEAD
+<<<<<<< HEAD
 				// time.Sleep(time.Millisecond * 100) // mock Analog network delay
 =======
 				//time.Sleep(time.Millisecond * 100) // mock Analog network delay
 >>>>>>> c200a55e (add test)
+=======
+				// time.Sleep(time.Millisecond * 100) // mock Analog network delay
+>>>>>>> a651e6a8 (add space)
 				err = s.Send(o)
 				if err != nil {
 					remoteAddr := "n/a"
