@@ -1,6 +1,6 @@
 global:
   registry: docker.io/daprio
-  tag: "1.6.0"
+  tag: 'edge'
   dnsSuffix: ".cluster.local"
   logAsJson: false
   imagePullPolicy: IfNotPresent

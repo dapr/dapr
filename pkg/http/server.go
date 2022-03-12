@@ -82,6 +82,14 @@ func (s *server) StartNonBlocking() error {
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
 
+	apiLogLevel := s.config.APILoglevel
+
+	if strings.EqualFold(apiLogLevel, "info") {
+		handler = s.apiLoggingInfo(handler)
+	} else if strings.EqualFold(apiLogLevel, "debug") {
+		handler = s.apiLoggingDebug(handler)
+	}
+
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
 	if s.config.UnixDomainSocket != "" {
@@ -208,6 +216,20 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 	return next
 }
 
+func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		log.Infof("HTTP API Called: %s %s", ctx.Method(), ctx.Path())
+		next(ctx)
+	}
+}
+
+func (s *server) apiLoggingDebug(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		log.Debugf("HTTP API Called: %s %s", ctx.Method(), ctx.Path())
+		next(ctx)
+	}
+}
+
 func (s *server) useRouter() fasthttp.RequestHandler {
 	endpoints := s.api.APIEndpoints()
 	router := s.getRouter(endpoints)
@@ -313,7 +335,7 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
 	for _, m := range e.Methods {
 		pathIncludesParameters := parameterFinder.MatchString(path)
-		if pathIncludesParameters {
+		if pathIncludesParameters && !e.KeepParamUnescape {
 			router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
 		} else {
 			router.Handle(m, path, e.Handler)

@@ -42,10 +42,8 @@ const (
 	SpiffeIDPrefix              = "spiffe://"
 	HTTPProtocol                = "http"
 	GRPCProtocol                = "grpc"
-	ActorReentrancy     Feature = "Actor.Reentrancy"
 	ActorTypeMetadata   Feature = "Actor.TypeMetadata"
 	PubSubRouting       Feature = "PubSub.Routing"
-	StateEncryption     Feature = "State.Encryption"
 )
 
 type Feature string
@@ -72,14 +70,14 @@ type AccessControlListPolicySpec struct {
 	DefaultAction       string
 	TrustDomain         string
 	Namespace           string
-	AppOperationActions map[string]AccessControlListOperationAction
+	AppOperationActions *Trie
 }
 
 // AccessControlListOperationAction is an in-memory access control list config per operation for fast lookup.
 type AccessControlListOperationAction struct {
-	VerbAction       map[string]string
-	OperationPostFix string
-	OperationAction  string
+	VerbAction      map[string]string
+	OperationName   string
+	OperationAction string
 }
 
 type ConfigurationSpec struct {
@@ -249,10 +247,11 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
-func LoadKubernetesConfiguration(config, namespace string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
+func LoadKubernetesConfiguration(config, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
 	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
+		PodName:   podName,
 	}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
 		return nil, err

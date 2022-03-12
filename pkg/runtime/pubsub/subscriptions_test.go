@@ -253,10 +253,15 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 type mockUnstableHTTPSubscriptions struct {
 	channel.AppChannel
 	callCount        int
+	alwaysError      bool
 	successThreshold int
 }
 
 func (m *mockUnstableHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if m.alwaysError {
+		return nil, errors.New("error")
+	}
+
 	m.callCount++
 
 	if m.callCount < m.successThreshold {
@@ -363,6 +368,15 @@ func TestHTTPSubscriptions(t *testing.T) {
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 		}
+	})
+
+	t.Run("error from app, retries exhausted", func(t *testing.T) {
+		m := mockUnstableHTTPSubscriptions{
+			alwaysError: true,
+		}
+
+		_, err := GetSubscriptionsHTTP(&m, log)
+		require.Error(t, err)
 	})
 }
 
@@ -494,7 +508,7 @@ type mockK8sSubscriptions struct {
 	operatorv1pb.OperatorClient
 }
 
-func (m *mockK8sSubscriptions) ListSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*operatorv1pb.ListSubscriptionsResponse, error) {
+func (m *mockK8sSubscriptions) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	v2 := testDeclarativeSubscriptionV2()
 	v2Bytes, err := yaml.Marshal(v2)
 	if err != nil {
@@ -507,7 +521,7 @@ func (m *mockK8sSubscriptions) ListSubscriptions(ctx context.Context, in *emptyp
 
 func TestK8sSubscriptions(t *testing.T) {
 	m := mockK8sSubscriptions{}
-	subs := DeclarativeKubernetes(&m, log)
+	subs := DeclarativeKubernetes(&m, "testPodName", "testNamespace", log)
 	if assert.Len(t, subs, 1) {
 		assert.Equal(t, "topic1", subs[0].Topic)
 		if assert.Len(t, subs[0].Rules, 3) {

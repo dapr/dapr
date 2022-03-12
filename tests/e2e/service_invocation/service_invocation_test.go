@@ -127,7 +127,6 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			Config:         "grpcproxyconfig",
 		},
 		{
 			AppName:        "grpcproxyserver",
@@ -137,7 +136,6 @@ func TestMain(m *testing.M) {
 			IngressEnabled: false,
 			MetricsEnabled: true,
 			AppProtocol:    "grpc",
-			Config:         "grpcproxyconfig",
 			AppPort:        50051,
 		},
 	}
@@ -172,8 +170,35 @@ var serviceinvocationTests = []struct {
 	},
 }
 
+var serviceinvocationPathTests = []struct {
+	in               string
+	remoteApp        string
+	appMethod        string
+	expectedResponse string
+}{
+	{
+		"Test call double encoded path",
+		"serviceinvocation-callee",
+		"path/value%252F123",
+		"/path/value%252F123",
+	},
+	{
+		"Test call encoded path",
+		"serviceinvocation-callee",
+		"path/value%2F123",
+		"/path/value%2F123",
+	},
+	{
+		"Test call normal path",
+		"serviceinvocation-callee",
+		"path/value/123",
+		"/path/value/123",
+	},
+}
+
 var moreServiceinvocationTests = []struct {
 	in               string
+	path             string
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
@@ -181,32 +206,37 @@ var moreServiceinvocationTests = []struct {
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
 		"Test HTTP to HTTP",
+		"httptohttptest",
 		"serviceinvocation-callee-1",
 		"httptohttptest",
 		"success",
 	},
 	{
 		"Test HTTP to gRPC",
+		"httptogrpctest",
 		"grpcapp",
 		"httptogrpctest",
 		"success",
 	},
 	{
 		"Test gRPC to HTTP",
+		"grpctohttptest",
 		"serviceinvocation-callee-1",
 		"grpctohttptest",
 		"success",
 	},
 	{
 		"Test gRPC to gRPC",
-		"grpcapp",
 		"grpctogrpctest",
+		"grpcapp",
+		"grpcToGrpcTest",
 		"success",
 	},
 }
 
 var crossNamespaceTests = []struct {
 	in               string
+	path             string
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
@@ -214,26 +244,30 @@ var crossNamespaceTests = []struct {
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
 		"Test HTTP to HTTP",
+		"httptohttptest",
 		"secondary-ns-http",
 		"httptohttptest",
 		"success",
 	},
 	{
 		"Test HTTP to gRPC",
+		"httptogrpctest",
 		"secondary-ns-grpc",
 		"httptogrpctest",
 		"success",
 	},
 	{
 		"Test gRPC to HTTP",
+		"grpctohttptest",
 		"secondary-ns-http",
 		"grpctohttptest",
 		"success",
 	},
 	{
 		"Test gRPC to gRPC",
-		"secondary-ns-grpc",
 		"grpctogrpctest",
+		"secondary-ns-grpc",
+		"grpcToGrpcTest",
 		"success",
 	},
 }
@@ -292,13 +326,38 @@ func TestServiceInvocation(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.path)
 
 			t.Logf("url is '%s'\n", url)
 			resp, err := utils.HTTPPost(
 				url,
 				body)
 
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
+
+	// make sure dapr do not auto unescape path
+	for _, tt := range serviceinvocationPathTests {
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			t.Logf("url is '%s'\n", url)
+			resp, err := utils.HTTPPost(
+				url,
+				body)
 			t.Log("checking err...")
 			require.NoError(t, err)
 
@@ -1050,7 +1109,7 @@ func TestCrossNamespaceCases(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.path)
 
 			t.Logf("url is '%s'\n", url)
 			resp, err := utils.HTTPPost(

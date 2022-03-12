@@ -14,11 +14,13 @@ limitations under the License.
 package http
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
@@ -276,11 +278,12 @@ func (a *api) constructBindingsEndpoints() []Endpoint {
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{router.MethodWild},
-			Route:   "invoke/{id}/method/{method:*}",
-			Alias:   "{method:*}",
-			Version: apiVersionV1,
-			Handler: a.onDirectMessage,
+			Methods:           []string{router.MethodWild},
+			Route:             "invoke/{id}/method/{method:*}",
+			Alias:             "{method:*}",
+			Version:           apiVersionV1,
+			KeepParamUnescape: true,
+			Handler:           a.onDirectMessage,
 		},
 	}
 }
@@ -425,17 +428,23 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
+	start := time.Now()
 	resp, err := a.sendToOutputBindingFn(name, &bindings.InvokeRequest{
 		Metadata:  req.Metadata,
 		Data:      b,
 		Operation: bindings.OperationKind(req.Operation),
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), name, req.Operation, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
+
 	if resp == nil {
 		respond(reqCtx, withEmpty())
 	} else {
@@ -459,7 +468,15 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// merge metadata from URL query parameters
 	metadata := getMetadataFromRequest(reqCtx)
+	if req.Metadata == nil {
+		req.Metadata = metadata
+	} else {
+		for k, v := range metadata {
+			req.Metadata[k] = v
+		}
+	}
 
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
 	if len(req.Keys) == 0 {
@@ -484,7 +501,12 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		}
 		reqs[i] = r
 	}
+
+	start := time.Now()
 	bulkGet, responses, err := store.BulkGet(reqs)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
 	if bulkGet {
 		// if store supports bulk get
@@ -604,7 +626,12 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
+	start := time.Now()
 	resp, err := store.Get(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -679,7 +706,12 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		req.ETag = &etag
 	}
 
+	start := time.Now()
 	err = store.Delete(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.Delete, err == nil, elapsed)
+
 	if err != nil {
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_DELETE")
 		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
@@ -713,7 +745,12 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
+	start := time.Now()
 	resp, err := store.GetSecret(req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.SecretInvoked(context.Background(), secretStoreName, diag.Get, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrSecretGet, req.Name, secretStoreName, err.Error()))
@@ -744,7 +781,12 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
+	start := time.Now()
 	resp, err := store.BulkGetSecret(req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.SecretInvoked(context.Background(), secretStoreName, diag.BulkGet, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrBulkSecretGet, secretStoreName, err.Error()))
@@ -808,7 +850,18 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	metadata := getMetadataFromRequest(reqCtx)
+
 	for i, r := range reqs {
+		// merge metadata from URL query parameters
+		if reqs[i].Metadata == nil {
+			reqs[i].Metadata = metadata
+		} else {
+			for k, v := range metadata {
+				reqs[i].Metadata[k] = v
+			}
+		}
+
 		reqs[i].Key, err = state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
 		if err != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
@@ -833,7 +886,12 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
+	start := time.Now()
 	err = store.BulkSet(reqs)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.Set, err == nil, elapsed)
+
 	if err != nil {
 		storeName := a.getStateStoreName(reqCtx)
 
@@ -1435,7 +1493,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
-
 			return
 		}
 
@@ -1449,7 +1506,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 				fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
-
 			return
 		}
 	}
@@ -1461,7 +1517,12 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		Metadata:   metadata,
 	}
 
+	start := time.Now()
 	err := a.pubsubAdapter.Publish(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
+
 	if err != nil {
 		status := fasthttp.StatusInternalServerError
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",
@@ -1568,6 +1629,16 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// merge metadata from URL query parameters
+	metadata := getMetadataFromRequest(reqCtx)
+	if req.Metadata == nil {
+		req.Metadata = metadata
+	} else {
+		for k, v := range metadata {
+			req.Metadata[k] = v
+		}
+	}
+
 	operations := []state.TransactionalStateOperation{}
 	for _, o := range req.Operations {
 		switch o.Operation {
@@ -1644,10 +1715,14 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
+	start := time.Now()
 	err := transactionalStore.Multi(&state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   req.Metadata,
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err == nil, elapsed)
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_TRANSACTION", fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
@@ -1689,7 +1764,12 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	}
 	req.Metadata = getMetadataFromRequest(reqCtx)
 
+	start := time.Now()
 	resp, err := querier.Query(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateQuery, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_QUERY", fmt.Sprintf(messages.ErrStateQuery, storeName, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
