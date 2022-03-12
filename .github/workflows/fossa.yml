@@ -29,7 +29,12 @@ on:
 jobs:
   fossa-scan:
 <<<<<<< HEAD
+<<<<<<< HEAD
     if: github.repository_owner == 'dapr' # FOSSA is not intended to run on forks.
+=======
+    env:
+      FossaPushOnlyToken: b88e1f4287c3108c8751bf106fb46db6
+>>>>>>> 39f0dc45 (Update with token)
     runs-on: ubuntu-latest
     env:
       FOSSA_API_KEY: b88e1f4287c3108c8751bf106fb46db6 # This is a push-only token that is safe to be exposed.
@@ -44,14 +49,19 @@ jobs:
         uses: fossas/fossa-action@main # Use a specific version if locking is preferred
         with:
 <<<<<<< HEAD
+<<<<<<< HEAD
           api-key: ${{ env.FOSSA_API_KEY }}
 =======
           api-key: ${{secrets.FOSSA_API_KEY}}
 >>>>>>> 1b2b0ac6 (add workflow)
+=======
+          api-key: $FossaPushOnlyToken
+>>>>>>> 39f0dc45 (Update with token)
 
       - name: "Run FOSSA Test"
         uses: fossas/fossa-action@main # Use a specific version if locking is preferred
         with:
+<<<<<<< HEAD
 <<<<<<< HEAD
           api-key: ${{ env.FOSSA_API_KEY }}
           run-tests: true
@@ -59,3 +69,7 @@ jobs:
           api-key: ${{secrets.FOSSA_API_KEY}}
           run-tests: true
 >>>>>>> 1b2b0ac6 (add workflow)
+=======
+          api-key: $FossaPushOnlyToken
+          run-tests: true
+>>>>>>> 39f0dc45 (Update with token)
