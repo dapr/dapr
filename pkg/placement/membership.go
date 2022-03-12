@@ -324,17 +324,15 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 		Operation: operation,
 		Tables:    tables,
 	}
-
 	var err error
 	for _, s := range targets {
 		config := retry.DefaultConfig()
 		config.MaxRetries = 3
 		backoff := config.NewBackOff()
-
 		retry.NotifyRecover(
 			func() error {
+				//time.Sleep(time.Millisecond * 100) // mock Analog network delay
 				err = s.Send(o)
-
 				if err != nil {
 					remoteAddr := "n/a"
 					if peer, ok := peer.FromContext(s.Context()); ok {
