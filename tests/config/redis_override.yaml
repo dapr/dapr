@@ -16,7 +16,7 @@ auth:
 
 image:
   repository: redislabs/rejson
-  tag: 2.0.6
+  tag: latest
 
 architecture: standalone
 

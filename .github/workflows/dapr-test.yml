@@ -32,7 +32,7 @@ jobs:
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       TEST_CLOUD_ENV: azure
-      HELMVER: v3.4.0
+      HELMVER: v3.7.2
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
       TARGET_OS: ${{ matrix.target_os }}
@@ -151,12 +151,6 @@ jobs:
           make setup-test-env-redis
           make setup-test-env-kafka
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
-      - name: Upload Helm charts folder
-        if: always()
-        uses: actions/upload-artifact@master
-        with:
-          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_helm_charts
-          path: ./charts/
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: make docker-deploy-k8s
