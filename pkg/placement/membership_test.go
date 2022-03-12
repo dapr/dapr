@@ -330,7 +330,8 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 							if clientID == 1 {
 								fmt.Println("client 1 unlock", time.Now())
 							}
-							overArr[clientID] = time.Now().Sub(start).Milliseconds()
+
+							overArr[clientID] = time.Since(start).Milliseconds()
 						}
 					}
 				}
