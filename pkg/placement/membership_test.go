@@ -366,13 +366,13 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 		testServer.disseminateOperation([]placementGRPCStream{host}, "update", mockMessage)
 		testServer.disseminateOperation([]placementGRPCStream{host}, "unlock", mockMessage)
 	}
-	//fmt.Println("start lock ", time.Now())
-	//testServer.disseminateOperation(streamConnPool, "lock", mockMessage)
-	//fmt.Println("all lock  ", time.Now())
-	//testServer.disseminateOperation(streamConnPool, "update", mockMessage)
-	//fmt.Println("all update", time.Now())
-	//testServer.disseminateOperation(streamConnPool, "unlock", mockMessage)
-	//fmt.Println("all unlock", time.Now())
+	// fmt.Println("start lock ", time.Now())
+	// testServer.disseminateOperation(streamConnPool, "lock", mockMessage)
+	// fmt.Println("all lock  ", time.Now())
+	// testServer.disseminateOperation(streamConnPool, "update", mockMessage)
+	// fmt.Println("all update", time.Now())
+	// testServer.disseminateOperation(streamConnPool, "unlock", mockMessage)
+	// fmt.Println("all unlock", time.Now())
 	startFlag.Store(false)
 	time.Sleep(time.Second) // wait client recv
 	var max int64
