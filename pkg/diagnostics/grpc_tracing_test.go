@@ -196,11 +196,15 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
 
+<<<<<<< HEAD
 		h := func(srv interface{}, stream grpc.ServerStream) error {
 			return nil
 		}
 
 		err := interceptor(ctx, nil, fakeInfo, h)
+=======
+		err := interceptor(ctx, nil, fakeInfo, nil)
+>>>>>>> 4abd5672 (stream tracing: ignore dapr api calls)
 		assert.Nil(t, err)
 	})
 
@@ -215,7 +219,12 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 	})
 }
 
+<<<<<<< HEAD
 type fakeStream struct{}
+=======
+type fakeStream struct {
+}
+>>>>>>> 4abd5672 (stream tracing: ignore dapr api calls)
 
 func (f *fakeStream) Context() context.Context {
 	return context.TODO()
@@ -230,6 +239,10 @@ func (f *fakeStream) SendHeader(metadata.MD) error {
 }
 
 func (f *fakeStream) SetTrailer(metadata.MD) {
+<<<<<<< HEAD
+=======
+
+>>>>>>> 4abd5672 (stream tracing: ignore dapr api calls)
 }
 
 func (f *fakeStream) SendMsg(m interface{}) error {

@@ -102,7 +102,11 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		if strings.Index(info.FullMethod, daprPackagePrefix) == 0 {
+<<<<<<< HEAD
 			return handler(srv, ss)
+=======
+			return nil
+>>>>>>> 4abd5672 (stream tracing: ignore dapr api calls)
 		}
 
 		var span *trace.Span
