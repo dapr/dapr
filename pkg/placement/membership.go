@@ -317,9 +317,12 @@ func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1p
 	// p.disseminateOperation(hosts, "update", newTable)
 	// p.disseminateOperation(hosts, "unlock", nil)
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> a15edb2a (gofumpt)
+=======
+>>>>>>> 962eda15 (gofumpt)
 }
 
 func (p *Service) disseminateOperation(targets []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
