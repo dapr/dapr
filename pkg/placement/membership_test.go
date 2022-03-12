@@ -294,7 +294,7 @@ func PerformTableUpdateCostTime() (wastedTime int64) {
 	const testClients = 100
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
 	testServer.hasLeadership.Store(true)
-	var overArr [testClients]int64
+	var overArr *[testClients]int64
 	// arrange.
 	var clientConns []*grpc.ClientConn
 	var clientStreams []v1pb.Placement_ReportDaprStatusClient
