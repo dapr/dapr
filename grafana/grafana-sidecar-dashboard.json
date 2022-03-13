@@ -1,9 +1,45 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "7.3.7"
+    },
+    {
+      "type": "panel",
+      "id": "graph",
+      "name": "Graph",
+      "version": "5.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "5.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "singlestat",
+      "name": "Singlestat",
+      "version": "5.0.0"
+    }
+  ],
   "annotations": {
     "list": [
       {
         "builtIn": 1,
-        "datasource": "Dapr",
+        "datasource": "-- Grafana --",
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -23,7 +59,7 @@
   "panels": [
     {
       "collapsed": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -37,7 +73,7 @@
     },
     {
       "cacheTimeout": null,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This shows the uptime of dapr runtime sidecar. If the sidecar is running for less than 10 minutes, the color will turn into RED.",
       "fieldConfig": {
         "defaults": {
@@ -96,8 +132,8 @@
       "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "time() - max(process_start_time_seconds{kubernetes_name=~\"($dapr_app_id)-dapr\", kubernetes_namespace=\"$namespace\"}) by (kubernetes_name)",
-          "legendFormat": "{{kubernetes_name}}",
+          "expr": "time() - max(process_start_time_seconds{pod=~\"($dapr_app_id).+\", namespace=\"$namespace\"}) by (pod)",
+          "legendFormat": "{{pod}}",
           "refId": "A"
         }
       ],
@@ -108,7 +144,7 @@
     },
     {
       "collapsed": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -125,7 +161,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This shows total amount of Kernel and user CPU usage for Daprd.",
       "fieldConfig": {
         "defaults": {
@@ -170,7 +206,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(container_cpu_usage_seconds_total{pod=~\"($dapr_app_id).*\", namespace=\"$namespace\"}[5m])) by (pod)",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{pod=~\"($dapr_app_id).+\", namespace=\"$namespace\"}[5m])) by (pod)",
           "interval": "",
           "legendFormat": "{{pod}}",
           "refId": "A"
@@ -222,7 +258,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {},
@@ -266,8 +302,8 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(go_goroutines{kubernetes_name=~\"($dapr_app_id)-dapr.*\", kubernetes_namespace=\"$namespace\"}) by (kubernetes_name)",
-          "legendFormat": "{{kubernetes_name}}",
+          "expr": "sum(go_goroutines{pod=~\"($dapr_app_id).+\", namespace=\"$namespace\"}) by (pod)",
+          "legendFormat": "{{pod}}",
           "refId": "A"
         }
       ],
@@ -317,7 +353,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "The amount of heap memory that belongs specifically to that process in bytes.",
       "fieldConfig": {
         "defaults": {
@@ -362,9 +398,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(go_memstats_alloc_bytes{kubernetes_name=~\"($dapr_app_id)-dapr\", kubernetes_namespace=\"$namespace\"}) by (kubernetes_name)",
+          "expr": "sum(go_memstats_alloc_bytes{pod=~\"($dapr_app_id).+\", namespace=\"$namespace\"}) by (pod)",
           "interval": "",
-          "legendFormat": "{{kubernetes_name}}",
+          "legendFormat": "{{pod}}",
           "refId": "A"
         }
       ],
@@ -414,7 +450,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "The amount of address space that a process is managing. This includes all types of memory, both in RAM and swapped out.",
       "fieldConfig": {
         "defaults": {
@@ -459,9 +495,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(process_virtual_memory_bytes{kubernetes_name=~\"($dapr_app_id)-dapr\", kubernetes_namespace=\"$namespace\"}) by (kubernetes_name)",
+          "expr": "sum(process_virtual_memory_bytes{pod=~\"($dapr_app_id).+\", namespace=\"$namespace\"}) by (pod)",
           "interval": "",
-          "legendFormat": "{{kubernetes_name}}",
+          "legendFormat": "{{pod}}",
           "refId": "A"
         }
       ],
@@ -509,7 +545,7 @@
     },
     {
       "collapsed": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -526,7 +562,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This charts shows the turn-around latency when user app calls Dapr API. For example, you can understand each statestore and service invocation performance.",
       "fieldConfig": {
         "defaults": {
@@ -574,14 +610,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_server_latency_bucket{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_server_latency_bucket{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "[95p] {{method}} {{path}} ({{app_id}})",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_server_latency_bucket{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_server_latency_bucket{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "[75p] {{method}} {{path}} ({{app_id}})",
@@ -635,7 +671,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This charts shows completed request rate (rps) when User app calls Dapr.",
       "fieldConfig": {
         "defaults": {
@@ -683,7 +719,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (app_id, method, path) (rate(dapr_http_server_response_count{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m]))",
+          "expr": "sum by (app_id, method, path) (rate(dapr_http_server_response_count{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m]))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "{{method}} {{path}} ({{app_id}})",
@@ -737,7 +773,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This charts shows the inbound request latency from Dapr to App. You can analyze App's API endpoint performance.",
       "fieldConfig": {
         "defaults": {
@@ -784,14 +820,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "[95p] {{method}} /{{path}} ({{app_id}})",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "[75p] {{method}} /{{path}} ({{app_id}})",
@@ -845,7 +881,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This charts shows request rate (rps) when Dapr runtime calls User app HTTP endpoints.",
       "fieldConfig": {
         "defaults": {
@@ -893,7 +929,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (app_id, method, path) (rate(dapr_http_client_completed_count{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m]))",
+          "expr": "sum by (app_id, method, path) (rate(dapr_http_client_completed_count{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m]))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "{{method}} {{path}} ({{app_id}})",
@@ -944,7 +980,7 @@
     },
     {
       "collapsed": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -961,7 +997,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This charts shows the turn-around latency when user app calls Dapr API. For example, you can understand each statestore and service invocation performance.",
       "fieldConfig": {
         "defaults": {
@@ -1006,13 +1042,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_server_server_latency_bucket{app_id=~\"$dapr_app_id\", grpc_server_method=~\".*.Dapr/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_server_method))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_server_server_latency_bucket{app_id=~\"$dapr_app_id\", grpc_server_method=~\".*.Dapr/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_server_method))",
           "interval": "",
           "legendFormat": "[95p] - {{grpc_server_method}} ({{app_id}})",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_server_server_latency_bucket{app_id=~\"$dapr_app_id\", grpc_server_method=~\".*.Dapr/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_server_method))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_server_server_latency_bucket{app_id=~\"$dapr_app_id\", grpc_server_method=~\".*.Dapr/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_server_method))",
           "interval": "",
           "legendFormat": "[75p] {{grpc_server_method}} ({{app_id}})",
           "refId": "B"
@@ -1064,7 +1100,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This charts shows completed request rate (rps) when User app calls Dapr.",
       "fieldConfig": {
         "defaults": {
@@ -1161,7 +1197,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This charts shows the inbound request latency from Dapr to App. You can analyze App's API endpoint performance.",
       "fieldConfig": {
         "defaults": {
@@ -1206,13 +1242,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
           "interval": "",
           "legendFormat": "[95p] {{grpc_client_method}} ({{app_id}})",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
           "interval": "",
           "legendFormat": "[75p] {{grpc_client_method}} ({{app_id}})",
           "refId": "B"
@@ -1264,7 +1300,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This charts shows request rate (rps) when Dapr runtime calls User app gRPC endpoints.",
       "fieldConfig": {
         "defaults": {
@@ -1309,7 +1345,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (app_id, grpc_client_method, grpc_client_status) (rate(dapr_grpc_io_client_completed_rpcs{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m]))",
+          "expr": "sum by (app_id, grpc_client_method, grpc_client_status) (rate(dapr_grpc_io_client_completed_rpcs{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", namespace=\"$namespace\"}[5m]))",
           "interval": "",
           "legendFormat": "{{grpc_client_status}} {{grpc_client_method}} ({{app_id}})",
           "refId": "A"
@@ -1358,7 +1394,7 @@
     },
     {
       "collapsed": true,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1368,7 +1404,7 @@
       "id": 52,
       "panels": [
         {
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This shows the number of configured components. For example, it will shows \"2\" if you configure redis statestore and redis pubsub components. ",
           "fieldConfig": {
             "defaults": {
@@ -1414,7 +1450,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_component_loaded{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id)",
+              "expr": "sum(dapr_runtime_component_loaded{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id)",
               "legendFormat": "{{app_id}}",
               "refId": "A"
             }
@@ -1426,7 +1462,7 @@
         },
         {
           "cacheTimeout": null,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This shows the number of initialized components. This number must be the same as loaded components. Otherwise, Daprd fails to initialize some of components.",
           "fieldConfig": {
             "defaults": {
@@ -1483,7 +1519,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_component_init_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id)",
+              "expr": "sum(dapr_runtime_component_init_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id)",
               "legendFormat": "{{app_id}}",
               "refId": "A"
             }
@@ -1498,7 +1534,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This chart shows the number component initialization failures with the reasons.",
           "fieldConfig": {
             "defaults": {
@@ -1544,7 +1580,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(dapr_runtime_component_init_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, reason)",
+              "expr": "sum(dapr_runtime_component_init_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, reason)",
               "legendFormat": "{{app_id}} - {{reason}}",
               "refId": "A"
             }
@@ -1596,7 +1632,7 @@
     },
     {
       "collapsed": true,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1610,7 +1646,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This shows when Daprd reports host status to placement service. Non-Actor service reports host status in the beginning. Actor service reports host status to placement periodically. If there is a failure, virtual actors will not be distributed properly.",
           "fieldConfig": {
             "defaults": {
@@ -1655,12 +1691,12 @@
           "steppedLine": true,
           "targets": [
             {
-              "expr": "rate(dapr_runtime_actor_status_report_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_actor_status_report_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "legendFormat": "OK ({{app_id}})",
               "refId": "A"
             },
             {
-              "expr": "rate(dapr_runtime_actor_status_report_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_actor_status_report_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "legendFormat": "Error ({{app_id}})",
               "refId": "B"
             }
@@ -1708,7 +1744,7 @@
         },
         {
           "cacheTimeout": null,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This shows the failures when Daprd reports host status to placement.",
           "fieldConfig": {
             "defaults": {
@@ -1753,7 +1789,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_actor_status_report_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, operation)",
+              "expr": "sum(dapr_runtime_actor_status_report_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, operation)",
               "legendFormat": "{{operation}} ({{app_id}})",
               "refId": "A"
             }
@@ -1768,7 +1804,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This shows the placement table update status based on the response from placement service. Daprd maintains the actor placement table in its memory. This table is periodically updated.",
           "fieldConfig": {
             "defaults": {
@@ -1813,7 +1849,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(dapr_runtime_actor_table_operation_recv_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, operation)",
+              "expr": "sum(dapr_runtime_actor_table_operation_recv_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, operation)",
               "format": "time_series",
               "intervalFactor": 3,
               "legendFormat": "{{operation}} ({{app_id}})",
@@ -1866,7 +1902,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This chart shows how many actors are deactivated.",
           "fieldConfig": {
             "defaults": {
@@ -1911,12 +1947,12 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dapr_runtime_actor_deactivated_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}",
+              "expr": "dapr_runtime_actor_deactivated_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}",
               "legendFormat": "OK {{actor_type}}",
               "refId": "A"
             },
             {
-              "expr": "dapr_runtime_actor_deactivated_failed_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}",
+              "expr": "dapr_runtime_actor_deactivated_failed_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}",
               "legendFormat": "Error {{actor_type}}",
               "refId": "C"
             }
@@ -1967,7 +2003,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This shows when actor is rebalanced. This operation can make the activated actors deactivated and move actor to the other hosts.",
           "fieldConfig": {
             "defaults": {
@@ -2012,7 +2048,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dapr_runtime_actor_rebalanced_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}",
+              "expr": "dapr_runtime_actor_rebalanced_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}",
               "intervalFactor": 1,
               "legendFormat": "{{app_id}}",
               "refId": "B"
@@ -2065,7 +2101,7 @@
     },
     {
       "collapsed": true,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -2079,7 +2115,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This chart  shows when mTLS is initialized, which means root cert is loaded and workload cert is issued from sentry, when runtime starts.",
           "fieldConfig": {
             "defaults": {
@@ -2124,13 +2160,13 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "rate(dapr_runtime_mtls_init_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_mtls_init_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "intervalFactor": 2,
               "legendFormat": "OK {{app_id}}",
               "refId": "A"
             },
             {
-              "expr": "rate(dapr_runtime_mtls_init_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_mtls_init_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "intervalFactor": 2,
               "legendFormat": "Error {{app_id}}",
               "refId": "B"
@@ -2179,7 +2215,7 @@
         },
         {
           "cacheTimeout": null,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "fieldConfig": {
             "defaults": {
               "custom": {},
@@ -2223,7 +2259,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_mtls_init_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, reason)",
+              "expr": "sum(dapr_runtime_mtls_init_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, reason)",
               "legendFormat": "{{reason}} ({{app_id}})",
               "refId": "A"
             }
@@ -2238,7 +2274,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "description": "This chart shows when workload certificate is rotated.",
           "fieldConfig": {
             "defaults": {
@@ -2283,7 +2319,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "rate(dapr_runtime_mtls_workload_cert_rotated_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_mtls_workload_cert_rotated_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -2291,7 +2327,7 @@
               "refId": "A"
             },
             {
-              "expr": "rate(dapr_runtime_mtls_workload_cert_rotated_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_mtls_workload_cert_rotated_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "intervalFactor": 2,
               "legendFormat": "Error {{app_id}}",
               "refId": "B"
@@ -2340,7 +2376,7 @@
         },
         {
           "cacheTimeout": null,
-          "datasource": "Dapr",
+          "datasource": "${DS_PROMETHEUS}",
           "fieldConfig": {
             "defaults": {
               "custom": {},
@@ -2384,7 +2420,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_mtls_workload_cert_rotated_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, reason)",
+              "expr": "sum(dapr_runtime_mtls_workload_cert_rotated_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, reason)",
               "legendFormat": "{{reason}} ({{app_id}})",
               "refId": "A"
             }
@@ -2412,7 +2448,7 @@
           "text": "pipeline",
           "value": "pipeline"
         },
-        "datasource": "Dapr",
+        "datasource": "${DS_PROMETHEUS}",
         "definition": "label_values(dapr_runtime_component_loaded,kubernetes_namespace)",
         "error": null,
         "hide": 0,
@@ -2446,7 +2482,7 @@
             "stateactor"
           ]
         },
-        "datasource": "Dapr",
+        "datasource": "${DS_PROMETHEUS}",
         "definition": "label_values(dapr_runtime_component_loaded,app_id)",
         "error": null,
         "hide": 0,

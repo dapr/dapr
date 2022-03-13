@@ -1,4 +1,40 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "7.3.7"
+    },
+    {
+      "type": "panel",
+      "id": "graph",
+      "name": "Graph",
+      "version": "5.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "5.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "singlestat",
+      "name": "Singlestat",
+      "version": "5.0.0"
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -21,7 +57,7 @@
   "panels": [
     {
       "collapsed": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -35,7 +71,7 @@
     },
     {
       "cacheTimeout": null,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {},
@@ -92,10 +128,10 @@
       "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "time() - max(process_start_time_seconds{app=~\"dapr-sentry|dapr-placement-server|dapr-sidecar-injector|dapr-operator\"}) by (app)",
+          "expr": "time() - max(process_start_time_seconds{container=~\"dapr-sentry|dapr-placement-server|dapr-sidecar-injector|dapr-operator\"}) by (container)",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{app}}",
+          "legendFormat": "{{container}}",
           "refId": "A"
         }
       ],
@@ -109,7 +145,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This shows total amount of kernel and user CPU usage time.",
       "fieldConfig": {
         "defaults": {
@@ -206,7 +242,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "The amount of allocated heap memory that belongs specifically to that process in bytes.",
       "fieldConfig": {
         "defaults": {
@@ -251,9 +287,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(go_memstats_alloc_bytes{app=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement-server|dapr-operator)\"}) by (app)",
+          "expr": "sum(go_memstats_alloc_bytes{container=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement-server|dapr-operator)\"}) by (container)",
           "interval": "",
-          "legendFormat": "{{app}}",
+          "legendFormat": "{{container}}",
           "refId": "A"
         }
       ],
@@ -303,7 +339,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {},
@@ -347,9 +383,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "max(go_goroutines{app=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement-server|dapr-operator)\"}) by (app)",
+          "expr": "max(go_goroutines{container=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement-server|dapr-operator)\"}) by (container)",
           "interval": "",
-          "legendFormat": "{{app}}",
+          "legendFormat": "{{container}}",
           "refId": "A"
         }
       ],
@@ -396,7 +432,7 @@
     },
     {
       "collapsed": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -413,7 +449,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "description": "The total number of sidecar injection requests.",
       "fieldConfig": {
         "defaults": {
@@ -509,7 +545,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "The total number of successful sidecar injection requests.",
       "fieldConfig": {
         "defaults": {
@@ -602,7 +638,7 @@
     },
     {
       "collapsed": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -623,7 +659,7 @@
         "#FADE2A",
         "#73BF69"
       ],
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "decimals": null,
       "description": "",
       "fieldConfig": {
@@ -710,7 +746,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "description": "Certificate Signing Request ( CSR ) from Dapr runtime",
       "fieldConfig": {
         "defaults": {
@@ -771,18 +807,18 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(dapr_sentry_cert_sign_request_received_total{app=\"dapr-sentry\"})",
+          "expr": "sum(dapr_sentry_cert_sign_request_received_total{container=\"dapr-sentry\"})",
           "legendFormat": "CSR Requests",
           "refId": "A"
         },
         {
-          "expr": "sum(dapr_sentry_cert_sign_success_total{app=\"dapr-sentry\"})",
+          "expr": "sum(dapr_sentry_cert_sign_success_total{container=\"dapr-sentry\"})",
           "instant": false,
           "legendFormat": "CSR Success",
           "refId": "B"
         },
         {
-          "expr": "sum(dapr_sentry_cert_sign_failure_total{app=\"dapr-sentry\"})",
+          "expr": "sum(dapr_sentry_cert_sign_failure_total{container=\"dapr-sentry\"})",
           "instant": false,
           "legendFormat": "CSR Failure",
           "refId": "C"
@@ -834,7 +870,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This chart shows the failure reason of Certificate Sign Request.",
       "fieldConfig": {
         "defaults": {
@@ -881,7 +917,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(dapr_sentry_cert_sign_failure_total{app=\"dapr-sentry\"}) by (reason)",
+          "expr": "sum(dapr_sentry_cert_sign_failure_total{container=\"dapr-sentry\"}) by (reason)",
           "legendFormat": "{{reason}}",
           "refId": "A"
         }
@@ -933,7 +969,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Dapr",
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This will be counted when issuer cert and key are changed.",
       "fieldConfig": {
         "defaults": {
@@ -979,7 +1015,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(dapr_sentry_issuercert_changed_total{app=\"dapr-sentry\"})",
+          "expr": "sum(dapr_sentry_issuercert_changed_total{container=\"dapr-sentry\"})",
           "refId": "A"
         }
       ],
@@ -1029,7 +1065,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "description": "This chart shows the reason of gRPC server TLS certificate issuance failures.",
       "fieldConfig": {
         "defaults": {
@@ -1076,7 +1112,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(dapr_sentry_servercert_issue_failed_total{app=\"dapr-sentry\"}) by (reason)",
+          "expr": "sum(dapr_sentry_servercert_issue_failed_total{container=\"dapr-sentry\"}) by (reason)",
           "legendFormat": "{{reason}}",
           "refId": "A"
         }
@@ -1124,7 +1160,7 @@
     },
     {
       "collapsed": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1141,7 +1177,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "description": "The total number of Dapr sidecars connected to placement service.",
       "fieldConfig": {
         "defaults": {
@@ -1238,7 +1274,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "${DS_PROMETHEUS}",
       "description": "The total number of actor sidecars and non-actor sidecars.",
       "fieldConfig": {
         "defaults": {
