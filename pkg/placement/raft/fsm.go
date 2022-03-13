@@ -79,10 +79,8 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 
 	entries := c.state.hashingTableMap()
 	for k, v := range entries {
-
 		var table v1pb.PlacementTable
 		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
-
 			table = v1pb.PlacementTable{
 				Hosts:     make(map[uint64]string),
 				SortedSet: make([]uint64, len(sortedSet)),
