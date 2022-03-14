@@ -209,9 +209,17 @@ func TestServiceInvocationWithAllowListsForGrpcProxy(t *testing.T) {
 }
 
 func TestServiceInvocationWithAllowLists(t *testing.T) {
+	config, err := tr.Platform.GetConfiguration("daprsystem")
+	if err != nil {
+		t.Logf("configuration name: daprsystem, get failed: %s \n", err.Error())
+		os.Exit(-1)
+	}
+	if !config.Spec.MTLSSpec.Enabled {
+		t.Logf("mtls disabled. can't running unit tests")
+		return
+	}
 	externalURL := tr.Platform.AcquireAppExternalURL("allowlists-caller")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-	var err error
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
