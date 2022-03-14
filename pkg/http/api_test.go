@@ -29,7 +29,7 @@ import (
 
 	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
-	jsoniter "github.com/json-iterator/go"
+
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -88,7 +88,6 @@ func TestPubSubEndpoints(t *testing.T) {
 				return &daprt.MockPubSub{}
 			},
 		},
-		json: jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
 
@@ -233,7 +232,6 @@ func TestShutdownEndpoints(t *testing.T) {
 	m := mock.Mock{}
 	m.On("shutdown", mock.Anything).Return()
 	testAPI := &api{
-		json: jsoniter.ConfigFastest,
 		shutdown: func() {
 			m.MethodCalled("shutdown")
 		},
@@ -296,7 +294,6 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			}
 			return &bindings.InvokeResponse{Data: []byte("testresponse")}, nil
 		},
-		json: jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
 
@@ -380,7 +377,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
-		json:                  jsoniter.ConfigFastest,
 		tracingSpec:           spec,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
@@ -445,7 +441,6 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
-		json:            jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
@@ -852,7 +847,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		actor: nil,
-		json:  jsoniter.ConfigFastest,
 	}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
@@ -1601,7 +1595,6 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
-		json: jsoniter.ConfigFastest,
 	}
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
@@ -1651,7 +1644,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		actor:       nil,
-		json:        jsoniter.ConfigFastest,
 		tracingSpec: spec,
 	}
 
@@ -2302,7 +2294,6 @@ func TestV1StateEndpoints(t *testing.T) {
 	testAPI := &api{
 		stateStores:              fakeStores,
 		transactionalStateStores: fakeTransactionalStores,
-		json:                     jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -2520,7 +2511,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		expectedResponses := []BulkGetResponse{
 			{
 				Key:   "good-key",
-				Data:  jsoniter.RawMessage("life is good"),
+				Data:  json.RawMessage("life is good"),
 				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
@@ -2553,7 +2544,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		expectedResponses := []BulkGetResponse{
 			{
 				Key:   "good-key",
-				Data:  jsoniter.RawMessage("life is good"),
+				Data:  json.RawMessage("life is good"),
 				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
@@ -2803,7 +2794,6 @@ func TestV1SecretEndpoints(t *testing.T) {
 	testAPI := &api{
 		secretsConfiguration: secretsConfiguration,
 		secretStores:         fakeStores,
-		json:                 jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
@@ -2920,7 +2910,6 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		json:  jsoniter.ConfigFastest,
 	}
 
 	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
@@ -2957,7 +2946,6 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	testAPI := &api{
 		stateStores:              fakeStores,
 		transactionalStateStores: fakeTransactionalStores,
-		json:                     jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
