@@ -262,6 +262,8 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 			Key:   i.Key,
 			Value: &as,
 		})
+
+		log.Printf("Debug: Key %s, Value %s", i.Key, string(as.Data))
 	}
 
 	log.Printf("Result for bulk get request for %d states: %v", len(states), output)
