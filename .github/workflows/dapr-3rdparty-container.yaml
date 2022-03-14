@@ -1,4 +1,4 @@
-name: Cache Docker 3rd Party Images
+name: dapr-mirror-containers
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  docker:
+  mirror:
     runs-on: ubuntu-latest
     steps:
       - 
