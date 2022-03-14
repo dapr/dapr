@@ -75,6 +75,8 @@ const (
 	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
 	daprAPILogLevel                   = "dapr.io/api-log-level"
+	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
+	unixDomainSocketVolume            = "dapr-unix-domain-socket"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -160,14 +162,16 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	trustAnchors, certChain, certKey = getTrustAnchorsAndCertChain(kubeClient, namespace)
 	identity = fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName)
 
+	socketMount := appendUnixDomainSocketVolume(&pod)
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer, err := getSidecarContainer(pod.Annotations, id, image, imagePullPolicy, req.Namespace, apiSvcAddress, placementAddress, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity)
+	sidecarContainer, err := getSidecarContainer(pod.Annotations, id, image, imagePullPolicy, req.Namespace, apiSvcAddress, placementAddress, socketMount, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity)
 	if err != nil {
 		return nil, err
 	}
 
 	patchOps := []PatchOperation{}
 	envPatchOps := []PatchOperation{}
+	socketVolumentPatchOps := []PatchOperation{}
 	var path string
 	var value interface{}
 	if len(pod.Spec.Containers) == 0 {
@@ -175,6 +179,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		value = []corev1.Container{*sidecarContainer}
 	} else {
 		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
+		socketVolumentPatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketMount)
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
@@ -188,6 +193,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		},
 	)
 	patchOps = append(patchOps, envPatchOps...)
+	patchOps = append(patchOps, socketVolumentPatchOps...)
 
 	return patchOps, nil
 }
@@ -245,6 +251,65 @@ LoopEnv:
 			Value: env,
 		})
 	}
+	return patchOps
+}
+
+// This function add Dapr unix domain socket volume to all the containers in any Dapr enabled pod.
+func addSocketVolumeToContainers(containers []corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
+	if socketVolumeMount == nil {
+		return []PatchOperation{}
+	}
+
+	return addVolumeToContainers(containers, *socketVolumeMount)
+}
+
+func addVolumeToContainers(containers []corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
+	volumeMount := []corev1.VolumeMount{addMounts}
+	volumeMountPatchOps := make([]PatchOperation, 0, len(containers))
+	for i, container := range containers {
+		path := fmt.Sprintf("%s/%d/volumeMounts", containersPath, i)
+		patchOps := getVolumeMountPatchOperations(container.VolumeMounts, volumeMount, path)
+		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
+	}
+	return volumeMountPatchOps
+}
+
+// It does not override existing values for those variables if they have been defined already.
+func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
+	if len(volumentMounts) == 0 {
+		// If there are no volume mount variables defined in the container, we initialize a slice of environment vars.
+		return []PatchOperation{
+			{
+				Op:    "add",
+				Path:  path,
+				Value: addMounts,
+			},
+		}
+	}
+	// If there are existing volume mounts, then we are adding to an existing slice of volume mounts.
+	path += "/-"
+
+	var patchOps []PatchOperation
+
+	for _, addMount := range addMounts {
+		isConflict := false
+		for _, mount := range volumentMounts {
+			// conflict cases
+			if addMount.Name == mount.Name || addMount.MountPath == mount.MountPath {
+				isConflict = true
+				break
+			}
+		}
+
+		if !isConflict {
+			patchOps = append(patchOps, PatchOperation{
+				Op:    "add",
+				Path:  path,
+				Value: addMount,
+			})
+		}
+	}
+
 	return patchOps
 }
 
@@ -369,6 +434,10 @@ func getReadBufferSize(annotations map[string]string) (int32, error) {
 
 func getGracefulShutdownSeconds(annotations map[string]string) (int32, error) {
 	return getInt32Annotation(annotations, daprGracefulShutdownSeconds)
+}
+
+func getUnixDomainSocketPath(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprUnixDomainSocketPath, "")
 }
 
 func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
@@ -515,7 +584,7 @@ func getPullPolicy(pullPolicy string) corev1.PullPolicy {
 	}
 }
 
-func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, imagePullPolicy, namespace, controlPlaneAddress, placementServiceAddress string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string) (*corev1.Container, error) {
+func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, imagePullPolicy, namespace, controlPlaneAddress, placementServiceAddress string, socketVolumeMount, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string) (*corev1.Container, error) {
 	appPort, err := getAppPort(annotations)
 	if err != nil {
 		return nil, err
@@ -671,10 +740,12 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
 
+	if socketVolumeMount != nil {
+		c.VolumeMounts = []corev1.VolumeMount{*socketVolumeMount}
+	}
+
 	if tokenVolumeMount != nil {
-		c.VolumeMounts = []corev1.VolumeMount{
-			*tokenVolumeMount,
-		}
+		c.VolumeMounts = append(c.VolumeMounts, *tokenVolumeMount)
 	}
 
 	if logAsJSONEnabled(annotations) {
@@ -752,4 +823,21 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		c.Resources = *resources
 	}
 	return c, nil
+}
+
+func appendUnixDomainSocketVolume(pod *corev1.Pod) *corev1.VolumeMount {
+	unixDomainSocket := getUnixDomainSocketPath(pod.Annotations)
+
+	if unixDomainSocket == "" {
+		return nil
+	}
+
+	// socketVolume is an EmptyDir
+	socketVolume := &corev1.Volume{
+		Name: unixDomainSocketVolume,
+	}
+
+	pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
+
+	return &corev1.VolumeMount{Name: unixDomainSocketVolume, MountPath: unixDomainSocket}
 }
