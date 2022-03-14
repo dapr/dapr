@@ -72,7 +72,7 @@ type bulkGetRequest struct {
 // bulkGetResponse is the response object from Dapr for a bulk get operation.
 type bulkGetResponse struct {
 	Key      string            `json:"key"`
-	Data     json.RawMessage   `json:"data,string,omitempty"`
+	Data     json.RawMessage   `json:"data,omitempty"`
 	ETag     *string           `json:"etag,omitempty"`
 	Metadata map[string]string `json:"metadata,omitempty"`
 	Error    string            `json:"error,omitempty"`
