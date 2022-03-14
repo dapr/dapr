@@ -99,12 +99,12 @@ func NewFromExisting(hosts map[uint64]string, sortedSet []uint64, loadMap map[st
 	}
 }
 
-// GetInternals returns the internal data structure of the consistent hash.
-func (c *Consistent) GetInternals() (map[uint64]string, []uint64, map[string]*Host, int64) {
+// ReadInternals returns the internal data structure of the consistent hash.
+func (c *Consistent) ReadInternals(reader func(map[uint64]string, []uint64, map[string]*Host, int64)) {
 	c.RLock()
 	defer c.RUnlock()
 
-	return c.hosts, c.sortedSet, c.loadMap, c.totalLoad
+	reader(c.hosts, c.sortedSet, c.loadMap, c.totalLoad)
 }
 
 // Add adds a host with port to the table.

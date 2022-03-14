@@ -104,7 +104,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations[daprLogAsJSON] = trueString
 		annotations[daprAPITokenSecret] = "secret"
 		annotations[daprAppTokenSecret] = "appsecret"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
 			"--mode", "kubernetes",
@@ -155,7 +155,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations[daprAppTokenSecret] = "appsecret"
 		annotations[daprEnableDebugKey] = trueString
 		annotations[daprDebugPortKey] = "55555"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
 			"--listen=:55555",
@@ -207,7 +207,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprListenAddresses] = "1.2.3.4,::1"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
 			"--mode", "kubernetes",
@@ -241,7 +241,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprGracefulShutdownSeconds] = "invalid"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
 			"--mode", "kubernetes",
@@ -275,7 +275,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprGracefulShutdownSeconds] = "5"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
 			"--mode", "kubernetes",
@@ -311,9 +311,32 @@ func TestGetSideCarContainer(t *testing.T) {
 			daprImage: image,
 		}
 
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		assert.Equal(t, image, container.Image)
+	})
+
+	t.Run("get sidecar container without unix domain socket path", func(t *testing.T) {
+		annotations := map[string]string{
+			daprUnixDomainSocketPath: "",
+		}
+
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+
+		assert.Equal(t, 0, len(container.VolumeMounts))
+	})
+
+	t.Run("get sidecar container with unix domain socket path", func(t *testing.T) {
+		socketPath := "/tmp"
+		annotations := map[string]string{
+			daprUnixDomainSocketPath: socketPath,
+		}
+
+		socketMount := &corev1.VolumeMount{Name: unixDomainSocketVolume, MountPath: socketPath}
+
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", socketMount, nil, "", "", "", "sentry:50000", true, "pod_identity")
+
+		assert.Equal(t, []corev1.VolumeMount{*socketMount}, container.VolumeMounts)
 	})
 }
 
@@ -469,6 +492,193 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			fmt.Println(tc.testName)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
+		})
+	}
+}
+
+func TestAddSocketVolumeToContainers(t *testing.T) {
+	testCases := []struct {
+		testName      string
+		mockContainer corev1.Container
+		socketMount   *corev1.VolumeMount
+		expOpsLen     int
+		expOps        []PatchOperation
+	}{
+		{
+			testName: "empty var, empty volume",
+			mockContainer: corev1.Container{
+				Name: "MockContainer",
+			},
+			socketMount: nil,
+			expOpsLen:   0,
+			expOps:      []PatchOperation{},
+		},
+		{
+			testName: "existing var, empty volume",
+			mockContainer: corev1.Container{
+				Name: "MockContainer",
+			},
+			socketMount: &corev1.VolumeMount{
+				Name:      unixDomainSocketVolume,
+				MountPath: "/tmp",
+			},
+			expOpsLen: 1,
+			expOps: []PatchOperation{
+				{
+					Op:   "add",
+					Path: "/spec/containers/0/volumeMounts",
+					Value: []corev1.VolumeMount{{
+						Name:      unixDomainSocketVolume,
+						MountPath: "/tmp",
+					}},
+				},
+			},
+		},
+		{
+			testName: "existing var, existing volume",
+			mockContainer: corev1.Container{
+				Name: "MockContainer",
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "mock1"},
+				},
+			},
+			socketMount: &corev1.VolumeMount{
+				Name:      unixDomainSocketVolume,
+				MountPath: "/tmp",
+			},
+			expOpsLen: 1,
+			expOps: []PatchOperation{
+				{
+					Op:   "add",
+					Path: "/spec/containers/0/volumeMounts/-",
+					Value: corev1.VolumeMount{
+						Name:      unixDomainSocketVolume,
+						MountPath: "/tmp",
+					},
+				},
+			},
+		},
+		{
+			testName: "existing var, multiple existing volumes",
+			mockContainer: corev1.Container{
+				Name: "MockContainer",
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "mock1"},
+					{Name: "mock2"},
+				},
+			},
+			socketMount: &corev1.VolumeMount{
+				Name:      unixDomainSocketVolume,
+				MountPath: "/tmp",
+			},
+			expOpsLen: 1,
+			expOps: []PatchOperation{
+				{
+					Op:   "add",
+					Path: "/spec/containers/0/volumeMounts/-",
+					Value: corev1.VolumeMount{
+						Name:      unixDomainSocketVolume,
+						MountPath: "/tmp",
+					},
+				},
+			},
+		},
+		{
+			testName: "existing var, conflict volume name",
+			mockContainer: corev1.Container{
+				Name: "MockContainer",
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: unixDomainSocketVolume},
+				},
+			},
+			socketMount: &corev1.VolumeMount{
+				Name:      unixDomainSocketVolume,
+				MountPath: "/tmp",
+			},
+			expOpsLen: 0,
+			expOps:    []PatchOperation{},
+		},
+		{
+			testName: "existing var, conflict volume mount path",
+			mockContainer: corev1.Container{
+				Name: "MockContainer",
+				VolumeMounts: []corev1.VolumeMount{
+					{MountPath: "/tmp"},
+				},
+			},
+			socketMount: &corev1.VolumeMount{
+				Name:      unixDomainSocketVolume,
+				MountPath: "/tmp",
+			},
+			expOpsLen: 0,
+			expOps:    []PatchOperation{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			patchEnv := addSocketVolumeToContainers([]corev1.Container{tc.mockContainer}, tc.socketMount)
+			assert.Equal(t, tc.expOpsLen, len(patchEnv))
+			assert.Equal(t, tc.expOps, patchEnv)
+		})
+	}
+}
+
+func TestAppendUnixDomainSocketVolume(t *testing.T) {
+	testCases := []struct {
+		testName        string
+		annotations     map[string]string
+		originalVolumes []corev1.Volume
+		expectVolumes   []corev1.Volume
+		exportMount     *corev1.VolumeMount
+	}{
+		{
+			"empty value",
+			map[string]string{daprUnixDomainSocketPath: ""},
+			nil,
+			nil,
+			nil,
+		},
+		{
+			"append on empty volumes",
+			map[string]string{daprUnixDomainSocketPath: "/tmp"},
+			nil,
+			[]corev1.Volume{{
+				Name: unixDomainSocketVolume,
+			}},
+			&corev1.VolumeMount{Name: unixDomainSocketVolume, MountPath: "/tmp"},
+		},
+		{
+			"append on existed volumes",
+			map[string]string{daprUnixDomainSocketPath: "/tmp"},
+			[]corev1.Volume{
+				{Name: "mock"},
+			},
+			[]corev1.Volume{{
+				Name: unixDomainSocketVolume,
+			}, {
+				Name: "mock",
+			}},
+			&corev1.VolumeMount{Name: unixDomainSocketVolume, MountPath: "/tmp"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			pod := corev1.Pod{}
+			pod.Annotations = tc.annotations
+			pod.Spec.Volumes = tc.originalVolumes
+
+			socketMount := appendUnixDomainSocketVolume(&pod)
+
+			if tc.exportMount == nil {
+				assert.Equal(t, tc.exportMount, socketMount)
+			} else {
+				assert.Equal(t, tc.exportMount.Name, socketMount.Name)
+				assert.Equal(t, tc.exportMount.MountPath, socketMount.MountPath)
+			}
+
+			assert.Equal(t, len(tc.expectVolumes), len(pod.Spec.Volumes))
 		})
 	}
 }
