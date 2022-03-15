@@ -543,7 +543,7 @@ func TestActorFeatures(t *testing.T) {
 					return
 				case <-timer.C:
 					// Ignore errors as this is just to keep the actor alive
-					_, _ := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
+					_, _ = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
 				}
 			}
 		}()
