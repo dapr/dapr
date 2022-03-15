@@ -39,24 +39,24 @@ func NewSentryCA() CertificateAuthority {
 // Run loads the trust anchors and issuer certs, creates a new CA and runs the CA server.
 func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan bool) {
 	// Create CA
-	certAuth, err := ca.NewCertificateAuthority(conf)
-	if err != nil {
-		log.Fatalf("error getting certificate authority: %s", err)
+	certAuth, authorityErr := ca.NewCertificateAuthority(conf)
+	if authorityErr != nil {
+		log.Fatalf("error getting certificate authority: %s", authorityErr)
 	}
 	log.Info("certificate authority loaded")
 
 	// Load the trust bundle
-	err = certAuth.LoadOrStoreTrustBundle()
-	if err != nil {
-		log.Fatalf("error loading trust root bundle: %s", err)
+	trustStoreErr := certAuth.LoadOrStoreTrustBundle()
+	if trustStoreErr != nil {
+		log.Fatalf("error loading trust root bundle: %s", trustStoreErr)
 	}
 	log.Infof("trust root bundle loaded. issuer cert expiry: %s", certAuth.GetCACertBundle().GetIssuerCertExpiry().String())
 	monitoring.IssuerCertExpiry(certAuth.GetCACertBundle().GetIssuerCertExpiry())
 
 	// Create identity validator
-	v, err := createValidator()
-	if err != nil {
-		log.Fatalf("error creating validator: %s", err)
+	v, validatorErr := createValidator()
+	if validatorErr != nil {
+		log.Fatalf("error creating validator: %s", validatorErr)
 	}
 	log.Info("validator created")
 
@@ -70,8 +70,8 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 			case <-certExpiryCheckTicker.C:
 				caCrt := certAuth.GetCACertBundle().GetRootCertPem()
 				block, _ := pem.Decode(caCrt)
-				cert, err := x509.ParseCertificate(block.Bytes)
-				if err != nil {
+				cert, certParseErr := x509.ParseCertificate(block.Bytes)
+				if certParseErr != nil {
 					log.Warn("could not determine Dapr root certificate expiration time")
 					continue
 				}
@@ -96,9 +96,9 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 	}
 
 	log.Infof("sentry certificate authority is running, protecting ya'll")
-	err = s.server.Run(conf.Port, certAuth.GetCACertBundle())
-	if err != nil {
-		log.Fatalf("error starting gRPC server: %s", err)
+	serverRunErr := s.server.Run(conf.Port, certAuth.GetCACertBundle())
+	if serverRunErr != nil {
+		log.Fatalf("error starting gRPC server: %s", serverRunErr)
 	}
 }
 
