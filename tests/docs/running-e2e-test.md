@@ -57,9 +57,6 @@ make delete-test-namespace
 ```
 3. Build, deploy, run tests from start to finish
 ```bash
-# Replace version placeholders in helm configuration files
-sh .github/scripts/set_helm_dapr_version.sh
-
 make e2e-build-deploy-run
 ```
 
@@ -96,13 +93,13 @@ make docker-build
 make docker-push
 
 # Replace version placeholders in helm configuration files
-sh .github/scripts/set_helm_dapr_version.sh
+sh .github/scripts/set_helm_dapr_version.sh set
 
 # Deploy Dapr runtime to your cluster
 make docker-deploy-k8s
 
 # Revert version placeholders in helm config files
-sh .github/scripts/revert_helm_dapr_version.sh
+sh .github/scripts/set_helm_dapr_version.sh revert
 ```
 
 ### Optional: Apply this configuration to disable mTLS

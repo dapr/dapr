@@ -16,7 +16,7 @@ set -e
 replace_all() {
   SUBSTRING=$1
   CONTENT=$2
-  FILES=`grep -Hrl $SUBSTRING charts`
+  FILES=$(grep -Hrl $SUBSTRING charts)
   for file in $FILES; do
     echo "Replacing \"$SUBSTRING\" with \"$CONTENT\" in $file ..."
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -29,6 +29,41 @@ replace_all() {
   done
 }
 
+revert_replace_all_chart_yaml() {
+  SUBSTRING=$1
+  CONTENT=$2
+  FILES=$(grep -Hrl $SUBSTRING charts)
+  for file in $FILES; do
+    if [[ "$file" =~ "Chart.yaml" ]]; then
+      echo "Replacing \"$SUBSTRING\" with \"$CONTENT\" in $file ..."
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        # Mac OSX
+        sed -i '' -e "s/$SUBSTRING/$CONTENT/" "$file"
+      else
+        # Linux
+        sed -e "s/$SUBSTRING/$CONTENT/" -i "$file"
+      fi
+    fi
+  done
+}
+
+revert_replace_all_values_yaml() {
+  SUBSTRING=$1
+  CONTENT=$2
+  FILES=$(grep -Hrl $SUBSTRING charts)
+  for file in $FILES; do
+    if [[ "$file" =~ "values.yaml" ]]; then
+      echo "Replacing \"$SUBSTRING\" with \"$CONTENT\" in $file ..."
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        # Mac OSX
+        sed -i '' -e "s/$SUBSTRING/$CONTENT/" "$file"
+      else
+        # Linux
+        sed -e "s/$SUBSTRING/$CONTENT/" -i "$file"
+      fi
+    fi
+  done
+}
 
 if [ -z $REL_VERSION ]; then
   echo "REL_VERSION is not set. Exiting ..."
@@ -41,5 +76,12 @@ if [[ "$REL_VERSION" == "edge" || "$REL_VERSION" == "nightly"* ]]; then
   DAPR_VERSION_HELM="0.0.0"
 fi
 
-replace_all "'edge'" "'$DAPR_VERSION_TAG'"
-replace_all "'0.0.0'" "'$DAPR_VERSION_HELM'"
+OPERATING=$1
+
+if [[ "$OPERATING" == "set" ]]; then
+  replace_all "'edge'" "'$DAPR_VERSION_TAG'"
+  replace_all "'0.0.0'" "'$DAPR_VERSION_HELM'"
+elif [[ "$OPERATING" == "revert" ]]; then
+  revert_replace_all_values_yaml "$DAPR_VERSION_TAG" "edge"
+  revert_replace_all_chart_yaml "$DAPR_VERSION_HELM" "0.0.0"
+fi
