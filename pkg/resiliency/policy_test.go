@@ -30,7 +30,6 @@ import (
 var log = logger.NewLogger("dapr.resiliency.test")
 
 func TestPolicy(t *testing.T) {
-	log := logger.NewLogger("test")
 	retryValue := retry.DefaultConfig()
 	cbValue := breaker.CircuitBreaker{
 		Name:     "test",
