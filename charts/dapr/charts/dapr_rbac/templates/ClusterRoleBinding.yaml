@@ -30,6 +30,15 @@ metadata:
   name: dapr-operator-admin
 rules:
   - apiGroups:
+      - ''
+    resources:
+      - secrets
+    verbs:
+      - list
+      - get
+      - update
+      - watch
+  - apiGroups:
       - apps
     resources:
       - statefulsets
