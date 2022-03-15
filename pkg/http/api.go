@@ -522,7 +522,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 				log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
 				bulkResp[i].Error = responses[i].Error
 			} else {
-				bulkResp[i].Data = []byte(responses[i].Data)
+				bulkResp[i].Data = responses[i].Data
 				bulkResp[i].ETag = responses[i].ETag
 				bulkResp[i].Metadata = responses[i].Metadata
 			}
@@ -552,7 +552,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 					log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
 					r.Error = err.Error()
 				} else if resp != nil {
-					r.Data = []byte(resp.Data)
+					r.Data = resp.Data
 					r.ETag = resp.ETag
 					r.Metadata = resp.Metadata
 				}
@@ -1789,7 +1789,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		qresp.Results[i].Key = state_loader.GetOriginalStateKey(resp.Results[i].Key)
 		qresp.Results[i].ETag = resp.Results[i].ETag
 		qresp.Results[i].Error = resp.Results[i].Error
-		qresp.Results[i].Data = []byte(resp.Results[i].Data)
+		qresp.Results[i].Data = resp.Results[i].Data
 	}
 
 	b, _ := json.Marshal(qresp)
