@@ -187,6 +187,59 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	})
 }
 
+func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
+	interceptor := GRPCTraceStreamServerInterceptor("test", config.TracingSpec{})
+
+	t.Run("invalid proxy request, return nil", func(t *testing.T) {
+		ctx := context.TODO()
+		fakeInfo := &grpc.StreamServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+		}
+
+		h := func(srv interface{}, stream grpc.ServerStream) error {
+			return nil
+		}
+
+		err := interceptor(ctx, nil, fakeInfo, h)
+		assert.Nil(t, err)
+	})
+
+	t.Run("valid proxy request without app id, return error", func(t *testing.T) {
+		ctx := context.TODO()
+		fakeInfo := &grpc.StreamServerInfo{
+			FullMethod: "/myapp.v1.DoSomething",
+		}
+
+		err := interceptor(ctx, &fakeStream{}, fakeInfo, nil)
+		assert.Error(t, err)
+	})
+}
+
+type fakeStream struct{}
+
+func (f *fakeStream) Context() context.Context {
+	return context.TODO()
+}
+
+func (f *fakeStream) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (f *fakeStream) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (f *fakeStream) SetTrailer(metadata.MD) {
+}
+
+func (f *fakeStream) SendMsg(m interface{}) error {
+	return nil
+}
+
+func (f *fakeStream) RecvMsg(m interface{}) error {
+	return nil
+}
+
 func TestSpanContextSerialization(t *testing.T) {
 	wantSc := trace.SpanContext{
 		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
