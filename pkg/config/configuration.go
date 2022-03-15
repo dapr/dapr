@@ -42,10 +42,8 @@ const (
 	SpiffeIDPrefix              = "spiffe://"
 	HTTPProtocol                = "http"
 	GRPCProtocol                = "grpc"
-	ActorReentrancy     Feature = "Actor.Reentrancy"
 	ActorTypeMetadata   Feature = "Actor.TypeMetadata"
 	PubSubRouting       Feature = "PubSub.Routing"
-	StateEncryption     Feature = "State.Encryption"
 )
 
 type Feature string
