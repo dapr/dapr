@@ -66,7 +66,7 @@ func NewProxy(connectionFactory messageClientConnection, appID string, localAppA
 
 // Handler returns a Stream Handler for handling requests that arrive for services that are not recognized by the server.
 func (p *proxy) Handler() grpc.StreamHandler {
-	return grpc_proxy.TransparentHandler(p.intercept, p.resiliency)
+	return grpc_proxy.TransparentHandler(p.intercept, p.resiliency, p.IsLocal)
 }
 
 func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, error) {
@@ -84,12 +84,12 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		return ctx, nil, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete.")
 	}
 
-	target, err := p.remoteAppFn(appID)
+	target, isLocal, err := p.isLocalInternal(appID)
 	if err != nil {
 		return ctx, nil, err
 	}
 
-	if target.id == p.appID {
+	if isLocal {
 		// proxy locally to the app
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl)
@@ -118,4 +118,22 @@ func (p *proxy) SetRemoteAppFn(remoteAppFn func(appID string) (remoteApp, error)
 // SetTelemetryFn sets a function that enriches the context with telemetry.
 func (p *proxy) SetTelemetryFn(spanFn func(context.Context) context.Context) {
 	p.telemetryFn = spanFn
+}
+
+// Expose the functionality to detect if apps are local or not.
+func (p *proxy) IsLocal(appID string) (bool, error) {
+	_, isLocal, err := p.isLocalInternal(appID)
+	return isLocal, err
+}
+
+func (p *proxy) isLocalInternal(appID string) (remoteApp, bool, error) {
+	if p.remoteAppFn == nil {
+		return remoteApp{}, false, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete.")
+	}
+
+	target, err := p.remoteAppFn(appID)
+	if err != nil {
+		return remoteApp{}, false, err
+	}
+	return target, target.id == p.appID, nil
 }

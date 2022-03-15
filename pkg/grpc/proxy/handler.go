@@ -53,10 +53,11 @@ func RegisterService(server *grpc.Server, director StreamDirector, resiliency re
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func TransparentHandler(director StreamDirector, resiliency resiliency.Provider) grpc.StreamHandler {
+func TransparentHandler(director StreamDirector, resiliency resiliency.Provider, isLocalFn func(string) (bool, error)) grpc.StreamHandler {
 	streamer := &handler{
 		director:   director,
 		resiliency: resiliency,
+		isLocalFn:  isLocalFn,
 	}
 	return streamer.handler
 }
@@ -64,6 +65,7 @@ func TransparentHandler(director StreamDirector, resiliency resiliency.Provider)
 type handler struct {
 	director      StreamDirector
 	resiliency    resiliency.Provider
+	isLocalFn     func(string) (bool, error)
 	bufferedCalls []interface{}
 }
 
@@ -90,7 +92,14 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		noOp := resiliency.NoOp{}
 		policy = noOp.EndpointPolicy(serverStream.Context(), "", "")
 	} else {
-		policy = s.resiliency.EndpointPolicy(serverStream.Context(), v[0], fmt.Sprintf("%s:%s", v[0], fullMethodName))
+		isLocal, err := s.isLocalFn(v[0])
+
+		if err == nil && isLocal {
+			policy = s.resiliency.EndpointPolicy(serverStream.Context(), v[0], fmt.Sprintf("%s:%s", v[0], fullMethodName))
+		} else {
+			noOp := resiliency.NoOp{}
+			policy = noOp.EndpointPolicy(serverStream.Context(), "", "")
+		}
 	}
 
 	cErr := policy(func(ctx context.Context) (rErr error) {
@@ -185,7 +194,7 @@ func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientSt
 			for _, msg := range s.bufferedCalls {
 				if err := dst.SendMsg(msg); err != nil {
 					ret <- err
-					break
+					return
 				}
 			}
 		}
