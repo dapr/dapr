@@ -31,11 +31,25 @@ jobs:
         with:
           src: wurstmeister/zookeeper:latest
           dst: |
-            ghcr.io/${{ secrets.DOCKER_REGISTRY_ID }}/3rdparty/zookeeper:latest
+            ghcr.io/${{ github.repository_owner }}/3rdparty/zookeeper:latest
       - # copy 3rd party kafka image from dockerhub to ghcr
         name: Push Image (kafka) to target registries
         uses: akhilerm/tag-push-action@v2.0.0
         with:
           src: wurstmeister/kafka:latest
           dst: |
-            ghcr.io/${{ secrets.DOCKER_REGISTRY_ID }}/3rdparty/kakfa:latest
+            ghcr.io/${{ github.repository_owner }}/3rdparty/kakfa:latest
+      - # copy 3rd party redis image from dockerhub to ghcr
+        name: Push Image (redis) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: redis:latest
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/redis:latest
+      - # copy 3rd party zipkin image from dockerhub to ghcr
+        name: Push Image (zipkin) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: openzipkin/zipkin:latest
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/zipkin:latest
