@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
@@ -97,6 +98,11 @@ func (m *MockPlatform) GetSidecarUsage(appName string) (*AppUsage, error) {
 func (m *MockPlatform) GetTotalRestarts(appName string) (int, error) {
 	args := m.Called(appName)
 	return 0, args.Error(0)
+}
+
+func (m *MockPlatform) GetConfiguration(name string) (*configurationv1alpha1.Configuration, error) {
+	args := m.Called(name)
+	return &configurationv1alpha1.Configuration{}, args.Error(0)
 }
 
 func TestStartRunner(t *testing.T) {
