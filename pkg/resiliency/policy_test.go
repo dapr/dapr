@@ -30,13 +30,14 @@ import (
 var log = logger.NewLogger("dapr.resiliency.test")
 
 func TestPolicy(t *testing.T) {
+	log := logger.NewLogger("test")
 	retryValue := retry.DefaultConfig()
 	cbValue := breaker.CircuitBreaker{
 		Name:     "test",
 		Interval: 10 * time.Millisecond,
 		Timeout:  10 * time.Millisecond,
 	}
-	cbValue.Initialize()
+	cbValue.Initialize(log)
 	tests := map[string]struct {
 		t  time.Duration
 		r  *retry.Config
