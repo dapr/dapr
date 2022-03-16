@@ -1,0 +1,102 @@
+apiVersion: dapr.io/v1alpha1
+kind: Resiliency
+metadata:
+  name: resiliency
+# Like in the Subscriptions CRD, scopes lists the Dapr App IDs that this
+# configuration applies to.
+scopes:
+  - app1
+  - app1 # duplicate to ensure we don't store it twice
+  - app2
+spec:
+
+  policies:
+    # Timeouts are simple named durations.
+    timeouts:
+      general: 5s
+      important: 60s
+      largeResponse: 10s
+
+    # Retries are named templates for and are instantiated for life of the operation.
+    retries:
+      pubsubRetry:
+        policy: constant
+        duration: 5s
+        maxRetries: 10
+
+      retryForever:
+        policy: exponential
+        maxInterval: 15s
+        maxRetries: 0 # Retry indefinitely
+
+      important:
+        policy: constant
+        duration: 5s
+        maxRetries: 30
+
+      someOperation:
+        policy: exponential
+        maxInterval: 15s
+
+      largeResponse:
+        policy: constant
+        duration: 5s
+        maxRetries: 3
+
+    # Circuit breakers are automatically instantiated per component, service endpoint, and application route.
+    # using these settings as a template. See logic below under `buildingBlocks`.
+    # Circuit breakers maintain counters that can live as long as the Dapr sidecar.
+    circuitBreakers:
+      pubsubCB:
+        maxRequests: 1
+        interval: 8s
+        timeout: 45s
+        trip: consecutiveFailures > 8
+
+  # This section specifies default policies for:
+  # * service invocation
+  # * requests to components
+  # * events sent to routes
+  buildingBlocks:
+    services:
+      appB:
+        timeout: general
+        retry: general
+        # Circuit breakers for services are scoped per endpoint (e.g. hostname + port).
+        # When a breaker is tripped, that route is removed from load balancing for the configured `timeout` duration.
+        circuitBreaker: general
+
+    actors:
+      myActorType:
+        timeout: general
+        retry: general
+        # Circuit breakers for actors are scoped by type, id, or both.
+        # When a breaker is tripped, that type or id is removed from the placement table for the configured `timeout` duration.
+        circuitBreaker: general
+        circuitBreakerScope: both
+        circuitBreakerCacheSize: 5000
+
+    components:
+      # For state stores, policies apply to saving and retrieving state.
+      # Watching, which is not implemented yet, is out of scope.
+      statestore1:
+        outbound:
+          timeout: general
+          retry: general
+          # Circuit breakers for components are scoped per component configuration/instance (e.g. redis1).
+          # When this breaker is tripped, all interaction to that component is prevented for the configured `timeout` duration.
+          circuitBreaker: general
+
+      pubsub1:
+        outbound:
+          retry: pubsubRetry
+          circuitBreaker: pubsubCB
+
+      pubsub2:
+        outbound:
+          retry: pubsubRetry
+          circuitBreaker: pubsubCB
+        inbound:
+          timeout: general
+          retry: general
+          circuitBreaker: general
