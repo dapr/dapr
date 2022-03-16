@@ -1381,13 +1381,12 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		return request.Keys[i] < request.Keys[j]
 	})
 
-	subscribeKeys := request.Keys
-	unsubscribedKeys := make([]string, 0)
+	subscribeKeys := make([]string, 0)
 
 	newCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// empty list means subscribing to all configuration keys
-	if len(subscribeKeys) == 0 {
+	if len(request.Keys) == 0 {
 		getConfigurationReq := &runtimev1pb.GetConfigurationRequest{
 			StoreName: request.StoreName,
 			Keys:      []string{},
@@ -1403,19 +1402,19 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		items := resp.GetItems()
 		for _, item := range items {
 			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, item.Key)]; !ok {
-				unsubscribedKeys = append(unsubscribedKeys, item.Key)
+				subscribeKeys = append(subscribeKeys, item.Key)
 			}
 		}
 	} else {
-		for _, k := range subscribeKeys {
+		for _, k := range request.Keys {
 			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
-				unsubscribedKeys = append(unsubscribedKeys, k)
+				subscribeKeys = append(subscribeKeys, k)
 			}
 		}
 	}
 
 	req := &configuration.SubscribeRequest{
-		Keys:     unsubscribedKeys,
+		Keys:     subscribeKeys,
 		Metadata: request.GetMetadata(),
 	}
 
