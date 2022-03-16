@@ -1,4 +1,4 @@
-name: dapr-mirror-containers
+name: dapr-mirror-images
 
 on:
   schedule:
@@ -38,7 +38,7 @@ jobs:
         with:
           src: wurstmeister/kafka:latest
           dst: |
-            ghcr.io/${{ github.repository_owner }}/3rdparty/kakfa:latest
+            ghcr.io/${{ github.repository_owner }}/3rdparty/kafka:latest
       - # copy 3rd party redis image from dockerhub to ghcr
         name: Push Image (redis) to target registries
         uses: akhilerm/tag-push-action@v2.0.0
