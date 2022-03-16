@@ -17,15 +17,14 @@ import (
 	"flag"
 	"time"
 
-	"k8s.io/klog"
-
-	"github.com/dapr/kit/logger"
+	klog "k8s.io/klog/v2"
 
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/kit/logger"
 )
 
 var (
