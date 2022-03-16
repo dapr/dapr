@@ -341,8 +341,9 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
 	var resp *invokev1.InvokeMethodResponse
-	requestErr := false
+	var requestErr bool
 	respError := policy(func(ctx context.Context) (rErr error) {
+		requestErr = false
 		resp, rErr = a.directMessaging.Invoke(ctx, in.Id, req)
 
 		if rErr != nil {

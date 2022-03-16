@@ -23,7 +23,13 @@ spec:
 
   targets:
     apps:
-      # Will be populated as we add more tests.
+      resiliencyapp:
+        timeout: fast
+        retry: fiveRetries
+
+      resiliencyappgrpc:
+        timeout: fast
+        retry: fiveRetries
 
     components:
       dapr-resiliency-binding:

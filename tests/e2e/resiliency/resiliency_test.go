@@ -193,14 +193,14 @@ func TestPubsubSubscriptionResiliency(t *testing.T) {
 		topic        string
 	}{
 		{
-			Name:         "Test sending input binding to app recovers from failure",
+			Name:         "Test sending event to app recovers from failure",
 			FailureCount: &recoverableErrorCount,
 			shouldFail:   false,
 			pubsub:       "dapr-resiliency-pubsub",
 			topic:        "resiliency-topic-http",
 		},
 		{
-			Name:         "Test sending input binding to app recovers from timeout",
+			Name:         "Test sending event to app recovers from timeout",
 			FailureCount: &recoverableErrorCount,
 			Timeout:      &recoverableTimeout,
 			shouldFail:   false,
@@ -215,14 +215,14 @@ func TestPubsubSubscriptionResiliency(t *testing.T) {
 			topic:        "resiliency-topic-http",
 		},
 		{
-			Name:         "Test sending input binding to grpc app recovers from failure",
+			Name:         "Test sending event to grpc app recovers from failure",
 			FailureCount: &recoverableErrorCount,
 			shouldFail:   false,
 			pubsub:       "dapr-resiliency-pubsub",
 			topic:        "resiliency-topic-grpc",
 		},
 		{
-			Name:         "Test sending input binding to grpc app recovers from timeout",
+			Name:         "Test sending event to grpc app recovers from timeout",
 			FailureCount: &recoverableErrorCount,
 			Timeout:      &recoverableTimeout,
 			shouldFail:   false,
@@ -265,6 +265,118 @@ func TestPubsubSubscriptionResiliency(t *testing.T) {
 				getCallsURL = "tests/getCallCountGRPC"
 			} else {
 				getCallsURL = "tests/getCallCount"
+			}
+			resp, err := utils.HTTPGet(fmt.Sprintf("%s/%s", externalURL, getCallsURL))
+			require.NoError(t, err)
+
+			json.Unmarshal(resp, &callCount)
+			if tc.shouldFail {
+				// First call + 5 retries and no more.
+				require.Equal(t, 6, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+			} else {
+				// First call + 3 retries and recovery.
+				require.Equal(t, 4, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+			}
+		})
+	}
+}
+
+func TestServiceInvocationResiliency(t *testing.T) {
+	recoverableErrorCount := 3
+	failingErrorCount := 10
+	recoverableTimeout := time.Second * 2
+	testCases := []struct {
+		Name         string
+		FailureCount *int
+		Timeout      *time.Duration
+		shouldFail   bool
+		callType     string
+	}{
+		{
+			Name:         "Test invoking app method recovers from failure",
+			FailureCount: &recoverableErrorCount,
+			shouldFail:   false,
+			callType:     "http",
+		},
+		{
+			Name:         "Test invoking app method recovers from timeout",
+			FailureCount: &recoverableErrorCount,
+			Timeout:      &recoverableTimeout,
+			shouldFail:   false,
+			callType:     "http",
+		},
+		{
+			Name:         "Test exhausting retries leads to failure",
+			FailureCount: &failingErrorCount,
+			shouldFail:   true,
+			callType:     "http",
+		},
+		{
+			Name:         "Test invoking grpc app method recovers from failure",
+			FailureCount: &recoverableErrorCount,
+			shouldFail:   false,
+			callType:     "grpc",
+		},
+		{
+			Name:         "Test invoking grpc app method recovers from timeout",
+			FailureCount: &recoverableErrorCount,
+			Timeout:      &recoverableTimeout,
+			shouldFail:   false,
+			callType:     "grpc",
+		},
+		{
+			Name:         "Test exhausting retries leads to failure in grpc app",
+			FailureCount: &failingErrorCount,
+			shouldFail:   true,
+			callType:     "grpc",
+		},
+		{
+			Name:         "Test invoking grpc proxy method recovers from failure",
+			FailureCount: &recoverableErrorCount,
+			shouldFail:   false,
+			callType:     "grpc_proxy",
+		},
+		{
+			Name:         "Test invoking grpc proxy method recovers from timeout",
+			FailureCount: &recoverableErrorCount,
+			Timeout:      &recoverableTimeout,
+			shouldFail:   false,
+			callType:     "grpc_proxy",
+		},
+		{
+			Name:         "Test exhausting retries leads to failure in grpc proxy",
+			FailureCount: &failingErrorCount,
+			shouldFail:   true,
+			callType:     "grpc_proxy",
+		},
+	}
+
+	// Get application URLs/wait for healthy.
+	externalURL := tr.Platform.AcquireAppExternalURL("resiliencyapp")
+	require.NotEmpty(t, externalURL, "resiliency external URL must not be empty!")
+	externalURLGRPC := tr.Platform.AcquireAppExternalURL("resiliencyappgrpc")
+	require.NotEmpty(t, externalURLGRPC, "resiliencygrpc external URL must not be empty!")
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	for _, tc := range testCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			message := createFailureMessage(tc.FailureCount, tc.Timeout)
+			b, _ := json.Marshal(message)
+			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeService/%s", externalURL, tc.callType), b)
+			require.NoError(t, err)
+			if !tc.shouldFail {
+				require.Equal(t, 200, code)
+			} else {
+				require.Equal(t, 500, code)
+			}
+
+			var callCount map[string][]CallRecord
+			getCallsURL := "tests/getCallCount"
+			if strings.Contains(tc.callType, "grpc") {
+				getCallsURL = "tests/getCallCountGRPC"
 			}
 			resp, err := utils.HTTPGet(fmt.Sprintf("%s/%s", externalURL, getCallsURL))
 			require.NoError(t, err)

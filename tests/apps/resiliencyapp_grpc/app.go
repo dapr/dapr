@@ -28,6 +28,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"google.golang.org/grpc"
+	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -38,6 +39,7 @@ const (
 // This is our app, which registers various gRPC calls.
 type server struct {
 	callTracking map[string][]CallRecord
+	pb.UnimplementedGreeterServer
 }
 
 type CallRecord struct {
@@ -49,6 +51,38 @@ type FailureMessage struct {
 	ID              string         `json:"id"`
 	MaxFailureCount *int           `json:"maxFailureCount,omitempty"`
 	Timeout         *time.Duration `json:"timeout,omitempty"`
+}
+
+// SayHello implements helloworld.GreeterServer
+// Instead of defining our own proto and generating the client/server, we're going to force our
+// use case in the sample code.
+func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
+	var message FailureMessage
+	err := json.Unmarshal([]byte(in.Name), &message)
+	if err != nil {
+		return nil, errors.New("failed to decode message")
+	}
+
+	callCount := 0
+	if records, ok := s.callTracking[message.ID]; ok {
+		callCount = records[len(records)-1].Count + 1
+	}
+
+	log.Printf("Proxy has seen %s %d times.", message.ID, callCount)
+
+	s.callTracking[message.ID] = append(s.callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+
+	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
+		if message.Timeout != nil {
+			// This request can still succeed if the resiliency policy timeout is longer than this sleep.
+			log.Println("Sleeping.")
+			time.Sleep(*message.Timeout)
+		} else {
+			log.Println("Forcing failure.")
+			return nil, errors.New("forced failure")
+		}
+	}
+	return &pb.HelloReply{Message: "Hello"}, nil
 }
 
 // gRPC server definitions.
@@ -71,6 +105,33 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 				Value: b,
 			}
 		}
+	} else if in.Method == "grpcInvoke" {
+		var message FailureMessage
+		err := json.Unmarshal(in.Data.Value, &message)
+		if err != nil {
+			return nil, errors.New("failed to decode message")
+		}
+
+		callCount := 0
+		if records, ok := s.callTracking[message.ID]; ok {
+			callCount = records[len(records)-1].Count + 1
+		}
+
+		log.Printf("Seen %s %d times.", message.ID, callCount)
+
+		s.callTracking[message.ID] = append(s.callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+
+		if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
+			if message.Timeout != nil {
+				// This request can still succeed if the resiliency policy timeout is longer than this sleep.
+				log.Println("Sleeping.")
+				time.Sleep(*message.Timeout)
+			} else {
+				log.Println("Forcing failure.")
+				return nil, errors.New("forced failure")
+			}
+		}
+		resp.Data = &anypb.Any{}
 	}
 
 	return resp, nil
@@ -177,10 +238,12 @@ func main() {
 	}
 
 	/* #nosec */
-	s := grpc.NewServer()
-	runtimev1pb.RegisterAppCallbackServer(s, &server{
+	server := &server{
 		callTracking: map[string][]CallRecord{},
-	})
+	}
+	s := grpc.NewServer()
+	runtimev1pb.RegisterAppCallbackServer(s, server)
+	pb.RegisterGreeterServer(s, server)
 
 	log.Println("Client starting...")
 
