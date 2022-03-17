@@ -20,15 +20,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	guuid "github.com/google/uuid"
-)
-
-var (
-	doOnce        sync.Once
-	defaultClient http.Client
 )
 
 // DefaultProbeTimeout is the a timeout used in HTTPGetNTimes() and
