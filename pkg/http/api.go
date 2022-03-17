@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
@@ -431,17 +432,23 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
+	start := time.Now()
 	resp, err := a.sendToOutputBindingFn(name, &bindings.InvokeRequest{
 		Metadata:  req.Metadata,
 		Data:      b,
 		Operation: bindings.OperationKind(req.Operation),
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), name, req.Operation, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
+
 	if resp == nil {
 		respond(reqCtx, withEmpty())
 	} else {
@@ -498,14 +505,18 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		}
 		reqs[i] = r
 	}
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
 
+	start := time.Now()
 	var bulkGet bool
 	var responses []state.BulkGetResponse
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
 	rErr := policy(func(ctx context.Context) (rErr error) {
 		bulkGet, responses, rErr = store.BulkGet(reqs)
 		return rErr
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
 	if bulkGet {
 		// if store supports bulk get
@@ -629,12 +640,17 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
+	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
 	var resp *state.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = store.Get(&req)
 		return rErr
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -709,10 +725,15 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		req.ETag = &etag
 	}
 
+	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
 	err = policy(func(ctx context.Context) error {
 		return store.Delete(&req)
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.Delete, err == nil, elapsed)
+
 	if err != nil {
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_DELETE")
 		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
@@ -746,12 +767,17 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
+	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName)
 	var resp secretstores.GetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = store.GetSecret(req)
 		return rErr
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.SecretInvoked(context.Background(), secretStoreName, diag.Get, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrSecretGet, req.Name, secretStoreName, err.Error()))
@@ -782,12 +808,17 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
+	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName)
 	var resp secretstores.BulkGetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = store.BulkGetSecret(req)
 		return rErr
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.SecretInvoked(context.Background(), secretStoreName, diag.BulkGet, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrBulkSecretGet, secretStoreName, err.Error()))
@@ -887,10 +918,15 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
+	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
 	err = policy(func(ctx context.Context) error {
 		return store.BulkSet(reqs)
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.Set, err == nil, elapsed)
+
 	if err != nil {
 		storeName := a.getStateStoreName(reqCtx)
 
@@ -1526,7 +1562,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
-
 			return
 		}
 
@@ -1540,7 +1575,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 				fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
-
 			return
 		}
 	}
@@ -1552,7 +1586,12 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		Metadata:   metadata,
 	}
 
+	start := time.Now()
 	err := a.pubsubAdapter.Publish(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
+
 	if err != nil {
 		status := fasthttp.StatusInternalServerError
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",
@@ -1745,6 +1784,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
+	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
 	err := policy(func(ctx context.Context) error {
 		return transactionalStore.Multi(&state.TransactionalStateRequest{
@@ -1752,6 +1792,10 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			Metadata:   req.Metadata,
 		})
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_TRANSACTION", fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1792,12 +1836,17 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	}
 	req.Metadata = getMetadataFromRequest(reqCtx)
 
+	start := time.Now()
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
 	var resp *state.QueryResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = querier.Query(&req)
 		return rErr
 	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateQuery, err == nil, elapsed)
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_QUERY", fmt.Sprintf(messages.ErrStateQuery, storeName, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))

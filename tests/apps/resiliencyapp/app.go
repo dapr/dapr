@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -29,6 +30,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	pb "google.golang.org/grpc/examples/helloworld/helloworld"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
@@ -172,6 +176,32 @@ func resiliencyPubsubHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func resiliencyServiceInvocationHandler(w http.ResponseWriter, r *http.Request) {
+	var message FailureMessage
+	json.NewDecoder(r.Body).Decode(&message)
+
+	log.Printf("Http invocation received message %+v\n", message)
+
+	callCount := 0
+	if records, ok := callTracking[message.ID]; ok {
+		callCount = records[len(records)-1].Count + 1
+	}
+
+	log.Printf("Seen %s %d times.", message.ID, callCount)
+
+	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
+		if message.Timeout != nil {
+			// This request can still succeed if the resiliency policy timeout is longer than this sleep.
+			time.Sleep(*message.Timeout)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 // App startup/endpoint setup.
 func initGRPCClient() {
 	url := fmt.Sprintf("localhost:%d", 50001)
@@ -196,6 +226,21 @@ func initGRPCClient() {
 	daprClient = runtimev1pb.NewDaprClient(grpcConn)
 }
 
+func newHTTPClient() *http.Client {
+	dialer := &net.Dialer{ //nolint:exhaustivestruct
+		Timeout: 5 * time.Second,
+	}
+	netTransport := &http.Transport{ //nolint:exhaustivestruct
+		DialContext:         dialer.DialContext,
+		TLSHandshakeTimeout: 5 * time.Second,
+	}
+
+	return &http.Client{ //nolint:exhaustivestruct
+		Timeout:   30 * time.Second,
+		Transport: netTransport,
+	}
+}
+
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
@@ -207,12 +252,14 @@ func appRouter() *mux.Router {
 	// Handling events/methods.
 	router.HandleFunc("/resiliencybinding", resiliencyBindingHandler).Methods("POST", "OPTIONS")
 	router.HandleFunc("/resiliency-topic-http", resiliencyPubsubHandler).Methods("POST")
+	router.HandleFunc("/resiliencyInvocation", resiliencyServiceInvocationHandler).Methods("POST")
 
 	// Test functions.
 	router.HandleFunc("/tests/getCallCount", TestGetCallCount).Methods("GET")
 	router.HandleFunc("/tests/getCallCountGRPC", TestGetCallCountGRPC).Methods("GET")
 	router.HandleFunc("/tests/invokeBinding/{binding}", TestInvokeOutputBinding).Methods("POST")
 	router.HandleFunc("/tests/publishMessage/{pubsub}/{topic}", TestPublishMessage).Methods("POST")
+	router.HandleFunc("/tests/invokeService/{protocol}", TestInvokeService).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
@@ -317,4 +364,78 @@ func TestPublishMessage(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error publishing event: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func TestInvokeService(w http.ResponseWriter, r *http.Request) {
+	protocol := mux.Vars(r)["protocol"]
+	log.Printf("Invoking resiliency service with %s", protocol)
+
+	if protocol == "http" {
+		client := newHTTPClient()
+		url := "http://localhost:3500/v1.0/invoke/resiliencyapp/method/resiliencyInvocation"
+
+		req, _ := http.NewRequest("POST", url, r.Body)
+		defer r.Body.Close()
+
+		resp, err := client.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(resp.StatusCode)
+	} else if protocol == "grpc" {
+		var message FailureMessage
+		err := json.NewDecoder(r.Body).Decode(&message)
+		if err != nil {
+			log.Println("Could not parse message.")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		b, _ := json.Marshal(message)
+
+		req := &runtimev1pb.InvokeServiceRequest{
+			Id: "resiliencyappgrpc",
+			Message: &commonv1pb.InvokeRequest{
+				Method: "grpcInvoke",
+				Data: &anypb.Any{
+					Value: b,
+				},
+			},
+		}
+
+		_, err = daprClient.InvokeService(r.Context(), req)
+		if err != nil {
+			log.Printf("Failed to invoke service: %s", err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	} else if protocol == "grpc_proxy" {
+		var message FailureMessage
+		err := json.NewDecoder(r.Body).Decode(&message)
+		if err != nil {
+			log.Println("Could not parse message.")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		log.Printf("Proxying message: %+v", message)
+		b, _ := json.Marshal(message)
+
+		conn, err := grpc.Dial("localhost:50001", grpc.WithInsecure(), grpc.WithBlock())
+		if err != nil {
+			log.Fatalf("did not connect: %v", err)
+		}
+		defer conn.Close()
+		client := pb.NewGreeterClient(conn)
+
+		ctx := r.Context()
+		ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", "resiliencyappgrpc")
+		_, err = client.SayHello(ctx, &pb.HelloRequest{Name: string(b)})
+		if err != nil {
+			log.Printf("could not greet: %v\n", err)
+			w.WriteHeader(500)
+			w.Write([]byte(fmt.Sprintf("failed to proxy request: %s", err)))
+			return
+		}
+	}
+
 }
