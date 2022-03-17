@@ -14,7 +14,7 @@ require (
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/ghodss/yaml v1.0.0
-	github.com/go-logr/logr v1.2.0
+	github.com/go-logr/logr v1.2.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
 	github.com/google/cel-go v0.9.0
@@ -63,10 +63,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.11.0
 )
 
-require (
-	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/go-logr/logr v1.2.2
-)
+require github.com/cenkalti/backoff v2.2.1+incompatible
 
 require (
 	cloud.google.com/go v0.86.0 // indirect
