@@ -13,7 +13,9 @@ limitations under the License.
 
 package testing
 
-import "github.com/dapr/components-contrib/state"
+import (
+	"github.com/dapr/components-contrib/state"
+)
 
 type TransactionalStoreMock struct {
 	MockStateStore
@@ -39,4 +41,27 @@ func (_m *TransactionalStoreMock) Features() []state.Feature {
 
 func (_m *TransactionalStoreMock) Close() error {
 	return nil
+}
+
+func (f *FailingStatestore) Multi(request *state.TransactionalStateRequest) error {
+	for _, op := range request.Operations {
+		if op.Operation == state.Delete {
+			req := op.Request.(state.DeleteRequest)
+			err := f.Failure.PerformFailure(req.Key)
+			if err != nil {
+				return err
+			}
+		} else if op.Operation == state.Upsert {
+			req := op.Request.(state.SetRequest)
+			err := f.Failure.PerformFailure(req.Key)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (f *FailingStatestore) Features() []state.Feature {
+	return []state.Feature{state.FeatureTransactional, state.FeatureETag}
 }
