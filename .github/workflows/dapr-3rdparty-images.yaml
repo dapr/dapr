@@ -1,0 +1,55 @@
+name: dapr-mirror-images
+
+on:
+  schedule:
+    - cron: '0 0 1 * *' # trigger on the 1st of every month at midnight
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - 
+        name: Checkout
+        uses: actions/checkout@v2
+      - # ghcr logins for pushing image after testing
+        name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: ${{ secrets.DOCKER_REGISTRY_ID }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - # copy 3rd party zookeeper image from dockerhub to ghcr
+        name: Push Image (zookeeper) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: wurstmeister/zookeeper:latest
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/zookeeper:latest
+      - # copy 3rd party kafka image from dockerhub to ghcr
+        name: Push Image (kafka) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: wurstmeister/kafka:latest
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/kafka:latest
+      - # copy 3rd party redis image from dockerhub to ghcr
+        name: Push Image (redis) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: redis:latest
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/redis:latest
+      - # copy 3rd party zipkin image from dockerhub to ghcr
+        name: Push Image (zipkin) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: openzipkin/zipkin:latest
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/zipkin:latest

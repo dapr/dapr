@@ -57,6 +57,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
@@ -350,6 +351,7 @@ func TestAPIToken(t *testing.T) {
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: mockDirectMessaging,
+		resiliency:      resiliency.New(nil),
 	}
 
 	t.Run("valid token", func(t *testing.T) {
@@ -490,6 +492,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: mockDirectMessaging,
+		resiliency:      resiliency.New(nil),
 	}
 
 	httpResponseTests := []struct {
@@ -593,6 +596,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 	fakeAPI := &api{
 		id:              "fakeAPI",
 		directMessaging: mockDirectMessaging,
+		resiliency:      resiliency.New(nil),
 	}
 
 	t.Run("handle grpc response code", func(t *testing.T) {
@@ -767,6 +771,7 @@ func TestGetSecret(t *testing.T) {
 		id:                   "fakeAPI",
 		secretStores:         fakeStores,
 		secretsConfiguration: secretsConfiguration,
+		resiliency:           resiliency.New(nil),
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -901,6 +906,7 @@ func TestGetBulkSecret(t *testing.T) {
 		id:                   "fakeAPI",
 		secretStores:         fakeStores,
 		secretsConfiguration: secretsConfiguration,
+		resiliency:           resiliency.New(nil),
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -934,7 +940,7 @@ func TestGetBulkSecret(t *testing.T) {
 
 func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
+	server := startDaprAPIServer(port, &api{id: "fakeAPI", resiliency: resiliency.New(nil)}, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -963,6 +969,7 @@ func TestSaveState(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1048,6 +1055,7 @@ func TestGetState(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1161,6 +1169,7 @@ func TestGetConfiguration(t *testing.T) {
 	fakeAPI := &api{
 		id:                  "fakeAPI",
 		configurationStores: map[string]configuration.Store{"store1": fakeConfigurationStore},
+		resiliency:          resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1310,6 +1319,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 		configurationSubscribe: make(map[string]chan struct{}),
 		id:                     "fakeAPI",
 		configurationStores:    map[string]configuration.Store{"store1": fakeConfigurationStore},
+		resiliency:             resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1495,6 +1505,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 		configurationSubscribe: make(map[string]chan struct{}),
 		id:                     "fakeAPI",
 		configurationStores:    map[string]configuration.Store{"store1": fakeConfigurationStore},
+		resiliency:             resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1607,6 +1618,7 @@ func TestGetBulkState(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1718,6 +1730,7 @@ func TestDeleteState(t *testing.T) {
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -1953,6 +1966,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		transactionalStateStores: map[string]state.TransactionalStore{
 			"store1": fakeTransactionalStore,
 		},
+		resiliency: resiliency.New(nil),
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -2251,6 +2265,7 @@ func TestQueryState(t *testing.T) {
 	server := startTestServerAPI(port, &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		resiliency:  resiliency.New(nil),
 	})
 	defer server.Stop()
 
@@ -2298,6 +2313,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 		&api{
 			id:          "fakeAPI",
 			stateStores: map[string]state.Store{"store1": &daprt.MockStateStore{}},
+			resiliency:  resiliency.New(nil),
 		},
 		"")
 	defer server.Stop()
@@ -2324,6 +2340,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 		&api{
 			id:          "fakeAPI",
 			stateStores: map[string]state.Store{storeName: &mockStateStoreQuerier{}},
+			resiliency:  resiliency.New(nil),
 		},
 		"")
 	defer server.Stop()
@@ -2348,6 +2365,7 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 			&api{
 				id:                  "fakeAPI",
 				configurationStores: map[string]configuration.Store{"store1": &mockConfigStore{}},
+				resiliency:          resiliency.New(nil),
 			},
 			"")
 		defer server.Stop()
@@ -2383,6 +2401,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 				configurationStores:        map[string]configuration.Store{"store1": &mockConfigStore{}},
 				configurationSubscribe:     make(map[string]chan struct{}),
 				configurationSubscribeLock: sync.Mutex{},
+				resiliency:                 resiliency.New(nil),
 			},
 			"")
 		defer server.Stop()

@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 
+	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
@@ -78,29 +79,32 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 
 	entries := c.state.hashingTableMap()
 	for k, v := range entries {
-		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
-		table := v1pb.PlacementTable{
-			Hosts:     make(map[uint64]string),
-			SortedSet: make([]uint64, len(sortedSet)),
-			TotalLoad: totalLoad,
-			LoadMap:   make(map[string]*v1pb.Host),
-		}
-
-		for lk, lv := range hosts {
-			table.Hosts[lk] = lv
-		}
-
-		copy(table.SortedSet, sortedSet)
-
-		for lk, lv := range loadMap {
-			h := v1pb.Host{
-				Name: lv.Name,
-				Load: lv.Load,
-				Port: lv.Port,
-				Id:   lv.AppID,
+		var table v1pb.PlacementTable
+		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
+			table = v1pb.PlacementTable{
+				Hosts:     make(map[uint64]string),
+				SortedSet: make([]uint64, len(sortedSet)),
+				TotalLoad: totalLoad,
+				LoadMap:   make(map[string]*v1pb.Host),
 			}
-			table.LoadMap[lk] = &h
-		}
+
+			for lk, lv := range hosts {
+				table.Hosts[lk] = lv
+			}
+
+			copy(table.SortedSet, sortedSet)
+
+			for lk, lv := range loadMap {
+				h := v1pb.Host{
+					Name: lv.Name,
+					Load: lv.Load,
+					Port: lv.Port,
+					Id:   lv.AppID,
+				}
+				table.LoadMap[lk] = &h
+			}
+		})
+
 		newTable.Entries[k] = &table
 
 		totalHostSize += len(table.Hosts)
