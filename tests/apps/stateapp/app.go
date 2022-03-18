@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -102,7 +103,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func save(states []daprState, statestore string) (int, error) {
+func save(states []daprState, statestore string, meta map[string]string) (int, error) {
 	log.Printf("Processing save request for %d entries.", len(states))
 
 	jsonValue, err := json.Marshal(states)
@@ -111,11 +112,14 @@ func save(states []daprState, statestore string) (int, error) {
 		return http.StatusInternalServerError, err
 	}
 
-	return load(jsonValue, statestore)
+	return load(jsonValue, statestore, meta)
 }
 
-func load(data []byte, statestore string) (int, error) {
+func load(data []byte, statestore string, meta map[string]string) (int, error) {
 	stateURL := fmt.Sprintf(stateURLTemplate, statestore)
+	if len(meta) != 0 {
+		stateURL += "?" + metadata2RawQuery(meta)
+	}
 	log.Printf("Posting %d bytes of state to %s", len(data), stateURL)
 	res, err := http.Post(stateURL, "application/json", bytes.NewBuffer(data))
 	if err != nil {
@@ -130,9 +134,9 @@ func load(data []byte, statestore string) (int, error) {
 	return res.StatusCode, err
 }
 
-func get(key, statestore string) (*appState, error) {
+func get(key, statestore string, meta map[string]string) (*appState, error) {
 	log.Printf("Processing get request for %s.", key)
-	url, err := createStateURL(key, statestore)
+	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
 		return nil, err
 	}
@@ -184,12 +188,12 @@ func parseState(key string, body []byte) (*appState, error) {
 	return state, nil
 }
 
-func getAll(states []daprState, statestore string) ([]daprState, error) {
+func getAll(states []daprState, statestore string, meta map[string]string) ([]daprState, error) {
 	log.Printf("Processing get request for %d states.", len(states))
 
 	var output = make([]daprState, 0, len(states))
 	for _, state := range states {
-		value, err := get(state.Key, statestore)
+		value, err := get(state.Key, statestore, meta)
 
 		if err != nil {
 			return nil, err
@@ -265,9 +269,9 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 	return output, nil
 }
 
-func delete(key, statestore string) error {
+func delete(key, statestore string, meta map[string]string) error {
 	log.Printf("Processing delete request for %s.", key)
-	url, err := createStateURL(key, statestore)
+	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
 		return err
 	}
@@ -291,11 +295,11 @@ func delete(key, statestore string) error {
 	return nil
 }
 
-func deleteAll(states []daprState, statestore string) error {
+func deleteAll(states []daprState, statestore string, meta map[string]string) error {
 	log.Printf("Processing delete request for %d states.", len(states))
 
 	for _, state := range states {
-		err := delete(state.Key, statestore)
+		err := delete(state.Key, statestore, meta)
 
 		if err != nil {
 			return err
@@ -338,10 +342,13 @@ func executeTransaction(states []daprState, statestore string) error {
 	return nil
 }
 
-func executeQuery(query []byte, statestore string) ([]daprState, error) {
+func executeQuery(query []byte, statestore string, meta map[string]string) ([]daprState, error) {
 	log.Printf("Processing query request '%s'.", string(query))
 
 	queryURL := fmt.Sprintf(queryURLTemplate, statestore)
+	if len(meta) != 0 {
+		queryURL += "?" + metadata2RawQuery(meta)
+	}
 	log.Printf("Posting %d bytes of state to %s", len(query), queryURL)
 	resp, err := http.Post(queryURL, "application/json", bytes.NewBuffer(query))
 	if err != nil {
@@ -405,6 +412,27 @@ func getRequestBody(w http.ResponseWriter, r *http.Request) (data []byte, err er
 	return
 }
 
+func getMetadata(values url.Values) map[string]string {
+	ret := make(map[string]string)
+
+	for k, v := range values {
+		ret[k] = v[0]
+	}
+
+	return ret
+}
+
+func metadata2RawQuery(meta map[string]string) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	arr := make([]string, 0, len(meta))
+	for k, v := range meta {
+		arr = append(arr, fmt.Sprintf("metadata.%s=%s", k, v))
+	}
+	return strings.Join(arr, "&")
+}
+
 // handles all APIs for HTTP calls
 func httpHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing request for %s", r.URL.RequestURI())
@@ -420,12 +448,13 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 
 	cmd := mux.Vars(r)["command"]
 	statestore := mux.Vars(r)["statestore"]
+	meta := getMetadata(r.URL.Query())
 	switch cmd {
 	case "save":
 		if req, err = parseRequestBody(w, r); err != nil {
 			return
 		}
-		_, err = save(req.States, statestore)
+		_, err = save(req.States, statestore, meta)
 		if err == nil {
 			// The save call to dapr side car has returned correct status.
 			// Set the status code to statusNoContent
@@ -435,12 +464,12 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		if data, err = getRequestBody(w, r); err != nil {
 			return
 		}
-		statusCode, err = load(data, statestore)
+		statusCode, err = load(data, statestore, meta)
 	case "get":
 		if req, err = parseRequestBody(w, r); err != nil {
 			return
 		}
-		res.States, err = getAll(req.States, statestore)
+		res.States, err = getAll(req.States, statestore, meta)
 	case "getbulk":
 		if req, err = parseRequestBody(w, r); err != nil {
 			return
@@ -450,7 +479,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		if req, err = parseRequestBody(w, r); err != nil {
 			return
 		}
-		err = deleteAll(req.States, statestore)
+		err = deleteAll(req.States, statestore, meta)
 		statusCode = http.StatusNoContent
 	case "transact":
 		if req, err = parseRequestBody(w, r); err != nil {
@@ -461,7 +490,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		if data, err = getRequestBody(w, r); err != nil {
 			return
 		}
-		res.States, err = executeQuery(data, statestore)
+		res.States, err = executeQuery(data, statestore, meta)
 	default:
 		err = fmt.Errorf("invalid URI: %s", uri)
 		statusCode = http.StatusBadRequest
@@ -497,6 +526,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 
 	cmd := mux.Vars(r)["command"]
 	statestore := mux.Vars(r)["statestore"]
+	meta := getMetadata(r.URL.Query())
 	switch cmd {
 	case "save":
 		if req, err = parseRequestBody(w, r); err != nil {
@@ -504,7 +534,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		_, err := daprClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
 			StoreName: statestore,
-			States:    daprState2StateItems(req.States),
+			States:    daprState2StateItems(req.States, meta),
 		})
 		statusCode = http.StatusNoContent
 		if err != nil {
@@ -531,7 +561,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		if req, err = parseRequestBody(w, r); err != nil {
 			return
 		}
-		states, err := getAllGRPC(req.States, statestore)
+		states, err := getAllGRPC(req.States, statestore, meta)
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("GetState", err.Error())
 		}
@@ -541,7 +571,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		statusCode = http.StatusNoContent
-		err = deleteAllGRPC(req.States, statestore)
+		err = deleteAllGRPC(req.States, statestore, meta)
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("DeleteState", err.Error())
 		}
@@ -564,6 +594,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		resp, err := daprClient.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 			StoreName: statestore,
 			Query:     string(data),
+			Metadata:  meta,
 		})
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("QueryState", err.Error())
@@ -619,13 +650,17 @@ func toDaprStates(response *runtimev1pb.GetBulkStateResponse) ([]daprState, erro
 	return result, nil
 }
 
-func deleteAllGRPC(states []daprState, statestore string) error {
+func deleteAllGRPC(states []daprState, statestore string, meta map[string]string) error {
+	m := map[string]string{metadataPartitionKey: partitionKey}
+	for k, v := range meta {
+		m[k] = v
+	}
 	for _, state := range states {
 		log.Printf("deleting sate for key %s\n", state.Key)
 		_, err := daprClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
 			StoreName: statestore,
 			Key:       state.Key,
-			Metadata:  map[string]string{metadataPartitionKey: partitionKey},
+			Metadata:  m,
 		})
 		if err != nil {
 			return err
@@ -635,14 +670,18 @@ func deleteAllGRPC(states []daprState, statestore string) error {
 	return nil
 }
 
-func getAllGRPC(states []daprState, statestore string) ([]daprState, error) {
+func getAllGRPC(states []daprState, statestore string, meta map[string]string) ([]daprState, error) {
 	var responses []daprState
+	m := map[string]string{metadataPartitionKey: partitionKey}
+	for k, v := range meta {
+		m[k] = v
+	}
 	for _, state := range states {
 		log.Printf("getting state for key %s\n", state.Key)
 		res, err := daprClient.GetState(context.Background(), &runtimev1pb.GetStateRequest{
 			StoreName: statestore,
 			Key:       state.Key,
-			Metadata:  map[string]string{metadataPartitionKey: partitionKey},
+			Metadata:  m,
 		})
 		if err != nil {
 			return nil, err
@@ -667,14 +706,18 @@ func setErrorMessage(method, errorString string) (int, string) {
 	return http.StatusInternalServerError, errorString
 }
 
-func daprState2StateItems(daprStates []daprState) []*commonv1pb.StateItem {
+func daprState2StateItems(daprStates []daprState, meta map[string]string) []*commonv1pb.StateItem {
 	var stateItems []*commonv1pb.StateItem
+	m := map[string]string{metadataPartitionKey: partitionKey}
+	for k, v := range meta {
+		m[k] = v
+	}
 	for _, daprState := range daprStates {
 		val, _ := json.Marshal(daprState.Value)
 		stateItems = append(stateItems, &commonv1pb.StateItem{
 			Key:      daprState.Key,
 			Value:    val,
-			Metadata: map[string]string{metadataPartitionKey: partitionKey},
+			Metadata: m,
 		})
 	}
 
@@ -697,7 +740,7 @@ func daprState2TransactionalStateRequest(daprStates []daprState) []*runtimev1pb.
 	return transactionalStateRequests
 }
 
-func createStateURL(key, statestore string) (string, error) {
+func createStateURL(key, statestore string, meta map[string]string) (string, error) {
 	stateURL := fmt.Sprintf(stateURLTemplate, statestore)
 	url, err := url.Parse(stateURL)
 	if err != nil {
@@ -705,7 +748,12 @@ func createStateURL(key, statestore string) (string, error) {
 	}
 
 	url.Path = path.Join(url.Path, key)
-	url.RawQuery = "metadata.partitionKey=e2etest"
+
+	m := map[string]string{metadataPartitionKey: partitionKey}
+	for k, v := range meta {
+		m[k] = v
+	}
+	url.RawQuery = metadata2RawQuery(m)
 
 	return url.String(), nil
 }
