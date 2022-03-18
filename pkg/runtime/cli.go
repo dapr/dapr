@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/acl"
+	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	global_config "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
@@ -33,6 +34,8 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	operator_v1 "github.com/dapr/dapr/pkg/proto/operator/v1"
+	resiliency_config "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
@@ -232,6 +235,18 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
+	// Config and resiliency need the operator client, only initiate once and only if we will actually use it.
+	var operatorClient operator_v1.OperatorClient
+	if *mode == string(modes.KubernetesMode) && *config != "" {
+		log.Infof("Initializing the operator client (config: %s)", *config)
+		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
+		if clientErr != nil {
+			return nil, clientErr
+		}
+		defer conn.Close()
+		operatorClient = client
+	}
+
 	var accessControlList *global_config.AccessControlList
 	var namespace string
 	var podName string
@@ -239,14 +254,9 @@ func FromFlags() (*DaprRuntime, error) {
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
-			if clientErr != nil {
-				return nil, clientErr
-			}
-			defer conn.Close()
 			namespace = os.Getenv("NAMESPACE")
 			podName = os.Getenv("POD_NAME")
-			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, podName, client)
+			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
@@ -260,11 +270,32 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
+	features := globalConfig.Spec.Features
+	resiliencyEnabled := global_config.IsFeatureEnabled(features, global_config.Resiliency)
+
+	var resiliencyProvider resiliency_config.Provider
+
+	if resiliencyEnabled {
+		var resiliencyConfigs []*resiliency_v1alpha.Resiliency
+		switch modes.DaprMode(*mode) {
+		case modes.KubernetesMode:
+			namespace = os.Getenv("NAMESPACE")
+			resiliencyConfigs = resiliency_config.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+		case modes.StandaloneMode:
+			resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(log, *appID, *componentsPath)
+		}
+		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
+		resiliencyProvider = resiliency_config.FromConfigurations(log, resiliencyConfigs...)
+	} else {
+		log.Debug("Resiliency is not enabled.")
+		resiliencyProvider = &resiliency_config.NoOp{}
+	}
+
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList), nil
+	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
 }
 
 func setEnvVariables(variables map[string]string) error {
