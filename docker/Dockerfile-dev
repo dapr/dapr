@@ -53,13 +53,14 @@ RUN apt-get update \
     # Install Go tools.
     && bash /tmp/staging/install-go-tools.sh "${USERNAME}" \
     #
-    # Install protoc compiler.
-    && LATEST_PROTOC_URL=$(curl -s https://api.github.com/repos/protocolbuffers/protobuf/releases/latest | grep -oP '"browser_download_url": "\K(.*)(?=")' | grep "protoc-.*-linux-x86_64") \
-    && wget -q -O /tmp/staging/protoc-latest.zip ${LATEST_PROTOC_URL} \
-    && unzip /tmp/staging/protoc-latest.zip -d /tmp/staging/protoc \
-    && chmod -R 755 /tmp/staging/protoc \
-    && mv /tmp/staging/protoc/include/* /usr/local/include \
-    && mv /tmp/staging/protoc/bin/* /usr/local/bin \
+    # Install protoc compiler 3.14.0 currently required by 'make gen-proto'.
+    && PROTOC_ZIP=protoc-3.14.0-linux-x86_64.zip \
+    && curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v3.14.0/$PROTOC_ZIP \
+    && unzip -o $PROTOC_ZIP -d /usr/local bin/protoc \
+    && chmod -R 755 /usr/local/bin/protoc \
+    && unzip -o $PROTOC_ZIP -d /usr/local 'include/*' \
+    && chmod -R 755 /usr/local/include/google/protobuf \
+    && rm -f $PROTOC_ZIP \
     #
     # Install Dapr CLI.
     && wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s "${DAPR_CLI_VERSION}" \

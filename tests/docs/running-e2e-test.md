@@ -2,19 +2,25 @@
 
 E2E tests are designed for verifying the functional correctness by replicating end-user behavior from app deployment. This describes how to run e2e tests in local dev environment and run them through CI
 
-  - [Run E2E tests in local dev environment](#run-e2e-tests-in-local-dev-environment)
-  - [Run E2E tests through GitHub Actions](#run-e2e-tests-through-github-actions)
+- [Run E2E tests in local dev environment](#run-e2e-tests-in-local-dev-environment)
+- [Run E2E tests through GitHub Actions](#run-e2e-tests-through-github-actions)
 
 ## Run E2E tests in local dev environment
 
 ### Prerequisites
 
-* Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
-* [Install the latest Helm v3](https://helm.sh/docs/intro/install/)
-* Create your DockerHub ID
-* Set the environment variables
+1. Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
+2. [Install the latest Helm v3](https://helm.sh/docs/intro/install/)
+3. Get a Docker container registry:
+   - If using Docker Hub, create your Docker Hub ID
+   - Other options include Azure Container Registry, GitHub Container Registry, etc
+4. Set the environment variables
+
     ```bash
+    # If using Docker Hub:
     export DAPR_REGISTRY=docker.io/your_dockerhub_id
+    # You can use other registries too, for example:
+    export DAPR_REGISTRY=myregistry.azurecr.io
     export DAPR_TAG=dev
     export DAPR_NAMESPACE=dapr-tests
     export DAPR_MTLS_ENABLED=true
@@ -31,7 +37,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube
 
-# If you are using minikube, you'll need to set the IP address for the minikube control plane.
+    # If you are using minikube, you'll need to set the IP address for the minikube control plane.
     export MINIKUBE_NODE_IP=your_k8s_master_ip
 
     # Set the below environment variables if you want to use the different registry and tag for test apps
@@ -40,23 +46,47 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # export DAPR_TEST_REGISTRY_SECRET=yourself_private_image_secret
     ```
 
+> If you need to create the `DAPR_TEST_REGISTRY_SECRET` variable, you can use this command:
+>
+> ```sh
+> DOCKER_REGISTRY="<url of the registry, such as myregistry.azurecr.io>"
+> DOCKER_USERNAME="<your username>"
+> DOCKER_PASSWORD="<your password>"
+> DOCKER_EMAIL="<your email (leave empty if not required)>"
+> export DAPR_TEST_REGISTRY_SECRET=$(
+>   kubectl create secret docker-registry --dry-run=client docker-regcred \
+>     --docker-server="${DOCKER_REGISTRY}" \
+>     --docker-username="${DOCKER_USERNAME}" \
+>     --docker-password="${DOCKER_PASSWORD}" \
+>     --docker-email=${DOCKER_EMAIL} \
+>     -o json | \
+>       jq -r '.data.".dockerconfigjson"'
+> )
+> ```
+
 ### Option 1: Build, deploy, and run Dapr and e2e tests
 
 If you are starting from scratch and just want to build dapr, deploy it, and run the e2e tests to your kubernetes cluster, do the following:
 
-1. Uninstall dapr, dapr-kafka, dapr-redis services, if it exists
-*Make sure you have DAPR_NAMESPACE set properly before you do this!*
-```
-helm uninstall dapr dapr-kafka dapr-redis -n $DAPR_NAMESPACE
-```
+1. Uninstall dapr, dapr-kafka, dapr-redis, dapr-mongodb services, if they exist
+
+   *Make sure you have DAPR_NAMESPACE set properly before you do this!*
+
+   ```sh
+   helm uninstall dapr dapr-kafka dapr-redis dapr-mongodb -n $DAPR_NAMESPACE
+   ```
+
 2. Remove the test namespace, if it exists
-```bash
-make delete-test-namespace
-```
+
+   ```bash
+   make delete-test-namespace
+   ```
+
 3. Build, deploy, run tests from start to finish
-```bash
-make e2e-build-deploy-run
-```
+
+   ```bash
+   make e2e-build-deploy-run
+   ```
 
 ### Option 2: Step by step guide
 
@@ -73,6 +103,7 @@ Install redis and kafka for state, pubsub, and binding building block
 ```bash
 make setup-helm-init
 make setup-test-env-redis
+make setup-test-env-mongodb
 
 # This may take a few minutes.  You can skip kafka install if you do not use bindings for your tests.
 make setup-test-env-kafka
@@ -127,18 +158,27 @@ Run end-to-end tests
 make test-e2e-all
 ```
 
+### Run a subset of end-to-end tests
+
+If you'd rather run a subset of end-to-end test, set the environmental variable `DAPR_E2E_TEST` with the name(s) of the test(s) (space-separated). These are the names of folders within the `tests/e2e` directory.
+
+```sh
+DAPR_E2E_TEST="actor_reminder" make test-e2e-all
+```
+
 ## Cleanup local environment
 
 To completely remove Dapr, test dependencies, and any lingering e2e test apps:
+
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
+
 ```bash
 # Uninstall dapr, dapr-kafka, dapr-redis services
-helm uninstall dapr dapr-kafka dapr-redis -n $DAPR_NAMESPACE
+helm uninstall dapr dapr-kafka dapr-redis dapr-mongodb -n $DAPR_NAMESPACE
 
 # Remove the test namespace
 make delete-test-namespace
 ```
-
 
 ## Run E2E tests through GitHub Actions
 
