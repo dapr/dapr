@@ -307,9 +307,11 @@ func (p *Service) performTableDissemination() {
 func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1pb.PlacementTables) {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
-	p.disseminateOperation(hosts, "lock", nil)
-	p.disseminateOperation(hosts, "update", newTable)
-	p.disseminateOperation(hosts, "unlock", nil)
+	for _, host := range hosts {
+		p.disseminateOperation([]placementGRPCStream{host}, "lock", nil)
+		p.disseminateOperation([]placementGRPCStream{host}, "update", newTable)
+		p.disseminateOperation([]placementGRPCStream{host}, "unlock", nil)
+	}
 }
 
 func (p *Service) disseminateOperation(targets []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
@@ -317,17 +319,14 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 		Operation: operation,
 		Tables:    tables,
 	}
-
 	var err error
 	for _, s := range targets {
 		config := retry.DefaultConfig()
 		config.MaxRetries = 3
 		backoff := config.NewBackOff()
-
 		retry.NotifyRecover(
 			func() error {
 				err = s.Send(o)
-
 				if err != nil {
 					remoteAddr := "n/a"
 					if peer, ok := peer.FromContext(s.Context()); ok {

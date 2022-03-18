@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 
@@ -221,9 +223,10 @@ func TestPerformTableUpdate(t *testing.T) {
 
 	// act
 	for i := 0; i < testClients; i++ {
+		time.Sleep(time.Millisecond)
 		host := &v1pb.Host{
 			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
-			Entities: []string{"DogActor", "CatActor"},
+			Entities: []string{"DogActor", "CatActor", fmt.Sprintf("127.0.0.1:5010%d", i)},
 			Id:       "testAppID",
 			Load:     1, // Not used yet
 			// Port is redundant because Name should include port number
@@ -285,4 +288,111 @@ func TestPerformTableUpdate(t *testing.T) {
 	}
 
 	cleanup()
+}
+
+func PerformTableUpdateCostTime() (wastedTime int64) {
+	const testClients = 100
+	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	testServer.hasLeadership.Store(true)
+	var overArr [testClients]int64
+	// arrange.
+	var clientConns []*grpc.ClientConn
+	var clientStreams []v1pb.Placement_ReportDaprStatusClient
+	startFlag := atomic.Bool{}
+	startFlag.Store(false)
+	for i := 0; i < testClients; i++ {
+		conn, stream, err := newTestClient(serverAddress)
+		if err != nil {
+			panic(err)
+		}
+		clientConns = append(clientConns, conn)
+		clientStreams = append(clientStreams, stream)
+		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {
+			var start time.Time
+			for {
+				placementOrder, streamErr := clientStream.Recv()
+				if streamErr != nil {
+					return
+				}
+				if placementOrder != nil {
+					if placementOrder.Operation == "lock" {
+						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
+							if clientID == 1 {
+								fmt.Println("client 1 lock", time.Now())
+							}
+							start = time.Now()
+						}
+					}
+					if placementOrder.Operation == "update" {
+						continue
+					}
+					if placementOrder.Operation == "unlock" {
+						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
+							if clientID == 1 {
+								fmt.Println("client 1 unlock", time.Now())
+							}
+							overArr[clientID] = time.Since(start).Milliseconds()
+						}
+					}
+				}
+			}
+		}(i, stream)
+	}
+
+	// register
+	for i := 0; i < testClients; i++ {
+		host := &v1pb.Host{
+			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
+			Entities: []string{"DogActor", "CatActor"},
+			Id:       "testAppID",
+			Load:     1, // Not used yet.
+		}
+		clientStreams[i].Send(host)
+	}
+	// Wait until clientStreams[clientID].Recv() in client go routine received new table.
+	for {
+		if len(testServer.streamConnPool) == testClients {
+			break
+		}
+	}
+	testServer.streamConnPoolLock.RLock()
+	streamConnPool := make([]placementGRPCStream, len(testServer.streamConnPool))
+	copy(streamConnPool, testServer.streamConnPool)
+	testServer.streamConnPoolLock.RUnlock()
+	startFlag.Store(true)
+	mockMessage := &v1pb.PlacementTables{Version: "demo"}
+
+	for _, host := range streamConnPool {
+		testServer.disseminateOperation([]placementGRPCStream{host}, "lock", mockMessage)
+		testServer.disseminateOperation([]placementGRPCStream{host}, "update", mockMessage)
+		testServer.disseminateOperation([]placementGRPCStream{host}, "unlock", mockMessage)
+	}
+	// fmt.Println("start lock ", time.Now())
+	// testServer.disseminateOperation(streamConnPool, "lock", mockMessage)
+	// fmt.Println("all lock  ", time.Now())
+	// testServer.disseminateOperation(streamConnPool, "update", mockMessage)
+	// fmt.Println("all update", time.Now())
+	// testServer.disseminateOperation(streamConnPool, "unlock", mockMessage)
+	// fmt.Println("all unlock", time.Now())
+	startFlag.Store(false)
+	time.Sleep(time.Second) // wait client recv
+	var max int64
+	for _, cost := range &overArr {
+		if cost > max {
+			max = cost
+		}
+	}
+	// clean up resources.
+	for i := 0; i < testClients; i++ {
+		clientStreams[i].CloseSend()
+		clientConns[i].Close()
+	}
+	cleanup()
+	return max
+}
+
+func TestPerformTableUpdatePerf(t *testing.T) {
+	for i := 0; i < 3; i++ {
+		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime())
+	}
 }
