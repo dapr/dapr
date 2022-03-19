@@ -552,7 +552,6 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 		log.Debugf("subscribing to topic=%s on pubsub=%s", topic, name)
 
-		defaultDataAsPayload := findDefaultDataAsPayload(route)
 		routeMetadata := route.metadata
 		routeRules := route.rules
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
@@ -574,9 +573,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 			var cloudEvent map[string]interface{}
 			data := msg.Data
-			if rawPayload && defaultDataAsPayload {
-				cloudEvent = pubsub.FromRawPayload(nil, msg.Topic, name)
-			} else if rawPayload {
+			if rawPayload {
 				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
 				data, err = a.json.Marshal(cloudEvent)
 				if err != nil {
@@ -657,13 +654,6 @@ func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}, rou
 	}
 
 	return "", false, false, nil
-}
-
-func findDefaultDataAsPayload(route Route) (dataAsPayload bool) {
-	if len(route.rules) == 0 {
-		return false
-	}
-	return route.rules[len(route.rules)-1].DataAsPayload && route.rules[len(route.rules)-1].Match == nil
 }
 
 func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{}, routingEnabled bool) (*runtime_pubsub.Rule, error) {
