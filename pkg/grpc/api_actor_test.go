@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
 func TestRegisterActorReminder(t *testing.T) {
@@ -97,7 +96,7 @@ func TestGetActorState(t *testing.T) {
 
 	t.Run("Get actor state - OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -156,7 +155,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 
 	t.Run("Save actor state - Upsert and Delete OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",

@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/acl"
+	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	global_config "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
@@ -34,6 +35,8 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	operator_v1 "github.com/dapr/dapr/pkg/proto/operator/v1"
+	resiliency_config "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
@@ -281,11 +284,45 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	var accessControlList *global_config.AccessControlList
+
+	// Config and resiliency need the operator client, only initiate once and only if we will actually use it.
+	var operatorClient operator_v1.OperatorClient
+	if *mode == string(modes.KubernetesMode) && *daprConfig != "" {
+		log.Infof("Initializing the operator client (config: %s)", *daprConfig)
+		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
+		if clientErr != nil {
+			return nil, clientErr
+		}
+		defer conn.Close()
+		operatorClient = client
+	}
+
+	features := globalConfig.Spec.Features
+	resiliencyEnabled := global_config.IsFeatureEnabled(features, global_config.Resiliency)
+
+	var resiliencyProvider resiliency_config.Provider
+
+	if resiliencyEnabled {
+		var resiliencyConfigs []*resiliency_v1alpha.Resiliency
+		switch modes.DaprMode(*mode) {
+		case modes.KubernetesMode:
+			namespace = os.Getenv("NAMESPACE")
+			resiliencyConfigs = resiliency_config.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+		case modes.StandaloneMode:
+			resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(log, *appID, *componentsPath)
+		}
+		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
+		resiliencyProvider = resiliency_config.FromConfigurations(log, resiliencyConfigs...)
+	} else {
+		log.Debug("Resiliency is not enabled.")
+		resiliencyProvider = &resiliency_config.NoOp{}
+	}
+
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList), nil
+	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
 }
 
 func setEnvVariables(variables map[string]string) error {
