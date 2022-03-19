@@ -403,9 +403,12 @@ func createRoutingRule(match, path string, dataAsPayload bool) (*Rule, error) {
 }
 
 // DeclarativeKubernetes loads subscriptions from the operator when running in Kubernetes.
-func DeclarativeKubernetes(client operatorv1pb.OperatorClient, log logger.Logger) []Subscription {
+func DeclarativeKubernetes(client operatorv1pb.OperatorClient, podName string, namespace string, log logger.Logger) []Subscription {
 	var subs []Subscription
-	resp, err := client.ListSubscriptions(context.TODO(), &emptypb.Empty{})
+	resp, err := client.ListSubscriptionsV2(context.TODO(), &operatorv1pb.ListSubscriptionsRequest{
+		PodName:   podName,
+		Namespace: namespace,
+	})
 	if err != nil {
 		log.Errorf("failed to list subscriptions from operator: %s", err)
 

@@ -19,7 +19,10 @@ import (
 	"os"
 	"strconv"
 
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -384,4 +387,10 @@ func getNamespaceOrDefault(namespace *string) string {
 		return kube.DaprTestNamespace
 	}
 	return *namespace
+}
+
+// GetConfiguration returns configuration by name.
+func (c *KubeTestPlatform) GetConfiguration(name string) (*configurationv1alpha1.Configuration, error) {
+	client := c.KubeClient.DaprClientSet.ConfigurationV1alpha1().Configurations(kube.DaprTestNamespace)
+	return client.Get(name, metav1.GetOptions{})
 }

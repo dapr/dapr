@@ -135,6 +135,12 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_placement.debug.enabled`            | Boolean value for enabling debug mode | `{}` |
 
+### Dapr RBAC options:
+| Parameter                                 | Description                                                             | Default                 |
+|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
+| `dapr_rbac.secretReader.enabled`          | Deploys a default secret reader Role and RoleBinding                    | `true`                  |
+| `dapr_rbac.secretReader.namespace`        | Namespace for the default secret reader                                 | `default`               |
+
 ### Dapr Sentry options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
@@ -163,7 +169,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
 | `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |
 | `dapr_sidecar_injector.hostNetwork` | Enable hostNetwork mode. This is helpful when working with overlay networks such as Calico CNI and admission webhooks fail | `false` |
-
+| `dapr_sidecar_injector.healthzPort` | The port used for health checks. Helpful in combination with hostNetwork to avoid port collisions | 8080 |
 
 
 

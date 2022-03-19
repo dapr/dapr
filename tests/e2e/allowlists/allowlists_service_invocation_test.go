@@ -73,6 +73,26 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
+		{
+			AppName:        "grpcproxyclient",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_client",
+			Replicas:       1,
+			AppProtocol:    "grpc",
+			IngressEnabled: true,
+			MetricsEnabled: true,
+		},
+		{
+			Config:         "allowlistsgrpcappconfig",
+			AppName:        "grpcproxyserver",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_server",
+			Replicas:       1,
+			IngressEnabled: false,
+			MetricsEnabled: true,
+			AppProtocol:    "grpc",
+			AppPort:        50051,
+		},
 	}
 
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
@@ -81,6 +101,7 @@ func TestMain(m *testing.M) {
 
 var allowListsForServiceInvocationTests = []struct {
 	in                 string
+	path               string
 	remoteApp          string
 	appMethod          string
 	expectedResponse   string
@@ -89,6 +110,7 @@ var allowListsForServiceInvocationTests = []struct {
 }{
 	{
 		"Test allow with callee side http",
+		"opAllow",
 		"allowlists-callee-http",
 		"opAllow",
 		"opAllow is called",
@@ -97,6 +119,7 @@ var allowListsForServiceInvocationTests = []struct {
 	},
 	{
 		"Test deny with callee side http",
+		"opDeny",
 		"allowlists-callee-http",
 		"opDeny",
 		"fail to invoke, id: allowlists-callee-http, err: rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: opDeny verb: POST",
@@ -105,14 +128,25 @@ var allowListsForServiceInvocationTests = []struct {
 	},
 	{
 		"Test allow with callee side grpc",
-		"allowlists-callee-grpc",
 		"grpctogrpctest",
+		"allowlists-callee-grpc",
+		"grpcToGrpcTest",
+		"success",
+		"grpc",
+		200,
+	},
+	{
+		"Test allow with callee side grpc without http verb",
+		"grpctogrpctest",
+		"allowlists-callee-grpc",
+		"grpcToGrpcWithoutVerbTest",
 		"success",
 		"grpc",
 		200,
 	},
 	{
 		"Test deny with callee side grpc",
+		"httptogrpctest",
 		"allowlists-callee-grpc",
 		"httptogrpctest",
 		"HTTP call failed with fail to invoke, id: allowlists-callee-grpc, err: rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httpToGrpcTest verb: NONE",
@@ -121,10 +155,71 @@ var allowListsForServiceInvocationTests = []struct {
 	},
 }
 
-func TestServiceInvocationWithAllowLists(t *testing.T) {
-	externalURL := tr.Platform.AcquireAppExternalURL("allowlists-caller")
+var allowListsForServiceInvocationForProxyTests = []struct {
+	in                 string
+	path               string
+	remoteApp          string
+	appMethod          string
+	expectedResponse   string
+	calleeSide         string
+	expectedStatusCode int
+}{
+	{
+		"Test allow with callee side grpc without http verb by grpc proxy",
+		"",
+		"grpcproxyclient",
+		"",
+		"success",
+		"grpc",
+		200,
+	},
+}
+
+func TestServiceInvocationWithAllowListsForGrpcProxy(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("grpcproxyclient")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 	var err error
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	for _, tt := range allowListsForServiceInvocationForProxyTests {
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			resp, err := utils.HTTPPost(
+				fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
+}
+
+func TestServiceInvocationWithAllowLists(t *testing.T) {
+	config, err := tr.Platform.GetConfiguration("daprsystem")
+	if err != nil {
+		t.Logf("configuration name: daprsystem, get failed: %s \n", err.Error())
+		os.Exit(-1)
+	}
+	if !config.Spec.MTLSSpec.Enabled {
+		t.Logf("mtls disabled. can't running unit tests")
+		return
+	}
+	externalURL := tr.Platform.AcquireAppExternalURL("allowlists-caller")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
@@ -144,7 +239,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			if tt.calleeSide == "http" {
 				url = fmt.Sprintf("%s/tests/invoke_test", externalURL)
 			} else {
-				url = fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+				url = fmt.Sprintf("http://%s/%s", externalURL, tt.path)
 			}
 			resp, statusCode, err := utils.HTTPPostWithStatus(
 				url,
