@@ -1,11 +1,12 @@
 package pubsub
 
 type Subscription struct {
-	PubsubName string            `json:"pubsubname"`
-	Topic      string            `json:"topic"`
-	Metadata   map[string]string `json:"metadata"`
-	Rules      []*Rule           `json:"rules,omitempty"`
-	Scopes     []string          `json:"scopes"`
+	PubsubName      string            `json:"pubsubname"`
+	Topic           string            `json:"topic"`
+	DeadLetterTopic string            `json:"dead_letter_topic"`
+	Metadata        map[string]string `json:"metadata"`
+	Rules           []*Rule           `json:"rules,omitempty"`
+	Scopes          []string          `json:"scopes"`
 }
 
 type Rule struct {

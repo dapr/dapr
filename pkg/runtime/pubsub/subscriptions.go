@@ -41,11 +41,12 @@ const (
 
 type (
 	SubscriptionJSON struct {
-		PubsubName string            `json:"pubsubname"`
-		Topic      string            `json:"topic"`
-		Metadata   map[string]string `json:"metadata,omitempty"`
-		Route      string            `json:"route"`  // Single route from v1alpha1
-		Routes     RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
+		PubsubName      string            `json:"pubsubname"`
+		Topic           string            `json:"topic"`
+		DeadLetterTopic string            `json:"dead_letter_topic"`
+		Metadata        map[string]string `json:"metadata,omitempty"`
+		Route           string            `json:"route"`  // Single route from v1alpha1
+		Routes          RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
 	}
 
 	RoutesJSON struct {
@@ -122,10 +123,11 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 			}
 
 			subscriptions[i] = Subscription{
-				PubsubName: si.PubsubName,
-				Topic:      si.Topic,
-				Metadata:   si.Metadata,
-				Rules:      rules,
+				PubsubName:      si.PubsubName,
+				Topic:           si.Topic,
+				Metadata:        si.Metadata,
+				DeadLetterTopic: si.DeadLetterTopic,
+				Rules:           rules,
 			}
 		}
 
@@ -200,10 +202,11 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 				return nil, err
 			}
 			subscriptions = append(subscriptions, Subscription{
-				PubsubName: s.PubsubName,
-				Topic:      s.GetTopic(),
-				Metadata:   s.GetMetadata(),
-				Rules:      rules,
+				PubsubName:      s.PubsubName,
+				Topic:           s.GetTopic(),
+				Metadata:        s.GetMetadata(),
+				DeadLetterTopic: s.DeadLetterTopic,
+				Rules:           rules,
 			})
 		}
 	}
@@ -275,11 +278,12 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 		}
 
 		return &Subscription{
-			Topic:      sub.Spec.Topic,
-			PubsubName: sub.Spec.Pubsubname,
-			Rules:      rules,
-			Metadata:   sub.Spec.Metadata,
-			Scopes:     sub.Scopes,
+			Topic:           sub.Spec.Topic,
+			PubsubName:      sub.Spec.Pubsubname,
+			Rules:           rules,
+			Metadata:        sub.Spec.Metadata,
+			Scopes:          sub.Scopes,
+			DeadLetterTopic: sub.Spec.DeadLetterTopic,
 		}, nil
 
 	default:
@@ -298,8 +302,9 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 					Path: sub.Spec.Route,
 				},
 			},
-			Metadata: sub.Spec.Metadata,
-			Scopes:   sub.Scopes,
+			Metadata:        sub.Spec.Metadata,
+			Scopes:          sub.Scopes,
+			DeadLetterTopic: sub.Spec.DeadLetterTopic,
 		}, nil
 	}
 }
