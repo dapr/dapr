@@ -44,6 +44,7 @@ const (
 	GRPCProtocol                = "grpc"
 	ActorTypeMetadata   Feature = "Actor.TypeMetadata"
 	PubSubRouting       Feature = "PubSub.Routing"
+	Resiliency          Feature = "Resiliency"
 )
 
 type Feature string

@@ -47,7 +47,7 @@ func EncryptedStateStore(storeName string) bool {
 // If no encryption keys exist, the function will return the bytes unmodified.
 func TryEncryptValue(storeName string, value []byte) ([]byte, error) {
 	keys := encryptedStateStores[storeName]
-	enc, err := encrypt(value, keys.Primary, AES256Algorithm)
+	enc, err := encrypt(value, keys.Primary)
 	if err != nil {
 		return value, err
 	}
@@ -76,5 +76,5 @@ func TryDecryptValue(storeName string, value []byte) ([]byte, error) {
 		key = keys.Secondary
 	}
 
-	return decrypt(value[:ind], key, AES256Algorithm)
+	return decrypt(value[:ind], key)
 }

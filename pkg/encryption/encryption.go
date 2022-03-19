@@ -33,7 +33,7 @@ const (
 	primaryEncryptionKey   = "primaryEncryptionKey"
 	secondaryEncryptionKey = "secondaryEncryptionKey"
 	errPrefix              = "failed to extract encryption key"
-	AES256Algorithm        = "AES256"
+	AESGCMAlgorithm        = "AES-GCM"
 )
 
 // ComponentEncryptionKeys holds the encryption keys set for a component.
@@ -44,9 +44,9 @@ type ComponentEncryptionKeys struct {
 
 // Key holds the key to encrypt an arbitrary object.
 type Key struct {
-	Key  string
-	Name string
-	gcm  cipher.AEAD
+	Key       string
+	Name      string
+	cipherObj cipher.AEAD
 }
 
 // ComponentEncryptionKey checks if a component definition contains an encryption key and extracts it using the supplied secret store.
@@ -103,20 +103,20 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 	}
 
 	if cek.Primary.Key != "" {
-		gcm, err := createCipher(cek.Primary, AES256Algorithm)
+		cipherObj, err := createCipher(cek.Primary, AESGCMAlgorithm)
 		if err != nil {
 			return ComponentEncryptionKeys{}, err
 		}
 
-		cek.Primary.gcm = gcm
+		cek.Primary.cipherObj = cipherObj
 	}
 	if cek.Secondary.Key != "" {
-		gcm, err := createCipher(cek.Secondary, AES256Algorithm)
+		cipherObj, err := createCipher(cek.Secondary, AESGCMAlgorithm)
 		if err != nil {
 			return ComponentEncryptionKeys{}, err
 		}
 
-		cek.Secondary.gcm = gcm
+		cek.Secondary.cipherObj = cipherObj
 	}
 
 	return cek, nil
@@ -156,27 +156,27 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.Metadat
 	return Key{}, nil
 }
 
-// Encrypt takes a byte array and encrypts it using a supplied encryption key and algorithm.
-func encrypt(value []byte, key Key, algorithm Algorithm) ([]byte, error) {
-	nsize := make([]byte, key.gcm.NonceSize())
+// Encrypt takes a byte array and encrypts it using a supplied encryption key.
+func encrypt(value []byte, key Key) ([]byte, error) {
+	nsize := make([]byte, key.cipherObj.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nsize); err != nil {
 		return value, err
 	}
 
-	return key.gcm.Seal(nsize, nsize, value, nil), nil
+	return key.cipherObj.Seal(nsize, nsize, value, nil), nil
 }
 
-// Decrypt takes a byte array and decrypts it using a supplied encryption key and algorithm.
-func decrypt(value []byte, key Key, algorithm Algorithm) ([]byte, error) {
+// Decrypt takes a byte array and decrypts it using a supplied encryption key.
+func decrypt(value []byte, key Key) ([]byte, error) {
 	enc, err := b64.StdEncoding.DecodeString(string(value))
 	if err != nil {
 		return value, err
 	}
 
-	nsize := key.gcm.NonceSize()
+	nsize := key.cipherObj.NonceSize()
 	nonce, ciphertext := enc[:nsize], enc[nsize:]
 
-	return key.gcm.Open(nil, nonce, ciphertext, nil)
+	return key.cipherObj.Open(nil, nonce, ciphertext, nil)
 }
 
 func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {
@@ -185,10 +185,15 @@ func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {
 		return nil, err
 	}
 
-	block, err := aes.NewCipher(keyBytes)
-	if err != nil {
-		return nil, err
+	switch algorithm {
+	// Other authenticated ciphers can be added if needed, e.g. golang.org/x/crypto/chacha20poly1305
+	case AESGCMAlgorithm:
+		block, err := aes.NewCipher(keyBytes)
+		if err != nil {
+			return nil, err
+		}
+		return cipher.NewGCM(block)
 	}
 
-	return cipher.NewGCM(block)
+	return nil, errors.New("unsupported algorithm")
 }
