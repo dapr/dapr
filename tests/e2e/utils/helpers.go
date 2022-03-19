@@ -91,7 +91,7 @@ func newHTTPClient(t time.Duration) http.Client {
 				KeepAlive: 6 * time.Minute,
 			}).Dial,
 		},
-  }
+	}
 }
 
 // HTTPGetNTimes calls the url n times and returns the first success

@@ -117,7 +117,8 @@ func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl, skew time.D
 
 // GenerateCSRCertificate returns an x509 Certificate from a CSR, signing cert, public key, signing private key and duration.
 func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identityBundle *identity.Bundle, signingCert *x509.Certificate, publicKey interface{}, signingKey crypto.PrivateKey,
-	ttl, skew time.Duration, isCA bool) ([]byte, error) {
+	ttl, skew time.Duration, isCA bool,
+) ([]byte, error) {
 	cert, err := generateBaseCert(ttl, skew, publicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "error generating csr certificate")

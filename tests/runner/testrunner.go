@@ -76,7 +76,8 @@ type TestRunner struct {
 // NewTestRunner returns TestRunner instance for e2e test.
 func NewTestRunner(id string, apps []kube.AppDescription,
 	comps []kube.ComponentDescription,
-	initApps []kube.AppDescription) *TestRunner {
+	initApps []kube.AppDescription,
+) *TestRunner {
 	return &TestRunner{
 		id:         id,
 		components: comps,

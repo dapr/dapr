@@ -118,7 +118,8 @@ func NewActorPlacement(
 	serverAddr []string, clientCert *dapr_credentials.CertChain,
 	appID, runtimeHostName string, actorTypes []string,
 	appHealthFn func() bool,
-	afterTableUpdateFn func()) *ActorPlacement {
+	afterTableUpdateFn func(),
+) *ActorPlacement {
 	return &ActorPlacement{
 		actorTypes:      actorTypes,
 		appID:           appID,
