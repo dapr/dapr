@@ -610,10 +610,15 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			}
 			if dataAsPayload && !rawPayload {
 				cloudData := cloudEvent[pubsub.DataField]
-				if cloudEvent == nil {
+				if cloudData == nil {
 					log.Warnf("event %v in pubsub %s and topic %s is configured to use data as payload, but data was missing. Use cloud event instead", cloudEvent[pubsub.IDField], name, msg.Topic)
 				} else {
-					data, _ = json.Marshal(cloudData)
+					data, err = a.json.Marshal(cloudData)
+					if err != nil {
+						log.Errorf("error serializing cloud event data in pubsub %s and topic %s: %s", name, msg.Topic, err)
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+						return err
+					}
 				}
 			}
 
