@@ -821,6 +821,7 @@ func TestSecretCache(t *testing.T) {
 		id:                   "fakeAPI",
 		secretStores:         fakeStores,
 		secretsConfiguration: secretsConfiguration,
+		resiliency:           resiliency.New(nil),
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
