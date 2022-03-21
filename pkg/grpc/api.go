@@ -1459,8 +1459,10 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	subscribeKeys := make([]string, 0)
 
+	// TODO(@halspang) provide a switch to use just resiliency or this.
 	newCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	// empty list means subscribing to all configuration keys
 	if len(request.Keys) == 0 {
 		getConfigurationReq := &runtimev1pb.GetConfigurationRequest{
@@ -1500,13 +1502,9 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		serverStream: configurationServer,
 	}
 
-	// TODO(@halspang) provide a switch to use just resiliency or this.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, request.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(newCtx, request.StoreName)
 	var id string
 	err = policy(func(ctx context.Context) (rErr error) {
 		id, rErr = store.Subscribe(ctx, req, handler.updateEventHandler)

@@ -2381,6 +2381,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 				configurationStores:        map[string]configuration.Store{"store1": &mockConfigStore{}},
 				configurationSubscribe:     make(map[string]chan struct{}),
 				configurationSubscribeLock: sync.Mutex{},
+				resiliency:                 resiliency.New(nil),
 			},
 			"")
 		defer server.Stop()
