@@ -37,8 +37,15 @@ func (*NoOp) EndpointPolicy(ctx context.Context, service string, endpoint string
 	}
 }
 
-// ActorPolicy returns a NoOp policy runner for an actor instance.
-func (*NoOp) ActorPolicy(ctx context.Context, actorType string, id string) Runner {
+// ActorPreLockPolicy returns a NoOp policy runner for an actor instance.
+func (*NoOp) ActorPreLockPolicy(ctx context.Context, actorType string, id string) Runner {
+	return func(oper Operation) error {
+		return oper(ctx)
+	}
+}
+
+// ActorPostLockPolicy returns a NoOp policy runner for an actor instance.
+func (*NoOp) ActorPostLockPolicy(ctx context.Context, actorType string, id string) Runner {
 	return func(oper Operation) error {
 		return oper(ctx)
 	}
