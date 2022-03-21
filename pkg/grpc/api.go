@@ -1509,7 +1509,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, request.StoreName)
 	var id string
 	err = policy(func(ctx context.Context) (rErr error) {
-		id, rErr = store.Subscribe(newCtx, req, handler.updateEventHandler)
+		id, rErr = store.Subscribe(ctx, req, handler.updateEventHandler)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
