@@ -25,6 +25,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/credentials"
@@ -66,6 +67,7 @@ func init() {
 
 	_ = componentsapi.AddToScheme(scheme)
 	_ = configurationapi.AddToScheme(scheme)
+	_ = resiliencyapi.AddToScheme(scheme)
 	_ = subscriptionsapi_v1alpha1.AddToScheme(scheme)
 	_ = subscriptionsapi_v2alpha1.AddToScheme(scheme)
 }
