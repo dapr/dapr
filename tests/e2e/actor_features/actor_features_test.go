@@ -534,12 +534,17 @@ func TestActorFeatures(t *testing.T) {
 
 		quit := make(chan struct{})
 		go func() {
+			// Keep the actor alive
+			timer := time.NewTimer(secondsBetweenChecksForActorFailover * time.Second)
+			defer timer.Stop()
 			for {
-				<-quit
-
-				_, backgroundError := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
-				require.NoError(t, backgroundError)
-				time.Sleep(secondsBetweenChecksForActorFailover * time.Second)
+				select {
+				case <-quit:
+					return
+				case <-timer.C:
+					// Ignore errors as this is just to keep the actor alive
+					_, _ = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
+				}
 			}
 		}()
 
