@@ -146,6 +146,7 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/oauth2clientcredentials"
 	"github.com/dapr/components-contrib/middleware/http/opa"
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
+	"github.com/dapr/components-contrib/middleware/http/routerchecker"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -509,6 +510,9 @@ func main() {
 			}),
 			http_middleware_loader.New("sentinel", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 				return sentinel.NewMiddleware(log).GetHandler(metadata)
+			}),
+			http_middleware_loader.New("routerchecker", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return routerchecker.NewMiddleware(log).GetHandler(metadata)
 			}),
 		),
 	)
