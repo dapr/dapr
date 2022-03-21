@@ -39,6 +39,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
+	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
 const (
