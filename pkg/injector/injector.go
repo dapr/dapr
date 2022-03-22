@@ -216,11 +216,9 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		var pod corev1.Pod
 		if err = json.Unmarshal(ar.Request.Object.Raw, &pod); err != nil {
 			log.Warnf("could not unmarshal raw object: %v", err)
-		} else {
-			if pod.Spec.DNSPolicy != "" && pod.Spec.DNSPolicy != corev1.DNSClusterFirst {
-				log.Warnf("%q's DNSPolicy is not %q. Services may not be called", pod.Namespace+"/"+pod.Name, corev1.DNSClusterFirst)
-				isDNSClusterFirst = false
-			}
+		} else if pod.Spec.DNSPolicy != "" && pod.Spec.DNSPolicy != corev1.DNSClusterFirst {
+			log.Warnf("%q's DNSPolicy is not %q. Services may not be called", pod.Namespace+"/"+pod.Name, corev1.DNSClusterFirst)
+			isDNSClusterFirst = false
 		}
 	}
 	if isDNSClusterFirst {
