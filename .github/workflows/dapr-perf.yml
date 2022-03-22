@@ -14,10 +14,10 @@
 name: dapr-perf
 
 on:
-  schedule:
-    - cron: '0 */2 * * *'
-  repository_dispatch:
-    types: [perf-test]
+  #schedule:
+  #  - cron: '0 */2 * * *'
+  #repository_dispatch:
+  #  types: [perf-test]
   workflow_dispatch:
 jobs:
   test-perf:
