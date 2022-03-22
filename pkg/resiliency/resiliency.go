@@ -259,7 +259,7 @@ func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error
 			return fmt.Errorf("invalid retry configuration %q: %w", name, err)
 		}
 		cb.Name = name
-		cb.Initialize()
+		cb.Initialize(r.log)
 		r.circuitBreakers[name] = &cb
 	}
 
@@ -357,7 +357,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 							Timeout:     template.Timeout,
 							Trip:        template.Trip,
 						}
-						cb.Initialize()
+						cb.Initialize(r.log)
 						cache.Add(endpoint, cb)
 					}
 				}
@@ -408,7 +408,7 @@ func (r *Resiliency) ActorPolicy(ctx context.Context, actorType string, id strin
 							Timeout:     template.Timeout,
 							Trip:        template.Trip,
 						}
-						cb.Initialize()
+						cb.Initialize(r.log)
 						cache.Add(key, cb)
 					}
 				}
@@ -438,7 +438,7 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) R
 		}
 		if componentPolicies.Outbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]
-			cb = r.componentCBs.Get(name, template)
+			cb = r.componentCBs.Get(r.log, name, template)
 		}
 	}
 
@@ -464,7 +464,7 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 		}
 		if componentPolicies.Inbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]
-			cb = r.componentCBs.Get(name, template)
+			cb = r.componentCBs.Get(r.log, name, template)
 		}
 	}
 
@@ -473,7 +473,7 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 
 // Get returns a cached circuit breaker if one exists.
 // Otherwise, it returns a new circuit breaker based on the provided template.
-func (e *circuitBreakerInstances) Get(instanceName string, template *breaker.CircuitBreaker) *breaker.CircuitBreaker {
+func (e *circuitBreakerInstances) Get(log logger.Logger, instanceName string, template *breaker.CircuitBreaker) *breaker.CircuitBreaker {
 	e.RLock()
 	cb, ok := e.cbs[instanceName]
 	e.RUnlock()
@@ -488,7 +488,7 @@ func (e *circuitBreakerInstances) Get(instanceName string, template *breaker.Cir
 		Timeout:     template.Timeout,
 		Trip:        template.Trip,
 	}
-	cb.Initialize()
+	cb.Initialize(log)
 
 	e.Lock()
 	e.cbs[instanceName] = cb

@@ -23,9 +23,11 @@ import (
 
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/kit/logger"
 )
 
 func TestCircuitBreaker(t *testing.T) {
+	log := logger.NewLogger("test")
 	t.Parallel()
 	var trip expr.Expr
 	err := trip.DecodeString("consecutiveFailures > 2")
@@ -35,7 +37,7 @@ func TestCircuitBreaker(t *testing.T) {
 		Trip:    &trip,
 		Timeout: 10 * time.Millisecond,
 	}
-	cb.Initialize()
+	cb.Initialize(log)
 	for i := 0; i < 3; i++ {
 		cb.Execute(func() error {
 			return errors.New("test")
