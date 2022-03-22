@@ -1,8 +1,8 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: grpcproxyconfig
+  name: resiliencyconfig
 spec:
   features:
-    - name: proxy.grpc
+    - name: Resiliency
       enabled: true

@@ -24,16 +24,12 @@ import (
 
 	grpc_proxy "github.com/dapr/dapr/pkg/grpc/proxy"
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
+	"github.com/dapr/dapr/pkg/resiliency"
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
-)
-
-const (
-	// GRPCFeatureName is the feature name for the Dapr configuration required to enable the proxy.
-	GRPCFeatureName = "proxy.grpc"
 )
 
 // Proxy is the interface for a gRPC transparent proxy.
@@ -51,22 +47,26 @@ type proxy struct {
 	telemetryFn       func(context.Context) context.Context
 	localAppAddress   string
 	acl               *config.AccessControlList
+	sslEnabled        bool
+	resiliency        resiliency.Provider
 }
 
 // NewProxy returns a new proxy.
-func NewProxy(connectionFactory messageClientConnection, appID string, localAppAddress string, remoteDaprPort int, acl *config.AccessControlList) Proxy {
+func NewProxy(connectionFactory messageClientConnection, appID string, localAppAddress string, remoteDaprPort int, acl *config.AccessControlList, sslEnabled bool, resiliency resiliency.Provider) Proxy {
 	return &proxy{
 		appID:             appID,
 		connectionFactory: connectionFactory,
 		localAppAddress:   localAppAddress,
 		remotePort:        remoteDaprPort,
 		acl:               acl,
+		sslEnabled:        sslEnabled,
+		resiliency:        resiliency,
 	}
 }
 
 // Handler returns a Stream Handler for handling requests that arrive for services that are not recognized by the server.
 func (p *proxy) Handler() grpc.StreamHandler {
-	return grpc_proxy.TransparentHandler(p.intercept)
+	return grpc_proxy.TransparentHandler(p.intercept, p.resiliency, p.IsLocal)
 }
 
 func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, error) {
@@ -84,12 +84,12 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		return ctx, nil, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete.")
 	}
 
-	target, err := p.remoteAppFn(appID)
+	target, isLocal, err := p.isLocalInternal(appID)
 	if err != nil {
 		return ctx, nil, err
 	}
 
-	if target.id == p.appID {
+	if isLocal {
 		// proxy locally to the app
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl)
@@ -98,12 +98,13 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 			}
 		}
 
-		conn, cErr := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+		conn, cErr := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, p.sslEnabled, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 		return outCtx, conn, cErr
 	}
 
 	// proxy to a remote daprd
-	conn, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+	// connection is recreated because its certification may have already been expired
+	conn, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, true, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 	outCtx = p.telemetryFn(outCtx)
 
 	return outCtx, conn, cErr
@@ -117,4 +118,22 @@ func (p *proxy) SetRemoteAppFn(remoteAppFn func(appID string) (remoteApp, error)
 // SetTelemetryFn sets a function that enriches the context with telemetry.
 func (p *proxy) SetTelemetryFn(spanFn func(context.Context) context.Context) {
 	p.telemetryFn = spanFn
+}
+
+// Expose the functionality to detect if apps are local or not.
+func (p *proxy) IsLocal(appID string) (bool, error) {
+	_, isLocal, err := p.isLocalInternal(appID)
+	return isLocal, err
+}
+
+func (p *proxy) isLocalInternal(appID string) (remoteApp, bool, error) {
+	if p.remoteAppFn == nil {
+		return remoteApp{}, false, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete.")
+	}
+
+	target, err := p.remoteAppFn(appID)
+	if err != nil {
+		return remoteApp{}, false, err
+	}
+	return target, target.id == p.appID, nil
 }

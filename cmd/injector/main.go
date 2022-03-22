@@ -31,9 +31,10 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.injector")
-
-const healthzPort = 8080
+var (
+	log         = logger.NewLogger("dapr.injector")
+	healthzPort int
+)
 
 func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
@@ -82,6 +83,8 @@ func init() {
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
+
+	flag.IntVar(&healthzPort, "healthz-port", 8080, "The port used for health checks")
 
 	flag.Parse()
 

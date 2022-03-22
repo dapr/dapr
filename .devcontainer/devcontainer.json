@@ -1,7 +1,7 @@
 {
 	"name": "Dapr Dev Environment",
 	// Update the container version when you publish dev-container
-	"image": "docker.io/daprio/dapr-dev:0.1.5",
+	"image": "docker.io/daprio/dapr-dev:0.1.6a",
 	// Replace with uncommented line below to build your own local copy of the image
 	// "dockerFile": "../docker/Dockerfile-dev",
 	"containerEnv": {

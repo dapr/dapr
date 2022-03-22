@@ -165,6 +165,23 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 		log.Errorf("unable to get service, %s, err: %s", mayDaprService, err)
 		return err
 	}
+
+	if err := h.patchDaprService(ctx, mayDaprService, wrapper); err != nil {
+		log.Errorf("unable to update service, %s, err: %s", mayDaprService, err)
+		return err
+	}
+
+	return nil
+}
+
+func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper) error {
+	appID := h.getAppID(wrapper)
+	service := h.createDaprServiceValues(ctx, expectedService, wrapper, appID)
+
+	if err := h.Update(ctx, service); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -194,7 +211,8 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	}
 
 	if enableMetrics {
-		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/probe"] = "true"
+		annotations["prometheus.io/scrape"] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
 		annotations["prometheus.io/port"] = strconv.Itoa(metricsPort)
 		annotations["prometheus.io/path"] = "/"
 	}

@@ -32,7 +32,7 @@ jobs:
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       TEST_CLOUD_ENV: azure
-      HELMVER: v3.4.0
+      HELMVER: v3.7.2
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
       TARGET_OS: ${{ matrix.target_os }}
@@ -42,12 +42,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-2019]
         target_arch: [amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
-          - os: windows-latest
+          - os: windows-2019
             target_os: windows
     steps:
       - name: Set up container log path

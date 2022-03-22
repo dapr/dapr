@@ -30,13 +30,13 @@ metadata:
   name: dapr-operator-admin
 rules:
 - apiGroups: ["*"]
-  resources: ["customresourcedefinitions", "serviceaccounts", "deployments", "statefulsets", "services", "configmaps", "secrets", "components", "configurations", "subscriptions", "leases"]
+  resources: ["customresourcedefinitions", "serviceaccounts", "deployments", "statefulsets", "services", "configmaps", "secrets", "components", "configurations", "subscriptions", "leases", "resiliencies"]
   verbs: ["get"]
 - apiGroups: ["*"]
-  resources: ["deployments", "statefulsets", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
+  resources: ["deployments", "statefulsets", "services", "components", "configurations", "subscriptions", "leases", "secrets", "resiliencies"]
   verbs: ["list"]
 - apiGroups: ["*"]
-  resources: ["deployments", "statefulsets", "services", "components", "configurations", "subscriptions", "leases", "secrets"]
+  resources: ["deployments", "statefulsets", "services", "components", "configurations", "subscriptions", "leases", "secrets", "resiliencies"]
   verbs: ["watch"]
 - apiGroups: ["*"]
   resources: ["services", "secrets", "subscriptions", "configmaps", "leases", "services/finalizers", "deployments/finalizers", "statefulsets/finalizers"]
@@ -50,12 +50,13 @@ rules:
 - apiGroups: ["*"]
   resources: ["deployments", "statefulsets", "services", "configmaps", "events", "leases"]
   verbs: ["create"]
+{{- if .Values.secretReader.enabled }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: secret-reader
-  namespace: default
+  namespace: {{ .Values.secretReader.namespace }}
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
@@ -65,7 +66,7 @@ kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-secret-reader
-  namespace: default
+  namespace: {{ .Values.secretReader.namespace }}
 subjects:
 - kind: ServiceAccount
   name: default
@@ -73,6 +74,7 @@ roleRef:
   kind: Role
   name: secret-reader
   apiGroup: rbac.authorization.k8s.io
+{{- end }}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
