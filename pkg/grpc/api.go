@@ -269,7 +269,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	span := diag_utils.SpanFromContext(ctx)
 	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
+	traceParent := diag.SpanContextToW3CString(span.SpanContext())
 	// Populate W3C tracestate to cloudevent envelope
 	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
@@ -286,7 +286,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
 			Data:            body,
-			TraceID:         corID,
+			TraceParent:     traceParent,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
 		})

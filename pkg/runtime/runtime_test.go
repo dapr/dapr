@@ -2294,17 +2294,17 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 
 		// Generate a new envelope to avoid affecting other tests by modifying shared `envelope`
-		envelopeNoTraceID := pubsub.NewCloudEventsEnvelope(
+		envelopeNoTraceParent := pubsub.NewCloudEventsEnvelope(
 			"", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "",
 			[]byte("Test Message"), "", "")
-		delete(envelopeNoTraceID, pubsub.TraceIDField)
-		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
+		delete(envelopeNoTraceParent, pubsub.TraceParentField)
+		bNoTraceParent, err := json.Marshal(envelopeNoTraceParent)
 		assert.Nil(t, err)
 
 		message := &pubsubSubscribedMessage{
-			cloudEvent: envelopeNoTraceID,
+			cloudEvent: envelopeNoTraceParent,
 			topic:      topic,
-			data:       bNoTraceID,
+			data:       bNoTraceParent,
 			metadata:   map[string]string{pubsubName: TestPubsubName},
 			path:       "topic1",
 		}

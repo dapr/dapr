@@ -1521,8 +1521,13 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	req.WithRawData(msg.data, contenttype.CloudEventContentType)
 	req.WithCustomHTTPMetadata(msg.metadata)
 
-	if cloudEvent[pubsub.TraceIDField] != nil {
-		traceID := cloudEvent[pubsub.TraceIDField].(string)
+	traceID, _ := cloudEvent[pubsub.TraceParentField].(string)
+	if traceID == "" {
+		// ::TODO(@1046102779): delete traceid and keep traceparent
+		// https://github.com/dapr/components-contrib/pull/1604
+		traceID, _ = cloudEvent[pubsub.TraceIDField].(string)
+	}
+	if traceID != "" {
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
@@ -1642,17 +1647,19 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	}
 
 	var span *trace.Span
-	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
-		if traceID, ok := iTraceID.(string); ok {
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
+	traceID, _ := cloudEvent[pubsub.TraceParentField].(string)
+	if traceID == "" {
+		// ::TODO(@1046102779): delete traceid and keep traceparent
+		// https://github.com/dapr/components-contrib/pull/1604
+		traceID, _ = cloudEvent[pubsub.TraceIDField].(string)
+	}
+	if traceID != "" {
+		sc, _ := diag.SpanContextFromW3CString(traceID)
+		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 
-			// no ops if trace is off
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-		} else {
-			log.Warnf("ignored non-string traceid value: %v", iTraceID)
-		}
+		// no ops if trace is off
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	}
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)

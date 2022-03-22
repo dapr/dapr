@@ -1541,7 +1541,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
+	traceParent := diag.SpanContextToW3CString(span.SpanContext())
 	// Populate W3C tracestate to cloudevent envelope
 	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
@@ -1553,7 +1553,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			Topic:           topic,
 			DataContentType: contentType,
 			Data:            body,
-			TraceID:         corID,
+			TraceParent:     traceParent,
 			TraceState:      traceState,
 			Pubsub:          pubsubName,
 		})

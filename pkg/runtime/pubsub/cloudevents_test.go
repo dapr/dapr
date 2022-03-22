@@ -28,14 +28,14 @@ func TestNewCloudEvent(t *testing.T) {
 			Data:            []byte("hello"),
 			Pubsub:          "c",
 			DataContentType: "",
-			TraceID:         "d",
+			TraceParent:     "d",
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "a", ce["source"].(string))
 		assert.Equal(t, "b", ce["topic"].(string))
 		assert.Equal(t, "hello", ce["data"].(string))
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
-		assert.Equal(t, "d", ce["traceid"].(string))
+		assert.Equal(t, "d", ce["traceparent"].(string))
 	})
 
 	t.Run("raw payload no data", func(t *testing.T) {
@@ -44,14 +44,14 @@ func TestNewCloudEvent(t *testing.T) {
 			Topic:           "b",
 			Pubsub:          "c",
 			DataContentType: "",
-			TraceID:         "d",
+			TraceParent:     "d",
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "a", ce["source"].(string))
 		assert.Equal(t, "b", ce["topic"].(string))
 		assert.Empty(t, ce["data"])
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
-		assert.Equal(t, "d", ce["traceid"].(string))
+		assert.Equal(t, "d", ce["traceparent"].(string))
 	})
 
 	t.Run("custom cloudevent", func(t *testing.T) {
@@ -67,14 +67,14 @@ func TestNewCloudEvent(t *testing.T) {
 			Data:            b,
 			DataContentType: "application/cloudevents+json",
 			Topic:           "topic1",
-			TraceID:         "trace1",
+			TraceParent:     "trace1",
 			Pubsub:          "pubsub",
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "world", ce["data"].(string))
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
 		assert.Equal(t, "topic1", ce["topic"].(string))
-		assert.Equal(t, "trace1", ce["traceid"].(string))
+		assert.Equal(t, "trace1", ce["traceparent"].(string))
 		assert.Equal(t, "pubsub", ce["pubsubname"].(string))
 	})
 }
