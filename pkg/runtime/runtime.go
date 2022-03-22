@@ -1527,11 +1527,9 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		// https://github.com/dapr/components-contrib/pull/1604
 		traceParent, _ = cloudEvent[pubsub.TraceIDField].(string)
 	}
-	if traceParent != "" {
-		sc, _ := diag.SpanContextFromW3CString(traceParent)
-		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
-		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-	}
+	sc, _ := diag.SpanContextFromW3CString(traceParent)
+	spanName := fmt.Sprintf("pubsub/%s", msg.topic)
+	ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 
 	start := time.Now()
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -1653,14 +1651,12 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		// https://github.com/dapr/components-contrib/pull/1604
 		traceParent, _ = cloudEvent[pubsub.TraceIDField].(string)
 	}
-	if traceParent != "" {
-		sc, _ := diag.SpanContextFromW3CString(traceParent)
-		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
+	sc, _ := diag.SpanContextFromW3CString(traceParent)
+	spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 
-		// no ops if trace is off
-		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-	}
+	// no ops if trace is off
+	ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
+	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 

@@ -2313,7 +2313,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		fakeReqNoTraceID.WithHTTPExtension(http.MethodPost, "")
 		fakeReqNoTraceID.WithRawData(message.data, contenttype.CloudEventContentType)
 		fakeReqNoTraceID.WithCustomHTTPMetadata(testPubSubMessage.metadata)
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReqNoTraceID).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReqNoTraceID).Return(fakeResp, nil)
 
 		// act
 		err = rt.publishMessageHTTP(context.Background(), message)
