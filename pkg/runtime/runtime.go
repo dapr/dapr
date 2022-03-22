@@ -1521,14 +1521,14 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	req.WithRawData(msg.data, contenttype.CloudEventContentType)
 	req.WithCustomHTTPMetadata(msg.metadata)
 
-	traceID, _ := cloudEvent[pubsub.TraceParentField].(string)
-	if traceID == "" {
+	traceParent, _ := cloudEvent[pubsub.TraceParentField].(string)
+	if traceParent == "" {
 		// ::TODO(@1046102779): delete traceid and keep traceparent
 		// https://github.com/dapr/components-contrib/pull/1604
-		traceID, _ = cloudEvent[pubsub.TraceIDField].(string)
+		traceParent, _ = cloudEvent[pubsub.TraceIDField].(string)
 	}
-	if traceID != "" {
-		sc, _ := diag.SpanContextFromW3CString(traceID)
+	if traceParent != "" {
+		sc, _ := diag.SpanContextFromW3CString(traceParent)
 		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 	}
@@ -1647,14 +1647,14 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	}
 
 	var span *trace.Span
-	traceID, _ := cloudEvent[pubsub.TraceParentField].(string)
-	if traceID == "" {
+	traceParent, _ := cloudEvent[pubsub.TraceParentField].(string)
+	if traceParent == "" {
 		// ::TODO(@1046102779): delete traceid and keep traceparent
 		// https://github.com/dapr/components-contrib/pull/1604
-		traceID, _ = cloudEvent[pubsub.TraceIDField].(string)
+		traceParent, _ = cloudEvent[pubsub.TraceIDField].(string)
 	}
-	if traceID != "" {
-		sc, _ := diag.SpanContextFromW3CString(traceID)
+	if traceParent != "" {
+		sc, _ := diag.SpanContextFromW3CString(traceParent)
 		spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 
 		// no ops if trace is off
