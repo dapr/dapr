@@ -384,7 +384,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	})
 
 	// In this case, there was an error with the actual request.
-	if requestErr {
+	if requestErr || errors.Is(respError, context.DeadlineExceeded) {
 		return nil, respError
 	}
 	return resp.Message(), respError
@@ -1551,9 +1551,13 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	delete(a.configurationSubscribe, subscribeID)
 	close(stop)
 
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, request.StoreName)
+
 	start := time.Now()
-	err = store.Unsubscribe(ctx, &configuration.UnsubscribeRequest{
-		ID: subscribeID,
+	err = policy(func(ctx context.Context) error {
+		return store.Unsubscribe(ctx, &configuration.UnsubscribeRequest{
+			ID: subscribeID,
+		})
 	})
 	elapsed := diag.ElapsedSince(start)
 

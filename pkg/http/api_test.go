@@ -2840,7 +2840,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingDeleteKey"])
 	})
 
 	t.Run("delete state request times out with resiliency", func(t *testing.T) {
