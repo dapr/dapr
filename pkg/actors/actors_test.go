@@ -2164,6 +2164,9 @@ func TestActorsRuntimeResliency(t *testing.T) {
 				constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey"): 1,
 				constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey"):    1,
 				constructCompositeKey("actors", actorType):                                 1, // Default reminder key.
+				constructCompositeKey("actors", "failingMetadataType", "metadata"):         1, // Default metadata key.
+				constructCompositeKey("actors", "failingMetadataStoreType", "metadata"):    1, // Default metadata key.
+				constructCompositeKey("actors", "failingDeleteType"):                       1, // Default reminder key.
 			},
 			Timeouts: map[string]time.Duration{
 				constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey"): time.Second * 10,
@@ -2276,5 +2279,39 @@ func TestActorsRuntimeResliency(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, 4, failingState.Failure.CallCount[callKey]) // Should be called 2 more times.
 		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("test get actor type metadata retries with resiliency", func(t *testing.T) {
+		runtime.disableBuiltInRetries = true
+		runtime.actorTypeMetadataEnabled = true
+		_, err := runtime.getActorTypeMetadata("failingMetadataType", false)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, failingState.Failure.CallCount[constructCompositeKey("actors", "failingMetadataType", "metadata")])
+	})
+
+	t.Run("test store reminder retries with resiliency", func(t *testing.T) {
+		runtime.disableBuiltInRetries = true
+		runtime.actorTypeMetadataEnabled = true
+		err := runtime.storeReminder(context.Background(), Reminder{
+			ActorType: "failingMetadataStoreType",
+			ActorID:   "failingMetadataStoreId",
+			Name:      "failingReminder",
+		}, make(chan bool))
+		assert.NoError(t, err)
+		// This flow has some extra requests in it, so after the failure we call it more than twice.
+		assert.Equal(t, 3, failingState.Failure.CallCount[constructCompositeKey("actors", "failingMetadataStoreType", "metadata")])
+	})
+
+	t.Run("test delete reminder retries with resiliency", func(t *testing.T) {
+		runtime.disableBuiltInRetries = true
+		runtime.actorTypeMetadataEnabled = false
+		err := runtime.DeleteReminder(context.Background(), &DeleteReminderRequest{
+			Name:      "failingReminder",
+			ActorType: "failingDeleteType",
+			ActorID:   "failingDeleteId",
+		})
+		assert.NoError(t, err)
+		// This flow has some extra requests in it, so after the failure we call it more than twice.
+		assert.Equal(t, 3, failingState.Failure.CallCount[constructCompositeKey("actors", "failingDeleteType")])
 	})
 }

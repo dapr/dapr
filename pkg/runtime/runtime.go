@@ -688,6 +688,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		a.proxy,
 		a.runtimeConfig.ReadBufferSize,
 		a.runtimeConfig.StreamRequestBody,
+		a.globalConfig.Spec.Features,
 	)
 }
 

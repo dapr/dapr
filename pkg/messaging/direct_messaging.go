@@ -52,19 +52,20 @@ type DirectMessaging interface {
 }
 
 type directMessaging struct {
-	appChannel          channel.AppChannel
-	connectionCreatorFn messageClientConnection
-	appID               string
-	mode                modes.DaprMode
-	grpcPort            int
-	namespace           string
-	resolver            nr.Resolver
-	tracingSpec         config.TracingSpec
-	hostAddress         string
-	hostName            string
-	maxRequestBodySize  int
-	proxy               Proxy
-	readBufferSize      int
+	appChannel            channel.AppChannel
+	connectionCreatorFn   messageClientConnection
+	appID                 string
+	mode                  modes.DaprMode
+	grpcPort              int
+	namespace             string
+	resolver              nr.Resolver
+	tracingSpec           config.TracingSpec
+	hostAddress           string
+	hostName              string
+	maxRequestBodySize    int
+	proxy                 Proxy
+	readBufferSize        int
+	disableBuiltInRetries bool
 }
 
 type remoteApp struct {
@@ -80,24 +81,25 @@ func NewDirectMessaging(
 	appChannel channel.AppChannel,
 	clientConnFn messageClientConnection,
 	resolver nr.Resolver,
-	tracingSpec config.TracingSpec, maxRequestBodySize int, proxy Proxy, readBufferSize int, streamRequestBody bool) DirectMessaging {
+	tracingSpec config.TracingSpec, maxRequestBodySize int, proxy Proxy, readBufferSize int, streamRequestBody bool, features []config.FeatureSpec) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appChannel:          appChannel,
-		connectionCreatorFn: clientConnFn,
-		appID:               appID,
-		mode:                mode,
-		grpcPort:            port,
-		namespace:           namespace,
-		resolver:            resolver,
-		tracingSpec:         tracingSpec,
-		hostAddress:         hAddr,
-		hostName:            hName,
-		maxRequestBodySize:  maxRequestBodySize,
-		proxy:               proxy,
-		readBufferSize:      readBufferSize,
+		appChannel:            appChannel,
+		connectionCreatorFn:   clientConnFn,
+		appID:                 appID,
+		mode:                  mode,
+		grpcPort:              port,
+		namespace:             namespace,
+		resolver:              resolver,
+		tracingSpec:           tracingSpec,
+		hostAddress:           hAddr,
+		hostName:              hName,
+		maxRequestBodySize:    maxRequestBodySize,
+		proxy:                 proxy,
+		readBufferSize:        readBufferSize,
+		disableBuiltInRetries: config.IsFeatureEnabled(features, config.DisableBuiltInRetries),
 	}
 
 	if proxy != nil {
@@ -118,7 +120,12 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	if app.id == d.appID && app.namespace == d.namespace {
 		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
+	retryCount := retry.DefaultLinearRetryCount
+	if d.disableBuiltInRetries {
+		// Retries are being handled by resiliency.
+		retryCount = 1
+	}
+	return d.invokeWithRetry(ctx, retryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
 }
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.

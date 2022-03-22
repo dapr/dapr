@@ -107,6 +107,7 @@ type actorsRuntime struct {
 	actorTypeMetadataEnabled bool
 	resiliency               resiliency.Provider
 	storeName                string
+	disableBuiltInRetries    bool
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -180,6 +181,7 @@ func NewActors(
 		actorTypeMetadataEnabled: configuration.IsFeatureEnabled(features, configuration.ActorTypeMetadata),
 		resiliency:               resiliency,
 		storeName:                stateStoreName,
+		disableBuiltInRetries:    configuration.IsFeatureEnabled(features, configuration.DisableBuiltInRetries),
 	}
 }
 
@@ -343,7 +345,12 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	backoffInterval time.Duration,
 	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
 	targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	for i := 0; i < numRetries; i++ {
+	// If the user has disabled built-in retries, disable them here so only resiliency is used.
+	retryCount := numRetries
+	if a.disableBuiltInRetries {
+		retryCount = 1
+	}
+	for i := 0; i < retryCount; i++ {
 		resp, err := fn(ctx, targetAddress, targetID, req)
 		if err == nil {
 			return resp, nil
@@ -1274,40 +1281,79 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 		},
 		Etag: nil,
 	}
-	retryErr := backoff.Retry(func() error {
-		metadataKey := constructCompositeKey("actors", actorType, "metadata")
-		resp, err := a.store.Get(&state.GetRequest{
-			Key: metadataKey,
-		})
-		if err != nil {
-			return err
-		}
-		actorMetadata := ActorMetadata{
-			ID: metadataZeroID,
-			RemindersMetadata: ActorRemindersMetadata{
-				partitionsEtag: nil,
-				PartitionCount: 0,
-			},
-			Etag: nil,
-		}
-		if len(resp.Data) > 0 {
-			err = json.Unmarshal(resp.Data, &actorMetadata)
-			if err != nil {
-				return fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
-			}
-			actorMetadata.Etag = resp.ETag
-		}
-
-		if migrate {
-			err = a.migrateRemindersForActorType(actorType, &actorMetadata)
+	var retryErr error
+	if a.disableBuiltInRetries {
+		policy := a.resiliency.ComponentOutboundPolicy(context.TODO(), a.storeName)
+		retryErr = policy(func(ctx context.Context) error {
+			metadataKey := constructCompositeKey("actors", actorType, "metadata")
+			resp, err := a.store.Get(&state.GetRequest{
+				Key: metadataKey,
+			})
 			if err != nil {
 				return err
 			}
-		}
+			actorMetadata := ActorMetadata{
+				ID: metadataZeroID,
+				RemindersMetadata: ActorRemindersMetadata{
+					partitionsEtag: nil,
+					PartitionCount: 0,
+				},
+				Etag: nil,
+			}
+			if len(resp.Data) > 0 {
+				err = json.Unmarshal(resp.Data, &actorMetadata)
+				if err != nil {
+					return fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
+				}
+				actorMetadata.Etag = resp.ETag
+			}
 
-		result = actorMetadata
-		return nil
-	}, backoff.NewExponentialBackOff())
+			if migrate {
+				err = a.migrateRemindersForActorType(actorType, &actorMetadata)
+				if err != nil {
+					return err
+				}
+			}
+
+			result = actorMetadata
+			return nil
+		})
+	} else {
+		retryErr = backoff.Retry(func() error {
+			metadataKey := constructCompositeKey("actors", actorType, "metadata")
+			resp, err := a.store.Get(&state.GetRequest{
+				Key: metadataKey,
+			})
+			if err != nil {
+				return err
+			}
+			actorMetadata := ActorMetadata{
+				ID: metadataZeroID,
+				RemindersMetadata: ActorRemindersMetadata{
+					partitionsEtag: nil,
+					PartitionCount: 0,
+				},
+				Etag: nil,
+			}
+			if len(resp.Data) > 0 {
+				err = json.Unmarshal(resp.Data, &actorMetadata)
+				if err != nil {
+					return fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(resp.Data), err)
+				}
+				actorMetadata.Etag = resp.ETag
+			}
+
+			if migrate {
+				err = a.migrateRemindersForActorType(actorType, &actorMetadata)
+				if err != nil {
+					return err
+				}
+			}
+
+			result = actorMetadata
+			return nil
+		}, backoff.NewExponentialBackOff())
+	}
 
 	if retryErr != nil {
 		return nil, retryErr
@@ -1581,7 +1627,9 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		a.activeReminders.Delete(reminderKey)
 	}
 
-	err := backoff.Retry(func() error {
+	var err error
+	if a.disableBuiltInRetries {
+		// All the individual actions are already covered by resiliency, so when we disable built-ins, just don't retry.
 		reminders, actorMetadata, err := a.getRemindersForActorType(req.ActorType, false)
 		if err != nil {
 			return err
@@ -1616,8 +1664,45 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		a.remindersLock.Lock()
 		a.reminders[req.ActorType] = reminders
 		a.remindersLock.Unlock()
-		return nil
-	}, backoff.NewExponentialBackOff())
+	} else {
+		err = backoff.Retry(func() error {
+			reminders, actorMetadata, err := a.getRemindersForActorType(req.ActorType, false)
+			if err != nil {
+				return err
+			}
+
+			// remove from partition first.
+			remindersInPartition, stateKey, etag := actorMetadata.removeReminderFromPartition(reminders, req.ActorType, req.ActorID, req.Name)
+
+			// now, we can remove from the "global" list.
+			for i := len(reminders) - 1; i >= 0; i-- {
+				if reminders[i].reminder.ActorType == req.ActorType && reminders[i].reminder.ActorID == req.ActorID && reminders[i].reminder.Name == req.Name {
+					reminders = append(reminders[:i], reminders[i+1:]...)
+				}
+			}
+
+			// Get the database partiton key (needed for CosmosDB)
+			databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
+
+			// Then, save the partition to the database.
+			err = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
+			if err != nil {
+				return err
+			}
+
+			// Finally, we must save metadata to get a new eTag.
+			// This avoids a race condition between an update and a repartitioning.
+			err = a.saveActorTypeMetadata(req.ActorType, actorMetadata)
+			if err != nil {
+				return err
+			}
+
+			a.remindersLock.Lock()
+			a.reminders[req.ActorType] = reminders
+			a.remindersLock.Unlock()
+			return nil
+		}, backoff.NewExponentialBackOff())
+	}
 	if err != nil {
 		return err
 	}
@@ -1690,7 +1775,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 
 	a.activeReminders.Store(reminderKey, stopChannel)
 
-	err := backoff.Retry(func() error {
+	if a.disableBuiltInRetries {
 		reminders, actorMetadata, err2 := a.getRemindersForActorType(reminder.ActorType, false)
 		if err2 != nil {
 			return err2
@@ -1721,10 +1806,43 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 		a.remindersLock.Lock()
 		a.reminders[reminder.ActorType] = reminders
 		a.remindersLock.Unlock()
-		return nil
-	}, backoff.NewExponentialBackOff())
-	if err != nil {
-		return err
+	} else {
+		err := backoff.Retry(func() error {
+			reminders, actorMetadata, err2 := a.getRemindersForActorType(reminder.ActorType, false)
+			if err2 != nil {
+				return err2
+			}
+
+			// First we add it to the partition list.
+			remindersInPartition, reminderRef, stateKey, etag := actorMetadata.insertReminderInPartition(reminders, reminder)
+
+			// Get the database partition key (needed for CosmosDB)
+			databasePartitionKey := actorMetadata.calculateDatabasePartitionKey(stateKey)
+
+			// Now we can add it to the "global" list.
+			reminders = append(reminders, reminderRef)
+
+			// Then, save the partition to the database.
+			err2 = a.saveRemindersInPartition(ctx, stateKey, remindersInPartition, etag, databasePartitionKey)
+			if err2 != nil {
+				return err2
+			}
+
+			// Finally, we must save metadata to get a new eTag.
+			// This avoids a race condition between an update and a repartitioning.
+			errForSaveMetadata := a.saveActorTypeMetadata(reminder.ActorType, actorMetadata)
+			if errForSaveMetadata != nil {
+				return errForSaveMetadata
+			}
+
+			a.remindersLock.Lock()
+			a.reminders[reminder.ActorType] = reminders
+			a.remindersLock.Unlock()
+			return nil
+		}, backoff.NewExponentialBackOff())
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
