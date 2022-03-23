@@ -36,7 +36,7 @@ func TestPolicy(t *testing.T) {
 		Interval: 10 * time.Millisecond,
 		Timeout:  10 * time.Millisecond,
 	}
-	cbValue.Initialize()
+	cbValue.Initialize(log)
 	tests := map[string]struct {
 		t  time.Duration
 		r  *retry.Config

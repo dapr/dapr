@@ -20,6 +20,7 @@ import (
 	"github.com/sony/gobreaker"
 
 	"github.com/dapr/dapr/pkg/expr"
+	"github.com/dapr/kit/logger"
 )
 
 // CircuitBreaker represents the configuration for how
@@ -58,7 +59,7 @@ func IsErrorPermanent(err error) bool {
 
 // Initialize creates the underlying circuit breaker using the
 // configuration fields.
-func (c *CircuitBreaker) Initialize() {
+func (c *CircuitBreaker) Initialize(log logger.Logger) {
 	var tripFn func(counts gobreaker.Counts) bool
 
 	if c.Trip != nil {
@@ -89,6 +90,9 @@ func (c *CircuitBreaker) Initialize() {
 		Interval:    c.Interval,
 		Timeout:     c.Timeout,
 		ReadyToTrip: tripFn,
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			log.Infof("Circuit breaker %q changed state from %s to %s", name, from, to)
+		},
 	})
 }
 

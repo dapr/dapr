@@ -13,29 +13,55 @@ limitations under the License.
 
 package kubernetes
 
+import (
+	"encoding/json"
+)
+
 // AppDescription holds the deployment information of test app.
 type AppDescription struct {
-	AppName           string
-	AppPort           int
-	AppProtocol       string
-	AppEnv            map[string]string
-	DaprEnabled       bool
-	ImageName         string
-	ImageSecret       string
-	RegistryName      string
-	Replicas          int32
-	IngressEnabled    bool
-	MetricsEnabled    bool // This controls the setting for the dapr.io/enable-metrics annotation
-	MetricsPort       string
-	Config            string
-	AppCPULimit       string
-	AppCPURequest     string
-	AppMemoryLimit    string
-	AppMemoryRequest  string
-	DaprCPULimit      string
-	DaprCPURequest    string
-	DaprMemoryLimit   string
-	DaprMemoryRequest string
-	Namespace         *string
-	IsJob             bool
+	AppName           string            `json:",omitempty"`
+	AppPort           int               `json:",omitempty"`
+	AppProtocol       string            `json:",omitempty"`
+	AppEnv            map[string]string `json:",omitempty"`
+	DaprEnabled       bool              `json:",omitempty"`
+	ImageName         string            `json:",omitempty"`
+	ImageSecret       string            `json:",omitempty"`
+	RegistryName      string            `json:",omitempty"`
+	Replicas          int32             `json:",omitempty"`
+	IngressEnabled    bool              `json:",omitempty"`
+	MetricsEnabled    bool              `json:",omitempty"` // This controls the setting for the dapr.io/enable-metrics annotation
+	MetricsPort       string            `json:",omitempty"`
+	Config            string            `json:",omitempty"`
+	AppCPULimit       string            `json:",omitempty"`
+	AppCPURequest     string            `json:",omitempty"`
+	AppMemoryLimit    string            `json:",omitempty"`
+	AppMemoryRequest  string            `json:",omitempty"`
+	DaprCPULimit      string            `json:",omitempty"`
+	DaprCPURequest    string            `json:",omitempty"`
+	DaprMemoryLimit   string            `json:",omitempty"`
+	DaprMemoryRequest string            `json:",omitempty"`
+	Namespace         *string           `json:",omitempty"`
+	IsJob             bool              `json:",omitempty"`
+}
+
+func (a AppDescription) String() string {
+	// AppDescription objects can contain credentials in ImageSecret which should not be exposed in logs.
+	// This method overrides the default stringifier to use the custom JSON stringifier which hides ImageSecret
+	j, _ := json.Marshal(a)
+	return string(j)
+}
+
+func (a AppDescription) MarshalJSON() ([]byte, error) {
+	imageSecret := a.ImageSecret
+	if imageSecret != "" {
+		imageSecret = "***"
+	}
+	type Alias AppDescription
+	return json.Marshal(&struct {
+		ImageSecret string `json:",omitempty"`
+		*Alias
+	}{
+		Alias:       (*Alias)(&a),
+		ImageSecret: imageSecret,
+	})
 }

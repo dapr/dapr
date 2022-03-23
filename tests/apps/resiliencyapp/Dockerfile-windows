@@ -11,22 +11,11 @@
 # limitations under the License.
 #
 
-auth:
-  enabled: false
-persistentVolume:
-  enabled: false
-tls:
-  enabled: false
-affinity:
-  nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-        - matchExpressions:
-          - key: kubernetes.io/os
-            operator: In
-            values:
-            - linux
-          - key: kubernetes.io/arch
-            operator: In
-            values:
-            - amd64
+FROM golang:1.17-nanoserver
+
+WORKDIR /app
+COPY . .
+RUN go get -d -v
+RUN go build -o app.exe .
+
+CMD ["app.exe"]
