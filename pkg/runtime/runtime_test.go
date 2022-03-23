@@ -50,6 +50,7 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
@@ -3621,6 +3622,19 @@ func (s *mockSecretStore) Close() error {
 	return s.closeErr
 }
 
+type mockConfigurationStore struct {
+	configuration.Store
+	closeErr error
+}
+
+func (s *mockConfigurationStore) Init(metadata configuration.Metadata) error {
+	return nil
+}
+
+func (s *mockConfigurationStore) Close() error {
+	return s.closeErr
+}
+
 type mockNameResolver struct {
 	nameresolution.Resolver
 	closeErr error
@@ -3827,4 +3841,68 @@ func TestComponentsCallback(t *testing.T) {
 	}
 
 	assert.True(t, callbackInvoked, "component callback was not invoked")
+}
+
+func TestShutdownComponentInstance(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	t.Run("shutdown output binding with error", func(t *testing.T) {
+		testErr := fmt.Errorf("error closing output binding")
+		outputBinding := &mockBinding{closeErr: testErr}
+		rt.outputBindings["mockBinding"] = outputBinding
+
+		err := rt.shutdownComponentInstance("mockBinding", outputBinding, bindingsComponent)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), testErr.Error())
+	})
+
+	t.Run("shutdown input binding with error", func(t *testing.T) {
+		testErr := fmt.Errorf("error closing input binding")
+		inputBinding := &mockBinding{closeErr: testErr}
+		rt.inputBindings["mockBinding"] = inputBinding
+
+		err := rt.shutdownComponentInstance("mockBinding", inputBinding, bindingsComponent)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), testErr.Error())
+	})
+
+	t.Run("shutdown pubsub with error", func(t *testing.T) {
+		testErr := fmt.Errorf("error closing pubsub")
+		pubsub := &mockPubSub{closeErr: testErr}
+		rt.pubSubs["mockPubSub"] = pubsub
+
+		err := rt.shutdownComponentInstance("mockPubSub", pubsub, pubsubComponent)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), testErr.Error())
+	})
+
+	t.Run("shutdown secret store with error", func(t *testing.T) {
+		testErr := fmt.Errorf("error closing secret store")
+		secretStore := &mockSecretStore{closeErr: testErr}
+		rt.secretStores["mockSecretStore"] = secretStore
+
+		err := rt.shutdownComponentInstance("mockSecretStore", secretStore, secretStoreComponent)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), testErr.Error())
+	})
+
+	t.Run("shutdown state with error", func(t *testing.T) {
+		testErr := fmt.Errorf("error closing state")
+		state := &mockStateStore{closeErr: testErr}
+		rt.stateStores["mockStateStore"] = state
+
+		err := rt.shutdownComponentInstance("mockStateStore", state, stateComponent)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), testErr.Error())
+	})
+
+	t.Run("shutdown configuration with error", func(t *testing.T) {
+		testErr := fmt.Errorf("error closing configuration")
+		configuration := &mockConfigurationStore{closeErr: testErr}
+		rt.configurationStores["mockConfiguration"] = configuration
+
+		err := rt.shutdownComponentInstance("mockConfiguration", configuration, configurationComponent)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), testErr.Error())
+	})
 }
