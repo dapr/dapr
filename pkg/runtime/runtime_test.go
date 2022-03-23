@@ -152,7 +152,8 @@ var testResiliency = &v1alpha1.Resiliency{
 }
 
 type MockKubernetesStateStore struct {
-	callback func()
+	callback      func()
+	closeCallback func()
 }
 
 func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
@@ -185,6 +186,9 @@ func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretR
 }
 
 func (m *MockKubernetesStateStore) Close() error {
+	if m.closeCallback != nil {
+		m.closeCallback()
+	}
 	return nil
 }
 
@@ -194,6 +198,10 @@ func NewMockKubernetesStore() secretstores.SecretStore {
 
 func NewMockKubernetesStoreWithInitCallback(cb func()) secretstores.SecretStore {
 	return &MockKubernetesStateStore{callback: cb}
+}
+
+func NewMockKubernetesStoreWithCloseCallback(cb func()) secretstores.SecretStore {
+	return &MockKubernetesStateStore{closeCallback: cb}
 }
 
 func TestNewRuntime(t *testing.T) {
@@ -1733,6 +1741,82 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 		assert.Equal(t, config.AllowAccess, rt.secretsConfiguration["testMock"].DefaultAccess, "Expected default access as allow")
 		assert.Empty(t, rt.secretsConfiguration["testMock"].DeniedSecrets, "Expected testMock deniedSecrets to not be populated")
 		assert.NotContains(t, rt.secretsConfiguration["testMock"].AllowedSecrets, "Expected testMock allowedSecrets to not be populated")
+	})
+}
+
+func TestProcessComponents(t *testing.T) {
+	t.Run("Process component for the first time", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		m := NewMockKubernetesStore()
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+				return m
+			}),
+		)
+
+		mockComponent := components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
+			},
+		}
+
+		go rt.processComponents()
+		rt.pendingComponents <- mockComponent
+
+		_, ok := rt.secretStores["kubernetesMock"]
+		assert.True(t, ok)
+	})
+
+	t.Run("Process component update should close the old component", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		closeCh := make(chan struct{})
+
+		m := NewMockKubernetesStoreWithCloseCallback(func() { close(closeCh) })
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+				return m
+			}),
+		)
+
+		mockComponent := components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
+			},
+		}
+
+		mockComponentUpdated := components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name:      "kubernetesMock",
+				Namespace: "newNamespace",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
+			},
+		}
+
+		go rt.processComponents()
+
+		// process the component for the first time
+		rt.pendingComponents <- mockComponent
+
+		// update the component
+		rt.pendingComponents <- mockComponentUpdated
+
+		// the old component should have shutdown
+		select {
+		case <-closeCh:
+		case <-time.After(time.Second):
+			t.Fatalf("expected component to be shutdown")
+		}
 	})
 }
 
