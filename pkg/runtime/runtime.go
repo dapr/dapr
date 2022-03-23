@@ -1158,6 +1158,18 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	return nil
 }
 
+func (a *DaprRuntime) shutdownInputBinding(name string, binding bindings.InputBinding) error {
+	if closer, ok := binding.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			err = fmt.Errorf("error closing input binding %s: %w", name, err)
+			log.Warn(err)
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
@@ -1183,6 +1195,18 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 	return nil
 }
 
+func (a *DaprRuntime) shutdownOutputBinding(name string, binding bindings.OutputBinding) error {
+	if closer, ok := binding.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			err = fmt.Errorf("error closing output binding %s: %w", name, err)
+			log.Warn(err)
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
@@ -1203,6 +1227,18 @@ func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 
 		a.configurationStores[s.ObjectMeta.Name] = store
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
+	}
+
+	return nil
+}
+
+func (a *DaprRuntime) shutdownConfiguration(name string, store configuration.Store) error {
+	if closer, ok := store.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			err = fmt.Errorf("error closing configuration store %s: %w", name, err)
+			log.Warn(err)
+			return err
+		}
 	}
 
 	return nil
@@ -1265,6 +1301,18 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 			a.actorStateStoreLock.Unlock()
 		}
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
+	}
+
+	return nil
+}
+
+func (a *DaprRuntime) shutdownState(name string, state state.Store) error {
+	if closer, ok := state.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			err = fmt.Errorf("error closing state store %s: %w", name, err)
+			log.Warn(err)
+			return err
+		}
 	}
 
 	return nil
@@ -1400,6 +1448,16 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	a.allowedTopics[pubsubName] = scopes.GetAllowedTopics(properties)
 	a.pubSubs[pubsubName] = pubSub
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
+
+	return nil
+}
+
+func (a *DaprRuntime) shutdownPubSub(name string, pubSub pubsub.PubSub) error {
+	if err := pubSub.Close(); err != nil {
+		err = fmt.Errorf("error closing pub sub %s: %w", name, err)
+		log.Warn(err)
+		return err
+	}
 
 	return nil
 }
@@ -1836,6 +1894,11 @@ func (a *DaprRuntime) processComponents() {
 			continue
 		}
 
+		// If a component instance already exists, it should be shutdown
+		// once a new component replaces it.
+		category := a.extractComponentCategory(comp)
+		instance, exists := a.tryRetrieveComponentInstance(comp.Name, category)
+
 		err := a.processComponentAndDependents(comp)
 		if err != nil {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
@@ -1845,8 +1908,42 @@ func (a *DaprRuntime) processComponents() {
 				log.Fatalf(e)
 			}
 			log.Errorf(e)
+		} else if exists {
+			if err := a.shutdownComponentInstance(comp.Name, instance, category); err != nil {
+				log.Warnf("process component %s error shutting down old component: %s", comp.Name, err.Error())
+			}
 		}
 	}
+}
+
+func (a *DaprRuntime) tryRetrieveComponentInstance(name string, category ComponentCategory) (interface{}, bool) {
+	switch category {
+	case bindingsComponent:
+		if inputBinding, exists := a.inputBindings[name]; exists {
+			return inputBinding, true
+		}
+		if outputBinding, exists := a.outputBindings[name]; exists {
+			return outputBinding, true
+		}
+	case pubsubComponent:
+		if pubSub, exists := a.pubSubs[name]; exists {
+			return pubSub, true
+		}
+	case secretStoreComponent:
+		if secretStore, exists := a.secretStores[name]; exists {
+			return secretStore, true
+		}
+	case stateComponent:
+		if store, exists := a.stateStores[name]; exists {
+			return store, true
+		}
+	case configurationComponent:
+		if store, exists := a.configurationStores[name]; exists {
+			return store, true
+		}
+	}
+
+	return nil, false
 }
 
 func (a *DaprRuntime) flushOutstandingComponents() {
@@ -1942,6 +2039,39 @@ func (a *DaprRuntime) stopActor() {
 	}
 }
 
+func (a *DaprRuntime) shutdownComponentInstance(name string, instance interface{}, category ComponentCategory) error {
+	switch category {
+	case bindingsComponent:
+		if outputBinding, ok := instance.(bindings.OutputBinding); ok {
+			if err := a.shutdownOutputBinding(name, outputBinding); err != nil {
+				return err
+			}
+		}
+		if inputBinding, ok := instance.(bindings.InputBinding); ok {
+			if err := a.shutdownInputBinding(name, inputBinding); err != nil {
+				return err
+			}
+		}
+	case pubsubComponent:
+		if pubSub, ok := instance.(pubsub.PubSub); ok {
+			return a.shutdownPubSub(name, pubSub)
+		}
+	case secretStoreComponent:
+		if secretStore, ok := instance.(secretstores.SecretStore); ok {
+			return a.shutdownSecretStore(name, secretStore)
+		}
+	case stateComponent:
+		if store, ok := instance.(state.Store); ok {
+			return a.shutdownState(name, store)
+		}
+	case configurationComponent:
+		if store, ok := instance.(configuration.Store); ok {
+			return a.shutdownConfiguration(name, store)
+		}
+	}
+	return nil
+}
+
 // shutdownComponents allows for a graceful shutdown of all runtime internal operations or components.
 func (a *DaprRuntime) shutdownComponents() error {
 	log.Info("Shutting down all components")
@@ -1949,46 +2079,28 @@ func (a *DaprRuntime) shutdownComponents() error {
 
 	// Close components if they implement `io.Closer`
 	for name, binding := range a.inputBindings {
-		if closer, ok := binding.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing input binding %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
+		if err := a.shutdownInputBinding(name, binding); err != nil {
+			merr = multierror.Append(merr, err)
 		}
 	}
 	for name, binding := range a.outputBindings {
-		if closer, ok := binding.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing output binding %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
+		if err := a.shutdownOutputBinding(name, binding); err != nil {
+			merr = multierror.Append(merr, err)
 		}
 	}
 	for name, secretstore := range a.secretStores {
-		if closer, ok := secretstore.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing secret store %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
+		if err := a.shutdownSecretStore(name, secretstore); err != nil {
+			merr = multierror.Append(merr, err)
 		}
 	}
 	for name, pubSub := range a.pubSubs {
-		if err := pubSub.Close(); err != nil {
-			err = fmt.Errorf("error closing pub sub %s: %w", name, err)
+		if err := a.shutdownPubSub(name, pubSub); err != nil {
 			merr = multierror.Append(merr, err)
-			log.Warn(err)
 		}
 	}
 	for name, stateStore := range a.stateStores {
-		if closer, ok := stateStore.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing state store %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
+		if err := a.shutdownState(name, stateStore); err != nil {
+			merr = multierror.Append(merr, err)
 		}
 	}
 	if closer, ok := a.nameResolver.(io.Closer); ok {
@@ -2237,6 +2349,18 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 
 	a.secretStores[c.ObjectMeta.Name] = secretStore
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
+	return nil
+}
+
+func (a *DaprRuntime) shutdownSecretStore(name string, secretStore secretstores.SecretStore) error {
+	if closer, ok := secretStore.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			err = fmt.Errorf("error closing secret store %s: %w", name, err)
+			log.Warn(err)
+			return err
+		}
+	}
+
 	return nil
 }
 
