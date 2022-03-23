@@ -1767,6 +1767,9 @@ func TestProcessComponents(t *testing.T) {
 		go rt.processComponents()
 		rt.pendingComponents <- mockComponent
 
+		// make sure that the component was processed.
+		time.Sleep(1 * time.Second)
+
 		_, ok := rt.secretStores["kubernetesMock"]
 		assert.True(t, ok)
 	})
