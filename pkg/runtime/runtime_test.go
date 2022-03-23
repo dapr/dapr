@@ -3933,9 +3933,9 @@ func TestShutdownComponentInstance(t *testing.T) {
 	t.Run("shutdown output binding with error", func(t *testing.T) {
 		testErr := fmt.Errorf("error closing output binding")
 		outputBinding := &mockBinding{closeErr: testErr}
-		rt.outputBindings["mockBinding"] = outputBinding
+		rt.outputBindings["mockOutputBinding"] = outputBinding
 
-		err := rt.shutdownComponentInstance("mockBinding", outputBinding, bindingsComponent)
+		err := rt.shutdownComponentInstance("mockOutputBinding", outputBinding, bindingsComponent)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), testErr.Error())
 	})
@@ -3943,9 +3943,9 @@ func TestShutdownComponentInstance(t *testing.T) {
 	t.Run("shutdown input binding with error", func(t *testing.T) {
 		testErr := fmt.Errorf("error closing input binding")
 		inputBinding := &mockBinding{closeErr: testErr}
-		rt.inputBindings["mockBinding"] = inputBinding
+		rt.inputBindings["mockInputBinding"] = inputBinding
 
-		err := rt.shutdownComponentInstance("mockBinding", inputBinding, bindingsComponent)
+		err := rt.shutdownComponentInstance("mockInputBinding", inputBinding, bindingsComponent)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), testErr.Error())
 	})
@@ -3988,5 +3988,14 @@ func TestShutdownComponentInstance(t *testing.T) {
 		err := rt.shutdownComponentInstance("mockConfiguration", configuration, configurationComponent)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), testErr.Error())
+	})
+
+	t.Run("shutdown component with wrong category does nothing", func(t *testing.T) {
+		testErr := fmt.Errorf("error closing configuration")
+		configuration := &mockConfigurationStore{closeErr: testErr}
+		rt.configurationStores["mockConfiguration"] = configuration
+
+		err := rt.shutdownComponentInstance("mockConfiguration", configuration, pubsubComponent)
+		assert.Nil(t, err)
 	})
 }
