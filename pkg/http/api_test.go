@@ -1702,19 +1702,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 2, failingActors.Failure.CallCount["failingId"])
 	})
 
-	t.Run("Direct Message - times out with resiliency", func(t *testing.T) {
-		testAPI.actor = failingActors
-
-		apiPath := fmt.Sprintf("v1.0/actors/failingActorType/%s/method/method1", "timeoutId")
-		start := time.Now()
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		end := time.Now()
-
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingActors.Failure.CallCount["timeoutId"])
-		assert.Less(t, end.Sub(start), time.Second*10)
-	})
-
 	fakeServer.Shutdown()
 }
 
@@ -2840,7 +2827,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingDeleteKey"])
 	})
 
 	t.Run("delete state request times out with resiliency", func(t *testing.T) {
