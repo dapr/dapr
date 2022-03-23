@@ -1909,6 +1909,7 @@ func (a *DaprRuntime) processComponents() {
 			}
 			log.Errorf(e)
 		} else if exists {
+			log.Infof("process component %s is replaced with a newer version, the older version will be shutdown", comp.Name)
 			if err := a.shutdownComponentInstance(comp.Name, instance, category); err != nil {
 				log.Warnf("process component %s error shutting down old component: %s", comp.Name, err.Error())
 			}
@@ -2069,6 +2070,7 @@ func (a *DaprRuntime) shutdownComponentInstance(name string, instance interface{
 			return a.shutdownConfiguration(name, store)
 		}
 	}
+
 	return nil
 }
 
