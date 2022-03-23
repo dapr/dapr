@@ -1358,7 +1358,11 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
 	// Having the retry here allows us to capture that and be resilient to host failure.
-	policy := a.resiliency.ActorPolicy(reqCtx, actorType, actorID)
+	// Additionally, we don't perform timeouts at this level. This is because an actor
+	// should technically wait forever on the locking mechanism. If we timeout while
+	// waiting for the lock, we can also create a queue of calls that will try and continue
+	// after the timeout.
+	policy := a.resiliency.ActorPreLockPolicy(reqCtx, actorType, actorID)
 	var resp *invokev1.InvokeMethodResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.actor.Call(ctx, req)

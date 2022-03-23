@@ -93,3 +93,37 @@ func (_m *MockConfigurationStore) Unsubscribe(ctx context.Context, req *configur
 
 	return r0
 }
+
+type FailingConfigurationStore struct {
+	Failure Failure
+}
+
+func (f *FailingConfigurationStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
+	if err := f.Failure.PerformFailure(req.Metadata["key"]); err != nil {
+		return nil, err
+	}
+	return &configuration.GetResponse{}, nil
+}
+
+func (f *FailingConfigurationStore) Init(metadata configuration.Metadata) error {
+	return nil
+}
+
+func (f *FailingConfigurationStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
+	handler(ctx, &configuration.UpdateEvent{
+		Items: []*configuration.Item{
+			{
+				Key: req.Metadata["key"],
+				Value: "testConfig",
+			},
+		},
+	})
+	if err := f.Failure.PerformFailure(req.Metadata["key"]); err != nil {
+		return "", err
+	}
+	return "subscribeID", nil
+}
+
+func (f *FailingConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
+	return f.Failure.PerformFailure(req.ID)
+}

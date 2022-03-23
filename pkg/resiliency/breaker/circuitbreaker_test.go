@@ -35,7 +35,7 @@ func TestCircuitBreaker(t *testing.T) {
 	cb := breaker.CircuitBreaker{ // nolint:exhaustivestruct
 		Name:    "test",
 		Trip:    &trip,
-		Timeout: 10 * time.Millisecond,
+		Timeout: 100 * time.Millisecond,
 	}
 	cb.Initialize(log)
 	for i := 0; i < 3; i++ {
@@ -47,7 +47,7 @@ func TestCircuitBreaker(t *testing.T) {
 		return nil
 	})
 	assert.EqualError(t, err, "circuit breaker is open")
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	err = cb.Execute(func() error {
 		return nil
 	})

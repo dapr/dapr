@@ -84,6 +84,11 @@ var testResiliency = &v1alpha1.Resiliency{
 			},
 		},
 		Targets: v1alpha1.Targets{
+			Actors: map[string]v1alpha1.ActorPolicyNames{
+				"failingActorType": {
+					Timeout: "fast",
+				},
+			},
 			Components: map[string]v1alpha1.ComponentPolicyNames{
 				"failStore": {
 					Outbound: v1alpha1.PolicyNames{
@@ -2168,7 +2173,7 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestActorsRuntimeResliency(t *testing.T) {
+func TestActorsRuntimeResiliency(t *testing.T) {
 	actorType := "failingActor"
 	actorID := "failingId"
 	failingState := &daprt.FailingStatestore{
@@ -2187,13 +2192,37 @@ func TestActorsRuntimeResliency(t *testing.T) {
 			CallCount: map[string]int{},
 		},
 	}
-	failingAppChannel := &daprt.FailingAppChannel{}
+	failingAppChannel := &daprt.FailingAppChannel{
+		Failure: daprt.Failure{
+			Timeouts: map[string]time.Duration{
+				"timeoutId": time.Second * 10,
+			},
+			CallCount: map[string]int{},
+		},
+		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
+			return req.Actor().ActorId
+		},
+	}
 	builder := runtimeBuilder{
 		appChannel:     failingAppChannel,
 		actorStore:     failingState,
 		actorStoreName: "failStore",
 	}
 	runtime := builder.buildActorRuntime()
+
+	t.Run("callLocalActor times out with resiliency", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("actorMethod")
+		req.WithActor("failingActorType", "timeoutId")
+
+		start := time.Now()
+		resp, err := runtime.callLocalActor(context.Background(), req)
+		end := time.Now()
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Equal(t, 1, failingAppChannel.Failure.CallCount["timeoutId"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
 
 	t.Run("test get state retries with resiliency", func(t *testing.T) {
 		req := &GetStateRequest{
