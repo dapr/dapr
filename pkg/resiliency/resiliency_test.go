@@ -184,7 +184,13 @@ func TestPoliciesForTargets(t *testing.T) {
 		{
 			name: "actor",
 			create: func(r *Resiliency) Runner {
-				return r.ActorPolicy(ctx, "myActorType", "id")
+				return r.ActorPreLockPolicy(ctx, "myActorType", "id")
+			},
+		},
+		{
+			name: "actor post lock",
+			create: func(r *Resiliency) Runner {
+				return r.ActorPostLockPolicy(ctx, "myActorType", "id")
 			},
 		},
 	}

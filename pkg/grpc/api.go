@@ -215,16 +215,8 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
 
-	// Unlike other actor calls, resiliency is handled here for invocation.
-	// This is due to actor invocation involving a lookup for the host.
-	// Having the retry here allows us to capture that and be resilient to host failure.
-	policy := a.resiliency.ActorPolicy(ctx, in.Actor.ActorType, in.Actor.ActorId)
-	var resp *invokev1.InvokeMethodResponse
-	err = policy(func(ctx context.Context) error {
-		retryResp, rErr := a.actor.Call(ctx, req)
-		resp = retryResp
-		return rErr
-	})
+	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
+	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
@@ -1283,7 +1275,19 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	req.WithActor(in.ActorType, in.ActorId)
 	req.WithRawData(in.Data, "")
 
-	resp, err := a.actor.Call(context.TODO(), req)
+	// Unlike other actor calls, resiliency is handled here for invocation.
+	// This is due to actor invocation involving a lookup for the host.
+	// Having the retry here allows us to capture that and be resilient to host failure.
+	// Additionally, we don't perform timeouts at this level. This is because an actor
+	// should technically wait forever on the locking mechanism. If we timeout while
+	// waiting for the lock, we can also create a queue of calls that will try and continue
+	// after the timeout.
+	resp := invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
+	policy := a.resiliency.ActorPreLockPolicy(ctx, in.ActorType, in.ActorId)
+	err := policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = a.actor.Call(ctx, req)
+		return rErr
+	})
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		apiServerLogger.Debug(err)
