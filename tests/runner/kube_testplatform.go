@@ -93,6 +93,19 @@ func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) erro
 	return nil
 }
 
+func (c *KubeTestPlatform) UpdateComponent(comp kube.ComponentDescription) error {
+	if c.KubeClient == nil {
+		return fmt.Errorf("kubernetes cluster needs to be setup")
+	}
+
+	err := kube.NewDaprComponent(c.KubeClient, getNamespaceOrDefault(comp.Namespace), comp).Update()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // addApps adds test apps to disposable App Resource queues.
 func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 	if c.KubeClient == nil {

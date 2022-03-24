@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -30,9 +31,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const numHealthChecks = 60 // Number of get calls before starting tests.
+const (
+	numHealthChecks                 = 60 // Number of get calls before starting tests.
+	componentUpdateFailureThreshold = 1  // Number of calls allowed to fail.
+)
 
-var tr *runner.TestRunner
+var (
+	tr                   *runner.TestRunner
+	redisComponentConfig = kube.ComponentDescription{
+		Name:     "runtime-state-store",
+		TypeName: "state.redis",
+		MetaData: map[string]string{
+			"redisHost":     `"dapr-redis-master:6379"`,
+			"redisPassword": `""`,
+		},
+	}
+)
 
 const (
 	runtimeAppName     = "runtime"
@@ -82,6 +96,7 @@ func TestMain(m *testing.M) {
 				"authRequired":  `"false"`,
 			},
 		},
+		redisComponentConfig,
 	}
 
 	initApps := []kube.AppDescription{
@@ -157,4 +172,45 @@ func TestRuntimeInitBindings(t *testing.T) {
 	require.Equal(t, 0, apiResponse.DaprHTTPSuccess)
 	require.Equal(t, 0, apiResponse.DaprGRPCError)
 	require.Equal(t, 0, apiResponse.DaprGRPCSuccess)
+}
+
+func TestRuntimeComponentUpdateDowntime(t *testing.T) {
+	t.Log("Enter TestRuntimeComponentUpdateDowntime")
+
+	// Get subscriber app URL
+	runtimeExternalURL := tr.Platform.AcquireAppExternalURL(runtimeAppName)
+	require.NotEmpty(t, runtimeExternalURL, "runtimeExternalURL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(runtimeExternalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// Start the test
+	_, err = getAPIResponse(t, "statestore/start", runtimeExternalURL)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Second)
+
+	// Update the state store component
+	updatedRedisComponentConfig := redisComponentConfig
+	updatedRedisComponentConfig.MetaData["ttlInSeconds"] = "3"
+	err = tr.Platform.UpdateComponent(updatedRedisComponentConfig)
+	if err != nil {
+		t.Fatalf("Failed to update component, %s", err.Error())
+	}
+
+	time.Sleep(20 * time.Second)
+
+	// Stop the test
+	_, err = getAPIResponse(t, "statestore/stop", runtimeExternalURL)
+	require.NoError(t, err)
+
+	// Get test results
+	apiResponse, err := getAPIResponse(t, "statestore", runtimeExternalURL)
+	require.NoError(t, err)
+
+	// Assert on the result values
+	require.LessOrEqual(t, apiResponse.DaprHTTPError, componentUpdateFailureThreshold)
+	require.Greater(t, apiResponse.DaprHTTPSuccess, 0)
 }

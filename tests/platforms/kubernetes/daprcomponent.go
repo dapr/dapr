@@ -14,6 +14,8 @@ limitations under the License.
 package kubernetes
 
 import (
+	"fmt"
+
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -56,6 +58,32 @@ func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
 	return client.Create(obj)
 }
 
+func (do *DaprComponent) updateComponent() (*v1alpha1.Component, error) {
+	client := do.kubeClient.DaprComponents(DaprTestNamespace)
+
+	obj, err := client.Get(do.component.Name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("error getting component %s", do.component.Name)
+	}
+
+	metadata := []v1alpha1.MetadataItem{}
+
+	for k, v := range do.component.MetaData {
+		metadata = append(metadata, v1alpha1.MetadataItem{
+			Name: k,
+			Value: v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte(v),
+				},
+			},
+		})
+	}
+
+	newObj := buildDaprComponentObject(do.component.Name, do.component.TypeName, metadata)
+	newObj.SetResourceVersion(obj.ResourceVersion)
+	return client.Update(newObj)
+}
+
 func (do *DaprComponent) deleteComponent() error {
 	client := do.kubeClient.DaprComponents(DaprTestNamespace)
 	return client.Delete(do.component.Name, &metav1.DeleteOptions{})
@@ -67,6 +95,11 @@ func (do *DaprComponent) Name() string {
 
 func (do *DaprComponent) Init() error {
 	_, err := do.addComponent()
+	return err
+}
+
+func (do *DaprComponent) Update() error {
+	_, err := do.updateComponent()
 	return err
 }
 

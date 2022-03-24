@@ -2044,14 +2044,10 @@ func (a *DaprRuntime) shutdownComponentInstance(name string, instance interface{
 	switch category {
 	case bindingsComponent:
 		if outputBinding, ok := instance.(bindings.OutputBinding); ok {
-			if err := a.shutdownOutputBinding(name, outputBinding); err != nil {
-				return err
-			}
+			return a.shutdownOutputBinding(name, outputBinding)
 		}
 		if inputBinding, ok := instance.(bindings.InputBinding); ok {
-			if err := a.shutdownInputBinding(name, inputBinding); err != nil {
-				return err
-			}
+			return a.shutdownInputBinding(name, inputBinding)
 		}
 	case pubsubComponent:
 		if pubSub, ok := instance.(pubsub.PubSub); ok {

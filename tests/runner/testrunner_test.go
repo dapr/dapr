@@ -60,6 +60,11 @@ func (m *MockPlatform) addComponents(comps []kube.ComponentDescription) error {
 	return args.Error(0)
 }
 
+func (m *MockPlatform) UpdateComponent(comps kube.ComponentDescription) error {
+	args := m.Called(comps)
+	return args.Error(0)
+}
+
 func (m *MockPlatform) addApps(apps []kube.AppDescription) error {
 	args := m.Called(apps)
 	return args.Error(0)

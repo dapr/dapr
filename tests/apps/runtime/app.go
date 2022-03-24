@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -33,6 +34,7 @@ const (
 	bindingsTopic   = "runtime-bindings-http"
 	daprHTTPAddr    = "localhost:3500"
 	daprGRPCAddr    = "localhost:50001"
+	stateStoreName  = "runtime-state-store"
 )
 
 type topicsList struct {
@@ -58,6 +60,10 @@ var (
 
 	bindingsDaprHTTPError, bindingsDaprHTTPSuccess uint32
 	bindingsDaprGRPCError, bindingsDaprGRPCSuccess uint32
+
+	stateStoreHTTPError, stateStoreHTTPSuccess uint32
+
+	stateStoreTestStopCh = make(chan struct{})
 )
 
 // indexHandler is the handler for root path.
@@ -104,6 +110,27 @@ func invokeDaprGRPCAPI() error {
 		return err
 	}
 	defer conn.Close()
+	return nil
+}
+
+func invokeStateStoreGetAPI() error {
+	stateStoreURL := fmt.Sprintf("http://%s/v1.0/state/%s/test", daprHTTPAddr, stateStoreName)
+	// nolint: gosec
+	r, err := http.Get(stateStoreURL)
+	if err != nil {
+		return err
+	}
+	defer r.Body.Close()
+
+	bytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+
+	if r.StatusCode < 200 || r.StatusCode >= 400 {
+		return fmt.Errorf("unexpected status code: %d, response: %s", r.StatusCode, string(bytes))
+	}
+
 	return nil
 }
 
@@ -173,6 +200,44 @@ func onInputBinding(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func stateStoreTestStartHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("stateStoreTestStartHandler(): called %s\n", r.URL)
+
+	var wg sync.WaitGroup
+
+	go func() {
+		for {
+			wg.Add(1)
+
+			select {
+			case <-stateStoreTestStopCh:
+				wg.Done()
+				return
+			default:
+				testAPI(&wg, &stateStoreHTTPSuccess, &stateStoreHTTPError, invokeStateStoreGetAPI, "stateStoreTest")
+			}
+		}
+	}()
+
+	// Always return success as we want to release the messages
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(appResponse{
+		Message: "success",
+	})
+}
+
+func stateStoreTestStopHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("stateStoreTestStopHandler(): called %s\n", r.URL)
+
+	stateStoreTestStopCh <- struct{}{}
+
+	// Always return success as we want to release the messages
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(appResponse{
+		Message: "success",
+	})
+}
+
 func getPubsubDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
 	log.Println("Enter getDaprAPIResponse")
 
@@ -205,6 +270,20 @@ func getBindingsDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func getStateStoreAPIResponse(w http.ResponseWriter, r *http.Request) {
+	log.Println("Enter getStateStoreAPIResponse")
+
+	response := daprAPIResponse{
+		DaprHTTPError:   int(stateStoreHTTPError),
+		DaprHTTPSuccess: int(stateStoreHTTPSuccess),
+	}
+
+	log.Printf("DaprAPIResponse=%+v", response)
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
 // appRouter initializes restful api router.
 func appRouter() *mux.Router {
 	log.Printf("Enter appRouter()")
@@ -215,6 +294,12 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/tests/pubsub", getPubsubDaprAPIResponse).Methods("GET")
 
 	router.HandleFunc("/tests/bindings", getBindingsDaprAPIResponse).Methods("GET")
+
+	router.HandleFunc("/tests/statestore/start", stateStoreTestStartHandler).Methods("GET")
+
+	router.HandleFunc("/tests/statestore/stop", stateStoreTestStopHandler).Methods("GET")
+
+	router.HandleFunc("/tests/statestore", getStateStoreAPIResponse).Methods("GET")
 
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
 

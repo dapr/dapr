@@ -47,6 +47,7 @@ type PlatformInterface interface {
 	GetSidecarUsage(appName string) (*AppUsage, error)
 	GetTotalRestarts(appname string) (int, error)
 	GetConfiguration(name string) (*configurationv1alpha1.Configuration, error)
+	UpdateComponent(comp kube.ComponentDescription) error
 }
 
 // AppUsage holds the CPU and Memory information for the application.
