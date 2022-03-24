@@ -682,7 +682,7 @@ func (a *actorsRuntime) evaluateReminders() {
 					} else {
 						stopChan, exists := a.activeReminders.Load(reminderKey)
 						if exists {
-							log.Debugf("stopping reminder %s on %s as it's active on another host", reminderKey, a.config.HostAddress)
+							log.Debugf("stopping reminder %s on %s as it's active on host %s", reminderKey, a.config.HostAddress, targetActorAddress)
 							close(stopChan.(chan bool))
 							a.activeReminders.Delete(reminderKey)
 						}
