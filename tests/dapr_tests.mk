@@ -336,7 +336,7 @@ setup-test-components: setup-app-configurations
 # Clean up test environment
 clean-test-env:
 	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)
-	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)-2
+	./tests/test-infra/clean_up.sh $(DAPR_TEST_SECONDARY_NAMESPACE)
 
 # Setup kind
 setup-kind:
