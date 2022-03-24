@@ -656,9 +656,9 @@ func (a *actorsRuntime) evaluateReminders() {
 						continue
 					}
 
+					actorKey := constructCompositeKey(r.reminder.ActorType, r.reminder.ActorID)
+					reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 					if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-						actorKey := constructCompositeKey(r.reminder.ActorType, r.reminder.ActorID)
-						reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 						_, exists := a.activeReminders.Load(reminderKey)
 
 						if !exists {
@@ -678,6 +678,13 @@ func (a *actorsRuntime) evaluateReminders() {
 								r.reminder.Name,
 								r.reminder.ActorID,
 								r.reminder.ActorType)
+						}
+					} else {
+						stopChan, exists := a.activeReminders.Load(reminderKey)
+						if exists {
+							log.Debugf("stopping reminder %s on %s as it's active on host %s", reminderKey, a.config.HostAddress, targetActorAddress)
+							close(stopChan.(chan bool))
+							a.activeReminders.Delete(reminderKey)
 						}
 					}
 				}
