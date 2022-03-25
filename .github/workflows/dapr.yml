@@ -30,19 +30,19 @@ jobs:
       TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest, windows-2019, macOS-latest]
         target_arch: [arm, arm64, amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
-          - os: windows-latest
+          - os: windows-2019
             target_os: windows
           - os: macOS-latest
             target_os: darwin
         exclude:
-          - os: windows-latest
+          - os: windows-2019
             target_arch: arm
-          - os: windows-latest
+          - os: windows-2019
             target_arch: arm64
           - os: macOS-latest
             target_arch: arm

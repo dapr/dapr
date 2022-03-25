@@ -22,17 +22,17 @@ jobs:
       GOPROXY: https://proxy.golang.org
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-2019]
         target_arch: [arm, arm64, amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
-          - os: windows-latest
+          - os: windows-2019
             target_os: windows
         exclude:
-          - os: windows-latest
+          - os: windows-2019
             target_arch: arm
-          - os: windows-latest
+          - os: windows-2019
             target_arch: arm64
     steps:
       - name: Set up Go ${{ env.GOVER }}
