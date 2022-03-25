@@ -227,7 +227,7 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 			return
 
 		case <-processingTicker.C:
-			log.Infof("process raft state command: nothing happened...")
+			log.Debugf("process raft state command: nothing happened...")
 			continue
 
 		case op := <-p.membershipCh:
