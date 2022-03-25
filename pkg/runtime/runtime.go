@@ -529,10 +529,10 @@ func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) sendToDeadLetterIfConfigured(name string, msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) sendToDeadLetterIfConfigured(name string, msg *pubsub.NewMessage) (isDeadLetterConfigured bool, err error) {
 	deadLetterTopic, ok := a.deadLetterTopics[fmt.Sprintf(deadLetterKeyFormat, name, msg.Topic)]
 	if !ok {
-		return nil
+		return false, nil
 	}
 	req := &pubsub.PublishRequest{
 		Data:        msg.Data,
@@ -542,11 +542,11 @@ func (a *DaprRuntime) sendToDeadLetterIfConfigured(name string, msg *pubsub.NewM
 		ContentType: msg.ContentType,
 	}
 
-	err := a.Publish(req)
+	err = a.Publish(req)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 	}
-	return err
+	return true, err
 }
 
 func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
@@ -589,7 +589,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			rawPayload, err := contrib_metadata.IsRawPayload(routeMetadata)
 			if err != nil {
 				log.Errorf("error deserializing pubsub metadata: %s", err)
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 				a.sendToDeadLetterIfConfigured(name, msg)
 				return nil
 			}
@@ -601,7 +601,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				data, err = a.json.Marshal(cloudEvent)
 				if err != nil {
 					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 					a.sendToDeadLetterIfConfigured(name, msg)
 					return nil
 				}
@@ -609,7 +609,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				err = a.json.Unmarshal(msg.Data, &cloudEvent)
 				if err != nil {
 					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 					a.sendToDeadLetterIfConfigured(name, msg)
 					return nil
 				}
@@ -625,7 +625,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
 			if err != nil {
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 				a.sendToDeadLetterIfConfigured(name, msg)
 				return nil
 			}
@@ -649,7 +649,10 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				})
 			})
 			if err != nil && err != context.Canceled {
-				a.sendToDeadLetterIfConfigured(name, msg)
+				// Sending msg to dead letter queue, if no DLQ is configured, return error for backwards compatibility(component level retry).
+				if ok, _ := a.sendToDeadLetterIfConfigured(name, msg); !ok {
+					return err
+				}
 			}
 			return nil
 		}); err != nil {
