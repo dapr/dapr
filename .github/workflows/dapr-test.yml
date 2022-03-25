@@ -11,34 +11,115 @@
 # limitations under the License.
 #
 
+# Required secrets:
+# - AZURE_CREDENTIALS: JSON object containing the Azure service principal credentials. Docs: https://github.com/Azure/login#configure-a-service-principal-with-a-secret
+# - DAPR_BOT_TOKEN: Token for the Dapr bot
+
 name: dapr-test
 
 on:
+  # Run every 2 hours
   schedule:
     - cron: '0 */2 * * *'
+  # Manual trigger
+  workflow_dispatch:
+  # Dispatch on external events
   repository_dispatch:
     types: [e2e-test]
 
+env:
+  # Version of Go
+  GOVER: "1.17"
+  # Configure proxy for Go modules
+  GOPROXY: https://proxy.golang.org
+  # Version of kubectl
+  KUBECTLVER: "v1.22.6"
+  # If not empty, uses cloud resources for testing
+  TEST_CLOUD_ENV: "azure"
+  # Version of Helm
+  HELMVER: "v3.7.2"
+  # Kubernetes namespace to use
+  DAPR_NAMESPACE: "dapr-tests"
+  # Timeout for tests
+  MAX_TEST_TIMEOUT: 5400
+  # Enable HA mode for tests
+  HA_MODE: true
+  # Space-separated of supported Azure regions: one will be picked randomly for each cluster
+  AZURE_REGIONS: "westus3 eastus2 canadacentral"
+
 jobs:
-  test-e2e:
-    name: end-to-end ${{ matrix.target_os }} tests
+  deploy-infrastructure:
+    name: Deploy test infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-test") {
+              var fs = require('fs');
+              // Set environment variables
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+            }
+      - name: Check out code
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Login to Azure
+        if: env.CHECKOUT_REPO != ''
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build test prefix
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          BASE_STR="E2E|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
+          TEST_PREFIX="dapre2e${SUFFIX}"
+          echo "Test prefix is ${TEST_PREFIX}"
+          echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
+        shell: bash
+      - name: Deploy the test cluster
+        if: env.TEST_PREFIX != ''
+        run: |
+          # Select two random Azure regions
+          REGIONS=(${{ env.AZURE_REGIONS }})
+          REGIONS_SIZE=${#REGIONS[@]}
+          REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
+          REGION1=${REGIONS[$REGIONS_IDX]}
+          REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
+          REGION2=${REGIONS[$REGIONS_IDX]}
+          echo "Deploying to Azure regions: l:${REGION1} $w:{REGION2}"
+
+          # Start the deployment of both test clusters
+          az deployment sub create \
+            --name "${{ env.TEST_PREFIX }}" \
+            --location ${REGION1} \
+            --template-file ./tests/test-infra/azure-all.bicep \
+            --parameters namePrefix="${{ env.TEST_PREFIX }}" location1=${REGION1} location2=${REGION2}
+        shell: bash
+
+  build:
+    name: Build for  ${{ matrix.target_os }}
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.17
-      KUBECTLVER: v1.19.3
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
-      GOPROXY: https://proxy.golang.org
-      DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
-      DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
-      TEST_CLOUD_ENV: azure
-      HELMVER: v3.7.2
-      DAPR_NAMESPACE: dapr-tests
-      MAX_TEST_TIMEOUT: 5400
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
-      HA_MODE: true
-      TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +130,130 @@ jobs:
             target_os: linux
           - os: windows-2019
             target_os: windows
+    steps:
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-test") {
+              var fs = require('fs');
+              // Set environment variables
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+            }
+      - name: Set up Go ${{ env.GOVER }}
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GOVER }}
+      - name: Check out code
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Cache Go modules (Linux)
+        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-
+      - name: Cache Go modules (Windows)
+        if: env.CHECKOUT_REPO != '' && runner.os == 'Windows'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-
+      - name: Login to Azure
+        if: env.CHECKOUT_REPO != ''
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build test prefix and set env vars
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          BASE_STR="E2E|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
+          TEST_PREFIX=""
+          if [ "${{ env.TARGET_OS }}" == "windows" ] ; then
+            TEST_PREFIX="dapre2e${SUFFIX}w"
+          else
+            TEST_PREFIX="dapre2e${SUFFIX}l"
+          fi
+          echo "Test prefix is ${TEST_PREFIX}"
+          echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_REGISTRY=${TEST_PREFIX}acr.azurecr.io" >> $GITHUB_ENV
+          echo "TEST_CLUSTER=${TEST_PREFIX}-aks" >> $GITHUB_ENV
+          echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
+        shell: bash
+      - name: Build dapr and its docker image
+        if: env.TEST_PREFIX != ''
+        run: |
+          make build
+          make docker-build
+        shell: bash
+      - name: Build e2e test apps
+        if: env.TEST_PREFIX != ''
+        run: |
+          make build-e2e-app-all
+        shell: bash
+      - name: Wait for Azure Container Registry deployment
+        if: env.TEST_PREFIX != ''
+        run: |
+          until az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
+          do
+              echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
+              sleep 20
+          done
+        shell: bash
+      - name: Login to Azure Container Registry
+        if: env.TEST_PREFIX != ''
+        run: |
+          az acr login --name ${{ env.TEST_PREFIX }}acr
+        shell: bash
+      - name: Push all container images to the registry
+        if: env.TEST_PREFIX != ''
+        run: |
+          make docker-push
+          make push-e2e-app-all
+        shell: bash
+
+  test-e2e:
+    name: End-to-end ${{ matrix.target_os }} tests
+    needs:
+      - build
+      - deploy-infrastructure
+    # Always run on Linux as the local OS is irrelevant and this is faster
+    runs-on: ubuntu-latest
+    env:
+      TARGET_OS: ${{ matrix.target_os }}
+      TARGET_ARCH: ${{ matrix.target_arch }}
+      TEST_OUTPUT_FILE_PREFIX: "test_report"
+    strategy:
+      fail-fast: false
+      matrix:
+        target_os: [linux, windows]
+        target_arch: [amd64]
     steps:
       - name: Set up container log path
         run: |
@@ -76,15 +281,25 @@ jobs:
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GOVER }}
-      - name: Check out code into the Go module directory
+      - name: Check out code
         if: env.CHECKOUT_REPO != ''
         uses: actions/checkout@v2
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: Cache Go modules (test)
+        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-tests-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-tests-
       - uses: azure/setup-kubectl@v1
         with:
           version: ${{ env.KUBECTLVER }}
@@ -93,99 +308,69 @@ jobs:
         uses: azure/setup-helm@v1
         with:
           version: ${{ env.HELMVER }}
-      - name: Login Azure
+      - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
-        run: |
-          az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }} --output none
-      - name: Find the test cluster
-        if: env.CHECKOUT_REPO != ''
-        run: ./tests/test-infra/find_cluster.sh ./tests/test-infra/e2e-list.${{ matrix.target_os }}.txt
-        shell: bash
-      - name: Add the test status comment to PR
-        if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''
-        env:
-          JOB_CONTEXT: ${{ toJson(job) }}
-        uses: actions/github-script@0.3.0
+        uses: azure/login@v1
         with:
-          github-token: ${{secrets.DAPR_BOT_TOKEN}}
-          script: |
-            const payload = context.payload;
-            const testPayload = payload.client_payload;
-            const testCluster = process.env.TEST_CLUSTER;
-            const targetOs = process.env.TARGET_OS;
-
-            if (!testCluster) {
-              message = "All test clusters are occupied by the other tests. Please try to test later.";
-            } else {
-              const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-              message = `Found the available test cluster - ${testCluster} for ${targetOs}. Please check the [build status](${checkLink}).`;
-            }
-
-            await github.issues.createComment({
-              owner: testPayload.issue.owner,
-              repo: testPayload.issue.repo,
-              issue_number: testPayload.issue.number,
-              body: message
-            });
-      - name: docker login
-        if: env.TEST_CLUSTER != ''
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build test prefix and set env vars
+        if: env.CHECKOUT_REPO != ''
         run: |
-          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: Setup environment variables for ${{ env.TEST_CLOUD_ENV }}
-        if: env.TEST_CLUSTER != '' && env.TEST_CLOUD_ENV != ''
-        run: ./tests/test-infra/setup_${{ env.TEST_CLOUD_ENV }}_env.ps1
-        shell: pwsh
-      - name: Start setup for cloud resources
-        if: env.TEST_CLUSTER != '' && env.TEST_CLOUD_ENV != ''
-        run: ./tests/test-infra/start_${{ env.TEST_CLOUD_ENV }}_setup.ps1
-        shell: pwsh
-      - name: Build dapr and its docker image and push them to test registry
-        if: env.TEST_CLUSTER != ''
+          BASE_STR="E2E|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
+          TEST_PREFIX=""
+          if [ "${{ env.TARGET_OS }}" == "windows" ] ; then
+            TEST_PREFIX="dapre2e${SUFFIX}w"
+          else
+            TEST_PREFIX="dapre2e${SUFFIX}l"
+          fi
+          echo "Test prefix is ${TEST_PREFIX}"
+          echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_REGISTRY=${TEST_PREFIX}acr.azurecr.io" >> $GITHUB_ENV
+          echo "TEST_CLUSTER=${TEST_PREFIX}-aks" >> $GITHUB_ENV
+          echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
+        shell: bash
+      - name: Connect to Kubernetes
+        if: env.TEST_PREFIX != ''
         run: |
-          make build
-          make docker-push
-      - name: Preparing ${{ env.TEST_CLUSTER }} cluster for test
-        if: env.TEST_CLUSTER != ''
+          az aks get-credentials -n "${{ env.TEST_CLUSTER }}" -g "${{ env.TEST_RESOURCE_GROUP }}"
+          kubectl create namespace ${{ env.DAPR_NAMESPACE }}
+        shell: bash
+      - name: Setup for cloud resources
+        if: env.TEST_PREFIX != '' && env.TEST_CLOUD_ENV != ''
+        run: ./tests/test-infra/setup_${{ env.TEST_CLOUD_ENV }}.sh
+        shell: bash
+      - name: Preparing AKS cluster for test
+        if: env.TEST_PREFIX != ''
         run: |
           make setup-helm-init
           make setup-test-env-redis
           make setup-test-env-kafka
+          if [ "${{ env.DAPR_TEST_STATE_STORE }}" == "" ] ; then
+            make setup-test-env-mongodb
+          fi
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
-      - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
-        if: env.TEST_CLUSTER != ''
+        shell: bash
+      - name: Deploy dapr to AKS cluster
+        if: env.TEST_PREFIX != ''
         run: make docker-deploy-k8s
       - name: Deploy test components
-        if: env.TEST_CLUSTER != ''
+        if: env.TEST_PREFIX != ''
         run: make setup-test-components
       - name: Show dapr configurations
-        if: env.TEST_CLUSTER != ''
+        if: env.TEST_PREFIX != ''
         run: kubectl get configurations daprsystem -n ${{ env.DAPR_NAMESPACE }} -o yaml
-      - name: Set windows TCP timeouts
-        if: matrix.target_os == 'windows'
-        run: |
-          netsh interface tcp set global initialRto=3000
-          netsh interface tcp set global maxSynRetransmissions=8
-          netsh interface tcp show global
-      - name: Build e2e test apps
-        if: env.TEST_CLUSTER != ''
-        run: make build-e2e-app-all
-      - name: Push e2e app images to test dockerhub
-        if: env.TEST_CLUSTER != ''
-        run: |
-          make push-e2e-app-all
-      - name: Verify cloud resources
-        if: env.TEST_CLUSTER != '' && env.TEST_CLOUD_ENV != ''
-        run: ./tests/test-infra/verify_${{ env.TEST_CLOUD_ENV }}_setup.ps1
-        shell: pwsh
       - name: Run E2E tests
-        if: env.TEST_CLUSTER != ''
+        if: env.TEST_PREFIX != ''
         run: make test-e2e-all
       - name: Save control plane K8s resources
-        if: always() && env.TEST_CLUSTER != ''
+        if: always() && env.TEST_PREFIX != ''
         run: |
           make save-dapr-control-plane-k8s-resources || true
       - name: Save control plane logs
-        if: always() && env.TEST_CLUSTER != ''
+        if: always() && env.TEST_PREFIX != ''
         run: |
           make save-dapr-control-plane-k8s-logs
       - name: Upload container logs
@@ -202,7 +387,7 @@ jobs:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
       - name: Add test result comment to PR
-        if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
+        if: always() && github.event_name == 'repository_dispatch' && env.TEST_PREFIX != ''
         env:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0
@@ -236,10 +421,35 @@ jobs:
                 body: message
               });
             }
-      - name: Clean up ${{ env.TEST_CLUSTER }} cluster
-        if: always() && env.TEST_CLUSTER != ''
-        run: make clean-test-env
-      - name: Tears down cloud resources
-        if: always() && env.TEST_CLUSTER != '' && env.TEST_CLOUD_ENV != ''
-        run: ./tests/test-infra/teardown_${{ env.TEST_CLOUD_ENV }}.ps1
-        shell: pwsh
+
+  cleanup:
+    name: Clean up Azure resources
+    runs-on: ubuntu-latest
+    needs:
+      - test-e2e
+    if: always()
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build test prefix
+        run: |
+          BASE_STR="E2E|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
+          TEST_PREFIX="dapre2e${SUFFIX}"
+          echo "Test prefix is ${TEST_PREFIX}"
+          echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
+        shell: bash
+      - name: Delete Linux cluster
+        run: |
+          # We are not waiting for these commands to complete, and we're ignoring errors
+          echo "Starting removal of resource group Dapr-E2E-${{ env.TEST_PREFIX }}l"
+          az group delete --no-wait --yes --name "Dapr-E2E-${{ env.TEST_PREFIX }}l" || true
+        shell: bash
+      - name: Delete Windows cluster
+        run: |
+          # We are not waiting for these commands to complete, and we're ignoring errors
+          echo "Starting removal of resource group Dapr-E2E-${{ env.TEST_PREFIX }}w"
+          az group delete --no-wait --yes --name "Dapr-E2E-${{ env.TEST_PREFIX }}w" || true
+        shell: bash
