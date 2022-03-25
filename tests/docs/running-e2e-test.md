@@ -185,3 +185,105 @@ make delete-test-namespace
 To keep the build infrastructure simple, Dapr uses [dapr-test GitHub Actions Workflow](https://github.com/dapr/dapr/actions?query=workflow%3Adapr-test) to run e2e tests using one of [AKS clusters](https://github.com/dapr/dapr/blob/4cd61680a3129f729deae24a51da241d0701376c/tests/test-infra/find_cluster.sh#L12-L17). A separate workflow also runs E2E in [KinD](https://kind.sigs.k8s.io/) clusters.
 
 Once a contributor creates a pull request, E2E tests on KinD clusters are automatically executed for faster feedback. In order to run the E2E tests on AKS, ask a maintainer or approver to add `/ok-to-test` comment to the Pull Request.
+
+## Run E2E tests on Azure AKS
+
+This repository's automated tests (CI) use an Azure Kubernetes Service (AKS) cluster to run E2E tests.
+
+If you want to run the tests in a similar environment, you can deploy the test infrastructure on your own using the Bicep templates in [tests/test-infra](/tests/test-infra/).
+
+> Before you run the commands below, ensure that you have an Azure subscription, have the Azure CLI installed, and are logged into Azure (`az login`)
+
+### Deploy AKS only
+
+If you want to deploy AKS and the Azure Container Registry only (without Azure Cosmos DB and Azure Service Bus), you can use this script:
+
+```sh
+# Set the Azure region to use (needs to support Availability Zones)
+AZURE_REGION="eastus2"
+
+# Name prefix for your test resources
+# Try to use a unique name
+export TEST_PREFIX="mydapraks42"
+
+# Set to true to add a Windows node pool to the AKS cluster
+ENABLE_WINDOWS="false"
+
+# Name of the resource group where to deploy your cluster
+export TEST_RESOURCE_GROUP="MyDaprTest"
+
+# Create a resource group
+az group create \
+  --resource-group "${TEST_RESOURCE_GROUP}" \
+  --location "${AZURE_REGION}"
+
+# Deploy the test infrastructure
+az deployment group create \
+  --resource-group "${TEST_RESOURCE_GROUP}" \
+  --template-file ./tests/test-infra/azure-aks.bicep \
+  --parameters namePrefix=${TEST_PREFIX} location=${AZURE_REGION} enableWindows=${ENABLE_WINDOWS}
+
+# Authenticate with Azure Container Registry
+az acr login --name "${TEST_PREFIX}acr"
+
+# Connect to AKS
+az aks get-credentials -n "${TEST_PREFIX}-aks" -g "${TEST_RESOURCE_GROUP}"
+
+# Set the value for DAPR_REGISTRY
+export DAPR_REGISTRY="${TEST_PREFIX}acr.azurecr.io"
+
+# Set the value for DAPR_NAMESPACE as per instructions above
+export DAPR_NAMESPACE=dapr-tests
+```
+
+After this, run the E2E tests as per instructions above, making sure to use the newly-created Azure Container Registry as Docker registry (make sure you maintain the environmental variables set in the steps above).
+
+
+### Deploy AKS and other Azure resources
+
+This is the setup that our E2E tests use in GitHub Actions, which includes AKS, Azure Cosmos DB, and Azure Service Bus, in addition to an Azure Container Registry. To replicate the same setup, run:
+
+> **NOTE:** This deploys an Azure Service Bus instance with ultra-high performance and it is **very expensive**. If you deploy this, don't forget to shut it down after you're done!
+
+```sh
+# Set the Azure region to use (needs to support Availability Zones)
+AZURE_REGION="eastus2"
+
+# Name prefix for your test resources
+# Try to use a unique name
+export TEST_PREFIX="mydapraks42"
+
+# Set to true to add a Windows node pool to the AKS cluster
+ENABLE_WINDOWS="false"
+
+# Name of the resource group where to deploy your cluster
+export TEST_RESOURCE_GROUP="MyDaprTest"
+
+# Create a resource group
+az group create \
+  --resource-group "${TEST_RESOURCE_GROUP}" \
+  --location "${AZURE_REGION}"
+
+# Deploy the test infrastructure
+az deployment group create \
+  --resource-group "${TEST_RESOURCE_GROUP}" \
+  --template-file ./tests/test-infra/azure.bicep \
+  --parameters namePrefix=${TEST_PREFIX} location=${AZURE_REGION} enableWindows=${ENABLE_WINDOWS}
+
+# Authenticate with Azure Container Registry
+az acr login --name "${TEST_PREFIX}acr"
+
+# Connect to AKS
+az aks get-credentials -n "${TEST_PREFIX}-aks" -g "${TEST_RESOURCE_GROUP}"
+
+# Set the value for DAPR_REGISTRY
+export DAPR_REGISTRY="${TEST_PREFIX}acr.azurecr.io"
+
+# Set the value for DAPR_NAMESPACE as per instructions above
+export DAPR_NAMESPACE=dapr-tests
+
+# Create the Kubernetes secrets in the Dapr test namespaces to allow connecting to Cosmos DB and Service Bus
+./tests/test-infra/setup_azure.sh
+```
+
+After this, run the E2E tests as per instructions above, making sure to use the newly-created Azure Container Registry as Docker registry (make sure you maintain the environmental variables set in the steps above).
