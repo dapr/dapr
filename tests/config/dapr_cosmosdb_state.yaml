@@ -29,10 +29,8 @@ spec:
       name: cosmosdb-secret
       key: url
   - name: database
-    value: dapr-aks-e2e-tests
+    value: dapre2e
   - name: collection
-    secretKeyRef:
-      name: cosmosdb-secret
-      key: collection
+    value: items
   - name: actorStateStore
     value: true
