@@ -333,11 +333,6 @@ setup-test-components: setup-app-configurations
 	# Show the installed configurations
 	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
 
-# Clean up test environment
-clean-test-env:
-	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)
-	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)-2
-
 # Setup kind
 setup-kind:
 	kind create cluster --config ./tests/config/kind.yaml --name kind
