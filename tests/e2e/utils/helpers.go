@@ -19,16 +19,23 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"runtime"
 	"strings"
 	"time"
 
 	guuid "github.com/google/uuid"
 )
 
-// DefaultProbeTimeout is the a timeout used in HTTPGetNTimes() and
-// HTTPGetRawNTimes() to avoid cases where early requests hang and
-// block all subsequent requests.
-const DefaultProbeTimeout = 30 * time.Second
+const (
+	// DefaultProbeTimeout is the a timeout used in HTTPGetNTimes() and
+	// HTTPGetRawNTimes() to avoid cases where early requests hang and
+	// block all subsequent requests.
+	DefaultProbeTimeout = 30 * time.Second
+
+	// Environment variable for setting the target OS where tests are running on.
+	TargetOsEnvVar = "TARGET_OS"
+)
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
 type SimpleKeyValue struct {
@@ -262,4 +269,14 @@ func extractBody(r io.ReadCloser) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// TestTargetOS returns the name of the OS that the tests are targeting (which could be different from the local OS).
+func TestTargetOS() string {
+	// Check if we have an env var first
+	if v, ok := os.LookupEnv(TargetOsEnvVar); ok {
+		return v
+	}
+	// Fallback to the runtime
+	return runtime.GOOS
 }
