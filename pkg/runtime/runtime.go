@@ -95,6 +95,9 @@ const (
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
 
+	// hot reloading is currently unsupported, but
+	// setting this environment variable restores the
+	// partial hot reloading support for k8s.
 	hotReloadingEnvVar = "DAPR_ALLOW_HOT_RELOADING"
 )
 
