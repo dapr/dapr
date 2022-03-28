@@ -94,6 +94,8 @@ const (
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
+
+	hotReloadingEnvVar = "DAPR_ALLOW_HOT_RELOADING"
 )
 
 type ComponentCategory string
@@ -190,8 +192,8 @@ type DaprRuntime struct {
 
 	resiliency resiliency.Provider
 
-	featureRoutingEnabled      bool // TODO: Remove feature flag once feature is ratified
-	featureHotReloadingEnabled bool
+	// TODO: Remove feature flag once feature is ratified
+	featureRoutingEnabled bool
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -259,8 +261,6 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 
 		resiliency: resiliencyProvider,
-
-		featureHotReloadingEnabled: false, // TODO: Use an actual feature flag once hot reloading feature is supported.
 	}
 }
 
@@ -374,7 +374,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	go a.processComponents()
 
-	if a.featureHotReloadingEnabled {
+	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
 		log.Debug("starting to watch component updates")
 		err = a.beginComponentsUpdates()
 		if err != nil {
