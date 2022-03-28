@@ -190,8 +190,8 @@ type DaprRuntime struct {
 
 	resiliency resiliency.Provider
 
-	// TODO: Remove feature flag once feature is ratified
-	featureRoutingEnabled bool
+	featureRoutingEnabled      bool // TODO: Remove feature flag once feature is ratified
+	featureHotReloadingEnabled bool
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -259,6 +259,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 
 		resiliency: resiliencyProvider,
+
+		featureHotReloadingEnabled: false, // TODO: Use an actual feature flag once hot reloading feature is supported.
 	}
 }
 
@@ -371,10 +373,15 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
 	go a.processComponents()
-	err = a.beginComponentsUpdates()
-	if err != nil {
-		log.Warnf("failed to watch component updates: %s", err)
+
+	if a.featureHotReloadingEnabled {
+		log.Debug("starting to watch component updates")
+		err = a.beginComponentsUpdates()
+		if err != nil {
+			log.Warnf("failed to watch component updates: %s", err)
+		}
 	}
+
 	a.appendBuiltinSecretStore()
 	err = a.loadComponents(opts)
 	if err != nil {
