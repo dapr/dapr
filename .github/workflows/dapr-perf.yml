@@ -42,7 +42,7 @@ env:
   # Timeout for tests
   MAX_TEST_TIMEOUT: 5400
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "westus3 canadacentral"
+  AZURE_REGIONS: "westus3 eastus2"
 
 jobs:
   deploy-infrastructure:
@@ -100,19 +100,28 @@ jobs:
           REGION=${REGIONS[$REGIONS_IDX]}
           echo "Deploying to Azure region: ${REGION}"
 
+           # Tags
+          TAGS="date=$(date --iso-8601=seconds)"
+          echo "Tags: ${TAGS}"
+
           # Create a resource group
           az group create \
             --resource-group "${{ env.TEST_RESOURCE_GROUP }}" \
-            --location ${REGION}
+            --location ${REGION} \
+            --tags "${TAGS}"
 
           # Deploy the test cluster, deploying AKS only
-          az deployment group create \
-            --resource-group "${{ env.TEST_RESOURCE_GROUP }}" \
-            --template-file ./tests/test-infra/azure-aks.bicep \
-            --parameters \
-              namePrefix="${{ env.TEST_PREFIX }}" \
-              location=${REGION} \
-              linuxVMSize=Standard_D8s_v4
+          # Retry the deployment twice in case of transient failures (such as capacity constraints)
+          for i in 1 2; do 
+            az deployment group create \
+              --resource-group "${{ env.TEST_RESOURCE_GROUP }}" \
+              --template-file ./tests/test-infra/azure-aks.bicep \
+              --parameters \
+                namePrefix="${{ env.TEST_PREFIX }}" \
+                location=${REGION} \
+                linuxVMSize=Standard_D8s_v4 \
+            && break || sleep 120
+          done
         shell: bash
 
   build:
