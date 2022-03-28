@@ -98,7 +98,7 @@ const (
 	// hot reloading is currently unsupported, but
 	// setting this environment variable restores the
 	// partial hot reloading support for k8s.
-	hotReloadingEnvVar = "DAPR_ALLOW_HOT_RELOADING"
+	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 )
 
 type ComponentCategory string
