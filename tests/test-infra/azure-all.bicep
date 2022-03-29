@@ -26,10 +26,16 @@ param location1 string
 @description('The location of the second set of resources')
 param location2 string
 
+@description('Optional value for the date tag for resource groups')
+param dateTag string = ''
+
 // Deploy the Linux cluster in the first location
 resource linuxResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
   name: 'Dapr-E2E-${namePrefix}l'
   location: location1
+  tags: dateTag != '' ? {
+    date: dateTag
+  } : {}
 }
 module linuxCluster 'azure.bicep' = {
   name: 'linuxCluster'
@@ -45,6 +51,9 @@ module linuxCluster 'azure.bicep' = {
 resource WindowsResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
   name: 'Dapr-E2E-${namePrefix}w'
   location: location2
+  tags: dateTag != '' ? {
+    date: dateTag
+  } : {}
 }
 module windowsCluster 'azure.bicep' = {
   name: 'windowsCluster'
