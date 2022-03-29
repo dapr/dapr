@@ -41,6 +41,8 @@ runtime \
 runtime_init \
 middleware \
 job-publisher \
+resiliencyapp \
+resiliencyapp_grpc \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
@@ -57,8 +59,6 @@ PERF_TESTS=actor_timer actor_reminder actor_activation service_invocation_http
 KUBECTL=kubectl
 
 DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
-
-DAPR_TEST_SECONDARY_NAMESPACE=dapr-tests-2
 
 ifeq ($(DAPR_TEST_STATE_STORE),)
 DAPR_TEST_STATE_STORE=redis
@@ -155,11 +155,9 @@ endef
 
 create-test-namespace:
 	kubectl create namespace $(DAPR_TEST_NAMESPACE)
-	kubectl create namespace $(DAPR_TEST_SECONDARY_NAMESPACE)
 
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
-	kubectl delete namespace $(DAPR_TEST_SECONDARY_NAMESPACE)
 
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb
 
@@ -319,17 +317,17 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_pubsub_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/app_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/resiliency_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed configurations
 	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
-
-# Clean up test environment
-clean-test-env:
-	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)
-	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)-2
 
 # Setup kind
 setup-kind:

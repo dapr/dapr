@@ -32,11 +32,14 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/resiliency"
+	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
 const (
@@ -63,6 +66,39 @@ type testRequest struct {
 type mockAppChannel struct {
 	channel.AppChannel
 	requestC chan testRequest
+}
+
+var testResiliency = &v1alpha1.Resiliency{
+	Spec: v1alpha1.ResiliencySpec{
+		Policies: v1alpha1.Policies{
+			Retries: map[string]v1alpha1.Retry{
+				"singleRetry": {
+					MaxRetries:  1,
+					MaxInterval: "100ms",
+					Policy:      "constant",
+					Duration:    "10ms",
+				},
+			},
+			Timeouts: map[string]string{
+				"fast": "100ms",
+			},
+		},
+		Targets: v1alpha1.Targets{
+			Actors: map[string]v1alpha1.ActorPolicyNames{
+				"failingActorType": {
+					Timeout: "fast",
+				},
+			},
+			Components: map[string]v1alpha1.ComponentPolicyNames{
+				"failStore": {
+					Outbound: v1alpha1.PolicyNames{
+						Retry:   "singleRetry",
+						Timeout: "fast",
+					},
+				},
+			},
+		},
+	},
 }
 
 func (m *mockAppChannel) GetBaseAddress() string {
@@ -243,9 +279,11 @@ func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 }
 
 type runtimeBuilder struct {
-	appChannel  channel.AppChannel
-	config      *Config
-	featureSpec []config.FeatureSpec
+	appChannel     channel.AppChannel
+	config         *Config
+	featureSpec    []config.FeatureSpec
+	actorStore     state.Store
+	actorStoreName string
 }
 
 func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
@@ -264,8 +302,13 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 
 	tracingSpec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
+	storeName := "actorStore"
+	if b.actorStore != nil {
+		store = b.actorStore
+		storeName = b.actorStoreName
+	}
 
-	a := NewActors(store, b.appChannel, nil, *b.config, nil, tracingSpec, b.featureSpec)
+	a := NewActors(store, b.appChannel, nil, *b.config, nil, tracingSpec, b.featureSpec, resiliency.FromConfigurations(log, testResiliency), storeName)
 
 	return a.(*actorsRuntime)
 }
@@ -274,7 +317,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
-	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
+	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
 }
@@ -298,7 +341,7 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 			Name:    config.ActorTypeMetadata,
 			Enabled: true,
 		},
-	})
+	}, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
 }
@@ -2114,4 +2157,153 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	assert.Nil(t, resp)
 	assert.Error(t, err)
+}
+
+func TestActorsRuntimeResiliency(t *testing.T) {
+	actorType := "failingActor"
+	actorID := "failingId"
+	failingState := &daprt.FailingStatestore{
+		Failure: daprt.Failure{
+			// Transform the keys into actor format.
+			Fails: map[string]int{
+				constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey"): 1,
+				constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey"):    1,
+				constructCompositeKey("actors", actorType):                                 1, // Default reminder key.
+			},
+			Timeouts: map[string]time.Duration{
+				constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey"): time.Second * 10,
+				constructCompositeKey(TestAppID, actorType, actorID, "timeoutMultiKey"):    time.Second * 10,
+				constructCompositeKey("actors", actorType):                                 time.Second * 10, // Default reminder key.
+			},
+			CallCount: map[string]int{},
+		},
+	}
+	failingAppChannel := &daprt.FailingAppChannel{
+		Failure: daprt.Failure{
+			Timeouts: map[string]time.Duration{
+				"timeoutId": time.Second * 10,
+			},
+			CallCount: map[string]int{},
+		},
+		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
+			return req.Actor().ActorId
+		},
+	}
+	builder := runtimeBuilder{
+		appChannel:     failingAppChannel,
+		actorStore:     failingState,
+		actorStoreName: "failStore",
+	}
+	runtime := builder.buildActorRuntime()
+
+	t.Run("callLocalActor times out with resiliency", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("actorMethod")
+		req.WithActor("failingActorType", "timeoutId")
+
+		start := time.Now()
+		resp, err := runtime.callLocalActor(context.Background(), req)
+		end := time.Now()
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Equal(t, 1, failingAppChannel.Failure.CallCount["timeoutId"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("test get state retries with resiliency", func(t *testing.T) {
+		req := &GetStateRequest{
+			Key:       "failingGetStateKey",
+			ActorType: actorType,
+			ActorID:   actorID,
+		}
+		_, err := runtime.GetState(context.Background(), req)
+
+		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey")
+		assert.NoError(t, err)
+		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+	})
+
+	t.Run("test get state times out with resiliency", func(t *testing.T) {
+		req := &GetStateRequest{
+			Key:       "timeoutGetStateKey",
+			ActorType: actorType,
+			ActorID:   actorID,
+		}
+		start := time.Now()
+		_, err := runtime.GetState(context.Background(), req)
+		end := time.Now()
+
+		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey")
+		assert.Error(t, err)
+		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("test state transaction retries with resiliency", func(t *testing.T) {
+		req := &TransactionalRequest{
+			Operations: []TransactionalOperation{
+				{
+					Operation: Delete,
+					Request: map[string]string{
+						"key": "failingMultiKey",
+					},
+				},
+			},
+			ActorType: actorType,
+			ActorID:   actorID,
+		}
+
+		err := runtime.TransactionalStateOperation(context.Background(), req)
+
+		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey")
+		assert.NoError(t, err)
+		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+	})
+
+	t.Run("test state transaction times out with resiliency", func(t *testing.T) {
+		req := &TransactionalRequest{
+			Operations: []TransactionalOperation{
+				{
+					Operation: Delete,
+					Request: map[string]string{
+						"key": "timeoutMultiKey",
+					},
+				},
+			},
+			ActorType: actorType,
+			ActorID:   actorID,
+		}
+
+		start := time.Now()
+		err := runtime.TransactionalStateOperation(context.Background(), req)
+		end := time.Now()
+
+		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutMultiKey")
+		assert.Error(t, err)
+		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("test get reminders retries and times out with resiliency", func(t *testing.T) {
+		_, err := runtime.GetReminder(context.Background(), &GetReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+		})
+
+		callKey := constructCompositeKey("actors", actorType)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+
+		// Key will no longer fail, so now we can check the timeout.
+		start := time.Now()
+		_, err = runtime.GetReminder(context.Background(), &GetReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+		})
+		end := time.Now()
+
+		assert.Error(t, err)
+		assert.Equal(t, 4, failingState.Failure.CallCount[callKey]) // Should be called 2 more times.
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
 }
