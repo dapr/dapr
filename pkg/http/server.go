@@ -62,6 +62,7 @@ type server struct {
 
 // NewServer returns a new HTTP server.
 func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline, apiSpec config.APISpec) Server {
+	infoLog.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
 		api:         api,
 		config:      config,
@@ -83,9 +84,7 @@ func (s *server) StartNonBlocking() error {
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
 
-	infoLog.SetOutputLevel(logger.LogLevel("info"))
 	enableAPILogging := s.config.EnableAPILogging
-
 	if enableAPILogging {
 		handler = s.apiLoggingInfo(handler)
 	}
