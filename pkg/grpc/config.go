@@ -24,11 +24,11 @@ type ServerConfig struct {
 	MaxRequestBodySize int
 	UnixDomainSocket   string
 	ReadBufferSize     int
-	APILoglevel        string
+	EnableApiLogging   bool
 }
 
 // NewServerConfig returns a new grpc server config.
-func NewServerConfig(appID string, hostAddress string, port int, apiListenAddresses []string, namespace string, trustDomain string, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, apiLogLevel string) ServerConfig {
+func NewServerConfig(appID string, hostAddress string, port int, apiListenAddresses []string, namespace string, trustDomain string, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, enableApiLogging bool) ServerConfig {
 	return ServerConfig{
 		AppID:              appID,
 		HostAddress:        hostAddress,
@@ -39,6 +39,6 @@ func NewServerConfig(appID string, hostAddress string, port int, apiListenAddres
 		MaxRequestBodySize: maxRequestBodySize,
 		UnixDomainSocket:   unixDomainSocket,
 		ReadBufferSize:     readBufferSize,
-		APILoglevel:        apiLogLevel,
+		EnableApiLogging:   enableApiLogging,
 	}
 }

@@ -127,7 +127,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--api-log-level", "",
+			"--enable-api-logging", "false",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -186,7 +186,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--api-log-level", "",
+			"--enable-api-logging", "false",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -230,7 +230,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--api-log-level", "",
+			"--enable-api-logging", "false",
 			"--enable-mtls",
 		}
 
@@ -264,7 +264,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
-			"--api-log-level", "",
+			"--enable-api-logging", "false",
 			"--enable-mtls",
 		}
 
@@ -298,7 +298,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-max-request-size", "-1",
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "5",
-			"--api-log-level", "",
+			"--enable-api-logging", "false",
 			"--enable-mtls",
 		}
 
