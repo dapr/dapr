@@ -42,7 +42,7 @@ env:
   # Timeout for tests
   MAX_TEST_TIMEOUT: 5400
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "westus3 eastus2"
+  AZURE_REGIONS: "westus3"
 
 jobs:
   deploy-infrastructure:
