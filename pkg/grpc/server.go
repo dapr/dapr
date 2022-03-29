@@ -66,6 +66,7 @@ type server struct {
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
 	kind               string
+	apiLogger          logger.Logger
 	logger             logger.Logger
 	maxConnectionAge   *time.Duration
 	authToken          string
@@ -74,6 +75,7 @@ type server struct {
 }
 
 var (
+	apiLogger            = logger.NewLogger("dapr.runtime.grpc.api")
 	apiServerLogger      = logger.NewLogger("dapr.runtime.grpc.api")
 	internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
 )
@@ -87,6 +89,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		metricSpec:  metricSpec,
 		kind:        apiServer,
 		logger:      apiServerLogger,
+		apiLogger:   apiLogger,
 		authToken:   auth.GetAPIToken(),
 		apiSpec:     apiSpec,
 		proxy:       proxy,
@@ -104,6 +107,7 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		renewMutex:       &sync.Mutex{},
 		kind:             internalServer,
 		logger:           internalServerLogger,
+		apiLogger:        nil,
 		maxConnectionAge: getDefaultMaxAgeDuration(),
 		proxy:            proxy,
 	}
@@ -222,8 +226,10 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 
 	apiLogLevel := s.config.APILoglevel
 	if strings.EqualFold(apiLogLevel, "info") {
+		s.apiLogger.SetOutputLevel(logger.InfoLevel)
 		intr = append(intr, s.getGRPCAPILoggingInfo(apiLogLevel))
 	} else if strings.EqualFold(apiLogLevel, "debug") {
+		s.apiLogger.SetOutputLevel(logger.DebugLevel)
 		intr = append(intr, s.getGRPCAPILoggingDebug(apiLogLevel))
 	}
 
@@ -313,14 +319,14 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 
 func (s *server) getGRPCAPILoggingInfo(apiLogLevel string) grpc_go.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (interface{}, error) {
-		s.logger.Info("gRPC API Called: ", *info)
+		s.apiLogger.Info("gRPC API Called: ", *info)
 		return handler(ctx, req)
 	}
 }
 
 func (s *server) getGRPCAPILoggingDebug(apiLogLevel string) grpc_go.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (interface{}, error) {
-		s.logger.Debug("gRPC API Called: ", *info)
+		s.apiLogger.Debug("gRPC API Called: ", *info)
 		return handler(ctx, req)
 	}
 }
