@@ -74,7 +74,7 @@ const (
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
 	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
-	daprEnableApiLogging              = "dapr.io/enable-api-logging"
+	daprEnableAPILogging              = "dapr.io/enable-api-logging"
 	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
 	containersPath                    = "/spec/containers"
@@ -114,7 +114,7 @@ const (
 	defaultMtlsEnabled                = true
 	trueString                        = "true"
 	defaultDaprHTTPStreamRequestBody  = false
-	defaultApiLoggingEnabled          = false
+	defaultAPILoggingEnabled          = false
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -564,7 +564,7 @@ func isResourceDaprEnabled(annotations map[string]string) bool {
 }
 
 func getEnableAPILogging(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprEnableApiLogging, defaultApiLoggingEnabled)
+	return getBoolAnnotationOrDefault(annotations, daprEnableAPILogging, defaultAPILoggingEnabled)
 }
 
 func getServiceAddress(name, namespace, clusterDomain string, port int) string {

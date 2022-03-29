@@ -219,9 +219,9 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 	}
 
-	enableApiLogging := s.config.EnableApiLogging
-	if enableApiLogging == true {
-		intr = append(intr, s.getGRPCAPILoggingInfo(enableApiLogging))
+	enableAPILogging := s.config.EnableAPILogging
+	if enableAPILogging {
+		intr = append(intr, s.getGRPCAPILoggingInfo())
 	}
 
 	chain := grpc_middleware.ChainUnaryServer(
@@ -308,7 +308,7 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 	return percentagePassed >= renewWhenPercentagePassed
 }
 
-func (s *server) getGRPCAPILoggingInfo(apiLogLevel bool) grpc_go.UnaryServerInterceptor {
+func (s *server) getGRPCAPILoggingInfo() grpc_go.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (interface{}, error) {
 		s.logger.Info("gRPC API Called: ", *info)
 		return handler(ctx, req)

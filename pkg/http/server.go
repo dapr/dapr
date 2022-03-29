@@ -82,9 +82,9 @@ func (s *server) StartNonBlocking() error {
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
 
-	enableApiLogging := s.config.EnableApiLogging
+	enableAPILogging := s.config.EnableAPILogging
 
-	if enableApiLogging == true {
+	if enableAPILogging {
 		handler = s.apiLoggingInfo(handler)
 	}
 

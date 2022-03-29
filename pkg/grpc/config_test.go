@@ -42,5 +42,5 @@ func TestServerConfig(t *testing.T) {
 	assert.Equal(t, vals[5], c.TrustDomain)
 	assert.Equal(t, vals[6], c.MaxRequestBodySize)
 	assert.Equal(t, vals[8], c.ReadBufferSize)
-	assert.Equal(t, vals[9], c.EnableApiLogging)
+	assert.Equal(t, vals[9], c.EnableAPILogging)
 }
