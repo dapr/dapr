@@ -38,8 +38,10 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.http")
-var infoLog = logger.NewLogger("dapr.runtime.http-info")
+var (
+	log     = logger.NewLogger("dapr.runtime.http")
+	infoLog = logger.NewLogger("dapr.runtime.http-info")
+)
 
 const protocol = "http"
 
@@ -75,11 +77,10 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, met
 
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
-	handler :=
-		useAPIAuthentication(
-			s.useCors(
-				s.useComponents(
-					s.useRouter())))
+	handler := useAPIAuthentication(
+		s.useCors(
+			s.useComponents(
+				s.useRouter())))
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
