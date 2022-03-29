@@ -39,6 +39,7 @@ import (
 )
 
 var log = logger.NewLogger("dapr.runtime.http")
+var infoLog = logger.NewLogger("dapr.runtime.http-info")
 
 const protocol = "http"
 
@@ -216,7 +217,7 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 
 func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		log.Infof("HTTP API Called: %s %s", ctx.Method(), ctx.Path())
+		infoLog.Infof("HTTP API Called: %s %s", ctx.Method(), ctx.Path())
 		next(ctx)
 	}
 }

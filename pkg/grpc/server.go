@@ -66,6 +66,7 @@ type server struct {
 	signedCertDuration time.Duration
 	kind               string
 	logger             logger.Logger
+	infoLogger         logger.Logger
 	maxConnectionAge   *time.Duration
 	authToken          string
 	apiSpec            config.APISpec
@@ -74,11 +75,13 @@ type server struct {
 
 var (
 	apiServerLogger      = logger.NewLogger("dapr.runtime.grpc.api")
+	apiServerInfoLogger  = logger.NewLogger("dapr.runtime.grpc.api-info")
 	internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
 )
 
 // NewAPIServer returns a new user facing gRPC API server.
 func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy) Server {
+	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
 		api:         api,
 		config:      config,
@@ -86,6 +89,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		metricSpec:  metricSpec,
 		kind:        apiServer,
 		logger:      apiServerLogger,
+		infoLogger:  apiServerInfoLogger,
 		authToken:   auth.GetAPIToken(),
 		apiSpec:     apiSpec,
 		proxy:       proxy,
@@ -310,7 +314,7 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 
 func (s *server) getGRPCAPILoggingInfo() grpc_go.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (interface{}, error) {
-		s.logger.Info("gRPC API Called: ", *info)
+		s.infoLogger.Info("gRPC API Called: ", *info)
 		return handler(ctx, req)
 	}
 }
