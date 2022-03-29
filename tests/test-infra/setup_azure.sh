@@ -22,44 +22,60 @@ if [[ -z "$TEST_RESOURCE_GROUP" ]]; then
     exit 1
 fi
 
-# Set environmental variables to use Cosmos DB as state store
-export DAPR_TEST_STATE_STORE=cosmosdb
-export DAPR_TEST_QUERY_STATE_STORE=cosmosdb_query
+# Control if we're using Cosmos DB
+USE_COSMOSDB=${1:-true}
+USE_SERVICEBUS=${2:-true}
 
-# Write into the GitHub Actions environment
-if [ -n "$GITHUB_ENV" ]; then
-  echo "DAPR_TEST_STATE_STORE=${DAPR_TEST_STATE_STORE}" >> $GITHUB_ENV
-  echo "DAPR_TEST_QUERY_STATE_STORE=${DAPR_TEST_QUERY_STATE_STORE}" >> $GITHUB_ENV
+if $USE_COSMOSDB ; then
+  echo "Configuring Cosmos DB as state store"
+
+  # Set environmental variables to use Cosmos DB as state store
+  export DAPR_TEST_STATE_STORE=cosmosdb
+  export DAPR_TEST_QUERY_STATE_STORE=cosmosdb_query
+
+  # Write into the GitHub Actions environment
+  if [ -n "$GITHUB_ENV" ]; then
+    echo "DAPR_TEST_STATE_STORE=${DAPR_TEST_STATE_STORE}" >> $GITHUB_ENV
+    echo "DAPR_TEST_QUERY_STATE_STORE=${DAPR_TEST_QUERY_STATE_STORE}" >> $GITHUB_ENV
+  fi
+
+  # Get the credentials for Cosmos DB
+  COSMOSDB_MASTER_KEY=$(
+    az cosmosdb keys list \
+      --name "${TEST_PREFIX}db" \
+      --resource-group "$TEST_RESOURCE_GROUP" \
+      --query "primaryMasterKey" \
+      -o tsv
+  )
+  kubectl create secret generic cosmosdb-secret \
+    --namespace=$DAPR_NAMESPACE \
+    --from-literal=url=https://${TEST_PREFIX}db.documents.azure.com:443/ \
+    --from-literal=primaryMasterKey=${COSMOSDB_MASTER_KEY}
+else
+  echo "NOT configuring Cosmos DB as state store"
 fi
 
-# Get the credentials for Cosmos DB
-COSMOSDB_MASTER_KEY=$(
-  az cosmosdb keys list \
-    --name "${TEST_PREFIX}db" \
-    --resource-group "$TEST_RESOURCE_GROUP" \
-    --query "primaryMasterKey" \
-    -o tsv
-)
-kubectl create secret generic cosmosdb-secret \
-  --namespace=$DAPR_NAMESPACE \
-  --from-literal=url=https://${TEST_PREFIX}db.documents.azure.com:443/ \
-  --from-literal=primaryMasterKey=${COSMOSDB_MASTER_KEY}
+if $USE_SERVICEBUS ; then
+  echo "Configuring Service Bus as pubsub store"
 
-# Set environmental variables to Service Bus state store
-export DAPR_TEST_PUBSUB=servicebus
-if [ -n "$GITHUB_ENV" ]; then
-  echo "DAPR_TEST_PUBSUB=${DAPR_TEST_PUBSUB}" >> $GITHUB_ENV
+  # Set environmental variables to Service Bus state store
+  export DAPR_TEST_PUBSUB=servicebus
+  if [ -n "$GITHUB_ENV" ]; then
+    echo "DAPR_TEST_PUBSUB=${DAPR_TEST_PUBSUB}" >> $GITHUB_ENV
+  fi
+
+  # Get the credentials for Service Bus
+  SERVICEBUS_CONNSTRING=$(
+    az servicebus namespace authorization-rule keys list \
+      --resource-group "$TEST_RESOURCE_GROUP" \
+      --namespace-name "${TEST_PREFIX}sb" \
+      --name RootManageSharedAccessKey \
+      --query primaryConnectionString \
+      -o tsv
+  )
+  kubectl create secret generic servicebus-secret \
+    --namespace=$DAPR_NAMESPACE \
+    --from-literal=connectionString=${SERVICEBUS_CONNSTRING}
+else
+  echo "NOT configuring Service Bus as pubsub store"
 fi
-
-# Get the credentials for Service Bus
-SERVICEBUS_CONNSTRING=$(
-  az servicebus namespace authorization-rule keys list \
-    --resource-group "$TEST_RESOURCE_GROUP" \
-    --namespace-name "${TEST_PREFIX}sb" \
-    --name RootManageSharedAccessKey \
-    --query primaryConnectionString \
-    -o tsv
-)
-kubectl create secret generic servicebus-secret \
-  --namespace=$DAPR_NAMESPACE \
-  --from-literal=connectionString=${SERVICEBUS_CONNSTRING}

@@ -232,8 +232,9 @@ az aks get-credentials -n "${TEST_PREFIX}-aks" -g "${TEST_RESOURCE_GROUP}"
 # Set the value for DAPR_REGISTRY
 export DAPR_REGISTRY="${TEST_PREFIX}acr.azurecr.io"
 
-# Set the value for DAPR_NAMESPACE as per instructions above
+# Set the value for DAPR_NAMESPACE as per instructions above and create the namespace
 export DAPR_NAMESPACE=dapr-tests
+make create-test-namespace
 ```
 
 After this, run the E2E tests as per instructions above, making sure to use the newly-created Azure Container Registry as Docker registry (make sure you maintain the environmental variables set in the steps above).
@@ -279,11 +280,13 @@ az aks get-credentials -n "${TEST_PREFIX}-aks" -g "${TEST_RESOURCE_GROUP}"
 # Set the value for DAPR_REGISTRY
 export DAPR_REGISTRY="${TEST_PREFIX}acr.azurecr.io"
 
-# Set the value for DAPR_NAMESPACE as per instructions above
+# Set the value for DAPR_NAMESPACE as per instructions above and create the namespace
 export DAPR_NAMESPACE=dapr-tests
+make create-test-namespace
 
 # Create the Kubernetes secrets in the Dapr test namespaces to allow connecting to Cosmos DB and Service Bus
-./tests/test-infra/setup_azure.sh
+# Syntax: ./tests/test-infra/setup_azure.sh <ENABLE_COSMOSDB> <ENABLE_SERVICEBUS>
+./tests/test-infra/setup_azure.sh true true
 ```
 
 After this, run the E2E tests as per instructions above, making sure to use the newly-created Azure Container Registry as Docker registry (make sure you maintain the environmental variables set in the steps above).

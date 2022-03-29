@@ -45,7 +45,7 @@ env:
   # Enable HA mode for tests
   HA_MODE: true
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "westus3 canadacentral"
+  AZURE_REGIONS: "westus3 eastus2 eastasia"
 
 jobs:
   deploy-infrastructure:
@@ -102,14 +102,26 @@ jobs:
           REGION1=${REGIONS[$REGIONS_IDX]}
           REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
           REGION2=${REGIONS[$REGIONS_IDX]}
-          echo "Deploying to Azure regions: l:${REGION1} $w:{REGION2}"
+          echo "Deploying to Azure regions: Linux=${REGION1} Windows=${REGION2}"
 
-          # Start the deployment of both test clusters
-          az deployment sub create \
-            --name "${{ env.TEST_PREFIX }}" \
-            --location ${REGION1} \
-            --template-file ./tests/test-infra/azure-all.bicep \
-            --parameters namePrefix="${{ env.TEST_PREFIX }}" location1=${REGION1} location2=${REGION2}
+          # Tags
+          DATE_TAG=$(date --iso-8601=seconds)
+          echo "Tags: date=${DATE_TAG}"
+
+          # Deploy both Linux and Windows cluster
+          # Retry the deployment twice in case of transient failures (such as capacity constraints)
+          for i in 1 2; do 
+            az deployment sub create \
+              --name "${{ env.TEST_PREFIX }}" \
+              --location ${REGION1} \
+              --template-file ./tests/test-infra/azure-all.bicep \
+              --parameters \
+                namePrefix="${{ env.TEST_PREFIX }}" \
+                location1=${REGION1} \
+                location2=${REGION2} \
+                dateTag="${DATE_TAG}" \
+            && break || sleep 120
+          done
         shell: bash
 
   build:
