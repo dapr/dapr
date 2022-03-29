@@ -63,6 +63,7 @@ type server struct {
 // NewServer returns a new HTTP server.
 func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline, apiSpec config.APISpec) Server {
 	infoLog.SetOutputLevel(logger.LogLevel("info"))
+
 	return &server{
 		api:         api,
 		config:      config,
