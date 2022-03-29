@@ -1,0 +1,56 @@
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Required secrets:
+# - AZURE_CREDENTIALS: JSON object containing the Azure service principal credentials. Docs: https://github.com/Azure/login#configure-a-service-principal-with-a-secret
+
+name: Cleanup Azure test resources
+
+on:
+  # Run every 6 hours
+  schedule:
+    - cron: '30 */6 * * *'
+  # Manual trigger
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: "Run cleanup script"
+        run: |
+          DELETE_BEFORE_DATE=$(date --date '4 hours ago' +'%s')
+          QUERY="[?(starts_with(name, 'Dapr-Perf-') || starts_with(name, 'Dapr-E2E-') && properties.provisioningState != 'Deleting' && tags.date != '')].{name: name, id: id, date: tags.date}"
+          LINES=$(az group list --query "$QUERY" | jq -c ".[]")
+
+          (
+            # Run in a sub-shell so we can modify IFS safely
+            IFS=$'\n'
+            for line in $(az group list --query "$QUERY" | jq -c '.[]')
+            do
+              RG_DATE_STR=$(echo "$line" | jq -r ".date")
+              RG_DATE=$(date --date "$RG_DATE_STR" +'%s')
+              RG_NAME=$(echo "$line" | jq -r ".name")
+              if [ $RG_DATE -lt $DELETE_BEFORE_DATE ] ; then
+                echo "DELETING Resource Group ${RG_NAME} that was deployed on ${RG_DATE_STR}"
+                az group delete --no-wait --yes --name "${RG_NAME}" || true
+              else
+                echo "Keeping Resource Group ${RG_NAME} that was deployed on ${RG_DATE_STR}"
+              fi
+            done
+          )
+        shell: bash
