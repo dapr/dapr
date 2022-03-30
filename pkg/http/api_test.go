@@ -77,9 +77,22 @@ var testResiliency = &v1alpha1.Resiliency{
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
+				"tenRetries": {
+					MaxRetries:  10,
+					MaxInterval: "100ms",
+					Policy:      "constant",
+					Duration:    "10ms",
+				},
 			},
 			Timeouts: map[string]string{
 				"fast": "100ms",
+			},
+			CircuitBreakers: map[string]v1alpha1.CircuitBreaker{
+				"simpleCB": {
+					MaxRequests: 1,
+					Timeout:     "1s",
+					Trip:        "consecutiveFailures > 4",
+				},
 			},
 		},
 		Targets: v1alpha1.Targets{
@@ -87,6 +100,10 @@ var testResiliency = &v1alpha1.Resiliency{
 				"failingApp": {
 					Retry:   "singleRetry",
 					Timeout: "fast",
+				},
+				"circuitBreakerApp": {
+					Retry:          "tenRetries",
+					CircuitBreaker: "simpleCB",
 				},
 			},
 			Components: map[string]v1alpha1.ComponentPolicyNames{
@@ -903,8 +920,9 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	failingDirectMessaging := &daprt.FailingDirectMessaging{
 		Failure: daprt.Failure{
 			Fails: map[string]int{
-				"failingKey":      1,
-				"extraFailingKey": 3,
+				"failingKey":        1,
+				"extraFailingKey":   3,
+				"circuitBreakerKey": 10,
 			},
 			Timeouts: map[string]time.Duration{
 				"timeoutKey": time.Second * 10,
@@ -967,6 +985,26 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["extraFailingKey"])
+	})
+
+	t.Run("Test invoke direct messages can trip circuit breaker", func(t *testing.T) {
+		apiPath := "v1.0/invoke/circuitBreakerApp/method/fakeMethod"
+		fakeData := []byte("circuitBreakerKey")
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
+		fakeReq.WithRawData(fakeData, "application/json")
+
+		// Circuit Breaker trips on the 5th failure, stopping retries.
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+
+		// Request occurs when the circuit breaker is open, which shouldn't even hit the app.
+		resp = fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Contains(t, string(resp.RawBody), "circuit breaker is open", "Should have received a circuit breaker open error.")
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
 	})
 
 	fakeServer.Shutdown()
