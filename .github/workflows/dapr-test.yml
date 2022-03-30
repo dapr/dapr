@@ -45,7 +45,7 @@ env:
   # Enable HA mode for tests
   HA_MODE: true
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "westus3 eastus2 eastasia"
+  AZURE_REGIONS: "westus3"
 
 jobs:
   deploy-infrastructure:
@@ -110,7 +110,8 @@ jobs:
 
           # Deploy both Linux and Windows cluster
           # Retry the deployment twice in case of transient failures (such as capacity constraints)
-          for i in 1 2; do 
+          success=false
+          for i in 1 2 3; do 
             az deployment sub create \
               --name "${{ env.TEST_PREFIX }}" \
               --location ${REGION1} \
@@ -120,8 +121,12 @@ jobs:
                 location1=${REGION1} \
                 location2=${REGION2} \
                 dateTag="${DATE_TAG}" \
-            && break || sleep 120
+              && success=true \
+              && break \
+              || sleep 120
           done
+          # Exit with error if failed
+          $success || exit 1
         shell: bash
 
   build:
@@ -232,11 +237,18 @@ jobs:
       - name: Wait for Azure Container Registry deployment
         if: env.TEST_PREFIX != ''
         run: |
-          until az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
+          elapsed=0
+          until [ $elapsed -ge 1800 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
           do
               echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
               sleep 20
+              elapsed=$(expr $elapsed + 20)
           done
+
+          if [ $elapsed -ge 1800 ]; then
+            echo "Azure Container Registry not ready on time"
+            exit 1
+          fi
         shell: bash
       - name: Login to Azure Container Registry
         if: env.TEST_PREFIX != ''
