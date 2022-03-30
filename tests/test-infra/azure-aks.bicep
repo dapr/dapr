@@ -21,10 +21,10 @@ param location string = resourceGroup().location
 param enableWindows bool = false
 
 @description('VM size to use for Linux nodes (agent pool)')
-param linuxVMSize string = 'Standard_D4s_v3'
+param linuxVMSize string = 'Standard_DS2_v2'
 
 @description('VM size to use for Windows nodes, if enabled')
-param windowsVMSize string = 'Standard_D8s_v3'
+param windowsVMSize string = 'Standard_DS3_v2'
 
 // Disk size (in GB) for each of the agent pool nodes
 // 0 applies the default
