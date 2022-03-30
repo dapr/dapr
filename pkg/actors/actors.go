@@ -138,6 +138,8 @@ const (
 	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
 
+var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
+
 // NewActors create a new actors runtime with given config.
 func NewActors(
 	stateStore state.Store,
@@ -330,7 +332,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, targetActorAddress, appID, req)
 	}
 
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrDaprResponseHeader) {
 		return nil, err
 	}
 	return resp, nil
@@ -434,7 +436,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// The .NET SDK signifies Actor failure via a header instead of a bad response.
 	if _, ok := resp.Headers()["X-Daprerrorresponseheader"]; ok {
-		return nil, errors.Errorf("error from a .NET actor")
+		return resp, ErrDaprResponseHeader
 	}
 
 	return resp, nil
