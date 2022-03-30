@@ -670,7 +670,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
 		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
-		"--enable-api-logging", fmt.Sprintf("%v", apiLoggingEnabled),
+		fmt.Sprintf("--enable-api-logging=%t", apiLoggingEnabled),
 	}
 
 	debugEnabled := getEnableDebug(annotations)
