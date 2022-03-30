@@ -2027,20 +2027,24 @@ func (a *DaprRuntime) cleanSocket() {
 }
 
 func (a *DaprRuntime) Shutdown(duration time.Duration) {
+	log.Infof("waiting %s to finish outstanding operations", duration)
+	<-time.After(duration)
+	log.Infof("dapr shutting down")
+
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 
 	a.cancel()
 	a.stopActor()
-	log.Infof("dapr shutting down.")
-	log.Info("Stopping Dapr APIs")
+
+	log.Info("stopping Dapr API servers")
 	for _, closer := range a.apiClosers {
 		if err := closer.Close(); err != nil {
 			log.Warnf("error closing API: %v", err)
 		}
 	}
-	log.Infof("Waiting %s to finish outstanding operations", duration)
-	<-time.After(duration)
+
+	log.Info("stopping components")
 	a.shutdownComponents()
 	a.shutdownC <- nil
 }
