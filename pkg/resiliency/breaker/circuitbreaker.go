@@ -91,7 +91,7 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 		Timeout:     c.Timeout,
 		ReadyToTrip: tripFn,
 		OnStateChange: func(name string, from, to gobreaker.State) {
-			log.Debugf("Circuit breaker %q changed state from %s to %s", name, from, to)
+			log.Infof("Circuit breaker %q changed state from %s to %s", name, from, to)
 		},
 	})
 }

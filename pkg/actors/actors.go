@@ -403,27 +403,38 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	defer act.unlock()
 
 	// Replace method to actors method.
+	originalMethod := req.Message().Method
 	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)
+
+	// Reset the method so we can perform retries.
+	defer func() { req.Message().Method = originalMethod }()
+
 	// Original code overrides method with PUT. Why?
 	if req.Message().GetHttpExtension() == nil {
 		req.WithHTTPExtension(nethttp.MethodPut, "")
 	} else {
 		req.Message().HttpExtension.Verb = commonv1pb.HTTPExtension_PUT
 	}
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+
+	policy := a.resiliency.ActorPostLockPolicy(ctx, act.actorType, act.actorID)
+	var resp *invokev1.InvokeMethodResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = a.appChannel.InvokeMethod(ctx, req)
+		return rErr
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
 	_, respData := resp.RawData()
-
 	if resp.Status().Code != nethttp.StatusOK {
 		return nil, errors.Errorf("error from actor service: %s", string(respData))
 	}
 
 	// The .NET SDK signifies Actor failure via a header instead of a bad response.
 	if _, ok := resp.Headers()["X-Daprerrorresponseheader"]; ok {
-		return nil, errors.Errorf("Error from a .NET Actor")
+		return nil, errors.Errorf("error from a .NET actor")
 	}
 
 	return resp, nil
@@ -645,9 +656,9 @@ func (a *actorsRuntime) evaluateReminders() {
 						continue
 					}
 
+					actorKey := constructCompositeKey(r.reminder.ActorType, r.reminder.ActorID)
+					reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 					if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-						actorKey := constructCompositeKey(r.reminder.ActorType, r.reminder.ActorID)
-						reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 						_, exists := a.activeReminders.Load(reminderKey)
 
 						if !exists {
@@ -667,6 +678,13 @@ func (a *actorsRuntime) evaluateReminders() {
 								r.reminder.Name,
 								r.reminder.ActorID,
 								r.reminder.ActorType)
+						}
+					} else {
+						stopChan, exists := a.activeReminders.Load(reminderKey)
+						if exists {
+							log.Debugf("stopping reminder %s on %s as it's active on host %s", reminderKey, a.config.HostAddress, targetActorAddress)
+							close(stopChan.(chan bool))
+							a.activeReminders.Delete(reminderKey)
 						}
 					}
 				}
@@ -860,7 +878,7 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	req.WithActor(reminder.ActorType, reminder.ActorID)
 	req.WithRawData(b, invokev1.JSONContentType)
 
-	policy := a.resiliency.ActorPolicy(context.Background(), reminder.ActorType, reminder.ActorID)
+	policy := a.resiliency.ActorPreLockPolicy(context.Background(), reminder.ActorType, reminder.ActorID)
 	return policy(func(ctx context.Context) error {
 		_, err := a.callLocalActor(context.Background(), req)
 		return err
@@ -1220,7 +1238,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	req.WithActor(actorType, actorID)
 	req.WithRawData(b, invokev1.JSONContentType)
 
-	policy := a.resiliency.ActorPolicy(context.Background(), actorType, actorID)
+	policy := a.resiliency.ActorPreLockPolicy(context.Background(), actorType, actorID)
 	err = policy(func(ctx context.Context) error {
 		_, err = a.callLocalActor(ctx, req)
 		return err

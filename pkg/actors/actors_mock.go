@@ -238,8 +238,7 @@ type FailingActors struct {
 }
 
 func (f *FailingActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
-	err := f.Failure.PerformFailure(req.Actor().ActorId)
-	if err != nil {
+	if err := f.Failure.PerformFailure(req.Actor().ActorId); err != nil {
 		return nil, err
 	}
 	resp := v1.NewInvokeMethodResponse(200, "Success", nil)
