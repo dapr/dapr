@@ -621,6 +621,8 @@ func (a *actorsRuntime) drainRebalancedActors() {
 		}(key, value, &wg)
 		return true
 	})
+
+	wg.Wait()
 }
 
 func (a *actorsRuntime) evaluateReminders() {
