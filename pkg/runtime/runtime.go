@@ -94,6 +94,11 @@ const (
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
+
+	// hot reloading is currently unsupported, but
+	// setting this environment variable restores the
+	// partial hot reloading support for k8s.
+	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 )
 
 type ComponentCategory string
@@ -371,10 +376,15 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
 	go a.processComponents()
-	err = a.beginComponentsUpdates()
-	if err != nil {
-		log.Warnf("failed to watch component updates: %s", err)
+
+	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
+		log.Debug("starting to watch component updates")
+		err = a.beginComponentsUpdates()
+		if err != nil {
+			log.Warnf("failed to watch component updates: %s", err)
+		}
 	}
+
 	a.appendBuiltinSecretStore()
 	err = a.loadComponents(opts)
 	if err != nil {
