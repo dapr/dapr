@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/dapr/components-contrib v1.7.0-rc.1
+	github.com/dapr/components-contrib v1.7.0-rc.2
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.1
@@ -101,7 +101,7 @@ require (
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/Shopify/sarama v1.23.1 // indirect
 	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
-	github.com/a8m/documentdb v1.3.1-0.20220324204957-1a60bd29b196 // indirect
+	github.com/a8m/documentdb v1.3.1-0.20220331220217-1e66c639b09a // indirect
 	github.com/aerospike/aerospike-client-go v4.5.0+incompatible // indirect
 	github.com/alibaba/sentinel-golang v1.0.3 // indirect
 	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.4 // indirect

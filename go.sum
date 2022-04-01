@@ -180,8 +180,8 @@ github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d/go.mod h1:3eOhrU
 github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 h1:5sXbqlSomvdjlRbWyNqkPsJ3Fg+tQZCbgeX1VGljbQY=
 github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/VividCortex/gohistogram v1.0.0/go.mod h1:Pf5mBqqDxYaXu3hDrrU+w6nw50o/4+TcAqDqk/vUH7g=
-github.com/a8m/documentdb v1.3.1-0.20220324204957-1a60bd29b196 h1:5UjuyLUTB+dE3iNqGz+8pTaNCBFU+lFRRKYurE9ucz4=
-github.com/a8m/documentdb v1.3.1-0.20220324204957-1a60bd29b196/go.mod h1:4Z0mpi7fkyqjxUdGiNMO3vagyiUoiwLncaIX6AsW5z0=
+github.com/a8m/documentdb v1.3.1-0.20220331220217-1e66c639b09a h1:R6ZVJrvLESkVdoKt5B5ayx8DgS3n7X0dpTHYTs2sahU=
+github.com/a8m/documentdb v1.3.1-0.20220331220217-1e66c639b09a/go.mod h1:4Z0mpi7fkyqjxUdGiNMO3vagyiUoiwLncaIX6AsW5z0=
 github.com/aerospike/aerospike-client-go v4.5.0+incompatible h1:6ALev/Ge4jW5avSLoqgvPYTh+FLeeDD9xDhzoMCNgOo=
 github.com/aerospike/aerospike-client-go v4.5.0+incompatible/go.mod h1:zj8LBEnWBDOVEIJt8LvaRvDG5ARAoa5dBeHaB472NRc=
 github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5/go.mod h1:SkGFH1ia65gfNATL8TAiHDNxPzPdmEL5uirI2Uyuz6c=
@@ -371,8 +371,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz
 github.com/danieljoos/wincred v1.0.2/go.mod h1:SnuYRW9lp1oJrZX/dXJqr0cPK5gYXqx3EJbmjhLdK9U=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.7.0-rc.1 h1:nGdajm9+AJOuHExdbRxuhnO8sA3yJZcauy9Ilm4Dj8w=
-github.com/dapr/components-contrib v1.7.0-rc.1/go.mod h1:ZyjWZaRHpnuSMRJV+E9fMjNK4kGg3kkfoqtBor5MiAM=
+github.com/dapr/components-contrib v1.7.0-rc.2 h1:6D3aDuqBrriqCywSAFaTz8RtOCIIFGF0Hftze7EygoM=
+github.com/dapr/components-contrib v1.7.0-rc.2/go.mod h1:/+Uu4ZrKz+SApjuq9aQwQGU/5WIzgwSNiUVnbvmX4Zo=
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233 h1:M0dWIG8kUxEFU57IqTWeqptNqlBsfosFgsA5Ov7rJ8g=
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233/go.mod h1:y8r0VqUNKyd6xBXp7gQjwA59wlCLGfKzL5J8iJsN09w=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
