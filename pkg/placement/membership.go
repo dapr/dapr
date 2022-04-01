@@ -323,6 +323,8 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 	for _, s := range targets {
 		config := retry.DefaultConfig()
 		config.MaxRetries = 3
+		config.Duration = time.Second * 60
+
 		backoff := config.NewBackOff()
 		retry.NotifyRecover(
 			func() error {

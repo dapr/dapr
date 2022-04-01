@@ -2035,7 +2035,6 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	defer a.cleanSocket()
 
 	a.cancel()
-	a.stopActor()
 
 	log.Info("stopping Dapr API servers")
 	for _, closer := range a.apiClosers {
@@ -2043,6 +2042,8 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 			log.Warnf("error closing API: %v", err)
 		}
 	}
+
+	a.stopActor()
 
 	log.Info("stopping components")
 	a.shutdownComponents()
