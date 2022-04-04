@@ -91,9 +91,6 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 
 // WithRawData sets message data and content_type.
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
-	if contentType == "" {
-		contentType = JSONContentType
-	}
 	imr.r.Message.ContentType = contentType
 	imr.r.Message.Data = &anypb.Any{Value: data}
 	return imr
@@ -172,13 +169,7 @@ func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 	}
 
 	contentType := m.GetContentType()
-	dataTypeURL := m.GetData().GetTypeUrl()
 	dataValue := m.GetData().GetValue()
-
-	// set content_type to application/json only if typeurl is unset and data is given
-	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
-		contentType = JSONContentType
-	}
 
 	return contentType, dataValue
 }

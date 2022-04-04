@@ -68,7 +68,8 @@ func TestResponseData(t *testing.T) {
 	t.Run("contenttype is set", func(t *testing.T) {
 		resp := NewInvokeMethodResponse(0, "OK", nil)
 		resp.WithRawData([]byte("test"), "application/json")
-		contentType, bData := resp.RawData()
+		_, bData := resp.RawData()
+		contentType := resp.r.Message.ContentType
 		assert.Equal(t, "application/json", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
@@ -76,8 +77,9 @@ func TestResponseData(t *testing.T) {
 	t.Run("contenttype is unset", func(t *testing.T) {
 		resp := NewInvokeMethodResponse(0, "OK", nil)
 		resp.WithRawData([]byte("test"), "")
-		contentType, bData := resp.RawData()
-		assert.Equal(t, "application/json", contentType)
+		_, bData := resp.RawData()
+		contentType := resp.r.Message.ContentType
+		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
 

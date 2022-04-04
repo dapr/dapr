@@ -137,8 +137,9 @@ func (s *server) StartNonBlocking() error {
 		publicHandler = s.useTracing(publicHandler)
 
 		healthServer := &fasthttp.Server{
-			Handler:            publicHandler,
-			MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+			Handler:              publicHandler,
+			MaxRequestBodySize:   s.config.MaxRequestBodySize * 1024 * 1024,
+			NoDefaultContentType: true,
 		}
 		s.servers = append(s.servers, healthServer)
 

@@ -219,13 +219,13 @@ func TestInvokeWithHeaders(t *testing.T) {
 
 func TestContentType(t *testing.T) {
 	ctx := context.Background()
-	t.Run("default application/json", func(t *testing.T) {
+	t.Run("no default content type on GET", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
 		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
 		req := invokev1.NewInvokeMethodRequest("method")
 		req.WithRawData(nil, "")
-		req.WithHTTPExtension(http.MethodPost, "")
+		req.WithHTTPExtension(http.MethodGet, "")
 
 		// act
 		resp, err := c.InvokeMethod(ctx, req)
@@ -233,8 +233,8 @@ func TestContentType(t *testing.T) {
 		// assert
 		assert.NoError(t, err)
 		contentType, body := resp.RawData()
-		assert.Equal(t, "text/plain; charset=utf-8", contentType)
-		assert.Equal(t, []byte("application/json"), body)
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte{}, body)
 		testServer.Close()
 	})
 
