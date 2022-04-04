@@ -56,10 +56,6 @@ func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *Inv
 
 // WithRawData sets Message using byte data and content type.
 func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *InvokeMethodResponse {
-	if contentType == "" {
-		contentType = JSONContentType
-	}
-
 	imr.r.Message.ContentType = contentType
 
 	// Clone data to prevent GC from deallocating data
@@ -136,11 +132,6 @@ func (imr *InvokeMethodResponse) RawData() (string, []byte) {
 	contentType := m.GetContentType()
 	dataTypeURL := m.GetData().GetTypeUrl()
 	dataValue := m.GetData().GetValue()
-
-	// set content_type to application/json only if typeurl is unset and data is given
-	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
-		contentType = JSONContentType
-	}
 
 	if dataTypeURL != "" {
 		contentType = ProtobufContentType
