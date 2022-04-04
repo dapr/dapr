@@ -96,7 +96,7 @@ jobs:
           fi
       - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        uses: golangci/golangci-lint-action@v2.2.1
+        uses: golangci/golangci-lint-action@v3.1.0
         with:
           version: ${{ env.GOLANGCILINT_VER }}
       - name: Run go mod tidy check diff
