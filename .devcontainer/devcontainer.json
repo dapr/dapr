@@ -36,9 +36,6 @@
 	],
 	// Always run image-defined default command
 	"overrideCommand": false,
-	// As a workaround for Codespaces not supporting workspaceFolder/workspace mount, create
-	// a symlink from /workspaces/dapr to /go/src/github.com/dapr/dapr
-	"postCreateCommand": "bash /usr/local/share/setup-gopath.sh dapr",
 	// On Linux, this will prevent new files getting created as root, but you
 	// may need to update the USER_UID and USER_GID in docker/Dockerfile-dev
 	// to match your user if not 1000.
@@ -61,6 +58,9 @@
 	],
 	"settings": {
 		"terminal.integrated.defaultProfile.linux": "bash",
+		"go.toolsManagement.checkForUpdates": "local",
+		"go.useLanguageServer": true,
+		"go.gopath": "/go"
 	},
 	"workspaceFolder": "/go/src/github.com/dapr/dapr",
 	"workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/go/src/github.com/dapr/dapr",
