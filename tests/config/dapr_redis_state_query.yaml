@@ -34,11 +34,15 @@ spec:
           "indexes": [
             {
               "key": "person.org",
-              "type": "TEXT"
+              "alias": "person_org",
+              "type": "TEXT",
+              "sortable": true
             },
             {
               "key": "state",
-              "type": "TEXT"
+              "alias": "state",
+              "type": "TEXT",
+              "sortable": true
             }
           ]
         }
