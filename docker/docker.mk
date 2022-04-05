@@ -206,3 +206,30 @@ tag-dev-container: check-docker-env-for-dev-container
 
 push-dev-container: check-docker-env-for-dev-container
 	$(DOCKER) push $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
+
+build-dev-container-all-arch:
+ifeq ($(DAPR_REGISTRY),)
+	$(info DAPR_REGISTRY environment variable not set, tagging image without registry prefix.)
+	$(DOCKER) buildx build \
+		--build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) \
+		-f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) \
+		--platform linux/amd64,linux/arm64 \
+		-t $(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG) \
+		$(DOCKERFILE_DIR)/.
+else
+	$(DOCKER) buildx build \
+		--build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) \
+		-f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) \
+		--platform linux/amd64,linux/arm64 \
+		-t $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG) \
+		$(DOCKERFILE_DIR)/.
+endif
+
+push-dev-container-all-arch: check-docker-env-for-dev-container
+	$(DOCKER) buildx build \
+		--build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) \
+		-f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) \
+		--platform linux/amd64,linux/arm64 \
+		--push \
+		-t $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG) \
+		$(DOCKERFILE_DIR)/.

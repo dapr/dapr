@@ -10,22 +10,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-#
-# Syntax: ./setup-user.sh [USERNAME] [SECURE_PATH_BASE]
 
-USERNAME=${1:-"dapr"}
-SECURE_PATH_BASE=${2:-$PATH}
+# This script sets up the current environment to be able to build multi-arch Docker images, installing QEMU 
 
 set -e
 
-if [ "$(id -u)" -ne 0 ]; then
-    echo -e 'Script must be run as root. Use sudo, su, or add "USER root" to your Dockerfile before running this script.'
-    exit 1
-fi
+# Set up QEMU
+docker run --privileged --rm tonistiigi/binfmt --install amd64,arm64,arm
 
-# Update the secure_path base
-echo "Defaults secure_path=\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:${SECURE_PATH_BASE}\"" >> /etc/sudoers.d/secure_path
-
-# Create the ~/.local/bin folder
-sudo -u ${USERNAME} mkdir -p /home/${USERNAME}/.local/bin
+# Create a buildx builder with support for multi-arch
+docker buildx create --use --name mybuilder
