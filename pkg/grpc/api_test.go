@@ -65,6 +65,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/security"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
@@ -278,8 +279,10 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 
 	opts := []grpc.ServerOption{}
 	if token != "" {
+		authToken := &security.APIToken{}
+		authToken.InitWithToken(token)
 		opts = append(opts,
-			grpc.UnaryInterceptor(setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token")),
+			grpc.UnaryInterceptor(setAPIAuthenticationMiddlewareUnary(authToken, "dapr-api-token")),
 		)
 	}
 

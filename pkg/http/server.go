@@ -14,7 +14,6 @@ limitations under the License.
 package http
 
 import (
-	"crypto/subtle"
 	"fmt"
 	"io"
 	"net"
@@ -254,15 +253,16 @@ func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 }
 
 func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	token := auth.GetAPIToken()
-	if token == "" {
+	authToken := auth.APIToken{}
+	authToken.Init()
+	if !authToken.HasAPIToken() {
 		return next
 	}
 	log.Info("enabled token authentication on http server")
 
 	return func(ctx *fasthttp.RequestCtx) {
 		v := ctx.Request.Header.Peek(auth.APITokenHeader)
-		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || subtle.ConstantTimeCompare(v, []byte(token)) == 1 {
+		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || authToken.CheckAPIToken(v) {
 			ctx.Request.Header.Del(auth.APITokenHeader)
 			next(ctx)
 		} else {

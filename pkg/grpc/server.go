@@ -68,7 +68,7 @@ type server struct {
 	logger             logger.Logger
 	infoLogger         logger.Logger
 	maxConnectionAge   *time.Duration
-	authToken          string
+	authToken          *auth.APIToken
 	apiSpec            config.APISpec
 	proxy              messaging.Proxy
 }
@@ -82,6 +82,8 @@ var (
 // NewAPIServer returns a new user facing gRPC API server.
 func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy) Server {
 	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
+	authToken := &auth.APIToken{}
+	authToken.Init()
 	return &server{
 		api:         api,
 		config:      config,
@@ -90,7 +92,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		kind:        apiServer,
 		logger:      apiServerLogger,
 		infoLogger:  apiServerInfoLogger,
-		authToken:   auth.GetAPIToken(),
+		authToken:   authToken,
 		apiSpec:     apiSpec,
 		proxy:       proxy,
 	}
@@ -204,7 +206,7 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		intr = append(intr, setAPIEndpointsMiddlewareUnary(s.apiSpec.Allowed))
 	}
 
-	if s.authToken != "" {
+	if s.authToken != nil && s.authToken.HasAPIToken() {
 		s.logger.Info("enabled token authentication on gRPC server")
 		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader))
 	}

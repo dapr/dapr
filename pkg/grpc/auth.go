@@ -2,16 +2,16 @@ package grpc
 
 import (
 	"context"
-	"crypto/subtle"
 	"net/http"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
 	v1 "github.com/dapr/dapr/pkg/messaging/v1"
+	auth "github.com/dapr/dapr/pkg/runtime/security"
 )
 
-func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.UnaryServerInterceptor {
+func setAPIAuthenticationMiddlewareUnary(apiToken *auth.APIToken, authHeader string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
@@ -25,7 +25,7 @@ func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.Unary
 			return nil, err
 		}
 
-		if subtle.ConstantTimeCompare([]byte(token[0]), []byte(apiToken)) == 0 {
+		if !apiToken.CheckAPIToken([]byte(token[0])) {
 			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "authentication error: api token mismatch")
 			return nil, err
 		}
