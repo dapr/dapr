@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 
 	"google.golang.org/grpc"
@@ -24,7 +25,7 @@ func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.Unary
 			return nil, err
 		}
 
-		if token[0] != apiToken {
+		if subtle.ConstantTimeCompare([]byte(token[0]), []byte(apiToken)) == 0 {
 			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "authentication error: api token mismatch")
 			return nil, err
 		}

@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"io"
 	"net"
@@ -261,7 +262,7 @@ func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 
 	return func(ctx *fasthttp.RequestCtx) {
 		v := ctx.Request.Header.Peek(auth.APITokenHeader)
-		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || string(v) == token {
+		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || subtle.ConstantTimeCompare(v, []byte(token)) == 1 {
 			ctx.Request.Header.Del(auth.APITokenHeader)
 			next(ctx)
 		} else {
