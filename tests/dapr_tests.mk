@@ -45,7 +45,7 @@ resiliencyapp \
 resiliencyapp_grpc \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -54,7 +54,7 @@ E2E_TESTAPP_DIR=./tests/apps
 PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer actor_reminder actor_activation service_invocation_http
+PERF_TESTS=actor_timer actor_reminder actor_activation service_invocation_http service_invocation_grpc
 
 KUBECTL=kubectl
 
@@ -135,7 +135,7 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageKindPush,$(ITEM))))
 define genPerfTestAppImageBuild
 .PHONY: build-perf-app-$(1)
 build-perf-app-$(1): check-e2e-env
-	$(DOCKER) build -f $(PERF_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(PERF_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
+	$(DOCKER) build -f $(PERF_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(PERF_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG) --build-arg GOARCH_ARG=$(GOARCH)
 endef
 
 # Generate perf app image build targets
