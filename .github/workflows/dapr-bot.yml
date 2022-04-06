@@ -15,29 +15,17 @@ jobs:
           script: |
             // list of owner who can control dapr-bot workflow
             // TODO: Read owners from OWNERS file.
-            const owners = [
-              "yaron2",
-              "youngbupark",
-              "Haishi2016",
-              "lukekim",
-              "amanbha",
-              "msfussell",
-              "shalabhms",
-              "LMWF",
-              "artursouza",
-              "vinayada1",
-              "mukundansundar",
-              "wcs1only",
-              "orizohar",
-              "pruthvidhodda",
-              "mchmarny",
-              "tcnghia",
-              "berndverst",
-              "halspang",
-              "tanvigour",
-              "dmitsh",
-              "pkedy",
-              "CodeMonkeyLeet"
+            const owners = [[
+              'artursouza',
+              'berndverst',
+              'halspang',
+              'ItalyPaleAle',
+              'msfussell',
+              'mukundansundar',
+              'pkedy',
+              'pruthvidhodda',
+              'tanvigour',
+              'yaron2'
             ];
 
             const payload = context.payload;
