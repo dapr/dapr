@@ -13,9 +13,11 @@
 
 FROM golang:1.17 as build_env
 
+ARG GOARCH_ARG=amd64
+
 WORKDIR /app
 COPY app.go go.mod ./
-RUN go get -d -v && go build -o app .
+RUN go get -d -v && GOOS=linux GOARCH=$GOARCH_ARG go build -o app .
 
 FROM debian:buster-slim
 WORKDIR /
