@@ -11,21 +11,12 @@
 # limitations under the License.
 #
 
-auth:
+cluster:
   enabled: false
 
-image:
-  repository: redislabs/rejson
-  tag: 2.0.6
-
-architecture: standalone
+usePassword: false
 
 master:
-  extraFlags:
-   - --loadmodule
-   - /usr/lib/redis/modules/rejson.so
-   - --loadmodule
-   - /usr/lib/redis/modules/redisearch.so
   persistence:
     enabled: false
   affinity:
