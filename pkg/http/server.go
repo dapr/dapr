@@ -139,7 +139,7 @@ func (s *server) StartNonBlocking() error {
 		healthServer := &fasthttp.Server{
 			Handler:              publicHandler,
 			MaxRequestBodySize:   s.config.MaxRequestBodySize * 1024 * 1024,
-			NoDefaultContentType: true,
+			NoDefaultContentType: s.config.NoDefaultContentType,
 		}
 		s.servers = append(s.servers, healthServer)
 

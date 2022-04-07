@@ -31,20 +31,21 @@ import (
 )
 
 const (
-	operatorCallTimeout         = time.Second * 5
-	operatorMaxRetries          = 100
-	AllowAccess                 = "allow"
-	DenyAccess                  = "deny"
-	DefaultTrustDomain          = "public"
-	DefaultNamespace            = "default"
-	ActionPolicyApp             = "app"
-	ActionPolicyGlobal          = "global"
-	SpiffeIDPrefix              = "spiffe://"
-	HTTPProtocol                = "http"
-	GRPCProtocol                = "grpc"
-	ActorTypeMetadata   Feature = "Actor.TypeMetadata"
-	PubSubRouting       Feature = "PubSub.Routing"
-	Resiliency          Feature = "Resiliency"
+	operatorCallTimeout          = time.Second * 5
+	operatorMaxRetries           = 100
+	AllowAccess                  = "allow"
+	DenyAccess                   = "deny"
+	DefaultTrustDomain           = "public"
+	DefaultNamespace             = "default"
+	ActionPolicyApp              = "app"
+	ActionPolicyGlobal           = "global"
+	SpiffeIDPrefix               = "spiffe://"
+	HTTPProtocol                 = "http"
+	GRPCProtocol                 = "grpc"
+	ActorTypeMetadata    Feature = "Actor.TypeMetadata"
+	PubSubRouting        Feature = "PubSub.Routing"
+	Resiliency           Feature = "Resiliency"
+	NoDefaultContentType Feature = "ServiceInvocation.NoDefaultContentType"
 )
 
 type Feature string

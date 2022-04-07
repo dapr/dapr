@@ -86,6 +86,8 @@ type api struct {
 	outboundReadyStatus      bool
 	tracingSpec              config.TracingSpec
 	shutdown                 func()
+	// TODO: Remove flag once feature is ratified
+	noDefaultContentType bool
 }
 
 type registeredComponent struct {
@@ -136,7 +138,9 @@ func NewAPI(
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
-	shutdown func()) API {
+	shutdown func(),
+	noDefaultContentType bool,
+) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
@@ -159,6 +163,7 @@ func NewAPI(
 		id:                       appID,
 		tracingSpec:              tracingSpec,
 		shutdown:                 shutdown,
+		noDefaultContentType:     noDefaultContentType,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -1000,6 +1005,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	// Construct internal invoke method request
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, reqCtx.QueryArgs().String())
+	req.NoDefaultContentType = a.noDefaultContentType
 	req.WithRawData(reqCtx.Request.Body(), string(reqCtx.Request.Header.ContentType()))
 	// Save headers to internal metadata
 	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
@@ -1345,6 +1351,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 
 	req := invokev1.NewInvokeMethodRequest(method)
+	req.NoDefaultContentType = a.noDefaultContentType
 	req.WithActor(actorType, actorID)
 	req.WithHTTPExtension(verb, reqCtx.QueryArgs().String())
 	req.WithRawData(body, string(reqCtx.Request.Header.ContentType()))

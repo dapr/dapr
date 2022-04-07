@@ -114,6 +114,15 @@ func TestData(t *testing.T) {
 	t.Run("contenttype is unset", func(t *testing.T) {
 		resp := NewInvokeMethodRequest("test_method")
 		resp.WithRawData([]byte("test"), "")
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
+	t.Run("contenttype is unset, with NoDefaultContentType", func(t *testing.T) {
+		resp := NewInvokeMethodRequest("test_method")
+		resp.NoDefaultContentType = true
+		resp.WithRawData([]byte("test"), "")
 		_, bData := resp.RawData()
 		contentType := resp.r.Message.ContentType
 		assert.Equal(t, "", contentType)

@@ -32,6 +32,9 @@ const (
 // InvokeMethodRequest holds InternalInvokeRequest protobuf message
 // and provides the helpers to manage it.
 type InvokeMethodRequest struct {
+	// TODO: Remove flag once feature is ratified
+	NoDefaultContentType bool
+
 	r *internalv1pb.InternalInvokeRequest
 }
 
@@ -91,6 +94,10 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 
 // WithRawData sets message data and content_type.
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
+	// TODO: Remove flag once feature is finalized
+	if contentType == "" && !imr.NoDefaultContentType {
+		contentType = JSONContentType
+	}
 	imr.r.Message.ContentType = contentType
 	imr.r.Message.Data = &anypb.Any{Value: data}
 	return imr
@@ -170,6 +177,15 @@ func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 
 	contentType := m.GetContentType()
 	dataValue := m.GetData().GetValue()
+
+	// TODO: Remove once feature is finalized
+	if !imr.NoDefaultContentType {
+		dataTypeURL := m.GetData().GetTypeUrl()
+		// set content_type to application/json only if typeurl is unset and data is given
+		if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
+			contentType = JSONContentType
+		}
+	}
 
 	return contentType, dataValue
 }
