@@ -1,20 +1,18 @@
-#
-# Copyright 2021 The Dapr Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# Based on https://github.com/microsoft/vscode-dev-containers/tree/v0.224.3/containers/go/.devcontainer/base.Dockerfile
 
-FROM golang:1.17-buster
+# [Choice] Go version: 1, 1.17, 1.18, etc
+ARG GOVERSION=1.17
+FROM golang:${GOVERSION}-bullseye
 
-# Optionally install zsh shell.
-ARG INSTALL_ZSH="false"
+# [Option] Install zsh
+ARG INSTALL_ZSH="true"
+
+# [Options] Versions
+ARG KUBECTL_VERSION="latest"
+ARG HELM_VERSION="latest"
+ARG MINIKUBE_VERSION="latest"
+ARG DAPR_CLI_VERSION="latest"
+ARG PROTOC_VERSION="3.14.0"
 
 # This Dockerfile adds a non-root 'dapr' user with sudo access. However, for Linux,
 # this user's GID/UID must match your local user UID/GID to avoid permission issues
@@ -24,51 +22,43 @@ ARG USERNAME=dapr
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-ARG KUBECTL_VERSION="latest"
-ARG HELM_VERSION="latest"
-ARG MINIKUBE_VERSION="latest"
-ARG DAPR_CLI_VERSION=""
-
-# Configure environment variables and pathing for dev tools.
-# Defaults to bash shell since the Dapr tutorials assume it, but zsh is optionally installed.
-ENV SHELL=/bin/bash \
-    DEBIAN_FRONTEND=noninteractive
+# Other env vars
+ENV GO111MODULE=auto
+ENV CGO_ENABLED=0
+ENV DOCKER_BUILDKIT=1
 
 # Setup image using library scripts and configure non-root user.
 COPY library-scripts/* custom-scripts/* first-run-notice.txt /tmp/staging/
 RUN apt-get update \
     #
-    # Install Ubuntu packages for less minimal Codespaces dev environment.
+    # Install needed packages and setup the environment and non-root user
     && bash /tmp/staging/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "true" "true" "true" \
     #
     # Additional custom configurations for non-root user.
     && bash /tmp/staging/setup-user.sh "${USERNAME}" "${PATH}" \
     #
-    # Install Docker CE CLI and Engine for Docker-in-Docker.
-    && bash /tmp/staging/docker-in-docker-debian.sh "true" "${USERNAME}" "false" \
+    # Install Docker CLI and Engine for Docker-in-Docker (using Docker CE).
+    && bash /tmp/staging/docker-in-docker-debian.sh "true" "${USERNAME}" "false" "latest" \
     #
     # Install Kubectl, Helm and Minkikube.
     && bash /tmp/staging/kubectl-helm-debian.sh "${KUBECTL_VERSION}" "${HELM_VERSION}" "${MINIKUBE_VERSION}" \
     #
     # Install Go tools.
-    && bash /tmp/staging/install-go-tools.sh "${USERNAME}" \
+    && bash /tmp/staging/go-debian.sh "none" "/usr/local/go" "${GOPATH}" "${USERNAME}" "false" \
     #
-    # Install protoc compiler 3.14.0 currently required by 'make gen-proto'.
-    && PROTOC_ZIP=protoc-3.14.0-linux-x86_64.zip \
-    && curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v3.14.0/$PROTOC_ZIP \
-    && unzip -o $PROTOC_ZIP -d /usr/local bin/protoc \
-    && chmod -R 755 /usr/local/bin/protoc \
-    && unzip -o $PROTOC_ZIP -d /usr/local 'include/*' \
-    && chmod -R 755 /usr/local/include/google/protobuf \
-    && rm -f $PROTOC_ZIP \
+    # Install tools for Dapr.
+    && bash /tmp/staging/install-dapr-tools.sh "${DAPR_CLI_VERSION}" "${PROTOC_VERSION}" \
     #
-    # Install Dapr CLI.
-    && wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s "${DAPR_CLI_VERSION}" \
+    # Install the GitHub CLI.
+    && bash /tmp/staging/github-debian.sh "latest" \
     #
-    # Copy devcontainer init, Docker bind-mount and GOPATH setup scripts
-    && mv -f -t /usr/local/share/ /tmp/staging/docker-bind-mount.sh /tmp/staging/devcontainer-init.sh /tmp/staging/setup-gopath.sh \
-    && chmod +x /usr/local/share/docker-bind-mount.sh /usr/local/share/devcontainer-init.sh /usr/local/share/setup-gopath.sh \
-    && chown ${USERNAME}:root /usr/local/share/docker-bind-mount.sh /usr/local/share/devcontainer-init.sh /usr/local/share/setup-gopath.sh \
+    # Install the Azure CLI.
+    && bash /tmp/staging/azcli-debian.sh "latest" \
+    #
+    # Copy our init scripts to /usr/local/share.
+    && mv -f -t /usr/local/share/ /tmp/staging/docker-bind-mount.sh /tmp/staging/devcontainer-init.sh /tmp/staging/setup-docker-multiarch.sh \
+    && chmod +x /usr/local/share/docker-bind-mount.sh /usr/local/share/devcontainer-init.sh  /usr/local/share/setup-docker-multiarch.sh \
+    && chown ${USERNAME}:root /usr/local/share/docker-bind-mount.sh /usr/local/share/devcontainer-init.sh  /usr/local/share/setup-docker-multiarch.sh \
     #
     # Move the first run notice to the correct location for Codespaces.
     && mkdir -p /usr/local/etc/vscode-dev-containers/ \

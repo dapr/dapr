@@ -51,10 +51,15 @@ type CircuitBreaker struct {
 	breaker *gobreaker.CircuitBreaker
 }
 
+var (
+	ErrOpenState       = gobreaker.ErrOpenState
+	ErrTooManyRequests = gobreaker.ErrTooManyRequests
+)
+
 // IsErrorPermanent returns true if `err` should be treated as a
 // permanent error that cannot be retried.
 func IsErrorPermanent(err error) bool {
-	return errors.Is(err, gobreaker.ErrOpenState) || errors.Is(err, gobreaker.ErrTooManyRequests)
+	return errors.Is(err, ErrOpenState) || errors.Is(err, ErrTooManyRequests)
 }
 
 // Initialize creates the underlying circuit breaker using the
@@ -105,5 +110,13 @@ func (c *CircuitBreaker) Execute(oper func() error) error {
 		return nil, err
 	})
 
-	return err // nolint:wrapcheck
+	// Wrap the error so we don't have to reference the external package in other places.
+	switch {
+	case errors.Is(err, gobreaker.ErrOpenState):
+		return ErrOpenState
+	case errors.Is(err, gobreaker.ErrTooManyRequests):
+		return ErrTooManyRequests
+	default:
+		return err //nolint:wrapcheck
+	}
 }
