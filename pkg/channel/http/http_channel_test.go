@@ -219,10 +219,37 @@ func TestInvokeWithHeaders(t *testing.T) {
 
 func TestContentType(t *testing.T) {
 	ctx := context.Background()
-	t.Run("no default content type on GET", func(t *testing.T) {
+
+	t.Run("default application/json", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
 		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+		req := invokev1.NewInvokeMethodRequest("method")
+		req.WithRawData(nil, "")
+		req.WithHTTPExtension(http.MethodPost, "")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, req)
+
+		// assert
+		assert.NoError(t, err)
+		contentType, body := resp.RawData()
+		assert.Equal(t, "text/plain; charset=utf-8", contentType)
+		assert.Equal(t, "application/json", string(body))
+		testServer.Close()
+	})
+
+	// TODO: Remove once the feature is ratified
+	t.Run("no default content type with ServiceInvocation.NoDefaultContentType", func(t *testing.T) {
+		config.SetNoDefaultContentType(true)
+		defer config.SetNoDefaultContentType(false)
+
+		handler := &testContentTypeHandler{}
+		testServer := httptest.NewServer(handler)
+		c := Channel{
+			baseAddress: testServer.URL,
+			client:      &fasthttp.Client{},
+		}
 		req := invokev1.NewInvokeMethodRequest("method")
 		req.WithRawData(nil, "")
 		req.WithHTTPExtension(http.MethodGet, "")
