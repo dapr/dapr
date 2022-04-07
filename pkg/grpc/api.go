@@ -55,6 +55,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -375,8 +376,8 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return respError
 	})
 
-	// In this case, there was an error with the actual request.
-	if requestErr || errors.Is(respError, context.DeadlineExceeded) {
+	// In this case, there was an error with the actual request or a resiliency policy stopped the request.
+	if requestErr || (errors.Is(respError, context.DeadlineExceeded) || breaker.IsErrorPermanent(respError)) {
 		return nil, respError
 	}
 	return resp.Message(), respError
