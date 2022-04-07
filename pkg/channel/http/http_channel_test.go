@@ -244,12 +244,10 @@ func TestContentType(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
 		c := Channel{
-			NoDefaultContentType: true,
-			baseAddress:          testServer.URL,
-			client:               &fasthttp.Client{},
+			baseAddress: testServer.URL,
+			client:      &fasthttp.Client{},
 		}
 		req := invokev1.NewInvokeMethodRequest("method")
-		req.NoDefaultContentType = true
 		req.WithRawData(nil, "")
 		req.WithHTTPExtension(http.MethodGet, "")
 

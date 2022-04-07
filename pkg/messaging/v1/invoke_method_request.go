@@ -20,6 +20,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/dapr/dapr/pkg/config"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -32,9 +33,6 @@ const (
 // InvokeMethodRequest holds InternalInvokeRequest protobuf message
 // and provides the helpers to manage it.
 type InvokeMethodRequest struct {
-	// TODO: Remove flag once feature is ratified
-	NoDefaultContentType bool
-
 	r *internalv1pb.InternalInvokeRequest
 }
 
@@ -95,7 +93,7 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 // WithRawData sets message data and content_type.
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
 	// TODO: Remove flag once feature is finalized
-	if contentType == "" && !imr.NoDefaultContentType {
+	if contentType == "" && !config.GetNoDefaultContentType() {
 		contentType = JSONContentType
 	}
 	imr.r.Message.ContentType = contentType
@@ -179,7 +177,7 @@ func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 	dataValue := m.GetData().GetValue()
 
 	// TODO: Remove once feature is finalized
-	if !imr.NoDefaultContentType {
+	if !config.GetNoDefaultContentType() {
 		dataTypeURL := m.GetData().GetTypeUrl()
 		// set content_type to application/json only if typeurl is unset and data is given
 		if contentType == "" && (dataTypeURL == "" && dataValue != nil) {

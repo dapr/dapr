@@ -50,9 +50,6 @@ const (
 
 // Channel is an HTTP implementation of an AppChannel.
 type Channel struct {
-	// TODO: Remove flag once feature is ratified
-	NoDefaultContentType bool
-
 	client              *fasthttp.Client
 	baseAddress         string
 	ch                  chan int
@@ -253,7 +250,7 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *
 
 	statusCode = resp.StatusCode()
 
-	if h.NoDefaultContentType {
+	if config.GetNoDefaultContentType() {
 		resp.Header.SetNoDefaultContentType(true)
 	}
 	contentType = (string)(resp.Header.ContentType())
@@ -261,7 +258,6 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *
 
 	// Convert status code
 	rsp := invokev1.NewInvokeMethodResponse(int32(statusCode), "", nil)
-	rsp.NoDefaultContentType = h.NoDefaultContentType
 	rsp.WithFastHTTPHeaders(&resp.Header).WithRawData(body, contentType)
 
 	return rsp

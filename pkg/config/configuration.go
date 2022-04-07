@@ -50,6 +50,8 @@ const (
 
 type Feature string
 
+var noDefaultContentTypeValue = false
+
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
 	metav1.TypeMeta `json:",inline" yaml:",inline"`
@@ -245,6 +247,8 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 		return nil, string(b), err
 	}
 
+	noDefaultContentTypeValue = IsFeatureEnabled(conf.Spec.Features, NoDefaultContentType)
+
 	return conf, string(b), nil
 }
 
@@ -271,6 +275,8 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 	if err != nil {
 		return nil, err
 	}
+
+	noDefaultContentTypeValue = IsFeatureEnabled(conf.Spec.Features, NoDefaultContentType)
 
 	return conf, nil
 }
@@ -337,4 +343,10 @@ func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
 		}
 	}
 	return false
+}
+
+// GetNoDefaultContentType returns the value of the noDefaultContentType flag.
+// It requires the configuration to be loaded, otherwise it returns false.
+func GetNoDefaultContentType() bool {
+	return noDefaultContentTypeValue
 }
