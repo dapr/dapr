@@ -250,6 +250,7 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *
 
 	statusCode = resp.StatusCode()
 
+	// TODO: Remove entire block when feature is finalized
 	if config.GetNoDefaultContentType() {
 		resp.Header.SetNoDefaultContentType(true)
 	}

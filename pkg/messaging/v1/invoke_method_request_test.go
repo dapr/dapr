@@ -122,13 +122,13 @@ func TestData(t *testing.T) {
 
 	t.Run("contenttype is unset, with NoDefaultContentType", func(t *testing.T) {
 		config.SetNoDefaultContentType(true)
+		defer config.SetNoDefaultContentType(false)
 		resp := NewInvokeMethodRequest("test_method")
 		resp.WithRawData([]byte("test"), "")
 		_, bData := resp.RawData()
 		contentType := resp.r.Message.ContentType
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("test"), bData)
-		config.SetNoDefaultContentType(false)
 	})
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {

@@ -92,7 +92,7 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 
 // WithRawData sets message data and content_type.
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
-	// TODO: Remove the "!config.GetNoDefaultContentType" once feature is finalized
+	// TODO: Remove the entire block once feature is finalized
 	if contentType == "" && !config.GetNoDefaultContentType() {
 		contentType = JSONContentType
 	}

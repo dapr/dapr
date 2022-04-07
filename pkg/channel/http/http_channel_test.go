@@ -242,6 +242,7 @@ func TestContentType(t *testing.T) {
 	// TODO: Remove once the feature is ratified
 	t.Run("no default content type with ServiceInvocation.NoDefaultContentType", func(t *testing.T) {
 		config.SetNoDefaultContentType(true)
+		defer config.SetNoDefaultContentType(false)
 
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
@@ -262,8 +263,6 @@ func TestContentType(t *testing.T) {
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte{}, body)
 		testServer.Close()
-
-		config.SetNoDefaultContentType(false)
 	})
 
 	t.Run("application/json", func(t *testing.T) {

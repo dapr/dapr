@@ -57,7 +57,7 @@ func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *Inv
 
 // WithRawData sets Message using byte data and content type.
 func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *InvokeMethodResponse {
-	// TODO: Remove the "!config.GetNoDefaultContentType" once feature is finalized
+	// TODO: Remove the entire block once feature is finalized
 	if contentType == "" && !config.GetNoDefaultContentType() {
 		contentType = JSONContentType
 	}
