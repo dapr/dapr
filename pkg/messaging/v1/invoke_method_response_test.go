@@ -77,8 +77,17 @@ func TestResponseData(t *testing.T) {
 
 	t.Run("contenttype is unset", func(t *testing.T) {
 		resp := NewInvokeMethodResponse(0, "OK", nil)
+
 		resp.WithRawData([]byte("test"), "")
 		contentType, bData := resp.RawData()
+		assert.Equal(t, "application/json", resp.r.Message.ContentType)
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+
+		// Force the ContentType to be empty to test setting it in RawData
+		resp.r.Message.ContentType = ""
+		contentType, bData = resp.RawData()
+		assert.Equal(t, "", resp.r.Message.ContentType)
 		assert.Equal(t, "application/json", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
@@ -87,10 +96,19 @@ func TestResponseData(t *testing.T) {
 	t.Run("contenttype is unset, with NoDefaultContentType", func(t *testing.T) {
 		config.SetNoDefaultContentType(true)
 		defer config.SetNoDefaultContentType(false)
+
 		resp := NewInvokeMethodResponse(0, "OK", nil)
+
 		resp.WithRawData([]byte("test"), "")
-		_, bData := resp.RawData()
-		contentType := resp.r.Message.ContentType
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "", resp.r.Message.ContentType)
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte("test"), bData)
+
+		// Force the ContentType to be empty to test setting it in RawData
+		resp.r.Message.ContentType = ""
+		contentType, bData = resp.RawData()
+		assert.Equal(t, "", resp.r.Message.ContentType)
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
