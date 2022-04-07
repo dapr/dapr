@@ -350,3 +350,9 @@ func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
 func GetNoDefaultContentType() bool {
 	return noDefaultContentTypeValue
 }
+
+// SetNoDefaultContentType sets the value of noDefaultContentTypeValue.
+// This should only be used for testing.
+func SetNoDefaultContentType(val bool) {
+	noDefaultContentTypeValue = val
+}

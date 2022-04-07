@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/dapr/dapr/pkg/config"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -84,12 +85,14 @@ func TestResponseData(t *testing.T) {
 
 	// TODO: Remove once feature is finalized
 	t.Run("contenttype is unset, with NoDefaultContentType", func(t *testing.T) {
+		config.SetNoDefaultContentType(true)
 		resp := NewInvokeMethodResponse(0, "OK", nil)
 		resp.WithRawData([]byte("test"), "")
 		_, bData := resp.RawData()
 		contentType := resp.r.Message.ContentType
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("test"), bData)
+		config.SetNoDefaultContentType(false)
 	})
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
