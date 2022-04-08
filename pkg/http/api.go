@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -135,7 +136,8 @@ func NewAPI(
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
-	shutdown func()) API {
+	shutdown func(),
+) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
@@ -1049,8 +1051,8 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return nil
 	})
 
-	// Special case for timeouts since they won't go through the rest of the logic.
-	if errors.Is(err, context.DeadlineExceeded) {
+	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
+	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
 		respond(reqCtx, withError(500, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
 		return
 	}
