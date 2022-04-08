@@ -65,7 +65,7 @@ RUN apt-get update \
     && mv -f /tmp/staging/first-run-notice.txt /usr/local/etc/vscode-dev-containers/ \
     #
     # Set permissions for the workspace folder
-    && chown ${USERNAME}:${USERNAME} /workspace \
+    && mkdir -p /workspace && chown ${USERNAME}:${USERNAME} /workspace \
     #
     # Clean up packages and the staging folder.
     && apt-get autoremove -y && apt-get clean -y && rm -rf /tmp/staging
