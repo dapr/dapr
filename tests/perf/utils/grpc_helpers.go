@@ -2,11 +2,13 @@ package utils
 
 import (
 	"context"
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"time"
+
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
-	"time"
+
+	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 type GrpcAccessFunction = func(cc *grpc.ClientConn) ([]byte, error)
@@ -32,7 +34,7 @@ func GrpcAccessNTimes(address string, f GrpcAccessFunction, n int) ([]byte, erro
 	return res, err
 }
 
-// GrpcAccess is a helper to make gRPC call to the method
+// GrpcAccess is a helper to make gRPC call to the method.
 func GrpcAccess(address string, f GrpcAccessFunction) ([]byte, error) {
 	cc, error := grpc.Dial(address, grpc.WithInsecure())
 	if error != nil {

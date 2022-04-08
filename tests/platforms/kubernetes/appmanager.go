@@ -570,7 +570,7 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 		lastService, err = serviceClient.Get(context.TODO(), m.app.AppName, metav1.GetOptions{})
 		done := isState(lastService, err)
 		if !done && err != nil {
-			fmt.Errorf("wait %s: %s", m.app.AppName, err)
+			log.Printf("wait for %s: %s", m.app.AppName, err)
 			return true, err
 		}
 
