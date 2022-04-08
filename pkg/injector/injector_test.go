@@ -448,8 +448,7 @@ func TestHandleRequest(t *testing.T) {
 		Namespace:    "test-ns",
 	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset())
 	injector := i.(*injector)
-
-	podBytes, _ := json.Marshal(corev1.Pod{
+	pod := corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
 			APIVersion: "v1",
@@ -475,8 +474,10 @@ func TestHandleRequest(t *testing.T) {
 				},
 			},
 		},
-	})
-
+	}
+	podBytes, _ := json.Marshal(pod)
+	pod.Spec.DNSPolicy = corev1.DNSClusterFirstWithHostNet
+	dnSPodBytes, _ := json.Marshal(pod)
 	testCases := []struct {
 		testName         string
 		request          v1.AdmissionReview
@@ -599,6 +600,25 @@ func TestHandleRequest(t *testing.T) {
 						Groups: []string{systemGroup},
 					},
 					Object: runtime.RawExtension{Raw: nil},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			false,
+		},
+		{
+			"TestSidecarInjectDnsPolicy",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						UID: authID,
+					},
+					Object: runtime.RawExtension{Raw: dnSPodBytes},
 				},
 			},
 			runtime.ContentTypeJSON,
