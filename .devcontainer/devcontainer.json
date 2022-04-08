@@ -57,7 +57,6 @@
 		"--init"
 	],
 	"settings": {
-		"terminal.integrated.defaultProfile.linux": "bash",
 		"go.toolsManagement.checkForUpdates": "local",
 		"go.useLanguageServer": true,
 		"go.gopath": "/go"
