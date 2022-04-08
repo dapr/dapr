@@ -94,6 +94,11 @@ const (
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
+
+	// hot reloading is currently unsupported, but
+	// setting this environment variable restores the
+	// partial hot reloading support for k8s.
+	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 )
 
 type ComponentCategory string
@@ -371,10 +376,15 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
 	go a.processComponents()
-	err = a.beginComponentsUpdates()
-	if err != nil {
-		log.Warnf("failed to watch component updates: %s", err)
+
+	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
+		log.Debug("starting to watch component updates")
+		err = a.beginComponentsUpdates()
+		if err != nil {
+			log.Warnf("failed to watch component updates: %s", err)
+		}
 	}
+
 	a.appendBuiltinSecretStore()
 	err = a.loadComponents(opts)
 	if err != nil {
@@ -1027,11 +1037,38 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) error {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.resiliency, a.stateStores, a.secretStores,
-		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.APIListenAddresses, publicPort, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.StreamRequestBody, a.runtimeConfig.APILogLevel)
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID,
+		a.appChannel,
+		a.directMessaging,
+		a.getComponents,
+		a.resiliency,
+		a.stateStores,
+		a.secretStores,
+		a.secretsConfiguration,
+		a.getPublishAdapter(),
+		a.actor,
+		a.sendToOutputBinding,
+		a.globalConfig.Spec.TracingSpec,
+		a.ShutdownWithWait,
+	)
+	serverConf := http.NewServerConfig(
+		a.runtimeConfig.ID,
+		a.hostAddress,
+		port,
+		a.runtimeConfig.APIListenAddresses,
+		publicPort,
+		profilePort,
+		allowedOrigins,
+		a.runtimeConfig.EnableProfiling,
+		a.runtimeConfig.MaxRequestBodySize,
+		a.runtimeConfig.UnixDomainSocket,
+		a.runtimeConfig.ReadBufferSize,
+		a.runtimeConfig.StreamRequestBody,
+		a.runtimeConfig.EnableAPILogging,
+	)
 
-	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
+	server := http.NewServer(a.daprHTTPAPI,
+		serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1070,7 +1107,7 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.APILogLevel)
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.EnableAPILogging)
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
@@ -2186,6 +2223,11 @@ func (a *DaprRuntime) createAppChannel() error {
 		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 		if err != nil {
 			log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+		}
+
+		// TODO: Remove once feature is finalized
+		if a.runtimeConfig.ApplicationProtocol == HTTPProtocol && !config.GetNoDefaultContentType() {
+			log.Warn("[DEPRECATION NOTICE] Adding a default content type to incoming service invocation requests is deprecated and will be removed in the future. See https://docs.dapr.io/operations/support/support-preview-features/ for more details. You can opt into the new behavior today by setting the configuration option `ServiceInvocation.NoDefaultContentType` to true.")
 		}
 		a.appChannel = ch
 	} else {

@@ -77,9 +77,22 @@ var testResiliency = &v1alpha1.Resiliency{
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
+				"tenRetries": {
+					MaxRetries:  10,
+					MaxInterval: "100ms",
+					Policy:      "constant",
+					Duration:    "10ms",
+				},
 			},
 			Timeouts: map[string]string{
 				"fast": "100ms",
+			},
+			CircuitBreakers: map[string]v1alpha1.CircuitBreaker{
+				"simpleCB": {
+					MaxRequests: 1,
+					Timeout:     "1s",
+					Trip:        "consecutiveFailures > 4",
+				},
 			},
 		},
 		Targets: v1alpha1.Targets{
@@ -87,6 +100,10 @@ var testResiliency = &v1alpha1.Resiliency{
 				"failingApp": {
 					Retry:   "singleRetry",
 					Timeout: "fast",
+				},
+				"circuitBreakerApp": {
+					Retry:          "tenRetries",
+					CircuitBreaker: "simpleCB",
 				},
 			},
 			Components: map[string]v1alpha1.ComponentPolicyNames{
@@ -903,8 +920,9 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	failingDirectMessaging := &daprt.FailingDirectMessaging{
 		Failure: daprt.Failure{
 			Fails: map[string]int{
-				"failingKey":      1,
-				"extraFailingKey": 3,
+				"failingKey":        1,
+				"extraFailingKey":   3,
+				"circuitBreakerKey": 10,
 			},
 			Timeouts: map[string]time.Duration{
 				"timeoutKey": time.Second * 10,
@@ -967,6 +985,26 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["extraFailingKey"])
+	})
+
+	t.Run("Test invoke direct messages can trip circuit breaker", func(t *testing.T) {
+		apiPath := "v1.0/invoke/circuitBreakerApp/method/fakeMethod"
+		fakeData := []byte("circuitBreakerKey")
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
+		fakeReq.WithRawData(fakeData, "application/json")
+
+		// Circuit Breaker trips on the 5th failure, stopping retries.
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+
+		// Request occurs when the circuit breaker is open, which shouldn't even hit the app.
+		resp = fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Contains(t, string(resp.RawBody), "circuit breaker is open", "Should have received a circuit breaker open error.")
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
 	})
 
 	fakeServer.Shutdown()
@@ -1700,19 +1738,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, 2, failingActors.Failure.CallCount["failingId"])
-	})
-
-	t.Run("Direct Message - times out with resiliency", func(t *testing.T) {
-		testAPI.actor = failingActors
-
-		apiPath := fmt.Sprintf("v1.0/actors/failingActorType/%s/method/method1", "timeoutId")
-		start := time.Now()
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		end := time.Now()
-
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingActors.Failure.CallCount["timeoutId"])
-		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
 	fakeServer.Shutdown()
@@ -2840,7 +2865,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingDeleteKey"])
 	})
 
 	t.Run("delete state request times out with resiliency", func(t *testing.T) {

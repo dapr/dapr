@@ -59,13 +59,13 @@ func TestNoOp(t *testing.T) {
 		{
 			name: "actor",
 			fn: func(ctx context.Context) Runner {
-				return policy.ActorPolicy(ctx, "test", "test")
+				return policy.ActorPreLockPolicy(ctx, "test", "test")
 			},
 		},
 		{
 			name: "actor error",
 			fn: func(ctx context.Context) Runner {
-				return policy.ActorPolicy(ctx, "test", "test")
+				return policy.ActorPreLockPolicy(ctx, "test", "test")
 			},
 			err: errors.New("actor error"),
 		},
