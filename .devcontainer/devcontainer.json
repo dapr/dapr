@@ -61,6 +61,6 @@
 		"go.useLanguageServer": true,
 		"go.gopath": "/go"
 	},
-	"workspaceFolder": "/go/src/github.com/dapr/dapr",
-	"workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/go/src/github.com/dapr/dapr",
+	"workspaceFolder": "/workspace/dapr",
+	"workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace/dapr",
 }
