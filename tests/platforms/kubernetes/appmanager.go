@@ -555,8 +555,9 @@ func (m *AppManager) AcquireExternalURL() string {
 		return ""
 	}
 
-	log.Printf("Service ingress for %s is ready...\n", m.app.AppName)
-	return m.AcquireExternalURLFromService(svc)
+	url := m.AcquireExternalURLFromService(svc)
+	log.Printf("Service ingress for %s is ready...: url=%s\n", m.app.AppName, url)
+	return url
 }
 
 // WaitUntilServiceState waits until isState returns true.
@@ -569,6 +570,7 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 		lastService, err = serviceClient.Get(context.TODO(), m.app.AppName, metav1.GetOptions{})
 		done := isState(lastService, err)
 		if !done && err != nil {
+			log.Printf("wait for %s: %s", m.app.AppName, err)
 			return true, err
 		}
 
