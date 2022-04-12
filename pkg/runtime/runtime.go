@@ -2247,6 +2247,12 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 		for strings.Contains(val, "{uuid}") {
 			val = strings.Replace(val, "{uuid}", uuid.New().String(), 1)
 		}
+		for strings.Contains(val, "{podName}") {
+			if a.podName == "" {
+				log.Warnf("could not get podname property")
+			}
+			val = strings.Replace(val, "{podName}", a.podName, 1)
+		}
 		properties[c.Name] = val
 	}
 	return properties
