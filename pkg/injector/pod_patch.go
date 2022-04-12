@@ -74,7 +74,7 @@ const (
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
 	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
-	daprAPILogLevel                   = "dapr.io/api-log-level"
+	daprEnableAPILogging              = "dapr.io/enable-api-logging"
 	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
 	daprPlacementAddressesKey         = "dapr.io/placement-addresses"
@@ -115,7 +115,7 @@ const (
 	defaultMtlsEnabled                = true
 	trueString                        = "true"
 	defaultDaprHTTPStreamRequestBody  = false
-	defaultAPILogLevel                = ""
+	defaultAPILoggingEnabled          = false
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -577,8 +577,8 @@ func isResourceDaprEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprEnabledKey, false)
 }
 
-func getAPILogLevel(annotations map[string]string) string {
-	return getStringAnnotationOrDefault(annotations, daprAPILogLevel, defaultAPILogLevel)
+func getEnableAPILogging(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprEnableAPILogging, defaultAPILoggingEnabled)
 }
 
 func getServiceAddress(name, namespace, clusterDomain string, port int) string {
@@ -609,6 +609,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	}
 
 	metricsEnabled := getEnableMetrics(annotations)
+	apiLoggingEnabled := getEnableAPILogging(annotations)
 	metricsPort := getMetricsPort(annotations)
 	maxConcurrency, err := getMaxConcurrency(annotations)
 	sidecarListenAddresses := getListenAddresses(annotations)
@@ -687,7 +688,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
 		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
-		"--api-log-level", getAPILogLevel(annotations),
+		fmt.Sprintf("--enable-api-logging=%t", apiLoggingEnabled),
 	}
 
 	debugEnabled := getEnableDebug(annotations)

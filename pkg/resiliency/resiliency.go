@@ -374,7 +374,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 			rc = r.retries[policyNames.Retry]
 		}
 		if policyNames.CircuitBreaker != "" {
-			template := r.circuitBreakers[policyNames.CircuitBreaker]
+			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
 			if ok {
 				cache, ok := r.serviceCBs[app]
 				if ok {
