@@ -1006,6 +1006,29 @@ func TestGetReminder(t *testing.T) {
 	assert.Equal(t, r.DueTime, "1s")
 }
 
+func TestCreateTimerDueTimes(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+	t.Run("test create timer with positive DueTime", func(t *testing.T) {
+		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "2s", "", "callback", "testTimer")
+		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+		assert.Nil(t, err)
+	})
+
+	t.Run("test create timer with 0 DueTime", func(t *testing.T) {
+		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "0s", "", "callback", "testTimer")
+		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+		assert.Nil(t, err)
+	})
+
+	t.Run("test create timer with no DueTime", func(t *testing.T) {
+		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "", "", "callback", "testTimer")
+		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+		assert.Nil(t, err)
+	})
+}
+
 func TestDeleteTimer(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
