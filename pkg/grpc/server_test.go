@@ -91,10 +91,10 @@ func TestGetMiddlewareOptions(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	t.Run("test close with info type api log level", func(t *testing.T) {
+	t.Run("test close with api logging enabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4, "info")
+		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4, true)
 		a := &api{}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
 		require.NoError(t, server.StartNonBlocking())
@@ -102,10 +102,10 @@ func TestClose(t *testing.T) {
 		assert.NoError(t, server.Close())
 	})
 
-	t.Run("test close with debug type api log level", func(t *testing.T) {
+	t.Run("test close with api logging disabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4, "debug")
+		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4, false)
 		a := &api{}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
 		require.NoError(t, server.StartNonBlocking())

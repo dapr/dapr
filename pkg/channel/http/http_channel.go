@@ -179,6 +179,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	// Send request to user application
 	resp := fasthttp.AcquireResponse()
+
 	err := h.client.Do(channelReq, resp)
 	defer func() {
 		fasthttp.ReleaseRequest(channelReq)
@@ -248,6 +249,11 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *
 	var body []byte
 
 	statusCode = resp.StatusCode()
+
+	// TODO: Remove entire block when feature is finalized
+	if config.GetNoDefaultContentType() {
+		resp.Header.SetNoDefaultContentType(true)
+	}
 	contentType = (string)(resp.Header.ContentType())
 	body = resp.Body()
 

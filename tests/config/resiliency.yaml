@@ -17,19 +17,20 @@ spec:
     circuitBreakers:
       simpleCB:
           maxRequests: 1
-          interval: 8s
-          timeout: 45s
-          trip: consecutiveFailures > 8
+          timeout: 30s
+          trip: consecutiveFailures > 15
 
   targets:
     apps:
       resiliencyapp:
         timeout: fast
         retry: fiveRetries
+        circuitBreaker: simpleCB
 
       resiliencyappgrpc:
         timeout: fast
         retry: fiveRetries
+        circuitBreaker: simpleCB
 
     actors:
       resiliencyActor:
@@ -41,7 +42,6 @@ spec:
         inbound: 
           timeout: fast
           retry: fiveRetries
-          circuitBreaker: simpleCB
         outbound:
           timeout: fast
           retry: fiveRetries
@@ -50,7 +50,6 @@ spec:
         inbound: 
           timeout: fast
           retry: fiveRetries
-          circuitBreaker: simpleCB
         outbound:
           timeout: fast
           retry: fiveRetries
@@ -59,7 +58,6 @@ spec:
         inbound:
           timeout: fast
           retry: fiveRetries
-          circuitBreaker: simpleCB
         outbound:
           timeout: fast
           retry: fiveRetries
