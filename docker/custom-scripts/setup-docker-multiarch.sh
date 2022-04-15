@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+#!/usr/bin/env bash
 #
 # Copyright 2021 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -10,10 +10,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
-# This script tears down Azure resources used for E2E tests.
+# This script sets up the current environment to be able to build multi-arch Docker images, installing QEMU 
 
-# Usage: teardown_azure.ps1
+set -e
 
-pwsh -noprofile "$PSScriptRoot\teardown_servicebus.ps1"
+# Set up QEMU
+docker run --privileged --rm tonistiigi/binfmt --install amd64,arm64,arm
+
+# Create a buildx builder with support for multi-arch
+docker buildx create --use --name mybuilder
