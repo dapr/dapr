@@ -45,7 +45,7 @@ resiliencyapp \
 resiliencyapp_grpc \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -54,13 +54,11 @@ E2E_TESTAPP_DIR=./tests/apps
 PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer actor_reminder actor_activation service_invocation_http
+PERF_TESTS=actor_timer actor_reminder actor_activation service_invocation_http service_invocation_grpc
 
 KUBECTL=kubectl
 
 DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
-
-DAPR_TEST_SECONDARY_NAMESPACE=dapr-tests-2
 
 ifeq ($(DAPR_TEST_STATE_STORE),)
 DAPR_TEST_STATE_STORE=redis
@@ -157,11 +155,9 @@ endef
 
 create-test-namespace:
 	kubectl create namespace $(DAPR_TEST_NAMESPACE)
-	kubectl create namespace $(DAPR_TEST_SECONDARY_NAMESPACE)
 
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
-	kubectl delete namespace $(DAPR_TEST_SECONDARY_NAMESPACE)
 
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb
 
@@ -332,11 +328,6 @@ setup-test-components: setup-app-configurations
 
 	# Show the installed configurations
 	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
-
-# Clean up test environment
-clean-test-env:
-	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)
-	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)-2
 
 # Setup kind
 setup-kind:

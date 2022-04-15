@@ -657,10 +657,10 @@ func TestAliasRoute(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	t.Run("test close with info type api log level", func(t *testing.T) {
+	t.Run("test close with api logging enabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, "info")
+		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, true)
 		a := &api{}
 		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
 		require.NoError(t, server.StartNonBlocking())
@@ -668,10 +668,10 @@ func TestClose(t *testing.T) {
 		assert.NoError(t, server.Close())
 	})
 
-	t.Run("test close with debug type api log level", func(t *testing.T) {
+	t.Run("test close with api logging disabled", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, "debug")
+		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, false)
 		a := &api{}
 		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
 		require.NoError(t, server.StartNonBlocking())
