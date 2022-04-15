@@ -36,3 +36,27 @@ func (m *MockBinding) Operations() []bindings.OperationKind {
 func (m *MockBinding) Close() error {
 	return nil
 }
+
+type FailingBinding struct {
+	Failure Failure
+}
+
+// Init is a mock initialization method.
+func (m *FailingBinding) Init(metadata bindings.Metadata) error {
+	return nil
+}
+
+// Invoke is a mock invoke method.
+func (m *FailingBinding) Invoke(req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+	key := string(req.Data)
+	return nil, m.Failure.PerformFailure(key)
+}
+
+// Operations is a mock operations method.
+func (m *FailingBinding) Operations() []bindings.OperationKind {
+	return []bindings.OperationKind{bindings.CreateOperation}
+}
+
+func (m *FailingBinding) Close() error {
+	return nil
+}

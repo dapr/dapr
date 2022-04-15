@@ -24,9 +24,34 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/logger"
 )
+
+var testActorResiliency = &v1alpha1.Resiliency{
+	Spec: v1alpha1.ResiliencySpec{
+		Policies: v1alpha1.Policies{
+			Retries: map[string]v1alpha1.Retry{
+				"singleRetry": {
+					MaxRetries:  1,
+					MaxInterval: "100ms",
+					Policy:      "constant",
+					Duration:    "10ms",
+				},
+			},
+		},
+		Targets: v1alpha1.Targets{
+			Actors: map[string]v1alpha1.ActorPolicyNames{
+				"failingActorType": {
+					Retry: "singleRetry",
+				},
+			},
+		},
+	},
+}
 
 func TestRegisterActorReminder(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
@@ -97,7 +122,7 @@ func TestGetActorState(t *testing.T) {
 
 	t.Run("Get actor state - OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -156,7 +181,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 
 	t.Run("Save actor state - Upsert and Delete OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -249,5 +274,39 @@ func TestInvokeActor(t *testing.T) {
 		client := runtimev1pb.NewDaprClient(clientConn)
 		_, err := client.InvokeActor(context.TODO(), &runtimev1pb.InvokeActorRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+}
+
+func TestInvokeActorWithResiliency(t *testing.T) {
+	failingActors := actors.FailingActors{
+		Failure: daprt.Failure{
+			Fails: map[string]int{
+				"failingActor": 1,
+			},
+			CallCount: map[string]int{},
+		},
+	}
+
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, &api{
+		id:         "fakeAPI",
+		actor:      &failingActors,
+		resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testActorResiliency),
+	}, "")
+	defer server.Stop()
+
+	t.Run("actors recover from error with resiliency", func(t *testing.T) {
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		req := &runtimev1pb.InvokeActorRequest{}
+		req.ActorType = "failingActorType"
+		req.ActorId = "failingActor"
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+		_, err := client.InvokeActor(context.Background(), req)
+		assert.NoError(t, err)
+		assert.Equal(t, codes.OK, status.Code(err))
+		assert.Equal(t, 2, failingActors.Failure.CallCount["failingActor"])
 	})
 }

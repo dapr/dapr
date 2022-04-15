@@ -275,6 +275,7 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 		req.Header.Add(k, v)
 	}
 
+	req.Header.Add("Content-Type", "application/json")
 	return httpClient.Do(req)
 }
 
@@ -294,6 +295,7 @@ func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, hea
 		req.Header.Add(k, v)
 	}
 
+	req.Header.Add("Content-Type", "application/json")
 	return httpClient.Do(req)
 }
 

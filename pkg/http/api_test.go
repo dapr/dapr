@@ -51,6 +51,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
@@ -58,12 +59,77 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/resiliency"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 )
 
 var invalidJSON = []byte{0x7b, 0x7b}
+
+var testResiliency = &v1alpha1.Resiliency{
+	Spec: v1alpha1.ResiliencySpec{
+		Policies: v1alpha1.Policies{
+			Retries: map[string]v1alpha1.Retry{
+				"singleRetry": {
+					MaxRetries:  1,
+					MaxInterval: "100ms",
+					Policy:      "constant",
+					Duration:    "10ms",
+				},
+				"tenRetries": {
+					MaxRetries:  10,
+					MaxInterval: "100ms",
+					Policy:      "constant",
+					Duration:    "10ms",
+				},
+			},
+			Timeouts: map[string]string{
+				"fast": "100ms",
+			},
+			CircuitBreakers: map[string]v1alpha1.CircuitBreaker{
+				"simpleCB": {
+					MaxRequests: 1,
+					Timeout:     "1s",
+					Trip:        "consecutiveFailures > 4",
+				},
+			},
+		},
+		Targets: v1alpha1.Targets{
+			Apps: map[string]v1alpha1.EndpointPolicyNames{
+				"failingApp": {
+					Retry:   "singleRetry",
+					Timeout: "fast",
+				},
+				"circuitBreakerApp": {
+					Retry:          "tenRetries",
+					CircuitBreaker: "simpleCB",
+				},
+			},
+			Components: map[string]v1alpha1.ComponentPolicyNames{
+				"failSecret": {
+					Outbound: v1alpha1.PolicyNames{
+						Retry:   "singleRetry",
+						Timeout: "fast",
+					},
+				},
+				"failStore": {
+					Outbound: v1alpha1.PolicyNames{
+						Retry:   "singleRetry",
+						Timeout: "fast",
+					},
+				},
+			},
+			Actors: map[string]v1alpha1.ActorPolicyNames{
+				"failingActorType": {
+					Retry:               "singleRetry",
+					Timeout:             "fast",
+					CircuitBreakerScope: "type",
+				},
+			},
+		},
+	},
+}
 
 func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
@@ -446,6 +512,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		json:            jsoniter.ConfigFastest,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
@@ -763,6 +830,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
 
@@ -848,11 +916,106 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
+func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
+	failingDirectMessaging := &daprt.FailingDirectMessaging{
+		Failure: daprt.Failure{
+			Fails: map[string]int{
+				"failingKey":        1,
+				"extraFailingKey":   3,
+				"circuitBreakerKey": 10,
+			},
+			Timeouts: map[string]time.Duration{
+				"timeoutKey": time.Second * 10,
+			},
+			CallCount: map[string]int{},
+		},
+	}
+
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		directMessaging: failingDirectMessaging,
+		json:            jsoniter.ConfigFastest,
+		resiliency:      resiliency.FromConfigurations(logger.NewLogger("messaging.test"), testResiliency),
+	}
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
+
+	t.Run("Test invoke direct message retries with resiliency", func(t *testing.T) {
+		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
+		fakeData := []byte("failingKey")
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
+		fakeReq.WithRawData(fakeData, "application/json")
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["failingKey"])
+	})
+
+	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
+		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
+		fakeData := []byte("timeoutKey")
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
+		fakeReq.WithRawData(fakeData, "application/json")
+
+		// act
+		start := time.Now()
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		end := time.Now()
+
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["timeoutKey"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("Test invoke direct messages fails after exhausting retries", func(t *testing.T) {
+		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
+		fakeData := []byte("extraFailingKey")
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
+		fakeReq.WithRawData(fakeData, "application/json")
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["extraFailingKey"])
+	})
+
+	t.Run("Test invoke direct messages can trip circuit breaker", func(t *testing.T) {
+		apiPath := "v1.0/invoke/circuitBreakerApp/method/fakeMethod"
+		fakeData := []byte("circuitBreakerKey")
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
+		fakeReq.WithRawData(fakeData, "application/json")
+
+		// Circuit Breaker trips on the 5th failure, stopping retries.
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+
+		// Request occurs when the circuit breaker is open, which shouldn't even hit the app.
+		resp = fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Contains(t, string(resp.RawBody), "circuit breaker is open", "Should have received a circuit breaker open error.")
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+	})
+
+	fakeServer.Shutdown()
+}
+
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		actor: nil,
-		json:  jsoniter.ConfigFastest,
+		actor:      nil,
+		json:       jsoniter.ConfigFastest,
+		resiliency: resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency),
 	}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
@@ -883,7 +1046,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("All PUT/POST APIs - 400 for invalid JSON", func(t *testing.T) {
-		testAPI.actor = new(daprt.MockActors)
+		testAPI.actor = new(actors.MockActors)
 		apiPaths := []string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
 			"v1.0/actors/fakeActorType/fakeActorID/state",
@@ -906,7 +1069,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("All PATCH APIs - 400 for invalid JSON", func(t *testing.T) {
-		testAPI.actor = new(daprt.MockActors)
+		testAPI.actor = new(actors.MockActors)
 		apiPaths := []string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
 		}
@@ -925,7 +1088,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -952,7 +1115,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -977,7 +1140,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 500 on GetState failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -1002,7 +1165,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 400 for missing actor instace", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -1046,7 +1209,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
@@ -1092,7 +1255,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -1131,7 +1294,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
@@ -1169,7 +1332,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
 
@@ -1199,7 +1362,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("CreateReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -1226,7 +1389,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			NewName:   "reminder2",
 		}
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
 
@@ -1252,7 +1415,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			NewName:   "reminder2",
 		}
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -1278,7 +1441,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("DeleteReminder", &reminderRequest).Return(nil)
 
@@ -1301,7 +1464,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("DeleteReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -1324,7 +1487,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("GetReminder", &reminderRequest).Return(nil, nil)
 
@@ -1346,7 +1509,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("GetReminder", &reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
 
@@ -1374,7 +1537,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Data: func() {},
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
 
@@ -1401,7 +1564,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Period:    "0h0m7s0ms",
 			Callback:  "",
 		}
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("CreateTimer", &timerRequest).Return(nil)
 
@@ -1431,7 +1594,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("CreateTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -1457,7 +1620,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("DeleteTimer", &timerRequest).Return(nil)
 
@@ -1480,7 +1643,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("DeleteTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
@@ -1504,7 +1667,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			"Host":            {"localhost"},
 			"User-Agent":      {"Go-http-client/1.1"},
 		}
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		invokeRequest := invokev1.NewInvokeMethodRequest("method1")
 		invokeRequest.WithActor("fakeActorType", "fakeActorID")
 		fakeData := []byte("fakeData")
@@ -1534,7 +1697,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			"Host":            {"localhost"},
 			"User-Agent":      {"Go-http-client/1.1"},
 		}
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		invokeRequest := invokev1.NewInvokeMethodRequest("method1")
 		invokeRequest.WithActor("fakeActorType", "fakeActorID")
 		fakeData := []byte("fakeData")
@@ -1553,6 +1716,28 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_INVOKE_METHOD", resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "Call", 1)
+	})
+
+	failingActors := &actors.FailingActors{
+		Failure: daprt.Failure{
+			Fails: map[string]int{
+				"failingId": 1,
+			},
+			Timeouts: map[string]time.Duration{
+				"timeoutId": time.Second * 10,
+			},
+			CallCount: map[string]int{},
+		},
+	}
+
+	t.Run("Direct Message - retries with resiliency", func(t *testing.T) {
+		testAPI.actor = failingActors
+
+		apiPath := fmt.Sprintf("v1.0/actors/failingActorType/%s/method/method1", "failingId")
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 2, failingActors.Failure.CallCount["failingId"])
 	})
 
 	fakeServer.Shutdown()
@@ -1619,7 +1804,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	t.Run("Metadata - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/metadata"
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 
 		mockActors.On("GetActiveActorsCount")
 
@@ -1653,6 +1838,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		actor:       nil,
 		json:        jsoniter.ConfigFastest,
 		tracingSpec: spec,
+		resiliency:  resiliency.New(nil),
 	}
 
 	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
@@ -1680,7 +1866,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -1725,7 +1911,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			},
 		}
 
-		mockActors := new(daprt.MockActors)
+		mockActors := new(actors.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
@@ -1777,6 +1963,7 @@ func TestAPIToken(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithAPIToken(testAPI.constructDirectMessagingEndpoints())
 
@@ -1919,6 +2106,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
 
@@ -2008,6 +2196,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
@@ -2074,6 +2263,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
+		resiliency:      resiliency.New(nil),
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
@@ -2293,16 +2483,44 @@ func TestV1StateEndpoints(t *testing.T) {
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
 	var fakeStore state.Store = fakeStateStoreQuerier{}
+	failingStore := &daprt.FailingStatestore{
+		Failure: daprt.Failure{
+			Fails: map[string]int{
+				"failingGetKey":        1,
+				"failingSetKey":        1,
+				"failingDeleteKey":     1,
+				"failingBulkGetKey":    1,
+				"failingBulkSetKey":    1,
+				"failingBulkDeleteKey": 1,
+				"failingMultiKey":      1,
+				"failingQueryKey":      1,
+			},
+			Timeouts: map[string]time.Duration{
+				"timeoutGetKey":        time.Second * 10,
+				"timeoutSetKey":        time.Second * 10,
+				"timeoutDeleteKey":     time.Second * 10,
+				"timeoutBulkGetKey":    time.Second * 10,
+				"timeoutBulkSetKey":    time.Second * 10,
+				"timeoutBulkDeleteKey": time.Second * 10,
+				"timeoutMultiKey":      time.Second * 10,
+				"timeoutQueryKey":      time.Second * 10,
+			},
+			CallCount: map[string]int{},
+		},
+	}
 	fakeStores := map[string]state.Store{
-		"store1": fakeStore,
+		"store1":    fakeStore,
+		"failStore": failingStore,
 	}
 	fakeTransactionalStores := map[string]state.TransactionalStore{
-		"store1": fakeStore.(state.TransactionalStore),
+		"store1":    fakeStore.(state.TransactionalStore),
+		"failStore": failingStore,
 	}
 	testAPI := &api{
 		stateStores:              fakeStores,
 		transactionalStateStores: fakeTransactionalStores,
 		json:                     jsoniter.ConfigFastest,
+		resiliency:               resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -2591,12 +2809,229 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 400, resp.StatusCode)
 	})
+
+	t.Run("get state request retries with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/failingGetKey", "failStore")
+
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingGetKey"])
+	})
+
+	t.Run("get state request times out with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/timeoutGetKey", "failStore")
+
+		start := time.Now()
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		end := time.Now()
+
+		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
+		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutGetKey"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("set state request retries with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", "failStore")
+
+		request := []state.SetRequest{{
+			Key: "failingSetKey",
+		}}
+		b, _ := json.Marshal(request)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingSetKey"])
+	})
+
+	t.Run("set state request times out with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", "failStore")
+
+		request := []state.SetRequest{{
+			Key: "timeoutSetKey",
+		}}
+		b, _ := json.Marshal(request)
+
+		start := time.Now()
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		end := time.Now()
+
+		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
+		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutSetKey"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("delete state request retries with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/failingDeleteKey", "failStore")
+
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingDeleteKey"])
+	})
+
+	t.Run("delete state request times out with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/timeoutDeleteKey", "failStore")
+
+		start := time.Now()
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+		end := time.Now()
+
+		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
+		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutDeleteKey"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("bulk state get can recover from one bad key with resiliency retries", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", "failStore")
+		request := BulkGetRequest{
+			Keys: []string{"failingBulkGetKey", "goodBulkGetKey"},
+		}
+		body, _ := json.Marshal(request)
+
+		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkGetKey"])
+		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkGetKey"])
+	})
+
+	t.Run("bulk state get times out on single with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", "failStore")
+		request := BulkGetRequest{
+			Keys: []string{"timeoutBulkGetKey", "goodTimeoutBulkGetKey"},
+		}
+		body, _ := json.Marshal(request)
+
+		start := time.Now()
+		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
+		end := time.Now()
+
+		var bulkResponse []state.BulkGetResponse
+		json.Unmarshal(resp.RawBody, &bulkResponse)
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Len(t, bulkResponse, 2)
+		assert.NotEmpty(t, bulkResponse[0].Error)
+		assert.Empty(t, bulkResponse[1].Error)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkGetKey"])
+		assert.Equal(t, 1, failingStore.Failure.CallCount["goodTimeoutBulkGetKey"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("bulk state set recovers from single key failure with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", "failStore")
+
+		reqs := []state.SetRequest{
+			{
+				Key: "failingBulkSetKey",
+			},
+			{
+				Key: "goodBulkSetKey",
+			},
+		}
+		b, _ := json.Marshal(reqs)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkSetKey"])
+		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkSetKey"])
+	})
+
+	t.Run("bulk state set times out with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", "failStore")
+
+		reqs := []state.SetRequest{
+			{
+				Key: "timeoutBulkSetKey",
+			},
+			{
+				Key: "goodTimeoutBulkSetKey",
+			},
+		}
+		b, _ := json.Marshal(reqs)
+
+		start := time.Now()
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		end := time.Now()
+
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkSetKey"])
+		assert.Equal(t, 0, failingStore.Failure.CallCount["goodTimeoutBulkSetKey"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("state transaction passes after retries with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "failStore")
+
+		req := &state.TransactionalStateRequest{
+			Operations: []state.TransactionalStateOperation{
+				{
+					Operation: state.Delete,
+					Request: map[string]string{
+						"key": "failingMultiKey",
+					},
+				},
+			},
+		}
+		b, _ := json.Marshal(req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingMultiKey"])
+	})
+
+	t.Run("state transaction times out with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "failStore")
+
+		req := &state.TransactionalStateRequest{
+			Operations: []state.TransactionalStateOperation{
+				{
+					Operation: state.Delete,
+					Request: map[string]string{
+						"key": "timeoutMultiKey",
+					},
+				},
+			},
+		}
+		b, _ := json.Marshal(req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutMultiKey"])
+	})
+
+	t.Run("state query retries with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0-alpha1/state/%s/query?metadata.key=failingQueryKey", "failStore")
+
+		req := &state.QueryRequest{}
+		b, _ := json.Marshal(req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["failingQueryKey"])
+	})
+
+	t.Run("state query times out with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0-alpha1/state/%s/query?metadata.key=timeoutQueryKey", "failStore")
+
+		req := &state.QueryRequest{}
+		b, _ := json.Marshal(req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutQueryKey"])
+	})
 }
 
 func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		stateStores: map[string]state.Store{"store1": fakeStateStore{}},
+		resiliency:  resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
@@ -2610,6 +3045,7 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		stateStores: map[string]state.Store{"store1": fakeStateStoreQuerier{}},
+		resiliency:  resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 
@@ -2623,6 +3059,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		stateStores: map[string]state.Store{storeName: fakeStateStoreQuerier{}},
+		resiliency:  resiliency.New(nil),
 	}
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
@@ -2779,11 +3216,19 @@ func (c fakeStateStoreQuerier) Query(req *state.QueryRequest) (*state.QueryRespo
 func TestV1SecretEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	fakeStore := daprt.FakeSecretStore{}
+	failingStore := daprt.FailingSecretStore{
+		Failure: daprt.Failure{
+			Fails:     map[string]int{"key": 1, "bulk": 1},
+			Timeouts:  map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
+			CallCount: map[string]int{},
+		},
+	}
 	fakeStores := map[string]secretstores.SecretStore{
-		"store1": fakeStore,
-		"store2": fakeStore,
-		"store3": fakeStore,
-		"store4": fakeStore,
+		"store1":     fakeStore,
+		"store2":     fakeStore,
+		"store3":     fakeStore,
+		"store4":     fakeStore,
+		"failSecret": failingStore,
 	}
 	secretsConfiguration := map[string]config.SecretsScope{
 		"store1": {
@@ -2804,6 +3249,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		secretsConfiguration: secretsConfiguration,
 		secretStores:         fakeStores,
 		json:                 jsoniter.ConfigFastest,
+		resiliency:           resiliency.FromConfigurations(logger.NewLogger("fakeLogger"), testResiliency),
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
@@ -2913,6 +3359,49 @@ func TestV1SecretEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "reading secrets should succeed")
 	})
+
+	t.Run("Get secret - retries on initial failure with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/key", "failSecret")
+
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["key"])
+	})
+
+	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/timeout", "failSecret")
+
+		// Store sleeps for 10 seconds, let's make sure our timeout takes less time than that.
+		start := time.Now()
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		end := time.Now()
+
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["timeout"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+
+	t.Run("Get bulk secret - retries on initial failure with resiliency", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/bulk", "failSecret")
+
+		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"metadata.key": "bulk"})
+
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["bulk"])
+	})
+
+	t.Run("Get bulk secret - timeout before request ends", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/bulk", "failSecret")
+
+		start := time.Now()
+		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"metadata.key": "bulkTimeout"})
+		end := time.Now()
+
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, 2, failingStore.Failure.CallCount["bulkTimeout"])
+		assert.Less(t, end.Sub(start), time.Second*10)
+	})
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {
@@ -2958,6 +3447,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		stateStores:              fakeStores,
 		transactionalStateStores: fakeTransactionalStores,
 		json:                     jsoniter.ConfigFastest,
+		resiliency:               resiliency.New(nil),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}

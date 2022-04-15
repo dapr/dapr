@@ -30,9 +30,6 @@ import (
 
 	"github.com/cenkalti/backoff"
 
-	"github.com/dapr/components-contrib/configuration"
-	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
-
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
@@ -48,6 +45,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/middleware"
@@ -55,6 +53,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -94,6 +94,11 @@ const (
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
+
+	// hot reloading is currently unsupported, but
+	// setting this environment variable restores the
+	// partial hot reloading support for k8s.
+	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 )
 
 type ComponentCategory string
@@ -136,6 +141,8 @@ type TopicRoute struct {
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
+	ctx                    context.Context
+	cancel                 context.CancelFunc
 	runtimeConfig          *Config
 	globalConfig           *config.Configuration
 	accessControlList      *config.AccessControlList
@@ -186,6 +193,8 @@ type DaprRuntime struct {
 
 	proxy messaging.Proxy
 
+	resiliency resiliency.Provider
+
 	// TODO: Remove feature flag once feature is ratified
 	featureRoutingEnabled bool
 }
@@ -216,8 +225,11 @@ type pubsubSubscribedMessage struct {
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
-func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList) *DaprRuntime {
+func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &DaprRuntime{
+		ctx:                    ctx,
+		cancel:                 cancel,
 		runtimeConfig:          runtimeConfig,
 		globalConfig:           globalConfig,
 		accessControlList:      accessControlList,
@@ -250,6 +262,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
+
+		resiliency: resiliencyProvider,
 	}
 }
 
@@ -362,10 +376,15 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
 	go a.processComponents()
-	err = a.beginComponentsUpdates()
-	if err != nil {
-		log.Warnf("failed to watch component updates: %s", err)
+
+	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
+		log.Debug("starting to watch component updates")
+		err = a.beginComponentsUpdates()
+		if err != nil {
+			log.Warnf("failed to watch component updates: %s", err)
+		}
 	}
+
 	a.appendBuiltinSecretStore()
 	err = a.loadComponents(opts)
 	if err != nil {
@@ -600,13 +619,16 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				return nil
 			}
 
-			return publishFunc(ctx, &pubsubSubscribedMessage{
-				cloudEvent: cloudEvent,
-				data:       data,
-				topic:      msg.Topic,
-				metadata:   msg.Metadata,
-				path:       routePath,
-				pubsub:     name,
+			policy := a.resiliency.ComponentInboundPolicy(ctx, name)
+			return policy(func(ctx context.Context) error {
+				return publishFunc(ctx, &pubsubSubscribedMessage{
+					cloudEvent: cloudEvent,
+					data:       data,
+					topic:      msg.Topic,
+					metadata:   msg.Metadata,
+					path:       routePath,
+					pubsub:     name,
+				})
 			})
 		}); err != nil {
 			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
@@ -681,7 +703,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 
 func (a *DaprRuntime) initProxy() {
 	a.proxy = messaging.NewProxy(a.grpc.GetGRPCConnection, a.runtimeConfig.ID,
-		fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList, a.runtimeConfig.AppSSL)
+		fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList, a.runtimeConfig.AppSSL, a.resiliency)
 
 	log.Info("gRPC proxy enabled")
 }
@@ -816,7 +838,13 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		ops := binding.Operations()
 		for _, o := range ops {
 			if o == req.Operation {
-				return binding.Invoke(req)
+				var resp *bindings.InvokeResponse
+				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name)
+				err := policy(func(ctx context.Context) (err error) {
+					resp, err = binding.Invoke(req)
+					return err
+				})
+				return resp, err
 			}
 		}
 		supported := make([]string, 0, len(ops))
@@ -832,7 +860,10 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
-				err := a.stateStores[response.StoreName].BulkSet(reqs)
+				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName)
+				err := policy(func(ctx context.Context) (err error) {
+					return a.stateStores[response.StoreName].BulkSet(reqs)
+				})
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)
 				}
@@ -859,9 +890,13 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := diag.StartInternalCallbackSpan(context.Background(), spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
+	path := a.inputBindingRoutes[bindingName]
+	if path == "" {
+		path = bindingName
+	}
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
@@ -872,7 +907,14 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			Metadata: metadata,
 		}
 		start := time.Now()
-		resp, err := client.OnBindingEvent(ctx, req)
+
+		var resp *runtimev1pb.BindingEventResponse
+		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName)
+		err := policy(func(ctx context.Context) (err error) {
+			resp, err = client.OnBindingEvent(ctx, req)
+			return err
+		})
+
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
 				bindingName,
@@ -915,7 +957,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		path := a.inputBindingRoutes[bindingName]
 		req := invokev1.NewInvokeMethodRequest(path)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
@@ -926,8 +967,23 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		req.WithMetadata(reqMetadata)
 
-		resp, err := a.appChannel.InvokeMethod(ctx, req)
-		if err != nil {
+		var resp *invokev1.InvokeMethodResponse
+		respErr := false
+		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName)
+		err := policy(func(ctx context.Context) (err error) {
+			respErr = false
+			resp, err = a.appChannel.InvokeMethod(ctx, req)
+			if err != nil {
+				return err
+			}
+
+			if resp != nil && resp.Status().Code != nethttp.StatusOK {
+				respErr = true
+				return errors.Errorf("Error sending binding event to application, status %d", resp.Status().Code)
+			}
+			return nil
+		})
+		if err != nil && !respErr {
 			return nil, errors.Wrap(err, "error invoking app")
 		}
 
@@ -981,11 +1037,38 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) error {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.stateStores, a.secretStores,
-		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.APIListenAddresses, publicPort, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.StreamRequestBody, a.runtimeConfig.APILogLevel)
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID,
+		a.appChannel,
+		a.directMessaging,
+		a.getComponents,
+		a.resiliency,
+		a.stateStores,
+		a.secretStores,
+		a.secretsConfiguration,
+		a.getPublishAdapter(),
+		a.actor,
+		a.sendToOutputBinding,
+		a.globalConfig.Spec.TracingSpec,
+		a.ShutdownWithWait,
+	)
+	serverConf := http.NewServerConfig(
+		a.runtimeConfig.ID,
+		a.hostAddress,
+		port,
+		a.runtimeConfig.APIListenAddresses,
+		publicPort,
+		profilePort,
+		allowedOrigins,
+		a.runtimeConfig.EnableProfiling,
+		a.runtimeConfig.MaxRequestBodySize,
+		a.runtimeConfig.UnixDomainSocket,
+		a.runtimeConfig.ReadBufferSize,
+		a.runtimeConfig.StreamRequestBody,
+		a.runtimeConfig.EnableAPILogging,
+	)
 
-	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
+	server := http.NewServer(a.daprHTTPAPI,
+		serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1024,11 +1107,11 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.APILogLevel)
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.EnableAPILogging)
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration, a.configurationStores,
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.resiliency, a.stateStores, a.secretStores, a.secretsConfiguration, a.configurationStores,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
 		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents, a.ShutdownWithWait)
 }
@@ -1371,7 +1454,10 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	return a.pubSubs[req.PubsubName].Publish(req)
+	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName)
+	return policy(func(ctx context.Context) (err error) {
+		return a.pubSubs[req.PubsubName].Publish(req)
+	})
 }
 
 // GetPubSub is an adapter method to find a pubsub by name.
@@ -1685,7 +1771,7 @@ func (a *DaprRuntime) initActors() error {
 		return errors.New("no actor state store defined")
 	}
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort, a.namespace, a.appConfig)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features, a.resiliency, a.actorStateStoreName)
 	err = act.Init()
 	a.actor = act
 	return err
@@ -1971,6 +2057,7 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 
+	a.cancel()
 	a.stopActor()
 	log.Infof("dapr shutting down.")
 	log.Info("Stopping Dapr APIs")
@@ -2136,6 +2223,11 @@ func (a *DaprRuntime) createAppChannel() error {
 		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 		if err != nil {
 			log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+		}
+
+		// TODO: Remove once feature is finalized
+		if a.runtimeConfig.ApplicationProtocol == HTTPProtocol && !config.GetNoDefaultContentType() {
+			log.Warn("[DEPRECATION NOTICE] Adding a default content type to incoming service invocation requests is deprecated and will be removed in the future. See https://docs.dapr.io/operations/support/support-preview-features/ for more details. You can opt into the new behavior today by setting the configuration option `ServiceInvocation.NoDefaultContentType` to true.")
 		}
 		a.appChannel = ch
 	} else {
