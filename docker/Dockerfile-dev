@@ -1,7 +1,7 @@
 # Based on https://github.com/microsoft/vscode-dev-containers/tree/v0.224.3/containers/go/.devcontainer/base.Dockerfile
 
 # [Choice] Go version: 1, 1.17, 1.18, etc
-ARG GOVERSION=1.17
+ARG GOVERSION=1.18
 FROM golang:${GOVERSION}-bullseye
 
 # [Option] Install zsh
@@ -63,6 +63,9 @@ RUN apt-get update \
     # Move the first run notice to the correct location for Codespaces.
     && mkdir -p /usr/local/etc/vscode-dev-containers/ \
     && mv -f /tmp/staging/first-run-notice.txt /usr/local/etc/vscode-dev-containers/ \
+    #
+    # Set permissions for the workspace folder
+    && mkdir -p /workspaces && chown ${USERNAME} /workspaces \
     #
     # Clean up packages and the staging folder.
     && apt-get autoremove -y && apt-get clean -y && rm -rf /tmp/staging

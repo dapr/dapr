@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package service_invocation_http_perf
+package service_invocation_grpc_perf
 
 import (
 	"encoding/json"
@@ -38,10 +38,12 @@ func TestMain(m *testing.M) {
 		{
 			AppName:           "testapp",
 			DaprEnabled:       true,
-			ImageName:         "perf-service_invocation_http",
+			ImageName:         "perf-service_invocation_grpc",
 			Replicas:          1,
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
+			AppPort:           3000,
+			AppProtocol:       "grpc",
 			DaprCPULimit:      "4.0",
 			DaprCPURequest:    "0.1",
 			DaprMemoryLimit:   "512Mi",
@@ -70,21 +72,21 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("serviceinvocationhttp", testApps, nil, nil)
+	tr = runner.NewTestRunner("serviceinvocationgrpc", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
-func TestServiceInvocationHTTPPerformance(t *testing.T) {
+func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	p := perf.Params()
-	t.Logf("running service invocation http test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
+	t.Logf("running service invocation grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
-	t.Logf("waiting until test app url is available: %s", testAppURL+"/test")
-	_, err := utils.HTTPGetNTimes(testAppURL+"/test", numHealthChecks)
+	t.Logf("Waiting until test app grpc service is available: %s", testAppURL)
+	_, err := utils.GrpcAccessNTimes(testAppURL, utils.GrpcServiceInvoke, numHealthChecks)
 	require.NoError(t, err)
 
 	// Get the ingress external url of tester app
@@ -92,17 +94,16 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
-	t.Logf("waiting until tester app url is available: %s", testerAppURL)
+	t.Logf("teter app url: %s", testerAppURL)
 	_, err = utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
 	require.NoError(t, err)
 
 	// Perform baseline test
-	endpoint := fmt.Sprintf("http://testapp:3000/test")
-	p.TargetEndpoint = endpoint
+	p.TargetEndpoint = fmt.Sprintf("http://testapp:3000/grpc/dapr?capability=invoke&target=appcallback&method=load")
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
-	t.Log("runnng baseline test...")
+	t.Log("running baseline test...")
 	baselineResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
 	t.Log("checking err...")
 	require.NoError(t, err)
@@ -111,8 +112,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	t.Logf("baseline test results: %s", string(baselineResp))
 
 	// Perform dapr test
-	endpoint = fmt.Sprintf("http://127.0.0.1:3500/v1.0/invoke/testapp/method/test")
-	p.TargetEndpoint = endpoint
+	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001/grpc/dapr?capability=invoke&target=dapr&method=load&appid=testapp")
 	body, err = json.Marshal(&p)
 	require.NoError(t, err)
 
