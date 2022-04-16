@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -67,6 +68,16 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func healthz(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func unknownHandler(w http.ResponseWriter, r *http.Request) {
+	// Just some debugging, if this is printed the app isn't setup correctly.
+	log.Printf("Unknown route called: %s", r.RequestURI)
+	w.WriteHeader(http.StatusNotFound)
+}
+
 func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("/dapr/subscribe called")
 
@@ -82,6 +93,22 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	b, err := json.Marshal(subscriptions)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Write(b)
+}
+
+func actorConfigHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("/dapr/config called")
+	daprConfig := struct {
+		Entities []string
+	}{
+		Entities: []string{"resiliencyActor"},
+	}
+
+	b, err := json.Marshal(daprConfig)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -202,6 +229,34 @@ func resiliencyServiceInvocationHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
+func resiliencyActorMethodHandler(w http.ResponseWriter, r *http.Request) {
+	var message FailureMessage
+	json.NewDecoder(r.Body).Decode(&message)
+
+	log.Printf("Actor received message %+v\n", message)
+
+	callCount := 0
+	if records, ok := callTracking[message.ID]; ok {
+		callCount = records[len(records)-1].Count + 1
+	}
+
+	log.Printf("Seen %s %d times.", message.ID, callCount)
+
+	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
+		if message.Timeout != nil {
+			// This request can still succeed if the resiliency policy timeout is longer than this sleep.
+			log.Printf("Sleeping: %v", *message.Timeout)
+			time.Sleep(*message.Timeout)
+		} else {
+			log.Println("Forcing failure.")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 // App startup/endpoint setup.
 func initGRPCClient() {
 	url := fmt.Sprintf("localhost:%d", 50001)
@@ -228,11 +283,11 @@ func initGRPCClient() {
 
 func newHTTPClient() *http.Client {
 	dialer := &net.Dialer{ //nolint:exhaustivestruct
-		Timeout: 5 * time.Second,
+		Timeout: 30 * time.Second,
 	}
 	netTransport := &http.Transport{ //nolint:exhaustivestruct
 		DialContext:         dialer.DialContext,
-		TLSHandshakeTimeout: 5 * time.Second,
+		TLSHandshakeTimeout: 30 * time.Second,
 	}
 
 	return &http.Client{ //nolint:exhaustivestruct
@@ -248,11 +303,14 @@ func appRouter() *mux.Router {
 
 	// Calls from dapr.
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
+	router.HandleFunc("/dapr/config", actorConfigHandler).Methods("GET")
+	router.HandleFunc("/healthz", healthz).Methods("GET")
 
 	// Handling events/methods.
 	router.HandleFunc("/resiliencybinding", resiliencyBindingHandler).Methods("POST", "OPTIONS")
 	router.HandleFunc("/resiliency-topic-http", resiliencyPubsubHandler).Methods("POST")
 	router.HandleFunc("/resiliencyInvocation", resiliencyServiceInvocationHandler).Methods("POST")
+	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", resiliencyActorMethodHandler).Methods("PUT")
 
 	// Test functions.
 	router.HandleFunc("/tests/getCallCount", TestGetCallCount).Methods("GET")
@@ -260,6 +318,9 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/tests/invokeBinding/{binding}", TestInvokeOutputBinding).Methods("POST")
 	router.HandleFunc("/tests/publishMessage/{pubsub}/{topic}", TestPublishMessage).Methods("POST")
 	router.HandleFunc("/tests/invokeService/{protocol}", TestInvokeService).Methods("POST")
+	router.HandleFunc("/tests/invokeActor/{protocol}", TestInvokeActorMethod).Methods("POST")
+
+	router.NotFoundHandler = router.NewRoute().HandlerFunc(unknownHandler).GetHandler()
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
@@ -383,6 +444,12 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(resp.StatusCode)
+
+		if resp.Body != nil {
+			defer resp.Body.Close()
+			b, _ := io.ReadAll(resp.Body)
+			w.Write(b)
+		}
 	} else if protocol == "grpc" {
 		var message FailureMessage
 		err := json.NewDecoder(r.Body).Decode(&message)
@@ -407,6 +474,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("Failed to invoke service: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("failed to call grpc service: %s", err.Error())))
 			return
 		}
 	} else if protocol == "grpc_proxy" {
@@ -431,11 +499,57 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", "resiliencyappgrpc")
 		_, err = client.SayHello(ctx, &pb.HelloRequest{Name: string(b)})
 		if err != nil {
-			log.Printf("could not greet: %v\n", err)
+			log.Printf("could not proxy request: %s", err.Error())
 			w.WriteHeader(500)
-			w.Write([]byte(fmt.Sprintf("failed to proxy request: %s", err)))
+			w.Write([]byte(fmt.Sprintf("failed to proxy request: %s", err.Error())))
 			return
 		}
 	}
 
+}
+
+func TestInvokeActorMethod(w http.ResponseWriter, r *http.Request) {
+	protocol := mux.Vars(r)["protocol"]
+	log.Printf("Invoking resiliency actor with %s", protocol)
+
+	if protocol == "http" {
+		client := &http.Client{
+			Timeout: 1 * time.Minute,
+		}
+		url := "http://localhost:3500/v1.0/actors/resiliencyActor/1/method/resiliencyMethod"
+
+		req, _ := http.NewRequest("PUT", url, r.Body)
+		defer r.Body.Close()
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("An error occurred calling actors: %s", err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(resp.StatusCode)
+	} else if protocol == "grpc" {
+		var message FailureMessage
+		err := json.NewDecoder(r.Body).Decode(&message)
+		if err != nil {
+			log.Println("Could not parse message.")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		b, _ := json.Marshal(message)
+
+		req := &runtimev1pb.InvokeActorRequest{
+			ActorType: "resiliencyActor",
+			ActorId:   "1",
+			Method:    "resiliencyMethod",
+			Data:      b,
+		}
+
+		_, err = daprClient.InvokeActor(r.Context(), req)
+		if err != nil {
+			log.Printf("An error occurred calling actors: %s", err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
 }

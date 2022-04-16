@@ -1,5 +1,3 @@
-#!/usr/bin/env pwsh
-#
 #
 # Copyright 2021 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +11,13 @@
 # limitations under the License.
 #
 
-# This script kicks off the setup of Azure services for E2E tests.
+FROM golang:1.17 as build_env
 
-# Usage: start_azure_setup.ps1
+WORKDIR /app
+COPY app.go go.mod ./
+RUN go get -d -v && go build -o app .
 
-Start-Process nohup "pwsh -noprofile $PSScriptRoot\setup_cosmosdb.ps1"
-Start-Process nohup "pwsh -noprofile $PSScriptRoot\setup_servicebus.ps1"
+FROM debian:buster-slim
+WORKDIR /
+COPY --from=build_env /app/app /
+CMD ["/app"]
