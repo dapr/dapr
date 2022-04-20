@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -443,6 +444,12 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(resp.StatusCode)
+
+		if resp.Body != nil {
+			defer resp.Body.Close()
+			b, _ := io.ReadAll(resp.Body)
+			w.Write(b)
+		}
 	} else if protocol == "grpc" {
 		var message FailureMessage
 		err := json.NewDecoder(r.Body).Decode(&message)
@@ -467,6 +474,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("Failed to invoke service: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("failed to call grpc service: %s", err.Error())))
 			return
 		}
 	} else if protocol == "grpc_proxy" {
@@ -491,9 +499,9 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", "resiliencyappgrpc")
 		_, err = client.SayHello(ctx, &pb.HelloRequest{Name: string(b)})
 		if err != nil {
-			log.Printf("could not greet: %v\n", err)
+			log.Printf("could not proxy request: %s", err.Error())
 			w.WriteHeader(500)
-			w.Write([]byte(fmt.Sprintf("failed to proxy request: %s", err)))
+			w.Write([]byte(fmt.Sprintf("failed to proxy request: %s", err.Error())))
 			return
 		}
 	}

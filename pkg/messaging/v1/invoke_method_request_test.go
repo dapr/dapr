@@ -21,6 +21,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/dapr/dapr/pkg/config"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -104,25 +105,55 @@ func TestMetadata(t *testing.T) {
 
 func TestData(t *testing.T) {
 	t.Run("contenttype is set", func(t *testing.T) {
-		resp := NewInvokeMethodRequest("test_method")
-		resp.WithRawData([]byte("test"), "application/json")
-		contentType, bData := resp.RawData()
+		req := NewInvokeMethodRequest("test_method")
+		req.WithRawData([]byte("test"), "application/json")
+		contentType, bData := req.RawData()
 		assert.Equal(t, "application/json", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
 
 	t.Run("contenttype is unset", func(t *testing.T) {
-		resp := NewInvokeMethodRequest("test_method")
-		resp.WithRawData([]byte("test"), "")
-		contentType, bData := resp.RawData()
+		req := NewInvokeMethodRequest("test_method")
+
+		req.WithRawData([]byte("test"), "")
+		contentType, bData := req.RawData()
+		assert.Equal(t, "application/json", req.r.Message.ContentType)
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+
+		// Force the ContentType to be empty to test setting it in RawData
+		req.r.Message.ContentType = ""
+		contentType, bData = req.RawData()
+		assert.Equal(t, "", req.r.Message.ContentType)
 		assert.Equal(t, "application/json", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
 
+	// TODO: Remove once feature is finalized
+	t.Run("contenttype is unset, with NoDefaultContentType", func(t *testing.T) {
+		config.SetNoDefaultContentType(true)
+		defer config.SetNoDefaultContentType(false)
+
+		req := NewInvokeMethodRequest("test_method")
+
+		req.WithRawData([]byte("test"), "")
+		contentType, bData := req.RawData()
+		assert.Equal(t, "", req.r.Message.ContentType)
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte("test"), bData)
+
+		// Force the ContentType to be empty to test setting it in RawData
+		req.r.Message.ContentType = ""
+		contentType, bData = req.RawData()
+		assert.Equal(t, "", req.r.Message.ContentType)
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
-		resp := NewInvokeMethodRequest("test_method")
-		resp.r.Message.Data = &anypb.Any{TypeUrl: "fake", Value: []byte("fake")}
-		contentType, bData := resp.RawData()
+		req := NewInvokeMethodRequest("test_method")
+		req.r.Message.Data = &anypb.Any{TypeUrl: "fake", Value: []byte("fake")}
+		contentType, bData := req.RawData()
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("fake"), bData)
 	})

@@ -83,9 +83,22 @@ var testResiliency = &v1alpha1.Resiliency{
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
+				"tenRetries": {
+					MaxRetries:  10,
+					MaxInterval: "100ms",
+					Policy:      "constant",
+					Duration:    "10ms",
+				},
 			},
 			Timeouts: map[string]string{
 				"fast": "100ms",
+			},
+			CircuitBreakers: map[string]v1alpha1.CircuitBreaker{
+				"simpleCB": {
+					MaxRequests: 1,
+					Timeout:     "1s",
+					Trip:        "consecutiveFailures > 4",
+				},
 			},
 		},
 		Targets: v1alpha1.Targets{
@@ -93,6 +106,10 @@ var testResiliency = &v1alpha1.Resiliency{
 				"failingApp": {
 					Retry:   "singleRetry",
 					Timeout: "fast",
+				},
+				"circuitBreakerApp": {
+					Retry:          "tenRetries",
+					CircuitBreaker: "simpleCB",
 				},
 			},
 			Components: map[string]v1alpha1.ComponentPolicyNames{
@@ -2908,8 +2925,9 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 	failingDirectMessaging := &daprt.FailingDirectMessaging{
 		Failure: daprt.Failure{
 			Fails: map[string]int{
-				"failingKey":      1,
-				"extraFailingKey": 3,
+				"failingKey":        1,
+				"extraFailingKey":   3,
+				"circuitBreakerKey": 10,
 			},
 			Timeouts: map[string]time.Duration{
 				"timeoutKey": time.Second * 10,
@@ -2977,6 +2995,31 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["extraFailingKey"])
+	})
+
+	t.Run("Test invoke direct messages opens circuit breaker after consecutive failures", func(t *testing.T) {
+		// Circuit breaker trips on the 5th request, ending the retries.
+		_, err := client.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{
+			Id: "circuitBreakerApp",
+			Message: &commonv1pb.InvokeRequest{
+				Method: "test",
+				Data:   &anypb.Any{Value: []byte("circuitBreakerKey")},
+			},
+		})
+		assert.Error(t, err)
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+
+		// Additional requests should fail due to the circuit breaker.
+		_, err = client.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{
+			Id: "circuitBreakerApp",
+			Message: &commonv1pb.InvokeRequest{
+				Method: "test",
+				Data:   &anypb.Any{Value: []byte("circuitBreakerKey")},
+			},
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "circuit breaker is open")
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
 	})
 }
 
