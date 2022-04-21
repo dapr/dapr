@@ -16,6 +16,6 @@ package retry
 import "time"
 
 const (
-	DefaultLinearBackoffInterval = time.Second
+	DefaultLinearBackoffInterval = time.Minute
 	DefaultLinearRetryCount      = 3
 )
