@@ -107,7 +107,6 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		renewMutex:       &sync.Mutex{},
 		kind:             internalServer,
 		logger:           internalServerLogger,
-		infoLogger:       apiServerInfoLogger,
 		maxConnectionAge: getDefaultMaxAgeDuration(),
 		proxy:            proxy,
 	}
@@ -315,7 +314,7 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 
 func (s *server) getGRPCAPILoggingInfo() grpc_go.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc_go.UnaryServerInfo, handler grpc_go.UnaryHandler) (interface{}, error) {
-		if info != nil {
+		if s.infoLogger != nil && info != nil {
 			s.infoLogger.Info("gRPC API Called: ", *info)
 		}
 		return handler(ctx, req)
