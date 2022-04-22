@@ -107,6 +107,7 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		renewMutex:       &sync.Mutex{},
 		kind:             internalServer,
 		logger:           internalServerLogger,
+		infoLogger:       apiServerInfoLogger,
 		maxConnectionAge: getDefaultMaxAgeDuration(),
 		proxy:            proxy,
 	}
