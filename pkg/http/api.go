@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -135,7 +136,8 @@ func NewAPI(
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
-	shutdown func()) API {
+	shutdown func(),
+) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
@@ -1049,8 +1051,8 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return nil
 	})
 
-	// Special case for timeouts since they won't go through the rest of the logic.
-	if errors.Is(err, context.DeadlineExceeded) {
+	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
+	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
 		respond(reqCtx, withError(500, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
 		return
 	}
@@ -1358,7 +1360,11 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
 	// Having the retry here allows us to capture that and be resilient to host failure.
-	policy := a.resiliency.ActorPolicy(reqCtx, actorType, actorID)
+	// Additionally, we don't perform timeouts at this level. This is because an actor
+	// should technically wait forever on the locking mechanism. If we timeout while
+	// waiting for the lock, we can also create a queue of calls that will try and continue
+	// after the timeout.
+	policy := a.resiliency.ActorPreLockPolicy(reqCtx, actorType, actorID)
 	var resp *invokev1.InvokeMethodResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.actor.Call(ctx, req)

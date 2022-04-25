@@ -1,4 +1,4 @@
-👋 Welcome to the Dapr Codespace! You are on our Dapr Contributors image.
+👋 Welcome to the Dapr dev container! You are on our Dapr Contributors image.
 It includes everything to build, run and test the https://github.com/dapr/dapr
 and https://github.com/dapr/components-contrib repositories.
 

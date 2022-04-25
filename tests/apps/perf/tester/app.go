@@ -19,8 +19,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // TODO: change to take from "github.com/dapr/dapr/tests/perf" once in repository. otherwise fails on go get step in Dockerfile.
@@ -78,6 +80,20 @@ func main() {
 // runTest accepts a set of test parameters, runs Fortio with the configured setting and returns
 // the test results in json format.
 func runTest(params TestParameters) ([]byte, error) {
+	args := buildFortioArgs(params)
+	fmt.Printf("running test with params: %s", args)
+
+	cmd := exec.Command("fortio", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile("result.json")
+}
+
+func buildFortioArgs(params TestParameters) []string {
 	var args []string
 
 	if len(params.Payload) > 0 {
@@ -94,15 +110,25 @@ func runTest(params TestParameters) ([]byte, error) {
 	if params.StdClient {
 		args = append(args, "-stdclient")
 	}
-	args = append(args, params.TargetEndpoint)
-	fmt.Printf("running test with params: %s", args)
 
-	cmd := exec.Command("fortio", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
-		return nil, err
+	endPoint := params.TargetEndpoint
+	if strings.Contains(params.TargetEndpoint, "/grpc") {
+		args = append(args, "-grpc")
+		if strings.Contains(params.TargetEndpoint, "/dapr") {
+			ep, params := parseDaprParameters(params.TargetEndpoint)
+			args = append(args, "-dapr", params)
+			endPoint = ep
+		}
 	}
-	return os.ReadFile("result.json")
+
+	args = append(args, endPoint)
+	return args
+}
+
+func parseDaprParameters(endpoint string) (string, string) {
+	u, _ := url.Parse(endpoint)
+
+	params := strings.ReplaceAll(u.RawQuery, "&", ",")
+	ep := u.Host
+	return ep, params
 }
