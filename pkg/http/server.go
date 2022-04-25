@@ -38,7 +38,10 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.http")
+var (
+	log     = logger.NewLogger("dapr.runtime.http")
+	infoLog = logger.NewLogger("dapr.runtime.http-info")
+)
 
 const protocol = "http"
 
@@ -61,6 +64,7 @@ type server struct {
 
 // NewServer returns a new HTTP server.
 func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline, apiSpec config.APISpec) Server {
+	infoLog.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
 		api:         api,
 		config:      config,
@@ -73,14 +77,18 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, met
 
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
-	handler :=
-		useAPIAuthentication(
-			s.useCors(
-				s.useComponents(
-					s.useRouter())))
+	handler := useAPIAuthentication(
+		s.useCors(
+			s.useComponents(
+				s.useRouter())))
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
+
+	enableAPILogging := s.config.EnableAPILogging
+	if enableAPILogging {
+		handler = s.apiLoggingInfo(handler)
+	}
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -206,6 +214,13 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 	}
 
 	return next
+}
+
+func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		infoLog.Infof("HTTP API Called: %s %s", ctx.Method(), ctx.Path())
+		next(ctx)
+	}
 }
 
 func (s *server) useRouter() fasthttp.RequestHandler {

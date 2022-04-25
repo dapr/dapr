@@ -50,6 +50,7 @@ var allowedControllersServiceAccounts = []string{
 	"job-controller",
 	"statefulset-controller",
 	"daemon-set-controller",
+	"tekton-pipelines-controller",
 }
 
 // Injector is the interface for the Dapr runtime sidecar injection component.

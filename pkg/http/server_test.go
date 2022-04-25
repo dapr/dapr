@@ -657,12 +657,25 @@ func TestAliasRoute(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	port, err := freeport.GetFreePort()
-	require.NoError(t, err)
-	serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false)
-	a := &api{}
-	server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
-	require.NoError(t, server.StartNonBlocking())
-	dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
-	assert.NoError(t, server.Close())
+	t.Run("test close with api logging enabled", func(t *testing.T) {
+		port, err := freeport.GetFreePort()
+		require.NoError(t, err)
+		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, true)
+		a := &api{}
+		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
+		require.NoError(t, server.StartNonBlocking())
+		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
+		assert.NoError(t, server.Close())
+	})
+
+	t.Run("test close with api logging disabled", func(t *testing.T) {
+		port, err := freeport.GetFreePort()
+		require.NoError(t, err)
+		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, false)
+		a := &api{}
+		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
+		require.NoError(t, server.StartNonBlocking())
+		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
+		assert.NoError(t, server.Close())
+	})
 }

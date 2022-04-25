@@ -28,7 +28,7 @@ func TestAddEncryptedStateStore(t *testing.T) {
 		r := AddEncryptedStateStore("test", ComponentEncryptionKeys{
 			Primary: Key{
 				Name: "primary",
-				Key:  "123",
+				Key:  "1234",
 			},
 		})
 		assert.True(t, r)
@@ -40,7 +40,7 @@ func TestAddEncryptedStateStore(t *testing.T) {
 		r := AddEncryptedStateStore("test", ComponentEncryptionKeys{
 			Primary: Key{
 				Name: "primary",
-				Key:  "123",
+				Key:  "1234",
 			},
 		})
 
@@ -50,7 +50,7 @@ func TestAddEncryptedStateStore(t *testing.T) {
 		r = AddEncryptedStateStore("test", ComponentEncryptionKeys{
 			Primary: Key{
 				Name: "primary",
-				Key:  "123",
+				Key:  "1234",
 			},
 		})
 
@@ -78,8 +78,8 @@ func TestTryEncryptValue(t *testing.T) {
 			Key:  key,
 		}
 
-		gcm, _ := createCipher(pr, AES256Algorithm)
-		pr.gcm = gcm
+		cipherObj, _ := createCipher(pr, AESGCMAlgorithm)
+		pr.cipherObj = cipherObj
 
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
@@ -110,8 +110,8 @@ func TestTryEncryptValue(t *testing.T) {
 			Key:  primaryKey,
 		}
 
-		gcm, _ := createCipher(pr, AES256Algorithm)
-		pr.gcm = gcm
+		cipherObj, _ := createCipher(pr, AESGCMAlgorithm)
+		pr.cipherObj = cipherObj
 
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
@@ -147,8 +147,8 @@ func TestTryEncryptValue(t *testing.T) {
 			Key:  key,
 		}
 
-		gcm, _ := createCipher(pr, AES256Algorithm)
-		pr.gcm = gcm
+		cipherObj, _ := createCipher(pr, AESGCMAlgorithm)
+		pr.cipherObj = cipherObj
 
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 		AddEncryptedStateStore("test", ComponentEncryptionKeys{
@@ -165,6 +165,38 @@ func TestTryEncryptValue(t *testing.T) {
 		dr, err := TryDecryptValue("test", r)
 		assert.NoError(t, err)
 		assert.Equal(t, []byte(s), dr)
+	})
+
+	t.Run("state store with AES128 primary key, value encrypted and decrypted successfully", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 16)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		cipherObj, _ := createCipher(pr, AESGCMAlgorithm)
+		pr.cipherObj = cipherObj
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		v := []byte("hello world")
+		r, err := TryEncryptValue("test", v)
+
+		assert.NoError(t, err)
+		assert.NotEqual(t, v, r)
+
+		dr, err := TryDecryptValue("test", r)
+		assert.NoError(t, err)
+		assert.Equal(t, v, dr)
 	})
 }
 

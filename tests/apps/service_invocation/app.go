@@ -275,6 +275,7 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 		req.Header.Add(k, v)
 	}
 
+	req.Header.Add("Content-Type", "application/json")
 	return httpClient.Do(req)
 }
 
@@ -294,6 +295,7 @@ func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, hea
 		req.Header.Add(k, v)
 	}
 
+	req.Header.Add("Content-Type", "application/json")
 	return httpClient.Do(req)
 }
 
@@ -740,7 +742,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("grpcToGrpcTest - target app: %s\n", commandBody.RemoteApp)
+	fmt.Printf("%s - target app: %s\n", commandBody.Method, commandBody.RemoteApp)
 
 	testMessage := guuid.New().String()
 	b, err := json.Marshal(testMessage)
@@ -750,9 +752,9 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("grpcToGrpcTest calling with message %s\n", string(b))
+	fmt.Printf("%s calling with message %s\n", commandBody.Method, string(b))
 
-	var req = constructRequest(commandBody.RemoteApp, "grpcToGrpcTest", "", b)
+	var req = constructRequest(commandBody.RemoteApp, commandBody.Method, "", b)
 	resp, err := daprClient.InvokeService(context.Background(), req)
 
 	if err != nil {
