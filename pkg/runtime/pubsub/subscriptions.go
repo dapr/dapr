@@ -43,7 +43,7 @@ type (
 	SubscriptionJSON struct {
 		PubsubName      string            `json:"pubsubname"`
 		Topic           string            `json:"topic"`
-		DeadLetterTopic string            `json:"dead_letter_topic"`
+		DeadLetterTopic string            `json:"deadLetterTopic"`
 		Metadata        map[string]string `json:"metadata,omitempty"`
 		Route           string            `json:"route"`  // Single route from v1alpha1
 		Routes          RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
