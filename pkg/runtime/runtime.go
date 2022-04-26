@@ -664,7 +664,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 					return err
 				}
 			}
-			return nil
+			return err
 		}); err != nil {
 			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
 		}
