@@ -26,7 +26,7 @@ func TestServerOptions(t *testing.T) {
 		}
 		opts, err := GetServerOptions(chain)
 		assert.Nil(t, err)
-		assert.NotNil(t, opts)
+		assert.Nil(t, opts)
 		assert.Len(t, opts, 0)
 	})
 }
