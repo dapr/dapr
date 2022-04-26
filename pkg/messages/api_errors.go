@@ -38,7 +38,7 @@ const (
 	ErrChannelInvoke         = "error invoking app channel: %s"
 
 	// Actor.
-	ErrActorRuntimeNotFound      = "actor runtime is not configured"
+	ErrActorRuntimeNotFound      = "the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: \"true\" in your state store component file?"
 	ErrActorInstanceMissing      = "actor instance is missing"
 	ErrActorInvoke               = "error invoke actor method: %s"
 	ErrActorReminderCreate       = "error creating actor reminder: %s"
