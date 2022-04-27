@@ -876,7 +876,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 				var resp *bindings.InvokeResponse
 				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name)
 				err := policy(func(ctx context.Context) (err error) {
-					resp, err = binding.Invoke(req)
+					resp, err = binding.Invoke(a.ctx, req)
 					return err
 				})
 				return resp, err
@@ -1051,7 +1051,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
-	err := binding.Read(func(resp *bindings.ReadResponse) ([]byte, error) {
+	err := binding.Read(func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		if resp != nil {
 			start := time.Now()
 			b, err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
