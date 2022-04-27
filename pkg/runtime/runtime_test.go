@@ -261,7 +261,7 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 
 func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
 	b, _ := yaml.Marshal(subscription)
-	os.WriteFile(filePath, b, 0600)
+	os.WriteFile(filePath, b, 0o600)
 }
 
 func TestProcessComponentsAndDependents(t *testing.T) {
@@ -269,7 +269,6 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	incorrectComponentType := components_v1alpha1.Component{
-
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
 		},
@@ -292,7 +291,6 @@ func TestDoProcessComponent(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	pubsubComponent := components_v1alpha1.Component{
-
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
 		},
@@ -1242,7 +1240,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1267,7 +1265,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1294,7 +1292,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -2971,14 +2969,14 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-func (b *mockBinding) Read(handler func(*bindings.ReadResponse) ([]byte, error)) error {
+func (b *mockBinding) Read(handler func(context.Context, *bindings.ReadResponse) ([]byte, error)) error {
 	b.data = string(testInputBindingData)
 	metadata := map[string]string{}
 	if b.metadata != nil {
 		metadata = b.metadata
 	}
 
-	_, err := handler(&bindings.ReadResponse{
+	_, err := handler(context.TODO(), &bindings.ReadResponse{
 		Metadata: metadata,
 		Data:     []byte(b.data),
 	})
@@ -2990,7 +2988,7 @@ func (b *mockBinding) Operations() []bindings.OperationKind {
 	return []bindings.OperationKind{bindings.CreateOperation, bindings.ListOperation}
 }
 
-func (b *mockBinding) Invoke(req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+func (b *mockBinding) Invoke(ctx context.Context, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 	return nil, nil
 }
 
