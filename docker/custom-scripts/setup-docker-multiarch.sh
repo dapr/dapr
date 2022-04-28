@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 #
 # Copyright 2021 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,24 +10,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
-[ -z "$1" ] && echo "Namespace must be specified" && exit 0
+# This script sets up the current environment to be able to build multi-arch Docker images, installing QEMU 
 
-installed_apps=$(helm list -q -n $1)
-echo $installed_apps
+set -e
 
-for app in $installed_apps; do
-    helm uninstall $app -n $1
-done
+# Set up QEMU
+docker run --privileged --rm tonistiigi/binfmt --install amd64,arm64,arm
 
-kubectl delete crds components.dapr.io configurations.dapr.io subscriptions.dapr.io
-
-echo "Trying to delete namespace..."
-kubectl delete namespace $1 --timeout=10m
-
-for pod in `kubectl get pods -n $1 -o name`; do
-  kubectl delete --force -n $1 $pod
-done
-
-exit 0
+# Create a buildx builder with support for multi-arch
+docker buildx create --use --name mybuilder

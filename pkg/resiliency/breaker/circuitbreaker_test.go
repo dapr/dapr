@@ -23,9 +23,11 @@ import (
 
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/kit/logger"
 )
 
 func TestCircuitBreaker(t *testing.T) {
+	log := logger.NewLogger("test")
 	t.Parallel()
 	var trip expr.Expr
 	err := trip.DecodeString("consecutiveFailures > 2")
@@ -33,9 +35,9 @@ func TestCircuitBreaker(t *testing.T) {
 	cb := breaker.CircuitBreaker{ // nolint:exhaustivestruct
 		Name:    "test",
 		Trip:    &trip,
-		Timeout: 10 * time.Millisecond,
+		Timeout: 100 * time.Millisecond,
 	}
-	cb.Initialize()
+	cb.Initialize(log)
 	for i := 0; i < 3; i++ {
 		cb.Execute(func() error {
 			return errors.New("test")
@@ -45,7 +47,7 @@ func TestCircuitBreaker(t *testing.T) {
 		return nil
 	})
 	assert.EqualError(t, err, "circuit breaker is open")
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	err = cb.Execute(func() error {
 		return nil
 	})

@@ -62,8 +62,10 @@ type (
 	Provider interface {
 		// EndpointPolicy returns the policy for a service endpoint.
 		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
-		// ActorPolicy returns the policy for an actor instance.
-		ActorPolicy(ctx context.Context, actorType string, id string) Runner
+		// ActorPolicy returns the policy for an actor instance to be used before the lock is acquired.
+		ActorPreLockPolicy(ctx context.Context, actorType string, id string) Runner
+		// ActorPolicy returns the policy for an actor instance to be used after the lock is acquired.
+		ActorPostLockPolicy(ctx context.Context, actorType string, id string) Runner
 		// ComponentOutboundPolicy returns the outbound policy for a component.
 		ComponentOutboundPolicy(ctx context.Context, name string) Runner
 		// ComponentInboundPolicy returns the inbound policy for a component.
@@ -85,9 +87,8 @@ type (
 		componentCBs  *circuitBreakerInstances
 
 		apps       map[string]PolicyNames
-		actors     map[string]ActorPolicyNames
+		actors     map[string]ActorPolicies
 		components map[string]ComponentPolicyNames
-		routes     map[string]PolicyNames
 	}
 
 	// circuitBreakerInstances stores circuit breaker state for components
@@ -111,10 +112,22 @@ type (
 		CircuitBreaker string
 	}
 
-	// ActorPolicyNames add the circuit breaker scope to PolicyNames.
-	ActorPolicyNames struct {
-		PolicyNames
+	// Actors have different behavior before and after locking.
+	ActorPolicies struct {
+		PreLockPolicies  ActorPreLockPolicyNames
+		PostLockPolicies ActorPostLockPolicyNames
+	}
+
+	// Policy used before an actor is locked. It does not include a timeout as we want to wait forever for the actor.
+	ActorPreLockPolicyNames struct {
+		Retry               string
+		CircuitBreaker      string
 		CircuitBreakerScope ActorCircuitBreakerScope
+	}
+
+	// Policy used after an actor is locked. It only uses timeout as retry/circuit breaker is handled before locking.
+	ActorPostLockPolicyNames struct {
+		Timeout string
 	}
 )
 
@@ -210,9 +223,8 @@ func New(log logger.Logger) *Resiliency {
 			cbs: make(map[string]*breaker.CircuitBreaker, 10),
 		},
 		apps:       make(map[string]PolicyNames),
-		actors:     make(map[string]ActorPolicyNames),
+		actors:     make(map[string]ActorPolicies),
 		components: make(map[string]ComponentPolicyNames),
-		routes:     make(map[string]PolicyNames),
 	}
 }
 
@@ -259,7 +271,7 @@ func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error
 			return fmt.Errorf("invalid retry configuration %q: %w", name, err)
 		}
 		cb.Name = name
-		cb.Initialize()
+		cb.Initialize(r.log)
 		r.circuitBreakers[name] = &cb
 	}
 
@@ -285,18 +297,38 @@ func (r *Resiliency) decodeTargets(c *resiliency_v1alpha.Resiliency) (err error)
 	}
 
 	for name, t := range targets.Actors {
-		scope, err := ParseActorCircuitBreakerScope(t.CircuitBreakerScope)
-		if err != nil {
-			return err
+		if t.CircuitBreakerScope == "" && t.CircuitBreaker != "" {
+			return fmt.Errorf("actor circuit breakers must include scope")
 		}
-		r.actors[name] = ActorPolicyNames{
-			PolicyNames: PolicyNames{
-				Timeout:        t.Timeout,
-				Retry:          t.Retry,
-				CircuitBreaker: t.CircuitBreaker,
-			},
-			CircuitBreakerScope: scope,
+
+		if t.CircuitBreaker != "" {
+			scope, cErr := ParseActorCircuitBreakerScope(t.CircuitBreakerScope)
+			if cErr != nil {
+				return cErr
+			}
+
+			r.actors[name] = ActorPolicies{
+				PreLockPolicies: ActorPreLockPolicyNames{
+					Retry:               t.Retry,
+					CircuitBreaker:      t.CircuitBreaker,
+					CircuitBreakerScope: scope,
+				},
+				PostLockPolicies: ActorPostLockPolicyNames{
+					Timeout: t.Timeout,
+				},
+			}
+		} else {
+			r.actors[name] = ActorPolicies{
+				PreLockPolicies: ActorPreLockPolicyNames{
+					Retry:          t.Retry,
+					CircuitBreaker: "",
+				},
+				PostLockPolicies: ActorPostLockPolicyNames{
+					Timeout: t.Timeout,
+				},
+			}
 		}
+
 		if t.CircuitBreakerCacheSize == 0 {
 			t.CircuitBreakerCacheSize = defaultActorCacheSize
 		}
@@ -342,7 +374,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 			rc = r.retries[policyNames.Retry]
 		}
 		if policyNames.CircuitBreaker != "" {
-			template := r.circuitBreakers[policyNames.CircuitBreaker]
+			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
 			if ok {
 				cache, ok := r.serviceCBs[app]
 				if ok {
@@ -357,7 +389,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 							Timeout:     template.Timeout,
 							Trip:        template.Trip,
 						}
-						cb.Initialize()
+						cb.Initialize(r.log)
 						cache.Add(endpoint, cb)
 					}
 				}
@@ -368,8 +400,8 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 	return Policy(ctx, r.log, operationName, t, rc, cb)
 }
 
-// ActorPolicy returns the policy for an actor instance.
-func (r *Resiliency) ActorPolicy(ctx context.Context, actorType string, id string) Runner {
+// ActorPreLockPolicy returns the policy for an actor instance to be used before an actor lock is acquired.
+func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, id string) Runner {
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
@@ -377,11 +409,8 @@ func (r *Resiliency) ActorPolicy(ctx context.Context, actorType string, id strin
 	if r == nil {
 		return Policy(ctx, r.log, operationName, t, rc, cb)
 	}
-	policyNames, ok := r.actors[actorType]
-	if ok {
-		if policyNames.Timeout != "" {
-			t = r.timeouts[policyNames.Timeout]
-		}
+	actorPolicies, ok := r.actors[actorType]
+	if policyNames := actorPolicies.PreLockPolicies; ok {
 		if policyNames.Retry != "" {
 			rc = r.retries[policyNames.Retry]
 		}
@@ -408,11 +437,30 @@ func (r *Resiliency) ActorPolicy(ctx context.Context, actorType string, id strin
 							Timeout:     template.Timeout,
 							Trip:        template.Trip,
 						}
-						cb.Initialize()
+						cb.Initialize(r.log)
 						cache.Add(key, cb)
 					}
 				}
 			}
+		}
+	}
+
+	return Policy(ctx, r.log, operationName, t, rc, cb)
+}
+
+// ActorPostLockPolicy returns the policy for an actor instance to be used after an actor lock is acquired.
+func (r *Resiliency) ActorPostLockPolicy(ctx context.Context, actorType string, id string) Runner {
+	var t time.Duration
+	var rc *retry.Config
+	var cb *breaker.CircuitBreaker
+	operationName := fmt.Sprintf("actor[%s, %s]", actorType, id)
+	if r == nil {
+		return Policy(ctx, r.log, operationName, t, rc, cb)
+	}
+	actorPolicies, ok := r.actors[actorType]
+	if policyNames := actorPolicies.PostLockPolicies; ok {
+		if policyNames.Timeout != "" {
+			t = r.timeouts[policyNames.Timeout]
 		}
 	}
 
@@ -438,7 +486,7 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) R
 		}
 		if componentPolicies.Outbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]
-			cb = r.componentCBs.Get(name, template)
+			cb = r.componentCBs.Get(r.log, name, template)
 		}
 	}
 
@@ -464,7 +512,7 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 		}
 		if componentPolicies.Inbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]
-			cb = r.componentCBs.Get(name, template)
+			cb = r.componentCBs.Get(r.log, name, template)
 		}
 	}
 
@@ -473,7 +521,7 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 
 // Get returns a cached circuit breaker if one exists.
 // Otherwise, it returns a new circuit breaker based on the provided template.
-func (e *circuitBreakerInstances) Get(instanceName string, template *breaker.CircuitBreaker) *breaker.CircuitBreaker {
+func (e *circuitBreakerInstances) Get(log logger.Logger, instanceName string, template *breaker.CircuitBreaker) *breaker.CircuitBreaker {
 	e.RLock()
 	cb, ok := e.cbs[instanceName]
 	e.RUnlock()
@@ -488,7 +536,7 @@ func (e *circuitBreakerInstances) Get(instanceName string, template *breaker.Cir
 		Timeout:     template.Timeout,
 		Trip:        template.Trip,
 	}
-	cb.Initialize()
+	cb.Initialize(log)
 
 	e.Lock()
 	e.cbs[instanceName] = cb

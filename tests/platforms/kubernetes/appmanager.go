@@ -278,7 +278,9 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
-		lastDeployment, err = deploymentsClient.Get(context.TODO(), m.app.AppName, metav1.GetOptions{})
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		lastDeployment, err = deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
 		done := isState(lastDeployment, err)
 		if !done && err != nil {
 			return true, err
@@ -290,12 +292,22 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 		// get deployment's Pods detail status info
 		podClient := m.client.Pods(m.namespace)
 		// Filter only 'testapp=appName' labeled Pods
-		podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		podList, err := podClient.List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 		})
+		// Reset Spec and ObjectMeta which could contain sensitive info like credentials
+		lastDeployment.Spec.Reset()
+		lastDeployment.ObjectMeta.Reset()
 		podStatus := map[string][]apiv1.ContainerStatus{}
 		if err == nil {
-			for _, pod := range podList.Items {
+			for i, pod := range podList.Items {
+				// Reset Spec and ObjectMeta which could contain sensitive info like credentials
+				pod.Spec.Reset()
+				pod.ObjectMeta.Reset()
+				podList.Items[i] = pod
+
 				podStatus[pod.Name] = pod.Status.ContainerStatuses
 			}
 			log.Printf("deployment %s relate pods: %+v", m.app.AppName, podList)
@@ -337,7 +349,10 @@ func (m *AppManager) IsJobCompleted(job *batchv1.Job, err error) bool {
 
 // IsDeploymentDone returns true if deployment object completes pod deployments.
 func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error) bool {
-	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == m.app.Replicas && deployment.Status.AvailableReplicas == m.app.Replicas
+	return err == nil &&
+		deployment.Generation == deployment.Status.ObservedGeneration &&
+		deployment.Status.ReadyReplicas == m.app.Replicas &&
+		deployment.Status.AvailableReplicas == m.app.Replicas
 }
 
 // IsJobDeleted returns true if job does not exist.
@@ -540,8 +555,9 @@ func (m *AppManager) AcquireExternalURL() string {
 		return ""
 	}
 
-	log.Printf("Service ingress for %s is ready...\n", m.app.AppName)
-	return m.AcquireExternalURLFromService(svc)
+	url := m.AcquireExternalURLFromService(svc)
+	log.Printf("Service ingress for %s is ready...: url=%s\n", m.app.AppName, url)
+	return url
 }
 
 // WaitUntilServiceState waits until isState returns true.
@@ -554,6 +570,7 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 		lastService, err = serviceClient.Get(context.TODO(), m.app.AppName, metav1.GetOptions{})
 		done := isState(lastService, err)
 		if !done && err != nil {
+			log.Printf("wait for %s: %s", m.app.AppName, err)
 			return true, err
 		}
 

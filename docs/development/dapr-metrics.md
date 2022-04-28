@@ -8,6 +8,7 @@ Dapr metric name starts with `dapr_` prefix except for health metrics.
   * [Dapr Placement metrics](#dapr-placement-metrics)
   * [Dapr Sentry metrics](#dapr-sentry-metrics)
   * [Dapr Runtime metrics](#dapr-runtime-metrics)
+  * [Dapr Component metrics](#dapr-component-metrics)
 
 ## Dapr Common metrics
 
@@ -121,3 +122,34 @@ We support only server side metrics.
 * dapr_http/client/received_bytes: Total bytes received in response bodies (not including headers but including error responses with bodies)
 * dapr_http/client/roundtrip_latency: End-to-end latency
 * dapr_http/client/completed_count: Count of completed requests
+
+## Dapr Component Metrics
+
+### Pub/Sub metrics
+
+* dapr_component_pubsub_ingress_latencies: The consuming app event processing latency
+* dapr_component_pubsub_ingress_count: The number of incoming messages arriving from the pub/sub component
+* dapr_component_pubsub_egress_count: The number of outgoing messages published to the pub/sub component
+* dapr_component_pubsub_egress_latencies: The latency of the response from the pub/sub component
+
+### Bindings metrics
+
+* dapr_component_input_binding_count: The number of incoming events arriving from the input binding component
+* dapr_component_input_binding_latencies: The triggered app event processing latency
+* dapr_component_output_binding_count: The number of operations invoked on the output binding component
+* dapr_component_output_binding_latencies: The latency of the response from the output binding component
+
+### State metrics
+
+* dapr_component_state_count: The number of operations performed on the state component
+* dapr_component_state_latencies: The latency of the response from the state component
+
+### Configuration metrics
+
+* dapr_component_configuration_count: The number of operations performed on the configuration component
+* dapr_component_configuration_latencies: The latency of the response from the configuration component
+
+### Secret metrics
+
+* dapr_component_secret_count: The number of operations performed on the secret component
+* dapr_component_secret_latencies: The latency of the response from the secret component
