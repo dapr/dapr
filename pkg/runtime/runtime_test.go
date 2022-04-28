@@ -904,7 +904,6 @@ func TestMetadataUUID(t *testing.T) {
 }
 
 func TestMetadataPodName(t *testing.T) {
-
 	pubsubComponent := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,

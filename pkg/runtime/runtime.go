@@ -2249,7 +2249,7 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 		}
 		for strings.Contains(val, "{podName}") {
 			if a.podName == "" {
-				log.Warnf("could not get podname property")
+				log.Warnf("could not get podName property")
 			}
 			val = strings.Replace(val, "{podName}", a.podName, 1)
 		}
