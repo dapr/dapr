@@ -247,9 +247,9 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesJob.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubRaw) && !receivedMessagesRaw.Has(msg) {
 		receivedMessagesRaw.Insert(msg)
-	} else if strings.HasSuffix(r.URL.String(), pubsubDead) && !receivedMessagesRaw.Has(msg) {
+	} else if strings.HasSuffix(r.URL.String(), pubsubDead) && !receivedMessagesDead.Has(msg) {
 		receivedMessagesDead.Insert(msg)
-	} else if strings.HasSuffix(r.URL.String(), pubsubDeadLetter) && !receivedMessagesRaw.Has(msg) {
+	} else if strings.HasSuffix(r.URL.String(), pubsubDeadLetter) && !receivedMessagesDeadLetter.Has(msg) {
 		receivedMessagesDeadLetter.Insert(msg)
 	} else {
 		// This case is triggered when there is multiple redelivery of same message or a message
