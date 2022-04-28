@@ -166,7 +166,7 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 		return err
 	}
 
-	if err := h.patchDaprService(ctx, mayDaprService, wrapper); err != nil {
+	if err := h.patchDaprService(ctx, mayDaprService, wrapper, daprSvc); err != nil {
 		log.Errorf("unable to update service, %s, err: %s", mayDaprService, err)
 		return err
 	}
@@ -174,9 +174,11 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	return nil
 }
 
-func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper) error {
+func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper, daprSvc corev1.Service) error {
 	appID := h.getAppID(wrapper)
 	service := h.createDaprServiceValues(ctx, expectedService, wrapper, appID)
+
+	service.ObjectMeta.ResourceVersion = daprSvc.ObjectMeta.ResourceVersion
 
 	if err := h.Update(ctx, service); err != nil {
 		return err
