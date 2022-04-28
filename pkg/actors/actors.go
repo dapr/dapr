@@ -138,6 +138,8 @@ const (
 	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
 
+var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
+
 // NewActors create a new actors runtime with given config.
 func NewActors(
 	stateStore state.Store,
@@ -330,7 +332,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, targetActorAddress, appID, req)
 	}
 
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrDaprResponseHeader) {
 		return nil, err
 	}
 	return resp, nil
@@ -434,7 +436,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// The .NET SDK signifies Actor failure via a header instead of a bad response.
 	if _, ok := resp.Headers()["X-Daprerrorresponseheader"]; ok {
-		return nil, errors.Errorf("error from a .NET actor")
+		return resp, ErrDaprResponseHeader
 	}
 
 	return resp, nil
@@ -495,7 +497,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 
 func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
 	if a.store == nil || a.transactionalStore == nil {
-		return errors.New("actors: state store does not exist or incorrectly configured")
+		return errors.New("actors: state store does not exist or incorrectly configured. Have you set the - name: actorStateStore value: \"true\" in your state store component file?")
 	}
 	operations := []state.TransactionalStateOperation{}
 	partitionKey := constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
@@ -621,6 +623,8 @@ func (a *actorsRuntime) drainRebalancedActors() {
 		}(key, value, &wg)
 		return true
 	})
+
+	wg.Wait()
 }
 
 func (a *actorsRuntime) evaluateReminders() {
@@ -656,9 +660,9 @@ func (a *actorsRuntime) evaluateReminders() {
 						continue
 					}
 
+					actorKey := constructCompositeKey(r.reminder.ActorType, r.reminder.ActorID)
+					reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 					if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-						actorKey := constructCompositeKey(r.reminder.ActorType, r.reminder.ActorID)
-						reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
 						_, exists := a.activeReminders.Load(reminderKey)
 
 						if !exists {
@@ -678,6 +682,13 @@ func (a *actorsRuntime) evaluateReminders() {
 								r.reminder.Name,
 								r.reminder.ActorID,
 								r.reminder.ActorType)
+						}
+					} else {
+						stopChan, exists := a.activeReminders.Load(reminderKey)
+						if exists {
+							log.Debugf("stopping reminder %s on %s as it's active on host %s", reminderKey, a.config.HostAddress, targetActorAddress)
+							close(stopChan.(chan bool))
+							a.activeReminders.Delete(reminderKey)
 						}
 					}
 				}
@@ -1113,9 +1124,6 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	if len(req.DueTime) != 0 {
 		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
 			return errors.Wrap(err, "error parsing timer due time")
-		}
-		if dueTime.Before(time.Now()) {
-			return errors.Errorf("timer %s has already expired: dueTime: %s TTL: %s", timerKey, req.DueTime, req.TTL)
 		}
 	} else {
 		dueTime = time.Now()
