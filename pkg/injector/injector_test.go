@@ -623,7 +623,7 @@ func TestHandleRequest(t *testing.T) {
 			},
 			runtime.ContentTypeJSON,
 			http.StatusOK,
-			false,
+			true,
 		},
 	}
 
