@@ -94,10 +94,10 @@ type registeredComponent struct {
 }
 
 type metadata struct {
-	ID                   string                      `json:"id"`
-	ActiveActorsCount    []actors.ActiveActorsCount  `json:"actors"`
-	Extended             map[interface{}]interface{} `json:"extended"`
-	RegisteredComponents []registeredComponent       `json:"components"`
+	ID                   string                     `json:"id"`
+	ActiveActorsCount    []actors.ActiveActorsCount `json:"actors"`
+	Extended             map[string]string          `json:"extended"`
+	RegisteredComponents []registeredComponent      `json:"components"`
 }
 
 const (
@@ -1432,11 +1432,11 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
-	temp := make(map[interface{}]interface{})
+	temp := make(map[string]string)
 
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key] = value
+		temp[key.(string)] = key.(string)
 
 		return true
 	})

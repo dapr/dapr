@@ -2727,7 +2727,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		expectedResponses := []BulkGetResponse{
 			{
 				Key:   "good-key",
-				Data:  json.RawMessage("life is good"),
+				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
 				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
@@ -2760,7 +2760,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		expectedResponses := []BulkGetResponse{
 			{
 				Key:   "good-key",
-				Data:  json.RawMessage("life is good"),
+				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
 				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
