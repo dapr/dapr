@@ -2246,7 +2246,6 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
 		assert.Equal(t, "error configuration stores nonExistStore not found", resp.ErrorBody["message"])
 	})
-	return
 }
 
 func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
@@ -3597,14 +3596,6 @@ func (c *fakeConfigurationStore) Subscribe(ctx context.Context, req *configurati
 
 func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
 	return nil
-}
-
-type fakeConfigurationStoreGetter struct {
-	fakeConfigurationStore
-}
-
-func (c fakeConfigurationStoreGetter) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
-	return nil, nil
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {
