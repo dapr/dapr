@@ -201,7 +201,9 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 
 	// Only the latest/storage version needs to be returned.
 	var subsV2alpha1 subscriptionsapi_v2alpha1.SubscriptionList
-	if err := a.Client.List(ctx, &subsV2alpha1); err != nil {
+	if err := a.Client.List(ctx, &subsV2alpha1, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
 		return nil, errors.Wrap(err, "error getting subscriptions")
 	}
 	for i := range subsV2alpha1.Items {
@@ -243,7 +245,9 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 	}
 
 	var resiliencies resiliencyapi.ResiliencyList
-	if err := a.Client.List(ctx, &resiliencies); err != nil {
+	if err := a.Client.List(ctx, &resiliencies, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
 		return nil, errors.Wrap(err, "error listing resiliencies")
 	}
 
