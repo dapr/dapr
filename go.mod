@@ -334,3 +334,6 @@ replace (
 )
 
 replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
+
+// after the PR in components-contrib is merged, this replace will be removed.
+replace github.com/dapr/components-contrib => github.com/skyao/components-contrib v1.7.1-0.20220429012952-c2dc6f2a8a70
