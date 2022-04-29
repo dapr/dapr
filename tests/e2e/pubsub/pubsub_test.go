@@ -263,10 +263,11 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
 			// empty string slices
-			ReceivedByTopicA:   []string{},
-			ReceivedByTopicB:   []string{},
-			ReceivedByTopicC:   []string{},
-			ReceivedByTopicRaw: []string{},
+			ReceivedByTopicA:    []string{},
+			ReceivedByTopicB:    []string{},
+			ReceivedByTopicC:    []string{},
+			ReceivedByTopicRaw:  []string{},
+			ReceivedByTopicDead: []string{},
 		})
 	} else if subscriberResponse == "error" {
 		log.Printf("Validating redelivered messages...")
