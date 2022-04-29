@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -73,6 +74,7 @@ type api struct {
 	getComponentsFn          func() []components_v1alpha1.Component
 	resiliency               resiliency.Provider
 	stateStores              map[string]state.Store
+	configurationStores      map[string]configuration.Store
 	transactionalStateStores map[string]state.TransactionalStore
 	secretStores             map[string]secretstores.SecretStore
 	secretsConfiguration     map[string]config.SecretsScope
@@ -102,24 +104,25 @@ type metadata struct {
 }
 
 const (
-	apiVersionV1         = "v1.0"
-	apiVersionV1alpha1   = "v1.0-alpha1"
-	idParam              = "id"
-	methodParam          = "method"
-	topicParam           = "topic"
-	actorTypeParam       = "actorType"
-	actorIDParam         = "actorId"
-	storeNameParam       = "storeName"
-	stateKeyParam        = "key"
-	secretStoreNameParam = "secretStoreName"
-	secretNameParam      = "key"
-	nameParam            = "name"
-	consistencyParam     = "consistency"
-	concurrencyParam     = "concurrency"
-	pubsubnameparam      = "pubsubname"
-	traceparentHeader    = "traceparent"
-	tracestateHeader     = "tracestate"
-	daprAppID            = "dapr-app-id"
+	apiVersionV1          = "v1.0"
+	apiVersionV1alpha1    = "v1.0-alpha1"
+	idParam               = "id"
+	methodParam           = "method"
+	topicParam            = "topic"
+	actorTypeParam        = "actorType"
+	actorIDParam          = "actorId"
+	storeNameParam        = "storeName"
+	stateKeyParam         = "key"
+	configurationKeyParam = "key"
+	secretStoreNameParam  = "secretStoreName"
+	secretNameParam       = "key"
+	nameParam             = "name"
+	consistencyParam      = "consistency"
+	concurrencyParam      = "concurrency"
+	pubsubnameparam       = "pubsubname"
+	traceparentHeader     = "traceparent"
+	tracestateHeader      = "tracestate"
+	daprAppID             = "dapr-app-id"
 )
 
 // NewAPI returns a new API.
@@ -132,6 +135,7 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
+	configurationStores map[string]configuration.Store,
 	pubsubAdapter runtime_pubsub.Adapter,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
@@ -153,6 +157,7 @@ func NewAPI(
 		transactionalStateStores: transactionalStateStores,
 		secretStores:             secretStores,
 		secretsConfiguration:     secretsConfiguration,
+		configurationStores:      configurationStores,
 		json:                     jsoniter.ConfigFastest,
 		actor:                    actor,
 		pubsubAdapter:            pubsubAdapter,
@@ -173,6 +178,7 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, metadataEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
@@ -394,6 +400,17 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Route:   "healthz/outbound",
 			Version: apiVersionV1,
 			Handler: a.onGetOutboundHealthz,
+		},
+	}
+}
+
+func (a *api) constructConfigurationEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onGetConfiguration,
 		},
 	}
 }
@@ -677,6 +694,71 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	respond(reqCtx, withJSON(fasthttp.StatusOK, resp.Data), withEtag(resp.ETag), withMetadata(resp.Metadata))
+}
+
+func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
+	if a.configurationStores == nil || len(a.configurationStores) == 0 {
+		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_CONFIGURED", messages.ErrConfigurationStoresNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+
+	storeName := a.getStateStoreName(reqCtx)
+
+	if a.configurationStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+	return a.configurationStores[storeName], storeName, nil
+}
+
+func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	metadata := getMetadataFromRequest(reqCtx)
+
+	keys := make([]string, 0)
+	queryKeys := reqCtx.QueryArgs().PeekMulti(configurationKeyParam)
+	for _, queryKeyByte := range queryKeys {
+		keys = append(keys, string(queryKeyByte))
+	}
+	req := configuration.GetRequest{
+		Keys:     keys,
+		Metadata: metadata,
+	}
+
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+	var getResponse *configuration.GetResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		getResponse, rErr = store.Get(ctx, &req)
+		return rErr
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+
+	if err != nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_GET", fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	if getResponse == nil || getResponse.Items == nil || len(getResponse.Items) == 0 {
+		respond(reqCtx, withEmpty())
+		return
+	}
+
+	respBytes, _ := a.json.Marshal(getResponse.Items)
+
+	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
 }
 
 func extractEtag(reqCtx *fasthttp.RequestCtx) (bool, string) {
