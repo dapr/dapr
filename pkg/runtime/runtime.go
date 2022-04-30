@@ -599,9 +599,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			rawPayload, err := contrib_metadata.IsRawPayload(routeMetadata)
 			if err != nil {
 				log.Errorf("error deserializing pubsub metadata: %s", err)
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-				a.sendToDeadLetterIfConfigured(name, msg)
-				return nil
+				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+					// dlq has been configured and message is successfully sent to dlq.
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					return nil
+				}
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				return err
 			}
 
 			var cloudEvent map[string]interface{}
@@ -611,17 +615,25 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				data, err = a.json.Marshal(cloudEvent)
 				if err != nil {
 					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-					a.sendToDeadLetterIfConfigured(name, msg)
-					return nil
+					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+						// dlq has been configured and message is successfully sent to dlq.
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						return nil
+					}
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+					return err
 				}
 			} else {
 				err = a.json.Unmarshal(msg.Data, &cloudEvent)
 				if err != nil {
 					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-					a.sendToDeadLetterIfConfigured(name, msg)
-					return nil
+					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+						// dlq has been configured and message is successfully sent to dlq.
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						return nil
+					}
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+					return err
 				}
 			}
 
@@ -635,9 +647,14 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
 			if err != nil {
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-				a.sendToDeadLetterIfConfigured(name, msg)
-				return nil
+				log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
+				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+					// dlq has been configured and message is successfully sent to dlq.
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					return nil
+				}
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				return err
 			}
 			if !shouldProcess {
 				// The event does not match any route specified so ignore it.
@@ -660,7 +677,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			})
 			if err != nil && err != context.Canceled {
 				// Sending msg to dead letter queue, if no DLQ is configured, return error for backwards compatibility(component level retry).
-				if ok, _ := a.sendToDeadLetterIfConfigured(name, msg); !ok {
+				if configured, _ := a.sendToDeadLetterIfConfigured(name, msg); !configured {
 					return err
 				}
 			}
