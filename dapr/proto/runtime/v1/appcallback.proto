@@ -160,6 +160,9 @@ message TopicSubscription {
   // The optional routing rules to match against. In the gRPC interface, OnTopicEvent
   // is still invoked but the matching path is sent in the TopicEventRequest.
   TopicRoutes routes = 5;
+
+  // The optional dead letter queue for this topic to send events to.
+  string dead_letter_topic = 6;
 }
 
 message TopicRoutes {
