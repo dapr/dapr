@@ -71,10 +71,12 @@ type callSubscriberMethodRequest struct {
 
 // data returned from the subscriber app.
 type receivedMessagesResponse struct {
-	ReceivedByTopicA   []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
-	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicA          []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB          []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC          []string `json:"pubsub-c-topic"`
+	ReceivedByTopicRaw        []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicDead       []string `json:"pubsub-dead-topic"`
+	ReceivedByTopicDeadLetter []string `json:"pubsub-deadletter-topic"`
 }
 
 type cloudEvent struct {
@@ -174,11 +176,16 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
 	require.NoError(t, err)
 
+	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-topic", protocol, nil, "")
+	require.NoError(t, err)
+
 	return receivedMessagesResponse{
-		ReceivedByTopicA:   sentTopicAMessages,
-		ReceivedByTopicB:   sentTopicBMessages,
-		ReceivedByTopicC:   sentTopicCMessages,
-		ReceivedByTopicRaw: sentTopicRawMessages,
+		ReceivedByTopicA:          sentTopicAMessages,
+		ReceivedByTopicB:          sentTopicBMessages,
+		ReceivedByTopicC:          sentTopicCMessages,
+		ReceivedByTopicRaw:        sentTopicRawMessages,
+		ReceivedByTopicDead:       sentTopicDeadMessages,
+		ReceivedByTopicDeadLetter: sentTopicDeadMessages,
 	}
 }
 
@@ -203,7 +210,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
-	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
 	return subscriberExternalURL
 }
 
@@ -242,7 +249,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
 		time.Sleep(10 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
 
 		callInitialize(t, publisherExternalURL, protocol)
 	}
@@ -254,18 +261,23 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		// validate that there is no redelivery of messages
 		log.Printf("Validating no redelivered messages...")
 		time.Sleep(30 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
 			// empty string slices
-			ReceivedByTopicA:   []string{},
-			ReceivedByTopicB:   []string{},
-			ReceivedByTopicC:   []string{},
-			ReceivedByTopicRaw: []string{},
+			ReceivedByTopicA:    []string{},
+			ReceivedByTopicB:    []string{},
+			ReceivedByTopicC:    []string{},
+			ReceivedByTopicRaw:  []string{},
+			ReceivedByTopicDead: []string{},
 		})
+	} else if subscriberResponse == "error" {
+		log.Printf("Validating redelivered messages...")
+		time.Sleep(30 * time.Second)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages)
 	} else {
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
 		time.Sleep(30 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
 	}
 
 	return subscriberExternalURL
@@ -297,7 +309,7 @@ func setDesiredResponse(t *testing.T, subscriberResponse string, publisherExtern
 	require.Equal(t, http.StatusOK, code)
 }
 
-func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) {
+func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, validateDeadLetter bool, sentMessages receivedMessagesResponse) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
@@ -324,7 +336,9 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
 			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
 			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
-			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) {
+			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) ||
+			len(appResp.ReceivedByTopicDead) != len(sentMessages.ReceivedByTopicDead) ||
+			(validateDeadLetter && len(appResp.ReceivedByTopicDeadLetter) != len(sentMessages.ReceivedByTopicDeadLetter)) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(5 * time.Second)
 		} else {
@@ -341,11 +355,20 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	sort.Strings(appResp.ReceivedByTopicC)
 	sort.Strings(sentMessages.ReceivedByTopicRaw)
 	sort.Strings(appResp.ReceivedByTopicRaw)
+	sort.Strings(sentMessages.ReceivedByTopicDead)
+	sort.Strings(appResp.ReceivedByTopicDead)
+	sort.Strings(sentMessages.ReceivedByTopicDeadLetter)
+	sort.Strings(appResp.ReceivedByTopicDeadLetter)
 
 	require.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA)
 	require.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB)
 	require.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC)
 	require.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw)
+	require.Equal(t, sentMessages.ReceivedByTopicDead, appResp.ReceivedByTopicDead)
+	if validateDeadLetter {
+		// only error response is expected to validate dead letter
+		require.Equal(t, sentMessages.ReceivedByTopicDead, appResp.ReceivedByTopicDead, "messages are expected send to dead letter topic")
+	}
 }
 
 func TestMain(m *testing.M) {
