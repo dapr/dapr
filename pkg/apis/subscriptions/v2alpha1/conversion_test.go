@@ -23,6 +23,7 @@ func TestConversion(t *testing.T) {
 			Routes: v2alpha1.Routes{
 				Default: "testPath",
 			},
+			DeadLetterTopic: "testDeadLetterTopic",
 		},
 	}
 
