@@ -43,7 +43,7 @@ func TestPlacementHA(t *testing.T) {
 	}
 
 	// Run tests
-	var leader = -1
+	leader := -1
 	t.Run("elects leader with 3 nodes", func(t *testing.T) {
 		leader = findLeader(t, raftServers)
 	})
@@ -152,8 +152,8 @@ func TestPlacementHA(t *testing.T) {
 	}
 }
 
-func createRaftServer(t *testing.T, nodeId int, peers []raft.PeerInfo) *raft.Server {
-	srv := raft.New(fmt.Sprintf("mynode-%d", nodeId), true, peers, "")
+func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) *raft.Server {
+	srv := raft.New(fmt.Sprintf("mynode-%d", nodeID), true, peers, "")
 	err := srv.StartRaft(nil)
 	assert.NoError(t, err)
 	return srv
