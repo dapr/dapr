@@ -67,9 +67,8 @@ func TestPlacementHA(t *testing.T) {
 		raftServers[leader] = nil
 		time.Sleep(2500 * time.Millisecond)
 		leader = findLeader(t, raftServers)
-		raftServers[leader].FSM().State()
 	})
-	t.Run("set and retrieve state in leader", func(t *testing.T) {
+	t.Run("set and retrieve state in leader after re-election", func(t *testing.T) {
 		_, err := raftServers[leader].ApplyCommand(raft.MemberUpsert, *testMembers[1])
 		assert.NoError(t, err)
 
