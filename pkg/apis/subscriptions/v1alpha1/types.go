@@ -36,8 +36,9 @@ type SubscriptionSpec struct {
 	Topic      string `json:"topic"`
 	Pubsubname string `json:"pubsubname"`
 	// +optional
-	Metadata map[string]string `json:"metadata,omitempty"`
-	Route    string            `json:"route"`
+	Metadata        map[string]string `json:"metadata,omitempty"`
+	Route           string            `json:"route"`
+	DeadLetterTopic string            `json:"deadLetterTopic,omitempty"`
 }
 
 // +kubebuilder:object:root=true
