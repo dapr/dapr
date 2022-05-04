@@ -158,7 +158,7 @@ import (
 	"github.com/dapr/components-contrib/configuration"
 	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
 
-	// lock
+	// Lock.
 	"github.com/dapr/components-contrib/lock"
 	lock_redis "github.com/dapr/components-contrib/lock/redis"
 )
