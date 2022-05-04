@@ -143,7 +143,7 @@ func (a *api) TryLock(ctx context.Context, req *runtimev1pb.TryLockRequest) (*ru
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIdEmpty, req.StoreName)
+		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 	if req.LockOwner == "" {
@@ -187,7 +187,7 @@ func (a *api) Unlock(ctx context.Context, req *runtimev1pb.UnlockRequest) (*runt
 		return newInternalErrorUnlockResponse(), err
 	}
 	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIdEmpty, req.StoreName)
+		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
 		return newInternalErrorUnlockResponse(), err
 	}
 	if req.LockOwner == "" {

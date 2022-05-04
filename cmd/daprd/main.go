@@ -14,11 +14,12 @@ limitations under the License.
 package main
 
 import (
-	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 
 	"github.com/valyala/fasthttp"
 	"go.uber.org/automaxprocs/maxprocs"

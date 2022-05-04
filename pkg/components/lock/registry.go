@@ -1,10 +1,11 @@
 package lock
 
 import (
+	"strings"
+
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/pkg/errors"
-	"strings"
 )
 
 type Lock struct {

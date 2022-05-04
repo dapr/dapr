@@ -1,10 +1,11 @@
 package lock
 
 import (
-	"github.com/dapr/components-contrib/lock"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/dapr/components-contrib/lock"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
