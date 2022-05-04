@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dapr/components-contrib/lock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/components-contrib/lock"
 )
 
 const (

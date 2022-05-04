@@ -772,7 +772,7 @@ func (a *DaprRuntime) initProxy() {
 	log.Info("gRPC proxy enabled")
 }
 
-// begin components updates for kubernetes mode
+// begin components updates for kubernetes mode.
 func (a *DaprRuntime) beginComponentsUpdates() error {
 	if a.runtimeConfig.Mode != modes.KubernetesMode {
 		return nil
