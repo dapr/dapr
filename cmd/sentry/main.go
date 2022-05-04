@@ -15,6 +15,7 @@ package main
 
 import (
 	"flag"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -81,7 +82,7 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	ctx := signals.Context()
+	runCtx := signals.Context()
 	config, err := config.FromConfigName(*configName)
 	if err != nil {
 		log.Warn(err)
@@ -96,34 +97,42 @@ func main() {
 	ca := sentry.NewSentryCA()
 
 	log.Infof("starting watch on filesystem directory: %s", watchDir)
+
 	issuerEvent := make(chan struct{})
-	ready := make(chan bool)
-
-	go ca.Run(ctx, config, ready)
-
-	<-ready
-
-	go fswatcher.Watch(ctx, watchDir, issuerEvent)
 
 	go func() {
+		// Restart the server when the issuer credentials change
 		for range issuerEvent {
 			monitoring.IssuerCertChanged()
-			log.Warn("issuer credentials changed. reloading")
-			ca.Restart(ctx, config)
+			log.Warn("issuer credentials changed; reloading")
+			err := ca.Restart(runCtx, config)
+			if err != nil {
+				log.Fatalf("failed to restart sentry server: %s", err)
+			}
 		}
 	}()
 
+	// Start the health server in background
 	go func() {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
 
-		err := healthzServer.Run(ctx, healthzPort)
-		if err != nil {
+		err := healthzServer.Run(runCtx, healthzPort)
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("failed to start healthz server: %s", err)
 		}
 	}()
 
-	<-stop
+	// Start the server in background
+	err = ca.Start(runCtx, config)
+	if err != nil {
+		log.Fatalf("failed to restart sentry server: %s", err)
+	}
+
+	// Watch for changes in the watchDir
+	// This also blocks until runCtx is canceled
+	fswatcher.Watch(runCtx, watchDir, issuerEvent)
+
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
 	<-time.After(shutdownDuration)

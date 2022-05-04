@@ -100,6 +100,9 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 
 	now := time.Now().UTC()
 	issuerExp := s.certAuth.GetCACertBundle().GetIssuerCertExpiry()
+	if issuerExp == nil {
+		return nil, errors.New("could not find expiration in issuer certificate")
+	}
 	serverCertTTL := issuerExp.Sub(now)
 
 	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), nil, serverCertTTL, false)
@@ -191,7 +194,9 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 }
 
 func (s *server) Shutdown() {
-	s.srv.Stop()
+	if s.srv != nil {
+		s.srv.GracefulStop()
+	}
 }
 
 func needsRefresh(cert *tls.Certificate, expiryBuffer time.Duration) bool {
