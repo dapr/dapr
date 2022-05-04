@@ -18,8 +18,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/dapr/components-contrib/lock"
-	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 	"io"
 	"net"
 	nethttp "net/http"
@@ -29,6 +27,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dapr/components-contrib/lock"
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 
 	"github.com/cenkalti/backoff"
 
