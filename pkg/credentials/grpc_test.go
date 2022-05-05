@@ -24,10 +24,8 @@ func TestServerOptions(t *testing.T) {
 			Cert:   []byte(nil),
 			Key:    []byte(nil),
 		}
-		opts, err := GetServerOptions(chain)
-		assert.Nil(t, err)
-		assert.Nil(t, opts)
-		assert.Len(t, opts, 0)
+		_, err := GetServerOptions(chain)
+		assert.Error(t, err)
 	})
 }
 
