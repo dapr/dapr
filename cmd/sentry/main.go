@@ -101,12 +101,23 @@ func main() {
 
 	go func() {
 		// Restart the server when the issuer credentials change
-		for range issuerEvent {
-			monitoring.IssuerCertChanged()
-			log.Warn("issuer credentials changed; reloading")
-			innerErr := ca.Restart(runCtx, config)
-			if innerErr != nil {
-				log.Fatalf("failed to restart sentry server: %s", innerErr)
+		var restart <-chan time.Time
+		for {
+			select {
+			case <-issuerEvent:
+				monitoring.IssuerCertChanged()
+				log.Debug("received issuer credentials changed signal")
+				// Batch all signals within 2s of each other
+				if restart == nil {
+					restart = time.After(2 * time.Second)
+				}
+			case <-restart:
+				log.Warn("issuer credentials changed; reloading")
+				innerErr := ca.Restart(runCtx, config)
+				if innerErr != nil {
+					log.Fatalf("failed to restart sentry server: %s", innerErr)
+				}
+				restart = nil
 			}
 		}
 	}()

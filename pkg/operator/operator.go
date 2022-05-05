@@ -150,16 +150,15 @@ func (o *operator) Run(ctx context.Context) {
 	// load certs from disk
 	var certChain *credentials.CertChain
 	log.Info("getting tls certificates")
-	fsevent := make(chan struct{})
-	defer close(fsevent)
 	watchCtx, watchCancel := context.WithCancel(ctx)
-	defer watchCancel()
+	fsevent := make(chan struct{})
 	go func() {
 		log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
 		err := fswatcher.Watch(watchCtx, o.config.Credentials.Path(), fsevent)
 		if err != nil {
 			log.Fatal("error starting watch on filesystem: %s", err)
 		}
+		close(fsevent)
 	}()
 	for {
 		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
@@ -167,10 +166,13 @@ func (o *operator) Run(ctx context.Context) {
 			log.Info("tls certificates loaded successfully")
 			certChain = chain
 			break
+		} else {
+			log.Info("tls certificate not found; waiting for disk changes")
 		}
 		<-fsevent
 		log.Debug("watcher found activity on filesystem")
 	}
+	watchCancel()
 
 	go func() {
 		healthzServer := health.NewServer(log)

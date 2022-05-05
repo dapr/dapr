@@ -62,6 +62,9 @@ func (s *sentry) Start(ctx context.Context, conf config.SentryConfig) error {
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	go s.run(certAuth, v)
 
+	// Wait 100ms to ensure a clean startup
+	time.Sleep(100 * time.Millisecond)
+
 	return nil
 }
 
@@ -187,5 +190,7 @@ func (s *sentry) Restart(ctx context.Context, conf config.SentryConfig) error {
 	defer s.restartLock.Unlock()
 	log.Info("sentry certificate authority is restarting")
 	s.Stop()
+	// Wait 200ms to ensure a clean shutdown
+	time.Sleep(200 * time.Millisecond)
 	return s.Start(ctx, conf)
 }
