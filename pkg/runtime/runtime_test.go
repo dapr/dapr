@@ -2763,6 +2763,148 @@ func TestPubsubWithResiliency(t *testing.T) {
 	})
 }
 
+// mockSubscribePubSub is an in-memory pubsub component.
+type mockSubscribePubSub struct {
+	handlers map[string]pubsub.Handler
+	pubCount map[string]int
+}
+
+// Init is a mock initialization method.
+func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
+	m.handlers = make(map[string]pubsub.Handler)
+	m.pubCount = make(map[string]int)
+	return nil
+}
+
+// Publish is a mock publish method. Immediately trigger handler if topic is subscribed.
+func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
+	m.pubCount[req.Topic]++
+	if handler, ok := m.handlers[req.Topic]; ok {
+		pubsubMsg := &pubsub.NewMessage{
+			Data:  req.Data,
+			Topic: req.Topic,
+		}
+		handler(context.Background(), pubsubMsg)
+	}
+
+	return nil
+}
+
+// Subscribe is a mock subscribe method.
+func (m *mockSubscribePubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+	m.handlers[req.Topic] = handler
+	return nil
+}
+
+func (m *mockSubscribePubSub) Close() error {
+	return nil
+}
+
+func (m *mockSubscribePubSub) Features() []pubsub.Feature {
+	return nil
+}
+
+func TestPubSubDeadLetter(t *testing.T) {
+	testDeadLetterPubsub := "failPubsub"
+	pubsubComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: testDeadLetterPubsub,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	t.Run("succeeded to publish message to dead letter when send message to app returns error", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.pubSubRegistry.Register(
+			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			}),
+		)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+		req.WithHTTPExtension(http.MethodGet, "")
+		req.WithRawData(nil, invokev1.JSONContentType)
+
+		subscriptionItems := []runtime_pubsub.SubscriptionJSON{
+			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
+			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
+		}
+		sub, _ := json.Marshal(subscriptionItems)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData(sub, "application/json")
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), req).Return(fakeResp, nil)
+		// Mock send message to app returns error.
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscribing()
+
+		err := rt.Publish(&pubsub.PublishRequest{
+			PubsubName: testDeadLetterPubsub,
+			Topic:      "topic0",
+			Data:       []byte(`{"id":"1"}`),
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		assert.Equal(t, 1, pubsubIns.pubCount["topic0"])
+		// Ensure the message is sent to dead letter topic.
+		assert.Equal(t, 1, pubsubIns.pubCount["topic1"])
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
+	})
+
+	t.Run("use dead letter with resiliency", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.resiliency = resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency)
+		rt.pubSubRegistry.Register(
+			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			}),
+		)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+		req.WithHTTPExtension(http.MethodGet, "")
+		req.WithRawData(nil, invokev1.JSONContentType)
+
+		subscriptionItems := []runtime_pubsub.SubscriptionJSON{
+			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
+			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
+		}
+		sub, _ := json.Marshal(subscriptionItems)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData(sub, "application/json")
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), req).Return(fakeResp, nil)
+		// Mock send message to app returns error.
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscribing()
+
+		err := rt.Publish(&pubsub.PublishRequest{
+			PubsubName: testDeadLetterPubsub,
+			Topic:      "topic0",
+			Data:       []byte(`{"id":"1"}`),
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		// Consider of resiliency, publish message may retry in some cases, make sure the pub count is greater than 1.
+		assert.True(t, pubsubIns.pubCount["topic0"] >= 1)
+		// Make sure every message that is sent to topic0 is sent to its dead letter topic1.
+		assert.Equal(t, pubsubIns.pubCount["topic0"], pubsubIns.pubCount["topic1"])
+		// Except of the one getting config from app, make sure each publish will result to twice subscribe call
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1+2*pubsubIns.pubCount["topic0"]+2*pubsubIns.pubCount["topic1"])
+	})
+}
+
 func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	testCases := []struct {
 		name             string
