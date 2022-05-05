@@ -31,23 +31,26 @@ import (
 )
 
 const (
-	operatorCallTimeout         = time.Second * 5
-	operatorMaxRetries          = 100
-	AllowAccess                 = "allow"
-	DenyAccess                  = "deny"
-	DefaultTrustDomain          = "public"
-	DefaultNamespace            = "default"
-	ActionPolicyApp             = "app"
-	ActionPolicyGlobal          = "global"
-	SpiffeIDPrefix              = "spiffe://"
-	HTTPProtocol                = "http"
-	GRPCProtocol                = "grpc"
-	ActorTypeMetadata   Feature = "Actor.TypeMetadata"
-	PubSubRouting       Feature = "PubSub.Routing"
-	Resiliency          Feature = "Resiliency"
+	operatorCallTimeout          = time.Second * 5
+	operatorMaxRetries           = 100
+	AllowAccess                  = "allow"
+	DenyAccess                   = "deny"
+	DefaultTrustDomain           = "public"
+	DefaultNamespace             = "default"
+	ActionPolicyApp              = "app"
+	ActionPolicyGlobal           = "global"
+	SpiffeIDPrefix               = "spiffe://"
+	HTTPProtocol                 = "http"
+	GRPCProtocol                 = "grpc"
+	ActorTypeMetadata    Feature = "Actor.TypeMetadata"
+	PubSubRouting        Feature = "PubSub.Routing"
+	Resiliency           Feature = "Resiliency"
+	NoDefaultContentType Feature = "ServiceInvocation.NoDefaultContentType"
 )
 
 type Feature string
+
+var noDefaultContentTypeValue = false
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
@@ -244,6 +247,8 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 		return nil, string(b), err
 	}
 
+	noDefaultContentTypeValue = IsFeatureEnabled(conf.Spec.Features, NoDefaultContentType)
+
 	return conf, string(b), nil
 }
 
@@ -270,6 +275,8 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 	if err != nil {
 		return nil, err
 	}
+
+	noDefaultContentTypeValue = IsFeatureEnabled(conf.Spec.Features, NoDefaultContentType)
 
 	return conf, nil
 }
@@ -301,7 +308,7 @@ func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 // IsSecretAllowed Check if the secret is allowed to be accessed.
 func (c SecretsScope) IsSecretAllowed(key string) bool {
 	// By default, set allow access for the secret store.
-	var access string = AllowAccess
+	access := AllowAccess
 	// Check and set deny access.
 	if strings.EqualFold(c.DefaultAccess, DenyAccess) {
 		access = DenyAccess
@@ -336,4 +343,16 @@ func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
 		}
 	}
 	return false
+}
+
+// GetNoDefaultContentType returns the value of the noDefaultContentType flag.
+// It requires the configuration to be loaded, otherwise it returns false.
+func GetNoDefaultContentType() bool {
+	return noDefaultContentTypeValue
+}
+
+// SetNoDefaultContentType sets the value of noDefaultContentTypeValue.
+// This should only be used for testing.
+func SetNoDefaultContentType(val bool) {
+	noDefaultContentTypeValue = val
 }

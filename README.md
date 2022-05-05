@@ -87,7 +87,7 @@ For more information on the community engagement, developer and contributing gui
 
 ### Contact Us
 
-Reach out with any questions you may have and we'll make sure to answer then as soon as possible!
+Reach out with any questions you may have and we'll make sure to answer them as soon as possible!
 
 | Platform  | Link        |
 |:----------|:------------|

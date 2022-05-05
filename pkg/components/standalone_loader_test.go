@@ -14,7 +14,7 @@ import (
 const configPrefix = "."
 
 func writeTempConfig(path, content string) error {
-	return os.WriteFile(filepath.Join(configPrefix, path), []byte(content), fs.FileMode(0644))
+	return os.WriteFile(filepath.Join(configPrefix, path), []byte(content), fs.FileMode(0o644))
 }
 
 func TestLoadComponentsFromFile(t *testing.T) {

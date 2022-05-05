@@ -18,6 +18,7 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -216,7 +217,9 @@ func UploadAzureBlob(report *perf.TestReport) error {
 	}
 
 	filename := fmt.Sprintf("%s-%v-%v-%v", report.TestName, now.Hour(), time.Hour.Minutes(), time.Hour.Seconds())
-	_, err = azblob.Invoke(&bindings.InvokeRequest{
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	_, err = azblob.Invoke(ctx, &bindings.InvokeRequest{
 		Operation: bindings.CreateOperation,
 		Data:      b,
 		Metadata: map[string]string{

@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       GOVER: 1.17
-      GOLANGCILINT_VER: v1.31
+      GOLANGCILINT_VER: v1.45.2
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
@@ -98,7 +98,7 @@ jobs:
           fi
       - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        uses: golangci/golangci-lint-action@v2.2.1
+        uses: golangci/golangci-lint-action@v3.1.0
         with:
           version: ${{ env.GOLANGCILINT_VER }}
       - name: Run go mod tidy check diff

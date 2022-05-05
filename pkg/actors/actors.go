@@ -138,6 +138,8 @@ const (
 	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
 
+var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
+
 // NewActors create a new actors runtime with given config.
 func NewActors(
 	stateStore state.Store,
@@ -148,7 +150,8 @@ func NewActors(
 	tracingSpec configuration.TracingSpec,
 	features []configuration.FeatureSpec,
 	resiliency resiliency.Provider,
-	stateStoreName string) Actors {
+	stateStoreName string,
+) Actors {
 	var transactionalStore state.TransactionalStore
 	if stateStore != nil {
 		features := stateStore.Features()
@@ -330,7 +333,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, targetActorAddress, appID, req)
 	}
 
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrDaprResponseHeader) {
 		return nil, err
 	}
 	return resp, nil
@@ -342,7 +345,8 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	numRetries int,
 	backoffInterval time.Duration,
 	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
-	targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	targetAddress, targetID string, req *invokev1.InvokeMethodRequest,
+) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
 		resp, err := fn(ctx, targetAddress, targetID, req)
 		if err == nil {
@@ -434,7 +438,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// The .NET SDK signifies Actor failure via a header instead of a bad response.
 	if _, ok := resp.Headers()["X-Daprerrorresponseheader"]; ok {
-		return nil, errors.Errorf("error from a .NET actor")
+		return resp, ErrDaprResponseHeader
 	}
 
 	return resp, nil
@@ -443,7 +447,8 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
 	targetAddress, targetID string,
-	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	req *invokev1.InvokeMethodRequest,
+) (*invokev1.InvokeMethodResponse, error) {
 	conn, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, false, false)
 	if err != nil {
 		return nil, err
@@ -495,7 +500,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 
 func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
 	if a.store == nil || a.transactionalStore == nil {
-		return errors.New("actors: state store does not exist or incorrectly configured")
+		return errors.New("actors: state store does not exist or incorrectly configured. Have you set the - name: actorStateStore value: \"true\" in your state store component file?")
 	}
 	operations := []state.TransactionalStateOperation{}
 	partitionKey := constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
@@ -958,7 +963,7 @@ func (m *ActorMetadata) calculateEtag(partitionID uint32) *string {
 
 func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminderReference, actorType, actorID, reminderName string) ([]Reminder, string, *string) {
 	// First, we find the partition
-	var partitionID uint32 = 0
+	var partitionID uint32
 	if m.RemindersMetadata.PartitionCount > 0 {
 		for _, reminderRef := range reminderRefs {
 			if reminderRef.reminder.ActorType == actorType && reminderRef.reminder.ActorID == actorID && reminderRef.reminder.Name == reminderName {
@@ -1122,9 +1127,6 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 	if len(req.DueTime) != 0 {
 		if dueTime, err = parseTime(req.DueTime, nil); err != nil {
 			return errors.Wrap(err, "error parsing timer due time")
-		}
-		if dueTime.Before(time.Now()) {
-			return errors.Errorf("timer %s has already expired: dueTime: %s TTL: %s", timerKey, req.DueTime, req.TTL)
 		}
 	} else {
 		dueTime = time.Now()
