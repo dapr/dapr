@@ -15,7 +15,6 @@ package main
 
 import (
 	"flag"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -117,8 +116,7 @@ func main() {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
 
-		err := healthzServer.Run(runCtx, healthzPort)
-		if err != nil && err != http.ErrServerClosed {
+		if err := healthzServer.Run(runCtx, healthzPort); err != nil {
 			log.Fatalf("failed to start healthz server: %s", err)
 		}
 	}()

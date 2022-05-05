@@ -84,13 +84,13 @@ func main() {
 
 	// Relay incoming process signal to exit placement gracefully
 	signalCh := make(chan os.Signal, 10)
-	gracefulExitCh := make(chan struct{})
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(signalCh)
 
 	<-signalCh
 
 	// Shutdown servers
+	gracefulExitCh := make(chan struct{})
 	go func() {
 		apiServer.Shutdown()
 		raftServer.Shutdown()
@@ -121,29 +121,24 @@ func loadCertChains(certChainPath string) *credentials.CertChain {
 	tlsCreds := credentials.NewTLSCredentials(certChainPath)
 
 	log.Info("mTLS enabled, getting tls certificates")
-	// try to load certs from disk, if not yet there, start a watch on the local filesystem
-	chain, err := credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
-	if err != nil {
-		fsevent := make(chan struct{})
-
-		go func() {
-			log.Infof("starting watch for certs on filesystem: %s", certChainPath)
-			err = fswatcher.Watch(context.Background(), tlsCreds.Path(), fsevent)
-			if err != nil {
-				log.Fatal("error starting watch on filesystem: %s", err)
-			}
-		}()
-
-		<-fsevent
-		log.Info("certificates detected")
-
-		chain, err = credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
+	fsevent := make(chan struct{})
+	defer close(fsevent)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		log.Infof("starting watch for certs on filesystem: %s", certChainPath)
+		err := fswatcher.Watch(ctx, tlsCreds.Path(), fsevent)
 		if err != nil {
-			log.Fatal("failed to load cert chain from disk: %s", err)
+			log.Fatal("error starting watch on filesystem: %s", err)
 		}
+	}()
+	for {
+		chain, err := credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
+		if err == nil {
+			log.Info("tls certificates loaded successfully")
+			return chain
+		}
+		<-fsevent
+		log.Debug("watcher found activity on filesystem")
 	}
-
-	log.Info("tls certificates loaded successfully")
-
-	return chain
 }
