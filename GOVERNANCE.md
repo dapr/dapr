@@ -1,7 +1,7 @@
 # Governance
 
 ## Project Maintainers
-[Project maintainers](OWNERS) are responsible for activities around maintaining and updating Dapr. Final decisions on the project reside with the project maintainers.
+[Project maintainers](https://github.com/dapr/community/blob/master/MAINTAINERS.md) are responsible for activities around maintaining and updating Dapr. Final decisions on the project reside with the project maintainers.
 
 Maintainers MUST remain active. If they are unresponsive for >3 months, they will be automatically removed unless a [super-majority](https://en.wikipedia.org/wiki/Supermajority#Two-thirds_vote) of the other project maintainers agrees to extend the period to be greater than 3 months.
 
