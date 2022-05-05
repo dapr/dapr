@@ -8,9 +8,18 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
+	daprtesting "github.com/dapr/dapr/pkg/testing"
 )
 
 func TestPlacementHA(t *testing.T) {
+	// Get 3 ports
+	ports, err := daprtesting.GetFreePorts(3)
+	if err != nil {
+		log.Fatalf("failed to get 3 ports: %v", err)
+		return
+	}
+
+	// Note that ports below are unused (i.e. no service is started on those ports), they are just used as identifiers with the IP address
 	testMembers := []*raft.DaprHostMember{
 		{
 			Name:     "127.0.0.1:3031",
@@ -35,7 +44,7 @@ func TestPlacementHA(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		peers[i] = raft.PeerInfo{
 			ID:      fmt.Sprintf("mynode-%d", i),
-			Address: fmt.Sprintf("127.0.0.1:%d", 6100+i),
+			Address: fmt.Sprintf("127.0.0.1:%d", ports[i]),
 		}
 	}
 	for i := 0; i < 3; i++ {
