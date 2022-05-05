@@ -2893,11 +2893,12 @@ func TestPubSubDeadLetter(t *testing.T) {
 		})
 		assert.Nil(t, err)
 		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
-		assert.Equal(t, 1, pubsubIns.pubCount["topic0"])
-		// Ensure the message is sent to dead letter topic.
-		assert.Equal(t, 1, pubsubIns.pubCount["topic1"])
-		// get config from app, send to topic0 path twice, send to topic1 path twice
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 5)
+		// Consider of resiliency, publish message may retry in some cases, make sure the pub count is greater than 1.
+		assert.True(t, pubsubIns.pubCount["topic0"] >= 1)
+		// Make sure every message that is sent to topic0 is sent to its dead letter topic1.
+		assert.Equal(t, pubsubIns.pubCount["topic0"], pubsubIns.pubCount["topic1"])
+		// Except of the one getting config from app, make sure each publish will result to twice subscribe call
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1+2*pubsubIns.pubCount["topic0"]+2*pubsubIns.pubCount["topic1"])
 	})
 }
 
