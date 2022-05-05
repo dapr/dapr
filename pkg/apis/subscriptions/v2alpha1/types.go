@@ -43,6 +43,8 @@ type SubscriptionSpec struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 	// The Routes configuration for this topic.
 	Routes Routes `json:"routes"`
+	// The optional dead letter queue for this topic to send events to.
+	DeadLetterTopic string `json:"deadLetterTopic,omitempty"`
 }
 
 // Routes encapsulates the rules and optional default path for a topic.
