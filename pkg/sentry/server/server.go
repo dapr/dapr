@@ -112,7 +112,9 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 
 	certPem := resp.CertPEM
 	certPem = append(certPem, s.certAuth.GetCACertBundle().GetIssuerCertPem()...)
-	certPem = append(certPem, s.certAuth.GetCACertBundle().GetRootCertPem()...)
+	if rootCertPem := s.certAuth.GetCACertBundle().GetRootCertPem(); len(rootCertPem) > 0 {
+		certPem = append(certPem, rootCertPem...)
+	}
 
 	cert, err := tls.X509KeyPair(certPem, pkPem)
 	if err != nil {
@@ -168,7 +170,9 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	rootCert := s.certAuth.GetCACertBundle().GetRootCertPem()
 
 	certPem = append(certPem, issuerCert...)
-	certPem = append(certPem, rootCert...)
+	if len(rootCert) > 0 {
+		certPem = append(certPem, rootCert...)
+	}
 
 	if len(certPem) == 0 {
 		err = errors.New("insufficient data in certificate signing request, no certs signed")

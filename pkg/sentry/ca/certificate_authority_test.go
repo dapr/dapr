@@ -121,7 +121,7 @@ func TestSignCSR(t *testing.T) {
 		csr := getTestCSR("test.a.com")
 		pk, _ := getECDSAPrivateKey()
 		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
-		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
@@ -139,7 +139,7 @@ func TestSignCSR(t *testing.T) {
 		csr := getTestCSR("test.a.com")
 		pk, _ := getECDSAPrivateKey()
 		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
-		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
@@ -170,7 +170,7 @@ func TestSignCSR(t *testing.T) {
 		csr := getTestCSR("test.a.com")
 		pk, _ := getECDSAPrivateKey()
 		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
-		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()

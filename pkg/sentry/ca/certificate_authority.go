@@ -87,7 +87,7 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, identity *identity.Bu
 	defer c.issuerLock.RUnlock()
 
 	certLifetime := ttl
-	if certLifetime.Seconds() < 0 {
+	if certLifetime.Seconds() <= 0 {
 		certLifetime = c.config.WorkloadCertTTL
 	}
 
@@ -101,7 +101,7 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, identity *identity.Bu
 		return nil, errors.Wrap(err, "error parsing csr pem")
 	}
 
-	crtb, err := csr.GenerateCSRCertificate(cert, subject, identity, signingCert, cert.PublicKey, signingKey.Key, certLifetime, c.config.AllowedClockSkew, isCA)
+	crtb, err := csr.GenerateCSRCertificate(cert, subject, identity, signingCert, cert.PublicKey, signingKey, certLifetime, c.config.AllowedClockSkew, isCA)
 	if err != nil {
 		return nil, errors.Wrap(err, "error signing csr")
 	}
@@ -112,7 +112,7 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, identity *identity.Bu
 	}
 
 	certPem := pem.EncodeToMemory(&pem.Block{
-		Type:  certs.Certificate,
+		Type:  certs.BlockTypeCertificate,
 		Bytes: crtb,
 	})
 
@@ -234,7 +234,7 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 		return nil, nil, nil, err
 	}
 
-	rootCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: rootCertBytes})
+	rootCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: rootCertBytes})
 
 	rootCert, err := x509.ParseCertificate(rootCertBytes)
 	if err != nil {
@@ -256,13 +256,13 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 		return nil, nil, nil, err
 	}
 
-	issuerCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: issuerCertBytes})
+	issuerCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: issuerCertBytes})
 
 	encodedKey, err := x509.MarshalECPrivateKey(issuerKey)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	issuerKeyPem := pem.EncodeToMemory(&pem.Block{Type: certs.ECPrivateKey, Bytes: encodedKey})
+	issuerKeyPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeECPrivateKey, Bytes: encodedKey})
 
 	issuerCert, err := x509.ParseCertificate(issuerCertBytes)
 	if err != nil {
@@ -276,10 +276,7 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 	}
 
 	return &certs.Credentials{
-		PrivateKey: &certs.PrivateKey{
-			Type: certs.ECPrivateKey,
-			Key:  issuerKey,
-		},
+		PrivateKey:  issuerKey,
 		Certificate: issuerCert,
 	}, rootCertPem, issuerCertPem, nil
 }
