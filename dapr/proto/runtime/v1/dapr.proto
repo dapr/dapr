@@ -97,9 +97,9 @@ service Dapr {
 
   // Distributed Lock API
   // A non-blocking method trying to get a lock with ttl.
-  rpc TryLock(TryLockRequest)returns (TryLockResponse) {}
+  rpc TryLockAlpha1(TryLockRequest)returns (TryLockResponse) {}
 
-  rpc Unlock(UnlockRequest)returns (UnlockResponse) {}
+  rpc UnlockAlpha1(UnlockRequest)returns (UnlockResponse) {}
 
   // Gets metadata of the sidecar
   rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}

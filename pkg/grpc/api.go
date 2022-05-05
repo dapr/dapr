@@ -101,8 +101,8 @@ type API interface {
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
 	// Distributed Lock API
 	// A non-blocking method trying to get a lock with ttl.
-	TryLock(ctx context.Context, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error)
-	Unlock(ctx context.Context, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error)
+	TryLockAlpha1(ctx context.Context, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error)
+	UnlockAlpha1(ctx context.Context, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -135,7 +135,7 @@ type api struct {
 	shutdown                   func()
 }
 
-func (a *api) TryLock(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
+func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
 	// 1. validate
 	if a.lockStores == nil || len(a.lockStores) == 0 {
 		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
@@ -179,7 +179,7 @@ func (a *api) TryLock(ctx context.Context, req *runtimev1pb.TryLockRequest) (*ru
 	return resp, nil
 }
 
-func (a *api) Unlock(ctx context.Context, req *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error) {
+func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error) {
 	// 1. validate
 	if a.lockStores == nil || len(a.lockStores) == 0 {
 		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)

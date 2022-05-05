@@ -68,8 +68,8 @@ type DaprClient interface {
 	UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error)
 	// Distributed Lock API
 	// A non-blocking method trying to get a lock with ttl.
-	TryLock(ctx context.Context, in *TryLockRequest, opts ...grpc.CallOption) (*TryLockResponse, error)
-	Unlock(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockResponse, error)
+	TryLockAlpha1(ctx context.Context, in *TryLockRequest, opts ...grpc.CallOption) (*TryLockResponse, error)
+	UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -316,18 +316,18 @@ func (c *daprClient) UnsubscribeConfigurationAlpha1(ctx context.Context, in *Uns
 	return out, nil
 }
 
-func (c *daprClient) TryLock(ctx context.Context, in *TryLockRequest, opts ...grpc.CallOption) (*TryLockResponse, error) {
+func (c *daprClient) TryLockAlpha1(ctx context.Context, in *TryLockRequest, opts ...grpc.CallOption) (*TryLockResponse, error) {
 	out := new(TryLockResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/TryLock", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/TryLockAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *daprClient) Unlock(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockResponse, error) {
+func (c *daprClient) UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockResponse, error) {
 	out := new(UnlockResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/Unlock", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnlockAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -413,8 +413,8 @@ type DaprServer interface {
 	UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error)
 	// Distributed Lock API
 	// A non-blocking method trying to get a lock with ttl.
-	TryLock(context.Context, *TryLockRequest) (*TryLockResponse, error)
-	Unlock(context.Context, *UnlockRequest) (*UnlockResponse, error)
+	TryLockAlpha1(context.Context, *TryLockRequest) (*TryLockResponse, error)
+	UnlockAlpha1(context.Context, *UnlockRequest) (*UnlockResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -496,11 +496,11 @@ func (UnimplementedDaprServer) SubscribeConfigurationAlpha1(*SubscribeConfigurat
 func (UnimplementedDaprServer) UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeConfigurationAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) TryLock(context.Context, *TryLockRequest) (*TryLockResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method TryLock not implemented")
+func (UnimplementedDaprServer) TryLockAlpha1(context.Context, *TryLockRequest) (*TryLockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TryLockAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) Unlock(context.Context, *UnlockRequest) (*UnlockResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Unlock not implemented")
+func (UnimplementedDaprServer) UnlockAlpha1(context.Context, *UnlockRequest) (*UnlockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnlockAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
@@ -940,38 +940,38 @@ func _Dapr_UnsubscribeConfigurationAlpha1_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_TryLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Dapr_TryLockAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TryLockRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaprServer).TryLock(ctx, in)
+		return srv.(DaprServer).TryLockAlpha1(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.Dapr/TryLock",
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/TryLockAlpha1",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).TryLock(ctx, req.(*TryLockRequest))
+		return srv.(DaprServer).TryLockAlpha1(ctx, req.(*TryLockRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_Unlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Dapr_UnlockAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UnlockRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaprServer).Unlock(ctx, in)
+		return srv.(DaprServer).UnlockAlpha1(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.Dapr/Unlock",
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnlockAlpha1",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).Unlock(ctx, req.(*UnlockRequest))
+		return srv.(DaprServer).UnlockAlpha1(ctx, req.(*UnlockRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1126,12 +1126,12 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_UnsubscribeConfigurationAlpha1_Handler,
 		},
 		{
-			MethodName: "TryLock",
-			Handler:    _Dapr_TryLock_Handler,
+			MethodName: "TryLockAlpha1",
+			Handler:    _Dapr_TryLockAlpha1_Handler,
 		},
 		{
-			MethodName: "Unlock",
-			Handler:    _Dapr_Unlock_Handler,
+			MethodName: "UnlockAlpha1",
+			Handler:    _Dapr_UnlockAlpha1_Handler,
 		},
 		{
 			MethodName: "GetMetadata",
