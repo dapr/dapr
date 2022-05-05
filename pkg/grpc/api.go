@@ -160,7 +160,7 @@ func (a *api) TryLock(ctx context.Context, req *runtimev1pb.TryLockRequest) (*ru
 		return &runtimev1pb.TryLockResponse{}, status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
 	}
 	// 3. convert request
-	compReq := TryLockRequest2ComponentRequest(req)
+	compReq := TryLockRequestToComponentRequest(req)
 	// modify key
 	var err error
 	compReq.ResourceID, err = lock_loader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
@@ -175,7 +175,7 @@ func (a *api) TryLock(ctx context.Context, req *runtimev1pb.TryLockRequest) (*ru
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 	// 5. convert response
-	resp := TryLockResponse2GrpcResponse(compResp)
+	resp := TryLockResponseToGrpcResponse(compResp)
 	return resp, nil
 }
 
@@ -225,7 +225,7 @@ func newInternalErrorUnlockResponse() *runtimev1pb.UnlockResponse {
 	}
 }
 
-func TryLockRequest2ComponentRequest(req *runtimev1pb.TryLockRequest) *lock.TryLockRequest {
+func TryLockRequestToComponentRequest(req *runtimev1pb.TryLockRequest) *lock.TryLockRequest {
 	result := &lock.TryLockRequest{}
 	if req == nil {
 		return result
@@ -236,7 +236,7 @@ func TryLockRequest2ComponentRequest(req *runtimev1pb.TryLockRequest) *lock.TryL
 	return result
 }
 
-func TryLockResponse2GrpcResponse(compResponse *lock.TryLockResponse) *runtimev1pb.TryLockResponse {
+func TryLockResponseToGrpcResponse(compResponse *lock.TryLockResponse) *runtimev1pb.TryLockResponse {
 	result := &runtimev1pb.TryLockResponse{}
 	if compResponse == nil {
 		return result
