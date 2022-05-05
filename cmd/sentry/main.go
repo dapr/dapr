@@ -104,9 +104,9 @@ func main() {
 		for range issuerEvent {
 			monitoring.IssuerCertChanged()
 			log.Warn("issuer credentials changed; reloading")
-			err := ca.Restart(runCtx, config)
-			if err != nil {
-				log.Fatalf("failed to restart sentry server: %s", err)
+			innerErr := ca.Restart(runCtx, config)
+			if innerErr != nil {
+				log.Fatalf("failed to restart sentry server: %s", innerErr)
 			}
 		}
 	}()
@@ -116,8 +116,8 @@ func main() {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
 
-		if err := healthzServer.Run(runCtx, healthzPort); err != nil {
-			log.Fatalf("failed to start healthz server: %s", err)
+		if innerErr := healthzServer.Run(runCtx, healthzPort); innerErr != nil {
+			log.Fatalf("failed to start healthz server: %s", innerErr)
 		}
 	}()
 

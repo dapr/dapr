@@ -82,8 +82,10 @@ func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) 
 	certExpiry := certAuth.GetCACertBundle().GetIssuerCertExpiry()
 	if certExpiry == nil {
 		log.Fatalf("error loading trust root bundle: missing certificate expiry")
+	} else {
+		// Need to be in an else block for the linter
+		log.Infof("trust root bundle loaded. issuer cert expiry: %s", certExpiry.String())
 	}
-	log.Infof("trust root bundle loaded. issuer cert expiry: %s", certExpiry.String())
 	monitoring.IssuerCertExpiry(certExpiry)
 
 	// Create identity validator
