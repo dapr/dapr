@@ -137,9 +137,8 @@ func loadCertChains(certChainPath string) *credentials.CertChain {
 		if err == nil {
 			log.Info("tls certificates loaded successfully")
 			return chain
-		} else {
-			log.Info("tls certificate not found; waiting for disk changes")
 		}
+		log.Info("tls certificate not found; waiting for disk changes")
 		<-fsevent
 		log.Debug("watcher found activity on filesystem")
 	}

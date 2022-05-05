@@ -166,9 +166,8 @@ func (o *operator) Run(ctx context.Context) {
 			log.Info("tls certificates loaded successfully")
 			certChain = chain
 			break
-		} else {
-			log.Info("tls certificate not found; waiting for disk changes")
 		}
+		log.Info("tls certificate not found; waiting for disk changes")
 		<-fsevent
 		log.Debug("watcher found activity on filesystem")
 	}
