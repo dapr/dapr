@@ -326,7 +326,8 @@ type chanGracefully struct {
 }
 
 func initChanGracefully(ch chan *componentsapi.Component) (
-	c *chanGracefully) {
+	c *chanGracefully,
+) {
 	return &chanGracefully{
 		ch:       ch,
 		isClosed: false,

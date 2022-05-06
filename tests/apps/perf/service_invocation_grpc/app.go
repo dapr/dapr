@@ -15,9 +15,10 @@ package main
 
 import (
 	"context"
+	"log"
+
 	"github.com/dapr/go-sdk/service/common"
 	daprd "github.com/dapr/go-sdk/service/grpc"
-	"log"
 )
 
 func main() {
