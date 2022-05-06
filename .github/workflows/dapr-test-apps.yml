@@ -24,7 +24,7 @@ jobs:
     name: Build on ${{ matrix.target_os }}_${{ matrix.target_arch }}
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.17
+      GOVER: 1.18
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
