@@ -140,9 +140,10 @@ func TestBindings(t *testing.T) {
 
 	// Only the first message fails, all other messages are successfully consumed.
 	// nine messages succeed.
-	require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
+	// Update: after retry mechanism introduced, the first message will try and success
+	require.Equal(t, testMessages[0:], decodedResponse.ReceivedMessages)
 	// one message fails.
-	require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
+	// require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
 	// routed binding will receive all messages
 	require.Equal(t, testMessages[0:], decodedResponse.RoutedMessages)
 
@@ -161,9 +162,10 @@ func TestBindings(t *testing.T) {
 
 	// Only the first message fails, all other messages are successfully consumed.
 	// nine messages succeed.
-	require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
+	// Update: after retry mechanism introduced, the first message will try and success
+	require.Equal(t, testMessages[0:], decodedResponse.ReceivedMessages)
 	// one message fails.
-	require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
+	// require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
 }
 
 func httpPostWithAssert(t *testing.T, url string, data []byte, status int) []byte {
