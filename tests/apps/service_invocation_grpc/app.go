@@ -78,7 +78,7 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 
 func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
-	var requestMD = map[string][]string{}
+	requestMD := map[string][]string{}
 	for k, vals := range md {
 		requestMD[k] = vals
 		fmt.Printf("incoming md: %s %q", k, vals)

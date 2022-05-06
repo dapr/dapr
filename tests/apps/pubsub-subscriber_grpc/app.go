@@ -226,7 +226,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 		// Return success with DROP status to drop message
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_DROP,
-		}, nil
+		}, err
 	}
 
 	// Raw data does not have content-type, so it is handled as-is.
