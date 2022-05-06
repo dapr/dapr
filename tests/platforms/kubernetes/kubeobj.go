@@ -94,7 +94,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	}
 
 	if len(appDesc.PlacementAddresses) != 0 {
-		annotationObject["dapr.io/placement-addresses"] = strings.Join(appDesc.PlacementAddresses, ",")
+		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}
 	return annotationObject
 }

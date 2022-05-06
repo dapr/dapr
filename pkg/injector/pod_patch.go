@@ -77,7 +77,7 @@ const (
 	daprEnableAPILogging              = "dapr.io/enable-api-logging"
 	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
-	daprPlacementAddressesKey         = "dapr.io/placement-addresses"
+	daprPlacementAddressesKey         = "dapr.io/placement-host-address"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
