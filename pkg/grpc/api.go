@@ -143,7 +143,8 @@ func NewAPI(
 	accessControlList *config.AccessControlList,
 	appProtocol string,
 	getComponentsFn func() []components_v1alpha.Component,
-	shutdown func()) API {
+	shutdown func(),
+) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
