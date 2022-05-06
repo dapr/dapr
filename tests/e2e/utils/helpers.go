@@ -128,10 +128,11 @@ func HTTPGetNTimes(url string, n int) ([]byte, error) {
 
 // httpGet is a helper to make GET request call to url.
 func httpGet(url string, timeout time.Duration) ([]byte, error) {
-	resp, err := httpGetRaw(url, timeout) //nolint
+	resp, err := httpGetRaw(url, timeout)
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	return extractBody(resp.Body)
 }
@@ -186,10 +187,11 @@ func HTTPGetRaw(url string) (*http.Response, error) {
 
 // HTTPPost is a helper to make POST request call to url.
 func HTTPPost(url string, data []byte) ([]byte, error) {
-	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
+	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	return extractBody(resp.Body)
 }
@@ -201,17 +203,18 @@ func HTTPPatch(url string, data []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient.Do(req) //nolint
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	return extractBody(resp.Body)
 }
 
 // HTTPPostWithStatus is a helper to make POST request call to url.
 func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
-	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
+	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		// From the Do method for the client.Post
 		// An error is returned if caused by client policy (such as

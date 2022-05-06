@@ -308,7 +308,7 @@ func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 // IsSecretAllowed Check if the secret is allowed to be accessed.
 func (c SecretsScope) IsSecretAllowed(key string) bool {
 	// By default, set allow access for the secret store.
-	var access string = AllowAccess
+	access := AllowAccess
 	// Check and set deny access.
 	if strings.EqualFold(c.DefaultAccess, DenyAccess) {
 		access = DenyAccess
