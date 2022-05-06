@@ -84,7 +84,7 @@ func NewRuntimeConfig(
 	appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort int, apiListenAddresses []string, publicPort *int,
 	appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string,
 	appSSL bool, maxRequestBodySize int, unixDomainSocket string, readBufferSize int, streamRequestBody bool,
-	gracefulShutdownDuration time.Duration, enableAPILogging bool) *Config {
+	gracefulShutdownDuration time.Duration, enableAPILogging bool, ) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
