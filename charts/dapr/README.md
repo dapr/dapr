@@ -122,7 +122,6 @@ The Helm chart has the follow configuration options that can be supplied:
 ### Dapr Placement options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
-| `dapr_placement.replicaCount`             | Number of replicas                                                      | `1`                     |
 | `dapr_placement.replicationFactor`        | Number of consistent hashing virtual node | `100`   |
 | `dapr_placement.logLevel`                 | Service Log level                                                       | `info`                  |
 | `dapr_placement.image.name`               | Service docker image name (`global.registry/dapr_placement.image.name`) | `dapr`   |
