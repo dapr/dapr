@@ -1,6 +1,6 @@
 module app
 
-go 1.17
+go 1.18
 
 require (
 	github.com/dapr/dapr v1.3.1-0.20210916215627-82ef46fb541f
