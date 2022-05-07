@@ -6,9 +6,9 @@ metadata:
     app: dapr-placement-server
 spec:
 {{- if eq .Values.global.ha.enabled true }}
-  replicas: {{ .Values.global.ha.replicaCount }}
+  replicas: 3
 {{- else }}
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1
 {{- end }}
   serviceName: dapr-placement-server
   podManagementPolicy: Parallel
