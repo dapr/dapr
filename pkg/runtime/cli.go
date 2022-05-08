@@ -121,8 +121,13 @@ func FromFlags() (*DaprRuntime, error) {
 	if *daprHTTPPort == "" {
 		if *daprHTTPPortEnvName != "" {
 			daprHTTPPort:= os.Getenv(*daprHTTPPortEnvName)
-		}else{
-			daprHTTPPort:= fmt.Sprintf("%v", DefaultDaprHTTPPort)
+		} else {
+			EnvDaprHTTPPort:= os.Getenv(env.DaprHTTPPort)
+			if *EnvDaprHTTPPort != "" {
+				daprHTTPPort:= *EnvDaprHTTPPort
+			} else {
+				daprHTTPPort:= fmt.Sprintf("%v", DefaultDaprHTTPPort)
+			}
 		}
 		log.Infof("HTTP port for Dapr API to listen on %s", *daprHTTPPort)
 	}
@@ -135,8 +140,13 @@ func FromFlags() (*DaprRuntime, error) {
 	if *daprAPIGRPCPort == "" {
 		if *daprAPIGRPCPortEnvName != "" {
 			daprAPIGRPCPort:= os.Getenv(*daprAPIGRPCPortEnvName)
-		}else{
-			daprAPIGRPCPort:= fmt.Sprintf("%v", DefaultDaprAPIGRPCPort)
+		} else {
+			EnvDaprGRPCPort:= os.Getenv(env.DaprGRPCPort)
+			if *EnvDaprGRPCPort != "" {
+				daprAPIGRPCPort:= *EnvDaprGRPCPort
+			} else {
+				daprAPIGRPCPort:= fmt.Sprintf("%v", DefaultDaprAPIGRPCPort)
+			}
 		}
 		log.Infof("gRPC port for the Dapr API to listen on %s", *daprHTTPPort)
 	}
@@ -175,6 +185,11 @@ func FromFlags() (*DaprRuntime, error) {
 
 	if *appPort == "" && *appPortEnvName != "" {
 		appPort:= os.Getenv(*appPortEnvName)
+	} else {
+		EnvAppPort:= os.Getenv(env.AppPort)
+		if *EnvAppPort != "" {
+			appPort:= *EnvAppPort
+		}
 	}
 	
 	var applicationPort int
