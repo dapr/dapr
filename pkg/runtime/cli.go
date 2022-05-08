@@ -44,12 +44,15 @@ import (
 // FromFlags parses command flags and returns DaprRuntime instance.
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
-	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
+	daprHTTPPort := flag.String("dapr-http-port", "", "HTTP port for Dapr API to listen on")
+	daprHTTPPortEnvName := flag.String(env.DaprHTTPPort, "", "HTTP port for Dapr get from Environment Variable")
 	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
 	daprPublicPort := flag.String("dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
-	daprAPIGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
+	daprAPIGRPCPort := flag.String("dapr-grpc-port", "", "gRPC port for the Dapr API to listen on")
+	daprAPIGRPCPortEnvName := flag.String(env.DaprGRPCPort, "", "gRPC port for the Dapr get from Environment Variable")
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
+	appPortEnvName := flag.String(env.DaprPort, "", "The port the application get From Environment Variable"))
 	profilePort := flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
@@ -115,11 +118,29 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Fatal(err)
 	}
 
+	if *daprHTTPPort == "" {
+		if *daprHTTPPortEnvName != "" {
+			daprHTTPPort:= os.Getenv(*daprHTTPPortEnvName)
+		}else{
+			daprHTTPPort:= fmt.Sprintf("%v", DefaultDaprHTTPPort)
+		}
+		log.Infof("HTTP port for Dapr API to listen on %s", *daprHTTPPort)
+	}
+	
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
 	if err != nil {
 		return nil, errors.Wrap(err, "error parsing dapr-http-port flag")
 	}
 
+	if *daprAPIGRPCPort == "" {
+		if *daprAPIGRPCPortEnvName != "" {
+			daprAPIGRPCPort:= os.Getenv(*daprAPIGRPCPortEnvName)
+		}else{
+			daprAPIGRPCPort:= fmt.Sprintf("%v", DefaultDaprAPIGRPCPort)
+		}
+		log.Infof("gRPC port for the Dapr API to listen on %s", *daprHTTPPort)
+	}
+	
 	daprAPIGRPC, err := strconv.Atoi(*daprAPIGRPCPort)
 	if err != nil {
 		return nil, errors.Wrap(err, "error parsing dapr-grpc-port flag")
@@ -152,6 +173,10 @@ func FromFlags() (*DaprRuntime, error) {
 		publicPort = &port
 	}
 
+	if *appPort == "" && *appPortEnvName != "" {
+		appPort:= os.Getenv(*appPortEnvName)
+	}
+	
 	var applicationPort int
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
