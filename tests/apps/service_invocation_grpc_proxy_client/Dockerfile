@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-FROM golang:1.17 as build_env
+FROM golang:1.18 as build_env
 
 WORKDIR /app
 COPY . .

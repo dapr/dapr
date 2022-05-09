@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.17
+go 1.18
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.0
@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/dapr/components-contrib v1.7.0-rc.4
+	github.com/dapr/components-contrib v1.7.1-0.20220426033643-068938c67654
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.1

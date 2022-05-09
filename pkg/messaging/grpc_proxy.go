@@ -81,7 +81,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	appID := v[0]
 
 	if p.remoteAppFn == nil {
-		return ctx, nil, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete.")
+		return ctx, nil, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
 	}
 
 	target, isLocal, err := p.isLocalInternal(appID)
@@ -128,7 +128,7 @@ func (p *proxy) IsLocal(appID string) (bool, error) {
 
 func (p *proxy) isLocalInternal(appID string) (remoteApp, bool, error) {
 	if p.remoteAppFn == nil {
-		return remoteApp{}, false, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete.")
+		return remoteApp{}, false, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
 	}
 
 	target, err := p.remoteAppFn(appID)

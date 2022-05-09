@@ -150,7 +150,8 @@ func NewActors(
 	tracingSpec configuration.TracingSpec,
 	features []configuration.FeatureSpec,
 	resiliency resiliency.Provider,
-	stateStoreName string) Actors {
+	stateStoreName string,
+) Actors {
 	var transactionalStore state.TransactionalStore
 	if stateStore != nil {
 		features := stateStore.Features()
@@ -344,7 +345,8 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	numRetries int,
 	backoffInterval time.Duration,
 	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
-	targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	targetAddress, targetID string, req *invokev1.InvokeMethodRequest,
+) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
 		resp, err := fn(ctx, targetAddress, targetID, req)
 		if err == nil {
@@ -445,7 +447,8 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
 	targetAddress, targetID string,
-	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	req *invokev1.InvokeMethodRequest,
+) (*invokev1.InvokeMethodResponse, error) {
 	conn, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, false, false)
 	if err != nil {
 		return nil, err
@@ -497,7 +500,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 
 func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
 	if a.store == nil || a.transactionalStore == nil {
-		return errors.New("actors: state store does not exist or incorrectly configured")
+		return errors.New("actors: state store does not exist or incorrectly configured. Have you set the - name: actorStateStore value: \"true\" in your state store component file?")
 	}
 	operations := []state.TransactionalStateOperation{}
 	partitionKey := constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
@@ -960,7 +963,7 @@ func (m *ActorMetadata) calculateEtag(partitionID uint32) *string {
 
 func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []actorReminderReference, actorType, actorID, reminderName string) ([]Reminder, string, *string) {
 	// First, we find the partition
-	var partitionID uint32 = 0
+	var partitionID uint32
 	if m.RemindersMetadata.PartitionCount > 0 {
 		for _, reminderRef := range reminderRefs {
 			if reminderRef.reminder.ActorType == actorType && reminderRef.reminder.ActorID == actorID && reminderRef.reminder.Name == reminderName {
