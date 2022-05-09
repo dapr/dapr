@@ -478,6 +478,8 @@ func TestHandleRequest(t *testing.T) {
 	podBytes, _ := json.Marshal(pod)
 	pod.Spec.DNSPolicy = corev1.DNSClusterFirstWithHostNet
 	dnSPodBytes, _ := json.Marshal(pod)
+	pod.Spec.DNSPolicy = corev1.DNSDefault
+	dnSDefaultPodBytes, _ := json.Marshal(pod)
 	testCases := []struct {
 		testName         string
 		request          v1.AdmissionReview
@@ -619,6 +621,25 @@ func TestHandleRequest(t *testing.T) {
 						UID: authID,
 					},
 					Object: runtime.RawExtension{Raw: dnSPodBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			true,
+		},
+		{
+			"TestSidecarInjectDnsPolicy",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						UID: authID,
+					},
+					Object: runtime.RawExtension{Raw: dnSDefaultPodBytes},
 				},
 			},
 			runtime.ContentTypeJSON,
