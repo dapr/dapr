@@ -12,7 +12,7 @@ import (
 func GetServerOptions(certChain *CertChain) ([]grpc.ServerOption, error) {
 	opts := []grpc.ServerOption{}
 	if certChain == nil {
-		return opts, nil
+		return nil, nil
 	}
 
 	cp := x509.NewCertPool()
@@ -20,7 +20,7 @@ func GetServerOptions(certChain *CertChain) ([]grpc.ServerOption, error) {
 
 	cert, err := tls.X509KeyPair(certChain.Cert, certChain.Key)
 	if err != nil {
-		return opts, nil
+		return nil, err
 	}
 
 	// nolint:gosec

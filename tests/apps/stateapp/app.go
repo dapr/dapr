@@ -191,10 +191,9 @@ func parseState(key string, body []byte) (*appState, error) {
 func getAll(states []daprState, statestore string, meta map[string]string) ([]daprState, error) {
 	log.Printf("Processing get request for %d states.", len(states))
 
-	var output = make([]daprState, 0, len(states))
+	output := make([]daprState, 0, len(states))
 	for _, state := range states {
 		value, err := get(state.Key, statestore, meta)
-
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +212,7 @@ func getAll(states []daprState, statestore string, meta map[string]string) ([]da
 func getBulk(states []daprState, statestore string) ([]daprState, error) {
 	log.Printf("Processing get bulk request for %d states.", len(states))
 
-	var output = make([]daprState, 0, len(states))
+	output := make([]daprState, 0, len(states))
 
 	url, err := createBulkStateURL(statestore)
 	if err != nil {
@@ -300,7 +299,6 @@ func deleteAll(states []daprState, statestore string, meta map[string]string) er
 
 	for _, state := range states {
 		err := delete(state.Key, statestore, meta)
-
 		if err != nil {
 			return err
 		}
@@ -370,7 +368,7 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 	}
 
 	log.Printf("Query returned %d results", len(qres.Results))
-	var output = make([]daprState, 0, len(qres.Results))
+	output := make([]daprState, 0, len(qres.Results))
 	for _, item := range qres.Results {
 		output = append(output, daprState{
 			Key: item.Key,
@@ -440,9 +438,9 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	var req *requestResponse
 	var data []byte
 	var err error
-	var res = requestResponse{}
-	var uri = r.URL.RequestURI()
-	var statusCode = http.StatusOK
+	res := requestResponse{}
+	uri := r.URL.RequestURI()
+	statusCode := http.StatusOK
 
 	res.StartTime = epoch()
 
@@ -522,7 +520,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var res requestResponse
 	res.StartTime = epoch()
-	var statusCode = http.StatusOK
+	statusCode := http.StatusOK
 
 	cmd := mux.Vars(r)["command"]
 	statestore := mux.Vars(r)["statestore"]
