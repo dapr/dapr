@@ -161,11 +161,11 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if applicationPort == daprHTTP {
-		return nil, errors.New("dapr api http port conflicts with app port")
+		return nil, errors.New("The configuration value of dapr-http-port conflicts with the configuration value of app-port or dapr.io/app-port")
 	}
 
 	if applicationPort == daprAPIGRPC {
-		return nil, errors.New("dapr api grpc port conflicts with app port")
+		return nil, errors.New("The configuration value of dapr-grpc-port conflicts with the configuration value of app-port or dapr.io/app-port")
 	}
 
 	var maxRequestBodySize int
