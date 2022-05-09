@@ -250,7 +250,6 @@ func (f *FailingActors) Init() error {
 }
 
 func (f *FailingActors) Stop() {
-
 }
 
 func (f *FailingActors) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {

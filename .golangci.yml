@@ -129,7 +129,7 @@ linters-settings:
     # Correct spellings using locale preferences for US or UK.
     # Default is to use a neutral variety of English.
     # Setting locale to US will correct the British spelling of 'colour' to 'color'.
-    locale: default
+    # locale: default
     ignore-words:
       - someword
   lll:
@@ -247,6 +247,32 @@ linters:
     - exhaustive
     - noctx
     - gci
+    - golint
+    - tparallel
+    - paralleltest
+    - wrapcheck
+    - tagliatelle
+    - ireturn
+    - exhaustivestruct
+    - errchkjson
+    - contextcheck
+    - gomoddirectives
+    - godot
+    - cyclop
+    - varnamelen
+    - gosec
+    - errorlint
+    - forcetypeassert
+    - ifshort
+    - maintidx
+    - nilnil
+    - predeclared
+    - tenv
+    - thelper
+    - wastedassign
+    - containedctx
+    - gosimple
+    - forbidigo
 issues:
   exclude:
     # staticcheck
