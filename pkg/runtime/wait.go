@@ -21,10 +21,10 @@ import (
 )
 
 var (
-	timeoutSeconds       int    = 60
-	requestTimeoutMillis int    = 500
-	periodMillis         int    = 100
-	urlFormat            string = "http://localhost:%s/v1.0/healthz/outbound"
+	timeoutSeconds       = 60
+	requestTimeoutMillis = 500
+	periodMillis         = 100
+	urlFormat            = "http://localhost:%s/v1.0/healthz/outbound"
 )
 
 func waitUntilDaprOutboundReady(daprHTTPPort string) {

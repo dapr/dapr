@@ -1,4 +1,3 @@
-replicaCount: 1
 logLevel: info
 
 # Specify full docker image name including registry url to use a custom placement service image
