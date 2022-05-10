@@ -38,5 +38,3 @@ spec:
     value: /custom-path
   - name: initialOffset
     value: oldest
-  - name: disableTls
-    value: true

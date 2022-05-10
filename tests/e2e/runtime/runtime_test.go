@@ -81,7 +81,6 @@ func TestMain(m *testing.M) {
 				"topics":        `"runtime-bindings-http"`,
 				"consumerGroup": `"group1"`,
 				"authRequired":  `"false"`,
-				"disableTls":    `"true"`,
 			},
 		},
 	}
