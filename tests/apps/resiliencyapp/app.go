@@ -505,7 +505,6 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
 }
 
 func TestInvokeActorMethod(w http.ResponseWriter, r *http.Request) {

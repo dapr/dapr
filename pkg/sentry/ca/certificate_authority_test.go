@@ -80,9 +80,9 @@ func getTestCertAuth() CertificateAuthority {
 }
 
 func writeTestCredentialsToDisk() {
-	os.WriteFile("ca.crt", []byte(rootCert), 0644)
-	os.WriteFile("issuer.crt", []byte(issuerCert), 0644)
-	os.WriteFile("issuer.key", []byte(issuerKey), 0644)
+	os.WriteFile("ca.crt", []byte(rootCert), 0o644)
+	os.WriteFile("issuer.crt", []byte(issuerCert), 0o644)
+	os.WriteFile("issuer.key", []byte(issuerKey), 0o644)
 }
 
 func cleanupCredentials() {

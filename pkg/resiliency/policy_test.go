@@ -132,7 +132,7 @@ func TestPolicyRetry(t *testing.T) {
 			fn := func(ctx context.Context) error {
 				if called < maxCalls {
 					called++
-					return errors.Errorf("Called (%d) vs Max (%d)!", called, maxCalls)
+					return errors.Errorf("Called (%d) vs Max (%d)", called, maxCalls)
 				}
 				return nil
 			}

@@ -80,7 +80,8 @@ func NewDirectMessaging(
 	appChannel channel.AppChannel,
 	clientConnFn messageClientConnection,
 	resolver nr.Resolver,
-	tracingSpec config.TracingSpec, maxRequestBodySize int, proxy Proxy, readBufferSize int, streamRequestBody bool) DirectMessaging {
+	tracingSpec config.TracingSpec, maxRequestBodySize int, proxy Proxy, readBufferSize int, streamRequestBody bool,
+) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 
@@ -142,7 +143,8 @@ func (d *directMessaging) invokeWithRetry(
 	backoffInterval time.Duration,
 	app remoteApp,
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
-	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	req *invokev1.InvokeMethodRequest,
+) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
 		resp, err := fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {

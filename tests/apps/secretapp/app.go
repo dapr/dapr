@@ -85,7 +85,7 @@ func get(key, store string) (*map[string]string, int, error) {
 
 	log.Printf("Found secret for key %s: %s", key, body)
 
-	var state = map[string]string{}
+	state := map[string]string{}
 	if len(body) == 0 {
 		return nil, http.StatusOK, nil
 	}
@@ -103,7 +103,7 @@ func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
 	statusCode := http.StatusOK
 	log.Printf("Processing get request for %d states.", len(secrets))
 
-	var output = make([]daprSecret, 0, len(secrets))
+	output := make([]daprSecret, 0, len(secrets))
 	for _, secret := range secrets {
 		value, sc, err := get(secret.Key, secret.Store)
 		if err != nil {
@@ -140,8 +140,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var res = requestResponse{}
-	var uri = r.URL.RequestURI()
+	res := requestResponse{}
+	uri := r.URL.RequestURI()
 	var secrets []daprSecret
 	var statusCode int
 
