@@ -399,6 +399,12 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
+	binaryMode, metaErr := contrib_metadata.IsBinaryMode(in.Metadata)
+	if metaErr != nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
 
 	span := diag_utils.SpanFromContext(ctx)
 	// Populate W3C traceparent to cloudevent envelope
@@ -414,29 +420,59 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 
 	if !rawPayload {
-		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
-			ID:              a.id,
-			Topic:           in.Topic,
-			DataContentType: in.DataContentType,
-			Data:            body,
-			TraceID:         corID,
-			TraceState:      traceState,
-			Pubsub:          in.PubsubName,
-		})
-		if err != nil {
-			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
-			apiServerLogger.Debug(err)
-			return &emptypb.Empty{}, err
-		}
+		if binaryMode {
+			headers, err := runtime_pubsub.NewBinaryCloudEvent(&runtime_pubsub.CloudEvent{
+				ID:              a.id,
+				Topic:           in.Topic,
+				DataContentType: in.DataContentType,
+				Data:            body,
+				TraceID:         corID,
+				TraceState:      traceState,
+				Pubsub:          in.PubsubName,
+			}, in.Metadata)
+			if err != nil {
+				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+				apiServerLogger.Debug(err)
+				return &emptypb.Empty{}, err
+			}
 
-		features := thepubsub.Features()
-		pubsub.ApplyMetadata(envelope, features, in.Metadata)
+			features := thepubsub.Features()
+			pubsub.ApplyMetadata(headers, features, in.Metadata)
 
-		data, err = json.Marshal(envelope)
-		if err != nil {
-			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
-			apiServerLogger.Debug(err)
-			return &emptypb.Empty{}, err
+			for k, v := range headers {
+				// add the headers to the cloudevent data
+				switch v.(type) {
+				default:
+					// ignored
+				case string:
+					in.Metadata[k] = v.(string)
+				}
+			}
+		} else {
+			envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+				ID:              a.id,
+				Topic:           in.Topic,
+				DataContentType: in.DataContentType,
+				Data:            body,
+				TraceID:         corID,
+				TraceState:      traceState,
+				Pubsub:          in.PubsubName,
+			})
+			if err != nil {
+				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+				apiServerLogger.Debug(err)
+				return &emptypb.Empty{}, err
+			}
+
+			features := thepubsub.Features()
+			pubsub.ApplyMetadata(envelope, features, in.Metadata)
+
+			data, err = json.Marshal(envelope)
+			if err != nil {
+				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+				apiServerLogger.Debug(err)
+				return &emptypb.Empty{}, err
+			}
 		}
 	}
 

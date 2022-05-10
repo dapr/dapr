@@ -39,3 +39,11 @@ func NewCloudEvent(req *CloudEvent) (map[string]interface{}, error) {
 	return contrib_pubsub.NewCloudEventsEnvelope(uuid.New().String(), req.ID, contrib_pubsub.DefaultCloudEventType,
 		"", req.Topic, req.Pubsub, req.DataContentType, req.Data, req.TraceID, req.TraceState), nil
 }
+
+func NewBinaryCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]interface{}, error) {
+	if contrib_contenttype.IsCloudEventContentType(req.DataContentType) {
+		return contrib_pubsub.FromCloudEventBinaryMode(req.Topic, req.Pubsub, req.TraceID, req.TraceState, req.DataContentType, metadata)
+	}
+	return contrib_pubsub.NewCloudEventsHeaders(uuid.New().String(), req.ID, contrib_pubsub.DefaultCloudEventType,
+		"", req.Topic, req.Pubsub, req.DataContentType, req.TraceID, req.TraceState), nil
+}

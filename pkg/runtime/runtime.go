@@ -618,10 +618,35 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 				return err
 			}
 
+			binaryMode, err := contrib_metadata.IsBinaryMode(routeMetadata)
+			if err != nil {
+				log.Errorf("error deserializing pubsub metadata: %s", err)
+				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+					// dlq has been configured and message is successfully sent to dlq.
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					return nil
+				}
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				return err
+			}
+
 			var cloudEvent map[string]interface{}
 			data := msg.Data
 			if rawPayload {
 				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
+				data, err = json.Marshal(cloudEvent)
+				if err != nil {
+					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+						// dlq has been configured and message is successfully sent to dlq.
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						return nil
+					}
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+					return err
+				}
+			} else if binaryMode {
+				cloudEvent = pubsub.FromBinaryModePayload(msg.Data, msg.Metadata, msg.Topic, name)
 				data, err = json.Marshal(cloudEvent)
 				if err != nil {
 					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
