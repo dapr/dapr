@@ -893,7 +893,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 				var resp *bindings.InvokeResponse
 				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name)
 				err := policy(func(ctx context.Context) (err error) {
-					resp, err = binding.Invoke(a.ctx, req)
+					resp, err = binding.Invoke(ctx, req)
 					return err
 				})
 				return resp, err
