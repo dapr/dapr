@@ -385,8 +385,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	if a.runtimeConfig.EnableBuiltinSecretStore {
 		a.appendBuiltinSecretStore()
-	} else {
-		log.Info("Builtin K8s Secret Store Not called")
 	}
 	err = a.loadComponents(opts)
 	if err != nil {
@@ -2300,8 +2298,6 @@ func (a *DaprRuntime) createAppChannel() error {
 }
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
-	log.Info("Info: Inside appendBuiltinSecretStore")
-	log.Infof("Infof: Inside appendBuiltinSecretStore")
 	for _, comp := range a.builtinSecretStore() {
 		a.pendingComponents <- comp
 	}
