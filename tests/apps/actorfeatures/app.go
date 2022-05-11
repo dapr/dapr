@@ -116,10 +116,12 @@ type TempTransactionalDelete struct {
 	Key string `json:"key"`
 }
 
-var actorLogs = []actorLogEntry{}
-var actorLogsMutex = &sync.Mutex{}
-var registeredActorType = getActorType()
-var actors sync.Map
+var (
+	actorLogs           = []actorLogEntry{}
+	actorLogsMutex      = &sync.Mutex{}
+	registeredActorType = getActorType()
+	actors              sync.Map
+)
 
 var envOverride sync.Map
 
@@ -208,7 +210,7 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
-	var daprConfigResponse = daprConfig{
+	daprConfigResponse := daprConfig{
 		[]string{getActorType()},
 		actorIdleTimeout,
 		actorScanInterval,
