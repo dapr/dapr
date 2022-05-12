@@ -151,7 +151,7 @@ func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 	if req.ExpiryInSeconds <= 0 {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrExpireNotPositive, req.StoreName)
+		err := status.Errorf(codes.InvalidArgument, messages.ErrExpiryInSecondsNotPositive, req.StoreName)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 	// 2. find lock component
