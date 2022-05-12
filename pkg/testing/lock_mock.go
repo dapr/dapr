@@ -6,8 +6,9 @@ package testing
 import (
 	reflect "reflect"
 
-	lock "github.com/dapr/components-contrib/lock"
 	gomock "github.com/golang/mock/gomock"
+
+	lock "github.com/dapr/components-contrib/lock"
 )
 
 // MockStore is a mock of Store interface.
