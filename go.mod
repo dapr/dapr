@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/dapr/components-contrib v1.7.1-0.20220428205650-bfd87eb7a53b
+	github.com/dapr/components-contrib v1.7.1-0.20220512111321-9bb86a08a656
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.1
@@ -63,7 +63,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.11.0
 )
 
-require github.com/cenkalti/backoff v2.2.1+incompatible
+require (
+	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/golang/mock v1.6.0
+)
 
 require (
 	cloud.google.com/go v0.86.0 // indirect
@@ -174,7 +177,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
