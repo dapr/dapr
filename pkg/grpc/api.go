@@ -150,7 +150,7 @@ func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest
 		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
-	if req.Expire <= 0 {
+	if req.ExpiryInSeconds <= 0 {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrExpireNotPositive, req.StoreName)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -232,7 +232,7 @@ func TryLockRequestToComponentRequest(req *runtimev1pb.TryLockRequest) *lock.Try
 	}
 	result.ResourceID = req.ResourceId
 	result.LockOwner = req.LockOwner
-	result.Expire = req.Expire
+	result.Expire = req.ExpiryInSeconds
 	return result
 }
 

@@ -567,8 +567,8 @@ message TryLockRequest {
   // So this field in the request shouldn't be removed.
   string lock_owner = 3;
 
-  // Required. expire is the time before expire.The time unit is second.
-  int32 expire = 4;
+  // Required. The time before expiry.The time unit is second.
+  int32 expiryInSeconds = 4;
 }
 
 
