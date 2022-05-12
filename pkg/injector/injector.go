@@ -167,6 +167,7 @@ func (i *injector) Run(ctx context.Context) {
 	}()
 
 	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
+	log.Error("injector ListenAndServeTLS")
 	err := i.server.ListenAndServeTLS(i.config.TLSCertFile, i.config.TLSKeyFile)
 	if err != http.ErrServerClosed {
 		log.Errorf("Sidecar injector error: %s", err)
@@ -176,6 +177,8 @@ func (i *injector) Run(ctx context.Context) {
 
 func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+
+	log.Error("injector received request")
 
 	monitoring.RecordSidecarInjectionRequestsCount()
 
@@ -190,6 +193,8 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "empty body", http.StatusBadRequest)
 		return
 	}
+
+	log.Errorf("injector received request: len=%d", len(body))
 
 	contentType := r.Header.Get("Content-Type")
 	if contentType != runtime.ContentTypeJSON {
@@ -226,6 +231,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	diagAppID := getAppIDFromRequest(ar.Request)
+	log.Errorf("injector received request: diagAppID=%s,patchedSuccessfully=%b", diagAppID, patchedSuccessfully)
 
 	if err != nil {
 		admissionResponse = toAdmissionResponse(err)
