@@ -20,6 +20,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/dapr/components-contrib/lock"
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	"github.com/golang/mock/gomock"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -87,6 +90,7 @@ const (
 	TestRuntimeConfigID  = "consumer0"
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
+	TestLockName         = "testlock"
 	maxGRPCServerUptime  = 200 * time.Millisecond
 )
 
@@ -301,6 +305,59 @@ func TestDoProcessComponent(t *testing.T) {
 			Metadata: getFakeMetadataItems(),
 		},
 	}
+
+	lockComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestLockName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "lock.mockLock",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	t.Run("test error on lock init", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(assert.AnError)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+
+		// assert
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+	})
+
+	t.Run("test error when lock version invalid", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		lockComponentV3 := lockComponent
+		lockComponentV3.Spec.Version = "v3"
+
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentV3)
+
+		// assert
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, err.Error(), "couldn't find lock store lock.mockLock/v3")
+	})
 
 	t.Run("test error on pubsub init", func(t *testing.T) {
 		// setup
