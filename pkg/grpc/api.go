@@ -232,7 +232,7 @@ func TryLockRequestToComponentRequest(req *runtimev1pb.TryLockRequest) *lock.Try
 	}
 	result.ResourceID = req.ResourceId
 	result.LockOwner = req.LockOwner
-	result.Expire = req.ExpiryInSeconds
+	result.ExpiryInSeconds = req.ExpiryInSeconds
 	return result
 }
 
