@@ -17,6 +17,9 @@
 name: E2E tests on KinD
 
 on:
+  # Manual trigger
+  workflow_dispatch:
+  # On pull requests
   pull_request:
     branches:
       - master
