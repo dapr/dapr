@@ -166,13 +166,17 @@ jobs:
         version: v3.3.4
 
     - name: Login to Azure
-      if: secrets.AZURE_CREDENTIALS != '' && env.DAPR_CACHE_REGISTRY != ''
+      env:
+        AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      if: env.AZURE_CREDENTIALS != '' && env.DAPR_CACHE_REGISTRY != ''
       uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
     - name: Login to cache registry
-      if: secrets.AZURE_CREDENTIALS != '' && env.DAPR_CACHE_REGISTRY != ''
+      env:
+        AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      if: env.AZURE_CREDENTIALS != '' && env.DAPR_CACHE_REGISTRY != ''
       run: |
         az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
       shell: bash
