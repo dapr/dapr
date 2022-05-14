@@ -106,8 +106,10 @@ build-e2e-app-$(1): check-e2e-env
 ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
 	CGO_ENABLED=0 GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -o $(E2E_TESTAPP_DIR)/$(1)/app$(BINARY_EXT_LOCAL) $(E2E_TESTAPP_DIR)/$(1)/app.go
 	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
-else
+else ifeq ($(DAPR_CACHE_REGISTRY),)
 	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+else
+	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) $(1) $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG) $(DOCKERFILE)
 endif
 endef
 
@@ -135,7 +137,11 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageKindPush,$(ITEM))))
 define genPerfTestAppImageBuild
 .PHONY: build-perf-app-$(1)
 build-perf-app-$(1): check-e2e-env
+ifeq ($(DAPR_CACHE_REGISTRY),)
 	$(DOCKER) build -f $(PERF_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(PERF_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
+else
+	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) perf/$(1) $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG) $(DOCKERFILE)
+endif
 endef
 
 # Generate perf app image build targets
