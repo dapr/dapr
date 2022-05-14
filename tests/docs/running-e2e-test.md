@@ -82,6 +82,8 @@ If you are starting from scratch and just want to build dapr, deploy it, and run
    make delete-test-namespace
    ```
 
+  > Note: please make sure that you have executed helm uninstall command before you delete dapr test namespace. Otherwise if you directly deleted the dapr test namespace without helm unisntall command and re-install dapr control plane, the dapr sidecar injector won't work and fail for "bad certificate". And you have already run into this problem, you can recover by helm uninstall command. See https://github.com/dapr/dapr/issues/4612
+
 3. Build, deploy, run tests from start to finish
 
    ```bash
