@@ -51,7 +51,11 @@ CACHE_NAME="${CACHE_REGISTRY}/${APP_DIR}:${DOCKERFILE}-${HASH}"
 function buildAndPush(){
     echo "Cached image not found; building it"
     docker build -f "${APP_DIR}/${DOCKERFILE}" "${APP_DIR}/." -t "${CACHE_NAME}"
-    docker push "${CACHE_NAME}"
+
+    # Push the image. This may fail if we're not authenticated, and it's fine
+    echo "Pushing image ${CACHE_NAME}…"
+    docker push "${CACHE_NAME}" \
+        || echo "Push failed - continuing regardless"
 }
 
 # Check if the image already exists, otherwise build it

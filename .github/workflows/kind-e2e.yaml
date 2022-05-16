@@ -11,9 +11,6 @@
 # limitations under the License.
 #
 
-# Required secrets:
-# - AZURE_CREDENTIALS: JSON object containing the Azure service principal credentials. This is necessary if you want to cache the E2E test images. Docs: https://github.com/Azure/login#configure-a-service-principal-with-a-secret
-
 name: E2E tests on KinD
 
 on:
@@ -167,22 +164,6 @@ jobs:
       uses: azure/setup-helm@v1
       with:
         version: v3.3.4
-
-    - name: Login to Azure
-      env:
-        AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-      if: env.AZURE_CREDENTIALS != '' && env.DAPR_CACHE_REGISTRY != ''
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-    - name: Login to cache registry
-      env:
-        AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-      if: env.AZURE_CREDENTIALS != '' && env.DAPR_CACHE_REGISTRY != ''
-      run: |
-        az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
-      shell: bash
 
     - name: Build and push Dapr
       run: |
