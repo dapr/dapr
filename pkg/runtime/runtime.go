@@ -33,7 +33,6 @@ import (
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
-	jsoniter "github.com/json-iterator/go"
 	openzipkin "github.com/openzipkin/zipkin-go"
 	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/pkg/errors"
@@ -166,7 +165,6 @@ type DaprRuntime struct {
 	pubSubRegistry         pubsub_loader.Registry
 	pubSubs                map[string]pubsub.PubSub
 	nameResolver           nr.Resolver
-	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
 	hostAddress            string
 	actorStateStoreName    string
@@ -239,7 +237,6 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		components:             make([]components_v1alpha1.Component, 0),
 		actorStateStoreLock:    &sync.RWMutex{},
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
-		json:                   jsoniter.ConfigFastest,
 		inputBindings:          map[string]bindings.InputBinding{},
 		outputBindings:         map[string]bindings.OutputBinding{},
 		secretStores:           map[string]secretstores.SecretStore{},
@@ -612,7 +609,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			data := msg.Data
 			if rawPayload {
 				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
-				data, err = a.json.Marshal(cloudEvent)
+				data, err = json.Marshal(cloudEvent)
 				if err != nil {
 					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
 					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
@@ -624,7 +621,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 					return err
 				}
 			} else {
-				err = a.json.Unmarshal(msg.Data, &cloudEvent)
+				err = json.Unmarshal(msg.Data, &cloudEvent)
 				if err != nil {
 					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
 					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
@@ -893,7 +890,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 				var resp *bindings.InvokeResponse
 				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name)
 				err := policy(func(ctx context.Context) (err error) {
-					resp, err = binding.Invoke(a.ctx, req)
+					resp, err = binding.Invoke(ctx, req)
 					return err
 				})
 				return resp, err
@@ -924,7 +921,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	}
 
 	if len(response.To) > 0 {
-		b, err := a.json.Marshal(&response.Data)
+		b, err := json.Marshal(&response.Data)
 		if err != nil {
 			return err
 		}
@@ -1002,7 +999,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				appResponseBody = resp.Data
 
 				var d interface{}
-				err := a.json.Unmarshal(resp.Data, &d)
+				err := json.Unmarshal(resp.Data, &d)
 				if err == nil {
 					response.Data = d
 				}
@@ -1646,12 +1643,13 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
 		var appResponse pubsub.AppResponse
-		err := a.json.Unmarshal(body, &appResponse)
+		err := json.Unmarshal(body, &appResponse)
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 			// Return no error so message does not get reprocessed.
-			return nil // nolint:nilerr
+			err = nil
+			return err
 		}
 
 		switch appResponse.Status {
@@ -1732,7 +1730,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 				return ErrUnexpectedEnvelopeData
 			}
 		} else if contenttype.IsJSONContentType(envelope.DataContentType) {
-			envelope.Data, _ = a.json.Marshal(data)
+			envelope.Data, _ = json.Marshal(data)
 		}
 	}
 
