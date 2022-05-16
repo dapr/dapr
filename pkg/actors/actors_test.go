@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -1545,7 +1544,7 @@ func TestGetState(t *testing.T) {
 	fakeData := strconv.Quote("fakeData")
 
 	var val interface{}
-	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
+	json.Unmarshal([]byte(fakeData), &val)
 
 	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
 
@@ -1582,7 +1581,7 @@ func TestDeleteState(t *testing.T) {
 	fakeData := strconv.Quote("fakeData")
 
 	var val interface{}
-	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
+	json.Unmarshal([]byte(fakeData), &val)
 
 	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
 
