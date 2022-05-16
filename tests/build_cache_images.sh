@@ -47,20 +47,16 @@ echo "HASH: ${HASH:0:10} (${HASH})"
 HASH="${HASH:0:10}"
 CACHE_NAME="${CACHE_REGISTRY}/${APP_DIR}:${DOCKERFILE}-${HASH}"
 
-# Check if the image already exists
-set +e
-docker pull "${CACHE_NAME}"
-EXITCODE=$?
-set -e
-
-# Image doesn't exist, so we need to build it
-if [ $EXITCODE -eq 0 ]; then
-    echo "Found cached image"
-else
+# Build and push the Docker image, invoked when the image isn't in the cache already
+function buildAndPush(){
     echo "Cached image not found; building it"
     docker build -f "${APP_DIR}/${DOCKERFILE}" "${APP_DIR}/." -t "${CACHE_NAME}"
     docker push "${CACHE_NAME}"
-fi
+}
+
+# Check if the image already exists, otherwise build it
+docker pull "${CACHE_NAME}" && echo "Found cached image" \
+    || buildAndPush
 
 # Tag the image with the desired tag
 echo "Tagging image as ${TARGET_NAME}"
