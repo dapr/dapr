@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/grpc"
 
 	daprhttp "github.com/dapr/dapr/pkg/http"
@@ -362,7 +361,7 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 	}
 
 	var qres daprhttp.QueryResponse
-	err = jsoniter.Unmarshal(body, &qres)
+	err = json.Unmarshal(body, &qres)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal query response from Dapr: %s", err.Error())
 	}
