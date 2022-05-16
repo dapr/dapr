@@ -1484,16 +1484,10 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 		items := resp.GetItems()
 		for _, item := range items {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, item.Key)]; !ok {
-				subscribeKeys = append(subscribeKeys, item.Key)
-			}
+			subscribeKeys = append(subscribeKeys, item.Key)
 		}
 	} else {
-		for _, k := range request.Keys {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
-				subscribeKeys = append(subscribeKeys, k)
-			}
-		}
+		subscribeKeys = append(subscribeKeys, request.Keys...)
 	}
 
 	req := &configuration.SubscribeRequest{

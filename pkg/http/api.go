@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	nethttp "net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -75,6 +76,7 @@ type api struct {
 	resiliency               resiliency.Provider
 	stateStores              map[string]state.Store
 	configurationStores      map[string]configuration.Store
+	configurationSubscribe   map[string]chan struct{}
 	transactionalStateStores map[string]state.TransactionalStore
 	secretStores             map[string]secretstores.SecretStore
 	secretsConfiguration     map[string]config.SecretsScope
@@ -104,25 +106,26 @@ type metadata struct {
 }
 
 const (
-	apiVersionV1          = "v1.0"
-	apiVersionV1alpha1    = "v1.0-alpha1"
-	idParam               = "id"
-	methodParam           = "method"
-	topicParam            = "topic"
-	actorTypeParam        = "actorType"
-	actorIDParam          = "actorId"
-	storeNameParam        = "storeName"
-	stateKeyParam         = "key"
-	configurationKeyParam = "key"
-	secretStoreNameParam  = "secretStoreName"
-	secretNameParam       = "key"
-	nameParam             = "name"
-	consistencyParam      = "consistency"
-	concurrencyParam      = "concurrency"
-	pubsubnameparam       = "pubsubname"
-	traceparentHeader     = "traceparent"
-	tracestateHeader      = "tracestate"
-	daprAppID             = "dapr-app-id"
+	apiVersionV1             = "v1.0"
+	apiVersionV1alpha1       = "v1.0-alpha1"
+	idParam                  = "id"
+	methodParam              = "method"
+	topicParam               = "topic"
+	actorTypeParam           = "actorType"
+	actorIDParam             = "actorId"
+	storeNameParam           = "storeName"
+	stateKeyParam            = "key"
+	configurationKeyParam    = "key"
+	configurationSubscribeID = "configurationSubscribeID"
+	secretStoreNameParam     = "secretStoreName"
+	secretNameParam          = "key"
+	nameParam                = "name"
+	consistencyParam         = "consistency"
+	concurrencyParam         = "concurrency"
+	pubsubnameparam          = "pubsubname"
+	traceparentHeader        = "traceparent"
+	tracestateHeader         = "tracestate"
+	daprAppID                = "dapr-app-id"
 )
 
 // NewAPI returns a new API.
@@ -158,6 +161,7 @@ func NewAPI(
 		secretStores:             secretStores,
 		secretsConfiguration:     secretsConfiguration,
 		configurationStores:      configurationStores,
+		configurationSubscribe:   make(map[string]chan struct{}),
 		json:                     jsoniter.ConfigFastest,
 		actor:                    actor,
 		pubsubAdapter:            pubsubAdapter,
@@ -411,6 +415,18 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 			Route:   "configuration/{storeName}",
 			Version: apiVersionV1alpha1,
 			Handler: a.onGetConfiguration,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}/subscribe",
+			Version: apiVersionV1alpha1,
+			Handler: a.onSubscribeConfiguration,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "configuration/{configurationSubscribeID}/unsubscribe",
+			Version: apiVersionV1alpha1,
+			Handler: a.onUnsubscribeConfiguration,
 		},
 	}
 }
@@ -713,6 +729,150 @@ func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.Reques
 		return nil, "", errors.New(msg.Message)
 	}
 	return a.configurationStores[storeName], storeName, nil
+}
+
+type subscribeConfigurationResponse struct {
+	ID string `json:"id"`
+}
+
+type configurationEventHandler struct {
+	api        *api
+	storeName  string
+	appChannel channel.AppChannel
+	json       jsoniter.API
+	res        resiliency.Provider
+}
+
+func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
+	for _, item := range e.Items {
+		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, item.Key))
+		req.WithHTTPExtension(nethttp.MethodPost, "")
+		eventBody, _ := h.json.Marshal(e)
+		req.WithRawData(eventBody, invokev1.JSONContentType)
+
+		policy := h.res.ComponentInboundPolicy(ctx, h.storeName)
+		err := policy(func(ctx context.Context) (err error) {
+			resp, err := h.appChannel.InvokeMethod(ctx, req)
+			if err != nil {
+				return err
+			}
+
+			if resp != nil && resp.Status().Code != nethttp.StatusOK {
+				return errors.Errorf("Error sending binding event to application, status %d", resp.Status().Code)
+			}
+			return nil
+		})
+		if err != nil {
+			log.Error(errors.Wrap(err, "error push subscribe event to app"))
+		}
+	}
+	return nil
+}
+
+func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	metadata := getMetadataFromRequest(reqCtx)
+	subscribeKeys := make([]string, 0)
+
+	keys := make([]string, 0)
+	queryKeys := reqCtx.QueryArgs().PeekMulti(configurationKeyParam)
+	for _, queryKeyByte := range queryKeys {
+		keys = append(keys, string(queryKeyByte))
+	}
+
+	// empty list means subscribing to all configuration keys
+	if len(keys) == 0 {
+		getConfigurationReq := &configuration.GetRequest{
+			Keys:     []string{},
+			Metadata: metadata,
+		}
+
+		start := time.Now()
+		policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+		var getResponse *configuration.GetResponse
+		err = policy(func(ctx context.Context) (rErr error) {
+			getResponse, rErr = store.Get(ctx, getConfigurationReq)
+			return rErr
+		})
+		elapsed := diag.ElapsedSince(start)
+		diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+
+		if err != nil {
+			msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+		items := getResponse.Items
+		for _, item := range items {
+			subscribeKeys = append(subscribeKeys, item.Key)
+		}
+	} else {
+		subscribeKeys = append(subscribeKeys, keys...)
+	}
+
+	req := configuration.SubscribeRequest{
+		Keys:     subscribeKeys,
+		Metadata: metadata,
+	}
+
+	// create handler
+	handler := &configurationEventHandler{
+		api:        a,
+		storeName:  storeName,
+		appChannel: a.appChannel,
+		json:       a.json,
+		res:        a.resiliency,
+	}
+
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+	var subscribeID string
+	err = policy(func(ctx context.Context) (rErr error) {
+		subscribeID, rErr = store.Subscribe(ctx, &req, handler.updateEventHandler)
+		return rErr
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
+
+	if err != nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	respBytes, _ := a.json.Marshal(&subscribeConfigurationResponse{
+		ID: subscribeID,
+	})
+	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
+}
+
+func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+	subscribeID := string(reqCtx.QueryArgs().Peek(configurationSubscribeID))
+
+	req := configuration.UnsubscribeRequest{
+		ID: subscribeID,
+	}
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+	err = policy(func(ctx context.Context) (rErr error) {
+		return store.Unsubscribe(ctx, &req)
+	})
+	elapsed := diag.ElapsedSince(start)
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
+
+	respond(reqCtx, withJSON(fasthttp.StatusOK, nil))
 }
 
 func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
