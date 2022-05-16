@@ -45,11 +45,11 @@ function hashdir(){
 HASH=$(hashdir "$APP_DIR")
 echo "HASH: ${HASH:0:10} (${HASH})"
 HASH="${HASH:0:10}"
-CACHE_TAG="${CACHE_REGISTRY}/${APP_DIR}:${DOCKERFILE}-${HASH}"
+CACHE_NAME="${CACHE_REGISTRY}/${APP_DIR}:${DOCKERFILE}-${HASH}"
 
 # Check if the image already exists
 set +e
-docker pull "${CACHE_TAG}"
+docker pull "${CACHE_NAME}"
 EXITCODE=$?
 set -e
 
@@ -58,10 +58,10 @@ if [ $EXITCODE -eq 0 ]; then
     echo "Found cached image"
 else
     echo "Cached image not found; building it"
-    docker build -f "${APP_DIR}/${DOCKERFILE}" "${APP_DIR}/." -t "${CACHE_TAG}"
-    docker push "${CACHE_TAG}"
+    docker build -f "${APP_DIR}/${DOCKERFILE}" "${APP_DIR}/." -t "${CACHE_NAME}"
+    docker push "${CACHE_NAME}"
 fi
 
 # Tag the image with the desired tag
 echo "Tagging image as ${TARGET_NAME}"
-docker tag "${CACHE_TAG}" "${TARGET_NAME}"
+docker tag "${CACHE_NAME}" "${TARGET_NAME}"
