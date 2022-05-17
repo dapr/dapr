@@ -171,8 +171,9 @@ func TestActorMissingStateStore(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("Actor service should 500 when no state store is available.", func(t *testing.T) {
-		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, "bogon-actor", "reminders", "failed-reminder"), reminderBody)
-		require.Error(t, err)
+		_, statusCode, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, externalURL, "bogon-actor", "reminders", "failed-reminder"), reminderBody)
+		require.NoError(t, err)
+		require.True(t, statusCode == 500)
 	})
 }
 

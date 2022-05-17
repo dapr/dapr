@@ -41,3 +41,5 @@ scopes:
 - actordotnet
 - actorpython
 - actorphp
+- resiliencyapp
+- resiliencyappgrpc
