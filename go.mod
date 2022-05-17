@@ -62,7 +62,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.11.0
 )
 
-require github.com/cenkalti/backoff v2.2.1+incompatible
+require (
+	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/golang/mock v1.6.0
+)
 
 require (
 	cloud.google.com/go v0.86.0 // indirect
@@ -175,7 +178,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect

@@ -200,7 +200,7 @@ func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) 
 		return newInternalErrorUnlockResponse(), status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
 	}
 	// 3. convert request
-	compReq := UnlockGrpc2ComponentRequest(req)
+	compReq := UnlockGrpcToComponentRequest(req)
 	// modify key
 	var err error
 	compReq.ResourceID, err = lock_loader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
@@ -215,7 +215,7 @@ func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) 
 		return newInternalErrorUnlockResponse(), err
 	}
 	// 5. convert response
-	resp := UnlockComp2GrpcResponse(compResp)
+	resp := UnlockResponseToGrpcResponse(compResp)
 	return resp, nil
 }
 
@@ -245,7 +245,7 @@ func TryLockResponseToGrpcResponse(compResponse *lock.TryLockResponse) *runtimev
 	return result
 }
 
-func UnlockGrpc2ComponentRequest(req *runtimev1pb.UnlockRequest) *lock.UnlockRequest {
+func UnlockGrpcToComponentRequest(req *runtimev1pb.UnlockRequest) *lock.UnlockRequest {
 	result := &lock.UnlockRequest{}
 	if req == nil {
 		return result
@@ -255,7 +255,7 @@ func UnlockGrpc2ComponentRequest(req *runtimev1pb.UnlockRequest) *lock.UnlockReq
 	return result
 }
 
-func UnlockComp2GrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.UnlockResponse {
+func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.UnlockResponse {
 	result := &runtimev1pb.UnlockResponse{}
 	if compResp == nil {
 		return result
