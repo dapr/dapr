@@ -737,7 +737,6 @@ type configurationEventHandler struct {
 	api        *api
 	storeName  string
 	appChannel channel.AppChannel
-	json       jsoniter.API
 	res        resiliency.Provider
 }
 
@@ -745,7 +744,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 	for _, item := range e.Items {
 		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, item.Key))
 		req.WithHTTPExtension(nethttp.MethodPost, "")
-		eventBody, _ := h.json.Marshal(e)
+		eventBody, _ := json.Marshal(e)
 		req.WithRawData(eventBody, invokev1.JSONContentType)
 
 		policy := h.res.ComponentInboundPolicy(ctx, h.storeName)
@@ -824,7 +823,6 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		api:        a,
 		storeName:  storeName,
 		appChannel: a.appChannel,
-		json:       a.json,
 		res:        a.resiliency,
 	}
 
@@ -845,7 +843,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	respBytes, _ := a.json.Marshal(&subscribeConfigurationResponse{
+	respBytes, _ := json.Marshal(&subscribeConfigurationResponse{
 		ID: subscribeID,
 	})
 	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
@@ -914,7 +912,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	respBytes, _ := a.json.Marshal(getResponse.Items)
+	respBytes, _ := json.Marshal(getResponse.Items)
 
 	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
 }
