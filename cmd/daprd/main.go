@@ -38,6 +38,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
+	"github.com/dapr/components-contrib/secretstores/huaweicloud/csms"
 	secretstore_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstore_env "github.com/dapr/components-contrib/secretstores/local/env"
 	secretstore_file "github.com/dapr/components-contrib/secretstores/local/file"
@@ -203,6 +204,9 @@ func main() {
 			}),
 			secretstores_loader.New("alicloud.parameterstore", func() secretstores.SecretStore {
 				return alicloud_paramstore.NewParameterStore(logContrib)
+			}),
+			secretstores_loader.New("huaweicloud.csms", func() secretstores.SecretStore {
+				return csms.NewHuaweiCsmsSecretStore(logContrib)
 			}),
 		),
 		runtime.WithStates(

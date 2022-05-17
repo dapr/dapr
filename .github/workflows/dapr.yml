@@ -33,8 +33,8 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.17
-      GOLANGCILINT_VER: v1.31
+      GOVER: 1.18
+      GOLANGCILINT_VER: v1.45.2
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
@@ -96,6 +96,36 @@ jobs:
             echo >&2
             exit 1
           fi
+      - name: Cache Go modules (Linux)
+        if: matrix.target_os == 'linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+      - name: Cache Go modules (Windows)
+        if: matrix.target_os == 'windows'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
+      - name: Cache Go modules (macOS)
+        if: matrix.target_os == 'darwin'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ env.GOVER }}-build-
       - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         uses: golangci/golangci-lint-action@v3.1.0

@@ -35,8 +35,10 @@ const (
 	numHealthChecks = 60                   // Number of get calls before starting tests.
 )
 
-var tr *runner.TestRunner
-var apps []kube.AppDescription
+var (
+	tr   *runner.TestRunner
+	apps []kube.AppDescription
+)
 
 func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 	t.Logf("Starting health check for %s\n", externalURL)
