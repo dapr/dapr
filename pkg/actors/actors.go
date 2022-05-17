@@ -192,7 +192,8 @@ func (a *actorsRuntime) Init() error {
 
 	if len(a.config.HostedActorTypes) > 0 {
 		if a.store == nil {
-			log.Warn("actors: state store must be present to initialize the actor runtime")
+			// If we have hosted actors and no store, we can't initialize the actor runtime
+			return fmt.Errorf("hosted actors: state store must be present to initialize the actor runtime")
 		} else {
 			features := a.store.Features()
 			if !state.FeatureETag.IsPresent(features) || !state.FeatureTransactional.IsPresent(features) {
