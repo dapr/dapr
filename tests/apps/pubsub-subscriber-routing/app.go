@@ -161,8 +161,8 @@ func eventHandlerF(w http.ResponseWriter, r *http.Request) {
 }
 
 func eventHandler(w http.ResponseWriter, r *http.Request, set sets.String) {
-	reqId := uuid.New().String()
-	log.Printf("(%s) eventHandler called %s", reqId, r.URL)
+	reqID := uuid.New().String()
+	log.Printf("(%s) eventHandler called %s", reqID, r.URL)
 
 	var err error
 	var body []byte
@@ -173,12 +173,12 @@ func eventHandler(w http.ResponseWriter, r *http.Request, set sets.String) {
 			body = data
 		}
 	} else {
-		log.Printf("(%s) r.Body is nil", reqId)
+		log.Printf("(%s) r.Body is nil", reqID)
 	}
 
-	msg, err := extractMessage(reqId, body)
+	msg, err := extractMessage(reqID, body)
 	if err != nil {
-		log.Printf("(%s) Responding with DROP. Error from extractMessage: %v", reqId, err)
+		log.Printf("(%s) Responding with DROP. Error from extractMessage: %v", reqID, err)
 		// Return success with DROP status to drop message
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -193,15 +193,15 @@ func eventHandler(w http.ResponseWriter, r *http.Request, set sets.String) {
 	set.Insert(msg)
 
 	w.WriteHeader(http.StatusOK)
-	log.Printf("(%s) Responding with SUCCESS", reqId)
+	log.Printf("(%s) Responding with SUCCESS", reqID)
 	json.NewEncoder(w).Encode(appResponse{
 		Message: "consumed",
 		Status:  "SUCCESS",
 	})
 }
 
-func extractMessage(reqId string, body []byte) (string, error) {
-	log.Printf("(%s) extractMessage() called with body=%s", reqId, string(body))
+func extractMessage(reqID string, body []byte) (string, error) {
+	log.Printf("(%s) extractMessage() called with body=%s", reqID, string(body))
 	if body == nil {
 		return "", errors.New("no body")
 	}
@@ -209,24 +209,24 @@ func extractMessage(reqId string, body []byte) (string, error) {
 	m := make(map[string]interface{})
 	err := json.Unmarshal(body, &m)
 	if err != nil {
-		log.Printf("(%s) Could not unmarshal: %v", reqId, err)
+		log.Printf("(%s) Could not unmarshal: %v", reqID, err)
 		return "", err
 	}
 
 	if m["data_base64"] != nil {
 		b, err := base64.StdEncoding.DecodeString(m["data_base64"].(string))
 		if err != nil {
-			log.Printf("(%s) Could not base64 decode: %v", reqId, err)
+			log.Printf("(%s) Could not base64 decode: %v", reqID, err)
 			return "", err
 		}
 
 		msg := string(b)
-		log.Printf("(%s) output from base64='%s'", reqId, msg)
+		log.Printf("(%s) output from base64='%s'", reqID, msg)
 		return msg, nil
 	}
 
 	msg := m["data"].(string)
-	log.Printf("(%s) output='%s'", reqId, msg)
+	log.Printf("(%s) output='%s'", reqID, msg)
 
 	return msg, nil
 }

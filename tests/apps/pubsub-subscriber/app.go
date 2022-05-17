@@ -153,7 +153,7 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(t)
 }
 
-func readMessageBody(reqId string, r *http.Request) (msg string, err error) {
+func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
 	defer r.Body.Close()
 
 	var body []byte
@@ -172,7 +172,7 @@ func readMessageBody(reqId string, r *http.Request) (msg string, err error) {
 		return "", err
 	}
 
-	msg, err = extractMessage(reqId, body)
+	msg, err = extractMessage(reqID, body)
 	if err != nil {
 		return "", fmt.Errorf("error from extractMessage: %w", err)
 	}
@@ -184,7 +184,7 @@ func readMessageBody(reqId string, r *http.Request) (msg string, err error) {
 		err = json.Unmarshal([]byte(msg), &actualMsg)
 		if err != nil {
 			// Log only
-			log.Printf("(%s) Error extracing JSON from raw event: %v", reqId, err)
+			log.Printf("(%s) Error extracing JSON from raw event: %v", reqID, err)
 		} else {
 			msg = actualMsg
 		}
@@ -194,16 +194,16 @@ func readMessageBody(reqId string, r *http.Request) (msg string, err error) {
 }
 
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
-	reqId := uuid.New().String()
+	reqID := uuid.New().String()
 
-	msg, err := readMessageBody(reqId, r)
+	msg, err := readMessageBody(reqID, r)
 
 	// Before we handle the error, see if we need to respond in another way
 	// We still want the message so we can log it
-	log.Printf("(%s) subscribeHandler called %s. Message: %s", reqId, r.URL, msg)
+	log.Printf("(%s) subscribeHandler called %s. Message: %s", reqID, r.URL, msg)
 	switch desiredResponse {
 	case respondWithRetry:
-		log.Printf("(%s) Responding with RETRY", reqId)
+		log.Printf("(%s) Responding with RETRY", reqID)
 		// do not store received messages, respond with success but a retry status
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -212,12 +212,12 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	case respondWithError:
-		log.Printf("(%s) Responding with ERROR", reqId)
+		log.Printf("(%s) Responding with ERROR", reqID)
 		// do not store received messages, respond with error
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	case respondWithInvalidStatus:
-		log.Printf("(%s) Responding with INVALID", reqId)
+		log.Printf("(%s) Responding with INVALID", reqID)
 		// do not store received messages, respond with success but an invalid status
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -228,7 +228,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("(%s) Responding with DROP due to error: %v", reqId, err)
+		log.Printf("(%s) Responding with DROP due to error: %v", reqID, err)
 		// Return 200 with DROP status to drop message
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -259,7 +259,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		// is thre for an unknown URL path
 
 		errorMessage := fmt.Sprintf("Unexpected/Multiple redelivery of message from %s", r.URL.String())
-		log.Printf("(%s) Responding with DROP. %s", reqId, errorMessage)
+		log.Printf("(%s) Responding with DROP. %s", reqID, errorMessage)
 		// Return success with DROP status to drop message
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -271,10 +271,10 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	if desiredResponse == respondWithEmptyJSON {
-		log.Printf("(%s) Responding with {}", reqId)
+		log.Printf("(%s) Responding with {}", reqID)
 		w.Write([]byte("{}"))
 	} else {
-		log.Printf("(%s) Responding with SUCCESS", reqId)
+		log.Printf("(%s) Responding with SUCCESS", reqID)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: "consumed",
 			Status:  "SUCCESS",
@@ -282,30 +282,30 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func extractMessage(reqId string, body []byte) (string, error) {
-	log.Printf("(%s) extractMessage() called with body=%s", reqId, string(body))
+func extractMessage(reqID string, body []byte) (string, error) {
+	log.Printf("(%s) extractMessage() called with body=%s", reqID, string(body))
 
 	m := make(map[string]interface{})
 	err := json.Unmarshal(body, &m)
 	if err != nil {
-		log.Printf("(%s) Could not unmarshal: %v", reqId, err)
+		log.Printf("(%s) Could not unmarshal: %v", reqID, err)
 		return "", err
 	}
 
 	if m["data_base64"] != nil {
 		b, err := base64.StdEncoding.DecodeString(m["data_base64"].(string))
 		if err != nil {
-			log.Printf("(%s) Could not base64 decode: %v", reqId, err)
+			log.Printf("(%s) Could not base64 decode: %v", reqID, err)
 			return "", err
 		}
 
 		msg := string(b)
-		log.Printf("(%s) output from base64='%s'", reqId, msg)
+		log.Printf("(%s) output from base64='%s'", reqID, msg)
 		return msg, nil
 	}
 
 	msg := m["data"].(string)
-	log.Printf("(%s) output='%s'", reqId, msg)
+	log.Printf("(%s) output='%s'", reqID, msg)
 
 	return msg, nil
 }

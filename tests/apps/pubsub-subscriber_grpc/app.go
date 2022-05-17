@@ -106,13 +106,13 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 	lock.Lock()
 	defer lock.Unlock()
 
-	reqId := uuid.New().String()
-	log.Printf("(%s) Got invoked method %s", reqId, in.Method)
+	reqID := uuid.New().String()
+	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
 
 	respBody := &anypb.Any{}
 	switch in.Method {
 	case "getMessages":
-		respBody.Value = s.getMessages(reqId)
+		respBody.Value = s.getMessages(reqID)
 	case "initialize":
 		initializeSets()
 	case "set-respond-error":
@@ -128,7 +128,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 	return &commonv1pb.InvokeResponse{Data: respBody, ContentType: "application/json"}, nil
 }
 
-func (s *server) getMessages(reqId string) []byte {
+func (s *server) getMessages(reqID string) []byte {
 	resp := receivedMessagesResponse{
 		ReceivedByTopicA:   receivedMessagesA.List(),
 		ReceivedByTopicB:   receivedMessagesB.List(),
@@ -137,7 +137,7 @@ func (s *server) getMessages(reqId string) []byte {
 	}
 
 	rawResp, _ := json.Marshal(resp)
-	log.Printf("(%s) getMessages response: %s", reqId, string(rawResp))
+	log.Printf("(%s) getMessages response: %s", reqID, string(rawResp))
 	return rawResp
 }
 
@@ -194,20 +194,20 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	lock.Lock()
 	defer lock.Unlock()
 
-	reqId := uuid.New().String()
-	log.Printf("(%s) Message arrived - Topic: %s, Message: %s", reqId, in.Topic, string(in.Data))
+	reqID := uuid.New().String()
+	log.Printf("(%s) Message arrived - Topic: %s, Message: %s", reqID, in.Topic, string(in.Data))
 
 	if respondWithRetry {
-		log.Printf("(%s) Responding with RETRY", reqId)
+		log.Printf("(%s) Responding with RETRY", reqID)
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_RETRY,
 		}, nil
 	} else if respondWithError {
-		log.Printf("(%s) Responding with ERROR", reqId)
+		log.Printf("(%s) Responding with ERROR", reqID)
 		// do not store received messages, respond with error
 		return nil, errors.New("error response")
 	} else if respondWithInvalidStatus {
-		log.Printf("(%s) Responding with INVALID", reqId)
+		log.Printf("(%s) Responding with INVALID", reqID)
 		// do not store received messages, respond with success but an invalid status
 		return &pb.TopicEventResponse{
 			Status: 4,
@@ -215,7 +215,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	}
 
 	if in.Data == nil {
-		log.Printf("(%s) Responding with DROP. in.Data is nil", reqId)
+		log.Printf("(%s) Responding with DROP. in.Data is nil", reqID)
 		// Return success with DROP status to drop message
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_DROP,
@@ -225,7 +225,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	var msg string
 	err := json.Unmarshal(in.Data, &msg)
 	if err != nil {
-		log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqId, err)
+		log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
 		// Return success with DROP status to drop message
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_DROP,
@@ -238,7 +238,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 		var actualMsg string
 		err = json.Unmarshal([]byte(msg), &actualMsg)
 		if err != nil {
-			log.Printf("(%s) Error extracing JSON from raw event: %v", reqId, err)
+			log.Printf("(%s) Error extracing JSON from raw event: %v", reqID, err)
 		} else {
 			msg = actualMsg
 		}
@@ -253,15 +253,15 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	} else if strings.HasPrefix(in.Topic, pubsubRaw) && !receivedMessagesRaw.Has(msg) {
 		receivedMessagesRaw.Insert(msg)
 	} else {
-		log.Printf("(%s) Received duplicate message: %s - %s", reqId, in.Topic, msg)
+		log.Printf("(%s) Received duplicate message: %s - %s", reqID, in.Topic, msg)
 	}
 
 	if respondWithEmptyJSON {
-		log.Printf("(%s) Responding with {}", reqId)
+		log.Printf("(%s) Responding with {}", reqID)
 		return &pb.TopicEventResponse{}, nil
 	}
 
-	log.Printf("(%s) Responding with SUCCESS", reqId)
+	log.Printf("(%s) Responding with SUCCESS", reqID)
 	return &pb.TopicEventResponse{
 		Status: pb.TopicEventResponse_SUCCESS,
 	}, nil

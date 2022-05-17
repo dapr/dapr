@@ -108,13 +108,13 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 	lock.Lock()
 	defer lock.Unlock()
 
-	reqId := uuid.New().String()
-	log.Printf("(%s) Got invoked method %s", reqId, in.Method)
+	reqID := uuid.New().String()
+	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
 
 	respBody := &anypb.Any{}
 	switch in.Method {
 	case "getMessages":
-		respBody.Value = s.getMessages(reqId)
+		respBody.Value = s.getMessages(reqID)
 	case "initialize":
 		initializeSets()
 	}
@@ -122,7 +122,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 	return &commonv1pb.InvokeResponse{Data: respBody, ContentType: "application/json"}, nil
 }
 
-func (s *server) getMessages(reqId string) []byte {
+func (s *server) getMessages(reqID string) []byte {
 	resp := routedMessagesResponse{
 		RouteA: routedMessagesA.List(),
 		RouteB: routedMessagesB.List(),
@@ -133,7 +133,7 @@ func (s *server) getMessages(reqId string) []byte {
 	}
 
 	rawResp, _ := json.Marshal(resp)
-	log.Printf("(%s) getMessages response: %s", reqId, string(rawResp))
+	log.Printf("(%s) getMessages response: %s", reqID, string(rawResp))
 	return rawResp
 }
 
@@ -169,8 +169,8 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	lock.Lock()
 	defer lock.Unlock()
 
-	reqId := uuid.New().String()
-	log.Printf("(%s) Message arrived - Topic: %s, Message: %s, Path: %s", reqId, in.Topic, string(in.Data), in.Path)
+	reqID := uuid.New().String()
+	log.Printf("(%s) Message arrived - Topic: %s, Message: %s, Path: %s", reqID, in.Topic, string(in.Data), in.Path)
 
 	var set *sets.String
 	switch in.Path {
@@ -187,7 +187,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	case pathF:
 		set = &routedMessagesF
 	default:
-		log.Printf("(%s) Responding with DROP. in.Path not found", reqId)
+		log.Printf("(%s) Responding with DROP. in.Path not found", reqID)
 		// Return success with DROP status to drop message.
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_DROP,
@@ -198,7 +198,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 
 	set.Insert(msg)
 
-	log.Printf("(%s) Responding with SUCCESS", reqId)
+	log.Printf("(%s) Responding with SUCCESS", reqID)
 	return &pb.TopicEventResponse{
 		Status: pb.TopicEventResponse_SUCCESS,
 	}, nil

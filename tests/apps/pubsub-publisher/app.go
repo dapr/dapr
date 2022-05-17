@@ -76,12 +76,12 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 // when called by the test, this function publishes to dapr
 // nolint:gosec
 func performPublish(w http.ResponseWriter, r *http.Request) {
-	reqId := uuid.New().String()
+	reqID := uuid.New().String()
 
 	var commandBody publishCommand
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {
-		log.Printf("(%s) performPublish() called. Failed to parse command body: %v", reqId, err)
+		log.Printf("(%s) performPublish() called. Failed to parse command body: %v", reqID, err)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
@@ -91,7 +91,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 
 	{
 		enc, _ := json.Marshal(commandBody)
-		log.Printf("(%s) performPublish() called with commandBody=%s", reqId, string(enc))
+		log.Printf("(%s) performPublish() called with commandBody=%s", reqID, string(enc))
 	}
 
 	// based on commandBody.Topic, send to the appropriate topic
@@ -101,7 +101,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 
 	jsonValue, err := json.Marshal(commandBody.Data)
 	if err != nil {
-		log.Printf("(%s) Error Marshaling: %v", reqId, err)
+		log.Printf("(%s) Error Marshaling: %v", reqID, err)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
@@ -117,13 +117,13 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	// publish to dapr
 	var status int
 	if commandBody.Protocol == "grpc" {
-		status, err = performPublishGRPC(reqId, commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
+		status, err = performPublishGRPC(reqID, commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
 	} else {
-		status, err = performPublishHTTP(reqId, commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
+		status, err = performPublishHTTP(reqID, commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
 	}
 
 	if err != nil {
-		log.Printf("(%s) Publish failed with error=%v, StatusCode=%d", reqId, err, status)
+		log.Printf("(%s) Publish failed with error=%v, StatusCode=%d", reqID, err, status)
 
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(appResponse{
@@ -136,10 +136,10 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(status)
 
 	if status == http.StatusOK || status == http.StatusNoContent {
-		log.Printf("(%s) Publish succeeded", reqId)
+		log.Printf("(%s) Publish succeeded", reqID)
 		resp = appResponse{Message: "Success"}
 	} else {
-		log.Printf("(%s) Publish failed", reqId)
+		log.Printf("(%s) Publish failed", reqID)
 		resp = appResponse{Message: "Failed"}
 	}
 	resp.StartTime = startTime
@@ -149,7 +149,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 }
 
 // nolint:gosec
-func performPublishHTTP(reqId string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
+func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, pubsubName, topic)
 	if len(metadata) > 0 {
 		params := net_url.Values{}
@@ -159,7 +159,7 @@ func performPublishHTTP(reqId string, topic string, jsonValue []byte, contentTyp
 		url = url + "?" + params.Encode()
 	}
 
-	log.Printf("(%s) Publishing using url %s and body '%s'", reqId, url, jsonValue)
+	log.Printf("(%s) Publishing using url %s and body '%s'", reqID, url, jsonValue)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -181,7 +181,7 @@ func performPublishHTTP(reqId string, topic string, jsonValue []byte, contentTyp
 	return resp.StatusCode, nil
 }
 
-func performPublishGRPC(reqId string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
+func performPublishGRPC(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
 	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
 	log.Printf("Connecting to dapr using url %s", url)
 
@@ -196,7 +196,7 @@ func performPublishGRPC(reqId string, topic string, jsonValue []byte, contentTyp
 	_, err := grpcClient.PublishEvent(ctx, req)
 	cancel()
 	if err != nil {
-		log.Printf("(%s) Publish failed: %v", reqId, err)
+		log.Printf("(%s) Publish failed: %v", reqID, err)
 
 		if strings.Contains(err.Error(), "topic is empty") {
 			return http.StatusNotFound, err
@@ -207,13 +207,13 @@ func performPublishGRPC(reqId string, topic string, jsonValue []byte, contentTyp
 }
 
 func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
-	reqId := uuid.New().String()
+	reqID := uuid.New().String()
 
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
 	if err != nil {
-		log.Printf("(%s) Could not read request body: %v", reqId, err)
+		log.Printf("(%s) Could not read request body: %v", reqID, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -221,17 +221,17 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	var req callSubscriberMethodRequest
 	json.Unmarshal(body, &req)
 
-	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqId, req.Method, req.RemoteApp, req.Protocol)
+	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqID, req.Method, req.RemoteApp, req.Protocol)
 
 	var resp []byte
 	if req.Protocol == "grpc" {
-		resp, err = callSubscriberMethodGRPC(reqId, req.RemoteApp, req.Method)
+		resp, err = callSubscriberMethodGRPC(reqID, req.RemoteApp, req.Method)
 	} else {
-		resp, err = callSubscriberMethodHTTP(reqId, req.RemoteApp, req.Method)
+		resp, err = callSubscriberMethodHTTP(reqID, req.RemoteApp, req.Method)
 	}
 
 	if err != nil {
-		log.Printf("(%s) Could not get logs from %s: %s", reqId, req.RemoteApp, err.Error())
+		log.Printf("(%s) Could not get logs from %s: %s", reqID, req.RemoteApp, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -239,7 +239,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
-func callSubscriberMethodGRPC(reqId, appName, method string) ([]byte, error) {
+func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 	invokeReq := &commonv1pb.InvokeRequest{
 		Method: method,
 	}
@@ -261,7 +261,7 @@ func callSubscriberMethodGRPC(reqId, appName, method string) ([]byte, error) {
 	return resp.Data.Value, nil
 }
 
-func callSubscriberMethodHTTP(reqId, appName, method string) ([]byte, error) {
+func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", daprPortHTTP, appName, method)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
