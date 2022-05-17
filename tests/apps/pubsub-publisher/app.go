@@ -25,10 +25,12 @@ import (
 	"strings"
 	"time"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 const (
@@ -74,11 +76,12 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 // when called by the test, this function publishes to dapr
 // nolint:gosec
 func performPublish(w http.ResponseWriter, r *http.Request) {
-	log.Println("performPublish() called")
+	reqId := uuid.New().String()
 
 	var commandBody publishCommand
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {
+		log.Printf("(%s) performPublish() called. Failed to parse command body: %v", reqId, err)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
@@ -86,11 +89,10 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("    commandBody.ContentType=%s", commandBody.ContentType)
-	log.Printf("    commandBody.Topic=%s", commandBody.Topic)
-	log.Printf("    commandBody.Data=%v", commandBody.Data)
-	log.Printf("    commandBody.Protocol=%s", commandBody.Protocol)
-	log.Printf("    commandBody.Metadata=%s", commandBody.Metadata)
+	{
+		enc, _ := json.Marshal(commandBody)
+		log.Printf("(%s) performPublish() called with commandBody=%s", reqId, string(enc))
+	}
 
 	// based on commandBody.Topic, send to the appropriate topic
 	resp := appResponse{Message: fmt.Sprintf("%s is not supported", commandBody.Topic)}
@@ -99,7 +101,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 
 	jsonValue, err := json.Marshal(commandBody.Data)
 	if err != nil {
-		log.Printf("Error Marshaling")
+		log.Printf("(%s) Error Marshaling: %v", reqId, err)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
@@ -115,13 +117,13 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	// publish to dapr
 	var status int
 	if commandBody.Protocol == "grpc" {
-		status, err = performPublishGRPC(commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
+		status, err = performPublishGRPC(reqId, commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
 	} else {
-		status, err = performPublishHTTP(commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
+		status, err = performPublishHTTP(reqId, commandBody.Topic, jsonValue, contentType, commandBody.Metadata)
 	}
 
 	if err != nil {
-		log.Printf("Publish failed with error=%s, StatusCode=%d", err.Error(), status)
+		log.Printf("(%s) Publish failed with error=%v, StatusCode=%d", reqId, err, status)
 
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(appResponse{
@@ -134,10 +136,10 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(status)
 
 	if status == http.StatusOK || status == http.StatusNoContent {
-		log.Printf("Publish succeeded")
+		log.Printf("(%s) Publish succeeded", reqId)
 		resp = appResponse{Message: "Success"}
 	} else {
-		log.Printf("Publish failed")
+		log.Printf("(%s) Publish failed", reqId)
 		resp = appResponse{Message: "Failed"}
 	}
 	resp.StartTime = startTime
@@ -147,7 +149,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 }
 
 // nolint:gosec
-func performPublishHTTP(topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
+func performPublishHTTP(reqId string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, pubsubName, topic)
 	if len(metadata) > 0 {
 		params := net_url.Values{}
@@ -157,9 +159,16 @@ func performPublishHTTP(topic string, jsonValue []byte, contentType string, meta
 		url = url + "?" + params.Encode()
 	}
 
-	log.Printf("Publishing using url %s and body '%s'", url, jsonValue)
+	log.Printf("(%s) Publishing using url %s and body '%s'", reqId, url, jsonValue)
 
-	resp, err := http.Post(url, contentType, bytes.NewBuffer(jsonValue))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonValue))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", contentType)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		if resp != nil {
 			return resp.StatusCode, err
@@ -172,7 +181,7 @@ func performPublishHTTP(topic string, jsonValue []byte, contentType string, meta
 	return resp.StatusCode, nil
 }
 
-func performPublishGRPC(topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
+func performPublishGRPC(reqId string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
 	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
 	log.Printf("Connecting to dapr using url %s", url)
 
@@ -183,9 +192,11 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 		DataContentType: contentType,
 		Metadata:        metadata,
 	}
-	_, err := grpcClient.PublishEvent(context.Background(), req)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, err := grpcClient.PublishEvent(ctx, req)
+	cancel()
 	if err != nil {
-		log.Printf("Publish failed: %s", err.Error())
+		log.Printf("(%s) Publish failed: %v", reqId, err)
 
 		if strings.Contains(err.Error(), "topic is empty") {
 			return http.StatusNotFound, err
@@ -196,11 +207,13 @@ func performPublishGRPC(topic string, jsonValue []byte, contentType string, meta
 }
 
 func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
+	reqId := uuid.New().String()
+
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
 	if err != nil {
-		log.Printf("Could not read request body: %s", err.Error())
+		log.Printf("(%s) Could not read request body: %v", reqId, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -208,17 +221,17 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	var req callSubscriberMethodRequest
 	json.Unmarshal(body, &req)
 
-	log.Printf("callSubscriberMethod: Call %s on %s", req.Method, req.RemoteApp)
+	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqId, req.Method, req.RemoteApp, req.Protocol)
 
 	var resp []byte
 	if req.Protocol == "grpc" {
-		resp, err = callMethodGRPC(req.RemoteApp, req.Method)
+		resp, err = callSubscriberMethodGRPC(reqId, req.RemoteApp, req.Method)
 	} else {
-		resp, err = callMethodHTTP(req.RemoteApp, req.Method)
+		resp, err = callSubscriberMethodHTTP(reqId, req.RemoteApp, req.Method)
 	}
 
 	if err != nil {
-		log.Printf("Could not get logs from %s: %s", req.RemoteApp, err.Error())
+		log.Printf("(%s) Could not get logs from %s: %s", reqId, req.RemoteApp, err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -226,7 +239,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
-func callMethodGRPC(appName, method string) ([]byte, error) {
+func callSubscriberMethodGRPC(reqId, appName, method string) ([]byte, error) {
 	invokeReq := &commonv1pb.InvokeRequest{
 		Method: method,
 	}
@@ -238,7 +251,9 @@ func callMethodGRPC(appName, method string) ([]byte, error) {
 		Id:      appName,
 	}
 
-	resp, err := grpcClient.InvokeService(context.Background(), req)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	resp, err := grpcClient.InvokeService(ctx, req)
+	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -246,9 +261,16 @@ func callMethodGRPC(appName, method string) ([]byte, error) {
 	return resp.Data.Value, nil
 }
 
-func callMethodHTTP(appName, method string) ([]byte, error) {
+func callSubscriberMethodHTTP(reqId, appName, method string) ([]byte, error) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", daprPortHTTP, appName, method)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer([]byte{})) //nolint: gosec
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer([]byte{})) //nolint: gosec
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +330,7 @@ func initGRPCClient() {
 func main() {
 	initGRPCClient()
 
-	log.Printf("Hello Dapr v2 - listening on http://localhost:%d", appPort)
+	log.Printf("PubSub Publisher - listening on http://localhost:%d", appPort)
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
 }

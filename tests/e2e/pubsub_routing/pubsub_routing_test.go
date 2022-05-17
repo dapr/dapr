@@ -24,13 +24,16 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/ratelimit"
 )
 
 var tr *runner.TestRunner
@@ -41,8 +44,9 @@ const (
 
 	// used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
 	// This is random so the first message name is not the same every time.
-	randomOffsetMax           = 99
-	numberOfMessagesToPublish = 100
+	randomOffsetMax           = 49
+	numberOfMessagesToPublish = 60
+	publishRateLimitRPS       = 25
 
 	receiveMessageRetries = 5
 
@@ -83,7 +87,7 @@ type cloudEvent struct {
 }
 
 // sends messages to the publisher app.  The publisher app does the actual publish.
-func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string, metadata map[string]string, cloudEventType string) ([]string, error) {
+func sendToPublisher(t *testing.T, offset int, publisherExternalURL string, topic string, protocol string, metadata map[string]string, cloudEventType string) ([]string, error) {
 	var sentMessages []string
 	contentType := "application/json"
 	if cloudEventType != "" {
@@ -95,11 +99,10 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 		Protocol:    protocol,
 		Metadata:    metadata,
 	}
-	//nolint: gosec
-	offset := rand.Intn(randomOffsetMax)
+	rateLimit := ratelimit.New(publishRateLimitRPS)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
 		// create and marshal message
-		messageID := fmt.Sprintf("message-%s-%03d", protocol, i)
+		messageID := fmt.Sprintf("msg-%s-%s-%04d", strings.TrimSuffix(topic, "-topic"), protocol, i)
 		var messageData interface{} = messageID
 		if cloudEventType != "" {
 			messageData = &cloudEvent{
@@ -121,6 +124,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
 		}
 
+		rateLimit.Take()
 		statusCode, err := postSingleMessage(url, jsonValue)
 		// return on an unsuccessful publish
 		if statusCode != http.StatusNoContent {
@@ -171,23 +175,31 @@ func testPublishSubscribeRouting(t *testing.T, publisherExternalURL, subscriberE
 }
 
 func testPublishRouting(t *testing.T, publisherExternalURL string, protocol string) routedMessagesResponse {
+	//nolint: gosec
+	offset := rand.Intn(randomOffsetMax) + 1
+	log.Printf("initial offset: %d", offset)
 	// set to respond with success
-	sentRouteAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.A")
+	sentRouteAMessages, err := sendToPublisher(t, offset, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.A")
 	require.NoError(t, err)
 
-	sentRouteBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.B")
+	offset += numberOfMessagesToPublish + 1
+	sentRouteBMessages, err := sendToPublisher(t, offset, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.B")
 	require.NoError(t, err)
 
-	sentRouteCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.C")
+	offset += numberOfMessagesToPublish + 1
+	sentRouteCMessages, err := sendToPublisher(t, offset, publisherExternalURL, "pubsub-routing", protocol, nil, "myevent.C")
 	require.NoError(t, err)
 
-	sentRouteDMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing-crd", protocol, nil, "myevent.D")
+	offset += numberOfMessagesToPublish + 1
+	sentRouteDMessages, err := sendToPublisher(t, offset, publisherExternalURL, "pubsub-routing-crd", protocol, nil, "myevent.D")
 	require.NoError(t, err)
 
-	sentRouteEMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing-crd", protocol, nil, "myevent.E")
+	offset += numberOfMessagesToPublish + 1
+	sentRouteEMessages, err := sendToPublisher(t, offset, publisherExternalURL, "pubsub-routing-crd", protocol, nil, "myevent.E")
 	require.NoError(t, err)
 
-	sentRouteFMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-routing-crd", protocol, nil, "myevent.F")
+	offset += numberOfMessagesToPublish + 1
+	sentRouteFMessages, err := sendToPublisher(t, offset, publisherExternalURL, "pubsub-routing-crd", protocol, nil, "myevent.F")
 	require.NoError(t, err)
 
 	return routedMessagesResponse{
@@ -219,7 +231,10 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 		require.NoError(t, err)
 
 		err = json.Unmarshal(resp, &appResp)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			log.Printf("failed to unmarshal JSON. Raw data: %s", string(resp))
+			t.FailNow()
+		}
 
 		log.Printf("subscriber received messages: route-a %d, route-b %d, route-c %d, route-d %d, route-e %d, route-f %d",
 			len(appResp.RouteA), len(appResp.RouteB), len(appResp.RouteC),
@@ -232,7 +247,7 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 			len(appResp.RouteE) != len(sentMessages.RouteE) ||
 			len(appResp.RouteF) != len(sentMessages.RouteF) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(1 * time.Second)
+			time.Sleep(5 * time.Second)
 		} else {
 			break
 		}
@@ -252,12 +267,12 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 	sort.Strings(sentMessages.RouteF)
 	sort.Strings(appResp.RouteF)
 
-	require.Equal(t, sentMessages.RouteA, appResp.RouteA)
-	require.Equal(t, sentMessages.RouteB, appResp.RouteB)
-	require.Equal(t, sentMessages.RouteC, appResp.RouteC)
-	require.Equal(t, sentMessages.RouteD, appResp.RouteD)
-	require.Equal(t, sentMessages.RouteE, appResp.RouteE)
-	require.Equal(t, sentMessages.RouteF, appResp.RouteF)
+	assert.Equal(t, sentMessages.RouteA, appResp.RouteA, "different messages received in route A")
+	assert.Equal(t, sentMessages.RouteB, appResp.RouteB, "different messages received in route B")
+	assert.Equal(t, sentMessages.RouteC, appResp.RouteC, "different messages received in route C")
+	assert.Equal(t, sentMessages.RouteD, appResp.RouteD, "different messages received in route D")
+	assert.Equal(t, sentMessages.RouteE, appResp.RouteE, "different messages received in route E")
+	assert.Equal(t, sentMessages.RouteF, appResp.RouteF, "different messages received in route F")
 }
 
 func TestMain(m *testing.M) {
