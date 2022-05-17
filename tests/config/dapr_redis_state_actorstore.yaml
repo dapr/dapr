@@ -29,6 +29,7 @@ spec:
   - name: actorStateStore
     value: true
 scopes:
+# actortestclient is deliberately omitted to ensure that `actor_features_test` works without a state store
 - actor1
 - actor2 
 - actorapp
