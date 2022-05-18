@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.1
-	github.com/dapr/components-contrib v1.7.1-0.20220426033643-068938c67654
+	github.com/dapr/components-contrib v1.7.1-0.20220513235222-e5e9011655dc
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.1
@@ -72,29 +72,31 @@ require (
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.0 // indirect
 	github.com/AthenZ/athenz v1.10.39 // indirect
-	github.com/Azure/azure-amqp-common-go/v3 v3.1.0 // indirect
-	github.com/Azure/azure-event-hubs-go/v3 v3.3.10 // indirect
-	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
-	github.com/Azure/azure-sdk-for-go v59.3.0+incompatible // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.20.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.12.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v0.8.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.3.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.1.0 // indirect
-	github.com/Azure/azure-service-bus-go v0.10.10 // indirect
+	github.com/Azure/azure-amqp-common-go/v3 v3.2.3 // indirect
+	github.com/Azure/azure-event-hubs-go/v3 v3.3.18 // indirect
+	github.com/Azure/azure-pipeline-go v0.2.3 // indirect
+	github.com/Azure/azure-sdk-for-go v63.4.0+incompatible // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.23.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.14.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v0.9.2 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.7.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.3.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v0.4.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/messaging/internal v0.1.0 // indirect
 	github.com/Azure/azure-storage-blob-go v0.10.0 // indirect
 	github.com/Azure/azure-storage-queue-go v0.0.0-20191125232315-636801874cdd // indirect
-	github.com/Azure/go-amqp v0.13.1 // indirect
+	github.com/Azure/go-amqp v0.17.4 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
-	github.com/Azure/go-autorest/autorest v0.11.23 // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.9.16 // indirect
-	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8 // indirect
-	github.com/Azure/go-autorest/autorest/azure/cli v0.4.2 // indirect
+	github.com/Azure/go-autorest/autorest v0.11.27 // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.9.18 // indirect
+	github.com/Azure/go-autorest/autorest/azure/auth v0.5.11 // indirect
+	github.com/Azure/go-autorest/autorest/azure/cli v0.4.5 // indirect
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/autorest/to v0.4.0 // indirect
 	github.com/Azure/go-autorest/autorest/validation v0.3.1 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v0.4.0 // indirect
 	github.com/DataDog/zstd v1.5.0 // indirect
 	github.com/OneOfOne/xxhash v1.2.7 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
@@ -170,7 +172,7 @@ require (
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
-	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/mock v1.6.0 // indirect
@@ -195,6 +197,7 @@ require (
 	github.com/hashicorp/go-uuid v1.0.1 // indirect
 	github.com/hashicorp/serf v0.9.5 // indirect
 	github.com/hazelcast/hazelcast-go-client v0.0.0-20190530123621-6cf767c2f31a // indirect
+	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.0.87 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/influxdata/influxdb-client-go v1.4.0 // indirect
@@ -215,13 +218,14 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jstemmer/go-junit-report v0.9.1 // indirect
 	github.com/klauspost/compress v1.14.4 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/linkedin/goavro/v2 v2.9.8 // indirect
 	github.com/machinebox/graphql v0.2.2 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/matoous/go-nanoid/v2 v2.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
-	github.com/mattn/go-ieproxy v0.0.0-20190702010315-6dee0af9227d // indirect
+	github.com/mattn/go-ieproxy v0.0.1 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/miekg/dns v1.1.35 // indirect
@@ -242,7 +246,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
-	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
+	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
@@ -320,7 +324,6 @@ require (
 	k8s.io/klog/v2 v2.30.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20211115234752-e816edb12b65 // indirect
 	k8s.io/utils v0.0.0-20210930125809-cb0fa318a74b // indirect
-	nhooyr.io/websocket v1.8.7 // indirect
 	sigs.k8s.io/json v0.0.0-20211020170558-c049b76a60c6 // indirect
 	sigs.k8s.io/kustomize/api v0.10.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.13.0 // indirect
