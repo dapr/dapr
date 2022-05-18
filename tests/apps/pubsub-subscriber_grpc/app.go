@@ -117,11 +117,11 @@ func initializeSets() {
 // This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload.
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	lock.Lock()
-	defer lock.Unlock()
-
 	reqID := uuid.New().String()
 	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
+
+	lock.Lock()
+	defer lock.Unlock()
 
 	respBody := &anypb.Any{}
 	switch in.Method {
