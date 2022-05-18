@@ -205,11 +205,11 @@ func postSingleMessage(url string, data []byte) (int, error) {
 	// HTTPPostWithStatus by default sends with content-type application/json
 	_, statusCode, err := utils.HTTPPostWithStatus(url, data)
 	if err != nil {
-		log.Printf("Publish failed with error=%s, response is nil", err.Error())
+		log.Printf("Publish failed with error=%s (body=%s)", err.Error(), data)
 		return http.StatusInternalServerError, err
 	}
 	if (statusCode != http.StatusOK) && (statusCode != http.StatusNoContent) {
-		err = fmt.Errorf("publish failed with StatusCode=%d", statusCode)
+		err = fmt.Errorf("publish failed with StatusCode=%d (body=%s)", statusCode, data)
 	}
 	return statusCode, err
 }
