@@ -46,6 +46,8 @@ env:
   HA_MODE: true
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "westus3"
+  # Container registry where to cache e2e test images
+  DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
 
 jobs:
   deploy-infrastructure:
@@ -168,6 +170,12 @@ jobs:
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
                 `CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
+      # In windows-2019 images, WSL comes with bash.exe (but no distribution) and that causes issues
+      # See: https://github.community/t/wsl-not-available-for-hosted-windows-machine/124389
+      - name: Remove bash.exe from WSL
+        if: runner.os == 'Windows'
+        run: |
+          rm.exe "C:/WINDOWS/system32/bash.EXE"
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
         uses: actions/setup-go@v3
@@ -204,6 +212,11 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Login to cache registry
+        if: env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+        run: |
+          az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
+        shell: bash
       - name: Build test prefix and set env vars
         if: env.CHECKOUT_REPO != ''
         run: |
