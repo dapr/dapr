@@ -120,6 +120,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
+	"github.com/dapr/components-contrib/bindings/huawei/obs"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
@@ -489,6 +490,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
 				return graphql.NewGraphQL(logContrib)
+			}),
+			bindings_loader.NewOutput("huawei.obs", func() bindings.OutputBinding {
+				return obs.NewHuaweiOBS(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
