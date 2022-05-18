@@ -241,7 +241,7 @@ release: build archive
 ################################################################################
 .PHONY: test
 test: test-deps
-	gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json --format standard-quiet -- ./pkg/... ./utils/... ./cmd/... $(COVERAGE_OPTS)
+	gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json --format standard-quiet -- ./pkg/... ./utils/... ./cmd/... $(COVERAGE_OPTS) --tags=unit
 	go test ./tests/...
 
 ################################################################################
@@ -258,6 +258,20 @@ lint:
 .PHONY: modtidy
 modtidy:
 	go mod tidy
+
+################################################################################
+# Target: format                                                              #
+################################################################################
+.PHONY: format
+format: modtidy
+	gofumpt -l -w . && goimports -local github.com/dapr/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./pkg/proto/*")
+
+################################################################################
+# Target: check                                                              #
+################################################################################
+# TODO add lint
+.PHONY: check
+check: format test
 
 ################################################################################
 # Target: init-proto                                                            #

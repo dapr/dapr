@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
+	"github.com/dapr/components-contrib/secretstores/huaweicloud/csms"
 	secretstore_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstore_env "github.com/dapr/components-contrib/secretstores/local/env"
 	secretstore_file "github.com/dapr/components-contrib/secretstores/local/file"
@@ -49,6 +50,7 @@ import (
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
+	"github.com/dapr/components-contrib/state/cockroachdb"
 	"github.com/dapr/components-contrib/state/couchbase"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
@@ -146,6 +148,7 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/oauth2clientcredentials"
 	"github.com/dapr/components-contrib/middleware/http/opa"
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
+	"github.com/dapr/components-contrib/middleware/http/routerchecker"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -197,6 +200,9 @@ func main() {
 			}),
 			secretstores_loader.New("alicloud.parameterstore", func() secretstores.SecretStore {
 				return alicloud_paramstore.NewParameterStore(logContrib)
+			}),
+			secretstores_loader.New("huaweicloud.csms", func() secretstores.SecretStore {
+				return csms.NewHuaweiCsmsSecretStore(logContrib)
 			}),
 		),
 		runtime.WithStates(
@@ -260,6 +266,9 @@ func main() {
 			}),
 			state_loader.New("oracledatabase", func() state.Store {
 				return state_oracledatabase.NewOracleDatabaseStateStore(logContrib)
+			}),
+			state_loader.New("cockroachdb", func() state.Store {
+				return cockroachdb.New(logContrib)
 			}),
 		),
 		runtime.WithConfigurations(
@@ -509,6 +518,9 @@ func main() {
 			}),
 			http_middleware_loader.New("sentinel", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 				return sentinel.NewMiddleware(log).GetHandler(metadata)
+			}),
+			http_middleware_loader.New("routerchecker", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return routerchecker.NewMiddleware(log).GetHandler(metadata)
 			}),
 		),
 	)

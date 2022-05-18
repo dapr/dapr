@@ -338,7 +338,8 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 }
 
 func validateMessagesReceivedBySubscriberOrError(
-	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) error {
+	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse,
+) error {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)

@@ -152,19 +152,38 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 		return err
 	}
 
-	mayDaprService := types.NamespacedName{
+	daprSvcName := types.NamespacedName{
 		Namespace: namespace,
 		Name:      h.daprServiceName(appID),
 	}
 	var daprSvc corev1.Service
-	if err := h.Get(ctx, mayDaprService, &daprSvc); err != nil {
+	if err := h.Get(ctx, daprSvcName, &daprSvc); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Debugf("no service for wrapper found, wrapper: %s/%s", namespace, mayDaprService.Name)
-			return h.createDaprService(ctx, mayDaprService, wrapper)
+			log.Debugf("no service for wrapper found, wrapper: %s/%s", namespace, daprSvcName.Name)
+			return h.createDaprService(ctx, daprSvcName, wrapper)
 		}
-		log.Errorf("unable to get service, %s, err: %s", mayDaprService, err)
+		log.Errorf("unable to get service, %s, err: %s", daprSvcName, err)
 		return err
 	}
+
+	if err := h.patchDaprService(ctx, daprSvcName, wrapper, daprSvc); err != nil {
+		log.Errorf("unable to update service, %s, err: %s", daprSvcName, err)
+		return err
+	}
+
+	return nil
+}
+
+func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper, daprSvc corev1.Service) error {
+	appID := h.getAppID(wrapper)
+	service := h.createDaprServiceValues(ctx, expectedService, wrapper, appID)
+
+	service.ObjectMeta.ResourceVersion = daprSvc.ObjectMeta.ResourceVersion
+
+	if err := h.Update(ctx, service); err != nil {
+		return err
+	}
+
 	return nil
 }
 

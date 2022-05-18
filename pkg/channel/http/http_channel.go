@@ -16,6 +16,7 @@ package http
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -23,7 +24,6 @@ import (
 
 	nethttp "net/http"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/plugin/ochttp/propagation/tracecontext"
 	"google.golang.org/grpc/codes"
@@ -55,7 +55,6 @@ type Channel struct {
 	ch                  chan int
 	tracingSpec         config.TracingSpec
 	appHeaderToken      string
-	json                jsoniter.API
 	maxResponseBodySize int
 }
 
@@ -78,7 +77,6 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 		baseAddress:         fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
 		tracingSpec:         spec,
 		appHeaderToken:      auth.GetAppToken(),
-		json:                jsoniter.ConfigFastest,
 		maxResponseBodySize: maxRequestBodySize,
 	}
 
@@ -132,7 +130,7 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 		fallthrough
 	default:
 		_, body := resp.RawData()
-		if err = h.json.Unmarshal(body, &config); err != nil {
+		if err = json.Unmarshal(body, &config); err != nil {
 			return nil, err
 		}
 	}
@@ -179,6 +177,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	// Send request to user application
 	resp := fasthttp.AcquireResponse()
+
 	err := h.client.Do(channelReq, resp)
 	defer func() {
 		fasthttp.ReleaseRequest(channelReq)
@@ -248,6 +247,11 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *
 	var body []byte
 
 	statusCode = resp.StatusCode()
+
+	// TODO: Remove entire block when feature is finalized
+	if config.GetNoDefaultContentType() {
+		resp.Header.SetNoDefaultContentType(true)
+	}
 	contentType = (string)(resp.Header.ContentType())
 	body = resp.Body()
 

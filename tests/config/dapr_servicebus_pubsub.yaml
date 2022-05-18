@@ -47,4 +47,4 @@ spec:
   - name: maxActiveMessages
     value: 20
   - name: disableEntityManagement
-    value: "true"
+    value: "false"

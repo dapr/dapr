@@ -1,0 +1,63 @@
+apiVersion: dapr.io/v1alpha1
+kind: Resiliency
+metadata:
+  name: resiliency
+spec:
+
+  policies:
+    timeouts:
+      fast: 500ms
+
+    retries:
+      fiveRetries:
+        policy: constant
+        duration: 10ms
+        maxRetries: 5
+
+    circuitBreakers:
+      simpleCB:
+          maxRequests: 1
+          timeout: 30s
+          trip: consecutiveFailures > 15
+
+  targets:
+    apps:
+      resiliencyapp:
+        timeout: fast
+        retry: fiveRetries
+        circuitBreaker: simpleCB
+
+      resiliencyappgrpc:
+        timeout: fast
+        retry: fiveRetries
+        circuitBreaker: simpleCB
+
+    actors:
+      resiliencyActor:
+        timeout: fast
+        retry: fiveRetries
+
+    components:
+      dapr-resiliency-binding:
+        inbound: 
+          timeout: fast
+          retry: fiveRetries
+        outbound:
+          timeout: fast
+          retry: fiveRetries
+
+      dapr-resiliency-binding-grpc:
+        inbound: 
+          timeout: fast
+          retry: fiveRetries
+        outbound:
+          timeout: fast
+          retry: fiveRetries
+
+      dapr-resiliency-pubsub:
+        inbound:
+          timeout: fast
+          retry: fiveRetries
+        outbound:
+          timeout: fast
+          retry: fiveRetries

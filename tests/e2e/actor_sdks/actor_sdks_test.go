@@ -19,7 +19,6 @@ package actor_sdks_e2e
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"testing"
 	"time"
 
@@ -36,8 +35,10 @@ const (
 	numHealthChecks = 60                   // Number of get calls before starting tests.
 )
 
-var tr *runner.TestRunner
-var apps []kube.AppDescription
+var (
+	tr   *runner.TestRunner
+	apps []kube.AppDescription
+)
 
 func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 	t.Logf("Starting health check for %s\n", externalURL)
@@ -84,7 +85,7 @@ func TestMain(m *testing.M) {
 
 	// Disables PHP test for Windows temporarily due to issues with its Windows container.
 	// See https://github.com/dapr/dapr/issues/2953
-	if runtime.GOOS != "windows" {
+	if utils.TestTargetOS() != "windows" {
 		apps = append(apps,
 			kube.AppDescription{
 				AppName:          "actorphp",
@@ -106,7 +107,7 @@ func TestActorInvocationCrossSDKs(t *testing.T) {
 	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor"}
 	// Disables PHP test for Windows temporarily due to issues with its Windows container.
 	// See https://github.com/dapr/dapr/issues/2953
-	if runtime.GOOS != "windows" {
+	if utils.TestTargetOS() != "windows" {
 		actorTypes = append(actorTypes, "PHPCarActor")
 	}
 

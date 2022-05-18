@@ -39,6 +39,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -200,7 +201,9 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 
 	// Only the latest/storage version needs to be returned.
 	var subsV2alpha1 subscriptionsapi_v2alpha1.SubscriptionList
-	if err := a.Client.List(ctx, &subsV2alpha1); err != nil {
+	if err := a.Client.List(ctx, &subsV2alpha1, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
 		return nil, errors.Wrap(err, "error getting subscriptions")
 	}
 	for i := range subsV2alpha1.Items {
@@ -214,6 +217,47 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 			continue
 		}
 		resp.Subscriptions = append(resp.Subscriptions, b)
+	}
+
+	return resp, nil
+}
+
+// GetResiliency returns a specified resiliency object.
+func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetResiliencyResponse, error) {
+	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
+	var resiliencyConfig resiliencyapi.Resiliency
+	if err := a.Client.Get(ctx, key, &resiliencyConfig); err != nil {
+		return nil, errors.Wrap(err, "error getting resiliency")
+	}
+	b, err := json.Marshal(&resiliencyConfig)
+	if err != nil {
+		return nil, errors.Wrap(err, "error marshalling resiliency")
+	}
+	return &operatorv1pb.GetResiliencyResponse{
+		Resiliency: b,
+	}, nil
+}
+
+// ListResiliency gets the list of applied resiliencies.
+func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
+	resp := &operatorv1pb.ListResiliencyResponse{
+		Resiliencies: [][]byte{},
+	}
+
+	var resiliencies resiliencyapi.ResiliencyList
+	if err := a.Client.List(ctx, &resiliencies, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
+		return nil, errors.Wrap(err, "error listing resiliencies")
+	}
+
+	for _, item := range resiliencies.Items {
+		b, err := json.Marshal(item)
+		if err != nil {
+			log.Warnf("Error unmarshalling resilienc: %s", err)
+			continue
+		}
+		resp.Resiliencies = append(resp.Resiliencies, b)
 	}
 
 	return resp, nil
@@ -282,7 +326,8 @@ type chanGracefully struct {
 }
 
 func initChanGracefully(ch chan *componentsapi.Component) (
-	c *chanGracefully) {
+	c *chanGracefully,
+) {
 	return &chanGracefully{
 		ch:       ch,
 		isClosed: false,

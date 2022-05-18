@@ -35,3 +35,13 @@ func (_m *MockQuerier) Query(req *state.QueryRequest) (*state.QueryResponse, err
 
 	return r0, r1
 }
+
+func (f *FailingStatestore) Query(req *state.QueryRequest) (*state.QueryResponse, error) {
+	key := req.Metadata["key"]
+	err := f.Failure.PerformFailure(key)
+
+	if err != nil {
+		return nil, err
+	}
+	return &state.QueryResponse{}, nil
+}

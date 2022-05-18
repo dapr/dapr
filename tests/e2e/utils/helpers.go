@@ -19,22 +19,23 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	guuid "github.com/google/uuid"
 )
 
-var (
-	doOnce        sync.Once
-	defaultClient http.Client
-)
+const (
+	// DefaultProbeTimeout is the a timeout used in HTTPGetNTimes() and
+	// HTTPGetRawNTimes() to avoid cases where early requests hang and
+	// block all subsequent requests.
+	DefaultProbeTimeout = 30 * time.Second
 
-// DefaultProbeTimeout is the a timeout used in HTTPGetNTimes() and
-// HTTPGetRawNTimes() to avoid cases where early requests hang and
-// block all subsequent requests.
-const DefaultProbeTimeout = 30 * time.Second
+	// Environment variable for setting the target OS where tests are running on.
+	TargetOsEnvVar = "TARGET_OS"
+)
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
 type SimpleKeyValue struct {
@@ -49,7 +50,7 @@ type StateTransactionKeyValue struct {
 	OperationType string
 }
 
-var httpClient = newHTTPClient()
+var httpClient = newHTTPClient(0)
 
 // GenerateRandomStringKeys generates random string keys (values are nil).
 func GenerateRandomStringKeys(num int) []SimpleKeyValue {
@@ -84,21 +85,20 @@ func GenerateRandomStringKeyValues(num int) []SimpleKeyValue {
 	return GenerateRandomStringValues(keys)
 }
 
-func newHTTPClient() http.Client {
-	doOnce.Do(func() {
-		defaultClient = http.Client{
-			Timeout: time.Second * 15,
-			Transport: &http.Transport{
-				// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
-				Dial: (&net.Dialer{
-					Timeout:   5 * time.Minute,
-					KeepAlive: 6 * time.Minute,
-				}).Dial,
-			},
-		}
-	})
-
-	return defaultClient
+func newHTTPClient(t time.Duration) http.Client {
+	if t == 0 {
+		t = time.Second * 15
+	}
+	return http.Client{
+		Timeout: t,
+		Transport: &http.Transport{
+			// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
+			Dial: (&net.Dialer{
+				Timeout:   5 * time.Minute,
+				KeepAlive: 6 * time.Minute,
+			}).Dial,
+		},
+	}
 }
 
 // HTTPGetNTimes calls the url n times and returns the first success
@@ -128,10 +128,11 @@ func HTTPGetNTimes(url string, n int) ([]byte, error) {
 
 // httpGet is a helper to make GET request call to url.
 func httpGet(url string, timeout time.Duration) ([]byte, error) {
-	resp, err := httpGetRaw(url, timeout) //nolint
+	resp, err := httpGetRaw(url, timeout)
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	return extractBody(resp.Body)
 }
@@ -168,10 +169,11 @@ func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 
 // HTTPGetRaw is a helper to make GET request call to url.
 func httpGetRaw(url string, t time.Duration) (*http.Response, error) {
+	client := httpClient
 	if t != 0 {
-		httpClient.Timeout = t
+		client = newHTTPClient(t)
 	}
-	resp, err := httpClient.Get(sanitizeHTTPURL(url))
+	resp, err := client.Get(sanitizeHTTPURL(url))
 	if err != nil {
 		return nil, err
 	}
@@ -185,10 +187,11 @@ func HTTPGetRaw(url string) (*http.Response, error) {
 
 // HTTPPost is a helper to make POST request call to url.
 func HTTPPost(url string, data []byte) ([]byte, error) {
-	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
+	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	return extractBody(resp.Body)
 }
@@ -200,17 +203,18 @@ func HTTPPatch(url string, data []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient.Do(req) //nolint
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	return extractBody(resp.Body)
 }
 
 // HTTPPostWithStatus is a helper to make POST request call to url.
 func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
-	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
+	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		// From the Do method for the client.Post
 		// An error is returned if caused by client policy (such as
@@ -268,4 +272,14 @@ func extractBody(r io.ReadCloser) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// TestTargetOS returns the name of the OS that the tests are targeting (which could be different from the local OS).
+func TestTargetOS() string {
+	// Check if we have an env var first
+	if v, ok := os.LookupEnv(TargetOsEnvVar); ok {
+		return v
+	}
+	// Fallback to the runtime
+	return runtime.GOOS
 }
