@@ -83,7 +83,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
-	t.Logf("test app url: %s", testAppURL+"/test")
+	t.Logf("waiting until test app url is available: %s", testAppURL+"/test")
 	_, err := utils.HTTPGetNTimes(testAppURL+"/test", numHealthChecks)
 	require.NoError(t, err)
 
@@ -92,7 +92,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
-	t.Logf("teter app url: %s", testerAppURL)
+	t.Logf("waiting until tester app url is available: %s", testerAppURL)
 	_, err = utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
 	require.NoError(t, err)
 

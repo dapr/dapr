@@ -33,7 +33,6 @@ import (
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
-	jsoniter "github.com/json-iterator/go"
 	openzipkin "github.com/openzipkin/zipkin-go"
 	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/pkg/errors"
@@ -94,6 +93,7 @@ const (
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
+	deadLetterKeyFormat           = "%s||%s" // componentName||topicName
 
 	// hot reloading is currently unsupported, but
 	// setting this environment variable restores the
@@ -165,7 +165,6 @@ type DaprRuntime struct {
 	pubSubRegistry         pubsub_loader.Registry
 	pubSubs                map[string]pubsub.PubSub
 	nameResolver           nr.Resolver
-	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
 	hostAddress            string
 	actorStateStoreName    string
@@ -179,6 +178,7 @@ type DaprRuntime struct {
 	daprHTTPAPI            http.API
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
+	deadLetterTopics       map[string]string
 	inputBindingRoutes     map[string]string
 	shutdownC              chan error
 	apiClosers             []io.Closer
@@ -237,7 +237,6 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		components:             make([]components_v1alpha1.Component, 0),
 		actorStateStoreLock:    &sync.RWMutex{},
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
-		json:                   jsoniter.ConfigFastest,
 		inputBindings:          map[string]bindings.InputBinding{},
 		outputBindings:         map[string]bindings.OutputBinding{},
 		secretStores:           map[string]secretstores.SecretStore{},
@@ -537,6 +536,26 @@ func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 	return nil
 }
 
+func (a *DaprRuntime) sendToDeadLetterIfConfigured(name string, msg *pubsub.NewMessage) (isDeadLetterConfigured bool, err error) {
+	deadLetterTopic, ok := a.deadLetterTopics[fmt.Sprintf(deadLetterKeyFormat, name, msg.Topic)]
+	if !ok {
+		return false, nil
+	}
+	req := &pubsub.PublishRequest{
+		Data:        msg.Data,
+		PubsubName:  name,
+		Topic:       deadLetterTopic,
+		Metadata:    msg.Metadata,
+		ContentType: msg.ContentType,
+	}
+
+	err = a.Publish(req)
+	if err != nil {
+		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
+	}
+	return true, err
+}
+
 func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 	var publishFunc func(ctx context.Context, msg *pubsubSubscribedMessage) error
 	switch a.runtimeConfig.ApplicationProtocol {
@@ -577,6 +596,11 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			rawPayload, err := contrib_metadata.IsRawPayload(routeMetadata)
 			if err != nil {
 				log.Errorf("error deserializing pubsub metadata: %s", err)
+				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+					// dlq has been configured and message is successfully sent to dlq.
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					return nil
+				}
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 				return err
 			}
@@ -585,16 +609,26 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			data := msg.Data
 			if rawPayload {
 				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
-				data, err = a.json.Marshal(cloudEvent)
+				data, err = json.Marshal(cloudEvent)
 				if err != nil {
 					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+						// dlq has been configured and message is successfully sent to dlq.
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						return nil
+					}
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 					return err
 				}
 			} else {
-				err = a.json.Unmarshal(msg.Data, &cloudEvent)
+				err = json.Unmarshal(msg.Data, &cloudEvent)
 				if err != nil {
 					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+						// dlq has been configured and message is successfully sent to dlq.
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						return nil
+					}
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 					return err
 				}
@@ -604,11 +638,18 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 
+				a.sendToDeadLetterIfConfigured(name, msg)
 				return nil
 			}
 
 			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
 			if err != nil {
+				log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
+				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
+					// dlq has been configured and message is successfully sent to dlq.
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+					return nil
+				}
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 				return err
 			}
@@ -616,11 +657,12 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				// The event does not match any route specified so ignore it.
 				log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msg.Topic)
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+				a.sendToDeadLetterIfConfigured(name, msg)
 				return nil
 			}
 
 			policy := a.resiliency.ComponentInboundPolicy(ctx, name)
-			return policy(func(ctx context.Context) error {
+			err = policy(func(ctx context.Context) error {
 				return publishFunc(ctx, &pubsubSubscribedMessage{
 					cloudEvent: cloudEvent,
 					data:       data,
@@ -630,6 +672,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 					pubsub:     name,
 				})
 			})
+			if err != nil && err != context.Canceled {
+				// Sending msg to dead letter queue, if no DLQ is configured, return error for backwards compatibility(component level retry).
+				if configured, _ := a.sendToDeadLetterIfConfigured(name, msg); !configured {
+					return err
+				}
+			}
+			return err
 		}); err != nil {
 			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
 		}
@@ -841,7 +890,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 				var resp *bindings.InvokeResponse
 				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name)
 				err := policy(func(ctx context.Context) (err error) {
-					resp, err = binding.Invoke(req)
+					resp, err = binding.Invoke(ctx, req)
 					return err
 				})
 				return resp, err
@@ -872,7 +921,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	}
 
 	if len(response.To) > 0 {
-		b, err := a.json.Marshal(&response.Data)
+		b, err := json.Marshal(&response.Data)
 		if err != nil {
 			return err
 		}
@@ -950,7 +999,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				appResponseBody = resp.Data
 
 				var d interface{}
-				err := a.json.Unmarshal(resp.Data, &d)
+				err := json.Unmarshal(resp.Data, &d)
 				if err == nil {
 					response.Data = d
 				}
@@ -1016,7 +1065,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
-	err := binding.Read(func(resp *bindings.ReadResponse) ([]byte, error) {
+	err := binding.Read(func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		if resp != nil {
 			start := time.Now()
 			b, err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
@@ -1037,11 +1086,38 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) error {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.resiliency, a.stateStores, a.secretStores,
-		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.APIListenAddresses, publicPort, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.StreamRequestBody, a.runtimeConfig.EnableAPILogging)
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID,
+		a.appChannel,
+		a.directMessaging,
+		a.getComponents,
+		a.resiliency,
+		a.stateStores,
+		a.secretStores,
+		a.secretsConfiguration,
+		a.getPublishAdapter(),
+		a.actor,
+		a.sendToOutputBinding,
+		a.globalConfig.Spec.TracingSpec,
+		a.ShutdownWithWait,
+	)
+	serverConf := http.NewServerConfig(
+		a.runtimeConfig.ID,
+		a.hostAddress,
+		port,
+		a.runtimeConfig.APIListenAddresses,
+		publicPort,
+		profilePort,
+		allowedOrigins,
+		a.runtimeConfig.EnableProfiling,
+		a.runtimeConfig.MaxRequestBodySize,
+		a.runtimeConfig.UnixDomainSocket,
+		a.runtimeConfig.ReadBufferSize,
+		a.runtimeConfig.StreamRequestBody,
+		a.runtimeConfig.EnableAPILogging,
+	)
 
-	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
+	server := http.NewServer(a.daprHTTPAPI,
+		serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1318,6 +1394,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	}
 
 	topicRoutes := make(map[string]TopicRoute)
+	deadLetterTopics := make(map[string]string)
 
 	if a.appChannel == nil {
 		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
@@ -1364,6 +1441,9 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 		}
 
 		topicRoutes[s.PubsubName].routes[s.Topic] = Route{metadata: s.Metadata, rules: s.Rules}
+		if len(s.DeadLetterTopic) > 0 {
+			deadLetterTopics[fmt.Sprintf(deadLetterKeyFormat, s.PubsubName, s.Topic)] = s.DeadLetterTopic
+		}
 	}
 
 	if len(topicRoutes) > 0 {
@@ -1376,6 +1456,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 		}
 	}
 	a.topicRoutes = topicRoutes
+	a.deadLetterTopics = deadLetterTopics
 	return topicRoutes, nil
 }
 
@@ -1561,12 +1642,13 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
 		var appResponse pubsub.AppResponse
-		err := a.json.Unmarshal(body, &appResponse)
+		err := json.Unmarshal(body, &appResponse)
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 			// Return no error so message does not get reprocessed.
-			return nil // nolint:nilerr
+			err = nil
+			return err
 		}
 
 		switch appResponse.Status {
@@ -1647,7 +1729,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 				return ErrUnexpectedEnvelopeData
 			}
 		} else if contenttype.IsJSONContentType(envelope.DataContentType) {
-			envelope.Data, _ = a.json.Marshal(data)
+			envelope.Data, _ = json.Marshal(data)
 		}
 	}
 
@@ -1741,7 +1823,7 @@ func (a *DaprRuntime) initActors() error {
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
 	if a.actorStateStoreName == "" {
-		return errors.New("no actor state store defined")
+		log.Warn("no actor state store defined")
 	}
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort, a.namespace, a.appConfig)
 	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features, a.resiliency, a.actorStateStoreName)
@@ -2196,6 +2278,11 @@ func (a *DaprRuntime) createAppChannel() error {
 		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 		if err != nil {
 			log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+		}
+
+		// TODO: Remove once feature is finalized
+		if a.runtimeConfig.ApplicationProtocol == HTTPProtocol && !config.GetNoDefaultContentType() {
+			log.Warn("[DEPRECATION NOTICE] Adding a default content type to incoming service invocation requests is deprecated and will be removed in the future. See https://docs.dapr.io/operations/support/support-preview-features/ for more details. You can opt into the new behavior today by setting the configuration option `ServiceInvocation.NoDefaultContentType` to true.")
 		}
 		a.appChannel = ch
 	} else {

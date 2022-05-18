@@ -335,7 +335,7 @@ func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStat
 			return nil
 		} else if err != nil {
 			s.recvError = err
-			return nil
+			return err
 		}
 		s.recvCount.Inc()
 		s.lastHost = req

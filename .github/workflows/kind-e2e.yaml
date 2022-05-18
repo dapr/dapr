@@ -10,9 +10,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 name: E2E tests on KinD
 
 on:
+  # Manual trigger
+  workflow_dispatch:
+  # On pull requests
   pull_request:
     branches:
       - master
@@ -47,7 +51,9 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      GOVER: 1.17
+      GOVER: 1.18
+      # Container registry where to cache e2e test images
+      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
