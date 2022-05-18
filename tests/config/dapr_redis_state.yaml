@@ -18,5 +18,3 @@ spec:
       key: host
   - name: redisPassword
     value: ""
-  - name: actorStateStore
-    value: true
