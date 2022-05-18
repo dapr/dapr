@@ -79,6 +79,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 // when called by the test, this function publishes to dapr
 // nolint:gosec
 func performPublish(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	reqID := uuid.New().String()
 
 	var commandBody publishCommand
@@ -99,8 +100,6 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 
 	// based on commandBody.Topic, send to the appropriate topic
 	resp := appResponse{Message: fmt.Sprintf("%s is not supported", commandBody.Topic)}
-
-	startTime := epoch()
 
 	jsonValue, err := json.Marshal(commandBody.Data)
 	if err != nil {
@@ -138,15 +137,17 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	// pass on status code to the calling application
 	w.WriteHeader(status)
 
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
 	if status == http.StatusOK || status == http.StatusNoContent {
-		log.Printf("(%s) Publish succeeded", reqID)
+		log.Printf("(%s) Publish succeeded in %v", reqID, duration)
 		resp = appResponse{Message: "Success"}
 	} else {
-		log.Printf("(%s) Publish failed", reqID)
+		log.Printf("(%s) Publish failed in %v", reqID, duration)
 		resp = appResponse{Message: "Failed"}
 	}
-	resp.StartTime = startTime
-	resp.EndTime = epoch()
+	resp.StartTime = epoch(&startTime)
+	resp.EndTime = epoch(&endTime)
 
 	json.NewEncoder(w).Encode(resp)
 }
@@ -287,9 +288,9 @@ func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
 	return body, nil
 }
 
-// epoch returns the current unix epoch timestamp
-func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
+// epoch returns the unix epoch timestamp from a time
+func epoch(t *time.Time) int {
+	return (int)(t.UTC().UnixNano() / 1000000)
 }
 
 // appRouter initializes restful api router
