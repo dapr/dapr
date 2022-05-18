@@ -244,9 +244,15 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 			continue
 		}
 
-		log.Printf("subscriber received messages: route-a %d, route-b %d, route-c %d, route-d %d, route-e %d, route-f %d",
-			len(appResp.RouteA), len(appResp.RouteB), len(appResp.RouteC),
-			len(appResp.RouteD), len(appResp.RouteE), len(appResp.RouteF))
+		log.Printf(
+			"subscriber received messages: route-a %d/%d, route-b %d/%d, route-c %d/%d, route-d %d/%d, route-e %d/%d, route-f %d/%d",
+			len(appResp.RouteA), len(sentMessages.RouteA),
+			len(appResp.RouteB), len(sentMessages.RouteB),
+			len(appResp.RouteC), len(sentMessages.RouteC),
+			len(appResp.RouteD), len(sentMessages.RouteD),
+			len(appResp.RouteE), len(sentMessages.RouteE),
+			len(appResp.RouteF), len(sentMessages.RouteF),
+		)
 
 		if len(appResp.RouteA) != len(sentMessages.RouteA) ||
 			len(appResp.RouteB) != len(sentMessages.RouteB) ||

@@ -357,8 +357,13 @@ func validateMessagesReceivedBySubscriber(
 			continue
 		}
 
-		log.Printf("subscriber received %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic and %d on pubsub-raw-topic",
-			len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC), len(appResp.ReceivedByTopicRaw))
+		log.Printf(
+			"subscriber received %d/%d messages on pubsub-a-topic, %d/%d on pubsub-b-topic and %d/%d on pubsub-c-topic and %d/%d on pubsub-raw-topic",
+			len(appResp.ReceivedByTopicA), len(sentMessages.ReceivedByTopicA),
+			len(appResp.ReceivedByTopicB), len(sentMessages.ReceivedByTopicB),
+			len(appResp.ReceivedByTopicC), len(sentMessages.ReceivedByTopicC),
+			len(appResp.ReceivedByTopicRaw), len(sentMessages.ReceivedByTopicRaw),
+		)
 
 		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
 			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
