@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-FROM golang:1.17-nanoserver
+FROM golang:1.18-nanoserver
 
 WORKDIR /app
 COPY . .

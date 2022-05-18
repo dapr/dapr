@@ -198,8 +198,8 @@ func TestActorReminder(t *testing.T) {
 		expectedEnvPartitionCount := "0"
 		mustCheckLogs := true
 		for i := 0; i < numActors; i++ {
-			//externalURL = tr.Platform.AcquireAppExternalURL(appName)
-			//require.NotEmpty(t, externalURL, "external URL must not be empty!")
+			// externalURL = tr.Platform.AcquireAppExternalURL(appName)
+			// require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
 			rateLimit.Take()
 			actorID := fmt.Sprintf(actorIDPartitionTemplate, i+1000)
@@ -270,7 +270,6 @@ func TestActorReminder(t *testing.T) {
 					return fmt.Errorf("invalid status code %d while registering reminder for actorID %s", httpStatusCode, actorID)
 				}
 				return nil
-
 			}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10))
 			require.NoError(t, err)
 

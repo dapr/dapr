@@ -454,7 +454,7 @@ func TestStateTransactionApps(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	var transactionTests = []struct {
+	transactionTests := []struct {
 		protocol string
 		in       testStateTransactionCase
 	}{
