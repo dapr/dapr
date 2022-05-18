@@ -45,7 +45,7 @@ resiliencyapp \
 resiliencyapp_grpc \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc state_get pubsub_publish
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
