@@ -51,6 +51,18 @@ You can build Dapr binaries with the `make` tool.
 make test
 ```
 
+## One-line command for local development
+
+```shell
+make check
+```
+This command will:
+- format, test and lint all the code 
+- check if you forget to `git commit` something.
+
+Note: To run linter locally, please use golangci-lint version v1.45.2, otherwise you might encounter errors.
+You can download version v1.45.2 [here](https://github.com/golangci/golangci-lint/releases/tag/v1.45.2) .
+
 ## Debug Dapr
 
 We highly recommend using VSCode with the [Go plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode.Go) for your productivity. If you want to use other code editors, please refer to the list of [editor plugins for Delve](https://github.com/go-delve/delve/blob/master/Documentation/EditorIntegration.md).
