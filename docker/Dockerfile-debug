@@ -1,4 +1,4 @@
-FROM golang:latest AS golang
+FROM golang:1.17 AS golang
 ENV GOPROXY=https://goproxy.io,direct
 RUN CGO_ENABLED=0 go get -ldflags '-s -w -extldflags -static' github.com/go-delve/delve/cmd/dlv
 
