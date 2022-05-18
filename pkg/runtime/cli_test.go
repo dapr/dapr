@@ -14,7 +14,6 @@ limitations under the License.
 package runtime
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,22 +43,4 @@ func TestParsePlacementAddr(t *testing.T) {
 			assert.EqualValues(t, tc.out, parsePlacementAddr(tc.addr))
 		})
 	}
-}
-
-func TestSetEnvVariables(t *testing.T) {
-	t.Run("Should set environment variables", func(t *testing.T) {
-		variables := map[string]string{
-			"ABC_ID":   "123",
-			"ABC_PORT": "234",
-			"ABC_HOST": "456",
-		}
-
-		err := setEnvVariables(variables)
-
-		assert.NoError(t, err)
-
-		for key, value := range variables {
-			assert.Equal(t, value, os.Getenv(key))
-		}
-	})
 }
