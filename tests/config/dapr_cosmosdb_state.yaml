@@ -32,5 +32,4 @@ spec:
     value: dapre2e
   - name: collection
     value: items
-  - name: actorStateStore
-    value: true
+
