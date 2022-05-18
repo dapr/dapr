@@ -329,14 +329,22 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	rawReq, _ := json.Marshal(request)
 
 	var appResp receivedMessagesResponse
+	var err error
 	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
-		resp, err := utils.HTTPPost(url, rawReq)
-		require.NoError(t, err)
+		var resp []byte
+		resp, err = utils.HTTPPost(url, rawReq)
+		if err != nil {
+			log.Printf("Error in response: %v", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
 
 		err = json.Unmarshal(resp, &appResp)
-		if !assert.NoError(t, err) {
-			log.Printf("failed to unmarshal JSON. Raw data: %s", string(resp))
-			t.FailNow()
+		if err != nil {
+			err = fmt.Errorf("failed to unmarshal JSON. Error: %v. Raw data: %s", err, string(resp))
+			log.Printf("Error in response: %v", err)
+			time.Sleep(10 * time.Second)
+			continue
 		}
 
 		log.Printf("subscriber received %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic and %d on pubsub-raw-topic",
@@ -354,6 +362,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			break
 		}
 	}
+	require.NoError(t, err, "too many failed attempts")
 
 	// Sort messages first because the delivered messages cannot be ordered.
 	sort.Strings(sentMessages.ReceivedByTopicA)

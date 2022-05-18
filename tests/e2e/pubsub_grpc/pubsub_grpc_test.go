@@ -323,27 +323,9 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	return subscriberExternalURL
 }
 
-func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) {
-	var err error
-	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
-		if retryCount > 0 {
-			log.Printf("Retrying due to error: %v", err)
-			time.Sleep(10 * time.Second)
-		}
-
-		err = validateMessagesReceivedBySubscriberOrError(t, publisherExternalURL, subscriberApp, protocol, sentMessages)
-		if err == nil {
-			// Success.
-			return
-		}
-	}
-
-	require.NoError(t, err)
-}
-
-func validateMessagesReceivedBySubscriberOrError(
+func validateMessagesReceivedBySubscriber(
 	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse,
-) error {
+) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
@@ -357,14 +339,22 @@ func validateMessagesReceivedBySubscriberOrError(
 	rawReq, _ := json.Marshal(request)
 
 	var appResp receivedMessagesResponse
+	var err error
 	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
-		resp, err := utils.HTTPPost(url, rawReq)
-		require.NoError(t, err)
+		var resp []byte
+		resp, err = utils.HTTPPost(url, rawReq)
+		if err != nil {
+			log.Printf("Error in response: %v", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
 
 		err = json.Unmarshal(resp, &appResp)
-		if !assert.NoError(t, err) {
-			log.Printf("failed to unmarshal JSON. Raw data: %s", string(resp))
-			t.FailNow()
+		if err != nil {
+			err = fmt.Errorf("failed to unmarshal JSON. Error: %v. Raw data: %s", err, string(resp))
+			log.Printf("Error in response: %v", err)
+			time.Sleep(10 * time.Second)
+			continue
 		}
 
 		log.Printf("subscriber received %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic and %d on pubsub-raw-topic",
@@ -380,6 +370,7 @@ func validateMessagesReceivedBySubscriberOrError(
 			break
 		}
 	}
+	require.NoError(t, err, "too many failed attempts")
 
 	// Sort messages first because the delivered messages might not be ordered.
 	sort.Strings(sentMessages.ReceivedByTopicA)
@@ -395,8 +386,6 @@ func validateMessagesReceivedBySubscriberOrError(
 	assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "different messages received in Topic B")
 	assert.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC, "different messages received in Topic C")
 	assert.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw, "different messages received in Topic Raw")
-
-	return nil
 }
 
 func TestMain(m *testing.M) {
