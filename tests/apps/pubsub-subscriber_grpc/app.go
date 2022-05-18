@@ -20,8 +20,11 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -88,9 +91,20 @@ func main() {
 
 	log.Println("Client starting...")
 
+	// Stop the gRPC server when we get a termination signal
+	stopCh := make(chan os.Signal, 1)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		// Wait for cancelation signal
+		<-stopCh
+		log.Println("Shutdown signal received")
+		s.GracefulStop()
+	}()
+
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
+	log.Println("App shut down")
 }
 
 func initializeSets() {
