@@ -1,5 +1,5 @@
 ARG WINDOWS_VERSION=1809
-FROM daprio/windows-python-base:$WINDOWS_VERSION
+FROM ghcr.io/dapr/windows-python-base:$WINDOWS_VERSION
 WORKDIR /app
 ADD . /app
 RUN pip install -r requirements.txt

@@ -1,7 +1,7 @@
 # escape=`
 ARG WINDOWS_VERSION=1809
 
-FROM daprio/windows-java-base:$WINDOWS_VERSION as build
+FROM ghcr.io/dapr/windows-java-base:$WINDOWS_VERSION as build
 
 RUN mkdir "c:\build"
 WORKDIR "c:\build"
@@ -12,7 +12,7 @@ RUN mvn dependency:go-offline
 ADD src/ "c:\build\src\"
 RUN mvn package
 
-FROM daprio/windows-java-base:$WINDOWS_VERSION
+FROM ghcr.io/dapr/windows-java-base:$WINDOWS_VERSION
 COPY --from=build "c:\build\target\app.jar" app.jar
 
 EXPOSE 3000
