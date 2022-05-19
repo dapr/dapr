@@ -2346,7 +2346,7 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 		}
 		for strings.Contains(val, "{podName}") {
 			if a.podName == "" {
-				log.Warnf("could not get podName property")
+				log.Fatalf("failed to parse metadata: property %s refers to {podName} but podName is not set", c.Name)
 			}
 			val = strings.Replace(val, "{podName}", a.podName, 1)
 		}
