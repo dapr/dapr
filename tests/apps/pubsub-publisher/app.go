@@ -218,6 +218,7 @@ func performPublishGRPC(reqID string, topic string, jsonValue []byte, contentTyp
 }
 
 func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	reqID := "s-" + uuid.New().String()
 
 	body, err := io.ReadAll(r.Body)
@@ -256,6 +257,9 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write(resp)
+
+	duration := time.Now().Sub(startTime)
+	log.Printf("(%s) responded in %v via %s", reqID, duration, req.Protocol)
 }
 
 func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
