@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
 	"go.uber.org/ratelimit"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
@@ -61,6 +62,7 @@ var offset int
 
 // sent to the publisher app, which will publish data to dapr.
 type publishCommand struct {
+	ReqID       string            `json:"reqID"`
 	ContentType string            `json:"contentType"`
 	Topic       string            `json:"topic"`
 	Data        interface{}       `json:"data"`
@@ -69,6 +71,7 @@ type publishCommand struct {
 }
 
 type callSubscriberMethodRequest struct {
+	ReqID     string `json:"reqID"`
 	RemoteApp string `json:"remoteApp"`
 	Protocol  string `json:"protocol"`
 	Method    string `json:"method"`
@@ -92,6 +95,7 @@ type cloudEvent struct {
 // checks is publishing is working.
 func publishHealthCheck(publisherExternalURL string) error {
 	commandBody := publishCommand{
+		ReqID:       "c-" + uuid.New().String(),
 		ContentType: "application/json",
 		Topic:       "pubsub-healthcheck-topic-grpc",
 		Protocol:    "grpc",
@@ -116,6 +120,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 		contentType = "application/cloudevents+json"
 	}
 	commandBody := publishCommand{
+		ReqID:       "c-" + uuid.New().String(),
 		ContentType: contentType,
 		Topic:       fmt.Sprintf("%s-%s", topic, protocol),
 		Protocol:    protocol,
@@ -162,6 +167,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 
 func callInitialize(t *testing.T, publisherExternalURL string, protocol string) {
 	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
 		RemoteApp: subscriberAppName,
 		Method:    "initialize",
 		Protocol:  protocol,
@@ -225,6 +231,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string) string {
 	log.Printf("Test publish without topic\n")
 	commandBody := publishCommand{
+		ReqID:    "c-" + uuid.New().String(),
 		Protocol: protocol,
 	}
 	commandBody.Data = "unsuccessful message"
@@ -257,6 +264,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 	// set to respond with specified subscriber response
 	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
 		RemoteApp: subscriberAppName,
 		Method:    "set-respond-" + subscriberResponse,
 		Protocol:  protocol,
@@ -331,6 +339,7 @@ func validateMessagesReceivedBySubscriber(
 	log.Printf("Getting messages received by subscriber using url %s", url)
 
 	request := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
 		RemoteApp: subscriberApp,
 		Protocol:  protocol,
 		Method:    "getMessages",

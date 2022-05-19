@@ -28,12 +28,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/tests/e2e/utils"
-	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
-	"github.com/dapr/dapr/tests/runner"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/ratelimit"
+
+	"github.com/dapr/dapr/tests/e2e/utils"
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
+	"github.com/dapr/dapr/tests/runner"
 )
 
 var tr *runner.TestRunner
@@ -56,6 +58,7 @@ const (
 
 // sent to the publisher app, which will publish data to dapr.
 type publishCommand struct {
+	ReqID       string            `json:"reqID"`
 	ContentType string            `json:"contentType"`
 	Topic       string            `json:"topic"`
 	Data        interface{}       `json:"data"`
@@ -64,6 +67,7 @@ type publishCommand struct {
 }
 
 type callSubscriberMethodRequest struct {
+	ReqID     string `json:"reqID"`
 	RemoteApp string `json:"remoteApp"`
 	Protocol  string `json:"protocol"`
 	Method    string `json:"method"`
@@ -94,6 +98,7 @@ func sendToPublisher(t *testing.T, offset int, publisherExternalURL string, topi
 		contentType = "application/cloudevents+json"
 	}
 	commandBody := publishCommand{
+		ReqID:       "c-" + uuid.New().String(),
 		ContentType: contentType,
 		Topic:       fmt.Sprintf("%s-%s", topic, protocol),
 		Protocol:    protocol,
@@ -153,6 +158,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 
 func callInitialize(t *testing.T, publisherExternalURL string, protocol string) {
 	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
 		RemoteApp: subscriberAppName,
 		Method:    "initialize",
 		Protocol:  protocol,
@@ -218,6 +224,7 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 	log.Printf("Getting messages received by subscriber using url %s", url)
 
 	request := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
 		RemoteApp: subscriberApp,
 		Protocol:  protocol,
 		Method:    "getMessages",

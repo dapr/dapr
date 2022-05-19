@@ -44,6 +44,7 @@ const (
 )
 
 type publishCommand struct {
+	ReqID       string            `json:"reqID"`
 	ContentType string            `json:"contentType"`
 	Topic       string            `json:"topic"`
 	Data        interface{}       `json:"data"`
@@ -58,6 +59,7 @@ type appResponse struct {
 }
 
 type callSubscriberMethodRequest struct {
+	ReqID     string `json:"reqID"`
 	RemoteApp string `json:"remoteApp"`
 	Protocol  string `json:"protocol"`
 	Method    string `json:"method"`
@@ -80,10 +82,11 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 // nolint:gosec
 func performPublish(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
-	reqID := uuid.New().String()
+	reqID := "s-" + uuid.New().String()
 
 	var commandBody publishCommand
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
+	r.Body.Close()
 	if err != nil {
 		log.Printf("(%s) performPublish() called. Failed to parse command body: %v", reqID, err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -91,6 +94,10 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 			Message: err.Error(),
 		})
 		return
+	}
+
+	if commandBody.ReqID != "" {
+		reqID = commandBody.ReqID
 	}
 
 	{
@@ -211,10 +218,10 @@ func performPublishGRPC(reqID string, topic string, jsonValue []byte, contentTyp
 }
 
 func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
-	reqID := uuid.New().String()
+	reqID := "s-" + uuid.New().String()
 
 	body, err := io.ReadAll(r.Body)
-	defer r.Body.Close()
+	r.Body.Close()
 
 	if err != nil {
 		log.Printf("(%s) Could not read request body: %v", reqID, err)
@@ -223,7 +230,15 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req callSubscriberMethodRequest
-	json.Unmarshal(body, &req)
+	err = json.Unmarshal(body, &req)
+	if err != nil {
+		log.Printf("(%s) Could not parse JSON request body: %v", reqID, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if req.ReqID != "" {
+		reqID = req.ReqID
+	}
 
 	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqID, req.Method, req.RemoteApp, req.Protocol)
 
