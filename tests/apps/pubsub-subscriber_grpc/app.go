@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -117,7 +118,14 @@ func initializeSets() {
 // This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload.
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	reqID := uuid.New().String()
+	reqID := "s-" + uuid.New().String()
+	if in.HttpExtension != nil && in.HttpExtension.Querystring != "" {
+		qs, err := url.ParseQuery(in.HttpExtension.Querystring)
+		if err == nil && qs.Has("reqid") {
+			reqID = qs.Get("reqid")
+		}
+	}
+
 	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
 
 	lock.Lock()

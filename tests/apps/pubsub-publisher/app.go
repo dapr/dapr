@@ -262,8 +262,10 @@ func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 	invokeReq := &commonv1pb.InvokeRequest{
 		Method: method,
 	}
+	qs := net_url.Values{"reqid": []string{reqID}}.Encode()
 	invokeReq.HttpExtension = &commonv1pb.HTTPExtension{
-		Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value["POST"]),
+		Verb:        commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value["POST"]),
+		Querystring: qs,
 	}
 	req := &runtimev1pb.InvokeServiceRequest{
 		Message: invokeReq,
@@ -281,7 +283,8 @@ func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 }
 
 func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", daprPortHTTP, appName, method)
+	qs := net_url.Values{"reqid": []string{reqID}}.Encode()
+	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s?%s", daprPortHTTP, appName, method, qs)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer([]byte{})) //nolint: gosec

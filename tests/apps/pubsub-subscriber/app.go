@@ -328,7 +328,12 @@ func unique(slice []string) []string {
 }
 
 // the test calls this to get the messages received
-func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
+func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
+	reqID := r.URL.Query().Get("reqid")
+	if reqID == "" {
+		reqID = "s-" + uuid.New().String()
+	}
+
 	response := receivedMessagesResponse{
 		ReceivedByTopicA:          unique(receivedMessagesA.List()),
 		ReceivedByTopicB:          unique(receivedMessagesB.List()),
@@ -339,7 +344,7 @@ func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 		ReceivedByTopicDeadLetter: unique(receivedMessagesDeadLetter.List()),
 	}
 
-	log.Printf("getReceivedMessages called. response=%s", response)
+	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
