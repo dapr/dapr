@@ -242,7 +242,8 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 func GetNewSelfSignedCertificates(
 	rootKey *ecdsa.PrivateKey,
 	selfSignedRootCertLifetime,
-	allowedClockSkew time.Duration) (*certs.Credentials, []byte, []byte, []byte, error) {
+	allowedClockSkew time.Duration,
+) (*certs.Credentials, []byte, []byte, []byte, error) {
 	rootCsr, err := csr.GenerateRootCertCSR(caOrg, caCommonName, &rootKey.PublicKey, selfSignedRootCertLifetime, allowedClockSkew)
 	if err != nil {
 		return nil, nil, nil, nil, err
