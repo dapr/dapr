@@ -359,7 +359,6 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
 			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
 			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) ||
-			len(appResp.ReceivedByTopicDead) != len(sentMessages.ReceivedByTopicDead) ||
 			(validateDeadLetter && len(appResp.ReceivedByTopicDeadLetter) != len(sentMessages.ReceivedByTopicDeadLetter)) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(5 * time.Second)
@@ -378,8 +377,6 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	sort.Strings(appResp.ReceivedByTopicC)
 	sort.Strings(sentMessages.ReceivedByTopicRaw)
 	sort.Strings(appResp.ReceivedByTopicRaw)
-	sort.Strings(sentMessages.ReceivedByTopicDead)
-	sort.Strings(appResp.ReceivedByTopicDead)
 
 	assert.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA, "different messages received in Topic A")
 	assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "different messages received in Topic B")
