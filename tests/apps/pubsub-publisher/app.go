@@ -147,10 +147,10 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	endTime := time.Now()
 	duration := endTime.Sub(startTime)
 	if status == http.StatusOK || status == http.StatusNoContent {
-		log.Printf("(%s) Publish succeeded in %v", reqID, duration)
+		log.Printf("(%s) Publish succeeded in %v", reqID, formatDuration(duration))
 		resp = appResponse{Message: "Success"}
 	} else {
-		log.Printf("(%s) Publish failed in %v", reqID, duration)
+		log.Printf("(%s) Publish failed in %v", reqID, formatDuration(duration))
 		resp = appResponse{Message: "Failed"}
 	}
 	resp.StartTime = epoch(&startTime)
@@ -259,7 +259,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 
 	duration := time.Now().Sub(startTime)
-	log.Printf("(%s) responded in %v via %s", reqID, duration, req.Protocol)
+	log.Printf("(%s) responded in %v via %s", reqID, formatDuration(duration), req.Protocol)
 }
 
 func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
@@ -313,6 +313,11 @@ func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
 // epoch returns the unix epoch timestamp from a time
 func epoch(t *time.Time) int {
 	return (int)(t.UTC().UnixNano() / 1000000)
+}
+
+// formatDuration formats the duration in ms
+func formatDuration(d time.Duration) string {
+	return fmt.Sprintf("%dms", d.Truncate(100*time.Microsecond).Milliseconds())
 }
 
 // appRouter initializes restful api router

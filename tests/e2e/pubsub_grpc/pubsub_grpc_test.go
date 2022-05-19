@@ -95,18 +95,18 @@ type cloudEvent struct {
 // checks is publishing is working.
 func publishHealthCheck(publisherExternalURL string) error {
 	commandBody := publishCommand{
-		ReqID:       "c-" + uuid.New().String(),
 		ContentType: "application/json",
 		Topic:       "pubsub-healthcheck-topic-grpc",
 		Protocol:    "grpc",
 		Data:        "health check",
 	}
-	jsonValue, _ := json.Marshal(commandBody)
 
 	// this is the publish app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/publish", publisherExternalURL)
 
 	return backoff.Retry(func() error {
+		commandBody.ReqID = "c-" + uuid.New().String()
+		jsonValue, _ := json.Marshal(commandBody)
 		_, err := postSingleMessage(url, jsonValue)
 		return err
 	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10))
@@ -120,7 +120,6 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 		contentType = "application/cloudevents+json"
 	}
 	commandBody := publishCommand{
-		ReqID:       "c-" + uuid.New().String(),
 		ContentType: contentType,
 		Topic:       fmt.Sprintf("%s-%s", topic, protocol),
 		Protocol:    protocol,
@@ -139,6 +138,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 				Data:            messageID,
 			}
 		}
+		commandBody.ReqID = "c-" + uuid.New().String()
 		commandBody.Data = messageData
 		jsonValue, err := json.Marshal(commandBody)
 		require.NoError(t, err)
@@ -339,28 +339,27 @@ func validateMessagesReceivedBySubscriber(
 	log.Printf("Getting messages received by subscriber using url %s", url)
 
 	request := callSubscriberMethodRequest{
-		ReqID:     "c-" + uuid.New().String(),
 		RemoteApp: subscriberApp,
 		Protocol:  protocol,
 		Method:    "getMessages",
 	}
 
-	rawReq, _ := json.Marshal(request)
-
 	var appResp receivedMessagesResponse
 	var err error
 	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
+		request.ReqID = "c-" + uuid.New().String()
+		rawReq, _ := json.Marshal(request)
 		var resp []byte
 		resp, err = utils.HTTPPost(url, rawReq)
 		if err != nil {
-			log.Printf("Error in response: %v", err)
+			log.Printf("Error in response: %v (reqID=%s)", err, request.ReqID)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 
 		err = json.Unmarshal(resp, &appResp)
 		if err != nil {
-			err = fmt.Errorf("failed to unmarshal JSON. Error: %v. Raw data: %s", err, string(resp))
+			err = fmt.Errorf("failed to unmarshal JSON. Error: %v. Raw data: %s (reqID=%s)", err, string(resp), request.ReqID)
 			log.Printf("Error in response: %v", err)
 			time.Sleep(10 * time.Second)
 			continue
