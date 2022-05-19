@@ -202,13 +202,14 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 
 func postSingleMessage(url string, data []byte) (int, error) {
 	// HTTPPostWithStatus by default sends with content-type application/json
+	start := time.Now()
 	_, statusCode, err := utils.HTTPPostWithStatus(url, data)
 	if err != nil {
-		log.Printf("Publish failed with error=%s (body=%s)", err.Error(), data)
+		log.Printf("Publish failed with error=%s (body=%s) (duration=%s)", err.Error(), data, utils.FormatDuration(time.Now().Sub(start)))
 		return http.StatusInternalServerError, err
 	}
 	if (statusCode != http.StatusOK) && (statusCode != http.StatusNoContent) {
-		err = fmt.Errorf("publish failed with StatusCode=%d (body=%s)", statusCode, data)
+		err = fmt.Errorf("publish failed with StatusCode=%d (body=%s) (duration=%s)", statusCode, data, utils.FormatDuration(time.Now().Sub(start)))
 	}
 	return statusCode, err
 }
@@ -340,16 +341,18 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		request.ReqID = "c-" + uuid.New().String()
 		rawReq, _ := json.Marshal(request)
 		var resp []byte
+		start := time.Now()
 		resp, err = utils.HTTPPost(url, rawReq)
+		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
-			log.Printf("Error in response: %v (reqID=%s)", err, request.ReqID)
+			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 
 		err = json.Unmarshal(resp, &appResp)
 		if err != nil {
-			err = fmt.Errorf("failed to unmarshal JSON. Error: %v. Raw data: %s (reqID=%s)", err, string(resp), request.ReqID)
+			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
 			log.Printf("Error in response: %v", err)
 			time.Sleep(10 * time.Second)
 			continue

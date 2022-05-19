@@ -282,3 +282,8 @@ func TestTargetOS() string {
 	// Fallback to the runtime
 	return runtime.GOOS
 }
+
+// FormatDuration formats the duration in ms
+func FormatDuration(d time.Duration) string {
+	return fmt.Sprintf("%dms", d.Truncate(100*time.Microsecond).Milliseconds())
+}
