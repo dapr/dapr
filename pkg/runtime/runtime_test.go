@@ -900,6 +900,51 @@ func TestMetadataUUID(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestMetadataPodName(t *testing.T) {
+	pubsubComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	pubsubComponent.Spec.Metadata = append(
+		pubsubComponent.Spec.Metadata,
+		components_v1alpha1.MetadataItem{
+			Name: "consumerID",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{podName}"),
+				},
+			},
+		})
+	rt := NewTestDaprRuntime(modes.KubernetesMode)
+	defer stopRuntime(t, rt)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		}),
+	)
+
+	rt.podName = "testPodName"
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		consumerID := metadata.Properties["consumerID"]
+
+		assert.Equal(t, "testPodName", consumerID)
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
+}
+
 func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec changed, component is updated", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
