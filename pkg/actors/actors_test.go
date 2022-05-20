@@ -323,7 +323,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 
 func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
-	var store state.Store = nil
+	var store state.Store
 	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
 	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
 
