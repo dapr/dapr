@@ -89,6 +89,7 @@ jobs:
         uses: golangci/golangci-lint-action@v2.2.1
         with:
           version: ${{ env.GOLANGCILINT_VER }}
+          skip-cache: true
       - name: Run go mod tidy check diff
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: make modtidy check-diff
