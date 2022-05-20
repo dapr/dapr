@@ -263,8 +263,9 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{}, 0)
-	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
+	c := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{},
+		TestActorMetadataPartitionCount)
+	a := NewActors(store, appChannel, nil, c, nil, spec, nil)
 
 	return a.(*actorsRuntime)
 }
@@ -272,9 +273,15 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	var store state.Store = nil
-	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
-	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+	c := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{},
+		TestActorMetadataPartitionCount)
 
+	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{
+		{
+			Name:    config.ActorTypeMetadata,
+			Enabled: true,
+		},
+	})
 	return a.(*actorsRuntime)
 }
 
