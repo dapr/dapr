@@ -410,6 +410,12 @@ jobs:
         if: always() && env.TEST_PREFIX != ''
         run: |
           make save-dapr-control-plane-k8s-logs
+      # Container log files can be bigger than the maximum file size allowed by GitHub
+      - name: Compress container logs
+        if: always()
+        run: |
+          gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
+        shell: bash
       - name: Upload container logs
         if: always()
         uses: actions/upload-artifact@master

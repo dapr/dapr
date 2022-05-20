@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/dapr/dapr v1.3.1-0.20210916215627-82ef46fb541f
+	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.8.0
 	google.golang.org/grpc v1.38.0
 )
