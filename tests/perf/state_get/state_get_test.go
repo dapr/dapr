@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package service_invocation_grpc_perf
+package state_get
 
 import (
 	"encoding/json"
@@ -37,24 +37,6 @@ var tr *runner.TestRunner
 func TestMain(m *testing.M) {
 	testApps := []kube.AppDescription{
 		{
-			AppName:           "testapp",
-			DaprEnabled:       true,
-			ImageName:         "perf-service_invocation_grpc",
-			Replicas:          1,
-			IngressEnabled:    true,
-			MetricsEnabled:    true,
-			AppPort:           3000,
-			AppProtocol:       "grpc",
-			DaprCPULimit:      "4.0",
-			DaprCPURequest:    "0.1",
-			DaprMemoryLimit:   "512Mi",
-			DaprMemoryRequest: "250Mi",
-			AppCPULimit:       "4.0",
-			AppCPURequest:     "0.1",
-			AppMemoryLimit:    "800Mi",
-			AppMemoryRequest:  "2500Mi",
-		},
-		{
 			AppName:           "tester",
 			DaprEnabled:       true,
 			ImageName:         "perf-tester",
@@ -73,36 +55,27 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("serviceinvocationgrpc", testApps, nil, nil)
+	tr = runner.NewTestRunner("state_get", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
-func TestServiceInvocationGrpcPerformance(t *testing.T) {
+func TestStateGetGrpcPerformance(t *testing.T) {
 	p := perf.Params()
-	t.Logf("running service invocation grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
-
-	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
-	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
-
-	// Check if test app endpoint is available
-	t.Logf("Waiting until test app grpc service is available: %s", testAppURL)
-	_, err := utils.GrpcAccessNTimes(testAppURL, utils.GrpcServiceInvoke, numHealthChecks)
-	require.NoError(t, err)
+	t.Logf("running state get grpc test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 	// Get the ingress external url of tester app
 	testerAppURL := tr.Platform.AcquireAppExternalURL("tester")
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
-	t.Logf("teter app url: %s", testerAppURL)
-	_, err = utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
+	t.Logf("tester app url: %s", testerAppURL)
+	_, err := utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
 	require.NoError(t, err)
 
 	// Perform baseline test
 	p.Grpc = true
-	p.Dapr = "capability=invoke,target=appcallback,method=load"
-	p.TargetEndpoint = fmt.Sprintf("http://testapp:3000")
+	p.Dapr = "capability=state,target=noop"
+	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
@@ -115,7 +88,7 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	t.Logf("baseline test results: %s", string(baselineResp))
 
 	// Perform dapr test
-	p.Dapr = "capability=invoke,target=dapr,method=load,appid=testapp"
+	p.Dapr = "capability=state,target=dapr,method=get,store=inmemorystate,key=abc123"
 	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 	body, err = json.Marshal(&p)
 	require.NoError(t, err)
@@ -126,17 +99,17 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 
-	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
+	sidecarUsage, err := tr.Platform.GetSidecarUsage("tester")
 	require.NoError(t, err)
 
-	appUsage, err := tr.Platform.GetAppUsage("testapp")
+	appUsage, err := tr.Platform.GetAppUsage("tester")
 	require.NoError(t, err)
 
-	restarts, err := tr.Platform.GetTotalRestarts("testapp")
+	restarts, err := tr.Platform.GetTotalRestarts("tester")
 	require.NoError(t, err)
 
 	t.Logf("dapr test results: %s", string(daprResp))
-	t.Logf("target dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	t.Logf("dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
@@ -162,7 +135,7 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{baselineResult, daprResult},
-		"Service Invocation",
+		"State Get",
 		sidecarUsage,
 		appUsage)
 	report.SetTotalRestartCount(restarts)
