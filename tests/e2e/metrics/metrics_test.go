@@ -147,11 +147,10 @@ func TestMetrics(t *testing.T) {
 			// Get the metrics from the metrics endpoint
 			res, err := utils.HTTPGetRawNTimes(fmt.Sprintf("http://localhost:%v", metricsPort), numHealthChecks)
 			require.NoError(t, err)
+			defer res.Body.Close()
 
 			// Evaluate the metrics are as expected
 			tt.evaluate(t, tt.app, res)
-
-			res.Body.Close()
 		})
 	}
 }
