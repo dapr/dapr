@@ -50,8 +50,6 @@ type StateTransactionKeyValue struct {
 	OperationType string
 }
 
-var httpClient = newHTTPClient(0)
-
 // GenerateRandomStringKeys generates random string keys (values are nil).
 func GenerateRandomStringKeys(num int) []SimpleKeyValue {
 	if num < 0 {
@@ -85,11 +83,11 @@ func GenerateRandomStringKeyValues(num int) []SimpleKeyValue {
 	return GenerateRandomStringValues(keys)
 }
 
-func newHTTPClient(t time.Duration) http.Client {
+func newHTTPClient(t time.Duration) *http.Client {
 	if t == 0 {
 		t = time.Second * 15
 	}
-	return http.Client{
+	return &http.Client{
 		Timeout: t,
 		Transport: &http.Transport{
 			// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
@@ -169,10 +167,7 @@ func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 
 // HTTPGetRaw is a helper to make GET request call to url.
 func httpGetRaw(url string, t time.Duration) (*http.Response, error) {
-	client := httpClient
-	if t != 0 {
-		client = newHTTPClient(t)
-	}
+	client := newHTTPClient(t)
 	resp, err := client.Get(sanitizeHTTPURL(url))
 	if err != nil {
 		return nil, err
@@ -187,7 +182,8 @@ func HTTPGetRaw(url string) (*http.Response, error) {
 
 // HTTPPost is a helper to make POST request call to url.
 func HTTPPost(url string, data []byte) ([]byte, error) {
-	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
+	client := newHTTPClient(0)
+	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -198,12 +194,13 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 
 // HTTPPatch is a helper to make PATCH request call to url.
 func HTTPPatch(url string, data []byte) ([]byte, error) {
+	client := newHTTPClient(0)
 	req, err := http.NewRequest("PATCH", sanitizeHTTPURL(url), bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +211,8 @@ func HTTPPatch(url string, data []byte) ([]byte, error) {
 
 // HTTPPostWithStatus is a helper to make POST request call to url.
 func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
-	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
+	client := newHTTPClient(0)
+	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		// From the Do method for the client.Post
 		// An error is returned if caused by client policy (such as
@@ -234,12 +232,13 @@ func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
 
 // HTTPDelete calls a given URL with the HTTP DELETE method.
 func HTTPDelete(url string) ([]byte, error) {
+	client := newHTTPClient(0)
 	req, err := http.NewRequest("DELETE", sanitizeHTTPURL(url), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	res, err := httpClient.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -282,4 +281,9 @@ func TestTargetOS() string {
 	}
 	// Fallback to the runtime
 	return runtime.GOOS
+}
+
+// FormatDuration formats the duration in ms
+func FormatDuration(d time.Duration) string {
+	return fmt.Sprintf("%dms", d.Truncate(100*time.Microsecond).Milliseconds())
 }
