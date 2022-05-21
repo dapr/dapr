@@ -4,23 +4,23 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
-)
-
-const (
-	// DefaultProbeTimeout is the a timeout used in HTTPGetNTimes() and
-	// HTTPGetRawNTimes() to avoid cases where early requests hang and
-	// block all subsequent requests.
-	DefaultProbeTimeout = 30 * time.Second
 )
 
 var httpClient *http.Client
 
 func init() {
 	httpClient = &http.Client{
-		Timeout: DefaultProbeTimeout,
+		Transport: &http.Transport{
+			// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
+			Dial: (&net.Dialer{
+				// This number cannot be large. Callers should retry failed calls (see HTTPGetNTimes())
+				Timeout: 3 * time.Minute,
+			}).Dial,
+		},
 	}
 }
 
@@ -45,7 +45,7 @@ func HTTPGetNTimes(url string, n int) ([]byte, error) {
 
 // HTTPGet is a helper to make GET request call to url
 func HTTPGet(url string) ([]byte, error) {
-	resp, err := httpClient.Get(sanitizeHTTPURL(url)) //nolint
+	resp, err := httpClient.Get(sanitizeHTTPURL(url))
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func HTTPGet(url string) ([]byte, error) {
 
 // HTTPPost is a helper to make POST request call to url
 func HTTPPost(url string, data []byte) ([]byte, error) {
-	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
+	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}

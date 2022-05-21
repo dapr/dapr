@@ -34,6 +34,9 @@ var httpClient *http.Client
 func init() {
 	httpClient = &http.Client{
 		Timeout: DefaultProbeTimeout,
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 2,
+		},
 	}
 }
 
@@ -81,6 +84,8 @@ func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 		}
 
 		if res != nil && res.Body != nil {
+			// Drain before closing
+			_, _ = io.Copy(io.Discard, res.Body)
 			_ = res.Body.Close()
 		}
 

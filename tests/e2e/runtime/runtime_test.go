@@ -53,7 +53,11 @@ func getAPIResponse(t *testing.T, testName, runtimeExternalURL string) (*daprAPI
 
 	resp, err := utils.HTTPGetRaw(url)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		// Drain before closing
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 	require.Equal(t, resp.StatusCode, http.StatusOK)
 
 	body, err := io.ReadAll(resp.Body)
