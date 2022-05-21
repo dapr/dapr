@@ -456,11 +456,11 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	err = a.initActors()
 	if err != nil {
-		log.Warnf("failed to init actors: %s", err)
+		log.Warnf("failed to init actors: %v", err)
+	} else {
+		a.daprHTTPAPI.SetActorRuntime(a.actor)
+		grpcAPI.SetActorRuntime(a.actor)
 	}
-
-	a.daprHTTPAPI.SetActorRuntime(a.actor)
-	grpcAPI.SetActorRuntime(a.actor)
 
 	// TODO: Remove feature flag once feature is ratified
 	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
@@ -747,6 +747,8 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		a.proxy,
 		a.runtimeConfig.ReadBufferSize,
 		a.runtimeConfig.StreamRequestBody,
+		a.resiliency,
+		config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency),
 	)
 }
 
@@ -1823,12 +1825,14 @@ func (a *DaprRuntime) initActors() error {
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
 	if a.actorStateStoreName == "" {
-		log.Warn("no actor state store defined")
+		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort, a.namespace, a.appConfig)
 	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features, a.resiliency, a.actorStateStoreName)
 	err = act.Init()
-	a.actor = act
+	if err == nil {
+		a.actor = act
+	}
 	return err
 }
 
