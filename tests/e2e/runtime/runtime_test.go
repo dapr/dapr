@@ -24,10 +24,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/e2e/utils"
 )
 
 const numHealthChecks = 60 // Number of get calls before starting tests.
@@ -72,7 +73,9 @@ func getAPIResponse(t *testing.T, testName, runtimeExternalURL string) (*daprAPI
 }
 
 func TestMain(m *testing.M) {
-	fmt.Println("Enter TestMain")
+	utils.SetupLogs("runtime")
+	utils.InitHTTPClient(false)
+
 	// These apps and components will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	comps := []kube.ComponentDescription{

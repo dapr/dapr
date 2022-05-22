@@ -15,11 +15,15 @@ package utils
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	"golang.org/x/net/http2"
 )
 
 const (
@@ -31,12 +35,25 @@ const (
 
 var httpClient *http.Client
 
-func init() {
-	httpClient = &http.Client{
-		Timeout: DefaultProbeTimeout,
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost: 2,
-		},
+func InitHTTPClient(enableHTTP2 bool) {
+	if enableHTTP2 {
+		httpClient = &http.Client{
+			Timeout: DefaultProbeTimeout,
+			// Configure for HTT/2 Cleartext (without TLS) and with prior knowledge
+			// (RFC7540 Section 3.2)
+			Transport: &http2.Transport{
+				// Make the transport accept scheme "http:"
+				AllowHTTP: true,
+				// Pretend we are dialing a TLS endpoint
+				DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+					return net.Dial(network, addr)
+				},
+			},
+		}
+	} else {
+		httpClient = &http.Client{
+			Timeout: DefaultProbeTimeout,
+		}
 	}
 }
 
