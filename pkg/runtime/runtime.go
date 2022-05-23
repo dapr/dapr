@@ -461,6 +461,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			grpcAPI.SetActorRuntime(a.actor)
+		}
 	}
 
 	// TODO: Remove feature flag once feature is ratified
