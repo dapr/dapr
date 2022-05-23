@@ -14,7 +14,6 @@ limitations under the License.
 package kubernetes
 
 import (
-	"net/http"
 	"path/filepath"
 
 	"k8s.io/client-go/kubernetes"
@@ -44,11 +43,6 @@ func NewKubeClient(configPath string, clusterName string) (*KubeClient, error) {
 	config, err := clientConfig(configPath, clusterName)
 	if err != nil {
 		return nil, err
-	}
-
-	// Re-use the same transport for all clients
-	config.Transport = &http.Transport{
-		MaxIdleConns: 1,
 	}
 
 	kubecs, err := kubernetes.NewForConfig(config)
