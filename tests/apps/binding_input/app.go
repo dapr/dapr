@@ -83,7 +83,7 @@ func (m *messageBuffer) fail(failedMessage string) bool {
 	return false
 }
 
-var messages messageBuffer = messageBuffer{
+var messages = messageBuffer{
 	lock:            &sync.RWMutex{},
 	successMessages: []string{},
 }

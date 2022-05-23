@@ -53,6 +53,10 @@ func InitHTTPClient(enableHTTP2 bool) {
 	} else {
 		httpClient = &http.Client{
 			Timeout: DefaultProbeTimeout,
+			Transport: &http.Transport{
+				MaxIdleConns:        2,
+				MaxIdleConnsPerHost: 1,
+			},
 		}
 	}
 }

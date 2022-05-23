@@ -185,11 +185,10 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 	if err != nil {
 		if resp != nil {
 			return resp.StatusCode, err
-		} else {
-			return http.StatusInternalServerError, err
 		}
+		return http.StatusInternalServerError, err
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 
 	return resp.StatusCode, nil
 }

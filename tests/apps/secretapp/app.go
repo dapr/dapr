@@ -35,8 +35,6 @@ const appPort = 3000
 
 // kubernetes is the name of the secret store
 const (
-	secretStore      = "kubernetes"
-	nonexistentStore = "nonexistent"
 	/* #nosec */
 	secretURL = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
 )

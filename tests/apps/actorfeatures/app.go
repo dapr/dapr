@@ -490,7 +490,6 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			return err
 		}
 	} else if testName == "getstatetest" {
-
 		// perform a get on a key saved above
 		url := fmt.Sprintf(actorGetStateURLFormat, actorType, id, "key1")
 
@@ -553,7 +552,6 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			return err
 		}
 	} else if testName == "getstatetest2" {
-
 		// perform a get on an existing key
 		url := fmt.Sprintf(actorGetStateURLFormat, actorType, id, "key1")
 
@@ -610,7 +608,8 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 	defer res.Body.Close()
 
 	if res.StatusCode != expectedHTTPStatusCode {
-		errBody, err := io.ReadAll(res.Body)
+		var errBody []byte
+		errBody, err = io.ReadAll(res.Body)
 		if err == nil {
 			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody))
 			return nil, t

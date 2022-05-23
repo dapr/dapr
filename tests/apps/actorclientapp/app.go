@@ -33,10 +33,9 @@ import (
 )
 
 const (
-	appPort               = 3000
-	daprV1URL             = "http://localhost:3500/v1.0"
-	actorMethodURLFormat  = daprV1URL + "/actors/%s/%s/method/%s"
-	secondsToWaitInMethod = 5
+	appPort              = 3000
+	daprV1URL            = "http://localhost:3500/v1.0"
+	actorMethodURLFormat = daprV1URL + "/actors/%s/%s/method/%s"
 )
 
 type daprActorResponse struct {
@@ -119,16 +118,6 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 	}
 
 	return resBody, nil
-}
-
-func healthzHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(""))
-}
-
-// epoch returns the current unix epoch timestamp
-func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
 }
 
 // appRouter initializes restful api router

@@ -25,21 +25,19 @@ import (
 	"syscall"
 	"time"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/golang/protobuf/ptypes/any"
+	"github.com/gorilla/mux"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
-
 	"google.golang.org/grpc"
 
-	"github.com/gorilla/mux"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 const (
-	appPort      = 3000
-	daprPort     = 3500
-	daprPortGRPC = 50001
+	appPort  = 3000
+	daprPort = 3500
 )
 
 type testCommandRequest struct {
