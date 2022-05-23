@@ -30,6 +30,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -183,11 +185,10 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 	if err != nil {
 		if resp != nil {
 			return resp.StatusCode, err
-		} else {
-			return http.StatusInternalServerError, err
 		}
+		return http.StatusInternalServerError, err
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 
 	return resp.StatusCode, nil
 }
@@ -358,14 +359,13 @@ func initGRPCClient() {
 	grpcClient = runtimev1pb.NewDaprClient(grpcConn)
 }
 
-func main() {
-	initGRPCClient()
-
-	log.Printf("PubSub Publisher - listening on http://localhost:%d", appPort)
-
-	server := http.Server{
+func startServer() {
+	// Create a server capable of supporting HTTP2 Cleartext connections
+	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
+	h2s := &http2.Server{}
+	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: appRouter(),
+		Handler: h2c.NewHandler(appRouter(), h2s),
 	}
 
 	// Stop the server when we get a termination signal
@@ -386,4 +386,11 @@ func main() {
 		log.Fatalf("Failed to run server: %v", err)
 	}
 	log.Println("Server shut down")
+}
+
+func main() {
+	initGRPCClient()
+
+	log.Printf("PubSub Publisher - listening on http://localhost:%d", appPort)
+	startServer()
 }

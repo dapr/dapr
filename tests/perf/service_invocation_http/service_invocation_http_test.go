@@ -34,6 +34,8 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("service_invocation_http")
+
 	testApps := []kube.AppDescription{
 		{
 			AppName:           "testapp",
