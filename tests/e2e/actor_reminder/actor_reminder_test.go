@@ -48,6 +48,7 @@ const (
 	actorInvokeURLFormat         = "%s/test/" + actorName + "/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat           = "%s/test/logs"                       // URL to fetch logs from test app.
 	shutdownURLFormat            = "%s/test/shutdown"                   // URL to shutdown sidecar and app.
+	misconfiguredAppName         = "actor-reminder-no-state-store"      // Actor-reminder app without a state store (should fail to start)
 )
 
 // represents a response for the APIs in this app.
@@ -129,10 +130,51 @@ func TestMain(m *testing.M) {
 				"TEST_APP_ACTOR_TYPE": actorName,
 			},
 		},
+		{
+			AppName:        misconfiguredAppName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-actorfeatures",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
+			DaprCPULimit:   "2.0",
+			DaprCPURequest: "0.1",
+			AppCPULimit:    "2.0",
+			AppCPURequest:  "0.1",
+			AppEnv: map[string]string{
+				"TEST_APP_ACTOR_TYPE": actorName,
+			},
+		},
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
 	os.Exit(tr.Start(m))
+}
+
+func TestActorMissingStateStore(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(misconfiguredAppName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	t.Logf("Checking if app is healthy ...")
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// Set reminder
+	reminder := actorReminder{
+		Data:    "reminderdata",
+		DueTime: "1s",
+		Period:  "1s",
+	}
+	reminderBody, err := json.Marshal(reminder)
+	require.NoError(t, err)
+
+	t.Run("Actor service should 500 when no state store is available.", func(t *testing.T) {
+		_, statusCode, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, externalURL, "bogon-actor", "reminders", "failed-reminder"), reminderBody)
+		require.NoError(t, err)
+		require.True(t, statusCode == 500)
+	})
 }
 
 func TestActorReminder(t *testing.T) {

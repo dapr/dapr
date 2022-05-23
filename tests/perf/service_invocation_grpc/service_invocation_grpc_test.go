@@ -22,11 +22,12 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/require"
 )
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
@@ -99,7 +100,9 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform baseline test
-	p.TargetEndpoint = fmt.Sprintf("http://testapp:3000/grpc/dapr?capability=invoke&target=appcallback&method=load")
+	p.Grpc = true
+	p.Dapr = "capability=invoke,target=appcallback,method=load"
+	p.TargetEndpoint = fmt.Sprintf("http://testapp:3000")
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
@@ -112,7 +115,8 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	t.Logf("baseline test results: %s", string(baselineResp))
 
 	// Perform dapr test
-	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001/grpc/dapr?capability=invoke&target=dapr&method=load&appid=testapp")
+	p.Dapr = "capability=invoke,target=dapr,method=load,appid=testapp"
+	p.TargetEndpoint = fmt.Sprintf("http://localhost:50001")
 	body, err = json.Marshal(&p)
 	require.NoError(t, err)
 

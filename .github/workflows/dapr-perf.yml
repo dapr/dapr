@@ -43,6 +43,8 @@ env:
   MAX_TEST_TIMEOUT: 5400
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "westus3"
+  # Container registry where to cache perf test images
+  DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
 
 jobs:
   deploy-infrastructure:
@@ -179,6 +181,11 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Login to cache registry
+        if: env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+        run: |
+          az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
+        shell: bash
       - name: Build test prefix and set env vars
         if: env.CHECKOUT_REPO != ''
         run: |
@@ -349,6 +356,22 @@ jobs:
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD_SIZE: 1024
         run: make test-perf-service_invocation_grpc
+      - name: Run Perf test state_get
+        if: env.TEST_PREFIX != ''
+        env:
+          DAPR_PERF_QPS: 1000
+          DAPR_PERF_CONNECTIONS: 16
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD_SIZE: 0
+        run: make test-perf-state_get
+      - name: Run Perf test pubsub_publish
+        if: env.TEST_PREFIX != ''
+        env:
+          DAPR_PERF_QPS: 1000
+          DAPR_PERF_CONNECTIONS: 16
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD_SIZE: 0
+        run: make test-perf-pubsub_publish
       - name: Run Perf test actor_timer in Java
         if: env.TEST_PREFIX != ''
         env:

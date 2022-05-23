@@ -132,13 +132,7 @@ func (o *operator) syncComponent(obj interface{}) {
 
 func (o *operator) Run(ctx context.Context) {
 	defer runtimeutil.HandleCrash()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	o.ctx = ctx
-	go func() {
-		<-ctx.Done()
-		log.Infof("Dapr Operator is shutting down")
-	}()
 	log.Infof("Dapr Operator is started")
 
 	go func() {
@@ -153,31 +147,31 @@ func (o *operator) Run(ctx context.Context) {
 	}
 	o.prepareConfig()
 
+	// load certs from disk
 	var certChain *credentials.CertChain
 	log.Info("getting tls certificates")
-	// try to load certs from disk, if not yet there, start a watch on the local filesystem
-	chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
-	if err != nil {
-		fsevent := make(chan struct{})
-
-		go func() {
-			log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
-			err = fswatcher.Watch(ctx, o.config.Credentials.Path(), fsevent)
-			if err != nil {
-				log.Fatal("error starting watch on filesystem: %s", err)
-			}
-		}()
-
-		<-fsevent
-		log.Info("certificates detected")
-
-		chain, err = credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
+	watchCtx, watchCancel := context.WithCancel(ctx)
+	fsevent := make(chan struct{})
+	go func() {
+		log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
+		err := fswatcher.Watch(watchCtx, o.config.Credentials.Path(), fsevent)
 		if err != nil {
-			log.Fatal("failed to load cert chain from disk: %s", err)
+			log.Fatal("error starting watch on filesystem: %s", err)
 		}
+		close(fsevent)
+	}()
+	for {
+		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
+		if err == nil {
+			log.Info("tls certificates loaded successfully")
+			certChain = chain
+			break
+		}
+		log.Info("tls certificate not found; waiting for disk changes")
+		<-fsevent
+		log.Debug("watcher found activity on filesystem")
 	}
-	certChain = chain
-	log.Info("tls certificates loaded successfully")
+	watchCancel()
 
 	go func() {
 		healthzServer := health.NewServer(log)
@@ -189,5 +183,8 @@ func (o *operator) Run(ctx context.Context) {
 		}
 	}()
 
+	// blocking call
 	o.apiServer.Run(certChain)
+
+	log.Infof("Dapr Operator is shutting down")
 }

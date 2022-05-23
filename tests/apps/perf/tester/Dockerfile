@@ -7,9 +7,8 @@ RUN go get -d -v && go build -o tester .
 FROM golang:1.17 as fortio_build_env
 
 WORKDIR /fortio
-# TODO: change to use dapr forked repo
-ADD "https://api.github.com/repos/skyao/fortio/branches/v1.24.0-dapr" skipcache
-RUN git clone https://github.com/skyao/fortio.git
+ADD "https://api.github.com/repos/dapr/fortio/branches/v1.24.0-dapr" skipcache
+RUN git clone https://github.com/dapr/fortio.git
 RUN cd fortio && git checkout v1.24.0-dapr && go build
 
 FROM debian:buster-slim
