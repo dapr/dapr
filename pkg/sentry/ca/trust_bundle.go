@@ -12,7 +12,7 @@ import (
 type TrustRootBundler interface {
 	GetIssuerCertPem() []byte
 	GetRootCertPem() []byte
-	GetIssuerCertExpiry() time.Time
+	GetIssuerCertExpiry() *time.Time
 	GetTrustAnchors() *x509.CertPool
 	GetTrustDomain() string
 }
@@ -33,8 +33,11 @@ func (t *trustRootBundle) GetIssuerCertPem() []byte {
 	return t.issuerCertPem
 }
 
-func (t *trustRootBundle) GetIssuerCertExpiry() time.Time {
-	return t.issuerCreds.Certificate.NotAfter
+func (t *trustRootBundle) GetIssuerCertExpiry() *time.Time {
+	if t.issuerCreds == nil || t.issuerCreds.Certificate == nil {
+		return nil
+	}
+	return &t.issuerCreds.Certificate.NotAfter
 }
 
 func (t *trustRootBundle) GetTrustAnchors() *x509.CertPool {

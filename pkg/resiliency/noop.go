@@ -31,7 +31,7 @@ func (*NoOp) RoutePolicy(ctx context.Context, name string) Runner {
 }
 
 // EndpointPolicy returns a NoOp policy runner for a service endpoint.
-func (*NoOp) EndpointPolicy(ctx context.Context, service string, endpoint string) Runner {
+func (*NoOp) EndpointPolicy(ctx context.Context, service string, endpoint string, useBuiltIn bool) Runner {
 	return func(oper Operation) error {
 		return oper(ctx)
 	}
@@ -63,4 +63,8 @@ func (*NoOp) ComponentOutboundPolicy(ctx context.Context, name string) Runner {
 	return func(oper Operation) error {
 		return oper(ctx)
 	}
+}
+
+func (*NoOp) PolicyDefined(target string, policyType PolicyType) bool {
+	return true
 }
