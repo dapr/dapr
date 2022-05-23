@@ -292,9 +292,10 @@ jobs:
         target_os: [linux, windows]
         target_arch: [amd64]
     steps:
-      - name: Set up container log path
+      - name: Set up log paths
         run: |
           echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
+          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
         shell: bash
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -411,10 +412,11 @@ jobs:
         run: |
           make save-dapr-control-plane-k8s-logs
       # Container log files can be bigger than the maximum file size allowed by GitHub
-      - name: Compress container logs
+      - name: Compress logs
         if: always()
         run: |
           gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
+          gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
         shell: bash
       - name: Upload container logs
         if: always()
@@ -422,6 +424,12 @@ jobs:
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_logs
+          path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@master
