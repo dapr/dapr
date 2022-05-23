@@ -92,7 +92,7 @@ func main() {
 
 	// Stop the gRPC server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh

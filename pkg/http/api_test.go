@@ -3150,7 +3150,7 @@ func (c fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetRe
 }
 
 func (c fakeStateStore) Init(metadata state.Metadata) error {
-	c.counter = 0
+	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 

@@ -248,8 +248,8 @@ test: test-deps
 # Target: lint                                                                 #
 ################################################################################
 # Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
-# Please use golangci-lint version v1.45.2 , otherwise you might encounter errors.
-# You can download version v1.45.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.45.2
+# Please use golangci-lint version v1.46.2 , otherwise you might encounter errors.
+# You can download version v1.46.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.46.2
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m

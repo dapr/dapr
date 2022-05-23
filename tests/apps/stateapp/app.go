@@ -783,15 +783,15 @@ func appRouter() *mux.Router {
 }
 
 func newHTTPClient() http.Client {
-	dialer := &net.Dialer{ //nolint:exhaustivestruct
+	dialer := &net.Dialer{
 		Timeout: 5 * time.Second,
 	}
-	netTransport := &http.Transport{ //nolint:exhaustivestruct
+	netTransport := &http.Transport{
 		DialContext:         dialer.DialContext,
 		TLSHandshakeTimeout: 5 * time.Second,
 	}
 
-	return http.Client{ //nolint:exhaustivestruct
+	return http.Client{
 		Timeout:   30 * time.Second,
 		Transport: netTransport,
 	}

@@ -253,6 +253,8 @@ linters:
     - wrapcheck
     - tagliatelle
     - ireturn
+    - nonamedreturns 
+    - exhaustruct
     - exhaustivestruct
     - errchkjson
     - contextcheck

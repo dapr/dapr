@@ -60,8 +60,8 @@ This command will:
 - format, test and lint all the code 
 - check if you forget to `git commit` something.
 
-Note: To run linter locally, please use golangci-lint version v1.45.2, otherwise you might encounter errors.
-You can download version v1.45.2 [here](https://github.com/golangci/golangci-lint/releases/tag/v1.45.2) .
+Note: To run linter locally, please use golangci-lint version v1.46.2, otherwise you might encounter errors.
+You can download version v1.46.2 [here](https://github.com/golangci/golangci-lint/releases/tag/v1.46.2) .
 
 ## Debug Dapr
 
