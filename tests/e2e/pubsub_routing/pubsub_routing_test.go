@@ -300,7 +300,9 @@ func validateMessagesRouted(t *testing.T, publisherExternalURL string, subscribe
 }
 
 func TestMain(m *testing.M) {
-	fmt.Println("Enter TestMain")
+	utils.SetupLogs("pubsub_routing")
+	utils.InitHTTPClient(true)
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{

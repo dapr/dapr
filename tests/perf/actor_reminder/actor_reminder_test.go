@@ -38,6 +38,8 @@ const (
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("actor_reminder")
+
 	testApps := []kube.AppDescription{
 		{
 			AppName:           "testapp",

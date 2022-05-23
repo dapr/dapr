@@ -46,6 +46,9 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("metrics")
+	utils.InitHTTPClient(false)
+
 	// This test shows how to deploy the multiple test apps, validate the side-car injection
 	// and validate the response by using test app's service endpoint
 
@@ -147,11 +150,14 @@ func TestMetrics(t *testing.T) {
 			// Get the metrics from the metrics endpoint
 			res, err := utils.HTTPGetRawNTimes(fmt.Sprintf("http://localhost:%v", metricsPort), numHealthChecks)
 			require.NoError(t, err)
+			defer func() {
+				// Drain before closing
+				_, _ = io.Copy(io.Discard, res.Body)
+				res.Body.Close()
+			}()
 
 			// Evaluate the metrics are as expected
 			tt.evaluate(t, tt.app, res)
-
-			res.Body.Close()
 		})
 	}
 }
