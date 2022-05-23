@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // ------------------------------------------------------------
@@ -107,7 +108,7 @@ func TestMain(m *testing.M) {
 			AppCPULimit:    "2.0",
 			AppCPURequest:  "0.1",
 			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_TYPE": actorName,
+				"TEST_APP_ACTOR_TYPE": "testactorreminder",
 			},
 		},
 	}
