@@ -405,7 +405,8 @@ func validateMessagesReceivedBySubscriber(
 }
 
 func TestMain(m *testing.M) {
-	fmt.Println("Enter TestMain")
+	utils.SetupLogs("pubsub_grpc")
+	utils.InitHTTPClient(true)
 
 	//nolint: gosec
 	offset = rand.Intn(randomOffsetMax) + 1
