@@ -46,13 +46,13 @@ func TestNoOp(t *testing.T) {
 		{
 			name: "endpoint",
 			fn: func(ctx context.Context) Runner {
-				return policy.EndpointPolicy(ctx, "test", "test")
+				return policy.EndpointPolicy(ctx, "test", "test", false)
 			},
 		},
 		{
 			name: "endpoint error",
 			fn: func(ctx context.Context) Runner {
-				return policy.EndpointPolicy(ctx, "test", "test")
+				return policy.EndpointPolicy(ctx, "test", "test", false)
 			},
 			err: errors.New("endpoint error"),
 		},
