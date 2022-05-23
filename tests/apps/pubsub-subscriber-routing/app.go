@@ -30,6 +30,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -298,15 +300,13 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func main() {
-	log.Printf("Dapr E2E test app: pubsub subscriber with routing - listening on http://localhost:%d", appPort)
-
-	// initialize sets on application start
-	initializeSets()
-
-	server := http.Server{
+func startServer() {
+	// Create a server capable of supporting HTTP2 Cleartext connections
+	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
+	h2s := &http2.Server{}
+	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: appRouter(),
+		Handler: h2c.NewHandler(appRouter(), h2s),
 	}
 
 	// Stop the server when we get a termination signal
@@ -327,4 +327,12 @@ func main() {
 		log.Fatalf("Failed to run server: %v", err)
 	}
 	log.Println("Server shut down")
+}
+
+func main() {
+	// initialize sets on application start
+	initializeSets()
+
+	log.Printf("Dapr E2E test app: pubsub subscriber with routing - listening on http://localhost:%d", appPort)
+	startServer()
 }

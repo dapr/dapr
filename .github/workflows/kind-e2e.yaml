@@ -128,8 +128,9 @@ jobs:
         # Log the generated kind.yaml for easy reference.
         cat kind.yaml
 
-        # Set log target directory
+        # Set log target directories
         echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
+        echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
 
     - name: Create KinD Cluster
       uses: helm/kind-action@v1.0.0
@@ -222,6 +223,14 @@ jobs:
       with:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_container_logs
         path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+
+    - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_test_logs
+          path: ${{ env.DAPR_TEST_LOG_PATH }}
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@master
