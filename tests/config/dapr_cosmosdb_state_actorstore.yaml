@@ -14,15 +14,39 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestore
+  name: statestore-actors
 spec:
-  type: state.redis
+  type: state.azure.cosmosdb
   version: v1
   initTimeout: 1m
   metadata:
-  - name: redisHost
+  - name: masterKey
     secretKeyRef:
-      name: redissecret
-      key: host
-  - name: redisPassword
-    value: ""
+      name: cosmosdb-secret
+      key: primaryMasterKey
+  - name: url
+    secretKeyRef:
+      name: cosmosdb-secret
+      key: url
+  - name: database
+    value: dapre2e
+  - name: collection
+    value: items
+  - name: actorStateStore
+    value: true
+scopes:
+# actortestclient is deliberately omitted to ensure that `actor_features_test` works without a state store
+- actor1
+- actor2
+- actorapp
+- actorfeatures
+- reentrantactor
+- actorreminder
+- actorreminderpartition
+- actorinvocationapp
+- actorjava
+- actordotnet
+- actorpython
+- actorphp
+- resiliencyapp
+- resiliencyappgrpc

@@ -1,0 +1,11 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: inmemorystate
+spec:
+  type: state.in-memory
+  version: v1
+  initTimeout: 1m
+  metadata:
+    - name: spacehold
+      value: metadata-is-required

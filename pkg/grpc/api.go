@@ -15,6 +15,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -25,7 +26,6 @@ import (
 	"github.com/dapr/components-contrib/configuration"
 
 	"github.com/golang/protobuf/ptypes/empty"
-	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -293,7 +293,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		features := thepubsub.Features()
 		pubsub.ApplyMetadata(envelope, features, in.Metadata)
 
-		data, err = jsoniter.ConfigFastest.Marshal(envelope)
+		data, err = json.Marshal(envelope)
 		if err != nil {
 			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
 			apiServerLogger.Debug(err)
@@ -341,7 +341,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
+	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method), false)
 	var resp *invokev1.InvokeMethodResponse
 	var requestErr bool
 	respError := policy(func(ctx context.Context) (rErr error) {
@@ -604,7 +604,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		}
 
 		if contentType, ok := req.Metadata[contrib_metadata.ContentType]; ok && contentType == contenttype.JSONContentType {
-			if err1 = jsoniter.Unmarshal(s.Value, &req.Value); err1 != nil {
+			if err1 = json.Unmarshal(s.Value, &req.Value); err1 != nil {
 				return &emptypb.Empty{}, err1
 			}
 		} else {
@@ -673,7 +673,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	}
 
 	var req state.QueryRequest
-	if err = jsoniter.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
+	if err = json.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrMalformedRequest, err.Error())
 		apiServerLogger.Debug(err)
 		return ret, err

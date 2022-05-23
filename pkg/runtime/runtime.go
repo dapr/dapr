@@ -33,7 +33,6 @@ import (
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
-	jsoniter "github.com/json-iterator/go"
 	openzipkin "github.com/openzipkin/zipkin-go"
 	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/pkg/errors"
@@ -166,7 +165,6 @@ type DaprRuntime struct {
 	pubSubRegistry         pubsub_loader.Registry
 	pubSubs                map[string]pubsub.PubSub
 	nameResolver           nr.Resolver
-	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
 	hostAddress            string
 	actorStateStoreName    string
@@ -239,7 +237,6 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		components:             make([]components_v1alpha1.Component, 0),
 		actorStateStoreLock:    &sync.RWMutex{},
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
-		json:                   jsoniter.ConfigFastest,
 		inputBindings:          map[string]bindings.InputBinding{},
 		outputBindings:         map[string]bindings.OutputBinding{},
 		secretStores:           map[string]secretstores.SecretStore{},
@@ -460,12 +457,11 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
 		if err != nil {
-			log.Warnf("failed to init actors: %s", err)
-		}
+			log.Warnf("failed to init actors: %v", err)
+		} else {
+			a.daprHTTPAPI.SetActorRuntime(a.actor)
+			grpcAPI.SetActorRuntime(a.actor)
 	}
-
-	a.daprHTTPAPI.SetActorRuntime(a.actor)
-	grpcAPI.SetActorRuntime(a.actor)
 
 	// TODO: Remove feature flag once feature is ratified
 	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
@@ -614,7 +610,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			data := msg.Data
 			if rawPayload {
 				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
-				data, err = a.json.Marshal(cloudEvent)
+				data, err = json.Marshal(cloudEvent)
 				if err != nil {
 					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
 					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
@@ -626,7 +622,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 					return err
 				}
 			} else {
-				err = a.json.Unmarshal(msg.Data, &cloudEvent)
+				err = json.Unmarshal(msg.Data, &cloudEvent)
 				if err != nil {
 					log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
 					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
@@ -752,6 +748,8 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		a.proxy,
 		a.runtimeConfig.ReadBufferSize,
 		a.runtimeConfig.StreamRequestBody,
+		a.resiliency,
+		config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency),
 	)
 }
 
@@ -926,7 +924,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	}
 
 	if len(response.To) > 0 {
-		b, err := a.json.Marshal(&response.Data)
+		b, err := json.Marshal(&response.Data)
 		if err != nil {
 			return err
 		}
@@ -1004,7 +1002,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				appResponseBody = resp.Data
 
 				var d interface{}
-				err := a.json.Unmarshal(resp.Data, &d)
+				err := json.Unmarshal(resp.Data, &d)
 				if err == nil {
 					response.Data = d
 				}
@@ -1650,7 +1648,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
 		var appResponse pubsub.AppResponse
-		err := a.json.Unmarshal(body, &appResponse)
+		err := json.Unmarshal(body, &appResponse)
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
@@ -1737,7 +1735,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 				return ErrUnexpectedEnvelopeData
 			}
 		} else if contenttype.IsJSONContentType(envelope.DataContentType) {
-			envelope.Data, _ = a.json.Marshal(data)
+			envelope.Data, _ = json.Marshal(data)
 		}
 	}
 
@@ -1831,7 +1829,7 @@ func (a *DaprRuntime) initActors() error {
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
 	if a.actorStateStoreName == "" {
-		log.Warn("no actor state store defined")
+		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID,
 		a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort,
@@ -1840,7 +1838,9 @@ func (a *DaprRuntime) initActors() error {
 		a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features,
 		a.resiliency, a.actorStateStoreName)
 	err = act.Init()
-	a.actor = act
+	if err == nil {
+		a.actor = act
+	}
 	return err
 }
 
@@ -2355,6 +2355,12 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 		val := c.Value.String()
 		for strings.Contains(val, "{uuid}") {
 			val = strings.Replace(val, "{uuid}", uuid.New().String(), 1)
+		}
+		for strings.Contains(val, "{podName}") {
+			if a.podName == "" {
+				log.Fatalf("failed to parse metadata: property %s refers to {podName} but podName is not set", c.Name)
+			}
+			val = strings.Replace(val, "{podName}", a.podName, 1)
 		}
 		properties[c.Name] = val
 	}
