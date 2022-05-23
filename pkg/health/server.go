@@ -79,8 +79,12 @@ func (s *server) Run(ctx context.Context, port int) error {
 
 	s.log.Infof("Healthz server is listening on %s", srv.Addr)
 	err := srv.ListenAndServe()
-	if err != http.ErrServerClosed {
-		s.log.Errorf("Healthz server error: %s", err)
+	if err != nil {
+		if err == http.ErrServerClosed {
+			err = nil
+		} else {
+			s.log.Errorf("Healthz server error: %s", err)
+		}
 	}
 	close(doneCh)
 	return err
