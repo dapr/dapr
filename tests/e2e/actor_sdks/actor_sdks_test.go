@@ -48,6 +48,9 @@ func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 }
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("actor_sdks")
+	utils.InitHTTPClient(false)
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	apps = []kube.AppDescription{
