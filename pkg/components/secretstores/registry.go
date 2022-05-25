@@ -26,7 +26,7 @@ import (
 type (
 	// SecretStore is a secret store component definition.
 	SecretStore struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() secretstores.SecretStore
 	}
 
@@ -46,9 +46,16 @@ type (
 )
 
 // New creates a SecretStore.
-func New(name string, factoryMethod func() secretstores.SecretStore) SecretStore {
+func New[T stringOrSliceOfStrings](name T, factoryMethod func() secretstores.SecretStore) SecretStore {
+	var names []string
+	switch n := any(name).(type) {
+	case string:
+		names = []string{n}
+	case []string:
+		names = n
+	}
 	return SecretStore{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -63,7 +70,9 @@ func NewRegistry() Registry {
 // Register adds one or many new secret stores to the registry.
 func (s *secretStoreRegistry) Register(components ...SecretStore) {
 	for _, component := range components {
-		s.secretStores[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			s.secretStores[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 

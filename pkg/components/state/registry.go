@@ -22,14 +22,26 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 )
 
+type stringOrSliceOfStrings interface {
+	string | []string
+}
+
 type State struct {
-	Name          string
+	Names         []string
 	FactoryMethod func() state.Store
 }
 
-func New(name string, factoryMethod func() state.Store) State {
+// New creates a new State.
+func New[T stringOrSliceOfStrings](name T, factoryMethod func() state.Store) State {
+	var names []string
+	switch n := any(name).(type) {
+	case string:
+		names = []string{n}
+	case []string:
+		names = n
+	}
 	return State{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -38,10 +50,6 @@ func New(name string, factoryMethod func() state.Store) State {
 type Registry interface {
 	Register(components ...State)
 	Create(name, version string) (state.Store, error)
-}
-
-type stringOrSliceOfStrings interface {
-	string | []string
 }
 
 type stateStoreRegistry struct {
@@ -59,7 +67,9 @@ func NewRegistry() Registry {
 // // The key is the name of the state store, eg. redis.
 func (s *stateStoreRegistry) Register(components ...State) {
 	for _, component := range components {
-		s.stateStores[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			s.stateStores[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 
