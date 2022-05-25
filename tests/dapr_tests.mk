@@ -54,11 +54,12 @@ E2E_TESTAPP_DIR=./tests/apps
 PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer actor_reminder actor_activation service_invocation_http service_invocation_grpc
+PERF_TESTS=actor_timer actor_reminder actor_activation service_invocation_http service_invocation_grpc state_get pubsub_publish
 
 KUBECTL=kubectl
 
 DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
+DAPR_TEST_LOG_PATH?=./dist/logs
 
 ifeq ($(DAPR_TEST_STATE_STORE),)
 DAPR_TEST_STATE_STORE=redis
@@ -106,8 +107,10 @@ build-e2e-app-$(1): check-e2e-env
 ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
 	CGO_ENABLED=0 GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -o $(E2E_TESTAPP_DIR)/$(1)/app$(BINARY_EXT_LOCAL) $(E2E_TESTAPP_DIR)/$(1)/app.go
 	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
-else
+else ifeq ($(DAPR_CACHE_REGISTRY),)
 	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+else
+	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) $(1) $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG) $(DOCKERFILE)
 endif
 endef
 
@@ -135,7 +138,11 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageKindPush,$(ITEM))))
 define genPerfTestAppImageBuild
 .PHONY: build-perf-app-$(1)
 build-perf-app-$(1): check-e2e-env
+ifeq ($(DAPR_CACHE_REGISTRY),)
 	$(DOCKER) build -f $(PERF_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(PERF_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
+else
+	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) perf/$(1) $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG) $(DOCKERFILE)
+endif
 endef
 
 # Generate perf app image build targets
@@ -218,17 +225,17 @@ test-e2e-all: check-e2e-env test-deps
 	# test
 	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
      ifeq ($(DAPR_E2E_TEST),)
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
      else
 	for app in $(DAPR_E2E_TEST); do \
-		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -p 2 -count=1 -v -tags=e2e ./tests/e2e/$$app/...; \
+		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -p 2 -count=1 -v -tags=e2e ./tests/e2e/$$app/...; \
 	done
      endif
 
 define genPerfTestRun
 .PHONY: test-perf-$(1)
 test-perf-$(1): check-e2e-env test-deps
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).xml --format standard-quiet -- -timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).xml --format standard-quiet -- -timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json | strings
 endef
 
@@ -239,7 +246,7 @@ TEST_PERF_TARGETS:=$(foreach ITEM,$(PERF_TESTS),test-perf-$(ITEM))
 
 # start all perf tests
 test-perf-all: check-e2e-env test-deps
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml --format standard-quiet -- -p 1 -count=1 -v -tags=perf ./tests/perf/...
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml --format standard-quiet -- -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 
 # add required helm repo
@@ -297,6 +304,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -322,6 +330,8 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)

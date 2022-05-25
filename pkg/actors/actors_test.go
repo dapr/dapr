@@ -321,6 +321,15 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 	return a.(*actorsRuntime)
 }
 
+func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *actorsRuntime {
+	spec := config.TracingSpec{SamplingRate: "1"}
+	var store state.Store
+	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
+	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+
+	return a.(*actorsRuntime)
+}
+
 func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
@@ -343,6 +352,12 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 	}, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
+}
+
+func newTestActorsRuntimeWithoutStore() *actorsRuntime {
+	appChannel := new(mockAppChannel)
+
+	return newTestActorsRuntimeWithMockAndNoStore(appChannel)
 }
 
 func newTestActorsRuntime() *actorsRuntime {
@@ -1824,6 +1839,30 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 	time.Sleep(time.Second * 2)
 	assert.False(t, testActorRuntime.appHealthy.Load())
+}
+
+func TestHostedActorsWithoutStateStore(t *testing.T) {
+	testActorRuntime := newTestActorsRuntimeWithoutStore()
+	testActorRuntime.config.HostedActorTypes = []string{"actor1"}
+	go testActorRuntime.startAppHealthCheck(
+		health.WithFailureThreshold(1),
+		health.WithInterval(1*time.Second),
+		health.WithRequestTimeout(100*time.Millisecond))
+
+	time.Sleep(time.Second * 2)
+	assert.False(t, testActorRuntime.appHealthy.Load())
+}
+
+func TestNoHostedActorsWithoutStateStore(t *testing.T) {
+	testActorRuntime := newTestActorsRuntimeWithoutStore()
+	testActorRuntime.config.HostedActorTypes = []string{}
+	go testActorRuntime.startAppHealthCheck(
+		health.WithFailureThreshold(1),
+		health.WithInterval(1*time.Second),
+		health.WithRequestTimeout(100*time.Millisecond))
+
+	time.Sleep(time.Second * 2)
+	assert.True(t, testActorRuntime.appHealthy.Load())
 }
 
 func TestShutdown(t *testing.T) {
