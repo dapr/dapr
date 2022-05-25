@@ -19,8 +19,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -75,7 +80,9 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
+	lock.Lock()
 	initializeSets()
+	lock.Unlock()
 
 	/* #nosec */
 	s := grpc.NewServer()
@@ -83,16 +90,24 @@ func main() {
 
 	log.Println("Client starting...")
 
+	// Stop the gRPC server when we get a termination signal
+	stopCh := make(chan os.Signal, 1)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		// Wait for cancelation signal
+		<-stopCh
+		log.Println("Shutdown signal received")
+		s.GracefulStop()
+	}()
+
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
+	log.Println("App shut down")
 }
 
 // initialize all the sets for a clean test.
 func initializeSets() {
-	lock.Lock()
-	defer lock.Unlock()
-
 	// initialize all the sets.
 	routedMessagesA = sets.NewString()
 	routedMessagesB = sets.NewString()
@@ -105,12 +120,23 @@ func initializeSets() {
 // This method gets invoked when a remote service has called the app through Dapr.
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload.
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	log.Printf("Got invoked method %s\n", in.Method)
+	reqID := "s-" + uuid.New().String()
+	if in.HttpExtension != nil && in.HttpExtension.Querystring != "" {
+		qs, err := url.ParseQuery(in.HttpExtension.Querystring)
+		if err == nil && qs.Has("reqid") {
+			reqID = qs.Get("reqid")
+		}
+	}
+
+	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
+
+	lock.Lock()
+	defer lock.Unlock()
 
 	respBody := &anypb.Any{}
 	switch in.Method {
 	case "getMessages":
-		respBody.Value = s.getRoutedMessages()
+		respBody.Value = s.getMessages(reqID)
 	case "initialize":
 		initializeSets()
 	}
@@ -118,7 +144,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 	return &commonv1pb.InvokeResponse{Data: respBody, ContentType: "application/json"}, nil
 }
 
-func (s *server) getRoutedMessages() []byte {
+func (s *server) getMessages(reqID string) []byte {
 	resp := routedMessagesResponse{
 		RouteA: routedMessagesA.List(),
 		RouteB: routedMessagesB.List(),
@@ -129,6 +155,7 @@ func (s *server) getRoutedMessages() []byte {
 	}
 
 	rawResp, _ := json.Marshal(resp)
+	log.Printf("(%s) getMessages response: %s", reqID, string(rawResp))
 	return rawResp
 }
 
@@ -161,7 +188,11 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 
 // This method is fired whenever a message has been published to a topic that has been subscribed. Dapr sends published messages in a CloudEvents 1.0 envelope.
 func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*pb.TopicEventResponse, error) {
-	log.Printf("Message arrived - Topic: %s, Message: %s, Path: %s\n", in.Topic, string(in.Data), in.Path)
+	lock.Lock()
+	defer lock.Unlock()
+
+	reqID := uuid.New().String()
+	log.Printf("(%s) Message arrived - Topic: %s, Message: %s, Path: %s", reqID, in.Topic, string(in.Data), in.Path)
 
 	var set *sets.String
 	switch in.Path {
@@ -178,6 +209,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	case pathF:
 		set = &routedMessagesF
 	default:
+		log.Printf("(%s) Responding with DROP. in.Path not found", reqID)
 		// Return success with DROP status to drop message.
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_DROP,
@@ -186,10 +218,9 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 
 	msg := string(in.Data)
 
-	lock.Lock()
-	defer lock.Unlock()
 	set.Insert(msg)
 
+	log.Printf("(%s) Responding with SUCCESS", reqID)
 	return &pb.TopicEventResponse{
 		Status: pb.TopicEventResponse_SUCCESS,
 	}, nil
@@ -204,6 +235,6 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
 func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
-	fmt.Printf("Invoked from binding: %s\n", in.Name)
+	log.Printf("Invoked from binding: %s", in.Name)
 	return &pb.BindingEventResponse{}, nil
 }

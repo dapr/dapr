@@ -19,10 +19,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 // TODO: change to take from "github.com/dapr/dapr/tests/perf" once in repository. otherwise fails on go get step in Dockerfile.
@@ -34,6 +32,8 @@ type TestParameters struct {
 	PayloadSizeKB     int    `json:"payloadSizeKB"`
 	Payload           string `json:"payload"`
 	StdClient         bool   `json:"stdClient"`
+	Grpc              bool   `json:"grpc"`
+	Dapr              string `json:"dapr"`
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -111,24 +111,13 @@ func buildFortioArgs(params TestParameters) []string {
 		args = append(args, "-stdclient")
 	}
 
-	endPoint := params.TargetEndpoint
-	if strings.Contains(params.TargetEndpoint, "/grpc") {
+	if params.Grpc {
 		args = append(args, "-grpc")
-		if strings.Contains(params.TargetEndpoint, "/dapr") {
-			ep, params := parseDaprParameters(params.TargetEndpoint)
-			args = append(args, "-dapr", params)
-			endPoint = ep
-		}
+	}
+	if params.Dapr != "" {
+		args = append(args, "-dapr", params.Dapr)
 	}
 
-	args = append(args, endPoint)
+	args = append(args, params.TargetEndpoint)
 	return args
-}
-
-func parseDaprParameters(endpoint string) (string, string) {
-	u, _ := url.Parse(endpoint)
-
-	params := strings.ReplaceAll(u.RawQuery, "&", ",")
-	ep := u.Host
-	return ep, params
 }
