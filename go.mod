@@ -62,7 +62,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.11.0
 )
 
-require github.com/cenkalti/backoff v2.2.1+incompatible
+require (
+	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/golang/mock v1.6.0
+)
 
 require (
 	cloud.google.com/go v0.86.0 // indirect
@@ -175,7 +178,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
@@ -197,6 +199,7 @@ require (
 	github.com/hashicorp/go-uuid v1.0.1 // indirect
 	github.com/hashicorp/serf v0.9.5 // indirect
 	github.com/hazelcast/hazelcast-go-client v0.0.0-20190530123621-6cf767c2f31a // indirect
+	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.21.12+incompatible // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.0.87 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
