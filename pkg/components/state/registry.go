@@ -22,23 +22,16 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 )
 
-type stringOrSliceOfStrings interface {
-	string | []string
-}
-
 type State struct {
 	Names         []string
 	FactoryMethod func() state.Store
 }
 
 // New creates a new State.
-func New[T stringOrSliceOfStrings](name T, factoryMethod func() state.Store) State {
-	var names []string
-	switch n := any(name).(type) {
-	case string:
-		names = []string{n}
-	case []string:
-		names = n
+func New(name string, factoryMethod func() state.Store, aliases ...string) State {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
 	}
 	return State{
 		Names:         names,

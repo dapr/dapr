@@ -296,9 +296,9 @@ func main() {
 			}),
 		),
 		runtime.WithPubSubs(
-			pubsub_loader.New([]string{"aws.snssqs", "snssqs"}, func() pubs.PubSub {
+			pubsub_loader.New("aws.snssqs", func() pubs.PubSub {
 				return pubsub_aws_snssqs.NewSnsSqs(logContrib)
-			}),
+			}, "snssqs"), // alias "snssqs" for backwards-compatibility; see dapr/components-contrib#1753
 			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
 				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
 			}),

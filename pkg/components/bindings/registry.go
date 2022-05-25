@@ -46,10 +46,6 @@ type (
 		CreateOutputBinding(name, version string) (bindings.OutputBinding, error)
 	}
 
-	stringOrSliceOfStrings interface {
-		string | []string
-	}
-
 	bindingsRegistry struct {
 		inputBindings  map[string]func() bindings.InputBinding
 		outputBindings map[string]func() bindings.OutputBinding
@@ -57,13 +53,10 @@ type (
 )
 
 // NewInput creates a InputBinding.
-func NewInput[T stringOrSliceOfStrings](name T, factoryMethod func() bindings.InputBinding) InputBinding {
-	var names []string
-	switch n := any(name).(type) {
-	case string:
-		names = []string{n}
-	case []string:
-		names = n
+func NewInput(name string, factoryMethod func() bindings.InputBinding, aliases ...string) InputBinding {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
 	}
 	return InputBinding{
 		Names:         names,
@@ -72,13 +65,10 @@ func NewInput[T stringOrSliceOfStrings](name T, factoryMethod func() bindings.In
 }
 
 // NewOutput creates a OutputBinding.
-func NewOutput[T stringOrSliceOfStrings](name T, factoryMethod func() bindings.OutputBinding) OutputBinding {
-	var names []string
-	switch n := any(name).(type) {
-	case string:
-		names = []string{n}
-	case []string:
-		names = n
+func NewOutput(name string, factoryMethod func() bindings.OutputBinding, aliases ...string) OutputBinding {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
 	}
 	return OutputBinding{
 		Names:         names,

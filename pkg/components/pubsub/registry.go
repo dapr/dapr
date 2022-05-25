@@ -36,23 +36,16 @@ type (
 		Create(name, version string) (pubsub.PubSub, error)
 	}
 
-	stringOrSliceOfStrings interface {
-		string | []string
-	}
-
 	pubSubRegistry struct {
 		messageBuses map[string]func() pubsub.PubSub
 	}
 )
 
 // New creates a PubSub.
-func New[T stringOrSliceOfStrings](name T, factoryMethod func() pubsub.PubSub) PubSub {
-	var names []string
-	switch n := any(name).(type) {
-	case string:
-		names = []string{n}
-	case []string:
-		names = n
+func New(name string, factoryMethod func() pubsub.PubSub, aliases ...string) PubSub {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
 	}
 	return PubSub{
 		Names:         names,

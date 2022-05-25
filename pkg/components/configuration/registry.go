@@ -22,23 +22,16 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 )
 
-type stringOrSliceOfStrings interface {
-	string | []string
-}
-
 type Configuration struct {
 	Names         []string
 	FactoryMethod func() configuration.Store
 }
 
 // New creates a new Configuration.
-func New[T stringOrSliceOfStrings](name T, factoryMethod func() configuration.Store) Configuration {
-	var names []string
-	switch n := any(name).(type) {
-	case string:
-		names = []string{n}
-	case []string:
-		names = n
+func New(name string, factoryMethod func() configuration.Store, aliases ...string) Configuration {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
 	}
 	return Configuration{
 		Names:         names,

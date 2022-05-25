@@ -37,10 +37,6 @@ type (
 		Create(name, version string, metadata middleware.Metadata) (http_middleware.Middleware, error)
 	}
 
-	stringOrSliceOfStrings interface {
-		string | []string
-	}
-
 	httpMiddlewareRegistry struct {
 		middleware map[string]FactoryMethod
 	}
@@ -50,13 +46,10 @@ type (
 )
 
 // New creates a Middleware.
-func New[T stringOrSliceOfStrings](name T, factoryMethod FactoryMethod) Middleware {
-	var names []string
-	switch n := any(name).(type) {
-	case string:
-		names = []string{n}
-	case []string:
-		names = n
+func New(name string, factoryMethod FactoryMethod, aliases ...string) Middleware {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
 	}
 	return Middleware{
 		Names:         names,

@@ -36,23 +36,16 @@ type (
 		Create(name, version string) (nr.Resolver, error)
 	}
 
-	stringOrSliceOfStrings interface {
-		string | []string
-	}
-
 	nameResolutionRegistry struct {
 		resolvers map[string]func() nr.Resolver
 	}
 )
 
 // New creates a NameResolution.
-func New[T stringOrSliceOfStrings](name T, factoryMethod func() nr.Resolver) NameResolution {
-	var names []string
-	switch n := any(name).(type) {
-	case string:
-		names = []string{n}
-	case []string:
-		names = n
+func New(name string, factoryMethod func() nr.Resolver, aliases ...string) NameResolution {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
 	}
 	return NameResolution{
 		Names:         names,

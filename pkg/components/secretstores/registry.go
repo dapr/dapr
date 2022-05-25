@@ -36,23 +36,16 @@ type (
 		Create(name, version string) (secretstores.SecretStore, error)
 	}
 
-	stringOrSliceOfStrings interface {
-		string | []string
-	}
-
 	secretStoreRegistry struct {
 		secretStores map[string]func() secretstores.SecretStore
 	}
 )
 
 // New creates a SecretStore.
-func New[T stringOrSliceOfStrings](name T, factoryMethod func() secretstores.SecretStore) SecretStore {
-	var names []string
-	switch n := any(name).(type) {
-	case string:
-		names = []string{n}
-	case []string:
-		names = n
+func New(name string, factoryMethod func() secretstores.SecretStore, aliases ...string) SecretStore {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
 	}
 	return SecretStore{
 		Names:         names,
