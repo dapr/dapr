@@ -76,7 +76,7 @@ import (
 
 	// Pub/Sub.
 	pubs "github.com/dapr/components-contrib/pubsub"
-	pubsub_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
+	pubsub_aws_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
 	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
@@ -296,6 +296,9 @@ func main() {
 			}),
 		),
 		runtime.WithPubSubs(
+			pubsub_loader.New("aws.snssqs", func() pubs.PubSub {
+				return pubsub_aws_snssqs.NewSnsSqs(logContrib)
+			}, "snssqs"), // alias "snssqs" for backwards-compatibility; see dapr/components-contrib#1753
 			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
 				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
 			}),
@@ -328,9 +331,6 @@ func main() {
 			}),
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)
-			}),
-			pubsub_loader.New("snssqs", func() pubs.PubSub {
-				return pubsub_snssqs.NewSnsSqs(logContrib)
 			}),
 			pubsub_loader.New("in-memory", func() pubs.PubSub {
 				return pubsub_inmemory.New(logContrib)
