@@ -761,7 +761,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		c.VolumeMounts = append(c.VolumeMounts, *tokenVolumeMount)
 	}
 
-	if volumeMounts != nil {
+	if len(volumeMounts) != 0 {
 		c.VolumeMounts = append(c.VolumeMounts, volumeMounts...)
 	}
 
