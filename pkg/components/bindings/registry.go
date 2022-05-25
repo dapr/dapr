@@ -26,13 +26,13 @@ import (
 type (
 	// InputBinding is an input binding component definition.
 	InputBinding struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() bindings.InputBinding
 	}
 
 	// OutputBinding is an output binding component definition.
 	OutputBinding struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() bindings.OutputBinding
 	}
 
@@ -46,6 +46,10 @@ type (
 		CreateOutputBinding(name, version string) (bindings.OutputBinding, error)
 	}
 
+	stringOrSliceOfStrings interface {
+		string | []string
+	}
+
 	bindingsRegistry struct {
 		inputBindings  map[string]func() bindings.InputBinding
 		outputBindings map[string]func() bindings.OutputBinding
@@ -53,17 +57,31 @@ type (
 )
 
 // NewInput creates a InputBinding.
-func NewInput(name string, factoryMethod func() bindings.InputBinding) InputBinding {
+func NewInput[T stringOrSliceOfStrings](name T, factoryMethod func() bindings.InputBinding) InputBinding {
+	var names []string
+	switch n := any(name).(type) {
+	case string:
+		names = []string{n}
+	case []string:
+		names = n
+	}
 	return InputBinding{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
 
 // NewOutput creates a OutputBinding.
-func NewOutput(name string, factoryMethod func() bindings.OutputBinding) OutputBinding {
+func NewOutput[T stringOrSliceOfStrings](name T, factoryMethod func() bindings.OutputBinding) OutputBinding {
+	var names []string
+	switch n := any(name).(type) {
+	case string:
+		names = []string{n}
+	case []string:
+		names = n
+	}
 	return OutputBinding{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -79,14 +97,18 @@ func NewRegistry() Registry {
 // RegisterInputBindings registers one or more new input bindings.
 func (b *bindingsRegistry) RegisterInputBindings(components ...InputBinding) {
 	for _, component := range components {
-		b.inputBindings[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			b.inputBindings[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 
 // RegisterOutputBindings registers one or more new output bindings.
 func (b *bindingsRegistry) RegisterOutputBindings(components ...OutputBinding) {
 	for _, component := range components {
-		b.outputBindings[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			b.outputBindings[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 

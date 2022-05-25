@@ -22,14 +22,26 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 )
 
+type stringOrSliceOfStrings interface {
+	string | []string
+}
+
 type Configuration struct {
-	Name          string
+	Names         []string
 	FactoryMethod func() configuration.Store
 }
 
-func New(name string, factoryMethod func() configuration.Store) Configuration {
+// New creates a new Configuration.
+func New[T stringOrSliceOfStrings](name T, factoryMethod func() configuration.Store) Configuration {
+	var names []string
+	switch n := any(name).(type) {
+	case string:
+		names = []string{n}
+	case []string:
+		names = n
+	}
 	return Configuration{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -55,7 +67,9 @@ func NewRegistry() Registry {
 // The key is the name of the state store, eg. redis.
 func (s *configurationStoreRegistry) Register(components ...Configuration) {
 	for _, component := range components {
-		s.configurationStores[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			s.configurationStores[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 

@@ -36,6 +36,10 @@ type (
 		Create(name, version string) (secretstores.SecretStore, error)
 	}
 
+	stringOrSliceOfStrings interface {
+		string | []string
+	}
+
 	secretStoreRegistry struct {
 		secretStores map[string]func() secretstores.SecretStore
 	}

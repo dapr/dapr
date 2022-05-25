@@ -40,6 +40,10 @@ type Registry interface {
 	Create(name, version string) (state.Store, error)
 }
 
+type stringOrSliceOfStrings interface {
+	string | []string
+}
+
 type stateStoreRegistry struct {
 	stateStores map[string]func() state.Store
 }

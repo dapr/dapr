@@ -26,7 +26,7 @@ import (
 type (
 	// NameResolution is a name resolution component definition.
 	NameResolution struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() nr.Resolver
 	}
 
@@ -36,15 +36,26 @@ type (
 		Create(name, version string) (nr.Resolver, error)
 	}
 
+	stringOrSliceOfStrings interface {
+		string | []string
+	}
+
 	nameResolutionRegistry struct {
 		resolvers map[string]func() nr.Resolver
 	}
 )
 
 // New creates a NameResolution.
-func New(name string, factoryMethod func() nr.Resolver) NameResolution {
+func New[T stringOrSliceOfStrings](name T, factoryMethod func() nr.Resolver) NameResolution {
+	var names []string
+	switch n := any(name).(type) {
+	case string:
+		names = []string{n}
+	case []string:
+		names = n
+	}
 	return NameResolution{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -59,7 +70,9 @@ func NewRegistry() Registry {
 // Register adds one or many name resolution components to the registry.
 func (s *nameResolutionRegistry) Register(components ...NameResolution) {
 	for _, component := range components {
-		s.resolvers[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			s.resolvers[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 

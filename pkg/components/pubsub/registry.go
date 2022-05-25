@@ -26,7 +26,7 @@ import (
 type (
 	// PubSub is a pub/sub component definition.
 	PubSub struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() pubsub.PubSub
 	}
 
@@ -36,15 +36,26 @@ type (
 		Create(name, version string) (pubsub.PubSub, error)
 	}
 
+	stringOrSliceOfStrings interface {
+		string | []string
+	}
+
 	pubSubRegistry struct {
 		messageBuses map[string]func() pubsub.PubSub
 	}
 )
 
 // New creates a PubSub.
-func New(name string, factoryMethod func() pubsub.PubSub) PubSub {
+func New[T stringOrSliceOfStrings](name T, factoryMethod func() pubsub.PubSub) PubSub {
+	var names []string
+	switch n := any(name).(type) {
+	case string:
+		names = []string{n}
+	case []string:
+		names = n
+	}
 	return PubSub{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -59,7 +70,9 @@ func NewRegistry() Registry {
 // Register registers one or more new message buses.
 func (p *pubSubRegistry) Register(components ...PubSub) {
 	for _, component := range components {
-		p.messageBuses[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			p.messageBuses[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 
