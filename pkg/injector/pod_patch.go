@@ -859,7 +859,29 @@ func appendUnixDomainSocketVolume(pod *corev1.Pod) *corev1.VolumeMount {
 	return &corev1.VolumeMount{Name: unixDomainSocketVolume, MountPath: unixDomainSocket}
 }
 
+func podContainsVolume(pod corev1.Pod, name string) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
-	// TODO: implement
-	return []corev1.VolumeMount{}
+	var volumeMounts []corev1.VolumeMount
+
+	vs := append(
+		utils.ParseVolumeMountsString(getVolumeMountsReadOnly(pod.Annotations), true),
+		utils.ParseVolumeMountsString(getVolumeMountsReadWrite(pod.Annotations), false)...)
+
+	for _, v := range vs {
+		if podContainsVolume(pod, v.Name) {
+			volumeMounts = append(volumeMounts, v)
+		} else {
+			log.Warnf("volume %s is not present in pod %s, skipping.", v.Name, pod.Name)
+		}
+	}
+
+	return volumeMounts
 }
