@@ -19,6 +19,8 @@ import (
 	"strings"
 	"syscall"
 
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+
 	"github.com/valyala/fasthttp"
 	"go.uber.org/automaxprocs/maxprocs"
 
@@ -124,6 +126,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
+	"github.com/dapr/components-contrib/bindings/huawei/obs"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
@@ -160,6 +163,10 @@ import (
 
 	"github.com/dapr/components-contrib/configuration"
 	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
+
+	// Lock.
+	"github.com/dapr/components-contrib/lock"
+	lock_redis "github.com/dapr/components-contrib/lock/redis"
 )
 
 var (
@@ -281,6 +288,11 @@ func main() {
 		runtime.WithConfigurations(
 			configuration_loader.New("redis", func() configuration.Store {
 				return configuration_redis.NewRedisConfigurationStore(logContrib)
+			}),
+		),
+		runtime.WithLocks(
+			lock_loader.New("redis", func() lock.Store {
+				return lock_redis.NewStandaloneRedisLock(logContrib)
 			}),
 		),
 		runtime.WithPubSubs(
@@ -496,6 +508,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
 				return graphql.NewGraphQL(logContrib)
+			}),
+			bindings_loader.NewOutput("huawei.obs", func() bindings.OutputBinding {
+				return obs.NewHuaweiOBS(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

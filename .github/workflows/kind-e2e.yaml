@@ -225,11 +225,11 @@ jobs:
         path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
 
     - name: Upload test logs
-        if: always()
-        uses: actions/upload-artifact@master
-        with:
-          name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_test_logs
-          path: ${{ env.DAPR_TEST_LOG_PATH }}
+      if: always()
+      uses: actions/upload-artifact@master
+      with:
+        name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_test_logs
+        path: ${{ env.DAPR_TEST_LOG_PATH }}
 
     - name: Upload test results
       if: always()
