@@ -128,7 +128,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
-			"--enable-builtin-k8s-secret-store=true",
+			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -188,7 +188,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
-			"--enable-builtin-k8s-secret-store=true",
+			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -233,7 +233,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
-			"--enable-builtin-k8s-secret-store=true",
+			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
 		}
 
@@ -268,7 +268,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
-			"--enable-builtin-k8s-secret-store=true",
+			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
 		}
 
@@ -303,7 +303,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "5",
 			"--enable-api-logging=false",
-			"--enable-builtin-k8s-secret-store=true",
+			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
 		}
 
@@ -347,7 +347,7 @@ func TestGetSideCarContainer(t *testing.T) {
 	t.Run("disable Builtin K8s Secret Store", func(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = defaultTestConfig
-		annotations[daprEnableBuiltinK8sSecretStore] = "false"
+		annotations[daprDisableBuiltinK8sSecretStore] = "true"
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
@@ -372,7 +372,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
-			"--enable-builtin-k8s-secret-store=false",
+			"--disable-builtin-k8s-secret-store=true",
 			"--enable-mtls",
 		}
 

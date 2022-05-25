@@ -383,7 +383,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Warnf("failed to watch component updates: %s", err)
 		}
 	}
-	if a.runtimeConfig.EnableBuiltinSecretStore {
+	if !a.runtimeConfig.DisableBuiltinK8sSecretStore {
 		a.appendBuiltinSecretStore()
 	}
 	err = a.loadComponents(opts)

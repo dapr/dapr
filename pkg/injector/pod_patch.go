@@ -76,7 +76,7 @@ const (
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
 	daprEnableAPILogging              = "dapr.io/enable-api-logging"
 	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
-	daprEnableBuiltinK8sSecretStore   = "dapr.io/enable-builtin-k8s-secret-store"
+	daprDisableBuiltinK8sSecretStore  = "dapr.io/disable-builtin-k8s-secret-store"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
@@ -116,7 +116,7 @@ const (
 	trueString                        = "true"
 	defaultDaprHTTPStreamRequestBody  = false
 	defaultAPILoggingEnabled          = false
-	defaultBuiltinSecretStoreEnabled  = true
+	defaultBuiltinSecretStoreDisabled = false
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -447,8 +447,8 @@ func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprHTTPStreamRequestBody, defaultDaprHTTPStreamRequestBody)
 }
 
-func getEnableBuiltinK8sSecretStore(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprEnableBuiltinK8sSecretStore, defaultBuiltinSecretStoreEnabled)
+func getDisableBuiltinK8sSecretStore(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprDisableBuiltinK8sSecretStore, defaultBuiltinSecretStoreDisabled)
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
@@ -606,7 +606,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	metricsPort := getMetricsPort(annotations)
 	maxConcurrency, err := getMaxConcurrency(annotations)
 	sidecarListenAddresses := getListenAddresses(annotations)
-	builtinK8sSecretStoreEnabled := getEnableBuiltinK8sSecretStore(annotations)
+	builtinK8sSecretStoreDisabled := getDisableBuiltinK8sSecretStore(annotations)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -679,7 +679,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
 		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
 		fmt.Sprintf("--enable-api-logging=%t", apiLoggingEnabled),
-		fmt.Sprintf("--enable-builtin-k8s-secret-store=%t", builtinK8sSecretStoreEnabled),
+		fmt.Sprintf("--disable-builtin-k8s-secret-store=%t", builtinK8sSecretStoreDisabled),
 	}
 
 	debugEnabled := getEnableDebug(annotations)
