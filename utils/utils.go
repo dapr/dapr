@@ -106,16 +106,15 @@ func ParseEnvString(envStr string) []corev1.EnvVar {
 func ParseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.VolumeMount {
 	volumeMounts := make([]corev1.VolumeMount, 0)
 
-	volumeMountsStr := strings.Split(volumeMountStr, ",")
-	for _, volumeMountStr := range volumeMountsStr {
-		volumeMountStr = strings.TrimSpace(volumeMountStr)
-		volumeMount := strings.Split(volumeMountStr, ":")
-		if len(volumeMount) != 2 {
+	vs := strings.Split(volumeMountStr, ",")
+	for _, v := range vs {
+		vmount := strings.Split(strings.TrimSpace(v), ":")
+		if len(vmount) != 2 {
 			continue
 		}
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      volumeMount[0],
-			MountPath: volumeMount[1],
+			Name:      vmount[0],
+			MountPath: vmount[1],
 			ReadOnly:  readOnly,
 		})
 	}
