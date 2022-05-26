@@ -147,7 +147,7 @@ func TestParseVolumeMountsString(t *testing.T) {
 		},
 		{
 			testName:     "valid volume mount string with readonly true.",
-			mountStr:     "my-mount:/tmp/mount1,mount2:/root/mount2",
+			mountStr:     " my-mount:/tmp/mount1,mount2:/root/mount2 ",
 			readOnly:     true,
 			expMountsLen: 2,
 			expMounts: []corev1.VolumeMount{
@@ -160,6 +160,18 @@ func TestParseVolumeMountsString(t *testing.T) {
 					Name:      "mount2",
 					MountPath: "/root/mount2",
 					ReadOnly:  true,
+				},
+			},
+		},
+		{
+			testName:     "volume mount string with invalid mounts",
+			mountStr:     "my-mount:/tmp/mount1:rw,mount2:/root/mount2,mount3",
+			readOnly:     false,
+			expMountsLen: 1,
+			expMounts: []corev1.VolumeMount{
+				{
+					Name:      "mount2",
+					MountPath: "/root/mount2",
 				},
 			},
 		},
