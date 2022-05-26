@@ -438,6 +438,44 @@ func TestAppSSL(t *testing.T) {
 	})
 }
 
+func TestSidecarContainerVolumeMounts(t *testing.T) {
+	t.Run("sidecar contains annotatated volume mounts", func(t *testing.T) {
+		annotations := map[string]string{}
+		volumeMounts := []corev1.VolumeMount{
+			{Name: "foo", MountPath: "/foo"},
+			{Name: "bar", MountPath: "/bar"},
+		}
+
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, volumeMounts, "", "", "", "", false, "")
+		assert.Equal(t, 2, len(c.VolumeMounts))
+		assert.Equal(t, volumeMounts[0], c.VolumeMounts[0])
+		assert.Equal(t, volumeMounts[1], c.VolumeMounts[1])
+	})
+
+	t.Run("sidecar contains all volume mounts", func(t *testing.T) {
+		annotations := map[string]string{}
+		socketVolumeMount := corev1.VolumeMount{
+			Name:      "socket-mount",
+			MountPath: "/socket/mount",
+		}
+		tokenVolumeMount := corev1.VolumeMount{
+			Name:      "token-mount",
+			MountPath: "/token/mount",
+		}
+		volumeMounts := []corev1.VolumeMount{
+			{Name: "foo", MountPath: "/foo"},
+			{Name: "bar", MountPath: "/bar"},
+		}
+
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", &socketVolumeMount, &tokenVolumeMount, volumeMounts, "", "", "", "", false, "")
+		assert.Equal(t, 4, len(c.VolumeMounts))
+		assert.Equal(t, socketVolumeMount, c.VolumeMounts[0])
+		assert.Equal(t, tokenVolumeMount, c.VolumeMounts[1])
+		assert.Equal(t, volumeMounts[0], c.VolumeMounts[2])
+		assert.Equal(t, volumeMounts[1], c.VolumeMounts[3])
+	})
+}
+
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
 
