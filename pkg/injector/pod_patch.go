@@ -869,7 +869,7 @@ func podContainsVolume(pod corev1.Pod, name string) bool {
 }
 
 func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
-	var volumeMounts []corev1.VolumeMount
+	volumeMounts := []corev1.VolumeMount{}
 
 	vs := append(
 		utils.ParseVolumeMountsString(getVolumeMountsReadOnly(pod.Annotations), true),
