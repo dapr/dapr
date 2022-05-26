@@ -439,7 +439,7 @@ func TestAppSSL(t *testing.T) {
 }
 
 func TestSidecarContainerVolumeMounts(t *testing.T) {
-	t.Run("sidecar contains annotatated volume mounts", func(t *testing.T) {
+	t.Run("sidecar contains custom volume mounts", func(t *testing.T) {
 		annotations := map[string]string{}
 		volumeMounts := []corev1.VolumeMount{
 			{Name: "foo", MountPath: "/foo"},
