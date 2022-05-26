@@ -378,7 +378,6 @@ func TestGetSideCarContainer(t *testing.T) {
 
 		assert.EqualValues(t, expectedArgs, container.Args)
 	})
-
 }
 
 func TestImagePullPolicy(t *testing.T) {
