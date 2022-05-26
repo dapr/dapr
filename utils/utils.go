@@ -101,7 +101,7 @@ func ParseEnvString(envStr string) []corev1.EnvVar {
 }
 
 // ParseVolumeMountsString parses the annotation and returns volume mounts.
-// The format of the annotation is: "mountPath1=hostPath1,mountPath2=hostPath2"
+// The format of the annotation is: "mountPath1:hostPath1,mountPath2:hostPath2"
 // The readOnly parameter applies to all mounts.
 func ParseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.VolumeMount {
 	volumeMounts := make([]corev1.VolumeMount, 0)
@@ -109,7 +109,7 @@ func ParseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.Volu
 	volumeMountsStr := strings.Split(volumeMountStr, ",")
 	for _, volumeMountStr := range volumeMountsStr {
 		volumeMountStr = strings.TrimSpace(volumeMountStr)
-		volumeMount := strings.Split(volumeMountStr, "=")
+		volumeMount := strings.Split(volumeMountStr, ":")
 		if len(volumeMount) != 2 {
 			continue
 		}
