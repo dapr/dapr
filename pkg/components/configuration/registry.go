@@ -23,13 +23,18 @@ import (
 )
 
 type Configuration struct {
-	Name          string
+	Names         []string
 	FactoryMethod func() configuration.Store
 }
 
-func New(name string, factoryMethod func() configuration.Store) Configuration {
+// New creates a new Configuration.
+func New(name string, factoryMethod func() configuration.Store, aliases ...string) Configuration {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return Configuration{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -55,7 +60,9 @@ func NewRegistry() Registry {
 // The key is the name of the state store, eg. redis.
 func (s *configurationStoreRegistry) Register(components ...Configuration) {
 	for _, component := range components {
-		s.configurationStores[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			s.configurationStores[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 
