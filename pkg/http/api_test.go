@@ -2145,7 +2145,6 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		storeName: fakeConfigurationStore,
 	}
 	testAPI := &api{
-		json:                jsoniter.ConfigFastest,
 		resiliency:          resiliency.New(nil),
 		configurationStores: fakeConfigurationStores,
 	}
