@@ -249,9 +249,10 @@ jobs:
           export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
           echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
         shell: bash
-      - name: Set up container log path
+      - name: Set up log paths
         run: |
           echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/perf_tests" >> $GITHUB_ENV
+          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/perf_tests" >> $GITHUB_ENV
         shell: bash
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -273,7 +274,6 @@ jobs:
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
                 `CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
-          shell: bash
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
         uses: actions/setup-go@v3
@@ -406,6 +406,12 @@ jobs:
         with:
           name: perf_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: perf_test_logs
+          path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_PREFIX != ''
         env:

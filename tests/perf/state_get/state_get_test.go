@@ -35,6 +35,8 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("state_get")
+
 	testApps := []kube.AppDescription{
 		{
 			AppName:           "tester",
