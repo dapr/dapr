@@ -52,6 +52,9 @@ const (
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("resiliency")
+	utils.InitHTTPClient(true)
+
 	testApps := []kube.AppDescription{
 		{
 			AppName:        "resiliencyapp",

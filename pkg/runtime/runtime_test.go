@@ -32,6 +32,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+
+	"github.com/dapr/components-contrib/lock"
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
@@ -86,6 +91,7 @@ const (
 	TestRuntimeConfigID  = "consumer0"
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
+	TestLockName         = "testlock"
 	maxGRPCServerUptime  = 200 * time.Millisecond
 )
 
@@ -300,6 +306,107 @@ func TestDoProcessComponent(t *testing.T) {
 			Metadata: getFakeMetadataItems(),
 		},
 	}
+
+	lockComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestLockName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:    "lock.mockLock",
+			Version: "v1",
+		},
+	}
+
+	t.Run("test error on lock init", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(assert.AnError)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+
+		// assert
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+	})
+
+	t.Run("test error when lock version invalid", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		lockComponentV3 := lockComponent
+		lockComponentV3.Spec.Version = "v3"
+
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentV3)
+
+		// assert
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, err.Error(), "couldn't find lock store lock.mockLock/v3")
+	})
+
+	t.Run("test error when lock prefix strategy invalid", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(nil)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		lockComponentWithWrongStrategy := lockComponent
+		lockComponentWithWrongStrategy.Spec.Metadata = []components_v1alpha1.MetadataItem{
+			{
+				Name: "keyPrefix",
+				Value: components_v1alpha1.DynamicValue{
+					JSON: v1.JSON{Raw: []byte("||")},
+				},
+			},
+		}
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentWithWrongStrategy)
+		// assert
+		assert.Error(t, err)
+	})
+
+	t.Run("lock init successfully and set right strategy", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(nil)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+		// assert
+		assert.Nil(t, err, "unexpected error")
+		// get modified key
+		key, err := lock_loader.GetModifiedLockKey("test", "mockLock", "appid-1")
+		assert.Nil(t, err, "unexpected error")
+		assert.Equal(t, key, "lock||appid-1||test")
+	})
 
 	t.Run("test error on pubsub init", func(t *testing.T) {
 		// setup
@@ -894,6 +1001,51 @@ func TestMetadataUUID(t *testing.T) {
 		assert.NotEqual(t, uuid0, uuid1)
 		assert.NotEqual(t, uuid0, uuid2)
 		assert.NotEqual(t, uuid1, uuid2)
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
+}
+
+func TestMetadataPodName(t *testing.T) {
+	pubsubComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	pubsubComponent.Spec.Metadata = append(
+		pubsubComponent.Spec.Metadata,
+		components_v1alpha1.MetadataItem{
+			Name: "consumerID",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{podName}"),
+				},
+			},
+		})
+	rt := NewTestDaprRuntime(modes.KubernetesMode)
+	defer stopRuntime(t, rt)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		}),
+	)
+
+	rt.podName = "testPodName"
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		consumerID := metadata.Properties["consumerID"]
+
+		assert.Equal(t, "testPodName", consumerID)
 	})
 
 	err := rt.processComponentAndDependents(pubsubComponent)

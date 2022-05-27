@@ -19,11 +19,16 @@ import (
 	"strings"
 	"syscall"
 
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+
 	"github.com/valyala/fasthttp"
 	"go.uber.org/automaxprocs/maxprocs"
 
-	"github.com/dapr/dapr/pkg/runtime"
+	"github.com/dapr/components-contrib/state/zookeeper"
+
 	"github.com/dapr/kit/logger"
+
+	"github.com/dapr/dapr/pkg/runtime"
 
 	// Included components in compiled daprd.
 
@@ -35,6 +40,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
+	"github.com/dapr/components-contrib/secretstores/huaweicloud/csms"
 	secretstore_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstore_env "github.com/dapr/components-contrib/secretstores/local/env"
 	secretstore_file "github.com/dapr/components-contrib/secretstores/local/file"
@@ -54,6 +60,7 @@ import (
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
 	"github.com/dapr/components-contrib/state/hazelcast"
+	state_in_memory "github.com/dapr/components-contrib/state/in-memory"
 	state_jetstream "github.com/dapr/components-contrib/state/jetstream"
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
@@ -64,13 +71,12 @@ import (
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/rethinkdb"
 	"github.com/dapr/components-contrib/state/sqlserver"
-	"github.com/dapr/components-contrib/state/zookeeper"
 
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 
 	// Pub/Sub.
 	pubs "github.com/dapr/components-contrib/pubsub"
-	pubsub_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
+	pubsub_aws_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
 	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
@@ -83,6 +89,7 @@ import (
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
+
 	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
@@ -119,6 +126,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
+	"github.com/dapr/components-contrib/bindings/huawei/obs"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
@@ -141,7 +149,7 @@ import (
 
 	// HTTP Middleware.
 
-	middleware "github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
 	"github.com/dapr/components-contrib/middleware/http/oauth2clientcredentials"
@@ -155,6 +163,10 @@ import (
 
 	"github.com/dapr/components-contrib/configuration"
 	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
+
+	// Lock.
+	"github.com/dapr/components-contrib/lock"
+	lock_redis "github.com/dapr/components-contrib/lock/redis"
 )
 
 var (
@@ -199,6 +211,9 @@ func main() {
 			}),
 			secretstores_loader.New("alicloud.parameterstore", func() secretstores.SecretStore {
 				return alicloud_paramstore.NewParameterStore(logContrib)
+			}),
+			secretstores_loader.New("huaweicloud.csms", func() secretstores.SecretStore {
+				return csms.NewHuaweiCsmsSecretStore(logContrib)
 			}),
 		),
 		runtime.WithStates(
@@ -266,13 +281,24 @@ func main() {
 			state_loader.New("cockroachdb", func() state.Store {
 				return cockroachdb.New(logContrib)
 			}),
+			state_loader.New("in-memory", func() state.Store {
+				return state_in_memory.NewInMemoryStateStore(logContrib)
+			}),
 		),
 		runtime.WithConfigurations(
 			configuration_loader.New("redis", func() configuration.Store {
 				return configuration_redis.NewRedisConfigurationStore(logContrib)
 			}),
 		),
+		runtime.WithLocks(
+			lock_loader.New("redis", func() lock.Store {
+				return lock_redis.NewStandaloneRedisLock(logContrib)
+			}),
+		),
 		runtime.WithPubSubs(
+			pubsub_loader.New("aws.snssqs", func() pubs.PubSub {
+				return pubsub_aws_snssqs.NewSnsSqs(logContrib)
+			}, "snssqs"), // alias "snssqs" for backwards-compatibility; see dapr/components-contrib#1753
 			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
 				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
 			}),
@@ -305,9 +331,6 @@ func main() {
 			}),
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)
-			}),
-			pubsub_loader.New("snssqs", func() pubs.PubSub {
-				return pubsub_snssqs.NewSnsSqs(logContrib)
 			}),
 			pubsub_loader.New("in-memory", func() pubs.PubSub {
 				return pubsub_inmemory.New(logContrib)
@@ -485,6 +508,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
 				return graphql.NewGraphQL(logContrib)
+			}),
+			bindings_loader.NewOutput("huawei.obs", func() bindings.OutputBinding {
+				return obs.NewHuaweiOBS(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

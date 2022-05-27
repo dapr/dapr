@@ -91,6 +91,9 @@ func countActorAction(resp []byte, actorID string, action string) int {
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("actor_reminder_partition")
+	utils.InitHTTPClient(false)
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
