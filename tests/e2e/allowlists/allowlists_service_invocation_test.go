@@ -43,6 +43,9 @@ const numHealthChecks = 60 // Number of times to call the endpoint to check for 
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("allowlists")
+	utils.InitHTTPClient(false)
+
 	// These apps will be deployed for hellodapr test before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{

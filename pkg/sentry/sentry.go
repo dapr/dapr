@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -22,24 +23,55 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 type CertificateAuthority interface {
-	Run(context.Context, config.SentryConfig, chan bool)
-	Restart(ctx context.Context, conf config.SentryConfig)
+	Start(context.Context, config.SentryConfig) error
+	Stop()
+	Restart(context.Context, config.SentryConfig) error
 }
 
 type sentry struct {
-	server    server.CAServer
-	reloading bool
+	conf        config.SentryConfig
+	ctx         context.Context
+	cancel      context.CancelFunc
+	server      server.CAServer
+	restartLock sync.Mutex
+	running     chan bool
+	stopping    chan bool
 }
 
 // NewSentryCA returns a new Sentry Certificate Authority instance.
 func NewSentryCA() CertificateAuthority {
-	return &sentry{}
+	return &sentry{
+		running: make(chan bool, 1),
+	}
 }
 
-// Run loads the trust anchors and issuer certs, creates a new CA and runs the CA server.
-func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan bool) {
+// Start the server in background.
+func (s *sentry) Start(ctx context.Context, conf config.SentryConfig) error {
+	// If the server is already running, return an error
+	select {
+	case s.running <- true:
+	default:
+		return errors.New("CertificateAuthority server is already running")
+	}
+
+	// Create the CA server
+	s.conf = conf
+	certAuth, v := s.createCAServer()
+
+	// Start the server in background
+	s.ctx, s.cancel = context.WithCancel(ctx)
+	go s.run(certAuth, v)
+
+	// Wait 100ms to ensure a clean startup
+	time.Sleep(100 * time.Millisecond)
+
+	return nil
+}
+
+// Loads the trust anchors and issuer certs, then creates a new CA.
+func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) {
 	// Create CA
-	certAuth, authorityErr := ca.NewCertificateAuthority(conf)
+	certAuth, authorityErr := ca.NewCertificateAuthority(s.conf)
 	if authorityErr != nil {
 		log.Fatalf("error getting certificate authority: %s", authorityErr)
 	}
@@ -50,8 +82,14 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 	if trustStoreErr != nil {
 		log.Fatalf("error loading trust root bundle: %s", trustStoreErr)
 	}
-	log.Infof("trust root bundle loaded. issuer cert expiry: %s", certAuth.GetCACertBundle().GetIssuerCertExpiry().String())
-	monitoring.IssuerCertExpiry(certAuth.GetCACertBundle().GetIssuerCertExpiry())
+	certExpiry := certAuth.GetCACertBundle().GetIssuerCertExpiry()
+	if certExpiry == nil {
+		log.Fatalf("error loading trust root bundle: missing certificate expiry")
+	} else {
+		// Need to be in an else block for the linter
+		log.Infof("trust root bundle loaded. issuer cert expiry: %s", certExpiry.String())
+	}
+	monitoring.IssuerCertExpiry(certExpiry)
 
 	// Create identity validator
 	v, validatorErr := createValidator()
@@ -60,45 +98,78 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 	}
 	log.Info("validator created")
 
-	// Run the CA server
+	return certAuth, v
+}
+
+// Runs the CA server.
+// This method blocks until the server is shut down.
+func (s *sentry) run(certAuth ca.CertificateAuthority, v identity.Validator) {
 	s.server = server.NewCAServer(certAuth, v)
 
-	certExpiryCheckTicker := time.NewTicker(time.Hour)
+	// In background, watch for the root certificate's expiration
+	go watchCertExpiry(s.ctx, certAuth)
+
+	// Watch for context cancelation to stop the server
 	go func() {
-		for {
-			select {
-			case <-certExpiryCheckTicker.C:
-				caCrt := certAuth.GetCACertBundle().GetRootCertPem()
-				block, _ := pem.Decode(caCrt)
-				cert, certParseErr := x509.ParseCertificate(block.Bytes)
-				if certParseErr != nil {
-					log.Warn("could not determine Dapr root certificate expiration time")
-					continue
-				}
-				if cert.NotAfter.Before(time.Now().UTC()) {
-					log.Warn("Dapr root certificate expiration warning: certificate has expired.")
-					continue
-				}
-				if (cert.NotAfter.Add(-30 * 24 * time.Hour)).Before(time.Now().UTC()) {
-					expiryDurationHours := int(cert.NotAfter.Sub(time.Now().UTC()).Hours())
-					log.Warnf("Dapr root certificate expiration warning: certificate expires in %d days and %d hours", expiryDurationHours/24, expiryDurationHours%24)
-				}
-			case <-ctx.Done():
-				log.Info("sentry certificate authority is shutting down")
-				s.server.Shutdown() // nolint: errcheck
-			}
+		<-s.ctx.Done()
+		s.server.Shutdown()
+		close(s.running)
+		s.running = make(chan bool, 1)
+		if s.stopping != nil {
+			close(s.stopping)
 		}
 	}()
 
-	if readyCh != nil {
-		readyCh <- true
-		s.reloading = false
-	}
-
+	// Start the server; this is a blocking call
 	log.Infof("sentry certificate authority is running, protecting ya'll")
-	serverRunErr := s.server.Run(conf.Port, certAuth.GetCACertBundle())
+	serverRunErr := s.server.Run(s.conf.Port, certAuth.GetCACertBundle())
 	if serverRunErr != nil {
 		log.Fatalf("error starting gRPC server: %s", serverRunErr)
+	}
+}
+
+// Stop the server.
+func (s *sentry) Stop() {
+	log.Info("sentry certificate authority is shutting down")
+	if s.cancel != nil {
+		s.stopping = make(chan bool)
+		s.cancel()
+		<-s.stopping
+		s.stopping = nil
+	}
+}
+
+// Watches certificates' expiry and shows an error message when they're nearing expiration time.
+// This is a blocking method that should be run in its own goroutine.
+func watchCertExpiry(ctx context.Context, certAuth ca.CertificateAuthority) {
+	log.Debug("starting root certificate expiration watcher")
+	certExpiryCheckTicker := time.NewTicker(time.Hour)
+	for {
+		select {
+		case <-certExpiryCheckTicker.C:
+			caCrt := certAuth.GetCACertBundle().GetRootCertPem()
+			block, _ := pem.Decode(caCrt)
+			cert, certParseErr := x509.ParseCertificate(block.Bytes)
+			if certParseErr != nil {
+				log.Warn("could not determine Dapr root certificate expiration time")
+				break
+			}
+			if cert.NotAfter.Before(time.Now().UTC()) {
+				log.Warn("Dapr root certificate expiration warning: certificate has expired.")
+				break
+			}
+			if (cert.NotAfter.Add(-30 * 24 * time.Hour)).Before(time.Now().UTC()) {
+				expiryDurationHours := int(cert.NotAfter.Sub(time.Now().UTC()).Hours())
+				log.Warnf("Dapr root certificate expiration warning: certificate expires in %d days and %d hours", expiryDurationHours/24, expiryDurationHours%24)
+			} else {
+				validity := cert.NotAfter.Sub(time.Now().UTC())
+				log.Debugf("Dapr root certificate is still valid for %s", validity.String())
+			}
+		case <-ctx.Done():
+			log.Debug("terminating root certificate expiration watcher")
+			certExpiryCheckTicker.Stop()
+			return
+		}
 	}
 }
 
@@ -114,12 +185,12 @@ func createValidator() (identity.Validator, error) {
 	return selfhosted.NewValidator(), nil
 }
 
-func (s *sentry) Restart(ctx context.Context, conf config.SentryConfig) {
-	if s.reloading {
-		return
-	}
-	s.reloading = true
-
-	s.server.Shutdown()
-	go s.Run(ctx, conf, nil)
+func (s *sentry) Restart(ctx context.Context, conf config.SentryConfig) error {
+	s.restartLock.Lock()
+	defer s.restartLock.Unlock()
+	log.Info("sentry certificate authority is restarting")
+	s.Stop()
+	// Wait 200ms to ensure a clean shutdown
+	time.Sleep(200 * time.Millisecond)
+	return s.Start(ctx, conf)
 }

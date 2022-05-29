@@ -77,6 +77,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
+			"dapr.io/enable-api-logging":                "true",
 		}
 		if !appDesc.IsJob {
 			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)
