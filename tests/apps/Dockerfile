@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-FROM debian:buster-slim
+FROM gcr.io/distroless/static:nonroot
 
 WORKDIR /app
 COPY . .

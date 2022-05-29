@@ -20,17 +20,21 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-
-	"google.golang.org/grpc"
 )
 
 const (
@@ -78,7 +82,9 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
+	lock.Lock()
 	initializeSets()
+	lock.Unlock()
 
 	/* #nosec */
 	s := grpc.NewServer()
@@ -86,15 +92,23 @@ func main() {
 
 	log.Println("Client starting...")
 
+	// Stop the gRPC server when we get a termination signal
+	stopCh := make(chan os.Signal, 1)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		// Wait for cancelation signal
+		<-stopCh
+		log.Println("Shutdown signal received")
+		s.GracefulStop()
+	}()
+
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
+	log.Println("App shut down")
 }
 
 func initializeSets() {
-	lock.Lock()
-	defer lock.Unlock()
-
 	receivedMessagesA = sets.NewString()
 	receivedMessagesB = sets.NewString()
 	receivedMessagesC = sets.NewString()
@@ -104,12 +118,23 @@ func initializeSets() {
 // This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload.
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	log.Printf("Got invoked method %s\n", in.Method)
+	reqID := "s-" + uuid.New().String()
+	if in.HttpExtension != nil && in.HttpExtension.Querystring != "" {
+		qs, err := url.ParseQuery(in.HttpExtension.Querystring)
+		if err == nil && qs.Has("reqid") {
+			reqID = qs.Get("reqid")
+		}
+	}
+
+	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
+
+	lock.Lock()
+	defer lock.Unlock()
 
 	respBody := &anypb.Any{}
 	switch in.Method {
 	case "getMessages":
-		respBody.Value = s.getReceivedMessages()
+		respBody.Value = s.getMessages(reqID)
 	case "initialize":
 		initializeSets()
 	case "set-respond-error":
@@ -125,10 +150,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 	return &commonv1pb.InvokeResponse{Data: respBody, ContentType: "application/json"}, nil
 }
 
-func (s *server) getReceivedMessages() []byte {
-	lock.Lock()
-	defer lock.Unlock()
-
+func (s *server) getMessages(reqID string) []byte {
 	resp := receivedMessagesResponse{
 		ReceivedByTopicA:   receivedMessagesA.List(),
 		ReceivedByTopicB:   receivedMessagesB.List(),
@@ -137,39 +159,32 @@ func (s *server) getReceivedMessages() []byte {
 	}
 
 	rawResp, _ := json.Marshal(resp)
+	log.Printf("(%s) getMessages response: %s", reqID, string(rawResp))
 	return rawResp
 }
 
 func (s *server) setRespondWithError() {
 	log.Println("setRespondWithError called")
-	lock.Lock()
-	defer lock.Unlock()
 	respondWithError = true
 }
 
 func (s *server) setRespondWithRetry() {
 	log.Println("setRespondWithRetry called")
-	lock.Lock()
-	defer lock.Unlock()
 	respondWithRetry = true
 }
 
 func (s *server) setRespondWithEmptyJSON() {
 	log.Println("setRespondWithEmptyJSON called")
-	lock.Lock()
-	defer lock.Unlock()
 	respondWithEmptyJSON = true
 }
 
 func (s *server) setRespondWithInvalidStatus() {
 	log.Println("setRespondWithInvalidStatus called")
-	lock.Lock()
-	defer lock.Unlock()
 	respondWithInvalidStatus = true
 }
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
-// To subscribe to a topic named TopicA.
+// to subscribe to a topic named TopicA.
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &pb.ListTopicSubscriptionsResponse{
@@ -195,18 +210,26 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 	}, nil
 }
 
-// This method is fired whenever a message has been published to a topic that has been subscribed. Dapr sends published messages in a CloudEvents 1.0 envelope.
+// This method is fired whenever a message has been published to a topic that has been subscribed.
+// Dapr sends published messages in a CloudEvents 1.0 envelope.
 func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*pb.TopicEventResponse, error) {
-	log.Printf("Message arrived - Topic: %s, Message: %s\n", in.Topic, string(in.Data))
+	lock.Lock()
+	defer lock.Unlock()
+
+	reqID := uuid.New().String()
+	log.Printf("(%s) Message arrived - Topic: %s, Message: %s", reqID, in.Topic, string(in.Data))
 
 	if respondWithRetry {
+		log.Printf("(%s) Responding with RETRY", reqID)
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_RETRY,
 		}, nil
 	} else if respondWithError {
+		log.Printf("(%s) Responding with ERROR", reqID)
 		// do not store received messages, respond with error
 		return nil, errors.New("error response")
 	} else if respondWithInvalidStatus {
+		log.Printf("(%s) Responding with INVALID", reqID)
 		// do not store received messages, respond with success but an invalid status
 		return &pb.TopicEventResponse{
 			Status: 4,
@@ -214,6 +237,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	}
 
 	if in.Data == nil {
+		log.Printf("(%s) Responding with DROP. in.Data is nil", reqID)
 		// Return success with DROP status to drop message
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_DROP,
@@ -223,6 +247,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	var msg string
 	err := json.Unmarshal(in.Data, &msg)
 	if err != nil {
+		log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
 		// Return success with DROP status to drop message
 		return &pb.TopicEventResponse{
 			Status: pb.TopicEventResponse_DROP,
@@ -235,14 +260,12 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 		var actualMsg string
 		err = json.Unmarshal([]byte(msg), &actualMsg)
 		if err != nil {
-			log.Printf("Error extracing JSON from raw event: %v", err)
+			log.Printf("(%s) Error extracing JSON from raw event: %v", reqID, err)
 		} else {
 			msg = actualMsg
 		}
 	}
 
-	lock.Lock()
-	defer lock.Unlock()
 	if strings.HasPrefix(in.Topic, pubsubA) && !receivedMessagesA.Has(msg) {
 		receivedMessagesA.Insert(msg)
 	} else if strings.HasPrefix(in.Topic, pubsubB) && !receivedMessagesB.Has(msg) {
@@ -252,12 +275,15 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	} else if strings.HasPrefix(in.Topic, pubsubRaw) && !receivedMessagesRaw.Has(msg) {
 		receivedMessagesRaw.Insert(msg)
 	} else {
-		log.Printf("Received duplicate message: %s - %s", in.Topic, msg)
+		log.Printf("(%s) Received duplicate message: %s - %s", reqID, in.Topic, msg)
 	}
 
 	if respondWithEmptyJSON {
+		log.Printf("(%s) Responding with {}", reqID)
 		return &pb.TopicEventResponse{}, nil
 	}
+
+	log.Printf("(%s) Responding with SUCCESS", reqID)
 	return &pb.TopicEventResponse{
 		Status: pb.TopicEventResponse_SUCCESS,
 	}, nil
@@ -272,6 +298,6 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
 func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
-	fmt.Printf("Invoked from binding: %s\n", in.Name)
+	log.Printf("Invoked from binding: %s", in.Name)
 	return &pb.BindingEventResponse{}, nil
 }

@@ -13,11 +13,13 @@
 
 FROM golang:1.18 as build_env
 
+ENV CGO_ENABLED=0
 WORKDIR /app
-COPY app.go go.mod ./
-RUN go get -d -v && go build -o app .
+COPY . .
+RUN go get -d -v
+RUN go build -o app .
 
-FROM debian:buster-slim
+FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=build_env /app/app /
 CMD ["/app"]
