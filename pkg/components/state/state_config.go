@@ -33,8 +33,10 @@ const (
 	daprSeparator = "||"
 )
 
-var statesConfiguration = map[string]*StoreConfiguration{}
-var namespace = os.Getenv("NAMESPACE")
+var (
+	statesConfiguration = map[string]*StoreConfiguration{}
+	namespace           = os.Getenv("NAMESPACE")
+)
 
 type StoreConfiguration struct {
 	keyPrefixStrategy string
