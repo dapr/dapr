@@ -28,7 +28,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
@@ -193,12 +192,13 @@ func (a *actorsRuntime) Init() error {
 
 	if len(a.config.HostedActorTypes) > 0 {
 		if a.store == nil {
-			log.Warn("actors: state store must be present to initialize the actor runtime")
-		} else {
-			features := a.store.Features()
-			if !state.FeatureETag.IsPresent(features) || !state.FeatureTransactional.IsPresent(features) {
-				return errors.New(incompatibleStateStore)
-			}
+			// If we have hosted actors and no store, we can't initialize the actor runtime
+			return fmt.Errorf("hosted actors: state store must be present to initialize the actor runtime")
+		}
+
+		features := a.store.Features()
+		if !state.FeatureETag.IsPresent(features) || !state.FeatureTransactional.IsPresent(features) {
+			return errors.New(incompatibleStateStore)
 		}
 	}
 
@@ -887,7 +887,7 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 
 	policy := a.resiliency.ActorPreLockPolicy(context.Background(), reminder.ActorType, reminder.ActorID)
 	return policy(func(ctx context.Context) error {
-		_, err := a.callLocalActor(context.Background(), req)
+		_, err := a.callLocalActor(ctx, req)
 		return err
 	})
 }
@@ -1478,7 +1478,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 						return
 					}
 
-					r.Data = jsoniter.RawMessage(resp.Data)
+					r.Data = json.RawMessage(resp.Data)
 					r.ETag = resp.ETag
 					r.Metadata = resp.Metadata
 				}

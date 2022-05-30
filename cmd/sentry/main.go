@@ -21,7 +21,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dapr/kit/logger"
+	"k8s.io/client-go/util/homedir"
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
@@ -32,6 +32,8 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.sentry")
@@ -55,7 +57,18 @@ func main() {
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
+	var kubeconfig *string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
 	flag.Parse()
+	if err := utils.SetEnvVariables(map[string]string{
+		utils.KubeConfigVar: *kubeconfig,
+	}); err != nil {
+		log.Fatalf("error set env failed:  %s", err.Error())
+	}
 
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
@@ -81,7 +94,7 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	ctx := signals.Context()
+	runCtx := signals.Context()
 	config, err := config.FromConfigName(*configName)
 	if err != nil {
 		log.Warn(err)
@@ -96,34 +109,52 @@ func main() {
 	ca := sentry.NewSentryCA()
 
 	log.Infof("starting watch on filesystem directory: %s", watchDir)
+
 	issuerEvent := make(chan struct{})
-	ready := make(chan bool)
-
-	go ca.Run(ctx, config, ready)
-
-	<-ready
-
-	go fswatcher.Watch(ctx, watchDir, issuerEvent)
 
 	go func() {
-		for range issuerEvent {
-			monitoring.IssuerCertChanged()
-			log.Warn("issuer credentials changed. reloading")
-			ca.Restart(ctx, config)
+		// Restart the server when the issuer credentials change
+		var restart <-chan time.Time
+		for {
+			select {
+			case <-issuerEvent:
+				monitoring.IssuerCertChanged()
+				log.Debug("received issuer credentials changed signal")
+				// Batch all signals within 2s of each other
+				if restart == nil {
+					restart = time.After(2 * time.Second)
+				}
+			case <-restart:
+				log.Warn("issuer credentials changed; reloading")
+				innerErr := ca.Restart(runCtx, config)
+				if innerErr != nil {
+					log.Fatalf("failed to restart sentry server: %s", innerErr)
+				}
+				restart = nil
+			}
 		}
 	}()
 
+	// Start the health server in background
 	go func() {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
 
-		err := healthzServer.Run(ctx, healthzPort)
-		if err != nil {
-			log.Fatalf("failed to start healthz server: %s", err)
+		if innerErr := healthzServer.Run(runCtx, healthzPort); innerErr != nil {
+			log.Fatalf("failed to start healthz server: %s", innerErr)
 		}
 	}()
 
-	<-stop
+	// Start the server in background
+	err = ca.Start(runCtx, config)
+	if err != nil {
+		log.Fatalf("failed to restart sentry server: %s", err)
+	}
+
+	// Watch for changes in the watchDir
+	// This also blocks until runCtx is canceled
+	fswatcher.Watch(runCtx, watchDir, issuerEvent)
+
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
 	<-time.After(shutdownDuration)

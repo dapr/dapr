@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -36,6 +37,8 @@ func stopSidecar() {
 	for retryCount := 0; retryCount < 200; retryCount++ {
 		r, err := http.Post(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort), "", bytes.NewBuffer([]byte{}))
 		if r != nil {
+			// Drain before closing
+			_, _ = io.Copy(io.Discard, r.Body)
 			r.Body.Close()
 		}
 		if err != nil {
@@ -62,7 +65,9 @@ func publishMessagesToPubsub() error {
 	// nolint: gosec
 	r, err := http.Post(daprPubsubURL, "application/json", bytes.NewBuffer(jsonValue))
 	if r != nil {
-		defer r.Body.Close()
+		// Drain before closing
+		_, _ = io.Copy(io.Discard, r.Body)
+		r.Body.Close()
 	}
 	if err != nil {
 		log.Printf("Error publishing messages to pubsub: %+v", err)

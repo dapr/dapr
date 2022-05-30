@@ -248,6 +248,8 @@ test: test-deps
 # Target: lint                                                                 #
 ################################################################################
 # Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
+# Please use golangci-lint version v1.45.2 , otherwise you might encounter errors.
+# You can download version v1.45.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.45.2
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
@@ -258,6 +260,20 @@ lint:
 .PHONY: modtidy
 modtidy:
 	go mod tidy
+
+################################################################################
+# Target: format                                                              #
+################################################################################
+.PHONY: format
+format: modtidy
+	gofumpt -l -w . && goimports -local github.com/dapr/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./pkg/proto/*")
+
+################################################################################
+# Target: check                                                              #
+################################################################################
+.PHONY: check
+check: format test lint
+	git status && [[ -z `git status -s` ]]
 
 ################################################################################
 # Target: init-proto                                                            #

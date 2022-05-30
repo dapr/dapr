@@ -62,7 +62,7 @@ func CertSignFailed(reason string) {
 }
 
 // IssuerCertExpiry records root cert expiry.
-func IssuerCertExpiry(expiry time.Time) {
+func IssuerCertExpiry(expiry *time.Time) {
 	stats.Record(context.Background(), issuerCertExpiryTimestamp.M(expiry.Unix()))
 }
 

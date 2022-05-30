@@ -15,6 +15,7 @@ package state
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -23,6 +24,7 @@ import (
 const (
 	strategyKey = "keyPrefix"
 
+	strategyNamespace = "namespace"
 	strategyAppid     = "appid"
 	strategyStoreName = "name"
 	strategyNone      = "none"
@@ -31,7 +33,10 @@ const (
 	daprSeparator = "||"
 )
 
-var statesConfiguration = map[string]*StoreConfiguration{}
+var (
+	statesConfiguration = map[string]*StoreConfiguration{}
+	namespace           = os.Getenv("NAMESPACE")
+)
 
 type StoreConfiguration struct {
 	keyPrefixStrategy string
@@ -68,6 +73,15 @@ func GetModifiedStateKey(key, storeName, appID string) (string, error) {
 			return key, nil
 		}
 		return fmt.Sprintf("%s%s%s", appID, daprSeparator, key), nil
+	case strategyNamespace:
+		if appID == "" {
+			return key, nil
+		}
+		if namespace == "" {
+			// if namespace is empty, fallback to app id strategy
+			return fmt.Sprintf("%s%s%s", appID, daprSeparator, key), nil
+		}
+		return fmt.Sprintf("%s.%s%s%s", namespace, appID, daprSeparator, key), nil
 	default:
 		return fmt.Sprintf("%s%s%s", stateConfiguration.keyPrefixStrategy, daprSeparator, key), nil
 	}
