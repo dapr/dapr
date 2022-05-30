@@ -106,6 +106,16 @@ func TestNamespacePrefix(t *testing.T) {
 		originalStateKey := GetOriginalStateKey(modifiedStateKey)
 		require.Equal(t, key, originalStateKey)
 	})
+
+	t.Run("with empty appid", func(t *testing.T) {
+		namespace = ""
+
+		modifiedStateKey, _ := GetModifiedStateKey(key, "store7", "")
+		require.Equal(t, "state-key-1234567", modifiedStateKey)
+
+		originalStateKey := GetOriginalStateKey(modifiedStateKey)
+		require.Equal(t, key, originalStateKey)
+	})
 }
 
 func TestDefaultPrefix(t *testing.T) {
