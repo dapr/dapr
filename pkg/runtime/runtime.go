@@ -607,7 +607,16 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				return nil
 			}
 
-			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
+			// --- START STOPGAP FIX
+			// TODO: This (the use of `topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic].rules` and the double test) is a stopgap measure for release-1.7 only and SHOULD NOT be included in 1.8 or newer.
+			// See https://github.com/dapr/dapr/pull/4685 for an explanation
+			routePath, shouldProcess, err := findMatchingRoute(topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic].rules, cloudEvent, a.featureRoutingEnabled)
+			if routePath == "" {
+				routePath, shouldProcess, err = findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
+			}
+			// --- ORIGINAL code
+			// routePath, shouldProcess, err = findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
+			// --- END STOPGAP FIX
 			if err != nil {
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
 				return err
