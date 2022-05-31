@@ -14,23 +14,27 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 const appPort = 3000
 
 // kubernetes is the name of the secret store
 const (
-	secretStore      = "kubernetes"
-	nonexistentStore = "nonexistent"
 	/* #nosec */
 	secretURL = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
 )
@@ -85,7 +89,7 @@ func get(key, store string) (*map[string]string, int, error) {
 
 	log.Printf("Found secret for key %s: %s", key, body)
 
-	var state = map[string]string{}
+	state := map[string]string{}
 	if len(body) == 0 {
 		return nil, http.StatusOK, nil
 	}
@@ -103,7 +107,7 @@ func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
 	statusCode := http.StatusOK
 	log.Printf("Processing get request for %d states.", len(secrets))
 
-	var output = make([]daprSecret, 0, len(secrets))
+	output := make([]daprSecret, 0, len(secrets))
 	for _, secret := range secrets {
 		value, sc, err := get(secret.Key, secret.Store)
 		if err != nil {
@@ -140,8 +144,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var res = requestResponse{}
-	var uri = r.URL.RequestURI()
+	res := requestResponse{}
+	uri := r.URL.RequestURI()
 	var secrets []daprSecret
 	var statusCode int
 
@@ -198,9 +202,37 @@ func appRouter() *mux.Router {
 	return router
 }
 
+func startServer() {
+	// Create a server capable of supporting HTTP2 Cleartext connections
+	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
+	h2s := &http2.Server{}
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", appPort),
+		Handler: h2c.NewHandler(appRouter(), h2s),
+	}
+
+	// Stop the server when we get a termination signal
+	stopCh := make(chan os.Signal, 1)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		// Wait for cancelation signal
+		<-stopCh
+		log.Println("Shutdown signal received")
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		server.Shutdown(ctx)
+	}()
+
+	// Blocking call
+	err := server.ListenAndServe()
+	if err != http.ErrServerClosed {
+		log.Fatalf("Failed to run server: %v", err)
+	}
+	log.Println("Server shut down")
+}
+
 func main() {
 	log.Printf("Secret App - listening on http://localhost:%d", appPort)
 	log.Printf("Secret endpoint - to be saved at %s", secretURL)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	startServer()
 }

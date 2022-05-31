@@ -165,7 +165,8 @@ func (g *grpcMetrics) ClientRequestReceived(ctx context.Context, method, status 
 			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
 			g.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
-			ctx, diag_utils.WithTags(appIDKey, g.appID),
+			ctx,
+			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method),
 			g.clientReceivedBytes.M(contentSize))
 	}
 }

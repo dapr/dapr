@@ -178,7 +178,7 @@ func TestPoliciesForTargets(t *testing.T) {
 		{
 			name: "endpoint",
 			create: func(r *Resiliency) Runner {
-				return r.EndpointPolicy(ctx, "appB", "127.0.0.1:3500")
+				return r.EndpointPolicy(ctx, "appB", "127.0.0.1:3500", false)
 			},
 		},
 		{
@@ -291,4 +291,38 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 
 	resiliencies = LoadStandaloneResiliency(log, "app3", "./testdata")
 	assert.Len(t, resiliencies, 1)
+}
+
+func TestBuiltInPoliciesAreCreated(t *testing.T) {
+	r := FromConfigurations(log, &resiliency_v1alpha.Resiliency{})
+	assert.NotNil(t, r.retries[builtInServiceRetries])
+	retry := r.retries[builtInServiceRetries]
+	assert.Equal(t, int64(3), retry.MaxRetries)
+	assert.Equal(t, time.Second, retry.Duration)
+}
+
+func TestResiliencyHasTargetDefined(t *testing.T) {
+	r := &resiliency_v1alpha.Resiliency{
+		Spec: resiliency_v1alpha.ResiliencySpec{
+			Targets: resiliency_v1alpha.Targets{
+				Apps: map[string]resiliency_v1alpha.EndpointPolicyNames{
+					"definedApp": {},
+				},
+				Actors: map[string]resiliency_v1alpha.ActorPolicyNames{
+					"definedActor": {},
+				},
+				Components: map[string]resiliency_v1alpha.ComponentPolicyNames{
+					"definedComponent": {},
+				},
+			},
+		},
+	}
+	config := FromConfigurations(log, r)
+
+	assert.False(t, config.PolicyDefined("badApp", Endpoint))
+	assert.False(t, config.PolicyDefined("badActor", Actor))
+	assert.False(t, config.PolicyDefined("badComponent", Component))
+	assert.True(t, config.PolicyDefined("definedApp", Endpoint))
+	assert.True(t, config.PolicyDefined("definedActor", Actor))
+	assert.True(t, config.PolicyDefined("definedComponent", Component))
 }

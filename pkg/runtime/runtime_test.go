@@ -32,11 +32,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+
+	"github.com/dapr/components-contrib/lock"
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/phayes/freeport"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -87,6 +91,7 @@ const (
 	TestRuntimeConfigID  = "consumer0"
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
+	TestLockName         = "testlock"
 	maxGRPCServerUptime  = 200 * time.Millisecond
 )
 
@@ -262,7 +267,7 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 
 func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
 	b, _ := yaml.Marshal(subscription)
-	os.WriteFile(filePath, b, 0600)
+	os.WriteFile(filePath, b, 0o600)
 }
 
 func TestProcessComponentsAndDependents(t *testing.T) {
@@ -270,7 +275,6 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	incorrectComponentType := components_v1alpha1.Component{
-
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
 		},
@@ -293,7 +297,6 @@ func TestDoProcessComponent(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	pubsubComponent := components_v1alpha1.Component{
-
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
 		},
@@ -303,6 +306,107 @@ func TestDoProcessComponent(t *testing.T) {
 			Metadata: getFakeMetadataItems(),
 		},
 	}
+
+	lockComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestLockName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:    "lock.mockLock",
+			Version: "v1",
+		},
+	}
+
+	t.Run("test error on lock init", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(assert.AnError)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+
+		// assert
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+	})
+
+	t.Run("test error when lock version invalid", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		lockComponentV3 := lockComponent
+		lockComponentV3.Spec.Version = "v3"
+
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentV3)
+
+		// assert
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, err.Error(), "couldn't find lock store lock.mockLock/v3")
+	})
+
+	t.Run("test error when lock prefix strategy invalid", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(nil)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		lockComponentWithWrongStrategy := lockComponent
+		lockComponentWithWrongStrategy.Spec.Metadata = []components_v1alpha1.MetadataItem{
+			{
+				Name: "keyPrefix",
+				Value: components_v1alpha1.DynamicValue{
+					JSON: v1.JSON{Raw: []byte("||")},
+				},
+			},
+		}
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentWithWrongStrategy)
+		// assert
+		assert.Error(t, err)
+	})
+
+	t.Run("lock init successfully and set right strategy", func(t *testing.T) {
+		// setup
+		ctrl := gomock.NewController(t)
+		mockLockStore := daprt.NewMockStore(ctrl)
+		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(nil)
+
+		rt.lockStoreRegistry.Register(
+			lock_loader.New("mockLock", func() lock.Store {
+				return mockLockStore
+			}),
+		)
+
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+		// assert
+		assert.Nil(t, err, "unexpected error")
+		// get modified key
+		key, err := lock_loader.GetModifiedLockKey("test", "mockLock", "appid-1")
+		assert.Nil(t, err, "unexpected error")
+		assert.Equal(t, key, "lock||appid-1||test")
+	})
 
 	t.Run("test error on pubsub init", func(t *testing.T) {
 		// setup
@@ -903,6 +1007,51 @@ func TestMetadataUUID(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestMetadataPodName(t *testing.T) {
+	pubsubComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	pubsubComponent.Spec.Metadata = append(
+		pubsubComponent.Spec.Metadata,
+		components_v1alpha1.MetadataItem{
+			Name: "consumerID",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{podName}"),
+				},
+			},
+		})
+	rt := NewTestDaprRuntime(modes.KubernetesMode)
+	defer stopRuntime(t, rt)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		}),
+	)
+
+	rt.podName = "testPodName"
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		consumerID := metadata.Properties["consumerID"]
+
+		assert.Equal(t, "testPodName", consumerID)
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
+}
+
 func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec changed, component is updated", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
@@ -1243,7 +1392,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1268,7 +1417,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -1295,7 +1444,7 @@ func TestInitPubSub(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0777))
+		require.NoError(t, os.Mkdir(dir, 0o777))
 		defer os.RemoveAll(dir)
 
 		s := testDeclarativeSubscription()
@@ -2374,7 +2523,6 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		// assert
 		var cloudEvent map[string]interface{}
-		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
 		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
@@ -2502,7 +2650,6 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		// assert
 		var cloudEvent map[string]interface{}
-		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
 		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
 		assert.Equal(t, expectedClientError.Error(), err.Error())
@@ -2765,6 +2912,148 @@ func TestPubsubWithResiliency(t *testing.T) {
 	})
 }
 
+// mockSubscribePubSub is an in-memory pubsub component.
+type mockSubscribePubSub struct {
+	handlers map[string]pubsub.Handler
+	pubCount map[string]int
+}
+
+// Init is a mock initialization method.
+func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
+	m.handlers = make(map[string]pubsub.Handler)
+	m.pubCount = make(map[string]int)
+	return nil
+}
+
+// Publish is a mock publish method. Immediately trigger handler if topic is subscribed.
+func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
+	m.pubCount[req.Topic]++
+	if handler, ok := m.handlers[req.Topic]; ok {
+		pubsubMsg := &pubsub.NewMessage{
+			Data:  req.Data,
+			Topic: req.Topic,
+		}
+		handler(context.Background(), pubsubMsg)
+	}
+
+	return nil
+}
+
+// Subscribe is a mock subscribe method.
+func (m *mockSubscribePubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+	m.handlers[req.Topic] = handler
+	return nil
+}
+
+func (m *mockSubscribePubSub) Close() error {
+	return nil
+}
+
+func (m *mockSubscribePubSub) Features() []pubsub.Feature {
+	return nil
+}
+
+func TestPubSubDeadLetter(t *testing.T) {
+	testDeadLetterPubsub := "failPubsub"
+	pubsubComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: testDeadLetterPubsub,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	t.Run("succeeded to publish message to dead letter when send message to app returns error", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.pubSubRegistry.Register(
+			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			}),
+		)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+		req.WithHTTPExtension(http.MethodGet, "")
+		req.WithRawData(nil, invokev1.JSONContentType)
+
+		subscriptionItems := []runtime_pubsub.SubscriptionJSON{
+			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
+			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
+		}
+		sub, _ := json.Marshal(subscriptionItems)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData(sub, "application/json")
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), req).Return(fakeResp, nil)
+		// Mock send message to app returns error.
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscribing()
+
+		err := rt.Publish(&pubsub.PublishRequest{
+			PubsubName: testDeadLetterPubsub,
+			Topic:      "topic0",
+			Data:       []byte(`{"id":"1"}`),
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		assert.Equal(t, 1, pubsubIns.pubCount["topic0"])
+		// Ensure the message is sent to dead letter topic.
+		assert.Equal(t, 1, pubsubIns.pubCount["topic1"])
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
+	})
+
+	t.Run("use dead letter with resiliency", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.resiliency = resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency)
+		rt.pubSubRegistry.Register(
+			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			}),
+		)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+		req.WithHTTPExtension(http.MethodGet, "")
+		req.WithRawData(nil, invokev1.JSONContentType)
+
+		subscriptionItems := []runtime_pubsub.SubscriptionJSON{
+			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
+			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
+		}
+		sub, _ := json.Marshal(subscriptionItems)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData(sub, "application/json")
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), req).Return(fakeResp, nil)
+		// Mock send message to app returns error.
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscribing()
+
+		err := rt.Publish(&pubsub.PublishRequest{
+			PubsubName: testDeadLetterPubsub,
+			Topic:      "topic0",
+			Data:       []byte(`{"id":"1"}`),
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		// Consider of resiliency, publish message may retry in some cases, make sure the pub count is greater than 1.
+		assert.True(t, pubsubIns.pubCount["topic0"] >= 1)
+		// Make sure every message that is sent to topic0 is sent to its dead letter topic1.
+		assert.Equal(t, pubsubIns.pubCount["topic0"], pubsubIns.pubCount["topic1"])
+		// Except of the one getting config from app, make sure each publish will result to twice subscribe call
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1+2*pubsubIns.pubCount["topic0"]+2*pubsubIns.pubCount["topic1"])
+	})
+}
+
 func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -2974,14 +3263,14 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-func (b *mockBinding) Read(handler func(*bindings.ReadResponse) ([]byte, error)) error {
+func (b *mockBinding) Read(handler func(context.Context, *bindings.ReadResponse) ([]byte, error)) error {
 	b.data = string(testInputBindingData)
 	metadata := map[string]string{}
 	if b.metadata != nil {
 		metadata = b.metadata
 	}
 
-	_, err := handler(&bindings.ReadResponse{
+	_, err := handler(context.TODO(), &bindings.ReadResponse{
 		Metadata: metadata,
 		Data:     []byte(b.data),
 	})
@@ -2993,7 +3282,7 @@ func (b *mockBinding) Operations() []bindings.OperationKind {
 	return []bindings.OperationKind{bindings.CreateOperation, bindings.ListOperation}
 }
 
-func (b *mockBinding) Invoke(req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+func (b *mockBinding) Invoke(ctx context.Context, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 	return nil, nil
 }
 

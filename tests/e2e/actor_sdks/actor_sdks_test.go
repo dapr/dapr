@@ -35,8 +35,10 @@ const (
 	numHealthChecks = 60                   // Number of get calls before starting tests.
 )
 
-var tr *runner.TestRunner
-var apps []kube.AppDescription
+var (
+	tr   *runner.TestRunner
+	apps []kube.AppDescription
+)
 
 func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 	t.Logf("Starting health check for %s\n", externalURL)
@@ -46,6 +48,9 @@ func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 }
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("actor_sdks")
+	utils.InitHTTPClient(false)
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	apps = []kube.AppDescription{
