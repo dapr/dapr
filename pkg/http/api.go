@@ -52,6 +52,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/components-contrib/transaction"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -85,6 +86,7 @@ type api struct {
 	outboundReadyStatus      bool
 	tracingSpec              config.TracingSpec
 	shutdown                 func()
+	transactions             map[string]transaction.Transaction
 }
 
 type registeredComponent struct {
@@ -136,6 +138,7 @@ func NewAPI(
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
 	shutdown func(),
+	transactions map[string]transaction.Transaction,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -158,6 +161,7 @@ func NewAPI(
 		id:                       appID,
 		tracingSpec:              tracingSpec,
 		shutdown:                 shutdown,
+		transactions:             transactions,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -172,6 +176,7 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
+	api.endpoints = append(api.endpoints, api.constructTransactionEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
@@ -236,6 +241,17 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Route:   "state/{storeName}/query",
 			Version: apiVersionV1alpha1,
 			Handler: a.onQueryState,
+		},
+	}
+}
+
+func (a *api) constructTransactionEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "transaction/{transactionName}/try",
+			Version: apiVersionV1,
+			Handler: a.onTransactionTry,
 		},
 	}
 }
@@ -1896,4 +1912,12 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
+}
+
+func (a *api) onTransactionTry(reqCtx *fasthttp.RequestCtx) {
+	transaction := a.transactions["tcc"]
+	for time := 1; time < 3; time++ {
+		transaction.Try(time)
+	}
+
 }

@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"github.com/dapr/components-contrib/transaction"
 	"os"
 	"os/signal"
 	"strings"
@@ -156,6 +157,10 @@ import (
 
 	"github.com/dapr/components-contrib/configuration"
 	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
+
+	////////test
+	transaction_loader "github.com/dapr/dapr/pkg/components/transaction"
+	transaction_tcc "github.com/dapr/components-contrib/transaction/tcc"
 )
 
 var (
@@ -521,6 +526,11 @@ func main() {
 			}),
 			http_middleware_loader.New("routerchecker", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 				return routerchecker.NewMiddleware(log).GetHandler(metadata)
+			}),
+		),
+		runtime.WithTransactions(
+			transaction_loader.New("tcc", func() transaction.Transaction {
+				return transaction_tcc.NewTccTransaction(logContrib)
 			}),
 		),
 	)

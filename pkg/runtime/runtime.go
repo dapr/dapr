@@ -84,6 +84,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
+	transaction_loader "github.com/dapr/dapr/pkg/components/transaction"
+	"github.com/dapr/components-contrib/transaction"
 )
 
 const (
@@ -164,6 +166,8 @@ type DaprRuntime struct {
 	secretStores           map[string]secretstores.SecretStore
 	pubSubRegistry         pubsub_loader.Registry
 	pubSubs                map[string]pubsub.PubSub
+	transactionRegistry    transaction_loader.Registry
+	transactions           map[string]transaction.Transaction
 	nameResolver           nr.Resolver
 	httpMiddlewareRegistry http_middleware_loader.Registry
 	hostAddress            string
@@ -373,6 +377,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
+	a.transactionRegistry.Register(opts.transactions...)
 
 	go a.processComponents()
 
@@ -1099,6 +1104,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.sendToOutputBinding,
 		a.globalConfig.Spec.TracingSpec,
 		a.ShutdownWithWait,
+		a.transactions,
 	)
 	serverConf := http.NewServerConfig(
 		a.runtimeConfig.ID,

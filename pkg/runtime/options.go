@@ -8,6 +8,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
+	"github.com/dapr/dapr/pkg/components/transaction"
 )
 
 type (
@@ -21,6 +22,7 @@ type (
 		inputBindings   []bindings.InputBinding
 		outputBindings  []bindings.OutputBinding
 		httpMiddleware  []http.Middleware
+		transactions    []transaction.Transaction
 
 		componentsCallback ComponentsCallback
 	}
@@ -89,5 +91,11 @@ func WithHTTPMiddleware(httpMiddleware ...http.Middleware) Option {
 func WithComponentsCallback(componentsCallback ComponentsCallback) Option {
 	return func(o *runtimeOpts) {
 		o.componentsCallback = componentsCallback
+	}
+}
+
+func WithTransactions(transactions ...transaction.Transaction) Option {
+	return func(o *runtimeOpts) {
+		o.transactions = append(o.transactions, transactions...)
 	}
 }
