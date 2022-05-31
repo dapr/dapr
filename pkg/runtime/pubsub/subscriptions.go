@@ -229,7 +229,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 	}
 
 	for _, f := range files {
-		if !f.IsDir() {
+		if !f.IsDir() && isYaml(f.Name()) {
 			filePath := filepath.Join(componentsPath, f.Name())
 			b, err := os.ReadFile(filePath)
 			if err != nil {
@@ -246,6 +246,15 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 	}
 
 	return subs
+}
+
+// isYaml checks whether the file is yaml or not.
+func isYaml(fileName string) bool {
+	extension := strings.ToLower(filepath.Ext(fileName))
+	if extension == ".yaml" || extension == ".yml" {
+		return true
+	}
+	return false
 }
 
 func marshalSubscription(b []byte) (*Subscription, error) {
