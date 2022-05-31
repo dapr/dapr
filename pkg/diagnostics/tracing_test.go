@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package diagnostics
 
@@ -25,7 +33,8 @@ func TestSpanContextToW3CString(t *testing.T) {
 		sc := trace.SpanContext{
 			TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
 			SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-			TraceOptions: trace.TraceOptions(1)}
+			TraceOptions: trace.TraceOptions(1),
+		}
 		got := SpanContextToW3CString(sc)
 		assert.Equal(t, expected, got)
 	})

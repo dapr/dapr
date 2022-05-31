@@ -3,7 +3,7 @@
 package testing
 
 import (
-	context "context"
+	"context"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -36,4 +36,20 @@ func (_m *MockDirectMessaging) Invoke(ctx context.Context, targetAppID string, r
 	}
 
 	return r0, r1
+}
+
+func (_m *MockDirectMessaging) Close() error {
+	return nil
+}
+
+type FailingDirectMessaging struct {
+	Failure Failure
+}
+
+func (f *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
+	err := f.Failure.PerformFailure(string(req.Message().Data.Value))
+	if err != nil {
+		return &v1.InvokeMethodResponse{}, err
+	}
+	return v1.NewInvokeMethodResponse(200, "OK", nil), nil
 }

@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package runner
 
@@ -10,18 +18,19 @@ import (
 	"log"
 	"os"
 
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
-// runnerFailExitCode is the exit code when test runner setup is failed
+// runnerFailExitCode is the exit code when test runner setup is failed.
 const runnerFailExitCode = 1
 
-// runnable is an interface to implement testing.M
+// runnable is an interface to implement testing.M.
 type runnable interface {
 	Run() int
 }
 
-// PlatformInterface defines the testing platform for test runner
+// PlatformInterface defines the testing platform for test runner.
 type PlatformInterface interface {
 	setup() error
 	tearDown() error
@@ -33,9 +42,11 @@ type PlatformInterface interface {
 	Restart(name string) error
 	Scale(name string, replicas int32) error
 	PortForwardToApp(appName string, targetPort ...int) ([]int, error)
+	SetAppEnv(appName, key, value string) error
 	GetAppUsage(appName string) (*AppUsage, error)
 	GetSidecarUsage(appName string) (*AppUsage, error)
 	GetTotalRestarts(appname string) (int, error)
+	GetConfiguration(name string) (*configurationv1alpha1.Configuration, error)
 }
 
 // AppUsage holds the CPU and Memory information for the application.
@@ -45,7 +56,7 @@ type AppUsage struct {
 }
 
 // TestRunner holds initial test apps and testing platform instance
-// maintains apps and platform for e2e test
+// maintains apps and platform for e2e test.
 type TestRunner struct {
 	// id is test runner id which will be used for logging
 	id string
@@ -62,10 +73,11 @@ type TestRunner struct {
 	Platform PlatformInterface
 }
 
-// NewTestRunner returns TestRunner instance for e2e test
+// NewTestRunner returns TestRunner instance for e2e test.
 func NewTestRunner(id string, apps []kube.AppDescription,
 	comps []kube.ComponentDescription,
-	initApps []kube.AppDescription) *TestRunner {
+	initApps []kube.AppDescription,
+) *TestRunner {
 	return &TestRunner{
 		id:         id,
 		components: comps,
@@ -75,7 +87,7 @@ func NewTestRunner(id string, apps []kube.AppDescription,
 	}
 }
 
-// Start is the entry point of Dapr test runner
+// Start is the entry point of Dapr test runner.
 func (tr *TestRunner) Start(m runnable) int {
 	// TODO: Add logging and reporting initialization
 

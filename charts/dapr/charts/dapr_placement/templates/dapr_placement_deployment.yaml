@@ -6,9 +6,9 @@ metadata:
     app: dapr-placement-server
 spec:
 {{- if eq .Values.global.ha.enabled true }}
-  replicas: {{ .Values.global.ha.replicaCount }}
+  replicas: 3
 {{- else }}
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1
 {{- end }}
   serviceName: dapr-placement-server
   podManagementPolicy: Parallel
@@ -24,6 +24,9 @@ spec:
         app.kubernetes.io/component: placement
         app.kubernetes.io/part-of: "dapr"
         app.kubernetes.io/managed-by: "helm"
+        {{- with .Values.global.labels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
       annotations:
         prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
@@ -37,16 +40,24 @@ spec:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 3
-          failureThreshold: 5
+{{- if eq .Values.debug.enabled false }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+{{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+{{- end }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 3
-          failureThreshold: 5
+{{- if eq .Values.debug.enabled false }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+{{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+{{- end }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
@@ -80,8 +91,22 @@ spec:
             protocol: TCP
 {{- end }}
         command:
+{{- if eq .Values.debug.enabled false }}
         - "/placement"
+{{- else }}
+        - "/dlv"
+{{- end }}
         args:
+{{- if eq .Values.debug.enabled true }}
+        - "--listen=:{{ .Values.debug.port }}"
+        - "--accept-multiclient"
+        - "--headless=true"
+        - "--log"
+        - "--api-version=2"
+        - "exec"
+        - "/placement"
+        - "--"
+{{- end }}
 {{- if eq .Values.global.ha.enabled true }}
         - "--id"
         - "$(PLACEMENT_ID)"
@@ -110,15 +135,18 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
-{{- if eq .Values.global.mtls.enabled true }}
         - "--tls-enabled"
-{{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
 {{- if eq .Values.cluster.forceInMemoryLog true }}
           runAsNonRoot: {{ .Values.runAsNonRoot }}
 {{- else }}
           runAsUser: 0
+{{- end }}
+{{- if eq .Values.debug.enabled true }}
+          capabilities:
+            add:
+              - SYS_PTRACE
 {{- end }}
 {{- end }}
         env:
@@ -150,9 +178,30 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
+{{- if .Values.global.ha.enabled }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-placement-server
+              topologyKey: topology.kubernetes.io/zone
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+{{- if .Values.global.tolerations }}
+      tolerations:
+{{ toYaml .Values.global.tolerations | indent 8 }}
 {{- end }}
 {{- if eq .Values.global.ha.enabled true }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}

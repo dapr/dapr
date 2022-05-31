@@ -1,0 +1,34 @@
+ARG WINDOWS_VERSION=1809
+
+FROM mcr.microsoft.com/windows/servercore:$WINDOWS_VERSION
+
+RUN powershell -Command \
+    Add-WindowsFeature Web-Server; \
+    Invoke-WebRequest -UseBasicParsing -Uri "https://dotnetbinaries.blob.core.windows.net/servicemonitor/2.0.1.10/ServiceMonitor.exe" -OutFile "C:\ServiceMonitor.exe"
+
+EXPOSE 80
+
+ENTRYPOINT ["C:\\ServiceMonitor.exe", "w3svc"]
+
+RUN powershell -Command \
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+  Invoke-WebRequest -Method Get -Uri https://windows.php.net/downloads/releases/latest/php-8.0-nts-Win32-vs16-x64-latest.zip -OutFile c:\php.zip ; \
+  Expand-Archive -Path c:\php.zip -DestinationPath c:\php ; \
+  Remove-Item c:\php.zip -Force
+
+ADD https://aka.ms/vs/16/release/VC_redist.x64.exe vc-redist.exe
+RUN start /w vc-redist.exe /q /norestart & del vc-redist.exe
+
+RUN powershell.exe -executionpolicy bypass "Add-WindowsFeature Web-CGI"
+
+ADD https://curl.haxx.se/ca/cacert.pem ca.pem
+RUN powershell -command cp ca.pem "C:\php\\" && powershell -command cp c:\php\php.ini-production c:\php\php.ini
+RUN powershell -command echo 'extension=php_mbstring.dll' 'extension=php_curl.dll' 'extension=php_openssl.dll' '[PHP_FILEINFO]' 'extension=php_fileinfo.dll' ' ' ' ' 'curl.cainfo = c:\php\ca.pem' >> C:\php\php.ini
+
+RUN %windir%\system32\inetsrv\appcmd set config /section:system.webServer/fastCGI /+[fullPath='c:\php\php-cgi.exe']
+RUN %windir%\system32\inetsrv\appcmd set config /section:system.webServer/handlers /+[name='PHP_via_FastCGI',path='*.php',verb='*',modules='FastCgiModule',scriptProcessor='c:\PHP\php-cgi.exe',resourceType='Either']
+RUN %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /[fullPath='c:\PHP\php-cgi.exe'].instanceMaxRequests:10000
+RUN %windir%\system32\inetsrv\appcmd.exe set config /section:defaultDocument /enabled:true /+files.[value='index.php']
+RUN     setx PATH /M %PATH%;C:\PHP
+
+RUN powershell -NoProfile -Command Remove-Item -Recurse C:\inetpub\wwwroot\*

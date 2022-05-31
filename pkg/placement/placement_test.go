@@ -1,56 +1,36 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package placement
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/placement/raft"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/pkg/placement/raft"
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 const testStreamSendLatency = 50 * time.Millisecond
-
-var testRaftServer *raft.Server
-
-// TestMain is executed only one time in the entire package to
-// start test raft server.
-func TestMain(m *testing.M) {
-	testRaftServer = raft.New("testnode", true, []raft.PeerInfo{
-		{
-			ID:      "testnode",
-			Address: "127.0.0.1:6060",
-		},
-	}, "")
-
-	testRaftServer.StartRaft(nil)
-
-	// Wait until test raft node become a leader.
-	for range time.Tick(200 * time.Millisecond) {
-		if testRaftServer.IsLeader() {
-			break
-		}
-	}
-
-	retVal := m.Run()
-
-	testRaftServer.Shutdown()
-
-	os.Exit(retVal)
-}
 
 func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) {
 	testServer := NewPlacementService(raftServer)
@@ -64,7 +44,7 @@ func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) 
 	time.Sleep(100 * time.Millisecond)
 
 	cleanUpFn := func() {
-		testServer.hasLeadership = false
+		testServer.hasLeadership.Store(false)
 		testServer.Shutdown()
 	}
 
@@ -90,7 +70,7 @@ func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_Repor
 func TestMemberRegistration_NoLeadership(t *testing.T) {
 	// set up
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
-	testServer.hasLeadership = false
+	testServer.hasLeadership.Store(false)
 
 	// arrange
 	conn, stream, err := newTestClient(serverAddress)
@@ -121,7 +101,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 
 func TestMemberRegistration_Leadership(t *testing.T) {
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
-	testServer.hasLeadership = true
+	testServer.hasLeadership.Store(true)
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
@@ -209,7 +189,10 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			require.True(t, false, "should not have any member change message because faulty host detector time will clean up")
 
 		case <-time.After(testStreamSendLatency):
-			assert.Equal(t, 0, len(testServer.streamConnPool))
+			testServer.streamConnPoolLock.RLock()
+			streamConnCount := len(testServer.streamConnPool)
+			testServer.streamConnPoolLock.RUnlock()
+			assert.Equal(t, 0, streamConnCount)
 		}
 	})
 

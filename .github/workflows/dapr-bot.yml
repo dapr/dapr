@@ -16,22 +16,19 @@ jobs:
             // list of owner who can control dapr-bot workflow
             // TODO: Read owners from OWNERS file.
             const owners = [
-              "yaron2",
-              "youngbupark",
-              "Haishi2016",
-              "lukekim",
-              "amanbha",
-              "msfussell",
-              "shalabhms",
-              "LMWF",
-              "artursouza",
-              "vinayada1",
-              "mukundansundar",
-              "wcs1only",
-              "orizohar",
-              "pruthvidhodda",
-              "mchmarny",
-              "tcnghia"
+              'artursouza',
+              'berndverst',
+              'daixiang0',
+              'halspang',
+              'ItalyPaleAle',
+              'johnewart',
+              'msfussell',
+              'mukundansundar',
+              'pkedy',
+              'pruthvidhodda',
+              'skyao',
+              'tanvigour',
+              'yaron2'
             ];
 
             const payload = context.payload;
@@ -39,6 +36,20 @@ jobs:
             const isFromPulls = !!payload.issue.pull_request;
             const commentBody = payload.comment.body;
 
+            if (!isFromPulls && commentBody && commentBody.indexOf("/assign") == 0) {
+              if (!issue.assignees || issue.assignees.length === 0) {
+                await github.issues.addAssignees({
+                  owner: issue.owner,
+                  repo: issue.repo,
+                  issue_number: issue.number,
+                  assignees: [context.actor],
+                })
+              }
+
+              return;
+            }
+
+            // actions above this check are enabled for everyone.
             if (owners.indexOf(context.actor) < 0) {
               return;
             }

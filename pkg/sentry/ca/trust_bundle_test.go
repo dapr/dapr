@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/sentry/certs"
 )
 
 func getTestCert() *x509.Certificate {
@@ -38,7 +39,9 @@ func TestBundleIssuerExpiry(t *testing.T) {
 		Certificate: issuerCert,
 	}
 
-	assert.Equal(t, issuerCert.NotAfter.String(), bundle.GetIssuerCertExpiry().String())
+	exp := bundle.GetIssuerCertExpiry()
+	assert.NotNil(t, exp)
+	assert.Equal(t, issuerCert.NotAfter.String(), exp.String())
 }
 
 func TestBundleIssuerCertMatch(t *testing.T) {

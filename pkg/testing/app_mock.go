@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package testing
 
@@ -10,7 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -19,13 +27,13 @@ import (
 	"time"
 )
 
-// KeyValState is a key value struct for state
+// KeyValState is a key value struct for state.
 type KeyValState struct {
 	Key   string      `json:"key"`
 	Value interface{} `json:"value"`
 }
 
-// Event is an app response event
+// Event is an app response event.
 type Event struct {
 	EventName   string        `json:"eventName,omitempty"`
 	To          []string      `json:"to,omitempty"`
@@ -35,7 +43,7 @@ type Event struct {
 	Data        interface{}   `json:"data,omitempty"`
 }
 
-// MockApp is a mock for an app
+// MockApp is a mock for an app.
 type MockApp struct {
 	returnBody   bool
 	messageCount int
@@ -43,7 +51,7 @@ type MockApp struct {
 	noprint      bool
 }
 
-// NewMockApp returns a new mocked app
+// NewMockApp returns a new mocked app.
 func NewMockApp(returnBody bool, messageCount int, noprint bool) *MockApp {
 	ret := new(MockApp)
 	ret.returnBody = returnBody
@@ -53,7 +61,7 @@ func NewMockApp(returnBody bool, messageCount int, noprint bool) *MockApp {
 	return ret
 }
 
-// Run opens a test HTTP server and echo endpoint on the mock object
+// Run opens a test HTTP server and echo endpoint on the mock object.
 func (a *MockApp) Run(port int) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/httptest", a.handler)
@@ -70,6 +78,7 @@ func (a *MockApp) Run(port int) {
 	cF()
 	server.Shutdown(ctx)
 }
+
 func (a *MockApp) echoHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 	var buffer bytes.Buffer
@@ -78,6 +87,7 @@ func (a *MockApp) echoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Write(buffer.Bytes())
 }
+
 func (a *MockApp) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(200)
@@ -85,7 +95,7 @@ func (a *MockApp) handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	body, _ := ioutil.ReadAll(r.Body)
+	body, _ := io.ReadAll(r.Body)
 
 	var msg Event
 	if err := json.Unmarshal(body, &msg); err != nil {

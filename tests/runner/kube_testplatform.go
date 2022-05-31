@@ -1,32 +1,42 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package runner
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 
-	"log"
-
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
 	defaultImageRegistry        = "docker.io/dapriotest"
 	defaultImageTag             = "latest"
 	disableTelemetryConfig      = "disable-telemetry"
-	defaultSidecarCPULimit      = "4.0"
-	defaultSidecarMemoryLimit   = "512Mi"
+	defaultSidecarCPULimit      = "1.0"
+	defaultSidecarMemoryLimit   = "256Mi"
 	defaultSidecarCPURequest    = "0.1"
-	defaultSidecarMemoryRequest = "250Mi"
-	defaultAppCPULimit          = "4.0"
-	defaultAppMemoryLimit       = "800Mi"
+	defaultSidecarMemoryRequest = "100Mi"
+	defaultAppCPULimit          = "1.0"
+	defaultAppMemoryLimit       = "300Mi"
 	defaultAppCPURequest        = "0.1"
-	defaultAppMemoryRequest     = "250Mi"
+	defaultAppMemoryRequest     = "200Mi"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
@@ -95,6 +105,11 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		if app.RegistryName == "" {
 			app.RegistryName = c.imageRegistry()
 		}
+
+		if app.ImageSecret == "" {
+			app.ImageSecret = c.imageSecret()
+		}
+
 		if app.ImageName == "" {
 			return fmt.Errorf("%s app doesn't have imagename property", app.AppName)
 		}
@@ -104,23 +119,41 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 			app.Config = disableTelemetryConfig
 		}
 
-		app.DaprCPULimit = c.sidecarCPULimit()
-		app.DaprCPURequest = c.sidecarCPURequest()
-		app.DaprMemoryLimit = c.sidecarMemoryLimit()
-		app.DaprMemoryRequest = c.sidecarMemoryRequest()
-		app.AppCPULimit = c.appCPULimit()
-		app.AppCPURequest = c.appCPURequest()
-		app.AppMemoryLimit = c.appMemoryLimit()
-		app.AppMemoryRequest = c.appMemoryRequest()
+		if app.DaprCPULimit == "" {
+			app.DaprCPULimit = c.sidecarCPULimit()
+		}
+		if app.DaprCPURequest == "" {
+			app.DaprCPURequest = c.sidecarCPURequest()
+		}
+		if app.DaprMemoryLimit == "" {
+			app.DaprMemoryLimit = c.sidecarMemoryLimit()
+		}
+		if app.DaprMemoryRequest == "" {
+			app.DaprMemoryRequest = c.sidecarMemoryRequest()
+		}
+		if app.AppCPULimit == "" {
+			app.AppCPULimit = c.appCPULimit()
+		}
+		if app.AppCPURequest == "" {
+			app.AppCPURequest = c.appCPURequest()
+		}
+		if app.AppMemoryLimit == "" {
+			app.AppMemoryLimit = c.appMemoryLimit()
+		}
+		if app.AppMemoryRequest == "" {
+			app.AppMemoryRequest = c.appMemoryRequest()
+		}
 
 		log.Printf("Adding app %v", app)
 		c.AppResources.Add(kube.NewAppManager(c.KubeClient, getNamespaceOrDefault(app.Namespace), app))
 	}
 
 	// installApps installs the apps in AppResource queue sequentially
+	log.Printf("Installing apps ...")
 	if err := c.AppResources.setup(); err != nil {
 		return err
 	}
+	log.Printf("Apps are installed.")
 
 	return nil
 }
@@ -131,6 +164,14 @@ func (c *KubeTestPlatform) imageRegistry() string {
 		return defaultImageRegistry
 	}
 	return reg
+}
+
+func (c *KubeTestPlatform) imageSecret() string {
+	secret := os.Getenv("DAPR_TEST_REGISTRY_SECRET")
+	if secret == "" {
+		return ""
+	}
+	return secret
 }
 
 func (c *KubeTestPlatform) imageTag() string {
@@ -220,7 +261,7 @@ func (c *KubeTestPlatform) AcquireAppExternalURL(name string) string {
 	return app.(*kube.AppManager).AcquireExternalURL()
 }
 
-// GetAppHostDetails returns the name and IP address of the host(pod) running 'name'
+// GetAppHostDetails returns the name and IP address of the host(pod) running 'name'.
 func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error) {
 	app := c.AppResources.FindActiveResource(name)
 	pods, err := app.(*kube.AppManager).GetHostDetails()
@@ -235,7 +276,7 @@ func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error
 	return pods[0].Name, pods[0].IP, nil
 }
 
-// Scale changes the number of replicas of the app
+// Scale changes the number of replicas of the app.
 func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
 	app := c.AppResources.FindActiveResource(name)
 	appManager := app.(*kube.AppManager)
@@ -249,17 +290,42 @@ func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
 	return err
 }
 
+// SetAppEnv sets the container environment variable.
+func (c *KubeTestPlatform) SetAppEnv(name, key, value string) error {
+	app := c.AppResources.FindActiveResource(name)
+	appManager := app.(*kube.AppManager)
+
+	if err := appManager.SetAppEnv(key, value); err != nil {
+		return err
+	}
+
+	if _, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone); err != nil {
+		return err
+	}
+
+	appManager.StreamContainerLogs()
+
+	return nil
+}
+
 // Restart restarts all instances for the app.
 func (c *KubeTestPlatform) Restart(name string) error {
 	// To minic the restart behavior, scale to 0 and then scale to the original replicas.
 	app := c.AppResources.FindActiveResource(name)
-	originalReplicas := app.(*kube.AppManager).App().Replicas
+	m := app.(*kube.AppManager)
+	originalReplicas := m.App().Replicas
 
 	if err := c.Scale(name, 0); err != nil {
 		return err
 	}
 
-	return c.Scale(name, originalReplicas)
+	if err := c.Scale(name, originalReplicas); err != nil {
+		return err
+	}
+
+	m.StreamContainerLogs()
+
+	return nil
 }
 
 // PortForwardToApp opens a new connection to the app on a the target port and returns the local port or error.
@@ -278,7 +344,7 @@ func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) 
 	return appManager.DoPortForwarding("", targetPorts...)
 }
 
-// GetAppUsage returns the Cpu and Memory usage for the app container for a given app
+// GetAppUsage returns the Cpu and Memory usage for the app container for a given app.
 func (c *KubeTestPlatform) GetAppUsage(appName string) (*AppUsage, error) {
 	app := c.AppResources.FindActiveResource(appName)
 	appManager := app.(*kube.AppManager)
@@ -301,7 +367,7 @@ func (c *KubeTestPlatform) GetTotalRestarts(appName string) (int, error) {
 	return appManager.GetTotalRestarts()
 }
 
-// GetSidecarUsage returns the Cpu and Memory usage for the dapr container for a given app
+// GetSidecarUsage returns the Cpu and Memory usage for the dapr container for a given app.
 func (c *KubeTestPlatform) GetSidecarUsage(appName string) (*AppUsage, error) {
 	app := c.AppResources.FindActiveResource(appName)
 	appManager := app.(*kube.AppManager)
@@ -321,4 +387,10 @@ func getNamespaceOrDefault(namespace *string) string {
 		return kube.DaprTestNamespace
 	}
 	return *namespace
+}
+
+// GetConfiguration returns configuration by name.
+func (c *KubeTestPlatform) GetConfiguration(name string) (*configurationv1alpha1.Configuration, error) {
+	client := c.KubeClient.DaprClientSet.ConfigurationV1alpha1().Configurations(kube.DaprTestNamespace)
+	return client.Get(name, metav1.GetOptions{})
 }

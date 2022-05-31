@@ -1,6 +1,7 @@
 package ca
 
 import (
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
@@ -8,13 +9,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -29,7 +32,7 @@ var log = logger.NewLogger("dapr.sentry.ca")
 
 // CertificateAuthority represents an interface for a compliant Certificate Authority.
 // Responsibilities include loading trust anchors and issuer certs, providing safe access to the trust bundle,
-// Validating and signing CSRs
+// Validating and signing CSRs.
 type CertificateAuthority interface {
 	LoadOrStoreTrustBundle() error
 	GetCACertBundle() TrustRootBundler
@@ -72,7 +75,7 @@ func (c *defaultCA) LoadOrStoreTrustBundle() error {
 	return nil
 }
 
-// GetCACertBundle returns the Trust Root Bundle
+// GetCACertBundle returns the Trust Root Bundle.
 func (c *defaultCA) GetCACertBundle() TrustRootBundler {
 	return c.bundle
 }
@@ -85,7 +88,7 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, identity *identity.Bu
 	defer c.issuerLock.RUnlock()
 
 	certLifetime := ttl
-	if certLifetime.Seconds() < 0 {
+	if certLifetime.Seconds() <= 0 {
 		certLifetime = c.config.WorkloadCertTTL
 	}
 
@@ -99,7 +102,7 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, identity *identity.Bu
 		return nil, errors.Wrap(err, "error parsing csr pem")
 	}
 
-	crtb, err := csr.GenerateCSRCertificate(cert, subject, identity, signingCert, cert.PublicKey, signingKey.Key, certLifetime, isCA)
+	crtb, err := csr.GenerateCSRCertificate(cert, subject, identity, signingCert, cert.PublicKey, signingKey, certLifetime, c.config.AllowedClockSkew, isCA)
 	if err != nil {
 		return nil, errors.Wrap(err, "error signing csr")
 	}
@@ -110,7 +113,7 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, identity *identity.Bu
 	}
 
 	certPem := pem.EncodeToMemory(&pem.Block{
-		Type:  certs.Certificate,
+		Type:  certs.BlockTypeCertificate,
 		Bytes: crtb,
 	})
 
@@ -222,62 +225,71 @@ func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rootCsr, err := csr.GenerateRootCertCSR(caOrg, caCommonName, &rootKey.PublicKey, selfSignedRootCertLifetime)
+	certsCredentials, rootCertPem, issuerCertPem, issuerKeyPem, err := GetNewSelfSignedCertificates(
+		rootKey, selfSignedRootCertLifetime, c.config.AllowedClockSkew)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
-	rootCertBytes, err := x509.CreateCertificate(rand.Reader, rootCsr, rootCsr, &rootKey.PublicKey, rootKey)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	rootCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: rootCertBytes})
-
-	rootCert, err := x509.ParseCertificate(rootCertBytes)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	issuerKey, err := certs.GenerateECPrivateKey()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	issuerCsr, err := csr.GenerateIssuerCertCSR(caCommonName, &issuerKey.PublicKey, selfSignedRootCertLifetime)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	issuerCertBytes, err := x509.CreateCertificate(rand.Reader, issuerCsr, rootCert, &issuerKey.PublicKey, rootKey)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	issuerCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: issuerCertBytes})
-
-	encodedKey, err := x509.MarshalECPrivateKey(issuerKey)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	issuerKeyPem := pem.EncodeToMemory(&pem.Block{Type: certs.ECPrivateKey, Bytes: encodedKey})
-
-	issuerCert, err := x509.ParseCertificate(issuerCertBytes)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
 	// store credentials so that next time sentry restarts it'll load normally
 	err = certs.StoreCredentials(c.config, rootCertPem, issuerCertPem, issuerKeyPem)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
+	return certsCredentials, rootCertPem, issuerCertPem, nil
+}
+
+func GetNewSelfSignedCertificates(
+	rootKey *ecdsa.PrivateKey,
+	selfSignedRootCertLifetime,
+	allowedClockSkew time.Duration,
+) (*certs.Credentials, []byte, []byte, []byte, error) {
+	rootCsr, err := csr.GenerateRootCertCSR(caOrg, caCommonName, &rootKey.PublicKey, selfSignedRootCertLifetime, allowedClockSkew)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	rootCertBytes, err := x509.CreateCertificate(rand.Reader, rootCsr, rootCsr, &rootKey.PublicKey, rootKey)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	rootCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: rootCertBytes})
+
+	rootCert, err := x509.ParseCertificate(rootCertBytes)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	issuerKey, err := certs.GenerateECPrivateKey()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	issuerCsr, err := csr.GenerateIssuerCertCSR(caCommonName, &issuerKey.PublicKey, selfSignedRootCertLifetime, allowedClockSkew)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	issuerCertBytes, err := x509.CreateCertificate(rand.Reader, issuerCsr, rootCert, &issuerKey.PublicKey, rootKey)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	issuerCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: issuerCertBytes})
+
+	encodedKey, err := x509.MarshalECPrivateKey(issuerKey)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	issuerKeyPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeECPrivateKey, Bytes: encodedKey})
+
+	issuerCert, err := x509.ParseCertificate(issuerCertBytes)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 	return &certs.Credentials{
-		PrivateKey: &certs.PrivateKey{
-			Type: certs.ECPrivateKey,
-			Key:  issuerKey,
-		},
+		PrivateKey:  issuerKey,
 		Certificate: issuerCert,
-	}, rootCertPem, issuerCertPem, nil
+	}, rootCertPem, issuerCertPem, issuerKeyPem, nil
 }

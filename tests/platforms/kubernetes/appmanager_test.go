@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package kubernetes
 
@@ -52,6 +60,7 @@ func testAppDescription() AppDescription {
 		RegistryName:   "dapriotest",
 		Replicas:       1,
 		IngressEnabled: true,
+		MetricsEnabled: true,
 	}
 }
 
@@ -239,7 +248,7 @@ func TestScaleDeploymentReplica(t *testing.T) {
 	})
 }
 
-func TestValidiateSideCar(t *testing.T) {
+func TestValidateSidecar(t *testing.T) {
 	testApp := testAppDescription()
 
 	objMeta := metav1.ObjectMeta{
@@ -284,10 +293,9 @@ func TestValidiateSideCar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		found, err := appManager.ValidiateSideCar()
+		err := appManager.ValidateSidecar()
 
 		assert.NoError(t, err)
-		assert.True(t, found)
 	})
 
 	t.Run("Sidecar is not injected", func(t *testing.T) {
@@ -320,8 +328,7 @@ func TestValidiateSideCar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		found, err := appManager.ValidiateSideCar()
-		assert.False(t, found)
+		err := appManager.ValidateSidecar()
 		assert.Error(t, err)
 	})
 
@@ -343,8 +350,7 @@ func TestValidiateSideCar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		found, err := appManager.ValidiateSideCar()
-		assert.False(t, found)
+		err := appManager.ValidateSidecar()
 		assert.Error(t, err)
 	})
 }

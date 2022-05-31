@@ -1,8 +1,10 @@
 replicaCount: 1
 logLevel: info
 
+# Specify full docker image name including registry url to use a custom sentry service image
+# Otherwise, helm chart will use {{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}
 image:
-  name: dapr
+  name: ""
 
 nameOverride: ""
 fullnameOverride: ""
@@ -19,6 +21,20 @@ tls:
   root:
     certPEM: ""
   trustDomain: cluster.local
+
+livenessProbe:
+  initialDelaySeconds: 3
+  periodSeconds: 3
+  failureThreshold: 5
+readinessProbe:
+  initialDelaySeconds: 3
+  periodSeconds: 3
+  failureThreshold: 5
+
+debug:
+  enabled: false
+  port: 40000
+  initialDelaySeconds: 30000
 
 runAsNonRoot: true
 resources: {}

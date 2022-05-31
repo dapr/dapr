@@ -68,6 +68,39 @@ spec:
                   trustDomain:
                     type: string
                 type: object
+              api:
+                description: APISpec describes the configuration for Dapr APIs
+                properties:
+                  allowed:
+                    items:
+                      description: APIAccessRule describes an access rule for allowing
+                        a Dapr API to be enabled and accessible by an app
+                      properties:
+                        name:
+                          type: string
+                        protocol:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - name
+                      - version
+                      type: object
+                    type: array
+                type: object
+              features:
+                items:
+                  description: FeatureSpec defines the features that are enabled/disabled
+                  properties:
+                    enabled:
+                      type: boolean
+                    name:
+                      type: string
+                  required:
+                  - enabled
+                  - name
+                  type: object
+                type: array
               httpPipeline:
                 description: PipelineSpec defines the middleware pipeline
                 properties:
@@ -118,6 +151,22 @@ spec:
                     type: string
                 required:
                 - enabled
+                type: object
+              nameResolution:
+                description: NameResolutionSpec is the spec for name resolution configuration
+                properties:
+                  component:
+                    type: string
+                  configuration:
+                    description: DynamicValue is a dynamic value struct for the component.metadata pair value
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  version:
+                    type: string
+                required:
+                - component
+                - configuration
+                - version
                 type: object
               secrets:
                 description: SecretsSpec is the spec for secrets configuration

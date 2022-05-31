@@ -1,16 +1,25 @@
+//go:build perf
 // +build perf
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
-
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 package actor_timer_with_state_perf
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,28 +31,48 @@ import (
 )
 
 const (
-	numHealthChecks = 60 // Number of times to check for endpoint health per app.
+	numHealthChecks        = 60 // Number of times to check for endpoint health per app.
+	serviceApplicationName = "perf-actor-timer-service"
+	clientApplicationName  = "perf-actor-timer-client"
 )
 
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("actor_timer")
+
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "testapp",
-			DaprEnabled:    true,
-			ImageName:      "perf-actorjava",
-			Replicas:       4,
-			IngressEnabled: true,
-			AppPort:        3000,
+			AppName:           serviceApplicationName,
+			DaprEnabled:       true,
+			ImageName:         "perf-actorjava",
+			Replicas:          4,
+			IngressEnabled:    true,
+			AppPort:           3000,
+			DaprCPULimit:      "4.0",
+			DaprCPURequest:    "0.1",
+			DaprMemoryLimit:   "512Mi",
+			DaprMemoryRequest: "250Mi",
+			AppCPULimit:       "4.0",
+			AppCPURequest:     "0.1",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "2500Mi",
 		},
 		{
-			AppName:        "tester",
-			DaprEnabled:    true,
-			ImageName:      "perf-tester",
-			Replicas:       1,
-			IngressEnabled: true,
-			AppPort:        3001,
+			AppName:           clientApplicationName,
+			DaprEnabled:       true,
+			ImageName:         "perf-tester",
+			Replicas:          1,
+			IngressEnabled:    true,
+			AppPort:           3001,
+			DaprCPULimit:      "4.0",
+			DaprCPURequest:    "0.1",
+			DaprMemoryLimit:   "512Mi",
+			DaprMemoryRequest: "250Mi",
+			AppCPULimit:       "4.0",
+			AppCPURequest:     "0.1",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "2500Mi",
 		},
 	}
 
@@ -54,7 +83,7 @@ func TestMain(m *testing.M) {
 func TestActorTimerWithStatePerformance(t *testing.T) {
 	p := perf.Params()
 	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
+	testAppURL := tr.Platform.AcquireAppExternalURL(serviceApplicationName)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
@@ -63,7 +92,7 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get the ingress external url of tester app
-	testerAppURL := tr.Platform.AcquireAppExternalURL("tester")
+	testerAppURL := tr.Platform.AcquireAppExternalURL(clientApplicationName)
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
@@ -72,27 +101,31 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform dapr test
-	endpoint := fmt.Sprintf("http://testapp:3000/actors")
+	endpoint := fmt.Sprintf("http://%s:3000/actors", serviceApplicationName)
 	p.TargetEndpoint = endpoint
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
 	t.Logf("running dapr test with params: %s", body)
 	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Logf("dapr test results: %s", string(daprResp))
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
 	// Let test run for 10 minutes triggering the timers and collect metrics.
+	t.Log("test is started, wait for 10 minutes...")
 	time.Sleep(10 * time.Minute)
 
-	appUsage, err := tr.Platform.GetAppUsage("testapp")
+	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
 	require.NoError(t, err)
 
-	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
+	sidecarUsage, err := tr.Platform.GetSidecarUsage(serviceApplicationName)
 	require.NoError(t, err)
 
-	restarts, err := tr.Platform.GetTotalRestarts("testapp")
+	restarts, err := tr.Platform.GetTotalRestarts(serviceApplicationName)
 	require.NoError(t, err)
 
 	t.Logf("dapr test results: %s", string(daprResp))
@@ -109,6 +142,18 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
+	}
+
+	report := perf.NewTestReport(
+		[]perf.TestResult{daprResult},
+		"Actor Timer",
+		sidecarUsage,
+		appUsage)
+	report.SetTotalRestartCount(restarts)
+	err = utils.UploadAzureBlob(report)
+
+	if err != nil {
+		t.Error(err)
 	}
 
 	require.Equal(t, 0, daprResult.RetCodes.Num400)

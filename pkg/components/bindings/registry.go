@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package bindings
 
@@ -11,23 +19,24 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/bindings"
+
 	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
 	// InputBinding is an input binding component definition.
 	InputBinding struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() bindings.InputBinding
 	}
 
 	// OutputBinding is an output binding component definition.
 	OutputBinding struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() bindings.OutputBinding
 	}
 
-	// Registry is the interface of a components that allows callers to get registered instances of input and output bindings
+	// Registry is the interface of a components that allows callers to get registered instances of input and output bindings.
 	Registry interface {
 		RegisterInputBindings(components ...InputBinding)
 		RegisterOutputBindings(components ...OutputBinding)
@@ -44,17 +53,25 @@ type (
 )
 
 // NewInput creates a InputBinding.
-func NewInput(name string, factoryMethod func() bindings.InputBinding) InputBinding {
+func NewInput(name string, factoryMethod func() bindings.InputBinding, aliases ...string) InputBinding {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return InputBinding{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
 
 // NewOutput creates a OutputBinding.
-func NewOutput(name string, factoryMethod func() bindings.OutputBinding) OutputBinding {
+func NewOutput(name string, factoryMethod func() bindings.OutputBinding, aliases ...string) OutputBinding {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return OutputBinding{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -70,18 +87,22 @@ func NewRegistry() Registry {
 // RegisterInputBindings registers one or more new input bindings.
 func (b *bindingsRegistry) RegisterInputBindings(components ...InputBinding) {
 	for _, component := range components {
-		b.inputBindings[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			b.inputBindings[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 
 // RegisterOutputBindings registers one or more new output bindings.
 func (b *bindingsRegistry) RegisterOutputBindings(components ...OutputBinding) {
 	for _, component := range components {
-		b.outputBindings[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			b.outputBindings[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 
-// Create instantiates an input binding based on `name`.
+// CreateInputBinding Create instantiates an input binding based on `name`.
 func (b *bindingsRegistry) CreateInputBinding(name, version string) (bindings.InputBinding, error) {
 	if method, ok := b.getInputBinding(name, version); ok {
 		return method(), nil
@@ -89,7 +110,7 @@ func (b *bindingsRegistry) CreateInputBinding(name, version string) (bindings.In
 	return nil, errors.Errorf("couldn't find input binding %s/%s", name, version)
 }
 
-// Create instantiates an output binding based on `name`.
+// CreateOutputBinding Create instantiates an output binding based on `name`.
 func (b *bindingsRegistry) CreateOutputBinding(name, version string) (bindings.OutputBinding, error) {
 	if method, ok := b.getOutputBinding(name, version); ok {
 		return method(), nil
@@ -116,8 +137,7 @@ func (b *bindingsRegistry) getInputBinding(name, version string) (func() binding
 	if ok {
 		return bindingFn, true
 	}
-	switch versionLower {
-	case "", "v0", "v1":
+	if components.IsInitialVersion(versionLower) {
 		bindingFn, ok = b.inputBindings[nameLower]
 	}
 	return bindingFn, ok

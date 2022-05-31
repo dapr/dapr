@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package diagnostics
 
@@ -13,20 +21,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func TestSpanAttributesMapFromGRPC(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		rpcMethod                    string
 		requestType                  string
 		expectedServiceNameAttribute string
@@ -176,6 +185,59 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
 	})
+}
+
+func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
+	interceptor := GRPCTraceStreamServerInterceptor("test", config.TracingSpec{})
+
+	t.Run("invalid proxy request, return nil", func(t *testing.T) {
+		ctx := context.TODO()
+		fakeInfo := &grpc.StreamServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+		}
+
+		h := func(srv interface{}, stream grpc.ServerStream) error {
+			return nil
+		}
+
+		err := interceptor(ctx, nil, fakeInfo, h)
+		assert.Nil(t, err)
+	})
+
+	t.Run("valid proxy request without app id, return error", func(t *testing.T) {
+		ctx := context.TODO()
+		fakeInfo := &grpc.StreamServerInfo{
+			FullMethod: "/myapp.v1.DoSomething",
+		}
+
+		err := interceptor(ctx, &fakeStream{}, fakeInfo, nil)
+		assert.Error(t, err)
+	})
+}
+
+type fakeStream struct{}
+
+func (f *fakeStream) Context() context.Context {
+	return context.TODO()
+}
+
+func (f *fakeStream) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (f *fakeStream) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (f *fakeStream) SetTrailer(metadata.MD) {
+}
+
+func (f *fakeStream) SendMsg(m interface{}) error {
+	return nil
+}
+
+func (f *fakeStream) RecvMsg(m interface{}) error {
+	return nil
 }
 
 func TestSpanContextSerialization(t *testing.T) {

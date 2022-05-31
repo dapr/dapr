@@ -11,7 +11,7 @@ func TestGetHostAdress(t *testing.T) {
 	t.Run("DAPR_HOST_IP present", func(t *testing.T) {
 		hostIP := "test.local"
 		os.Setenv(HostIPEnvVar, hostIP)
-		defer os.Clearenv()
+		defer os.Unsetenv(HostIPEnvVar)
 
 		address, err := GetHostAddress()
 		assert.Nil(t, err)

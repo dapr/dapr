@@ -1,0 +1,11 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: inmemorypubsub
+spec:
+  type: pubsub.in-memory
+  version: v1
+  initTimeout: 1m
+  metadata:
+    - name: spacehold
+      value: metadata-is-required

@@ -1206,13 +1206,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_client_completed_rpcs_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
           "interval": "",
           "legendFormat": "[95p] {{grpc_client_method}} ({{app_id}})",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_client_completed_rpcs_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
           "interval": "",
           "legendFormat": "[75p] {{grpc_client_method}} ({{app_id}})",
           "refId": "B"
@@ -1309,7 +1309,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (app_id, grpc_client_method, grpc_client_status) (rate(dapr_grpc_io_client_completed_rpcs_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m]))",
+          "expr": "sum by (app_id, grpc_client_method, grpc_client_status) (rate(dapr_grpc_io_client_completed_rpcs{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m]))",
           "interval": "",
           "legendFormat": "{{grpc_client_status}} {{grpc_client_method}} ({{app_id}})",
           "refId": "A"

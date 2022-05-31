@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package main
 
@@ -9,7 +17,6 @@ import (
 	actor_cl "actorload/pkg/actor/client"
 	cl "actorload/pkg/actor/client"
 	http_client "actorload/pkg/actor/client/http"
-
 	"errors"
 	"flag"
 	"fmt"
@@ -79,9 +86,9 @@ func (lt *actorLoadTestRunnable) Run(t int) {
 
 	log.Debugf("got, code: %3d, size: %d", code, size)
 
-	elasped := time.Since(start)
+	elapsed := time.Since(start)
 
-	lt.telemetryClient.RecordLoadRequestCount(lt.testActorType, actorID, elasped, code)
+	lt.telemetryClient.RecordLoadRequestCount(lt.testActorType, actorID, elapsed, code)
 
 	lt.RetCodes[code]++
 	lt.sizes.Record(float64(size))
@@ -104,7 +111,7 @@ type actorLoadTestOptions struct {
 }
 
 func generatePayload(length int) []byte {
-	var chs = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+	chs := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
 	payload := make([]byte, length)
 	for i := range payload {
@@ -115,7 +122,7 @@ func generatePayload(length int) []byte {
 }
 
 func activateRandomActors(client actor_cl.ActorClient, actorType string, maxActor int) []string {
-	var activatedActors = []string{}
+	activatedActors := []string{}
 	for i := 0; i < maxActor; i++ {
 		actorID := strings.Replace(uuid.New().String(), "-", "", -1)
 		log.Infof("Request to activate %s.%s actor", actorType, actorID)

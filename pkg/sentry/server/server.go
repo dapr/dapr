@@ -7,17 +7,19 @@ import (
 	"net"
 	"time"
 
-	"github.com/dapr/dapr/pkg/logger"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/dapr/kit/logger"
+
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -26,7 +28,7 @@ const (
 
 var log = logger.NewLogger("dapr.sentry.server")
 
-// CAServer is an interface for the Certificate Authority server
+// CAServer is an interface for the Certificate Authority server.
 type CAServer interface {
 	Run(port int, trustBundle ca.TrustRootBundler) error
 	Shutdown()
@@ -39,7 +41,7 @@ type server struct {
 	validator   identity.Validator
 }
 
-// NewCAServer returns a new CA Server running a gRPC server
+// NewCAServer returns a new CA Server running a gRPC server.
 func NewCAServer(ca ca.CertificateAuthority, validator identity.Validator) CAServer {
 	return &server{
 		certAuth:  ca,
@@ -98,6 +100,9 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 
 	now := time.Now().UTC()
 	issuerExp := s.certAuth.GetCACertBundle().GetIssuerCertExpiry()
+	if issuerExp == nil {
+		return nil, errors.New("could not find expiration in issuer certificate")
+	}
 	serverCertTTL := issuerExp.Sub(now)
 
 	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), nil, serverCertTTL, false)
@@ -107,7 +112,9 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 
 	certPem := resp.CertPEM
 	certPem = append(certPem, s.certAuth.GetCACertBundle().GetIssuerCertPem()...)
-	certPem = append(certPem, s.certAuth.GetCACertBundle().GetRootCertPem()...)
+	if rootCertPem := s.certAuth.GetCACertBundle().GetRootCertPem(); len(rootCertPem) > 0 {
+		certPem = append(certPem, rootCertPem...)
+	}
 
 	cert, err := tls.X509KeyPair(certPem, pkPem)
 	if err != nil {
@@ -121,12 +128,11 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 // The method receives a request with an identity and initial cert and returns
 // A signed certificate including the trust chain to the caller along with an expiry date.
 func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
-	monitoring.CertSignRequestRecieved()
+	monitoring.CertSignRequestReceived()
 
 	csrPem := req.GetCertificateSigningRequest()
 
 	csr, err := certs.ParsePemCSR(csrPem)
-
 	if err != nil {
 		err = errors.Wrap(err, "cannot parse certificate signing request pem")
 		log.Error(err)
@@ -164,7 +170,9 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	rootCert := s.certAuth.GetCACertBundle().GetRootCertPem()
 
 	certPem = append(certPem, issuerCert...)
-	certPem = append(certPem, rootCert...)
+	if len(rootCert) > 0 {
+		certPem = append(certPem, rootCert...)
+	}
 
 	if len(certPem) == 0 {
 		err = errors.New("insufficient data in certificate signing request, no certs signed")
@@ -190,7 +198,9 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 }
 
 func (s *server) Shutdown() {
-	s.srv.Stop()
+	if s.srv != nil {
+		s.srv.GracefulStop()
+	}
 }
 
 func needsRefresh(cert *tls.Certificate, expiryBuffer time.Duration) bool {

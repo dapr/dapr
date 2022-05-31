@@ -37,15 +37,15 @@ All decisions are categorized in the following folders:
   
 * **SDKs** - Decisions on Dapr SDKs.
 
-  - [SDK-001: SDK releases](./sdk/SDK-001-releases.MD)
-  - [SDK-002: Java JDK versions](./sdk/SDK-002-java-jdk-versions.MD)
+  - [SDK-001: SDK releases](./sdk/SDK-001-releases.md)
+  - [SDK-002: Java JDK versions](./sdk/SDK-002-java-jdk-versions.md)
 
 * **Engineering** - Decisions on Engineering practices, including CI/CD, testing and releases.
 
-  - [ENG-001: Image Tagging](./engineering/ENG-001-tagging.MD)
-  - [ENG-002: Dapr Release](./engineering/ENG-002-Dapr-Release.MD)
-  - [ENG-003: Test Infrastructure](./engineering/ENG-003-test-infrastructure.MD)
-  - [ENG-004: Signing](./engineering/ENG-004-signing.MD)
+  - [ENG-001: Image Tagging](./engineering/ENG-001-tagging.md)
+  - [ENG-002: Dapr Release](./engineering/ENG-002-Dapr-Release.md)
+  - [ENG-003: Test Infrastructure](./engineering/ENG-003-test-infrastructure.md)
+  - [ENG-004: Signing](./engineering/ENG-004-signing.md)
 
 ## Creating new decision records
 

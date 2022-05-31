@@ -1,6 +1,11 @@
-FROM golang:latest
-ARG TARGETPLATFORM
+# current directory must be ./dist
+
+FROM golang:1.18 AS golang
+ENV GOPROXY=https://goproxy.io,direct
+RUN CGO_ENABLED=0 go install -ldflags '-s -w -extldflags -static' github.com/go-delve/delve/cmd/dlv@latest
+
+FROM gcr.io/distroless/static:nonroot
 ARG PKG_FILES
 WORKDIR /
+COPY --from=golang /go/bin/dlv /
 COPY /$PKG_FILES /
-

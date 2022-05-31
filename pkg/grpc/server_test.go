@@ -1,13 +1,19 @@
 package grpc
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/logger"
+	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/kit/logger"
+
+	"github.com/dapr/dapr/pkg/config"
+	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
 func TestCertRenewal(t *testing.T) {
@@ -58,5 +64,52 @@ func TestGetMiddlewareOptions(t *testing.T) {
 		serverOption := fakeServer.getMiddlewareOptions()
 
 		assert.Equal(t, 1, len(serverOption))
+	})
+
+	t.Run("should have api access rules middleware", func(t *testing.T) {
+		fakeServer := &server{
+			config: ServerConfig{},
+			tracingSpec: config.TracingSpec{
+				SamplingRate: "0",
+			},
+			renewMutex: &sync.Mutex{},
+			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
+			apiSpec: config.APISpec{
+				Allowed: []config.APIAccessRule{
+					{
+						Name:    "state",
+						Version: "v1",
+					},
+				},
+			},
+		}
+
+		serverOption := fakeServer.getMiddlewareOptions()
+
+		assert.Equal(t, 1, len(serverOption))
+	})
+}
+
+func TestClose(t *testing.T) {
+	t.Run("test close with api logging enabled", func(t *testing.T) {
+		port, err := freeport.GetFreePort()
+		require.NoError(t, err)
+		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4, true)
+		a := &api{}
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
+		require.NoError(t, server.StartNonBlocking())
+		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
+		assert.NoError(t, server.Close())
+	})
+
+	t.Run("test close with api logging disabled", func(t *testing.T) {
+		port, err := freeport.GetFreePort()
+		require.NoError(t, err)
+		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, "test", "test", 4, "", 4, false)
+		a := &api{}
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
+		require.NoError(t, server.StartNonBlocking())
+		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
+		assert.NoError(t, server.Close())
 	})
 }

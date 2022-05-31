@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package kubernetes
 
@@ -20,6 +28,7 @@ func TestBuildDeploymentObject(t *testing.T) {
 		RegistryName:   "dariotest",
 		Replicas:       1,
 		IngressEnabled: true,
+		MetricsEnabled: true,
 	}
 
 	t.Run("Dapr Enabled", func(t *testing.T) {
@@ -45,6 +54,39 @@ func TestBuildDeploymentObject(t *testing.T) {
 	})
 }
 
+func TestBuildJobObject(t *testing.T) {
+	testApp := AppDescription{
+		AppName:        "testapp",
+		DaprEnabled:    true,
+		ImageName:      "helloworld",
+		RegistryName:   "dariotest",
+		Replicas:       1,
+		IngressEnabled: true,
+	}
+
+	t.Run("Dapr Enabled", func(t *testing.T) {
+		testApp.DaprEnabled = true
+
+		// act
+		obj := buildJobObject("testNamespace", testApp)
+
+		// assert
+		assert.NotNil(t, obj)
+		assert.Equal(t, "true", obj.Spec.Template.Annotations["dapr.io/enabled"])
+	})
+
+	t.Run("Dapr disabled", func(t *testing.T) {
+		testApp.DaprEnabled = false
+
+		// act
+		obj := buildJobObject("testNamespace", testApp)
+
+		// assert
+		assert.NotNil(t, obj)
+		assert.Empty(t, obj.Spec.Template.Annotations)
+	})
+}
+
 func TestBuildServiceObject(t *testing.T) {
 	testApp := AppDescription{
 		AppName:        "testapp",
@@ -53,6 +95,7 @@ func TestBuildServiceObject(t *testing.T) {
 		RegistryName:   "dariotest",
 		Replicas:       1,
 		IngressEnabled: true,
+		MetricsEnabled: true,
 	}
 
 	t.Run("Ingress is enabled", func(t *testing.T) {

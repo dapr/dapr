@@ -1,23 +1,33 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package v1
 
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
 
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/stretchr/testify/assert"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 func TestInternalMetadataToHTTPHeader(t *testing.T) {
@@ -50,7 +60,7 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 }
 
 func TestGrpcMetadataToInternalMetadata(t *testing.T) {
-	var keyBinValue = []byte{101, 200}
+	keyBinValue := []byte{101, 200}
 	testMD := metadata.Pairs(
 		"key", "key value",
 		"key-bin", string(keyBinValue),
@@ -65,7 +75,7 @@ func TestGrpcMetadataToInternalMetadata(t *testing.T) {
 }
 
 func TestIsJSONContentType(t *testing.T) {
-	var contentTypeTests = []struct {
+	contentTypeTests := []struct {
 		in  string
 		out bool
 	}{
@@ -122,7 +132,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		// always trace header is returned
 		assert.Equal(t, 11, convertedMD.Len())
 
-		var testHeaders = []struct {
+		testHeaders := []struct {
 			key      string
 			expected string
 		}{
@@ -148,7 +158,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		// always trace header is returned
 		assert.Equal(t, 11, convertedMD.Len())
 
-		var testHeaders = []struct {
+		testHeaders := []struct {
 			key      string
 			expected string
 		}{
@@ -169,8 +179,8 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		}
 	})
 
-	var keyBinValue = []byte{100, 50}
-	var keyBinEncodedValue = base64.StdEncoding.EncodeToString(keyBinValue)
+	keyBinValue := []byte{100, 50}
+	keyBinEncodedValue := base64.StdEncoding.EncodeToString(keyBinValue)
 
 	traceBinValue := []byte{10, 30, 50, 60}
 	traceBinValueEncodedValue := base64.StdEncoding.EncodeToString(traceBinValue)
@@ -346,4 +356,32 @@ func TestProtobufToJSON(t *testing.T) {
 	// For mac and windows
 	comp2 := string(jsonBody) == "{\"stackEntries\":[\"first stack\", \"second stack\"]}"
 	assert.True(t, comp1 || comp2)
+}
+
+func TestWithCustomGrpcMetadata(t *testing.T) {
+	customMetadataKey := func(i int) string {
+		return fmt.Sprintf("customMetadataKey%d", i)
+	}
+	customMetadataValue := func(i int) string {
+		return fmt.Sprintf("customMetadataValue%d", i)
+	}
+
+	numMetadata := 10
+	md := make(map[string]string, numMetadata)
+	for i := 0; i < numMetadata; i++ {
+		md[customMetadataKey(i)] = customMetadataValue(i)
+	}
+
+	ctx := context.Background()
+	ctx = WithCustomGRPCMetadata(ctx, md)
+
+	ctxMd, ok := metadata.FromOutgoingContext(ctx)
+	assert.True(t, ok)
+
+	for i := 0; i < numMetadata; i++ {
+		val, ok := ctxMd[strings.ToLower(customMetadataKey(i))]
+		assert.True(t, ok)
+		// We assume only 1 value per key as the input map can only support string -> string mapping.
+		assert.Equal(t, customMetadataValue(i), val[0])
+	}
 }

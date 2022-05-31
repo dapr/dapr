@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package v1
 
@@ -9,14 +17,16 @@ import (
 	"errors"
 	"strings"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	"github.com/dapr/dapr/pkg/config"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 const (
-	// DefaultAPIVersion is the default Dapr API version
+	// DefaultAPIVersion is the default Dapr API version.
 	DefaultAPIVersion = internalv1pb.APIVersion_V1
 )
 
@@ -26,7 +36,7 @@ type InvokeMethodRequest struct {
 	r *internalv1pb.InternalInvokeRequest
 }
 
-// NewInvokeMethodRequest creates InvokeMethodRequest object for method
+// NewInvokeMethodRequest creates InvokeMethodRequest object for method.
 func NewInvokeMethodRequest(method string) *InvokeMethodRequest {
 	return &InvokeMethodRequest{
 		r: &internalv1pb.InternalInvokeRequest{
@@ -38,7 +48,7 @@ func NewInvokeMethodRequest(method string) *InvokeMethodRequest {
 	}
 }
 
-// FromInvokeRequestMessage creates InvokeMethodRequest object from InvokeRequest pb object
+// FromInvokeRequestMessage creates InvokeMethodRequest object from InvokeRequest pb object.
 func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest {
 	return &InvokeMethodRequest{
 		r: &internalv1pb.InternalInvokeRequest{
@@ -48,7 +58,7 @@ func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest
 	}
 }
 
-// InternalInvokeRequest creates InvokeMethodRequest object from InternalInvokeRequest pb object
+// InternalInvokeRequest creates InvokeMethodRequest object from InternalInvokeRequest pb object.
 func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
 	req := &InvokeMethodRequest{r: pb}
 	if pb.Message == nil {
@@ -58,19 +68,19 @@ func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMetho
 	return req, nil
 }
 
-// WithActor sets actor type and id
+// WithActor sets actor type and id.
 func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMethodRequest {
 	imr.r.Actor = &internalv1pb.Actor{ActorType: actorType, ActorId: actorID}
 	return imr
 }
 
-// WithMetadata sets metadata
+// WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
 	imr.r.Metadata = MetadataToInternalMetadata(md)
 	return imr
 }
 
-// WithFastHTTPHeaders sets fasthttp request headers
+// WithFastHTTPHeaders sets fasthttp request headers.
 func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
 	md := map[string][]string{}
 	header.VisitAll(func(key []byte, value []byte) {
@@ -80,9 +90,10 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 	return imr
 }
 
-// WithRawData sets message data and content_type
+// WithRawData sets message data and content_type.
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
-	if contentType == "" {
+	// TODO: Remove the entire block once feature is finalized
+	if contentType == "" && !config.GetNoDefaultContentType() {
 		contentType = JSONContentType
 	}
 	imr.r.Message.ContentType = contentType
@@ -90,7 +101,7 @@ func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *In
 	return imr
 }
 
-// WithHTTPExtension sets new HTTP extension with verb and querystring
+// WithHTTPExtension sets new HTTP extension with verb and querystring.
 func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring string) *InvokeMethodRequest {
 	httpMethod, ok := commonv1pb.HTTPExtension_Verb_value[strings.ToUpper(verb)]
 	if !ok {
@@ -105,7 +116,22 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 	return imr
 }
 
-// EncodeHTTPQueryString generates querystring for http using http extension object
+// WithCustomHTTPMetadata applies a metadata map to a InvokeMethodRequest.
+func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *InvokeMethodRequest {
+	for k, v := range md {
+		if imr.r.Metadata == nil {
+			imr.r.Metadata = make(map[string]*internalv1pb.ListStringValue)
+		}
+
+		// NOTE: We don't explicitly lowercase the keys here but this will be done
+		//       later when attached to the HTTP request as headers.
+		imr.r.Metadata[k] = &internalv1pb.ListStringValue{Values: []string{v}}
+	}
+
+	return imr
+}
+
+// EncodeHTTPQueryString generates querystring for http using http extension object.
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	m := imr.r.Message
 	if m == nil || m.GetHttpExtension() == nil {
@@ -115,32 +141,32 @@ func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	return m.GetHttpExtension().Querystring
 }
 
-// APIVersion gets API version of InvokeMethodRequest
+// APIVersion gets API version of InvokeMethodRequest.
 func (imr *InvokeMethodRequest) APIVersion() internalv1pb.APIVersion {
 	return imr.r.GetVer()
 }
 
-// Metadata gets Metadata of InvokeMethodRequest
+// Metadata gets Metadata of InvokeMethodRequest.
 func (imr *InvokeMethodRequest) Metadata() DaprInternalMetadata {
 	return imr.r.GetMetadata()
 }
 
-// Proto returns InternalInvokeRequest Proto object
+// Proto returns InternalInvokeRequest Proto object.
 func (imr *InvokeMethodRequest) Proto() *internalv1pb.InternalInvokeRequest {
 	return imr.r
 }
 
-// Actor returns actor type and id
+// Actor returns actor type and id.
 func (imr *InvokeMethodRequest) Actor() *internalv1pb.Actor {
 	return imr.r.GetActor()
 }
 
-// Message gets InvokeRequest Message object
+// Message gets InvokeRequest Message object.
 func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
 	return imr.r.Message
 }
 
-// RawData returns content_type and byte array body
+// RawData returns content_type and byte array body.
 func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 	m := imr.r.Message
 	if m == nil || m.Data == nil {
@@ -148,13 +174,37 @@ func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 	}
 
 	contentType := m.GetContentType()
-	dataTypeURL := m.GetData().GetTypeUrl()
 	dataValue := m.GetData().GetValue()
 
-	// set content_type to application/json only if typeurl is unset and data is given
-	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
-		contentType = JSONContentType
+	// TODO: Remove once feature is finalized
+	if !config.GetNoDefaultContentType() {
+		dataTypeURL := m.GetData().GetTypeUrl()
+		// set content_type to application/json only if typeurl is unset and data is given
+		if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
+			contentType = JSONContentType
+		}
 	}
 
 	return contentType, dataValue
+}
+
+// Adds a new header to the existing set.
+func (imr *InvokeMethodRequest) AddHeaders(header *fasthttp.RequestHeader) {
+	md := map[string][]string{}
+	header.VisitAll(func(key []byte, value []byte) {
+		md[string(key)] = []string{string(value)}
+	})
+
+	internalMd := MetadataToInternalMetadata(md)
+
+	if imr.r.Metadata == nil {
+		imr.r.Metadata = internalMd
+	} else {
+		for key, val := range internalMd {
+			// We're only adding new values, not overwriting existing
+			if _, ok := imr.r.Metadata[key]; !ok {
+				imr.r.Metadata[key] = val
+			}
+		}
+	}
 }

@@ -1,11 +1,19 @@
+//go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
-
-package actor_activation_e2e
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+package activation
 
 import (
 	"encoding/json"
@@ -48,22 +56,22 @@ func parseLogEntries(resp []byte) []actorLogEntry {
 	return logEntries
 }
 
-func findActorActivation(resp []byte, actorId string) bool {
-	return findActorAction(resp, actorId, "activation")
+func findActorActivation(resp []byte, actorID string) bool {
+	return findActorAction(resp, actorID, "activation")
 }
 
-func findActorDeactivation(resp []byte, actorId string) bool {
-	return findActorAction(resp, actorId, "deactivation")
+func findActorDeactivation(resp []byte, actorID string) bool {
+	return findActorAction(resp, actorID, "deactivation")
 }
 
-func findActorMethodInvokation(resp []byte, actorId string) bool {
-	return findActorAction(resp, actorId, "actormethod")
+func findActorMethodInvokation(resp []byte, actorID string) bool {
+	return findActorAction(resp, actorID, "actormethod")
 }
 
-func findActorAction(resp []byte, actorId string, action string) bool {
+func findActorAction(resp []byte, actorID string, action string) bool {
 	logEntries := parseLogEntries(resp)
 	for _, logEntry := range logEntries {
-		if (logEntry.ActorID == actorId) && (logEntry.Action == action) {
+		if (logEntry.ActorID == actorID) && (logEntry.Action == action) {
 			return true
 		}
 	}
@@ -74,6 +82,9 @@ func findActorAction(resp []byte, actorId string, action string) bool {
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("actor_activation")
+	utils.InitHTTPClient(true)
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -83,6 +94,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorapp",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 
@@ -105,9 +117,9 @@ func TestActorActivation(t *testing.T) {
 	time.Sleep(15 * time.Second)
 
 	t.Run("Actor deactivates due to timeout.", func(t *testing.T) {
-		actorId := "100"
+		actorID := "100"
 
-		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorId)
+		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID)
 
 		_, err = utils.HTTPPost(invokeURL, []byte{})
 		require.NoError(t, err)
@@ -117,10 +129,10 @@ func TestActorActivation(t *testing.T) {
 		require.NoError(t, err)
 
 		// there is no longer an activate message
-		require.False(t, findActorActivation(resp, actorId))
+		require.False(t, findActorActivation(resp, actorID))
 
-		require.True(t, findActorMethodInvokation(resp, actorId))
-		require.False(t, findActorDeactivation(resp, actorId))
+		require.True(t, findActorMethodInvokation(resp, actorID))
+		require.False(t, findActorDeactivation(resp, actorID))
 
 		time.Sleep(secondsToCheckActorDeactivation * time.Second)
 
@@ -129,15 +141,15 @@ func TestActorActivation(t *testing.T) {
 		require.NoError(t, err)
 
 		// there is no longer an activate message
-		require.False(t, findActorActivation(resp, actorId))
+		require.False(t, findActorActivation(resp, actorID))
 
-		require.True(t, findActorMethodInvokation(resp, actorId))
-		require.True(t, findActorDeactivation(resp, actorId))
+		require.True(t, findActorMethodInvokation(resp, actorID))
+		require.True(t, findActorDeactivation(resp, actorID))
 	})
 
 	t.Run("Actor does not deactivate since there is no timeout.", func(t *testing.T) {
-		actorId := guuid.New().String()
-		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorId)
+		actorID := guuid.New().String()
+		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID)
 
 		_, err = utils.HTTPPost(invokeURL, []byte{})
 		require.NoError(t, err)
@@ -146,10 +158,10 @@ func TestActorActivation(t *testing.T) {
 		require.NoError(t, err)
 
 		// there is no longer an activate message
-		require.False(t, findActorActivation(resp, actorId))
+		require.False(t, findActorActivation(resp, actorID))
 
-		require.True(t, findActorMethodInvokation(resp, actorId))
-		require.False(t, findActorDeactivation(resp, actorId))
+		require.True(t, findActorMethodInvokation(resp, actorID))
+		require.False(t, findActorDeactivation(resp, actorID))
 
 		time.Sleep(secondsToCheckActorRemainsActive * time.Second)
 
@@ -157,9 +169,9 @@ func TestActorActivation(t *testing.T) {
 		require.NoError(t, err)
 
 		// there is no longer an activate message
-		require.False(t, findActorActivation(resp, actorId))
+		require.False(t, findActorActivation(resp, actorID))
 
-		require.True(t, findActorMethodInvokation(resp, actorId))
-		require.False(t, findActorDeactivation(resp, actorId))
+		require.True(t, findActorMethodInvokation(resp, actorID))
+		require.False(t, findActorDeactivation(resp, actorID))
 	})
 }

@@ -41,6 +41,9 @@ spec:
         app.kubernetes.io/component: sentry
         app.kubernetes.io/part-of: "dapr"
         app.kubernetes.io/managed-by: "helm"
+        {{- with .Values.global.labels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
       annotations:
         prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
@@ -48,34 +51,30 @@ spec:
         prometheus.io/path: "/"
 {{- end }}
     spec:
-{{- if eq .Values.global.ha.enabled true }}
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - dapr-sentry
-            topologyKey: "kubernetes.io/hostname"
-{{- end }}
       containers:
       - name: dapr-sentry
         livenessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 3
-          periodSeconds: 3
-          failureThreshold: 5
+          {{- if eq .Values.debug.enabled false }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          {{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+          {{- end }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 3
-          periodSeconds: 3
-          failureThreshold: 5
+          {{- if eq .Values.debug.enabled false }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          {{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+          {{- end }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
@@ -85,6 +84,11 @@ spec:
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: {{ .Values.runAsNonRoot }}
+  {{- if eq .Values.debug.enabled true }}
+          capabilities:
+            add:
+              - SYS_PTRACE
+  {{- end }}
 {{- end }}
         env:
         - name: NAMESPACE
@@ -98,6 +102,11 @@ spec:
           containerPort: {{ .Values.global.prometheus.port }}
           protocol: TCP
 {{- end }}
+{{- if eq .Values.debug.enabled true }}
+        - name: debug
+          containerPort: {{ .Values.debug.port }}
+          protocol: TCP
+{{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
@@ -105,8 +114,22 @@ spec:
             mountPath: /var/run/dapr/credentials
             readOnly: true
         command:
+{{- if eq .Values.debug.enabled false }}
         - "/sentry"
+{{- else }}
+        - "/dlv"
+{{- end }}
         args:
+{{- if eq .Values.debug.enabled true }}
+        - "--listen=:{{ .Values.debug.port }}"
+        - "--accept-multiclient"
+        - "--headless=true"
+        - "--log"
+        - "--api-version=2"
+        - "exec"
+        - "/sentry"
+        - "--"
+{{- end }}
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
@@ -141,7 +164,28 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
+{{- if .Values.global.ha.enabled }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-sentry
+              topologyKey: topology.kubernetes.io/zone
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+{{- if .Values.global.tolerations }}
+      tolerations:
+{{ toYaml .Values.global.tolerations | indent 8 }}
 {{- end }}

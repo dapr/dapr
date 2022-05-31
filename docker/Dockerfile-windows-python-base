@@ -1,0 +1,17 @@
+ARG WINDOWS_VERSION=1809
+FROM python:3.7-windowsservercore-$WINDOWS_VERSION as python-servercore
+
+FROM mcr.microsoft.com/windows/nanoserver:$WINDOWS_VERSION
+COPY --from=python-servercore C:\\Python C:\\Python
+
+USER ContainerAdministrator
+
+ENV PYTHONPATH C:\\Python;C:\\Python\\Scripts;C:\\Python\\DLLs;C:\\Python\\Lib;C:\\Python\\Lib\\plat-win;C:\\Python\\Lib\\site-packages
+RUN setx.exe /m PATH %PATH%;%PYTHONPATH%
+RUN setx.exe /m PYTHONPATH %PYTHONPATH%
+RUN setx.exe /m PIP_CACHE_DIR C:\Users\ContainerUser\AppData\Local\pip\Cache
+RUN reg.exe ADD HKLM\SYSTEM\CurrentControlSet\Control\FileSystem /v LongPathsEnabled /t REG_DWORD /d 1 /f
+
+RUN pip install --upgrade pip
+
+CMD ["C:\\python\\python.exe"]

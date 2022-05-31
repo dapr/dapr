@@ -1,13 +1,18 @@
 global:
   registry: docker.io/daprio
-  tag: "1.0.0-rc.3"
+  tag: 'edge'
   dnsSuffix: ".cluster.local"
   logAsJson: false
   imagePullPolicy: IfNotPresent
   imagePullSecrets: ""
+  nodeSelector: {}
+  tolerations: []
   ha:
     enabled: false
     replicaCount: 3
+    disruption:
+      minimumAvailable: ""
+      maximumUnavailable: "25%"
   prometheus:
     enabled: true
     port: 9090
@@ -16,3 +21,4 @@ global:
     workloadCertTTL: 24h
     allowedClockSkew: 15m
   daprControlPlaneOs: linux
+  labels: {}

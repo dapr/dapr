@@ -27,6 +27,8 @@ type TestParameters struct {
 	PayloadSizeKB     int    `json:"payloadSizeKB"`
 	Payload           string `json:"payload"`
 	StdClient         bool   `json:"stdClient"`
+	Grpc              bool   `json:"grpc"`
+	Dapr              string `json:"dapr"`
 }
 
 func Params() TestParameters {

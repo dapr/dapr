@@ -4,9 +4,10 @@ import (
 	"context"
 	"net/http"
 
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.UnaryServerInterceptor {
@@ -27,6 +28,8 @@ func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.Unary
 			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "authentication error: api token mismatch")
 			return nil, err
 		}
+
+		md.Set(authHeader, "")
 		return handler(ctx, req)
 	}
 }

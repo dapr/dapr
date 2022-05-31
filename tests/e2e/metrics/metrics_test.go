@@ -1,9 +1,18 @@
+//go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package metrics_e2e
 
@@ -37,6 +46,9 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("metrics")
+	utils.InitHTTPClient(false)
+
 	// This test shows how to deploy the multiple test apps, validate the side-car injection
 	// and validate the response by using test app's service endpoint
 
@@ -49,6 +61,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-hellodapr",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName: "grpcmetrics",
@@ -59,6 +72,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-stateapp",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "disabledmetric",
@@ -67,6 +81,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-hellodapr",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 
@@ -135,6 +150,11 @@ func TestMetrics(t *testing.T) {
 			// Get the metrics from the metrics endpoint
 			res, err := utils.HTTPGetRawNTimes(fmt.Sprintf("http://localhost:%v", metricsPort), numHealthChecks)
 			require.NoError(t, err)
+			defer func() {
+				// Drain before closing
+				_, _ = io.Copy(io.Discard, res.Body)
+				res.Body.Close()
+			}()
 
 			// Evaluate the metrics are as expected
 			tt.evaluate(t, tt.app, res)
@@ -211,7 +231,11 @@ func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) 
 						foundPath = true
 
 						if strings.Contains(l.GetValue(), "healthz") {
-							require.Equal(t, "/v1.0/healthz", l.GetValue())
+							if strings.Contains(l.GetValue(), "outbound") {
+								require.Equal(t, "/v1.0/healthz/outbound", l.GetValue())
+							} else {
+								require.Equal(t, "/v1.0/healthz", l.GetValue())
+							}
 						} else {
 							require.Equal(t, fmt.Sprintf("/v1.0/invoke/%s/method/tests/green", app), l.GetValue())
 						}

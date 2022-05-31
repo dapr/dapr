@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package diagnostics
 
@@ -11,24 +19,25 @@ import (
 	"strings"
 	"time"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // To track the metrics for fasthttp using opencensus, this implementation is inspired by
 // https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ochttp
 
-// Tag key definitions for http requests
+// Tag key definitions for http requests.
 var (
 	httpStatusCodeKey = tag.MustNewKey("status")
 	httpPathKey       = tag.MustNewKey("path")
 	httpMethodKey     = tag.MustNewKey("method")
 )
 
-// Default distributions
+// Default distributions.
 var (
 	defaultSizeDistribution    = view.Distribution(1024, 2048, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824, 4294967296)
 	defaultLatencyDistribution = view.Distribution(1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1000, 2000, 5000, 10000, 20000, 50000, 100000)
@@ -39,10 +48,12 @@ type httpMetrics struct {
 	serverRequestBytes  *stats.Int64Measure
 	serverResponseBytes *stats.Int64Measure
 	serverLatency       *stats.Float64Measure
+	serverResponseCount *stats.Int64Measure
 
 	clientSentBytes        *stats.Int64Measure
 	clientReceivedBytes    *stats.Int64Measure
 	clientRoundtripLatency *stats.Float64Measure
+	clientCompletedCount   *stats.Int64Measure
 
 	appID   string
 	enabled bool
@@ -66,7 +77,10 @@ func newHTTPMetrics() *httpMetrics {
 			"http/server/latency",
 			"HTTP request end to end latency in server.",
 			stats.UnitMilliseconds),
-
+		serverResponseCount: stats.Int64(
+			"http/server/response_count",
+			"The number of HTTP responses",
+			stats.UnitDimensionless),
 		clientSentBytes: stats.Int64(
 			"http/client/sent_bytes",
 			"Total bytes sent in request body (not including headers)",
@@ -79,6 +93,10 @@ func newHTTPMetrics() *httpMetrics {
 			"http/client/roundtrip_latency",
 			"Time between first byte of request headers sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
+		clientCompletedCount: stats.Int64(
+			"http/client/completed_count",
+			"Count of completed requests",
+			stats.UnitDimensionless),
 
 		enabled: false,
 	}
@@ -105,6 +123,10 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			h.serverResponseCount.M(1))
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 			h.serverLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx, diag_utils.WithTags(appIDKey, h.appID),
@@ -126,6 +148,10 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
+			h.clientCompletedCount.M(1))
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx, diag_utils.WithTags(appIDKey, h.appID),
@@ -137,77 +163,21 @@ func (h *httpMetrics) Init(appID string) error {
 	h.appID = appID
 	h.enabled = true
 
-	views := []*view.View{
-		{
-			Name:        "http/server/request_count",
-			Description: "The Number of HTTP requests",
-			TagKeys:     []tag.Key{appIDKey, httpPathKey, httpMethodKey},
-			Measure:     h.serverRequestCount,
-			Aggregation: view.Count(),
-		},
-		{
-			Name:        "http/server/request_bytes",
-			Description: "Size distribution of HTTP request body",
-			TagKeys:     []tag.Key{appIDKey},
-			Measure:     h.serverRequestBytes,
-			Aggregation: defaultSizeDistribution,
-		},
-		{
-			Name:        "http/server/response_bytes",
-			Description: "Size distribution of HTTP response body",
-			TagKeys:     []tag.Key{appIDKey},
-			Measure:     h.serverResponseBytes,
-			Aggregation: defaultSizeDistribution,
-		},
-		{
-			Name:        "http/server/latency",
-			Description: "Latency distribution of HTTP requests",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-			Measure:     h.serverLatency,
-			Aggregation: defaultLatencyDistribution,
-		},
-		{
-			Name:        "http/server/response_count",
-			Description: "The number of HTTP responses",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-			Measure:     h.serverLatency,
-			Aggregation: view.Count(),
-		},
-
-		{
-			Name:        "http/client/sent_bytes",
-			Measure:     h.clientSentBytes,
-			Aggregation: defaultSizeDistribution,
-			Description: "Total bytes sent in request body (not including headers)",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-		},
-		{
-			Name:        "http/client/received_bytes",
-			Measure:     h.clientReceivedBytes,
-			Aggregation: defaultSizeDistribution,
-			Description: "Total bytes received in response bodies (not including headers but including error responses with bodies)",
-			TagKeys:     []tag.Key{appIDKey},
-		},
-		{
-			Name:        "http/client/roundtrip_latency",
-			Measure:     h.clientRoundtripLatency,
-			Aggregation: defaultLatencyDistribution,
-			Description: "End-to-end latency",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-		},
-		{
-			Name:        "http/client/completed_count",
-			Measure:     h.clientRoundtripLatency,
-			Aggregation: view.Count(),
-			Description: "Count of completed requests",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-		},
-	}
-
-	return view.Register(views...)
+	tags := []tag.Key{appIDKey}
+	return view.Register(
+		diag_utils.NewMeasureView(h.serverRequestCount, []tag.Key{appIDKey, httpPathKey, httpMethodKey}, view.Count()),
+		diag_utils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.serverLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diag_utils.NewMeasureView(h.serverResponseCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
+		diag_utils.NewMeasureView(h.clientSentBytes, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.clientRoundtripLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diag_utils.NewMeasureView(h.clientCompletedCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
+	)
 }
 
-// FastHTTPMiddleware is the middleware to track http server-side requests
+// FastHTTPMiddleware is the middleware to track http server-side requests.
 func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		reqContentSize := ctx.Request.Header.ContentLength()
@@ -232,7 +202,7 @@ func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.
 }
 
 // convertPathToMetricLabel removes the variant parameters in URL path for low cardinality label space
-// For example, it removes {keys} param from /v1/state/statestore/{keys}
+// For example, it removes {keys} param from /v1/state/statestore/{keys}.
 func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 	if path == "" {
 		return path
@@ -244,7 +214,7 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 	}
 
 	// Split up to 6 delimiters in 'v1/actors/DemoActor/1/timer/name'
-	var parsedPath = strings.SplitN(p, "/", 6)
+	parsedPath := strings.SplitN(p, "/", 6)
 
 	if len(parsedPath) < 3 {
 		return path

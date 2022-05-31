@@ -1,9 +1,18 @@
+//go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package actor_invocation_e2e
 
@@ -27,7 +36,7 @@ const (
 
 type actorCallRequest struct {
 	ActorType       string `json:"actorType"`
-	ActorId         string `json:"actorId"`
+	ActorID         string `json:"actorId"`
 	Method          string `json:"method"`
 	RemoteActorID   string `json:"remoteId,omitempty"`
 	RemoteActorType string `json:"remoteType,omitempty"`
@@ -47,6 +56,9 @@ func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 }
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("actor_invocation")
+	utils.InitHTTPClient(true)
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -56,6 +68,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorinvocationapp",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "actor2",
@@ -63,6 +76,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorinvocationapp",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 
@@ -83,7 +97,7 @@ func TestActorInvocation(t *testing.T) {
 	t.Run("Actor remote invocation", func(t *testing.T) {
 		request := actorCallRequest{
 			ActorType: "actor1",
-			ActorId:   "10",
+			ActorID:   "10",
 			Method:    "logCall",
 		}
 
@@ -95,7 +109,7 @@ func TestActorInvocation(t *testing.T) {
 
 		request = actorCallRequest{
 			ActorType: "actor2",
-			ActorId:   "20",
+			ActorID:   "20",
 			Method:    "logCall",
 		}
 
@@ -110,7 +124,7 @@ func TestActorInvocation(t *testing.T) {
 		// Register the 2nd actor on the same pod.
 		request := actorCallRequest{
 			ActorType: "actor1",
-			ActorId:   "11",
+			ActorID:   "11",
 			Method:    "logCall",
 		}
 
@@ -122,7 +136,7 @@ func TestActorInvocation(t *testing.T) {
 
 		request = actorCallRequest{
 			ActorType:       "actor1",
-			ActorId:         "10",
+			ActorID:         "10",
 			Method:          "callDifferentActor",
 			RemoteActorID:   "11",
 			RemoteActorType: "actor1",
@@ -139,7 +153,7 @@ func TestActorInvocation(t *testing.T) {
 		// Register the 2nd actor on a different pod.
 		request := actorCallRequest{
 			ActorType: "actor2",
-			ActorId:   "21",
+			ActorID:   "21",
 			Method:    "logCall",
 		}
 
@@ -151,7 +165,7 @@ func TestActorInvocation(t *testing.T) {
 
 		request = actorCallRequest{
 			ActorType:       "actor1",
-			ActorId:         "10",
+			ActorID:         "10",
 			Method:          "callDifferentActor",
 			RemoteActorID:   "21",
 			RemoteActorType: "actor2",
@@ -175,7 +189,7 @@ func TestActorNegativeInvocation(t *testing.T) {
 	t.Run("Try actor call with non-bound method", func(t *testing.T) {
 		request := actorCallRequest{
 			ActorType: "actor1",
-			ActorId:   "10",
+			ActorID:   "10",
 			Method:    "notAMethod",
 		}
 
@@ -190,7 +204,7 @@ func TestActorNegativeInvocation(t *testing.T) {
 	t.Run("Try actor call with non-registered actor type", func(t *testing.T) {
 		request := actorCallRequest{
 			ActorType: "notAType",
-			ActorId:   "10",
+			ActorID:   "10",
 			Method:    "logCall",
 		}
 

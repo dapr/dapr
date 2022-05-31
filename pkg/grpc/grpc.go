@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package grpc
 
@@ -9,8 +17,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
@@ -18,62 +31,84 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 const (
-	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances
+	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances.
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 	dialTimeout       = time.Second * 30
 )
 
-// Manager is a wrapper around gRPC connection pooling
+// ClientConnCloser combines grpc.ClientConnInterface and io.Closer
+// to cover the methods used from *grpc.ClientConn.
+type ClientConnCloser interface {
+	grpc.ClientConnInterface
+	io.Closer
+}
+
+// Manager is a wrapper around gRPC connection pooling.
 type Manager struct {
-	AppClient      *grpc.ClientConn
-	lock           *sync.Mutex
-	connectionPool map[string]*grpc.ClientConn
+	AppClient      ClientConnCloser
+	lock           *sync.RWMutex
+	connectionPool *connectionPool
 	auth           security.Authenticator
 	mode           modes.DaprMode
 }
 
-// NewGRPCManager returns a new grpc manager
+// NewGRPCManager returns a new grpc manager.
 func NewGRPCManager(mode modes.DaprMode) *Manager {
 	return &Manager{
-		lock:           &sync.Mutex{},
-		connectionPool: map[string]*grpc.ClientConn{},
+		lock:           &sync.RWMutex{},
+		connectionPool: newConnectionPool(),
 		mode:           mode,
 	}
 }
 
-// SetAuthenticator sets the gRPC manager a tls authenticator context
+// SetAuthenticator sets the gRPC manager a tls authenticator context.
 func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 	g.auth = auth
 }
 
-// CreateLocalChannel creates a new gRPC AppChannel
-func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
-	conn, err := g.GetGRPCConnection(fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled)
+// CreateLocalChannel creates a new gRPC AppChannel.
+func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
+	conn, _, err := g.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled)
 	if err != nil {
 		return nil, errors.Errorf("error establishing connection to app grpc on port %v: %s", port, err)
 	}
 
 	g.AppClient = conn
-	ch := grpc_channel.CreateLocalChannel(port, maxConcurrency, conn, spec)
+	ch := grpc_channel.CreateLocalChannel(port, maxConcurrency, conn, spec, maxRequestBodySize, readBufferSize)
 	return ch, nil
 }
 
-// GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist
-func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool) (*grpc.ClientConn, error) {
-	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
-		return val, nil
+// GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist.
+func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error) {
+	releaseFactory := func(conn *grpc.ClientConn) func() {
+		return func() {
+			g.connectionPool.Release(conn)
+		}
 	}
 
-	g.lock.Lock()
-	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
-		g.lock.Unlock()
-		return val, nil
+	// share pooled connection
+	if !recreateIfExists {
+		g.lock.RLock()
+		if conn, ok := g.connectionPool.Share(address); ok {
+			g.lock.RUnlock()
+
+			teardown := releaseFactory(conn)
+			return conn, teardown, nil
+		}
+		g.lock.RUnlock()
+
+		g.lock.RLock()
+		// read the value once again, as a concurrent writer could create it
+		if conn, ok := g.connectionPool.Share(address); ok {
+			g.lock.RUnlock()
+
+			teardown := releaseFactory(conn)
+			return conn, teardown, nil
+		}
+		g.lock.RUnlock()
 	}
 
 	opts := []grpc.DialOption{
@@ -84,11 +119,12 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 		opts = append(opts, grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
 	}
 
+	transportCredentialsAdded := false
 	if !skipTLS && g.auth != nil {
 		signedCert := g.auth.GetCurrentSignedCert()
 		cert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 		if err != nil {
-			return nil, errors.Errorf("error generating x509 Key Pair: %s", err)
+			return nil, func() {}, errors.Errorf("error generating x509 Key Pair: %s", err)
 		}
 
 		var serverName string
@@ -103,11 +139,10 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 			RootCAs:      signedCert.TrustChain,
 		})
 		opts = append(opts, grpc.WithTransportCredentials(ta))
-	} else {
-		opts = append(opts, grpc.WithInsecure())
+		transportCredentialsAdded = true
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
@@ -116,20 +151,68 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			InsecureSkipVerify: true,
 		})))
+		transportCredentialsAdded = true
 	}
 
+	if !transportCredentialsAdded {
+		opts = append(opts, grpc.WithInsecure())
+	}
+
+	opts = append(opts, customOpts...)
 	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
 	if err != nil {
-		g.lock.Unlock()
-		return nil, err
+		return nil, func() {}, err
 	}
 
-	if c, ok := g.connectionPool[address]; ok {
-		c.Close()
+	teardown := releaseFactory(conn)
+	g.connectionPool.Register(address, conn)
+
+	return conn, teardown, nil
+}
+
+type connectionPool struct {
+	pool           map[string]*grpc.ClientConn
+	referenceCount map[*grpc.ClientConn]int
+}
+
+func newConnectionPool() *connectionPool {
+	return &connectionPool{
+		pool:           map[string]*grpc.ClientConn{},
+		referenceCount: map[*grpc.ClientConn]int{},
+	}
+}
+
+func (p *connectionPool) Register(address string, conn *grpc.ClientConn) {
+	if oldConn, ok := p.pool[address]; ok {
+		// oldConn is not used by pool anymore
+		p.Release(oldConn)
 	}
 
-	g.connectionPool[address] = conn
-	g.lock.Unlock()
+	p.pool[address] = conn
+	// conn is used by caller and pool
+	// NOTE: pool should also increment referenceCount not to close the pooled connection
+	p.referenceCount[conn] = 2
+}
 
-	return conn, nil
+func (p *connectionPool) Share(address string) (*grpc.ClientConn, bool) {
+	conn, ok := p.pool[address]
+	if !ok {
+		return nil, false
+	}
+
+	p.referenceCount[conn]++
+	return conn, true
+}
+
+func (p *connectionPool) Release(conn *grpc.ClientConn) {
+	if _, ok := p.referenceCount[conn]; !ok {
+		return
+	}
+
+	p.referenceCount[conn]--
+
+	// for concurrent use, connection is closed after all callers release it
+	if p.referenceCount[conn] <= 0 {
+		conn.Close()
+	}
 }

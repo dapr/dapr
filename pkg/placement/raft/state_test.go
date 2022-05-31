@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package raft
 
@@ -16,9 +24,9 @@ func TestNewDaprHostMemberState(t *testing.T) {
 	s := newDaprHostMemberState()
 
 	// assert
-	assert.Equal(t, uint64(0), s.Index)
-	assert.Equal(t, 0, len(s.Members))
-	assert.Equal(t, 0, len(s.hashingTableMap))
+	assert.Equal(t, uint64(0), s.Index())
+	assert.Equal(t, 0, len(s.Members()))
+	assert.Equal(t, 0, len(s.hashingTableMap()))
 }
 
 func TestClone(t *testing.T) {
@@ -35,9 +43,9 @@ func TestClone(t *testing.T) {
 
 	// assert
 	assert.NotSame(t, s, newState)
-	assert.Nil(t, newState.hashingTableMap)
-	assert.Equal(t, s.Index, newState.Index)
-	assert.EqualValues(t, s.Members, newState.Members)
+	assert.Nil(t, newState.hashingTableMap())
+	assert.Equal(t, s.Index(), newState.Index())
+	assert.EqualValues(t, s.Members(), newState.Members())
 }
 
 func TestUpsertMember(t *testing.T) {
@@ -54,8 +62,8 @@ func TestUpsertMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 1, len(s.Members))
-		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.Equal(t, 1, len(s.Members()))
+		assert.Equal(t, 2, len(s.hashingTableMap()))
 		assert.True(t, updated)
 	})
 
@@ -69,8 +77,8 @@ func TestUpsertMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 2, len(s.Members))
-		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.Equal(t, 2, len(s.Members()))
+		assert.Equal(t, 2, len(s.hashingTableMap()))
 		assert.True(t, updated)
 
 		// act
@@ -114,10 +122,10 @@ func TestUpsertMember(t *testing.T) {
 		updated := s.upsertMember(testMember)
 
 		// assert
-		assert.Equal(t, 2, len(s.Members))
+		assert.Equal(t, 2, len(s.Members()))
 		assert.True(t, updated)
-		assert.Equal(t, 1, len(s.Members[testMember.Name].Entities))
-		assert.Equal(t, 3, len(s.hashingTableMap), "this doesn't delete empty consistent hashing table")
+		assert.Equal(t, 1, len(s.Members()[testMember.Name].Entities))
+		assert.Equal(t, 3, len(s.hashingTableMap()), "this doesn't delete empty consistent hashing table")
 	})
 }
 
@@ -134,9 +142,9 @@ func TestRemoveMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 1, len(s.Members))
+		assert.Equal(t, 1, len(s.Members()))
 		assert.True(t, updated)
-		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.Equal(t, 2, len(s.hashingTableMap()))
 
 		// act
 		updated = s.removeMember(&DaprHostMember{
@@ -144,9 +152,9 @@ func TestRemoveMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 0, len(s.Members))
+		assert.Equal(t, 0, len(s.Members()))
 		assert.True(t, updated)
-		assert.Equal(t, 0, len(s.hashingTableMap))
+		assert.Equal(t, 0, len(s.hashingTableMap()))
 	})
 
 	t.Run("no table update required", func(t *testing.T) {
@@ -156,9 +164,9 @@ func TestRemoveMember(t *testing.T) {
 		})
 
 		// assert
-		assert.Equal(t, 0, len(s.Members))
+		assert.Equal(t, 0, len(s.Members()))
 		assert.False(t, updated)
-		assert.Equal(t, 0, len(s.hashingTableMap))
+		assert.Equal(t, 0, len(s.hashingTableMap()))
 	})
 }
 
@@ -178,9 +186,9 @@ func TestUpdateHashingTable(t *testing.T) {
 		// act
 		s.updateHashingTables(testMember)
 
-		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.Equal(t, 2, len(s.hashingTableMap()))
 		for _, ent := range testMember.Entities {
-			assert.NotNil(t, s.hashingTableMap[ent])
+			assert.NotNil(t, s.hashingTableMap()[ent])
 		}
 	})
 
@@ -194,9 +202,9 @@ func TestUpdateHashingTable(t *testing.T) {
 		// act
 		s.updateHashingTables(testMember)
 
-		assert.Equal(t, 3, len(s.hashingTableMap))
+		assert.Equal(t, 3, len(s.hashingTableMap()))
 		for _, ent := range testMember.Entities {
-			assert.NotNil(t, s.hashingTableMap[ent])
+			assert.NotNil(t, s.hashingTableMap()[ent])
 		}
 	})
 }
@@ -211,7 +219,7 @@ func TestRemoveHashingTable(t *testing.T) {
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
 	}
 
-	var testcases = []struct {
+	testcases := []struct {
 		name       string
 		totalTable int
 	}{
@@ -231,35 +239,39 @@ func TestRemoveHashingTable(t *testing.T) {
 			testMember.Name = tc.name
 			s.removeHashingTables(testMember)
 
-			assert.Equal(t, tc.totalTable, len(s.hashingTableMap))
+			assert.Equal(t, tc.totalTable, len(s.hashingTableMap()))
 		})
 	}
 }
 
 func TestRestoreHashingTables(t *testing.T) {
 	// arrange
-	var testnames = []string{
+	testnames := []string{
 		"127.0.0.1:8080",
 		"127.0.0.1:8081",
 	}
 
 	s := &DaprHostMemberState{
-		Index:           0,
-		Members:         map[string]*DaprHostMember{},
-		hashingTableMap: nil,
+		data: DaprHostMemberStateData{
+			Index:           0,
+			Members:         map[string]*DaprHostMember{},
+			hashingTableMap: nil,
+		},
 	}
 	for _, tn := range testnames {
-		s.Members[tn] = &DaprHostMember{
+		s.lock.Lock()
+		s.data.Members[tn] = &DaprHostMember{
 			Name:     tn,
 			AppID:    "fakeID",
 			Entities: []string{"actorTypeOne", "actorTypeTwo"},
 		}
+		s.lock.Unlock()
 	}
-	assert.Equal(t, 0, len(s.hashingTableMap))
+	assert.Equal(t, 0, len(s.hashingTableMap()))
 
 	// act
 	s.restoreHashingTables()
 
 	// assert
-	assert.Equal(t, 2, len(s.hashingTableMap))
+	assert.Equal(t, 2, len(s.hashingTableMap()))
 }

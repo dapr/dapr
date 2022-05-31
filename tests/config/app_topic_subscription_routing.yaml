@@ -1,0 +1,16 @@
+apiVersion: dapr.io/v2alpha1
+kind: Subscription
+metadata:
+  name: pubsub-routing-crd-http-subscription
+spec:
+  pubsubname: messagebus
+  topic: pubsub-routing-crd-http
+  routes:
+    rules:
+      - match: 'event.type == "myevent.D"'
+        path: myevent.D
+      - match: 'event.type == "myevent.E"'
+        path: myevent.E
+    default: myevent.F
+scopes:
+  - pubsub-subscriber-routing

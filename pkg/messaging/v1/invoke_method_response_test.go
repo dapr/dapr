@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package v1
 
@@ -9,12 +17,14 @@ import (
 	"net/http"
 	"testing"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	"github.com/dapr/dapr/pkg/config"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 func TestInvocationResponse(t *testing.T) {
@@ -59,16 +69,47 @@ func TestResponseData(t *testing.T) {
 	t.Run("contenttype is set", func(t *testing.T) {
 		resp := NewInvokeMethodResponse(0, "OK", nil)
 		resp.WithRawData([]byte("test"), "application/json")
-		contentType, bData := resp.RawData()
+		_, bData := resp.RawData()
+		contentType := resp.r.Message.ContentType
 		assert.Equal(t, "application/json", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
 
 	t.Run("contenttype is unset", func(t *testing.T) {
 		resp := NewInvokeMethodResponse(0, "OK", nil)
+
 		resp.WithRawData([]byte("test"), "")
 		contentType, bData := resp.RawData()
+		assert.Equal(t, "application/json", resp.r.Message.ContentType)
 		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+
+		// Force the ContentType to be empty to test setting it in RawData
+		resp.r.Message.ContentType = ""
+		contentType, bData = resp.RawData()
+		assert.Equal(t, "", resp.r.Message.ContentType)
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
+	// TODO: Remove once feature is finalized
+	t.Run("contenttype is unset, with NoDefaultContentType", func(t *testing.T) {
+		config.SetNoDefaultContentType(true)
+		defer config.SetNoDefaultContentType(false)
+
+		resp := NewInvokeMethodResponse(0, "OK", nil)
+
+		resp.WithRawData([]byte("test"), "")
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "", resp.r.Message.ContentType)
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte("test"), bData)
+
+		// Force the ContentType to be empty to test setting it in RawData
+		resp.r.Message.ContentType = ""
+		contentType, bData = resp.RawData()
+		assert.Equal(t, "", resp.r.Message.ContentType)
+		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
 
@@ -102,7 +143,7 @@ func TestResponseHeader(t *testing.T) {
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
-		var resp = fasthttp.AcquireResponse()
+		resp := fasthttp.AcquireResponse()
 		resp.Header.Set("Header1", "Value1")
 		resp.Header.Set("Header2", "Value2")
 		resp.Header.Set("Header3", "Value3")

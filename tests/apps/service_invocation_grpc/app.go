@@ -1,17 +1,23 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-
-	"context"
-
 	"net"
 
 	"go.opencensus.io/trace"
@@ -27,8 +33,7 @@ import (
 )
 
 // server is our user app
-type server struct {
-}
+type server struct{}
 
 type appResponse struct {
 	Message string `json:"message,omitempty"`
@@ -73,7 +78,7 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 
 func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
-	var requestMD = map[string][]string{}
+	requestMD := map[string][]string{}
 	for k, vals := range md {
 		requestMD[k] = vals
 		fmt.Printf("incoming md: %s %q", k, vals)
@@ -100,7 +105,7 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 	return json.Marshal(requestMD)
 }
 
-// This method gets invoked when a remote service has called the app through Dapr
+// OnInvoke This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.GetData().Value))
@@ -111,7 +116,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 	case "httpToGrpcTest":
 		// not a typo, the handling is the same as the case below
 		fallthrough
-	case "grpcToGrpcTest":
+	case "grpcToGrpcTest", "grpcToGrpcWithoutVerbTest":
 		response, err = s.grpcTestHandler(in.GetData().Value)
 	case "retrieve_request_object":
 		response, err = s.retrieveRequestObject(ctx)
@@ -127,7 +132,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 	return &commonv1pb.InvokeResponse{Data: respBody, ContentType: "application/json"}, nil
 }
 
-// Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
+// ListTopicSubscriptions Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
 // To subscribe to a topic named TopicA
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	return &pb.ListTopicSubscriptionsResponse{
@@ -139,7 +144,7 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 	}, nil
 }
 
-// Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
+// ListInputBindings Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
 // To invoke our app with a binding named storage
 func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
 	return &pb.ListInputBindingsResponse{
@@ -147,13 +152,15 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.
 	}, nil
 }
 
-// This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata
+// OnBindingEvent This method gets invoked every time a new event is fired from a registered binding.
+// The message carries the binding name, a payload and optional metadata
 func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
 	fmt.Println("Invoked from binding")
 	return &pb.BindingEventResponse{}, nil
 }
 
-// This method is fired whenever a message has been published to a topic that has been subscribed. Dapr sends published messages in a CloudEvents 1.0 envelope.
+// OnTopicEvent This method is fired whenever a message has been published to a topic that has been subscribed.
+// Dapr sends published messages in a CloudEvents 1.0 envelope.
 func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*pb.TopicEventResponse, error) {
 	fmt.Println("Topic message arrived")
 	return &pb.TopicEventResponse{}, nil

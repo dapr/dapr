@@ -1,36 +1,46 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package main
 
 import (
 	"flag"
+	"path/filepath"
 	"time"
+
+	"k8s.io/client-go/util/homedir"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/injector"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.injector")
-
-const (
-	healthzPort = 8080
+var (
+	log         = logger.NewLogger("dapr.injector")
+	healthzPort int
 )
 
 func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
-	cfg, err := injector.GetConfigFromEnvironment()
+	cfg, err := injector.GetConfig()
 	if err != nil {
 		log.Fatalf("error getting config: %s", err)
 	}
@@ -49,12 +59,12 @@ func main() {
 		}
 	}()
 
-	uid, err := injector.ReplicasetAccountUID(kubeClient)
+	uids, err := injector.AllowedControllersServiceAccountUID(ctx, kubeClient)
 	if err != nil {
-		log.Fatalf("failed to get authentication uid from service account: %s", err)
+		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}
 
-	injector.NewInjector(uid, cfg, daprClient, kubeClient).Run(ctx)
+	injector.NewInjector(uids, cfg, daprClient, kubeClient).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
@@ -67,8 +77,22 @@ func init() {
 
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	var kubeconfig *string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+
+	flag.IntVar(&healthzPort, "healthz-port", 8080, "The port used for health checks")
 
 	flag.Parse()
+
+	if err := utils.SetEnvVariables(map[string]string{
+		utils.KubeConfigVar: *kubeconfig,
+	}); err != nil {
+		log.Fatalf("error set env failed:  %s", err.Error())
+	}
 
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {

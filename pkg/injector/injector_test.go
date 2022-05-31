@@ -1,19 +1,37 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package injector
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/admission/v1"
+	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/uuid"
+	kubernetesfake "k8s.io/client-go/kubernetes/fake"
+
+	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
 )
 
 const (
@@ -21,7 +39,7 @@ const (
 )
 
 func TestConfigCorrectValues(t *testing.T) {
-	i := NewInjector("", Config{
+	i := NewInjector(nil, Config{
 		TLSCertFile:            "a",
 		TLSKeyFile:             "b",
 		SidecarImage:           "c",
@@ -155,9 +173,33 @@ func TestMaxConcurrency(t *testing.T) {
 	})
 }
 
-func TestKubernetesDNS(t *testing.T) {
-	dns := getKubernetesDNS("a", "b")
-	assert.Equal(t, "a.b.svc.cluster.local", dns)
+func TestGetServiceAddress(t *testing.T) {
+	testCases := []struct {
+		name          string
+		namespace     string
+		clusterDomain string
+		port          int
+		expect        string
+	}{
+		{
+			port:          80,
+			name:          "a",
+			namespace:     "b",
+			clusterDomain: "cluster.local",
+			expect:        "a.b.svc.cluster.local:80",
+		},
+		{
+			port:          50001,
+			name:          "app",
+			namespace:     "default",
+			clusterDomain: "selfdefine.domain",
+			expect:        "app.default.svc.selfdefine.domain:50001",
+		},
+	}
+	for _, tc := range testCases {
+		dns := getServiceAddress(tc.name, tc.namespace, tc.clusterDomain, tc.port)
+		assert.Equal(t, tc.expect, dns)
+	}
 }
 
 func TestGetMetricsPort(t *testing.T) {
@@ -187,7 +229,7 @@ func TestGetContainer(t *testing.T) {
 	annotations[daprConfigKey] = "config"
 	annotations[daprAppPortKey] = appPort
 
-	c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
+	c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
 
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
@@ -202,7 +244,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprCPULimitKey] = "100m"
 		annotations[daprMemoryLimitKey] = "1Gi"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Limits.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Limits.Memory().String())
@@ -216,7 +258,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprCPURequestKey] = "100m"
 		annotations[daprMemoryRequestKey] = "1Gi"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Requests.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Requests.Memory().String())
@@ -228,7 +270,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprAppPortKey] = appPort
 		annotations[daprLogAsJSON] = "true"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Len(t, c.Resources.Limits, 0)
 	})
@@ -362,7 +404,7 @@ func TestAppSSL(t *testing.T) {
 		annotations := map[string]string{
 			daprAppSSLKey: "true",
 		}
-		c, _ := getSidecarContainer(annotations, "app", "image", "", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
 		found := false
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
@@ -377,7 +419,7 @@ func TestAppSSL(t *testing.T) {
 		annotations := map[string]string{
 			daprAppSSLKey: "false",
 		}
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
 				t.FailNow()
@@ -387,11 +429,209 @@ func TestAppSSL(t *testing.T) {
 
 	t.Run("get sidecar container not specified", func(t *testing.T) {
 		annotations := map[string]string{}
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
 				t.FailNow()
 			}
 		}
 	})
+}
+
+func TestHandleRequest(t *testing.T) {
+	authID := "test-auth-id"
+
+	i := NewInjector([]string{authID}, Config{
+		TLSCertFile:  "test-cert",
+		TLSKeyFile:   "test-key",
+		SidecarImage: "test-image",
+		Namespace:    "test-ns",
+	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset())
+	injector := i.(*injector)
+
+	podBytes, _ := json.Marshal(corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "test-app",
+			Namespace:         "default",
+			CreationTimestamp: metav1.Time{Time: time.Now()},
+			Labels: map[string]string{
+				"app": "test-app",
+			},
+			Annotations: map[string]string{
+				"dapr.io/enabled":  "true",
+				"dapr.io/app-id":   "test-app",
+				"dapr.io/app-port": "3000",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "main",
+					Image: "docker.io/app:latest",
+				},
+			},
+		},
+	})
+
+	testCases := []struct {
+		testName         string
+		request          v1.AdmissionReview
+		contentType      string
+		expectStatusCode int
+		expectPatched    bool
+	}{
+		{
+			"TestSidecarInjectSuccess",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Groups: []string{systemGroup},
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			true,
+		},
+		{
+			"TestSidecarInjectWrongContentType",
+			v1.AdmissionReview{},
+			runtime.ContentTypeYAML,
+			http.StatusUnsupportedMediaType,
+			true,
+		},
+		{
+			"TestSidecarInjectInvalidKind",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Deployment"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Groups: []string{systemGroup},
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			false,
+		},
+		{
+			"TestSidecarInjectGroupsNotContains",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Groups: []string{"system:kubelet"},
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			false,
+		},
+		{
+			"TestSidecarInjectUIDContains",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						UID: authID,
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			true,
+		},
+		{
+			"TestSidecarInjectUIDNotContains",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						UID: "auth-id-123",
+					},
+					Object: runtime.RawExtension{Raw: podBytes},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			false,
+		},
+		{
+			"TestSidecarInjectEmptyPod",
+			v1.AdmissionReview{
+				Request: &v1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "test-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Groups: []string{systemGroup},
+					},
+					Object: runtime.RawExtension{Raw: nil},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			false,
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(injector.handleRequest))
+	defer ts.Close()
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			requestBytes, err := json.Marshal(tc.request)
+			assert.NoError(t, err)
+
+			resp, err := http.Post(ts.URL, tc.contentType, bytes.NewBuffer(requestBytes))
+			assert.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, tc.expectStatusCode, resp.StatusCode)
+
+			if resp.StatusCode == http.StatusOK {
+				body, err := io.ReadAll(resp.Body)
+				assert.NoError(t, err)
+
+				var ar v1.AdmissionReview
+				err = json.Unmarshal(body, &ar)
+				assert.NoError(t, err)
+
+				assert.Equal(t, tc.expectPatched, len(ar.Response.Patch) > 0)
+			}
+		})
+	}
 }

@@ -1,17 +1,26 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package monitoring
 
 import (
 	"context"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 const (
@@ -32,26 +41,26 @@ var (
 		"The total number of dapr services updated.",
 		stats.UnitDimensionless)
 
-	// appIDKey is a tag key for App ID
+	// appIDKey is a tag key for App ID.
 	appIDKey = tag.MustNewKey(appID)
 )
 
-// RecordServiceCreatedCount records the number of dapr service created
+// RecordServiceCreatedCount records the number of dapr service created.
 func RecordServiceCreatedCount(appID string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceCreatedTotal.M(1))
 }
 
-// RecordServiceDeletedCount records the number of dapr service deleted
+// RecordServiceDeletedCount records the number of dapr service deleted.
 func RecordServiceDeletedCount(appID string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceDeletedTotal.M(1))
 }
 
-// RecordServiceUpdatedCount records the number of dapr service updated
+// RecordServiceUpdatedCount records the number of dapr service updated.
 func RecordServiceUpdatedCount(appID string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceUpdatedTotal.M(1))
 }
 
-// InitMetrics initialize the operator service metrics
+// InitMetrics initialize the operator service metrics.
 func InitMetrics() error {
 	err := view.Register(
 		diag_utils.NewMeasureView(serviceCreatedTotal, []tag.Key{appIDKey}, view.Count()),

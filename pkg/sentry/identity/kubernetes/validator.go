@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/pkg/errors"
 	kauthapi "k8s.io/api/authentication/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8s "k8s.io/client-go/kubernetes"
 	kauth "k8s.io/client-go/kubernetes/typed/authentication/v1"
+
+	"github.com/dapr/dapr/pkg/sentry/identity"
 )
 
 const (

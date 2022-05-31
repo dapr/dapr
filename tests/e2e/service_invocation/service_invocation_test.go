@@ -1,11 +1,20 @@
+//go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
-package service_invocation_e2e
+package serviceinvocation_tests
 
 import (
 	"encoding/base64"
@@ -15,13 +24,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opencensus.io/trace/propagation"
+
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.opencensus.io/trace/propagation"
 )
 
 type testCommandRequest struct {
@@ -56,6 +66,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("service_invocation")
+	utils.InitHTTPClient(false)
+
 	// These apps will be deployed for hellodapr test before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -65,6 +78,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "serviceinvocation-callee-0",
@@ -72,6 +86,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "serviceinvocation-callee-1",
@@ -79,6 +94,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "grpcapp",
@@ -86,6 +102,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
 		{
@@ -94,6 +111,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 			Namespace:      &secondaryNamespace,
 		},
 		{
@@ -102,8 +120,27 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 			Namespace:      &secondaryNamespace,
 			AppProtocol:    "grpc",
+		},
+		{
+			AppName:        "grpcproxyclient",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_client",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
+		},
+		{
+			AppName:        "grpcproxyserver",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc_proxy_server",
+			Replicas:       1,
+			IngressEnabled: false,
+			MetricsEnabled: true,
+			AppProtocol:    "grpc",
+			AppPort:        50051,
 		},
 	}
 
@@ -137,8 +174,35 @@ var serviceinvocationTests = []struct {
 	},
 }
 
+var serviceinvocationPathTests = []struct {
+	in               string
+	remoteApp        string
+	appMethod        string
+	expectedResponse string
+}{
+	{
+		"Test call double encoded path",
+		"serviceinvocation-callee",
+		"path/value%252F123",
+		"/path/value%252F123",
+	},
+	{
+		"Test call encoded path",
+		"serviceinvocation-callee",
+		"path/value%2F123",
+		"/path/value%2F123",
+	},
+	{
+		"Test call normal path",
+		"serviceinvocation-callee",
+		"path/value/123",
+		"/path/value/123",
+	},
+}
+
 var moreServiceinvocationTests = []struct {
 	in               string
+	path             string
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
@@ -146,32 +210,37 @@ var moreServiceinvocationTests = []struct {
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
 		"Test HTTP to HTTP",
+		"httptohttptest",
 		"serviceinvocation-callee-1",
 		"httptohttptest",
 		"success",
 	},
 	{
 		"Test HTTP to gRPC",
+		"httptogrpctest",
 		"grpcapp",
 		"httptogrpctest",
 		"success",
 	},
 	{
 		"Test gRPC to HTTP",
+		"grpctohttptest",
 		"serviceinvocation-callee-1",
 		"grpctohttptest",
 		"success",
 	},
 	{
 		"Test gRPC to gRPC",
-		"grpcapp",
 		"grpctogrpctest",
+		"grpcapp",
+		"grpcToGrpcTest",
 		"success",
 	},
 }
 
 var crossNamespaceTests = []struct {
 	in               string
+	path             string
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
@@ -179,26 +248,44 @@ var crossNamespaceTests = []struct {
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
 		"Test HTTP to HTTP",
+		"httptohttptest",
 		"secondary-ns-http",
 		"httptohttptest",
 		"success",
 	},
 	{
 		"Test HTTP to gRPC",
+		"httptogrpctest",
 		"secondary-ns-grpc",
 		"httptogrpctest",
 		"success",
 	},
 	{
 		"Test gRPC to HTTP",
+		"grpctohttptest",
 		"secondary-ns-http",
 		"grpctohttptest",
 		"success",
 	},
 	{
 		"Test gRPC to gRPC",
-		"secondary-ns-grpc",
 		"grpctogrpctest",
+		"secondary-ns-grpc",
+		"grpcToGrpcTest",
+		"success",
+	},
+}
+
+var grpcProxyTests = []struct {
+	in               string
+	remoteApp        string
+	appMethod        string
+	expectedResponse string
+}{
+	{
+		"Test grpc proxy",
+		"grpcproxyclient",
+		"",
 		"success",
 	},
 }
@@ -243,13 +330,71 @@ func TestServiceInvocation(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.path)
 
 			t.Logf("url is '%s'\n", url)
 			resp, err := utils.HTTPPost(
 				url,
 				body)
 
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
+
+	// make sure dapr do not auto unescape path
+	for _, tt := range serviceinvocationPathTests {
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			t.Logf("url is '%s'\n", url)
+			resp, err := utils.HTTPPost(
+				url,
+				body)
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
+}
+
+func TestGRPCProxy(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("grpcproxyclient")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+	var err error
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	for _, tt := range grpcProxyTests {
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			resp, err := utils.HTTPPost(
+				fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
 			t.Log("checking err...")
 			require.NoError(t, err)
 
@@ -278,46 +423,14 @@ func TestHeaders(t *testing.T) {
 
 	t.Logf("externalURL is '%s'\n", externalURL)
 
-	t.Run("http-to-http", func(t *testing.T) {
-		body, err := json.Marshal(testCommandRequest{
-			RemoteApp: "serviceinvocation-callee-0",
-			Method:    "http-to-http",
-		})
-		require.NoError(t, err)
+	t.Run("http-to-http-v1", func(t *testing.T) {
+		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL)
+		verifyHTTPToHTTP(t, hostIP, hostname, url, expectedForwarded)
+	})
 
-		resp, err := utils.HTTPPost(
-			fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL), body)
-		t.Log("checking err...")
-		require.NoError(t, err)
-
-		var appResp appResponse
-		t.Logf("unmarshalling..%s\n", string(resp))
-		err = json.Unmarshal(resp, &appResp)
-
-		var actualHeaders = map[string]string{}
-		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
-		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
-		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
-
-		require.NoError(t, err)
-		assert.NotNil(t, requestHeaders["Accept-Encoding"][0])
-		assert.NotNil(t, requestHeaders["Content-Length"][0])
-		assert.Equal(t, "application/json", requestHeaders["Content-Type"][0])
-		assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
-		assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
-		assert.NotNil(t, requestHeaders["Traceparent"][0])
-		assert.NotNil(t, requestHeaders["User-Agent"][0])
-		assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
-		assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
-		assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
-
-		assert.NotNil(t, responseHeaders["Content-Length"][0])
-		assert.Equal(t, "application/json; utf-8", responseHeaders["Content-Type"][0])
-		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
-		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
-		assert.NotNil(t, responseHeaders["Traceparent"][0])
+	t.Run("http-to-http-dapr-app-id", func(t *testing.T) {
+		url := fmt.Sprintf("http://%s/tests/dapr_id_httptohttptest", externalURL)
+		verifyHTTPToHTTP(t, hostIP, hostname, url, expectedForwarded)
 	})
 
 	t.Run("grpc-to-grpc", func(t *testing.T) {
@@ -336,11 +449,11 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
-		var trailerHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
+		trailerHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 		json.Unmarshal([]byte(actualHeaders["trailers"]), &trailerHeaders)
@@ -351,8 +464,18 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "DaprValue1", requestHeaders["daprtest-request-1"][0])
 		assert.Equal(t, "DaprValue2", requestHeaders["daprtest-request-2"][0])
 		assert.NotNil(t, requestHeaders["user-agent"][0])
-		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRq, "grpc-trace-bin is missing from the request") {
+			if assert.Equal(t, 1, len(grpcTraceBinRq), "grpc-trace-bin is missing from the request") {
+				assert.NotEqual(t, "", grpcTraceBinRq[0], "grpc-trace-bin is missing from the request")
+			}
+		}
+		traceParentRq := requestHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRq, "traceparent is missing from the request") {
+			if assert.Equal(t, 1, len(traceParentRq), "traceparent is missing from the request") {
+				assert.NotEqual(t, "", traceParentRq[0], "traceparent is missing from the request")
+			}
+		}
 		assert.Equal(t, hostIP, requestHeaders["x-forwarded-for"][0])
 		assert.Equal(t, hostname, requestHeaders["x-forwarded-host"][0])
 		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
@@ -360,8 +483,18 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
-		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
+		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRs, "grpc-trace-bin is missing from the response") {
+			if assert.Equal(t, 1, len(grpcTraceBinRs), "grpc-trace-bin is missing from the response") {
+				assert.NotEqual(t, "", grpcTraceBinRs[0], "grpc-trace-bin is missing from the response")
+			}
+		}
+		traceParentRs := responseHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRs, "traceparent is missing from the response") {
+			if assert.Equal(t, 1, len(traceParentRs), "traceparent is missing from the response") {
+				assert.NotEqual(t, "", traceParentRs[0], "traceparent is missing from the response")
+			}
+		}
 
 		assert.Equal(t, "DaprTest-Trailer-Value-1", trailerHeaders["daprtest-trailer-1"][0])
 		assert.Equal(t, "DaprTest-Trailer-Value-2", trailerHeaders["daprtest-trailer-2"][0])
@@ -383,10 +516,10 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 
@@ -408,8 +541,13 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, responseHeaders["dapr-date"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
-		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
+
+		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRs, "grpc-trace-bin is missing from the response") {
+			if assert.Equal(t, 1, len(grpcTraceBinRs), "grpc-trace-bin is missing from the response") {
+				assert.NotEqual(t, "", grpcTraceBinRs[0], "grpc-trace-bin is missing from the response")
+			}
+		}
 	})
 
 	t.Run("http-to-grpc", func(t *testing.T) {
@@ -428,10 +566,10 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 
@@ -445,8 +583,18 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "DaprValue1", requestHeaders["daprtest-request-1"][0])
 		assert.Equal(t, "DaprValue2", requestHeaders["daprtest-request-2"][0])
 		assert.NotNil(t, requestHeaders["user-agent"][0])
-		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRq, "grpc-trace-bin is missing from the request") {
+			if assert.Equal(t, 1, len(grpcTraceBinRq), "grpc-trace-bin is missing from the request") {
+				assert.NotEqual(t, "", grpcTraceBinRq[0], "grpc-trace-bin is missing from the request")
+			}
+		}
+		traceParentRq := requestHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRq, "traceparent is missing from the request") {
+			if assert.Equal(t, 1, len(traceParentRq), "traceparent is missing from the request") {
+				assert.NotEqual(t, "", traceParentRq[0], "traceparent is missing from the request")
+			}
+		}
 		assert.Equal(t, hostIP, requestHeaders["x-forwarded-for"][0])
 		assert.Equal(t, hostname, requestHeaders["x-forwarded-host"][0])
 		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
@@ -478,37 +626,14 @@ func TestHeaders(t *testing.T) {
 	expectedTraceID := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 	expectedEncodedTraceID := "AABL+S81d7NNpqPOkp0ODkc2AQDwZ6oLqQK3AgE="
 
-	t.Run("http-to-http-tracing", func(t *testing.T) {
-		body, err := json.Marshal(testCommandRequest{
-			RemoteApp:        "serviceinvocation-callee-0",
-			Method:           "http-to-http-tracing",
-			RemoteAppTracing: "true",
-		})
-		require.NoError(t, err)
+	t.Run("http-to-http-tracing-v1", func(t *testing.T) {
+		url := fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL)
+		verifyHTTPToHTTPTracing(t, url, expectedTraceID)
+	})
 
-		resp, err := utils.HTTPPost(
-			fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL), body)
-		t.Log("checking err...")
-		require.NoError(t, err)
-
-		var appResp appResponse
-		t.Logf("unmarshalling..%s\n", string(resp))
-		err = json.Unmarshal(resp, &appResp)
-
-		var actualHeaders = map[string]string{}
-		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
-		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
-		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
-
-		require.NoError(t, err)
-
-		assert.NotNil(t, requestHeaders["Traceparent"][0])
-		assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
-
-		assert.NotNil(t, responseHeaders["Traceparent"][0])
-		assert.Equal(t, expectedTraceID, responseHeaders["Traceparent"][0])
+	t.Run("http-to-http-tracing-dapr-id", func(t *testing.T) {
+		url := fmt.Sprintf("http://%s/tests/dapr_id_httptohttptest", externalURL)
+		verifyHTTPToHTTPTracing(t, url, expectedTraceID)
 	})
 
 	t.Run("grpc-to-grpc-tracing", func(t *testing.T) {
@@ -528,32 +653,50 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
-		var trailerHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
+		trailerHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 		json.Unmarshal([]byte(actualHeaders["trailers"]), &trailerHeaders)
 
 		require.NoError(t, err)
 
-		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRq, "grpc-trace-bin is missing from the request") {
+			if assert.Equal(t, 1, len(grpcTraceBinRq), "grpc-trace-bin is missing from the request") {
+				assert.NotEqual(t, "", grpcTraceBinRq[0], "grpc-trace-bin is missing from the request")
+			}
+		}
+		traceParentRq := requestHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRq, "traceparent is missing from the request") {
+			if assert.Equal(t, 1, len(traceParentRq), "traceparent is missing from the request") {
+				assert.NotEqual(t, "", traceParentRq[0], "traceparent is missing from the request")
+			}
+		}
 
-		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
-		traceContext := responseHeaders["grpc-trace-bin"][0]
+		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRs) {
+			if assert.Equal(t, 1, len(grpcTraceBinRs)) {
+				traceContext := grpcTraceBinRs[0]
+				t.Logf("received response grpc header..%s\n", traceContext)
+				assert.Equal(t, expectedEncodedTraceID, traceContext)
+				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
+				gotSc, ok := propagation.FromBinary(decoded)
 
-		t.Logf("received response grpc header..%s\n", traceContext)
-		assert.Equal(t, expectedEncodedTraceID, traceContext)
-		decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-		gotSc, ok := propagation.FromBinary([]byte(decoded))
-
-		assert.True(t, ok)
-		assert.NotNil(t, gotSc)
-		assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
+				assert.True(t, ok)
+				assert.NotNil(t, gotSc)
+				assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
+			}
+		}
+		traceParentRs := responseHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRs, "traceparent is missing from the response") {
+			if assert.Equal(t, 1, len(traceParentRs), "traceparent is missing from the response") {
+				assert.Equal(t, expectedTraceID, traceParentRs[0], "traceparent value was not expected")
+			}
+		}
 	})
 
 	t.Run("http-to-grpc-tracing", func(t *testing.T) {
@@ -573,20 +716,21 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 
 		require.NoError(t, err)
 
-		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
-
-		assert.NotNil(t, responseHeaders["Traceparent"][0])
-		assert.Equal(t, expectedTraceID, responseHeaders["Traceparent"][0])
+		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRq, "grpc-trace-bin is missing from the request") {
+			if assert.Equal(t, 1, len(grpcTraceBinRq), "grpc-trace-bin is missing from the request") {
+				assert.NotEqual(t, "", grpcTraceBinRq[0], "grpc-trace-bin is missing from the request")
+			}
+		}
 	})
 
 	t.Run("grpc-to-http-tracing", func(t *testing.T) {
@@ -606,10 +750,10 @@ func TestHeaders(t *testing.T) {
 		t.Logf("unmarshalling..%s\n", string(resp))
 		err = json.Unmarshal(resp, &appResp)
 
-		var actualHeaders = map[string]string{}
+		actualHeaders := map[string]string{}
 		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
-		var requestHeaders = map[string][]string{}
-		var responseHeaders = map[string][]string{}
+		requestHeaders := map[string][]string{}
+		responseHeaders := map[string][]string{}
 		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
 		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
 
@@ -618,19 +762,100 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, requestHeaders["Traceparent"][0])
 		assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
 
-		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
-		traceContext := responseHeaders["grpc-trace-bin"][0]
+		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRs, "grpc-trace-bin is missing from the response") {
+			if assert.Equal(t, 1, len(grpcTraceBinRs), "grpc-trace-bin is missing from the response") {
+				traceContext := grpcTraceBinRs[0]
+				assert.NotEqual(t, "", traceContext)
 
-		t.Logf("received response grpc header..%s\n", traceContext)
-		assert.Equal(t, expectedEncodedTraceID, traceContext)
-		decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-		gotSc, ok := propagation.FromBinary([]byte(decoded))
+				t.Logf("received response grpc header..%s\n", traceContext)
+				assert.Equal(t, expectedEncodedTraceID, traceContext)
+				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
+				gotSc, ok := propagation.FromBinary(decoded)
 
-		assert.True(t, ok)
-		assert.NotNil(t, gotSc)
-		assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
+				assert.True(t, ok)
+				assert.NotNil(t, gotSc)
+				assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
+			}
+		}
 	})
+}
+
+func verifyHTTPToHTTPTracing(t *testing.T, url string, expectedTraceID string) {
+	body, err := json.Marshal(testCommandRequest{
+		RemoteApp:        "serviceinvocation-callee-0",
+		Method:           "http-to-http-tracing",
+		RemoteAppTracing: "true",
+	})
+	require.NoError(t, err)
+
+	resp, err := utils.HTTPPost(url, body)
+	t.Log("checking err...")
+	require.NoError(t, err)
+
+	var appResp appResponse
+	t.Logf("unmarshalling..%s\n", string(resp))
+	err = json.Unmarshal(resp, &appResp)
+
+	actualHeaders := map[string]string{}
+	json.Unmarshal([]byte(appResp.Message), &actualHeaders)
+	requestHeaders := map[string][]string{}
+	responseHeaders := map[string][]string{}
+	json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
+	json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
+
+	require.NoError(t, err)
+
+	assert.NotNil(t, requestHeaders["Traceparent"][0])
+	assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
+
+	traceParentRs := responseHeaders["Traceparent"]
+	if assert.NotNil(t, traceParentRs, "Traceparent is missing from the response") {
+		if assert.Equal(t, 1, len(traceParentRs), "Traceparent is missing from the response") {
+			assert.Equal(t, expectedTraceID, traceParentRs[0], "Traceparent value was not expected")
+		}
+	}
+}
+
+func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, expectedForwarded string) {
+	body, err := json.Marshal(testCommandRequest{
+		RemoteApp: "serviceinvocation-callee-0",
+		Method:    "http-to-http",
+	})
+	require.NoError(t, err)
+
+	resp, err := utils.HTTPPost(url, body)
+	t.Log("checking err...")
+	require.NoError(t, err)
+
+	var appResp appResponse
+	t.Logf("unmarshalling..%s\n", string(resp))
+	err = json.Unmarshal(resp, &appResp)
+
+	actualHeaders := map[string]string{}
+	json.Unmarshal([]byte(appResp.Message), &actualHeaders)
+	requestHeaders := map[string][]string{}
+	responseHeaders := map[string][]string{}
+	json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
+	json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
+
+	require.NoError(t, err)
+	assert.NotNil(t, requestHeaders["Accept-Encoding"][0])
+	assert.NotNil(t, requestHeaders["Content-Length"][0])
+	assert.Equal(t, "application/json", requestHeaders["Content-Type"][0])
+	assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
+	assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
+	assert.NotNil(t, requestHeaders["Traceparent"][0])
+	assert.NotNil(t, requestHeaders["User-Agent"][0])
+	assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
+	assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
+	assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
+
+	assert.NotNil(t, responseHeaders["Content-Length"][0])
+	assert.Equal(t, "application/json; utf-8", responseHeaders["Content-Type"][0])
+	assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
+	assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
+	assert.NotNil(t, responseHeaders["Traceparent"][0])
 }
 
 func TestNegativeCases(t *testing.T) {
@@ -736,15 +961,15 @@ func TestNegativeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+		resp, status, _ := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
 
 		var testResults negativeTestResult
 		json.Unmarshal(resp, &testResults)
 
 		require.False(t, testResults.MainCallSuccessful)
 		require.Equal(t, 500, status)
-		require.Contains(t, string(testResults.RawError), "Client.Timeout exceeded while awaiting headers")
-		require.NotContains(t, string(testResults.RawError), "Client waited longer than it should have.")
+		require.Contains(t, testResults.RawError, "Client.Timeout exceeded while awaiting headers")
+		require.NotContains(t, testResults.RawError, "Client waited longer than it should have.")
 	})
 
 	t.Run("service_timeout_grpc", func(t *testing.T) {
@@ -755,15 +980,15 @@ func TestNegativeCases(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
+		resp, status, _ := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
 
 		var testResults negativeTestResult
 		json.Unmarshal(resp, &testResults)
 
 		require.False(t, testResults.MainCallSuccessful)
 		require.Equal(t, 500, status)
-		require.Contains(t, string(testResults.RawError), "rpc error: code = DeadlineExceeded desc = context deadline exceeded")
-		require.NotContains(t, string(testResults.RawError), "Client waited longer than it should have.")
+		require.Contains(t, testResults.RawError, "rpc error: code = DeadlineExceeded desc = context deadline exceeded")
+		require.NotContains(t, testResults.RawError, "Client waited longer than it should have.")
 	})
 
 	t.Run("service_parse_error_http", func(t *testing.T) {
@@ -802,7 +1027,7 @@ func TestNegativeCases(t *testing.T) {
 		require.Equal(t, 500, status)
 		require.Nil(t, err)
 		require.Nil(t, testResults.RawBody)
-		require.Contains(t, string(testResults.RawError), "rpc error: code = Unknown desc = Internal Server Error")
+		require.Contains(t, testResults.RawError, "rpc error: code = Unknown desc = Internal Server Error")
 	})
 
 	t.Run("service_large_data_http", func(t *testing.T) {
@@ -888,7 +1113,7 @@ func TestCrossNamespaceCases(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.path)
 
 			t.Logf("url is '%s'\n", url)
 			resp, err := utils.HTTPPost(

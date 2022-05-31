@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package nameresolution
 
@@ -11,13 +19,14 @@ import (
 	"github.com/pkg/errors"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
+
 	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
 	// NameResolution is a name resolution component definition.
 	NameResolution struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() nr.Resolver
 	}
 
@@ -33,9 +42,13 @@ type (
 )
 
 // New creates a NameResolution.
-func New(name string, factoryMethod func() nr.Resolver) NameResolution {
+func New(name string, factoryMethod func() nr.Resolver, aliases ...string) NameResolution {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return NameResolution{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -50,7 +63,9 @@ func NewRegistry() Registry {
 // Register adds one or many name resolution components to the registry.
 func (s *nameResolutionRegistry) Register(components ...NameResolution) {
 	for _, component := range components {
-		s.resolvers[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			s.resolvers[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 

@@ -1,19 +1,29 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package runtime
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewConfig(t *testing.T) {
+	publicPort := DefaultDaprPublicPort
 	c := NewRuntimeConfig("app1", []string{"localhost:5050"}, "localhost:5051", "*", "config", "components", "http", "kubernetes",
-		3500, 50002, 50001, 8080, 7070, true, 1, true, "localhost:5052", true, 4)
+		3500, 50002, 50001, []string{"1.2.3.4"}, &publicPort, 8080, 7070, true, 1, true, "localhost:5052", true, 4, "", 4, true, time.Second, true)
 
 	assert.Equal(t, "app1", c.ID)
 	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
@@ -26,6 +36,8 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, 3500, c.HTTPPort)
 	assert.Equal(t, 50002, c.InternalGRPCPort)
 	assert.Equal(t, 50001, c.APIGRPCPort)
+	assert.Equal(t, &publicPort, c.PublicPort)
+	assert.Equal(t, "1.2.3.4", c.APIListenAddresses[0])
 	assert.Equal(t, 8080, c.ApplicationPort)
 	assert.Equal(t, 7070, c.ProfilePort)
 	assert.Equal(t, true, c.EnableProfiling)
@@ -34,4 +46,9 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, "localhost:5052", c.SentryServiceAddress)
 	assert.Equal(t, true, c.AppSSL)
 	assert.Equal(t, 4, c.MaxRequestBodySize)
+	assert.Equal(t, "", c.UnixDomainSocket)
+	assert.Equal(t, 4, c.ReadBufferSize)
+	assert.Equal(t, true, c.StreamRequestBody)
+	assert.Equal(t, time.Second, c.GracefulShutdownDuration)
+	assert.Equal(t, true, c.EnableAPILogging)
 }

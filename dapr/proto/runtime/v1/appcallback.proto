@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 syntax = "proto3";
 
@@ -70,6 +78,10 @@ message TopicEventRequest {
 
   // The name of the pubsub the publisher sent to.
   string pubsub_name = 8;
+
+  // The matching path from TopicSubscription/routes (if specified) for this event.
+  // This value is used by OnTopicEvent to "switch" inside the handler.
+  string path = 9;
 }
 
 // TopicEventResponse is response from app on published message
@@ -144,6 +156,33 @@ message TopicSubscription {
 
   // The optional properties used for this topic's subscription e.g. session id
   map<string,string> metadata = 3;
+
+  // The optional routing rules to match against. In the gRPC interface, OnTopicEvent
+  // is still invoked but the matching path is sent in the TopicEventRequest.
+  TopicRoutes routes = 5;
+
+  // The optional dead letter queue for this topic to send events to.
+  string dead_letter_topic = 6;
+}
+
+message TopicRoutes {
+  // The list of rules for this topic.
+  repeated TopicRule rules = 1;
+
+  // The default path for this topic.
+  string default = 2;
+}
+
+message TopicRule {
+  // The optional CEL expression used to match the event.
+	// If the match is not specified, then the route is considered
+	// the default.
+  string match = 1;
+
+  // The path used to identify matches for this subscription.
+  // This value is passed in TopicEventRequest and used by OnTopicEvent to "switch"
+  // inside the handler.
+  string path = 2;
 }
 
 // ListInputBindingsResponse is the message including the list of input bindings.

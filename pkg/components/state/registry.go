@@ -1,30 +1,45 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package state
 
 import (
 	"strings"
 
-	"github.com/dapr/components-contrib/state"
 	"github.com/pkg/errors"
+
+	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type State struct {
-	Name          string
+	Names         []string
 	FactoryMethod func() state.Store
 }
 
-func New(name string, factoryMethod func() state.Store) State {
+// New creates a new State.
+func New(name string, factoryMethod func() state.Store, aliases ...string) State {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return State{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
 
-// Registry is an interface for a component that returns registered state store implementations
+// Registry is an interface for a component that returns registered state store implementations.
 type Registry interface {
 	Register(components ...State)
 	Create(name, version string) (state.Store, error)
@@ -45,26 +60,27 @@ func NewRegistry() Registry {
 // // The key is the name of the state store, eg. redis.
 func (s *stateStoreRegistry) Register(components ...State) {
 	for _, component := range components {
-		s.stateStores[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			s.stateStores[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 
 func (s *stateStoreRegistry) Create(name, version string) (state.Store, error) {
-	if method, ok := s.getSecretStore(name, version); ok {
+	if method, ok := s.getStateStore(name, version); ok {
 		return method(), nil
 	}
 	return nil, errors.Errorf("couldn't find state store %s/%s", name, version)
 }
 
-func (s *stateStoreRegistry) getSecretStore(name, version string) (func() state.Store, bool) {
+func (s *stateStoreRegistry) getStateStore(name, version string) (func() state.Store, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	stateStoreFn, ok := s.stateStores[nameLower+"/"+versionLower]
 	if ok {
 		return stateStoreFn, true
 	}
-	switch versionLower {
-	case "", "v0", "v1":
+	if components.IsInitialVersion(versionLower) {
 		stateStoreFn, ok = s.stateStores[nameLower]
 	}
 	return stateStoreFn, ok

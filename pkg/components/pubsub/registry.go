@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package pubsub
 
@@ -11,17 +19,18 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/pubsub"
+
 	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
 	// PubSub is a pub/sub component definition.
 	PubSub struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() pubsub.PubSub
 	}
 
-	// Registry is the interface for callers to get registered pub-sub components
+	// Registry is the interface for callers to get registered pub-sub components.
 	Registry interface {
 		Register(components ...PubSub)
 		Create(name, version string) (pubsub.PubSub, error)
@@ -33,14 +42,18 @@ type (
 )
 
 // New creates a PubSub.
-func New(name string, factoryMethod func() pubsub.PubSub) PubSub {
+func New(name string, factoryMethod func() pubsub.PubSub, aliases ...string) PubSub {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return PubSub{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
 
-// NewRegistry returns a new pub sub registry
+// NewRegistry returns a new pub sub registry.
 func NewRegistry() Registry {
 	return &pubSubRegistry{
 		messageBuses: map[string]func() pubsub.PubSub{},
@@ -50,7 +63,9 @@ func NewRegistry() Registry {
 // Register registers one or more new message buses.
 func (p *pubSubRegistry) Register(components ...PubSub) {
 	for _, component := range components {
-		p.messageBuses[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			p.messageBuses[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 

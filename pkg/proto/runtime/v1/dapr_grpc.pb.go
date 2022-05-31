@@ -5,10 +5,10 @@ package runtime
 import (
 	context "context"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -27,15 +27,17 @@ type DaprClient interface {
 	// Gets a bulk of state items for a list of keys
 	GetBulkState(ctx context.Context, in *GetBulkStateRequest, opts ...grpc.CallOption) (*GetBulkStateResponse, error)
 	// Saves the state for a specific key.
-	SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Queries the state.
+	QueryStateAlpha1(ctx context.Context, in *QueryStateRequest, opts ...grpc.CallOption) (*QueryStateResponse, error)
 	// Deletes the state for a specific key.
-	DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Deletes a bulk of state items for a list of keys
-	DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Executes transactions for a specified store
-	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
-	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -43,23 +45,37 @@ type DaprClient interface {
 	// Gets a bulk of secrets
 	GetBulkSecret(ctx context.Context, in *GetBulkSecretRequest, opts ...grpc.CallOption) (*GetBulkSecretResponse, error)
 	// Register an actor timer.
-	RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Unregister an actor timer.
-	UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Register an actor reminder.
-	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Unregister an actor reminder.
-	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Rename an actor reminder.
+	RenameActorReminder(ctx context.Context, in *RenameActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(ctx context.Context, in *InvokeActorRequest, opts ...grpc.CallOption) (*InvokeActorResponse, error)
+	// GetConfiguration gets configuration from configuration store.
+	GetConfigurationAlpha1(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
+	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
+	SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error)
+	// UnSubscribeConfiguration unsubscribe the subscription of configuration
+	UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error)
+	// Distributed Lock API
+	// A non-blocking method trying to get a lock with ttl.
+	TryLockAlpha1(ctx context.Context, in *TryLockRequest, opts ...grpc.CallOption) (*TryLockResponse, error)
+	UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockResponse, error)
 	// Gets metadata of the sidecar
-	GetMetadata(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
+	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
-	SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Shutdown the sidecar
+	Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type daprClient struct {
@@ -97,8 +113,8 @@ func (c *daprClient) GetBulkState(ctx context.Context, in *GetBulkStateRequest, 
 	return out, nil
 }
 
-func (c *daprClient) SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SaveState", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -106,8 +122,17 @@ func (c *daprClient) SaveState(ctx context.Context, in *SaveStateRequest, opts .
 	return out, nil
 }
 
-func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) QueryStateAlpha1(ctx context.Context, in *QueryStateRequest, opts ...grpc.CallOption) (*QueryStateResponse, error) {
+	out := new(QueryStateResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/QueryStateAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/DeleteState", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -115,8 +140,8 @@ func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateRequest, op
 	return out, nil
 }
 
-func (c *daprClient) DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/DeleteBulkState", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -124,8 +149,8 @@ func (c *daprClient) DeleteBulkState(ctx context.Context, in *DeleteBulkStateReq
 	return out, nil
 }
 
-func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -133,8 +158,8 @@ func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteSta
 	return out, nil
 }
 
-func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PublishEvent", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -169,8 +194,8 @@ func (c *daprClient) GetBulkSecret(ctx context.Context, in *GetBulkSecretRequest
 	return out, nil
 }
 
-func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RegisterActorTimer", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -178,8 +203,8 @@ func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTi
 	return out, nil
 }
 
-func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnregisterActorTimer", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -187,8 +212,8 @@ func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterAct
 	return out, nil
 }
 
-func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RegisterActorReminder", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -196,9 +221,18 @@ func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActo
 	return out, nil
 }
 
-func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnregisterActorReminder", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) RenameActorReminder(ctx context.Context, in *RenameActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RenameActorReminder", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -214,8 +248,8 @@ func (c *daprClient) GetActorState(ctx context.Context, in *GetActorStateRequest
 	return out, nil
 }
 
-func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -232,7 +266,75 @@ func (c *daprClient) InvokeActor(ctx context.Context, in *InvokeActorRequest, op
 	return out, nil
 }
 
-func (c *daprClient) GetMetadata(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error) {
+func (c *daprClient) GetConfigurationAlpha1(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error) {
+	out := new(GetConfigurationResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetConfigurationAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[0], "/dapr.proto.runtime.v1.Dapr/SubscribeConfigurationAlpha1", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprSubscribeConfigurationAlpha1Client{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Dapr_SubscribeConfigurationAlpha1Client interface {
+	Recv() (*SubscribeConfigurationResponse, error)
+	grpc.ClientStream
+}
+
+type daprSubscribeConfigurationAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprSubscribeConfigurationAlpha1Client) Recv() (*SubscribeConfigurationResponse, error) {
+	m := new(SubscribeConfigurationResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *daprClient) UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error) {
+	out := new(UnsubscribeConfigurationResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnsubscribeConfigurationAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) TryLockAlpha1(ctx context.Context, in *TryLockRequest, opts ...grpc.CallOption) (*TryLockResponse, error) {
+	out := new(TryLockResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/TryLockAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockResponse, error) {
+	out := new(UnlockResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnlockAlpha1", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error) {
 	out := new(GetMetadataResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetMetadata", in, out, opts...)
 	if err != nil {
@@ -241,9 +343,18 @@ func (c *daprClient) GetMetadata(ctx context.Context, in *empty.Empty, opts ...g
 	return out, nil
 }
 
-func (c *daprClient) SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *daprClient) SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SetMetadata", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/Shutdown", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -261,15 +372,17 @@ type DaprServer interface {
 	// Gets a bulk of state items for a list of keys
 	GetBulkState(context.Context, *GetBulkStateRequest) (*GetBulkStateResponse, error)
 	// Saves the state for a specific key.
-	SaveState(context.Context, *SaveStateRequest) (*empty.Empty, error)
+	SaveState(context.Context, *SaveStateRequest) (*emptypb.Empty, error)
+	// Queries the state.
+	QueryStateAlpha1(context.Context, *QueryStateRequest) (*QueryStateResponse, error)
 	// Deletes the state for a specific key.
-	DeleteState(context.Context, *DeleteStateRequest) (*empty.Empty, error)
+	DeleteState(context.Context, *DeleteStateRequest) (*emptypb.Empty, error)
 	// Deletes a bulk of state items for a list of keys
-	DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*empty.Empty, error)
+	DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*emptypb.Empty, error)
 	// Executes transactions for a specified store
-	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*empty.Empty, error)
+	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
-	PublishEvent(context.Context, *PublishEventRequest) (*empty.Empty, error)
+	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -277,23 +390,37 @@ type DaprServer interface {
 	// Gets a bulk of secrets
 	GetBulkSecret(context.Context, *GetBulkSecretRequest) (*GetBulkSecretResponse, error)
 	// Register an actor timer.
-	RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*empty.Empty, error)
+	RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*emptypb.Empty, error)
 	// Unregister an actor timer.
-	UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*empty.Empty, error)
+	UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*emptypb.Empty, error)
 	// Register an actor reminder.
-	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*empty.Empty, error)
+	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*emptypb.Empty, error)
 	// Unregister an actor reminder.
-	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*empty.Empty, error)
+	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error)
+	// Rename an actor reminder.
+	RenameActorReminder(context.Context, *RenameActorReminderRequest) (*emptypb.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*empty.Empty, error)
+	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error)
+	// GetConfiguration gets configuration from configuration store.
+	GetConfigurationAlpha1(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
+	// SubscribeConfiguration gets configuration from configuration store and subscribe the updates event by grpc stream
+	SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error
+	// UnSubscribeConfiguration unsubscribe the subscription of configuration
+	UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error)
+	// Distributed Lock API
+	// A non-blocking method trying to get a lock with ttl.
+	TryLockAlpha1(context.Context, *TryLockRequest) (*TryLockResponse, error)
+	UnlockAlpha1(context.Context, *UnlockRequest) (*UnlockResponse, error)
 	// Gets metadata of the sidecar
-	GetMetadata(context.Context, *empty.Empty) (*GetMetadataResponse, error)
+	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
-	SetMetadata(context.Context, *SetMetadataRequest) (*empty.Empty, error)
+	SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error)
+	// Shutdown the sidecar
+	Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -309,19 +436,22 @@ func (UnimplementedDaprServer) GetState(context.Context, *GetStateRequest) (*Get
 func (UnimplementedDaprServer) GetBulkState(context.Context, *GetBulkStateRequest) (*GetBulkStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBulkState not implemented")
 }
-func (UnimplementedDaprServer) SaveState(context.Context, *SaveStateRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) SaveState(context.Context, *SaveStateRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SaveState not implemented")
 }
-func (UnimplementedDaprServer) DeleteState(context.Context, *DeleteStateRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) QueryStateAlpha1(context.Context, *QueryStateRequest) (*QueryStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryStateAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DeleteState(context.Context, *DeleteStateRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteState not implemented")
 }
-func (UnimplementedDaprServer) DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteBulkState not implemented")
 }
-func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteStateTransaction not implemented")
 }
-func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
 }
 func (UnimplementedDaprServer) InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error) {
@@ -333,32 +463,53 @@ func (UnimplementedDaprServer) GetSecret(context.Context, *GetSecretRequest) (*G
 func (UnimplementedDaprServer) GetBulkSecret(context.Context, *GetBulkSecretRequest) (*GetBulkSecretResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBulkSecret not implemented")
 }
-func (UnimplementedDaprServer) RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterActorTimer not implemented")
 }
-func (UnimplementedDaprServer) UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorTimer not implemented")
 }
-func (UnimplementedDaprServer) RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterActorReminder not implemented")
 }
-func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorReminder not implemented")
+}
+func (UnimplementedDaprServer) RenameActorReminder(context.Context, *RenameActorReminderRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RenameActorReminder not implemented")
 }
 func (UnimplementedDaprServer) GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorState not implemented")
 }
-func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteActorStateTransaction not implemented")
 }
 func (UnimplementedDaprServer) InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeActor not implemented")
 }
-func (UnimplementedDaprServer) GetMetadata(context.Context, *empty.Empty) (*GetMetadataResponse, error) {
+func (UnimplementedDaprServer) GetConfigurationAlpha1(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetConfigurationAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeConfigurationAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeConfigurationAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) TryLockAlpha1(context.Context, *TryLockRequest) (*TryLockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TryLockAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) UnlockAlpha1(context.Context, *UnlockRequest) (*UnlockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnlockAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
 }
-func (UnimplementedDaprServer) SetMetadata(context.Context, *SetMetadataRequest) (*empty.Empty, error) {
+func (UnimplementedDaprServer) SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetMetadata not implemented")
+}
+func (UnimplementedDaprServer) Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -440,6 +591,24 @@ func _Dapr_SaveState_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).SaveState(ctx, req.(*SaveStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_QueryStateAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).QueryStateAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/QueryStateAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).QueryStateAlpha1(ctx, req.(*QueryStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -642,6 +811,24 @@ func _Dapr_UnregisterActorReminder_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_RenameActorReminder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenameActorReminderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).RenameActorReminder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/RenameActorReminder",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).RenameActorReminder(ctx, req.(*RenameActorReminderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_GetActorState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetActorStateRequest)
 	if err := dec(in); err != nil {
@@ -696,8 +883,101 @@ func _Dapr_InvokeActor_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_GetConfigurationAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetConfigurationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetConfigurationAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetConfigurationAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetConfigurationAlpha1(ctx, req.(*GetConfigurationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubscribeConfigurationAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribeConfigurationRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaprServer).SubscribeConfigurationAlpha1(m, &daprSubscribeConfigurationAlpha1Server{stream})
+}
+
+type Dapr_SubscribeConfigurationAlpha1Server interface {
+	Send(*SubscribeConfigurationResponse) error
+	grpc.ServerStream
+}
+
+type daprSubscribeConfigurationAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprSubscribeConfigurationAlpha1Server) Send(m *SubscribeConfigurationResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Dapr_UnsubscribeConfigurationAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnsubscribeConfigurationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).UnsubscribeConfigurationAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnsubscribeConfigurationAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).UnsubscribeConfigurationAlpha1(ctx, req.(*UnsubscribeConfigurationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_TryLockAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TryLockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).TryLockAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/TryLockAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).TryLockAlpha1(ctx, req.(*TryLockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_UnlockAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnlockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).UnlockAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnlockAlpha1",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).UnlockAlpha1(ctx, req.(*UnlockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -709,7 +989,7 @@ func _Dapr_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(in
 		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetMetadata",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).GetMetadata(ctx, req.(*empty.Empty))
+		return srv.(DaprServer).GetMetadata(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -728,6 +1008,24 @@ func _Dapr_SetMetadata_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).SetMetadata(ctx, req.(*SetMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).Shutdown(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/Shutdown",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).Shutdown(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -754,6 +1052,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SaveState",
 			Handler:    _Dapr_SaveState_Handler,
+		},
+		{
+			MethodName: "QueryStateAlpha1",
+			Handler:    _Dapr_QueryStateAlpha1_Handler,
 		},
 		{
 			MethodName: "DeleteState",
@@ -800,6 +1102,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_UnregisterActorReminder_Handler,
 		},
 		{
+			MethodName: "RenameActorReminder",
+			Handler:    _Dapr_RenameActorReminder_Handler,
+		},
+		{
 			MethodName: "GetActorState",
 			Handler:    _Dapr_GetActorState_Handler,
 		},
@@ -812,6 +1118,22 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_InvokeActor_Handler,
 		},
 		{
+			MethodName: "GetConfigurationAlpha1",
+			Handler:    _Dapr_GetConfigurationAlpha1_Handler,
+		},
+		{
+			MethodName: "UnsubscribeConfigurationAlpha1",
+			Handler:    _Dapr_UnsubscribeConfigurationAlpha1_Handler,
+		},
+		{
+			MethodName: "TryLockAlpha1",
+			Handler:    _Dapr_TryLockAlpha1_Handler,
+		},
+		{
+			MethodName: "UnlockAlpha1",
+			Handler:    _Dapr_UnlockAlpha1_Handler,
+		},
+		{
 			MethodName: "GetMetadata",
 			Handler:    _Dapr_GetMetadata_Handler,
 		},
@@ -819,7 +1141,17 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "SetMetadata",
 			Handler:    _Dapr_SetMetadata_Handler,
 		},
+		{
+			MethodName: "Shutdown",
+			Handler:    _Dapr_Shutdown_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "SubscribeConfigurationAlpha1",
+			Handler:       _Dapr_SubscribeConfigurationAlpha1_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "dapr/proto/runtime/v1/dapr.proto",
 }

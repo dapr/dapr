@@ -1,21 +1,35 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 const (
@@ -23,7 +37,7 @@ const (
 	daprV1URL            = "http://localhost:3500/v1.0"
 	actorMethodURLFormat = daprV1URL + "/actors/%s/%s/method/%s"
 
-	registedActorType       = "testactor" // Actor type must be unique per test app.
+	registeredActorType     = "testactor" // Actor type must be unique per test app.
 	actorIdleTimeout        = "5s"        // Short idle timeout.
 	actorScanInterval       = "1s"        // Smaller then actorIdleTimeout and short for speedy test.
 	drainOngoingCallTimeout = "1s"
@@ -53,15 +67,17 @@ type daprConfig struct {
 }
 
 var daprConfigResponse = daprConfig{
-	[]string{registedActorType},
+	[]string{registeredActorType},
 	actorIdleTimeout,
 	actorScanInterval,
 	drainOngoingCallTimeout,
 	drainRebalancedActors,
 }
 
-var actorLogs = []actorLogEntry{}
-var actorLogsMutex = &sync.Mutex{}
+var (
+	actorLogs      = []actorLogEntry{}
+	actorLogsMutex = &sync.Mutex{}
+)
 
 var actors sync.Map
 
@@ -133,7 +149,7 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
 
-	if actorType != registedActorType {
+	if actorType != registeredActorType {
 		log.Printf("Unknown actor type: %s", actorType)
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -181,7 +197,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		log.Printf("Could not read actor's test response: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -218,8 +234,36 @@ func appRouter() *mux.Router {
 	return router
 }
 
+func startServer() {
+	// Create a server capable of supporting HTTP2 Cleartext connections
+	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
+	h2s := &http2.Server{}
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", appPort),
+		Handler: h2c.NewHandler(appRouter(), h2s),
+	}
+
+	// Stop the server when we get a termination signal
+	stopCh := make(chan os.Signal, 1)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		// Wait for cancelation signal
+		<-stopCh
+		log.Println("Shutdown signal received")
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		server.Shutdown(ctx)
+	}()
+
+	// Blocking call
+	err := server.ListenAndServe()
+	if err != http.ErrServerClosed {
+		log.Fatalf("Failed to run server: %v", err)
+	}
+	log.Println("Server shut down")
+}
+
 func main() {
 	log.Printf("Actor App - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	startServer()
 }

@@ -14,7 +14,7 @@ roleRef:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: role-tokenreview-binding
+  name: dapr-role-tokenreview-binding
 subjects:
 - kind: ServiceAccount
   name: dapr-operator
@@ -29,30 +29,52 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-operator-admin
 rules:
-- apiGroups: ["*"]
-  resources: ["serviceaccounts", "deployments", "services", "configmaps", "secrets", "components", "configurations", "leases"]
-  verbs: ["get"]
-- apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases"]
-  verbs: ["list"]
-- apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases"]
-  verbs: ["watch"]
-- apiGroups: ["*"]
-  resources: ["services", "secrets", "configmaps", "leases", "services/finalizers", "deployments/finalizers"]
-  verbs: ["update"]
-- apiGroups: ["*"]
-  resources: ["services", "leases"]
-  verbs: ["delete"]
-- apiGroups: ["*"]
-  resources: ["deployments", "services", "configmaps", "events", "leases"]
-  verbs: ["create"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/finalizers"]
+    verbs: [ "get", "list", "watch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "statefulsets/finalizers"]
+    verbs: [ "get", "list", "watch", "update", "create"]
+  - apiGroups: [""]
+    resources: ["services","services/finalizers"]
+    verbs: [ "get", "list", "watch", "update", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: [ "get", "update", "create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: [ "get", "list", "watch", "update"]
+  - apiGroups: ["dapr.io"]
+    resources: ["components"]
+    verbs: [ "get", "list", "watch"]
+  - apiGroups: ["dapr.io"]
+    resources: ["configurations"]
+    verbs: [ "get", "list", "watch"]
+  - apiGroups: ["dapr.io"]
+    resources: ["subscriptions"]
+    verbs: [ "get", "list", "watch", "update"]
+  - apiGroups: ["dapr.io"]
+    resources: ["resiliencies"]
+    verbs: [ "get", "list", "watch"]   
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: [ "get", "list", "watch", "update", "create", "delete"]
+  - apiGroups: ["", "events.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create"]
+{{- if .Values.secretReader.enabled }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: secret-reader
-  namespace: default
+  namespace: {{ .Values.secretReader.namespace }}
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
@@ -62,7 +84,7 @@ kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-secret-reader
-  namespace: default
+  namespace: {{ .Values.secretReader.namespace }}
 subjects:
 - kind: ServiceAccount
   name: default
@@ -70,6 +92,7 @@ roleRef:
   kind: Role
   name: secret-reader
   apiGroup: rbac.authorization.k8s.io
+{{- end }}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1

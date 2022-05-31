@@ -89,6 +89,7 @@ func TestMain(m *testing.M) {
             ImageName:      "e2e-hellodapr",
             Replicas:       1,
             IngressEnabled: true,
+            MetricsEnabled: true,
         },
     }
 
@@ -124,6 +125,7 @@ testApps := []kube.AppDescription{
         ImageName:      "e2e-hellodapr", // docker image name 'e2e-[test app name]'
         Replicas:       1,               // number of replicas
         IngressEnabled: true,            // enable ingress endpoint
+        MetricsEnabled: true,            // enable metrics endpoint
     },
 }
 

@@ -1,9 +1,18 @@
+//go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package hellodapr_e2e
 
@@ -34,6 +43,9 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("hellodapr")
+	utils.InitHTTPClient(true)
+
 	// This test shows how to deploy the multiple test apps, validate the side-car injection
 	// and validate the response by using test app's service endpoint
 
@@ -41,25 +53,40 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "hellobluedapr",
-			DaprEnabled:    true,
-			ImageName:      "e2e-hellodapr",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:           "hellobluedapr",
+			DaprEnabled:       true,
+			ImageName:         "e2e-hellodapr",
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			DaprMemoryLimit:   "200Mi",
+			DaprMemoryRequest: "100Mi",
+			AppMemoryLimit:    "200Mi",
+			AppMemoryRequest:  "100Mi",
 		},
 		{
-			AppName:        "hellogreendapr",
-			DaprEnabled:    true,
-			ImageName:      "e2e-hellodapr",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:           "hellogreendapr",
+			DaprEnabled:       true,
+			ImageName:         "e2e-hellodapr",
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			DaprMemoryLimit:   "200Mi",
+			DaprMemoryRequest: "100Mi",
+			AppMemoryLimit:    "200Mi",
+			AppMemoryRequest:  "100Mi",
 		},
 		{
-			AppName:        "helloenvtestdapr",
-			DaprEnabled:    true,
-			ImageName:      "e2e-hellodapr",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:           "helloenvtestdapr",
+			DaprEnabled:       true,
+			ImageName:         "e2e-hellodapr",
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			DaprMemoryLimit:   "200Mi",
+			DaprMemoryRequest: "100Mi",
+			AppMemoryLimit:    "200Mi",
+			AppMemoryRequest:  "100Mi",
 		},
 	}
 
@@ -101,7 +128,7 @@ func TestHelloDapr(t *testing.T) {
 			require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 			// Check if test app endpoint is available
-			resp, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+			_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 			require.NoError(t, err)
 
 			// Trigger test
@@ -110,7 +137,7 @@ func TestHelloDapr(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			resp, err = utils.HTTPPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
+			resp, err := utils.HTTPPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
 			require.NoError(t, err)
 
 			var appResp appResponse

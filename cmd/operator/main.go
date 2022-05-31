@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package main
 
@@ -9,24 +17,28 @@ import (
 	"flag"
 	"time"
 
-	"github.com/dapr/dapr/pkg/logger"
+	"k8s.io/klog"
+
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
-	"k8s.io/klog"
 )
 
-var log = logger.NewLogger("dapr.operator")
-var config string
-var certChainPath string
-var disableLeaderElection bool
+var (
+	log                   = logger.NewLogger("dapr.operator")
+	config                string
+	certChainPath         string
+	disableLeaderElection bool
+)
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
 
-	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config
+	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
 )
 
@@ -34,7 +46,11 @@ func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
-	operator.NewOperator(config, certChainPath, !disableLeaderElection).Run(ctx)
+	go operator.NewOperator(config, certChainPath, !disableLeaderElection).Run(ctx)
+	// The webhooks use their own controller context and stops on SIGTERM and SIGINT.
+	go operator.RunWebhooks(!disableLeaderElection)
+
+	<-ctx.Done() // Wait for SIGTERM and SIGINT.
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)

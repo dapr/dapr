@@ -1,16 +1,25 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package messaging
 
 import (
 	"testing"
 
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
+
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 func newDirectMessaging() *directMessaging {
@@ -49,6 +58,33 @@ func TestForwardedHeaders(t *testing.T) {
 
 		md = req.Metadata()[fasthttp.HeaderForwarded]
 		assert.Equal(t, "for=1;by=1;host=2", md.Values[0])
+	})
+
+	t.Run("forwarded headers get appended", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("GET")
+		req.WithMetadata(map[string][]string{
+			fasthttp.HeaderXForwardedFor:  {"originalXForwardedFor"},
+			fasthttp.HeaderXForwardedHost: {"originalXForwardedHost"},
+			fasthttp.HeaderForwarded:      {"originalForwarded"},
+		})
+
+		dm := newDirectMessaging()
+		dm.hostAddress = "1"
+		dm.hostName = "2"
+
+		dm.addForwardedHeadersToMetadata(req)
+
+		md := req.Metadata()[fasthttp.HeaderXForwardedFor]
+		assert.Equal(t, "originalXForwardedFor", md.Values[0])
+		assert.Equal(t, "1", md.Values[1])
+
+		md = req.Metadata()[fasthttp.HeaderXForwardedHost]
+		assert.Equal(t, "originalXForwardedHost", md.Values[0])
+		assert.Equal(t, "2", md.Values[1])
+
+		md = req.Metadata()[fasthttp.HeaderForwarded]
+		assert.Equal(t, "originalForwarded", md.Values[0])
+		assert.Equal(t, "for=1;by=1;host=2", md.Values[1])
 	})
 }
 

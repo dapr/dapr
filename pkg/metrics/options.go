@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package metrics
 
@@ -14,24 +22,24 @@ const (
 	defaultMetricsEnabled = true
 )
 
-// Options defines the sets of options for Dapr logging
+// Options defines the sets of options for Dapr logging.
 type Options struct {
 	// OutputLevel is the level of logging
 	MetricsEnabled bool
 
-	metricsPort string
+	Port string
 }
 
 func defaultMetricOptions() *Options {
 	return &Options{
-		metricsPort:    defaultMetricsPort,
+		Port:           defaultMetricsPort,
 		MetricsEnabled: defaultMetricsEnabled,
 	}
 }
 
 // MetricsPort gets metrics port.
 func (o *Options) MetricsPort() uint64 {
-	port, err := strconv.ParseUint(o.metricsPort, 10, 64)
+	port, err := strconv.ParseUint(o.Port, 10, 64)
 	if err != nil {
 		// Use default metrics port as a fallback
 		port, _ = strconv.ParseUint(defaultMetricsPort, 10, 64)
@@ -40,12 +48,13 @@ func (o *Options) MetricsPort() uint64 {
 	return port
 }
 
-// AttachCmdFlags attaches metrics options to command flags
+// AttachCmdFlags attaches metrics options to command flags.
 func (o *Options) AttachCmdFlags(
 	stringVar func(p *string, name string, value string, usage string),
-	boolVar func(p *bool, name string, value bool, usage string)) {
+	boolVar func(p *bool, name string, value bool, usage string),
+) {
 	stringVar(
-		&o.metricsPort,
+		&o.Port,
 		"metrics-port",
 		defaultMetricsPort,
 		"The port for the metrics server")
@@ -56,11 +65,12 @@ func (o *Options) AttachCmdFlags(
 		"Enable prometheus metric")
 }
 
-// AttachCmdFlag attaches single metrics option to command flags
+// AttachCmdFlag attaches single metrics option to command flags.
 func (o *Options) AttachCmdFlag(
-	stringVar func(p *string, name string, value string, usage string)) {
+	stringVar func(p *string, name string, value string, usage string),
+) {
 	stringVar(
-		&o.metricsPort,
+		&o.Port,
 		"metrics-port",
 		defaultMetricsPort,
 		"The port for the metrics server")

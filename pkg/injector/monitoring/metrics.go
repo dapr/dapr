@@ -1,17 +1,26 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package monitoring
 
 import (
 	"context"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 const (
@@ -35,29 +44,29 @@ var (
 
 	noKeys = []tag.Key{}
 
-	// appIDKey is a tag key for App ID
+	// appIDKey is a tag key for App ID.
 	appIDKey = tag.MustNewKey(appID)
 
-	// failedReasonKey is a tag key for failed reason
+	// failedReasonKey is a tag key for failed reason.
 	failedReasonKey = tag.MustNewKey(failedReason)
 )
 
-// RecordSidecarInjectionRequestsCount records the total number of sidecar injection requests
+// RecordSidecarInjectionRequestsCount records the total number of sidecar injection requests.
 func RecordSidecarInjectionRequestsCount() {
 	stats.Record(context.Background(), sidecarInjectionRequestsTotal.M(1))
 }
 
-// RecordSuccessfulSidecarInjectionCount records the number of successful sidecar injections
+// RecordSuccessfulSidecarInjectionCount records the number of successful sidecar injections.
 func RecordSuccessfulSidecarInjectionCount(appID string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), succeededSidecarInjectedTotal.M(1))
 }
 
-// RecordFailedSidecarInjectionCount records the number of failed sidecar injections
+// RecordFailedSidecarInjectionCount records the number of failed sidecar injections.
 func RecordFailedSidecarInjectionCount(appID, reason string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID, failedReasonKey, reason), failedSidecarInjectedTotal.M(1))
 }
 
-// InitMetrics initialize the injector service metrics
+// InitMetrics initialize the injector service metrics.
 func InitMetrics() error {
 	err := view.Register(
 		diag_utils.NewMeasureView(sidecarInjectionRequestsTotal, noKeys, view.Count()),

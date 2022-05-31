@@ -1,16 +1,24 @@
+//go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package actor_sdks_e2e
 
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"testing"
 	"time"
 
@@ -23,27 +31,14 @@ import (
 )
 
 const (
-	appName         = "actorinvocationapp"      // App name in Dapr.
-	numHealthChecks = 60                        // Number of get calls before starting tests.
-	callActorURL    = "%s/test/callActorMethod" // URL to force Actor registration
+	appName         = "actorinvocationapp" // App name in Dapr.
+	numHealthChecks = 60                   // Number of get calls before starting tests.
 )
 
-type actorCallRequest struct {
-	ActorType       string `json:"actorType"`
-	ActorId         string `json:"actorId"`
-	Method          string `json:"method"`
-	RemoteActorID   string `json:"remoteId,omitempty"`
-	RemoteActorType string `json:"remoteType,omitempty"`
-}
-
-var tr *runner.TestRunner
-var apps []kube.AppDescription
-
-func getExternalURL(t *testing.T, appName string) string {
-	externalURL := tr.Platform.AcquireAppExternalURL(appName)
-	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-	return externalURL
-}
+var (
+	tr   *runner.TestRunner
+	apps []kube.AppDescription
+)
 
 func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 	t.Logf("Starting health check for %s\n", externalURL)
@@ -53,37 +48,58 @@ func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 }
 
 func TestMain(m *testing.M) {
-	// Disables this test for Windows temporarily due to issues with Windows containers.
-	// Technically, this test can still work on Windows against K8s on Linux.
-	// See https://github.com/dapr/dapr/issues/2695
-	if runtime.GOOS == "windows" {
-		return
-	}
+	utils.SetupLogs("actor_sdks")
+	utils.InitHTTPClient(false)
 
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	apps = []kube.AppDescription{
 		{
-			AppName:        "actorjava",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorjava",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:          "actorjava",
+			DaprEnabled:      true,
+			ImageName:        "e2e-actorjava",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "500Mi",
+			AppMemoryRequest: "200Mi",
 		},
 		{
-			AppName:        "actordotnet",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actordotnet",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:          "actordotnet",
+			DaprEnabled:      true,
+			ImageName:        "e2e-actordotnet",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "500Mi",
+			AppMemoryRequest: "200Mi",
 		},
 		{
-			AppName:        "actorpython",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorpython",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:          "actorpython",
+			DaprEnabled:      true,
+			ImageName:        "e2e-actorpython",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
+	}
+
+	// Disables PHP test for Windows temporarily due to issues with its Windows container.
+	// See https://github.com/dapr/dapr/issues/2953
+	if utils.TestTargetOS() != "windows" {
+		apps = append(apps,
+			kube.AppDescription{
+				AppName:          "actorphp",
+				DaprEnabled:      true,
+				ImageName:        "e2e-actorphp",
+				Replicas:         1,
+				IngressEnabled:   true,
+				MetricsEnabled:   true,
+				AppMemoryLimit:   "200Mi",
+				AppMemoryRequest: "100Mi",
+			})
 	}
 
 	tr = runner.NewTestRunner(appName, apps, nil, nil)
@@ -92,6 +108,12 @@ func TestMain(m *testing.M) {
 
 func TestActorInvocationCrossSDKs(t *testing.T) {
 	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor"}
+	// Disables PHP test for Windows temporarily due to issues with its Windows container.
+	// See https://github.com/dapr/dapr/issues/2953
+	if utils.TestTargetOS() != "windows" {
+		actorTypes = append(actorTypes, "PHPCarActor")
+	}
+
 	scenarios := []struct {
 		method           string
 		payload          string
@@ -154,18 +176,19 @@ func TestActorInvocationCrossSDKs(t *testing.T) {
 		healthCheckApp(t, externalURL, numHealthChecks)
 	}
 
+	t.Log("Sleeping for 10 seconds ...")
 	time.Sleep(10 * time.Second)
 
 	for _, appSpec := range apps {
 		app := appSpec.AppName
+		t.Logf("Getting URL for app %s ...", app)
 		externalURL := tr.Platform.AcquireAppExternalURL(app)
 
 		for _, actorType := range actorTypes {
 			for _, tt := range scenarios {
 				method := fmt.Sprintf(tt.method, actorType, uuid.New().String())
-				name := fmt.Sprintf("Test %s calling %s", app, method)
+				name := fmt.Sprintf("Test %s calling %s", app, fmt.Sprintf(tt.method, actorType, "ActorId"))
 				t.Run(name, func(t *testing.T) {
-
 					resp, err := utils.HTTPPost(fmt.Sprintf("%s/%s", externalURL, method), []byte(tt.payload))
 					t.Log("checking err...")
 					require.NoError(t, err)

@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package grpc
 
@@ -14,12 +22,13 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
+
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc"
 )
 
 // TODO: Add APIVersion testing
@@ -40,7 +49,7 @@ func TestInvokeMethod(t *testing.T) {
 	defer close(t, conn)
 	assert.NoError(t, err)
 
-	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1"}
+	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", maxRequestBodySize: 4, readBufferSize: 4}
 	req := invokev1.NewInvokeMethodRequest("method")
 	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 	response, err := c.InvokeMethod(context.Background(), req)

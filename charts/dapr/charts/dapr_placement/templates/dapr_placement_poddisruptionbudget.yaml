@@ -1,0 +1,30 @@
+{{- if eq .Values.global.ha.enabled true }}
+{{- if .Capabilities.APIVersions.Has "policy/v1" }}
+apiVersion: policy/v1
+{{- else }}
+apiVersion: policy/v1beta1
+{{- end }}
+kind: PodDisruptionBudget
+metadata:
+  name: dapr-placement-server-disruption-budget
+  labels:
+    app: dapr-placement-server
+spec:
+{{- if .Values.global.ha.disruption.minimumAvailable }}
+  minAvailable: {{ .Values.global.ha.disruption.minimumAvailable }}
+{{- end }}
+{{- if .Values.global.ha.disruption.maximumUnavailable }}
+  maxUnavailable: {{ .Values.global.ha.disruption.maximumUnavailable }}
+{{- end }}
+  selector:
+    matchLabels:
+      app: dapr-placement-server
+      app.kubernetes.io/name: {{ .Release.Name }}
+      app.kubernetes.io/version: {{ .Values.global.tag }}
+      app.kubernetes.io/component: placement
+      app.kubernetes.io/part-of: "dapr"
+      app.kubernetes.io/managed-by: "helm"
+      {{- with .Values.global.labels }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}

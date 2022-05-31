@@ -1,9 +1,18 @@
+//go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package stateapp_e2e
 
@@ -265,17 +274,11 @@ func generateTestCases(isHTTP bool) []testCase {
 		},
 		{
 			// No comma since this will become the name of the test without spaces.
-			"Test data size edges (default 4MB) " + protocol,
+			"Test data size edges (1MB < limit < 4MB) " + protocol,
 			[]testStep{
 				{
 					"save",
 					generateSpecificLengthSample(1024 * 1024), // Less than limit
-					emptyResponse,
-					204,
-				},
-				{
-					"save",
-					generateSpecificLengthSample(1024*1024*3 - 55), // Exact limit
 					emptyResponse,
 					204,
 				},
@@ -309,9 +312,16 @@ func generateStateTransactionCases(protocolType string) testStateTransactionCase
 	testStateTransactionCase := testStateTransactionCase{
 		[]stateTransactionTestStep{
 			{
+				// Transaction order should be tested in conformance tests: https://github.com/dapr/components-contrib/issues/1210
 				"transact",
 				newStateTransactionRequestResponse(
 					utils.StateTransactionKeyValue{testCase1Key, testCase1Value, "upsert"},
+				),
+				emptyResponse,
+			},
+			{
+				"transact",
+				newStateTransactionRequestResponse(
 					utils.StateTransactionKeyValue{testCase1Key, "", "delete"},
 					utils.StateTransactionKeyValue{testCase2Key, testCase2Value, "upsert"},
 				),
@@ -370,6 +380,9 @@ func generateSpecificLengthSample(sizeInBytes int) requestResponse {
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("stateapp")
+	utils.InitHTTPClient(true)
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -379,6 +392,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-stateapp",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 
@@ -443,7 +457,7 @@ func TestStateTransactionApps(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	var transactionTests = []struct {
+	transactionTests := []struct {
 		protocol string
 		in       testStateTransactionCase
 	}{
@@ -476,6 +490,7 @@ func TestStateTransactionApps(t *testing.T) {
 					for _, ri := range appResp.States {
 						if er.Key == ri.Key {
 							require.Equal(t, er.Key, ri.Key)
+							require.Equal(t, er.Value != nil, ri.Value != nil)
 							if er.Value != nil {
 								require.True(t, reflect.DeepEqual(er.Value.Data, ri.Value.Data))
 							}
@@ -584,5 +599,52 @@ func TestMissingAndMisconfiguredStateStore(t *testing.T) {
 			require.Equal(t, tc.status, status)
 			require.Nil(t, err)
 		})
+	}
+}
+
+func TestQueryStateStore(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	for _, storename := range []string{"querystatestore", "querystatestore2"} {
+		// Populate store.
+		body, err := os.ReadFile("query-data/dataset.json")
+		require.NoError(t, err)
+
+		url := fmt.Sprintf("%s/test/http/load/%s?contentType=application/json", externalURL, storename)
+		_, status, err := utils.HTTPPostWithStatus(url, body)
+		require.NoError(t, err)
+		require.Equal(t, 204, status)
+
+		tests := []struct {
+			path string
+			keys int
+		}{
+			{
+				path: "./query-data/query.json",
+				keys: 3,
+			},
+		}
+		for _, test := range tests {
+			body, err := os.ReadFile(test.path)
+			require.NoError(t, err)
+
+			for _, protocol := range []string{"http", "grpc"} {
+				url := fmt.Sprintf("%s/test/%s/query/%s?contentType=application/json&queryIndexName=orgIndx", externalURL, protocol, storename)
+				resp, status, err := utils.HTTPPostWithStatus(url, body)
+				require.NoError(t, err)
+				require.Equal(t, 200, status)
+
+				var states requestResponse
+				err = json.Unmarshal(resp, &states)
+				require.NoError(t, err)
+				require.Equal(t, test.keys, len(states.States))
+			}
+		}
 	}
 }

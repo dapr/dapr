@@ -18,6 +18,9 @@ spec:
         app.kubernetes.io/component: dashboard
         app.kubernetes.io/part-of: "dapr"
         app.kubernetes.io/managed-by: "helm"
+        {{- with .Values.global.labels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       serviceAccountName: dashboard-reader
       affinity:
@@ -66,4 +69,12 @@ spec:
 {{- if .Values.image.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.image.imagePullSecrets }}
+{{- end }}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+{{- if .Values.global.tolerations }}
+      tolerations:
+{{ toYaml .Values.global.tolerations | indent 8 }}
 {{- end }}

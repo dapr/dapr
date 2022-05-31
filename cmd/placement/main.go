@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package main
 
@@ -13,10 +21,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -75,13 +84,13 @@ func main() {
 
 	// Relay incoming process signal to exit placement gracefully
 	signalCh := make(chan os.Signal, 10)
-	gracefulExitCh := make(chan struct{})
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(signalCh)
 
 	<-signalCh
 
 	// Shutdown servers
+	gracefulExitCh := make(chan struct{})
 	go func() {
 		apiServer.Shutdown()
 		raftServer.Shutdown()
@@ -112,29 +121,25 @@ func loadCertChains(certChainPath string) *credentials.CertChain {
 	tlsCreds := credentials.NewTLSCredentials(certChainPath)
 
 	log.Info("mTLS enabled, getting tls certificates")
-	// try to load certs from disk, if not yet there, start a watch on the local filesystem
-	chain, err := credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
-	if err != nil {
-		fsevent := make(chan struct{})
-
-		go func() {
-			log.Infof("starting watch for certs on filesystem: %s", certChainPath)
-			err = fswatcher.Watch(context.Background(), tlsCreds.Path(), fsevent)
-			if err != nil {
-				log.Fatal("error starting watch on filesystem: %s", err)
-			}
-		}()
-
-		<-fsevent
-		log.Info("certificates detected")
-
-		chain, err = credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fsevent := make(chan struct{})
+	go func() {
+		log.Infof("starting watch for certs on filesystem: %s", certChainPath)
+		err := fswatcher.Watch(ctx, tlsCreds.Path(), fsevent)
 		if err != nil {
-			log.Fatal("failed to load cert chain from disk: %s", err)
+			log.Fatal("error starting watch on filesystem: %s", err)
 		}
+		close(fsevent)
+	}()
+	for {
+		chain, err := credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
+		if err == nil {
+			log.Info("tls certificates loaded successfully")
+			return chain
+		}
+		log.Info("tls certificate not found; waiting for disk changes")
+		<-fsevent
+		log.Debug("watcher found activity on filesystem")
 	}
-
-	log.Info("tls certificates loaded successfully")
-
-	return chain
 }

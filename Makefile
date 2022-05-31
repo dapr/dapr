@@ -1,7 +1,15 @@
-# ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-# ------------------------------------------------------------
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 ################################################################################
 # Variables                                                                    #
@@ -24,7 +32,8 @@ FORCE_INMEM ?= true
 LATEST_RELEASE ?=
 
 PROTOC ?=protoc
-
+# name of protoc-gen-go when protoc-gen-go --version is run.
+PROTOC_GEN_GO_NAME = "protoc-gen-go"
 ifdef REL_VERSION
 	DAPR_VERSION := $(REL_VERSION)
 else
@@ -38,6 +47,8 @@ else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
 	TARGET_ARCH_LOCAL=arm64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
 	TARGET_ARCH_LOCAL=arm
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),arm64)
+	TARGET_ARCH_LOCAL=arm64
 else
 	TARGET_ARCH_LOCAL=amd64
 endif
@@ -56,12 +67,16 @@ else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
 else
    TARGET_OS_LOCAL ?= windows
+   PROTOC_GEN_GO_NAME := "protoc-gen-go.exe"
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
+
+PROTOC_GEN_GO_NAME+= "v1.26.0"
 
 # Default docker container and e2e test targst.
 TARGET_OS ?= linux
 TARGET_ARCH ?= amd64
+TEST_OUTPUT_FILE_PREFIX ?= ./test_report
 
 ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
@@ -81,6 +96,7 @@ OUT_DIR := ./dist
 HELM:=helm
 RELEASE_NAME?=dapr
 DAPR_NAMESPACE?=dapr-system
+DAPR_MTLS_ENABLED?=true
 HELM_CHART_ROOT:=./charts
 HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
@@ -92,8 +108,12 @@ HELM_REGISTRY?=daprio.azurecr.io
 # Go build details                                                             #
 ################################################################################
 BASE_PACKAGE_NAME := github.com/dapr/dapr
+LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
-DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)
+DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.gitcommit=$(GIT_COMMIT) \
+  -X $(BASE_PACKAGE_NAME)/pkg/version.gitversion=$(GIT_VERSION) \
+  -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION) \
+  -X $(LOGGER_PACKAGE_NAME).DaprVersion=$(DAPR_VERSION)
 
 ifeq ($(origin DEBUG), undefined)
   BUILDTYPE_DIR:=release
@@ -198,6 +218,7 @@ upload-helmchart:
 # Target: docker-deploy-k8s                                                    #
 ################################################################################
 
+PULL_POLICY?=Always
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
@@ -205,7 +226,9 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
-		--set dapr_placement.logLevel=debug \
+		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
+		--set global.imagePullPolicy=$(PULL_POLICY) --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
+		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) $(HELM_CHART_DIR)
 
 ################################################################################
@@ -217,14 +240,16 @@ release: build archive
 # Target: test                                                                 #
 ################################################################################
 .PHONY: test
-test:
-	go test ./pkg/... $(COVERAGE_OPTS)
+test: test-deps
+	gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json --format standard-quiet -- ./pkg/... ./utils/... ./cmd/... $(COVERAGE_OPTS) --tags=unit
 	go test ./tests/...
 
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
 # Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
+# Please use golangci-lint version v1.45.2 , otherwise you might encounter errors.
+# You can download version v1.45.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.45.2
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
@@ -237,11 +262,26 @@ modtidy:
 	go mod tidy
 
 ################################################################################
+# Target: format                                                              #
+################################################################################
+.PHONY: format
+format: modtidy
+	gofumpt -l -w . && goimports -local github.com/dapr/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./pkg/proto/*")
+
+################################################################################
+# Target: check                                                              #
+################################################################################
+.PHONY: check
+check: format test lint
+	git status && [[ -z `git status -s` ]]
+
+################################################################################
 # Target: init-proto                                                            #
 ################################################################################
 .PHONY: init-proto
 init-proto:
-	go get google.golang.org/protobuf/cmd/protoc-gen-go@v1.25.0 google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1.0
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.26
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1
 
 ################################################################################
 # Target: gen-proto                                                            #
@@ -262,7 +302,7 @@ $(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
 GEN_PROTOS:=$(foreach ITEM,$(GRPC_PROTOS),gen-proto-$(ITEM))
 
 .PHONY: gen-proto
-gen-proto: $(GEN_PROTOS) modtidy
+gen-proto: check-proto-version $(GEN_PROTOS) modtidy
 
 ################################################################################
 # Target: get-components-contrib                                               #
@@ -278,6 +318,36 @@ get-components-contrib:
 check-diff:
 	git diff --exit-code ./go.mod # check no changes
 	git diff --exit-code ./go.sum # check no changes
+
+################################################################################
+# Target: check-proto-version                                                         #
+################################################################################
+.PHONY: check-proto-version
+check-proto-version: ## Checking the version of proto related tools
+	@test "$(shell protoc --version)" = "libprotoc 3.14.0" \
+	|| { echo "please use protoc 3.14.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+
+	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc 1.1.0" \
+	|| { echo "please use protoc-gen-go-grpc 1.1.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+
+	@test "$(shell protoc-gen-go --version 2>&1)" = "$(PROTOC_GEN_GO_NAME)" \
+	|| { echo "please use protoc-gen-go v1.26.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+
+################################################################################
+# Target: check-proto-diff                                                           #
+################################################################################
+.PHONY: check-proto-diff
+check-proto-diff:
+	git diff --exit-code ./pkg/proto/common/v1/common.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/internals/v1/status.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/operator/v1/operator.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/operator/v1/operator_grpc.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/appcallback.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/appcallback_grpc.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/dapr.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/dapr_grpc.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/sentry/v1/sentry.pb.go # check no changes
+
 
 ################################################################################
 # Target: codegen                                                              #

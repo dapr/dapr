@@ -1,9 +1,18 @@
+//go:build perf
 // +build perf
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package service_invocation_http_perf
 
@@ -25,21 +34,41 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("service_invocation_http")
+
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "testapp",
-			DaprEnabled:    true,
-			ImageName:      "perf-service_invocation_http",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:           "testapp",
+			DaprEnabled:       true,
+			ImageName:         "perf-service_invocation_http",
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			DaprCPULimit:      "4.0",
+			DaprCPURequest:    "0.1",
+			DaprMemoryLimit:   "512Mi",
+			DaprMemoryRequest: "250Mi",
+			AppCPULimit:       "4.0",
+			AppCPURequest:     "0.1",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "2500Mi",
 		},
 		{
-			AppName:        "tester",
-			DaprEnabled:    true,
-			ImageName:      "perf-tester",
-			Replicas:       1,
-			IngressEnabled: true,
-			AppPort:        3001,
+			AppName:           "tester",
+			DaprEnabled:       true,
+			ImageName:         "perf-tester",
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			AppPort:           3001,
+			DaprCPULimit:      "4.0",
+			DaprCPURequest:    "0.1",
+			DaprMemoryLimit:   "512Mi",
+			DaprMemoryRequest: "250Mi",
+			AppCPULimit:       "4.0",
+			AppCPURequest:     "0.1",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "2500Mi",
 		},
 	}
 
@@ -56,7 +85,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
-	t.Logf("test app url: %s", testAppURL+"/test")
+	t.Logf("waiting until test app url is available: %s", testAppURL+"/test")
 	_, err := utils.HTTPGetNTimes(testAppURL+"/test", numHealthChecks)
 	require.NoError(t, err)
 
@@ -65,7 +94,7 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
-	t.Logf("teter app url: %s", testerAppURL)
+	t.Logf("waiting until tester app url is available: %s", testerAppURL)
 	_, err = utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
 	require.NoError(t, err)
 
@@ -95,14 +124,17 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 
-	usage, err := tr.Platform.GetSidecarUsage("testapp")
+	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
+	require.NoError(t, err)
+
+	appUsage, err := tr.Platform.GetAppUsage("testapp")
 	require.NoError(t, err)
 
 	restarts, err := tr.Platform.GetTotalRestarts("testapp")
 	require.NoError(t, err)
 
 	t.Logf("dapr test results: %s", string(daprResp))
-	t.Logf("target dapr sidecar consumed %vm Cpu and %vMb of Memory", usage.CPUm, usage.MemoryMb)
+	t.Logf("target dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
@@ -113,17 +145,27 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	percentiles := map[int]string{1: "75th", 2: "90th"}
+	tp90Latency := 0.0
 
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
 
 		latency := (daprValue - baselineValue) * 1000
+		if v == "90th" {
+			tp90Latency = latency
+		}
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 	}
 
-	err = utils.UploadAzureBlob([]perf.TestResult{baselineResult, daprResult}, "Service Invocation",
-		fmt.Sprintf("%vMB", usage.MemoryMb), fmt.Sprintf("%vm", usage.CPUm))
+	report := perf.NewTestReport(
+		[]perf.TestResult{baselineResult, daprResult},
+		"Service Invocation",
+		sidecarUsage,
+		appUsage)
+	report.SetTotalRestartCount(restarts)
+	err = utils.UploadAzureBlob(report)
+
 	if err != nil {
 		t.Error(err)
 	}
@@ -132,4 +174,6 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
+	require.Greater(t, tp90Latency, 0.0)
+	require.LessOrEqual(t, tp90Latency, 2.0)
 }

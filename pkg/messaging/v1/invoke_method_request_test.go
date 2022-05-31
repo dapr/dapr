@@ -1,18 +1,29 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package v1
 
 import (
+	"fmt"
 	"testing"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	"github.com/dapr/dapr/pkg/config"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 func TestInvokeRequest(t *testing.T) {
@@ -77,7 +88,7 @@ func TestMetadata(t *testing.T) {
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
-		var req = fasthttp.AcquireRequest()
+		req := fasthttp.AcquireRequest()
 		req.Header.Set("Header1", "Value1")
 		req.Header.Set("Header2", "Value2")
 		req.Header.Set("Header3", "Value3")
@@ -94,25 +105,55 @@ func TestMetadata(t *testing.T) {
 
 func TestData(t *testing.T) {
 	t.Run("contenttype is set", func(t *testing.T) {
-		resp := NewInvokeMethodRequest("test_method")
-		resp.WithRawData([]byte("test"), "application/json")
-		contentType, bData := resp.RawData()
+		req := NewInvokeMethodRequest("test_method")
+		req.WithRawData([]byte("test"), "application/json")
+		contentType, bData := req.RawData()
 		assert.Equal(t, "application/json", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
 
 	t.Run("contenttype is unset", func(t *testing.T) {
-		resp := NewInvokeMethodRequest("test_method")
-		resp.WithRawData([]byte("test"), "")
-		contentType, bData := resp.RawData()
+		req := NewInvokeMethodRequest("test_method")
+
+		req.WithRawData([]byte("test"), "")
+		contentType, bData := req.RawData()
+		assert.Equal(t, "application/json", req.r.Message.ContentType)
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+
+		// Force the ContentType to be empty to test setting it in RawData
+		req.r.Message.ContentType = ""
+		contentType, bData = req.RawData()
+		assert.Equal(t, "", req.r.Message.ContentType)
 		assert.Equal(t, "application/json", contentType)
 		assert.Equal(t, []byte("test"), bData)
 	})
 
+	// TODO: Remove once feature is finalized
+	t.Run("contenttype is unset, with NoDefaultContentType", func(t *testing.T) {
+		config.SetNoDefaultContentType(true)
+		defer config.SetNoDefaultContentType(false)
+
+		req := NewInvokeMethodRequest("test_method")
+
+		req.WithRawData([]byte("test"), "")
+		contentType, bData := req.RawData()
+		assert.Equal(t, "", req.r.Message.ContentType)
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte("test"), bData)
+
+		// Force the ContentType to be empty to test setting it in RawData
+		req.r.Message.ContentType = ""
+		contentType, bData = req.RawData()
+		assert.Equal(t, "", req.r.Message.ContentType)
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
-		resp := NewInvokeMethodRequest("test_method")
-		resp.r.Message.Data = &anypb.Any{TypeUrl: "fake", Value: []byte("fake")}
-		contentType, bData := resp.RawData()
+		req := NewInvokeMethodRequest("test_method")
+		req.r.Message.Data = &anypb.Any{TypeUrl: "fake", Value: []byte("fake")}
+		contentType, bData := req.RawData()
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("fake"), bData)
 	})
@@ -149,4 +190,54 @@ func TestProto(t *testing.T) {
 
 	assert.Equal(t, "application/json", req2.GetMessage().ContentType)
 	assert.Equal(t, []byte("test"), req2.GetMessage().Data.Value)
+}
+
+func TestAddHeaders(t *testing.T) {
+	req := NewInvokeMethodRequest("test_method")
+	header := fasthttp.RequestHeader{}
+	header.Add("Dapr-Reentrant-Id", "test")
+	req.AddHeaders(&header)
+
+	assert.NotNil(t, req.r.Metadata)
+	assert.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
+	assert.Equal(t, "test", req.r.Metadata["Dapr-Reentrant-Id"].Values[0])
+}
+
+func TestAddHeadersDoesNotOverwrite(t *testing.T) {
+	header := fasthttp.RequestHeader{}
+	header.Add("Dapr-Reentrant-Id", "test")
+	req := NewInvokeMethodRequest("test_method").WithFastHTTPHeaders(&header)
+
+	header.Set("Dapr-Reentrant-Id", "test2")
+	req.AddHeaders(&header)
+
+	assert.NotNil(t, req.r.Metadata)
+	assert.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
+	assert.Equal(t, "test", req.r.Metadata["Dapr-Reentrant-Id"].Values[0])
+}
+
+func TestWithCustomHTTPMetadata(t *testing.T) {
+	customMetadataKey := func(i int) string {
+		return fmt.Sprintf("customMetadataKey%d", i)
+	}
+	customMetadataValue := func(i int) string {
+		return fmt.Sprintf("customMetadataValue%d", i)
+	}
+
+	numMetadata := 10
+	md := make(map[string]string, numMetadata)
+	for i := 0; i < numMetadata; i++ {
+		md[customMetadataKey(i)] = customMetadataValue(i)
+	}
+
+	req := NewInvokeMethodRequest("test_method")
+	req.WithCustomHTTPMetadata(md)
+
+	imrMd := req.Metadata()
+	for i := 0; i < numMetadata; i++ {
+		val, ok := imrMd[customMetadataKey(i)]
+		assert.True(t, ok)
+		// We assume only 1 value per key as the input map can only support string -> string mapping.
+		assert.Equal(t, customMetadataValue(i), val.Values[0])
+	}
 }

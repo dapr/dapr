@@ -8,21 +8,25 @@ const (
 	SubscriptionScopes = "subscriptionScopes"
 	PublishingScopes   = "publishingScopes"
 	AllowedTopics      = "allowedTopics"
-	appsSeperator      = ";"
-	appSeperator       = "="
-	topicSeperator     = ","
+	appsSeparator      = ";"
+	appSeparator       = "="
+	topicSeparator     = ","
 )
 
 // GetScopedTopics returns a list of scoped topics for a given application from a Pub/Sub
-// Component properties
+// Component properties.
 func GetScopedTopics(scope, appID string, metadata map[string]string) []string {
-	topics := []string{}
+	var (
+		existM = map[string]struct{}{}
+		topics = []string{}
+	)
 
 	if val, ok := metadata[scope]; ok && val != "" {
-		apps := strings.Split(val, appsSeperator)
+		val = strings.ReplaceAll(val, " ", "")
+		apps := strings.Split(val, appsSeparator)
 		for _, a := range apps {
-			appTopics := strings.Split(a, appSeperator)
-			if len(appTopics) == 0 {
+			appTopics := strings.Split(a, appSeparator)
+			if len(appTopics) < 2 {
 				continue
 			}
 
@@ -31,18 +35,34 @@ func GetScopedTopics(scope, appID string, metadata map[string]string) []string {
 				continue
 			}
 
-			topics = strings.Split(appTopics[1], topicSeperator)
-			break
+			tempTopics := strings.Split(appTopics[1], topicSeparator)
+			for _, tempTopic := range tempTopics {
+				if _, ok = existM[tempTopic]; !ok {
+					existM[tempTopic] = struct{}{}
+					topics = append(topics, tempTopic)
+				}
+			}
 		}
 	}
 	return topics
 }
 
+// GetAllowedTopics return the all topics list of params allowedTopics.
 func GetAllowedTopics(metadata map[string]string) []string {
-	topics := []string{}
+	var (
+		existM = map[string]struct{}{}
+		topics = []string{}
+	)
 
 	if val, ok := metadata[AllowedTopics]; ok && val != "" {
-		topics = strings.Split(val, topicSeperator)
+		val = strings.ReplaceAll(val, " ", "")
+		tempTopics := strings.Split(val, topicSeparator)
+		for _, tempTopic := range tempTopics {
+			if _, ok = existM[tempTopic]; !ok {
+				existM[tempTopic] = struct{}{}
+				topics = append(topics, tempTopic)
+			}
+		}
 	}
 	return topics
 }

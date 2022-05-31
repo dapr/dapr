@@ -1,24 +1,34 @@
+//go:build e2e
 // +build e2e
 
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 package runtime_e2e
 
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/require"
 )
 
 const numHealthChecks = 60 // Number of get calls before starting tests.
@@ -29,14 +39,7 @@ const (
 	runtimeAppName     = "runtime"
 	runtimeInitAppName = "runtime-init"
 	numPubsubMessages  = 10
-	numBindingMessages = 10
 )
-
-type appResponse struct {
-	Message   string `json:"message,omitempty"`
-	StartTime int    `json:"start_time,omitempty"`
-	EndTime   int    `json:"end_time,omitempty"`
-}
 
 type daprAPIResponse struct {
 	DaprHTTPSuccess int `json:"dapr_http_success"`
@@ -51,10 +54,14 @@ func getAPIResponse(t *testing.T, testName, runtimeExternalURL string) (*daprAPI
 
 	resp, err := utils.HTTPGetRaw(url)
 	require.NoError(t, err)
+	defer func() {
+		// Drain before closing
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 	require.Equal(t, resp.StatusCode, http.StatusOK)
 
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +73,9 @@ func getAPIResponse(t *testing.T, testName, runtimeExternalURL string) (*daprAPI
 }
 
 func TestMain(m *testing.M) {
-	fmt.Println("Enter TestMain")
+	utils.SetupLogs("runtime")
+	utils.InitHTTPClient(false)
+
 	// These apps and components will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	comps := []kube.ComponentDescription{
@@ -89,6 +98,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-runtime_init",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 			AppPort:        -1,
 		},
 	}
@@ -100,6 +110,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-runtime",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 

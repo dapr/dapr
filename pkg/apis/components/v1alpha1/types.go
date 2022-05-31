@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package v1alpha1
 
@@ -16,7 +24,7 @@ import (
 // +genclient:noStatus
 // +kubebuilder:object:root=true
 
-// Component describes an Dapr component type
+// Component describes an Dapr component type.
 type Component struct {
 	metav1.TypeMeta `json:",inline"`
 	// +optional
@@ -29,7 +37,7 @@ type Component struct {
 	Scopes []string `json:"scopes,omitempty"`
 }
 
-// ComponentSpec is the spec for a component
+// ComponentSpec is the spec for a component.
 type ComponentSpec struct {
 	Type    string `json:"type"`
 	Version string `json:"version"`
@@ -40,7 +48,7 @@ type ComponentSpec struct {
 	InitTimeout string `json:"initTimeout"`
 }
 
-// MetadataItem is a name/value pair for a metadata
+// MetadataItem is a name/value pair for a metadata.
 type MetadataItem struct {
 	Name string `json:"name"`
 	// +optional
@@ -55,14 +63,14 @@ type SecretKeyRef struct {
 	Key  string `json:"key"`
 }
 
-// Auth represents authentication details for the component
+// Auth represents authentication details for the component.
 type Auth struct {
 	SecretStore string `json:"secretStore"`
 }
 
 // +kubebuilder:object:root=true
 
-// ComponentList is a list of Dapr components
+// ComponentList is a list of Dapr components.
 type ComponentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
@@ -70,7 +78,7 @@ type ComponentList struct {
 	Items []Component `json:"items"`
 }
 
-// DynamicValue is a dynamic value struct for the component.metadata pair value
+// DynamicValue is a dynamic value struct for the component.metadata pair value.
 type DynamicValue struct {
 	v1.JSON `json:",inline"`
 }

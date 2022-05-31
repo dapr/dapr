@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package http
 
@@ -14,10 +22,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/config"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/config"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 type testConcurrencyHandler struct {
@@ -42,15 +51,13 @@ func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	io.WriteString(w, r.URL.RawQuery)
 }
 
-type testContentTypeHandler struct {
-}
+type testContentTypeHandler struct{}
 
 func (t *testContentTypeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, r.Header.Get("Content-Type"))
 }
 
-type testHandlerHeaders struct {
-}
+type testHandlerHeaders struct{}
 
 func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	headers := map[string]string{}
@@ -61,7 +68,7 @@ func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(rsp))
 }
 
-// testHTTPHandler is used for querystring test
+// testHTTPHandler is used for querystring test.
 type testHTTPHandler struct {
 	serverURL string
 
@@ -212,6 +219,7 @@ func TestInvokeWithHeaders(t *testing.T) {
 
 func TestContentType(t *testing.T) {
 	ctx := context.Background()
+
 	t.Run("default application/json", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
@@ -227,7 +235,33 @@ func TestContentType(t *testing.T) {
 		assert.NoError(t, err)
 		contentType, body := resp.RawData()
 		assert.Equal(t, "text/plain; charset=utf-8", contentType)
-		assert.Equal(t, []byte("application/json"), body)
+		assert.Equal(t, "application/json", string(body))
+		testServer.Close()
+	})
+
+	// TODO: Remove once the feature is ratified
+	t.Run("no default content type with ServiceInvocation.NoDefaultContentType", func(t *testing.T) {
+		config.SetNoDefaultContentType(true)
+		defer config.SetNoDefaultContentType(false)
+
+		handler := &testContentTypeHandler{}
+		testServer := httptest.NewServer(handler)
+		c := Channel{
+			baseAddress: testServer.URL,
+			client:      &fasthttp.Client{},
+		}
+		req := invokev1.NewInvokeMethodRequest("method")
+		req.WithRawData(nil, "")
+		req.WithHTTPExtension(http.MethodGet, "")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, req)
+
+		// assert
+		assert.NoError(t, err)
+		contentType, body := resp.RawData()
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte{}, body)
 		testServer.Close()
 	})
 
@@ -322,7 +356,7 @@ func TestAppToken(t *testing.T) {
 
 func TestCreateChannel(t *testing.T) {
 	t.Run("ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, true)
+		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, true, 4, 4)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()
@@ -330,7 +364,7 @@ func TestCreateChannel(t *testing.T) {
 	})
 
 	t.Run("non-ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, false)
+		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, false, 4, 4)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()

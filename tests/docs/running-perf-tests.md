@@ -28,10 +28,11 @@ Performance tests are designed to let you evaluate the latency, resource usage a
 
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube
-    
+
     # Set the below environment variables if you want to use the different registry and tag for test apps
     # export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
     # export DARP_TEST_TAG=dev
+    # export DAPR_TEST_REGISTRY_SECRET=yourself_private_image_secret
 
     # Set the below environment variables to configure test specific settings.
     # DAPR_PERF_QPS sets the desired number of requests per second. Default is 1.
@@ -116,3 +117,8 @@ make push-perf-app-all
 # start perf tests
 make test-perf-all
 ```
+
+## Run perf tests through GitHub Actions
+To keep the build infrastructure simple, Dapr uses dapr-test GitHub Actions Workflow to run e2e tests using one of AKS clusters. A separate workflow also runs E2E in KinD clusters.
+
+Once a contributor creates a pull request, E2E tests on KinD clusters are automatically executed for faster feedback. In order to run the E2E tests on AKS, ask a maintainer or approver to add /ok-to-perf comment to the Pull Request.

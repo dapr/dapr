@@ -1,7 +1,15 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package diagnostics
 
@@ -9,19 +17,20 @@ import (
 	"context"
 	"time"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // This implementation is inspired by
 // https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ocgrpc
 
-// Tag key definitions for http requests
+// Tag key definitions for http requests.
 var (
 	KeyServerMethod = tag.MustNewKey("grpc_server_method")
 	KeyServerStatus = tag.MustNewKey("grpc_server_status")
@@ -34,10 +43,12 @@ type grpcMetrics struct {
 	serverReceivedBytes *stats.Int64Measure
 	serverSentBytes     *stats.Int64Measure
 	serverLatency       *stats.Float64Measure
+	serverCompletedRpcs *stats.Int64Measure
 
 	clientSentBytes        *stats.Int64Measure
 	clientReceivedBytes    *stats.Int64Measure
 	clientRoundtripLatency *stats.Float64Measure
+	clientCompletedRpcs    *stats.Int64Measure
 
 	appID   string
 	enabled bool
@@ -57,6 +68,10 @@ func newGRPCMetrics() *grpcMetrics {
 			"grpc.io/server/server_latency",
 			"Time between first byte of request received to last byte of response sent, or terminal error.",
 			stats.UnitMilliseconds),
+		serverCompletedRpcs: stats.Int64(
+			"grpc.io/server/completed_rpcs",
+			"Distribution of bytes sent per RPC, by method.",
+			stats.UnitDimensionless),
 
 		clientSentBytes: stats.Int64(
 			"grpc.io/client/sent_bytes_per_rpc",
@@ -70,7 +85,10 @@ func newGRPCMetrics() *grpcMetrics {
 			"grpc.io/client/roundtrip_latency",
 			"Time between first byte of request sent to last byte of response received, or terminal error.",
 			stats.UnitMilliseconds),
-
+		clientCompletedRpcs: stats.Int64(
+			"grpc.io/client/completed_rpcs",
+			"Count of RPCs by method and status.",
+			stats.UnitDimensionless),
 		enabled: false,
 	}
 }
@@ -79,60 +97,16 @@ func (g *grpcMetrics) Init(appID string) error {
 	g.appID = appID
 	g.enabled = true
 
-	views := []*view.View{
-		{
-			Name:        "grpc.io/server/received_bytes_per_rpc",
-			Description: "Distribution of received bytes per RPC, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyServerMethod},
-			Measure:     g.serverReceivedBytes,
-			Aggregation: defaultSizeDistribution,
-		},
-		{
-			Name:        "grpc.io/server/sent_bytes_per_rpc",
-			Description: "Distribution of total sent bytes per RPC, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyServerMethod},
-			Measure:     g.serverSentBytes,
-			Aggregation: defaultSizeDistribution,
-		},
-		{
-			Name:        "grpc.io/server/server_latency",
-			Description: "Distribution of server latency in milliseconds, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyServerMethod},
-			Measure:     g.serverLatency,
-			Aggregation: defaultLatencyDistribution,
-		},
-		{
-			Name:        "grpc.io/server/completed_rpcs",
-			Description: "Count of RPCs by method and status.",
-			TagKeys:     []tag.Key{appIDKey, KeyServerMethod, KeyServerStatus},
-			Measure:     g.serverLatency,
-			Aggregation: view.Count(),
-		},
-		{
-			Name:        "grpc.io/client/sent_bytes_per_rpc",
-			Description: "Distribution of bytes sent per RPC, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyClientMethod},
-			Measure:     g.clientSentBytes,
-			Aggregation: view.Count(),
-		},
-
-		{
-			Name:        "grpc.io/client/received_bytes_per_rpc",
-			Measure:     g.clientReceivedBytes,
-			Aggregation: defaultSizeDistribution,
-			Description: "Distribution of bytes received per RPC, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyClientMethod},
-		},
-		{
-			Name:        "grpc.io/client/completed_rpcs",
-			Measure:     g.clientRoundtripLatency,
-			Aggregation: defaultSizeDistribution,
-			Description: "Count of RPCs by method and status.",
-			TagKeys:     []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus},
-		},
-	}
-
-	return view.Register(views...)
+	return view.Register(
+		diag_utils.NewMeasureView(g.serverReceivedBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.serverSentBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.serverLatency, []tag.Key{appIDKey, KeyServerMethod}, defaultLatencyDistribution),
+		diag_utils.NewMeasureView(g.serverCompletedRpcs, []tag.Key{appIDKey, KeyServerMethod, KeyServerStatus}, view.Count()),
+		diag_utils.NewMeasureView(g.clientSentBytes, []tag.Key{appIDKey, KeyClientMethod}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.clientReceivedBytes, []tag.Key{appIDKey, KeyClientMethod}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.clientRoundtripLatency, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, defaultLatencyDistribution),
+		diag_utils.NewMeasureView(g.clientCompletedRpcs, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, view.Count()),
+	)
 }
 
 func (g *grpcMetrics) IsEnabled() bool {
@@ -155,6 +129,10 @@ func (g *grpcMetrics) ServerRequestSent(ctx context.Context, method, status stri
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			ctx,
+			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
+			g.serverCompletedRpcs.M(1))
+		stats.RecordWithTags(
+			ctx,
 			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method),
 			g.serverSentBytes.M(contentSize))
 		stats.RecordWithTags(
@@ -175,15 +153,20 @@ func (g *grpcMetrics) ClientRequestSent(ctx context.Context, method string, cont
 	return time.Now()
 }
 
-func (g *grpcMetrics) ClientRequestRecieved(ctx context.Context, method, status string, contentSize int64, start time.Time) {
+func (g *grpcMetrics) ClientRequestReceived(ctx context.Context, method, status string, contentSize int64, start time.Time) {
 	if g.enabled {
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
+			g.clientCompletedRpcs.M(1))
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
 			g.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
-			ctx, diag_utils.WithTags(appIDKey, g.appID),
+			ctx,
+			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method),
 			g.clientReceivedBytes.M(contentSize))
 	}
 }
@@ -215,7 +198,7 @@ func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method 
 		if err == nil {
 			size = g.getPayloadSize(reply)
 		}
-		g.ClientRequestRecieved(ctx, method, status.Code(err).String(), int64(size), start)
+		g.ClientRequestReceived(ctx, method, status.Code(err).String(), int64(size), start)
 		return err
 	}
 }

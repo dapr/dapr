@@ -1,28 +1,39 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package operator
 
 import (
 	"context"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/fswatcher"
-	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/operator/api"
-	"github.com/dapr/dapr/pkg/operator/handlers"
 	"k8s.io/apimachinery/pkg/runtime"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/pkg/fswatcher"
+	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/operator/api"
+	"github.com/dapr/dapr/pkg/operator/handlers"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -31,14 +42,14 @@ const (
 	healthzPort = 8080
 )
 
-// Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle
+// Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
 type Operator interface {
 	Run(ctx context.Context)
 }
 
 type operator struct {
 	ctx         context.Context
-	daprHandler handlers.Handler
+	daprHandler *handlers.DaprHandler
 	apiServer   api.Server
 
 	configName    string
@@ -49,21 +60,25 @@ type operator struct {
 	client client.Client
 }
 
-var (
-	scheme = runtime.NewScheme()
-)
+var scheme = runtime.NewScheme()
 
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = componentsapi.AddToScheme(scheme)
 	_ = configurationapi.AddToScheme(scheme)
-	_ = subscriptionsapi.AddToScheme(scheme)
+	_ = resiliencyapi.AddToScheme(scheme)
+	_ = subscriptionsapi_v1alpha1.AddToScheme(scheme)
+	_ = subscriptionsapi_v2alpha1.AddToScheme(scheme)
 }
 
-// NewOperator returns a new Dapr Operator
+// NewOperator returns a new Dapr Operator.
 func NewOperator(config, certChainPath string, enableLeaderElection bool) Operator {
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	conf, err := ctrl.GetConfig()
+	if err != nil {
+		log.Fatalf("unable to get controller runtime configuration, err: %s", err)
+	}
+	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: "0",
 		LeaderElection:     enableLeaderElection,
@@ -85,10 +100,10 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 		certChainPath: certChainPath,
 	}
 	o.apiServer = api.NewAPIServer(o.client)
-	if componentInfomer, err := mgr.GetCache().GetInformer(context.TODO(), &componentsapi.Component{}); err != nil {
+	if componentInformer, err := mgr.GetCache().GetInformer(context.TODO(), &componentsapi.Component{}); err != nil {
 		log.Fatalf("unable to get setup components informer, err: %s", err)
 	} else {
-		componentInfomer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: o.syncComponent,
 			UpdateFunc: func(_, newObj interface{}) {
 				o.syncComponent(newObj)
@@ -117,13 +132,7 @@ func (o *operator) syncComponent(obj interface{}) {
 
 func (o *operator) Run(ctx context.Context) {
 	defer runtimeutil.HandleCrash()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	o.ctx = ctx
-	go func() {
-		<-ctx.Done()
-		log.Infof("Dapr Operator is shutting down")
-	}()
 	log.Infof("Dapr Operator is started")
 
 	go func() {
@@ -138,33 +147,31 @@ func (o *operator) Run(ctx context.Context) {
 	}
 	o.prepareConfig()
 
+	// load certs from disk
 	var certChain *credentials.CertChain
-	if o.config.MTLSEnabled {
-		log.Info("mTLS enabled, getting tls certificates")
-		// try to load certs from disk, if not yet there, start a watch on the local filesystem
-		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
+	log.Info("getting tls certificates")
+	watchCtx, watchCancel := context.WithCancel(ctx)
+	fsevent := make(chan struct{})
+	go func() {
+		log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
+		err := fswatcher.Watch(watchCtx, o.config.Credentials.Path(), fsevent)
 		if err != nil {
-			fsevent := make(chan struct{})
-
-			go func() {
-				log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
-				err = fswatcher.Watch(ctx, o.config.Credentials.Path(), fsevent)
-				if err != nil {
-					log.Fatal("error starting watch on filesystem: %s", err)
-				}
-			}()
-
-			<-fsevent
-			log.Info("certificates detected")
-
-			chain, err = credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
-			if err != nil {
-				log.Fatal("failed to load cert chain from disk: %s", err)
-			}
+			log.Fatal("error starting watch on filesystem: %s", err)
 		}
-		certChain = chain
-		log.Info("tls certificates loaded successfully")
+		close(fsevent)
+	}()
+	for {
+		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
+		if err == nil {
+			log.Info("tls certificates loaded successfully")
+			certChain = chain
+			break
+		}
+		log.Info("tls certificate not found; waiting for disk changes")
+		<-fsevent
+		log.Debug("watcher found activity on filesystem")
 	}
+	watchCancel()
 
 	go func() {
 		healthzServer := health.NewServer(log)
@@ -176,5 +183,8 @@ func (o *operator) Run(ctx context.Context) {
 		}
 	}()
 
+	// blocking call
 	o.apiServer.Run(certChain)
+
+	log.Infof("Dapr Operator is shutting down")
 }

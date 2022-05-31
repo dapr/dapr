@@ -1,29 +1,50 @@
-// ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-// ------------------------------------------------------------
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package main
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const (
-	appPort = 3000
-	pubsubA = "pubsub-a-topic-http"
-	pubsubB = "pubsub-b-topic-http"
-	pubsubC = "pubsub-c-topic-http"
+	appPort          = 3000
+	pubsubA          = "pubsub-a-topic-http"
+	pubsubB          = "pubsub-b-topic-http"
+	pubsubC          = "pubsub-c-topic-http"
+	pubsubJob        = "pubsub-job-topic-http"
+	pubsubRaw        = "pubsub-raw-topic-http"
+	pubsubDead       = "pubsub-dead-topic-http"
+	pubsubDeadLetter = "pubsub-deadletter-topic-http"
 )
 
 type appResponse struct {
@@ -35,36 +56,55 @@ type appResponse struct {
 }
 
 type receivedMessagesResponse struct {
-	ReceivedByTopicA []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC []string `json:"pubsub-c-topic"`
+	ReceivedByTopicA          []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB          []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC          []string `json:"pubsub-c-topic"`
+	ReceivedByTopicJob        []string `json:"pubsub-job-topic"`
+	ReceivedByTopicRaw        []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicDead       []string `json:"pubsub-dead-topic"`
+	ReceivedByTopicDeadLetter []string `json:"pubsub-deadletter-topic"`
 }
 
 type subscription struct {
-	PubsubName string `json:"pubsubname"`
-	Topic      string `json:"topic"`
-	Route      string `json:"route"`
+	PubsubName      string            `json:"pubsubname"`
+	Topic           string            `json:"topic"`
+	Route           string            `json:"route"`
+	DeadLetterTopic string            `json:"deadLetterTopic"`
+	Metadata        map[string]string `json:"metadata"`
 }
+
+// respondWith determines the response to return when a message
+// is received.
+type respondWith int
+
+const (
+	respondWithSuccess respondWith = iota
+	// respond with empty json message
+	respondWithEmptyJSON
+	// respond with error
+	respondWithError
+	// respond with retry
+	respondWithRetry
+	// respond with invalid status
+	respondWithInvalidStatus
+)
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesA sets.String
-	receivedMessagesB sets.String
-	receivedMessagesC sets.String
-	// boolean variable to respond with empty json message if set
-	respondWithEmptyJSON bool
-	// boolean variable to respond with error if set
-	respondWithError bool
-	// boolean variable to respond with retry if set
-	respondWithRetry bool
-	// boolean variable to respond with invalid status if set
-	respondWithInvalidStatus bool
-	lock                     sync.Mutex
+	receivedMessagesA          sets.String
+	receivedMessagesB          sets.String
+	receivedMessagesC          sets.String
+	receivedMessagesJob        sets.String
+	receivedMessagesRaw        sets.String
+	receivedMessagesDead       sets.String
+	receivedMessagesDeadLetter sets.String
+	desiredResponse            respondWith
+	lock                       sync.Mutex
 )
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, _ *http.Request) {
-	log.Printf("indexHandler is called\n")
+	log.Printf("indexHandler called")
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
@@ -73,8 +113,6 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 // this handles /dapr/subscribe, which is called from dapr into this app.
 // this returns the list of topics the app is subscribed to.
 func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
-	log.Printf("configureSubscribeHandler called\n")
-
 	pubsubName := "messagebus"
 
 	t := []subscription{
@@ -88,23 +126,91 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			Topic:      pubsubB,
 			Route:      pubsubB,
 		},
+		// pubsub-c-topic is loaded from the YAML/CRD
+		// tests/config/app_topic_subscription_pubsub.yaml.
 		{
 			PubsubName: pubsubName,
-			Topic:      pubsubC,
-			Route:      pubsubC,
+			Topic:      pubsubJob,
+			Route:      pubsubJob,
+		},
+		{
+			PubsubName: pubsubName,
+			Topic:      pubsubRaw,
+			Route:      pubsubRaw,
+			Metadata: map[string]string{
+				"rawPayload": "true",
+			},
+		},
+		{
+			PubsubName:      pubsubName,
+			Topic:           pubsubDead,
+			Route:           pubsubDead,
+			DeadLetterTopic: pubsubDeadLetter,
+		},
+		{
+			PubsubName: pubsubName,
+			Topic:      pubsubDeadLetter,
+			Route:      pubsubDeadLetter,
 		},
 	}
-	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)
+
+	log.Printf("configureSubscribeHandler called; subscribing to: %v\n", t)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(t)
 }
 
-// this handles messages published to "pubsub-a-topic"
-func subscribeHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("aHandler is called %s\n", r.URL)
+func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
+	defer r.Body.Close()
 
-	if respondWithRetry {
+	var body []byte
+	if r.Body != nil {
+		var data []byte
+		data, err = io.ReadAll(r.Body)
+		if err == nil {
+			body = data
+		}
+	} else {
+		// error
+		err = errors.New("r.Body is nil")
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	msg, err = extractMessage(reqID, body)
+	if err != nil {
+		return "", fmt.Errorf("error from extractMessage: %w", err)
+	}
+
+	// Raw data does not have content-type, so it is handled as-is.
+	// Because the publisher encodes to JSON before publishing, we need to decode here.
+	if strings.HasSuffix(r.URL.String(), pubsubRaw) {
+		var actualMsg string
+		err = json.Unmarshal([]byte(msg), &actualMsg)
+		if err != nil {
+			// Log only
+			log.Printf("(%s) Error extracing JSON from raw event: %v", reqID, err)
+		} else {
+			msg = actualMsg
+		}
+	}
+
+	return msg, nil
+}
+
+func subscribeHandler(w http.ResponseWriter, r *http.Request) {
+	reqID := uuid.New().String()
+
+	msg, err := readMessageBody(reqID, r)
+
+	// Before we handle the error, see if we need to respond in another way
+	// We still want the message so we can log it
+	log.Printf("(%s) subscribeHandler called %s. Message: %s", reqID, r.URL, msg)
+	switch desiredResponse {
+	case respondWithRetry:
+		log.Printf("(%s) Responding with RETRY", reqID)
 		// do not store received messages, respond with success but a retry status
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -112,11 +218,13 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 			Status:  "RETRY",
 		})
 		return
-	} else if respondWithError {
+	case respondWithError:
+		log.Printf("(%s) Responding with ERROR", reqID)
 		// do not store received messages, respond with error
 		w.WriteHeader(http.StatusInternalServerError)
 		return
-	} else if respondWithInvalidStatus {
+	case respondWithInvalidStatus:
+		log.Printf("(%s) Responding with INVALID", reqID)
 		// do not store received messages, respond with success but an invalid status
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -125,34 +233,10 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	defer r.Body.Close()
-
-	var err error
-	var data []byte
-	var body []byte
-	if r.Body != nil {
-		if data, err = ioutil.ReadAll(r.Body); err == nil {
-			body = data
-			log.Printf("assigned\n")
-		}
-	} else {
-		// error
-		err = errors.New("r.Body is nil")
-	}
 
 	if err != nil {
-		// Return success with DROP status to drop message
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(appResponse{
-			Message: err.Error(),
-			Status:  "DROP",
-		})
-		return
-	}
-
-	msg, err := extractMessage(body)
-	if err != nil {
-		// Return success with DROP status to drop message
+		log.Printf("(%s) Responding with DROP due to error: %v", reqID, err)
+		// Return 200 with DROP status to drop message
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
@@ -169,12 +253,20 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesB.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubC) && !receivedMessagesC.Has(msg) {
 		receivedMessagesC.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubJob) && !receivedMessagesJob.Has(msg) {
+		receivedMessagesJob.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubRaw) && !receivedMessagesRaw.Has(msg) {
+		receivedMessagesRaw.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubDead) && !receivedMessagesDead.Has(msg) {
+		receivedMessagesDead.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubDeadLetter) && !receivedMessagesDeadLetter.Has(msg) {
+		receivedMessagesDeadLetter.Insert(msg)
 	} else {
 		// This case is triggered when there is multiple redelivery of same message or a message
 		// is thre for an unknown URL path
 
 		errorMessage := fmt.Sprintf("Unexpected/Multiple redelivery of message from %s", r.URL.String())
-		log.Print(errorMessage)
+		log.Printf("(%s) Responding with DROP. %s", reqID, errorMessage)
 		// Return success with DROP status to drop message
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -185,9 +277,11 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if respondWithEmptyJSON {
+	if desiredResponse == respondWithEmptyJSON {
+		log.Printf("(%s) Responding with {}", reqID)
 		w.Write([]byte("{}"))
 	} else {
+		log.Printf("(%s) Responding with SUCCESS", reqID)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: "consumed",
 			Status:  "SUCCESS",
@@ -195,78 +289,80 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func extractMessage(body []byte) (string, error) {
-	log.Printf("extractMessage() called")
-
-	log.Printf("body=%s", string(body))
+func extractMessage(reqID string, body []byte) (string, error) {
+	log.Printf("(%s) extractMessage() called with body=%s", reqID, string(body))
 
 	m := make(map[string]interface{})
 	err := json.Unmarshal(body, &m)
 	if err != nil {
-		log.Printf("Could not unmarshal, %s", err.Error())
+		log.Printf("(%s) Could not unmarshal: %v", reqID, err)
 		return "", err
 	}
 
+	if m["data_base64"] != nil {
+		b, err := base64.StdEncoding.DecodeString(m["data_base64"].(string))
+		if err != nil {
+			log.Printf("(%s) Could not base64 decode: %v", reqID, err)
+			return "", err
+		}
+
+		msg := string(b)
+		log.Printf("(%s) output from base64='%s'", reqID, msg)
+		return msg, nil
+	}
+
 	msg := m["data"].(string)
-	log.Printf("output='%s'\n", msg)
+	log.Printf("(%s) output='%s'", reqID, msg)
 
 	return msg, nil
 }
 
-// the test calls this to get the messages received
-func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
-	log.Println("Enter getReceivedMessages")
+func unique(slice []string) []string {
+	keys := make(map[string]bool)
+	list := []string{}
+	for _, entry := range slice {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
 
-	response := receivedMessagesResponse{
-		ReceivedByTopicA: receivedMessagesA.List(),
-		ReceivedByTopicB: receivedMessagesB.List(),
-		ReceivedByTopicC: receivedMessagesC.List(),
+// the test calls this to get the messages received
+func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
+	reqID := r.URL.Query().Get("reqid")
+	if reqID == "" {
+		reqID = "s-" + uuid.New().String()
 	}
 
-	log.Printf("receivedMessagesResponse=%s", response)
+	response := receivedMessagesResponse{
+		ReceivedByTopicA:          unique(receivedMessagesA.List()),
+		ReceivedByTopicB:          unique(receivedMessagesB.List()),
+		ReceivedByTopicC:          unique(receivedMessagesC.List()),
+		ReceivedByTopicJob:        unique(receivedMessagesJob.List()),
+		ReceivedByTopicRaw:        unique(receivedMessagesRaw.List()),
+		ReceivedByTopicDead:       unique(receivedMessagesDead.List()),
+		ReceivedByTopicDeadLetter: unique(receivedMessagesDeadLetter.List()),
+	}
+
+	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
 
-// set to respond with error on receiving messages from pubsub
-func setRespondWithError(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	lock.Lock()
-	defer lock.Unlock()
-	log.Print("set respond with error")
-	respondWithError = true
-	w.WriteHeader(http.StatusOK)
-}
-
-// set to respond with invalid status on receiving messages from pubsub
-func setRespondInvalidStatus(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	lock.Lock()
-	defer lock.Unlock()
-	log.Print("set respond with invalid status")
-	respondWithInvalidStatus = true
-	w.WriteHeader(http.StatusOK)
-}
-
-// set to respond with error on receiving messages from pubsub
-func setRespondWithRetry(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	lock.Lock()
-	defer lock.Unlock()
-	log.Print("set respond with retry")
-	respondWithRetry = true
-	w.WriteHeader(http.StatusOK)
-}
-
-// set to respond with empty json on receiving messages from pubsub
-func setRespondEmptyJSON(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	lock.Lock()
-	defer lock.Unlock()
-	log.Print("set respond with empty json")
-	respondWithEmptyJSON = true
-	w.WriteHeader(http.StatusOK)
+// setDesiredResponse returns an http.HandlerFunc that sets the desired response
+// to `resp` and logs `msg`.
+func setDesiredResponse(resp respondWith, msg string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		lock.Lock()
+		defer lock.Unlock()
+		log.Print(msg)
+		desiredResponse = resp
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
 // handler called for empty-json case.
@@ -281,20 +377,30 @@ func initializeSets() {
 	receivedMessagesA = sets.NewString()
 	receivedMessagesB = sets.NewString()
 	receivedMessagesC = sets.NewString()
+	receivedMessagesJob = sets.NewString()
+	receivedMessagesRaw = sets.NewString()
+	receivedMessagesDead = sets.NewString()
+	receivedMessagesDeadLetter = sets.NewString()
 }
 
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
-	log.Printf("Enter appRouter()")
+	log.Printf("Called appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 
 	router.HandleFunc("/getMessages", getReceivedMessages).Methods("POST")
-	router.HandleFunc("/set-respond-error", setRespondWithError).Methods("POST")
-	router.HandleFunc("/set-respond-retry", setRespondWithRetry).Methods("POST")
-	router.HandleFunc("/set-respond-empty-json", setRespondEmptyJSON).Methods("POST")
-	router.HandleFunc("/set-respond-invalid-status", setRespondInvalidStatus).Methods("POST")
+	router.HandleFunc("/set-respond-success",
+		setDesiredResponse(respondWithSuccess, "set respond with success")).Methods("POST")
+	router.HandleFunc("/set-respond-error",
+		setDesiredResponse(respondWithError, "set respond with error")).Methods("POST")
+	router.HandleFunc("/set-respond-retry",
+		setDesiredResponse(respondWithRetry, "set respond with retry")).Methods("POST")
+	router.HandleFunc("/set-respond-empty-json",
+		setDesiredResponse(respondWithEmptyJSON, "set respond with empty json"))
+	router.HandleFunc("/set-respond-invalid-status",
+		setDesiredResponse(respondWithInvalidStatus, "set respond with invalid status")).Methods("POST")
 	router.HandleFunc("/initialize", initializeHandler).Methods("POST")
 
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
@@ -302,15 +408,48 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/"+pubsubA, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubB, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubC, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubJob, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubRaw, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubDead, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubDeadLetter, subscribeHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
 }
 
-func main() {
-	log.Printf("Hello Dapr v2 - listening on http://localhost:%d", appPort)
+func startServer() {
+	// Create a server capable of supporting HTTP2 Cleartext connections
+	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
+	h2s := &http2.Server{}
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", appPort),
+		Handler: h2c.NewHandler(appRouter(), h2s),
+	}
 
+	// Stop the server when we get a termination signal
+	stopCh := make(chan os.Signal, 1)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		// Wait for cancelation signal
+		<-stopCh
+		log.Println("Shutdown signal received")
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		server.Shutdown(ctx)
+	}()
+
+	// Blocking call
+	err := server.ListenAndServe()
+	if err != http.ErrServerClosed {
+		log.Fatalf("Failed to run server: %v", err)
+	}
+	log.Println("Server shut down")
+}
+
+func main() {
 	// initialize sets on application start
 	initializeSets()
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+
+	log.Printf("Dapr E2E test app: pubsub - listening on http://localhost:%d", appPort)
+	startServer()
 }
