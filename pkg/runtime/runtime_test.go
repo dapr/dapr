@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -46,9 +47,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	pb "github.com/trusch/grpc-proxy/testservice"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -4109,6 +4113,7 @@ func TestComponentsCallback(t *testing.T) {
 
 		return nil
 	}))
+	defer rt.Shutdown(0)
 
 	select {
 	case <-c:
@@ -4116,4 +4121,133 @@ func TestComponentsCallback(t *testing.T) {
 	}
 
 	assert.True(t, callbackInvoked, "component callback was not invoked")
+}
+
+func TestGRPCProxy(t *testing.T) {
+	// setup gRPC server
+	serverPort, _ := freeport.GetFreePort()
+	teardown, err := runGRPCApp(serverPort)
+	require.NoError(t, err)
+	defer teardown()
+
+	mockNameResolution := nr_loader.NameResolution{
+		Names: []string{"mdns"}, // for standalone mode
+		FactoryMethod: func() nameresolution.Resolver {
+			mockResolver := new(daprt.MockResolver)
+			// proxy to server anytime
+			mockResolver.On("Init", mock.Anything).Return(nil)
+			mockResolver.On("ResolveID", mock.Anything).Return(fmt.Sprintf("localhost:%d", serverPort), nil)
+			return mockResolver
+		},
+	}
+
+	// setup proxy
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "grpc", serverPort)
+	internalPort, _ := freeport.GetFreePort()
+	rt.runtimeConfig.InternalGRPCPort = internalPort
+	defer stopRuntime(t, rt)
+
+	go func() {
+		rt.Run(WithNameResolutions(mockNameResolution))
+	}()
+	defer rt.Shutdown(0)
+
+	time.Sleep(time.Second)
+
+	req := &pb.PingRequest{Value: "foo"}
+
+	t.Run("proxy single streaming request", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+		defer cancel()
+		stream, err := pingStreamClient(ctx, internalPort)
+		require.NoError(t, err)
+
+		require.NoError(t, stream.Send(req), "sending to PingStream must not fail")
+		resp, err := stream.Recv()
+		require.NoError(t, err)
+		require.NotNil(t, resp, "resp must not be nil")
+
+		require.NoError(t, stream.CloseSend(), "no error on close send")
+	})
+
+	t.Run("proxy concurrent streaming requests", func(t *testing.T) {
+		ctx1, cancel := context.WithTimeout(context.TODO(), time.Second)
+		defer cancel()
+		stream1, err := pingStreamClient(ctx1, internalPort)
+		require.NoError(t, err)
+
+		ctx2, cancel := context.WithTimeout(context.TODO(), time.Second)
+		defer cancel()
+		stream2, err := pingStreamClient(ctx2, internalPort)
+		require.NoError(t, err)
+
+		require.NoError(t, stream1.Send(req), "sending to PingStream must not fail")
+		resp, err := stream1.Recv()
+		require.NoError(t, err)
+		require.NotNil(t, resp, "resp must not be nil")
+
+		require.NoError(t, stream2.Send(req), "sending to PingStream must not fail")
+		resp, err = stream2.Recv()
+		require.NoError(t, err)
+		require.NotNil(t, resp, "resp must not be nil")
+
+		require.NoError(t, stream1.CloseSend(), "no error on close send")
+		require.NoError(t, stream2.CloseSend(), "no error on close send")
+	})
+}
+
+func runGRPCApp(port int) (func(), error) {
+	serverListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return func() {}, err
+	}
+
+	server := grpc.NewServer()
+	pb.RegisterTestServiceServer(server, &pingStreamService{})
+	go func() {
+		server.Serve(serverListener)
+	}()
+	teardown := func() {
+		server.Stop()
+	}
+
+	return teardown, nil
+}
+
+func pingStreamClient(ctx context.Context, port int) (pb.TestService_PingStreamClient, error) {
+	clientConn, err := grpc.DialContext(
+		ctx,
+		fmt.Sprintf("localhost:%d", port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	testClient := pb.NewTestServiceClient(clientConn)
+
+	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", "dummy")
+	return testClient.PingStream(ctx)
+}
+
+type pingStreamService struct {
+	pb.TestServiceServer
+}
+
+func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) error {
+	counter := int32(0)
+	for {
+		ping, err := stream.Recv()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+		pong := &pb.PingResponse{Value: ping.Value, Counter: counter}
+		if err := stream.Send(pong); err != nil {
+			return err
+		}
+		counter++
+	}
+	return nil
 }
