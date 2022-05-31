@@ -148,7 +148,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 			}
 			s.Scopes = []string{fmt.Sprintf("%v", i)}
 
-			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v", dir, i))
+			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v.yaml", dir, i))
 		}
 
 		subs := DeclarativeSelfHosted(dir, log)
@@ -163,6 +163,17 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Metadata["testName"])
 			}
 		}
+	})
+
+	t.Run("will not load non yaml file", func(t *testing.T) {
+		s := testDeclarativeSubscriptionV1()
+		s.Scopes = []string{"scope1"}
+
+		filePath := filepath.Join(dir, "sub.txt")
+		writeSubscriptionToDisk(s, filePath)
+
+		subs := DeclarativeSelfHosted(dir, log)
+		assert.Len(t, subs, 2)
 	})
 
 	t.Run("no subscriptions loaded", func(t *testing.T) {
@@ -219,7 +230,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 			}
 			s.Scopes = []string{iStr}
 
-			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v", dir, i))
+			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v.yaml", dir, i))
 		}
 
 		subs := DeclarativeSelfHosted(dir, log)
