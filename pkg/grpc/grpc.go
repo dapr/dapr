@@ -175,12 +175,14 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 type connectionPool struct {
 	pool           map[string]*grpc.ClientConn
 	referenceCount map[*grpc.ClientConn]int
+	referenceLock  *sync.RWMutex
 }
 
 func newConnectionPool() *connectionPool {
 	return &connectionPool{
 		pool:           map[string]*grpc.ClientConn{},
 		referenceCount: map[*grpc.ClientConn]int{},
+		referenceLock:  &sync.RWMutex{},
 	}
 }
 
@@ -193,6 +195,9 @@ func (p *connectionPool) Register(address string, conn *grpc.ClientConn) {
 	p.pool[address] = conn
 	// conn is used by caller and pool
 	// NOTE: pool should also increment referenceCount not to close the pooled connection
+
+	p.referenceLock.Lock()
+	defer p.referenceLock.Unlock()
 	p.referenceCount[conn] = 2
 }
 
@@ -202,15 +207,23 @@ func (p *connectionPool) Share(address string) (*grpc.ClientConn, bool) {
 		return nil, false
 	}
 
+	p.referenceLock.Lock()
+	defer p.referenceLock.Unlock()
+
 	p.referenceCount[conn]++
 	return conn, true
 }
 
 func (p *connectionPool) Release(conn *grpc.ClientConn) {
+	p.referenceLock.RLock()
 	if _, ok := p.referenceCount[conn]; !ok {
+		p.referenceLock.RUnlock()
 		return
 	}
+	p.referenceLock.RUnlock()
 
+	p.referenceLock.Lock()
+	defer p.referenceLock.Unlock()
 	p.referenceCount[conn]--
 
 	// for concurrent use, connection is closed after all callers release it
