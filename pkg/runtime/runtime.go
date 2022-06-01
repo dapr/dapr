@@ -267,6 +267,9 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 
 		resiliency: resiliencyProvider,
+		
+		transactionRegistry: transaction_loader.NewRegistry(),
+		transactions:        map[string]transaction.Transaction{},
 	}
 }
 
