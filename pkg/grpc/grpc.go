@@ -215,15 +215,13 @@ func (p *connectionPool) Share(address string) (*grpc.ClientConn, bool) {
 }
 
 func (p *connectionPool) Release(conn *grpc.ClientConn) {
-	p.referenceLock.RLock()
-	if _, ok := p.referenceCount[conn]; !ok {
-		p.referenceLock.RUnlock()
-		return
-	}
-	p.referenceLock.RUnlock()
-
 	p.referenceLock.Lock()
 	defer p.referenceLock.Unlock()
+
+	if _, ok := p.referenceCount[conn]; !ok {
+		return
+	}
+
 	p.referenceCount[conn]--
 
 	// for concurrent use, connection is closed after all callers release it
