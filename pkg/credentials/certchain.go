@@ -4,13 +4,13 @@ import (
 	"os"
 )
 
-const (
+var (
 	// RootCertFilename is the filename that holds the root certificate.
-	RootCertFilename = "ca.crt"
+	RootCertFilename string = "ca.crt"
 	// IssuerCertFilename is the filename that holds the issuer certificate.
-	IssuerCertFilename = "issuer.crt"
+	IssuerCertFilename string = "issuer.crt"
 	// IssuerKeyFilename is the filename that holds the issuer key.
-	IssuerKeyFilename = "issuer.key"
+	IssuerKeyFilename string = "issuer.key"
 )
 
 // CertChain holds the certificate trust chain PEM values.
