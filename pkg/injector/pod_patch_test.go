@@ -128,6 +128,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
+			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -187,6 +188,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
+			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -231,6 +233,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
+			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
 		}
 
@@ -265,6 +268,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
+			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
 		}
 
@@ -299,6 +303,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "5",
 			"--enable-api-logging=false",
+			"--disable-builtin-k8s-secret-store=false",
 			"--enable-mtls",
 		}
 
@@ -337,6 +342,41 @@ func TestGetSideCarContainer(t *testing.T) {
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", socketMount, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		assert.Equal(t, []corev1.VolumeMount{*socketMount}, container.VolumeMounts)
+	})
+
+	t.Run("disable Builtin K8s Secret Store", func(t *testing.T) {
+		annotations := map[string]string{}
+		annotations[daprConfigKey] = defaultTestConfig
+		annotations[daprDisableBuiltinK8sSecretStore] = "true"
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+
+		expectedArgs := []string{
+			"--mode", "kubernetes",
+			"--dapr-http-port", "3500",
+			"--dapr-grpc-port", "50001",
+			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
+			"--app-port", "",
+			"--app-id", "app_id",
+			"--control-plane-address", "controlplane:9000",
+			"--app-protocol", "http",
+			"--placement-host-address", "placement:50000",
+			"--config", defaultTestConfig,
+			"--log-level", "info",
+			"--app-max-concurrency", "-1",
+			"--sentry-address", "sentry:50000",
+			"--enable-metrics=true",
+			"--metrics-port", "9090",
+			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
+			"--dapr-graceful-shutdown-seconds", "-1",
+			"--enable-api-logging=false",
+			"--disable-builtin-k8s-secret-store=true",
+			"--enable-mtls",
+		}
+
+		assert.EqualValues(t, expectedArgs, container.Args)
 	})
 }
 
