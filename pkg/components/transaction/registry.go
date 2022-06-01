@@ -67,5 +67,5 @@ func (t *transactionRegistry) getTransaction(name, version string) (func() trans
 }
 
 func createFullName(name string) string {
-	return strings.ToLower("state." + name)
+	return strings.ToLower("transaction." + name)
 }

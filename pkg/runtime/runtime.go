@@ -115,6 +115,7 @@ const (
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
 	kubernetesSecretStore                             = "kubernetes"
+	transactionComponent            ComponentCategory = "transaction"
 )
 
 var componentCategoriesNeedProcess = []ComponentCategory{
@@ -124,6 +125,7 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	stateComponent,
 	middlewareComponent,
 	configurationComponent,
+	transactionComponent,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -2021,6 +2023,8 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 		return a.initState(comp)
 	case configurationComponent:
 		return a.initConfiguration(comp)
+	case transactionComponent:
+		return a.initTransaction(comp)
 	}
 	return nil
 }
@@ -2432,4 +2436,10 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 		}(name, binding)
 	}
 	return nil
+}
+
+func (a *DaprRuntime) initTransaction(s components_v1alpha1.Component) error {
+	transaction, err := a.transactionRegistry.Create(s.Spec.Type, s.Spec.Version)
+	a.transactions[s.ObjectMeta.Name] = transaction
+	return err
 }

@@ -1915,9 +1915,9 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 }
 
 func (a *api) onTransactionTry(reqCtx *fasthttp.RequestCtx) {
-	transaction := a.transactions["tcc"]
+	log.Debug("calling transaction components")
+	transaction := a.transactions["transactions"]
 	for time := 1; time < 3; time++ {
 		transaction.Try(time)
 	}
-
 }
