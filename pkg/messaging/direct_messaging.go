@@ -46,7 +46,7 @@ var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type messageClientConnection func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error)
+type messageClientConnection func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
 
 // DirectMessaging is the API interface for invoking a remote app.
 type DirectMessaging interface {
@@ -173,7 +173,8 @@ func (d *directMessaging) invokeWithRetry(
 
 				code := status.Code(rErr)
 				if code == codes.Unavailable || code == codes.Unauthenticated {
-					_, connerr := d.connectionCreatorFn(ctx, app.address, app.id, app.namespace, false, true, false)
+					_, teardown, connerr := d.connectionCreatorFn(ctx, app.address, app.id, app.namespace, false, true, false)
+					defer teardown()
 					if connerr != nil {
 						nullifyResponsePath = true
 						return backoff.Permanent(connerr)
@@ -208,7 +209,8 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, connerr := d.connectionCreatorFn(context.TODO(), app.address, app.id, app.namespace, false, true, false)
+			_, teardown, connerr := d.connectionCreatorFn(context.TODO(), app.address, app.id, app.namespace, false, true, false)
+			defer teardown()
 			if connerr != nil {
 				return nil, connerr
 			}
@@ -235,7 +237,8 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
+	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
+	defer teardown()
 	if err != nil {
 		return nil, err
 	}
