@@ -26,5 +26,3 @@ spec:
     secretKeyRef:
       name: cosmosdb-secret
       key: collection
-  - name: actorStateStore
-    value: true
