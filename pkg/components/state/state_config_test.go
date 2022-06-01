@@ -15,6 +15,7 @@ func TestMain(m *testing.M) {
 	SaveStateConfiguration("store3", map[string]string{strategyKey: strategyDefault})
 	SaveStateConfiguration("store4", map[string]string{strategyKey: strategyStoreName})
 	SaveStateConfiguration("store5", map[string]string{strategyKey: "other-fixed-prefix"})
+	SaveStateConfiguration("store7", map[string]string{strategyKey: strategyNamespace})
 	// if strategyKey not set
 	SaveStateConfiguration("store6", map[string]string{})
 	os.Exit(m.Run())
@@ -77,12 +78,44 @@ func TestAppidPrefix(t *testing.T) {
 	require.Equal(t, key, originalStateKey)
 }
 
-func TestAppidPrefix_WithEnptyAppid(t *testing.T) {
+func TestAppidPrefix_WithEmptyAppid(t *testing.T) {
 	modifiedStateKey, _ := GetModifiedStateKey(key, "store2", "")
 	require.Equal(t, "state-key-1234567", modifiedStateKey)
 
 	originalStateKey := GetOriginalStateKey(modifiedStateKey)
 	require.Equal(t, key, originalStateKey)
+}
+
+func TestNamespacePrefix(t *testing.T) {
+	t.Run("with namespace", func(t *testing.T) {
+		namespace = "ns1"
+
+		modifiedStateKey, _ := GetModifiedStateKey(key, "store7", "appid1")
+		require.Equal(t, "ns1.appid1||state-key-1234567", modifiedStateKey)
+
+		originalStateKey := GetOriginalStateKey(modifiedStateKey)
+		require.Equal(t, key, originalStateKey)
+	})
+
+	t.Run("with empty namespace, fallback to appid", func(t *testing.T) {
+		namespace = ""
+
+		modifiedStateKey, _ := GetModifiedStateKey(key, "store7", "appid1")
+		require.Equal(t, "appid1||state-key-1234567", modifiedStateKey)
+
+		originalStateKey := GetOriginalStateKey(modifiedStateKey)
+		require.Equal(t, key, originalStateKey)
+	})
+
+	t.Run("with empty appid", func(t *testing.T) {
+		namespace = ""
+
+		modifiedStateKey, _ := GetModifiedStateKey(key, "store7", "")
+		require.Equal(t, "state-key-1234567", modifiedStateKey)
+
+		originalStateKey := GetOriginalStateKey(modifiedStateKey)
+		require.Equal(t, key, originalStateKey)
+	})
 }
 
 func TestDefaultPrefix(t *testing.T) {

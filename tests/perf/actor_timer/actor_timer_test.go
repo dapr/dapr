@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,7 +31,9 @@ import (
 )
 
 const (
-	numHealthChecks = 60 // Number of times to check for endpoint health per app.
+	numHealthChecks        = 60 // Number of times to check for endpoint health per app.
+	serviceApplicationName = "perf-actor-timer-service"
+	clientApplicationName  = "perf-actor-timer-client"
 )
 
 var tr *runner.TestRunner
@@ -40,7 +43,7 @@ func TestMain(m *testing.M) {
 
 	testApps := []kube.AppDescription{
 		{
-			AppName:           "testapp",
+			AppName:           serviceApplicationName,
 			DaprEnabled:       true,
 			ImageName:         "perf-actorjava",
 			Replicas:          4,
@@ -56,7 +59,7 @@ func TestMain(m *testing.M) {
 			AppMemoryRequest:  "2500Mi",
 		},
 		{
-			AppName:           "tester",
+			AppName:           clientApplicationName,
 			DaprEnabled:       true,
 			ImageName:         "perf-tester",
 			Replicas:          1,
@@ -80,7 +83,7 @@ func TestMain(m *testing.M) {
 func TestActorTimerWithStatePerformance(t *testing.T) {
 	p := perf.Params()
 	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
+	testAppURL := tr.Platform.AcquireAppExternalURL(serviceApplicationName)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
@@ -89,7 +92,7 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get the ingress external url of tester app
-	testerAppURL := tr.Platform.AcquireAppExternalURL("tester")
+	testerAppURL := tr.Platform.AcquireAppExternalURL(clientApplicationName)
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
@@ -98,27 +101,31 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform dapr test
-	endpoint := fmt.Sprintf("http://testapp:3000/actors")
+	endpoint := fmt.Sprintf("http://%s:3000/actors", serviceApplicationName)
 	p.TargetEndpoint = endpoint
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
 	t.Logf("running dapr test with params: %s", body)
 	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Logf("dapr test results: %s", string(daprResp))
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
 	// Let test run for 10 minutes triggering the timers and collect metrics.
+	t.Log("test is started, wait for 10 minutes...")
 	time.Sleep(10 * time.Minute)
 
-	appUsage, err := tr.Platform.GetAppUsage("testapp")
+	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
 	require.NoError(t, err)
 
-	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
+	sidecarUsage, err := tr.Platform.GetSidecarUsage(serviceApplicationName)
 	require.NoError(t, err)
 
-	restarts, err := tr.Platform.GetTotalRestarts("testapp")
+	restarts, err := tr.Platform.GetTotalRestarts(serviceApplicationName)
 	require.NoError(t, err)
 
 	t.Logf("dapr test results: %s", string(daprResp))

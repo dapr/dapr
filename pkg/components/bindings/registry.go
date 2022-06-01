@@ -26,13 +26,13 @@ import (
 type (
 	// InputBinding is an input binding component definition.
 	InputBinding struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() bindings.InputBinding
 	}
 
 	// OutputBinding is an output binding component definition.
 	OutputBinding struct {
-		Name          string
+		Names         []string
 		FactoryMethod func() bindings.OutputBinding
 	}
 
@@ -53,17 +53,25 @@ type (
 )
 
 // NewInput creates a InputBinding.
-func NewInput(name string, factoryMethod func() bindings.InputBinding) InputBinding {
+func NewInput(name string, factoryMethod func() bindings.InputBinding, aliases ...string) InputBinding {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return InputBinding{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
 
 // NewOutput creates a OutputBinding.
-func NewOutput(name string, factoryMethod func() bindings.OutputBinding) OutputBinding {
+func NewOutput(name string, factoryMethod func() bindings.OutputBinding, aliases ...string) OutputBinding {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return OutputBinding{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -79,14 +87,18 @@ func NewRegistry() Registry {
 // RegisterInputBindings registers one or more new input bindings.
 func (b *bindingsRegistry) RegisterInputBindings(components ...InputBinding) {
 	for _, component := range components {
-		b.inputBindings[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			b.inputBindings[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 
 // RegisterOutputBindings registers one or more new output bindings.
 func (b *bindingsRegistry) RegisterOutputBindings(components ...OutputBinding) {
 	for _, component := range components {
-		b.outputBindings[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			b.outputBindings[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 
