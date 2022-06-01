@@ -76,6 +76,7 @@ const (
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
 	daprEnableAPILogging              = "dapr.io/enable-api-logging"
 	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
+	daprDisableBuiltinK8sSecretStore  = "dapr.io/disable-builtin-k8s-secret-store"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
@@ -115,6 +116,7 @@ const (
 	trueString                        = "true"
 	defaultDaprHTTPStreamRequestBody  = false
 	defaultAPILoggingEnabled          = false
+	defaultBuiltinSecretStoreDisabled = false
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -445,6 +447,10 @@ func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprHTTPStreamRequestBody, defaultDaprHTTPStreamRequestBody)
 }
 
+func getDisableBuiltinK8sSecretStore(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprDisableBuiltinK8sSecretStore, defaultBuiltinSecretStoreDisabled)
+}
+
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
 	enabled, ok := annotations[key]
 	if !ok {
@@ -600,6 +606,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	metricsPort := getMetricsPort(annotations)
 	maxConcurrency, err := getMaxConcurrency(annotations)
 	sidecarListenAddresses := getListenAddresses(annotations)
+	builtinK8sSecretStoreDisabled := getDisableBuiltinK8sSecretStore(annotations)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -672,6 +679,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
 		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
 		fmt.Sprintf("--enable-api-logging=%t", apiLoggingEnabled),
+		fmt.Sprintf("--disable-builtin-k8s-secret-store=%t", builtinK8sSecretStoreDisabled),
 	}
 
 	debugEnabled := getEnableDebug(annotations)
