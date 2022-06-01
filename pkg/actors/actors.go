@@ -485,7 +485,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
 	var resp *state.GetResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = a.store.Get(&state.GetRequest{
+		resp, rErr = a.store.Get(ctx, &state.GetRequest{
 			Key:      key,
 			Metadata: metadata,
 		})
@@ -713,7 +713,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
 	var resp *state.GetResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = a.store.Get(&state.GetRequest{
+		resp, rErr = a.store.Get(ctx, &state.GetRequest{
 			Key: constructCompositeKey(actorKey, name),
 		})
 		return rErr
@@ -741,7 +741,7 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 
 	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
 	return policy(func(ctx context.Context) error {
-		return a.store.Set(&state.SetRequest{
+		return a.store.Set(ctx, &state.SetRequest{
 			Key:   constructCompositeKey(actorKey, name),
 			Value: track,
 		})
@@ -1263,7 +1263,7 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 	metadataKey := constructCompositeKey("actors", actorType, "metadata")
 	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
 	return policy(func(ctx context.Context) error {
-		return a.store.Set(&state.SetRequest{
+		return a.store.Set(ctx, &state.SetRequest{
 			Key:   metadataKey,
 			Value: actorMetadata,
 			ETag:  actorMetadata.Etag,
@@ -1442,7 +1442,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		var bulkGet bool
 		var bulkResponse []state.BulkGetResponse
 		err := policy(func(ctx context.Context) (rErr error) {
-			bulkGet, bulkResponse, rErr = a.store.BulkGet(getRequests)
+			bulkGet, bulkResponse, rErr = a.store.BulkGet(ctx, getRequests)
 			return rErr
 		})
 		if bulkGet {
@@ -1462,7 +1462,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 					r := param.(*state.BulkGetResponse)
 					var resp *state.GetResponse
 					ferr := policy(func(ctx context.Context) (rErr error) {
-						resp, rErr = a.store.Get(&getRequest)
+						resp, rErr = a.store.Get(ctx, &getRequest)
 						return rErr
 					})
 					if ferr != nil {
@@ -1525,7 +1525,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 	key := constructCompositeKey("actors", actorType)
 	var resp *state.GetResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = a.store.Get(&state.GetRequest{
+		resp, rErr = a.store.Get(ctx, &state.GetRequest{
 			Key: key,
 		})
 		return rErr
@@ -1569,7 +1569,7 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 	log.Debugf("saving %d reminders in %s ...", len(reminders), stateKey)
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
 	return policy(func(ctx context.Context) error {
-		return a.store.Set(&state.SetRequest{
+		return a.store.Set(ctx, &state.SetRequest{
 			Key:      stateKey,
 			Value:    reminders,
 			ETag:     etag,
@@ -1648,7 +1648,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
 	return policy(func(ctx context.Context) error {
-		return a.store.Delete(&state.DeleteRequest{
+		return a.store.Delete(ctx, &state.DeleteRequest{
 			Key: reminderKey,
 		})
 	})
