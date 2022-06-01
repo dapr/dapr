@@ -755,12 +755,12 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 			}
 
 			if resp != nil && resp.Status().Code != nethttp.StatusOK {
-				return errors.Errorf("Error sending binding event to application, status %d", resp.Status().Code)
+				return errors.Errorf("Error sending configuration item to application, status %d", resp.Status().Code)
 			}
 			return nil
 		})
 		if err != nil {
-			log.Error(errors.Wrap(err, "error push subscribe event to app"))
+			log.Error(errors.Wrap(err, "error sending configuration item to the app"))
 		}
 	}
 	return nil
