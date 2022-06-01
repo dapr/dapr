@@ -165,6 +165,8 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 	}
 
 	teardown := releaseFactory(conn)
+	g.lock.Lock()
+	defer g.lock.Unlock()
 	g.connectionPool.Register(address, conn)
 
 	return conn, teardown, nil
