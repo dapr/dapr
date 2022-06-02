@@ -3268,7 +3268,7 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-func (b *mockBinding) Read(handler func(context.Context, *bindings.ReadResponse) ([]byte, error)) error {
+func (b *mockBinding) Read(handler bindings.Handler) error {
 	b.data = string(testInputBindingData)
 	metadata := map[string]string{}
 	if b.metadata != nil {
