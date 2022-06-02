@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/transaction"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -52,7 +53,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/components-contrib/transaction"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -241,17 +241,6 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Route:   "state/{storeName}/query",
 			Version: apiVersionV1alpha1,
 			Handler: a.onQueryState,
-		},
-	}
-}
-
-func (a *api) constructTransactionEndpoints() []Endpoint {
-	return []Endpoint{
-		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "transaction/{transactionName}/try",
-			Version: apiVersionV1,
-			Handler: a.onTransactionTry,
 		},
 	}
 }
@@ -1912,6 +1901,17 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
+}
+
+func (a *api) constructTransactionEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "transaction/{transactionName}/try",
+			Version: apiVersionV1,
+			Handler: a.onTransactionTry,
+		},
+	}
 }
 
 func (a *api) onTransactionTry(reqCtx *fasthttp.RequestCtx) {
