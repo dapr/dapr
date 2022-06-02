@@ -20,6 +20,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/admission/v1"
@@ -120,9 +121,11 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
-func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient kubernetes.Interface) ([]string, error) {
+func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
 	allowedUids := []string{}
-	for i, allowedControllersServiceAccount := range allowedControllersServiceAccounts {
+	allowedList := strings.Split(cfg.AllowedControllerServiceAccounts, ",")
+	allowedList = append(allowedList, allowedControllersServiceAccounts...)
+	for i, allowedControllersServiceAccount := range allowedList {
 		saUUID, err := getServiceAccount(ctx, kubeClient, allowedControllersServiceAccount)
 		// i == 0 => "replicaset-controller" is the only one mandatory
 		if err != nil {
