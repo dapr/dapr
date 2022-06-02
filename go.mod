@@ -171,6 +171,7 @@ require (
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5 // indirect
 	github.com/fatih/color v1.10.0 // indirect
+	github.com/frankban/quicktest v1.14.3 // indirect
 	github.com/go-errors/errors v1.4.0 // indirect
 	github.com/go-kit/log v0.2.0 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
