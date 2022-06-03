@@ -240,6 +240,11 @@ jobs:
         if: env.TEST_PREFIX != ''
         run: |
           make build
+
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
+            # For Linux, we use images based on Mariner
+            export DOCKERFILE=Dockerfile-mariner
+          fi
           make docker-build
         shell: bash
       - name: Build e2e test apps
