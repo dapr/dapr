@@ -26,7 +26,7 @@ func (m *MockPubSub) Publish(req *pubsub.PublishRequest) error {
 }
 
 // Subscribe is a mock subscribe method.
-func (m *MockPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+func (m *MockPubSub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	args := m.Called(req, handler)
 	return args.Error(0)
 }
@@ -51,7 +51,7 @@ func (f *FailingPubsub) Publish(req *pubsub.PublishRequest) error {
 	return f.Failure.PerformFailure(req.Topic)
 }
 
-func (f *FailingPubsub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+func (f *FailingPubsub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	err := f.Failure.PerformFailure(req.Topic)
 	if err != nil {
 		return err
