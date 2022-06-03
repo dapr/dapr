@@ -72,6 +72,7 @@ func FromFlags() (*DaprRuntime, error) {
 	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
 	daprGracefulShutdownSeconds := flag.Int("dapr-graceful-shutdown-seconds", -1, "Graceful shutdown time in seconds.")
 	enableAPILogging := flag.Bool("enable-api-logging", false, "Enable API logging for API calls")
+	disableBuiltinK8sSecretStore := flag.Bool("disable-builtin-k8s-secret-store", false, "Disable Builtin Kubernetes Secret Store")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -209,7 +210,7 @@ func FromFlags() (*DaprRuntime, error) {
 		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
 	}
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration, *enableAPILogging)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration, *enableAPILogging, *disableBuiltinK8sSecretStore)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package

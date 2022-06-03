@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,18 +101,22 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform dapr test
-	endpoint := fmt.Sprintf("http://testapp:3000/actors")
+	endpoint := fmt.Sprintf("http://%s:3000/actors", serviceApplicationName)
 	p.TargetEndpoint = endpoint
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
 	t.Logf("running dapr test with params: %s", body)
 	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Logf("dapr test results: %s", string(daprResp))
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
 	// Let test run for 10 minutes triggering the timers and collect metrics.
+	t.Log("test is started, wait for 10 minutes...")
 	time.Sleep(10 * time.Minute)
 
 	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
