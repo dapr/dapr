@@ -41,7 +41,8 @@ spec:
     spec:
       initContainers:
         - name: init-injectorapp
-          image: busybox:1.35.0
+          # image: busybox:1.35.0
+          image: gcr.io/google-containers/busybox:latest
           command: ['sh', '-c', 'echo {"secret-key": "secret-value"} > /tmp/storage/secrets.json']
           volumeMounts:
             - mountPath: /tmp/storage
@@ -49,7 +50,7 @@ spec:
       containers:
       - name: injectorapp
         # image: dapriotest/e2e-injectorapp
-        image: shubham1172/e2e-injectorapp:e2etests
+        image: ghcr.io/shubham1172/e2e-injectorapp:pr2455-linux-amd64
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
@@ -60,3 +61,5 @@ spec:
       volumes:
         - name: storage-volume
           emptyDir: {}
+      nodeSelector:
+          kubernetes.io/os: linux

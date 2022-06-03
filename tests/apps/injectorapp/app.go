@@ -33,7 +33,7 @@ import (
 
 const (
 	appPort         = 3000
-	secretStoreName = "secretstore"
+	secretStoreName = "local-secret-store"
 	/* #nosec */
 	secretURL = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
 )
