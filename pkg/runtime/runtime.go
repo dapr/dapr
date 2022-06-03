@@ -646,18 +646,8 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 					return err
 				}
 			} else if binaryMode {
+				// for binary mode, just send the binary data as the payload
 				cloudEvent = pubsub.FromBinaryModePayload(msg.Data, msg.Metadata, msg.Topic, name)
-				data, err = json.Marshal(cloudEvent)
-				if err != nil {
-					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-					if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
-						// dlq has been configured and message is successfully sent to dlq.
-						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-						return nil
-					}
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
-					return err
-				}
 			} else {
 				err = json.Unmarshal(msg.Data, &cloudEvent)
 				if err != nil {

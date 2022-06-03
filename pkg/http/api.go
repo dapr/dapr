@@ -1542,6 +1542,16 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	binaryMode, metaErr := contrib_metadata.IsBinaryMode(metadata)
+	if metaErr != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_REQUEST_METADATA",
+			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+
+		return
+	}
+
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
@@ -1551,7 +1561,40 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	data := body
 
-	if !rawPayload {
+	if binaryMode {
+		headers, err := runtime_pubsub.NewBinaryCloudEvent(&runtime_pubsub.CloudEvent{
+			ID:              a.id,
+			Topic:           topic,
+			DataContentType: contentType,
+			Data:            body,
+			TraceID:         corID,
+			TraceState:      traceState,
+			Pubsub:          pubsubName,
+		}, metadata)
+
+		if err != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+
+		features := thepubsub.Features()
+		pubsub.ApplyMetadata(headers, features, metadata)
+
+		for k, v := range headers {
+			// add the headers to the cloudevent data
+			switch v.(type) {
+			default:
+				// ignored
+			case string:
+				metadata[k] = v.(string)
+			}
+		}
+	}
+
+	if !rawPayload && !binaryMode {
 		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
 			ID:              a.id,
 			Topic:           topic,
