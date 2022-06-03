@@ -37,20 +37,18 @@ spec:
         dapr.io/enabled: "true"
         dapr.io/app-id: "injectorapp"
         dapr.io/app-port: "3000"
-        dapr.io/volume-mount: "storage-volume:/tmp/secrets/"
+        dapr.io/volume-mounts: "storage-volume:/tmp/secrets/"
     spec:
       initContainers:
         - name: init-injectorapp
-          # image: busybox:1.35.0
-          image: gcr.io/google-containers/busybox:latest
-          command: ['sh', '-c', 'echo {"secret-key": "secret-value"} > /tmp/storage/secrets.json']
+          image: busybox:1.35.0
+          command: ['sh', '-c', 'echo ''{"secret-key": "secret-value"}'' > /tmp/storage/secrets.json']
           volumeMounts:
             - mountPath: /tmp/storage
               name: storage-volume
       containers:
       - name: injectorapp
-        # image: dapriotest/e2e-injectorapp
-        image: ghcr.io/shubham1172/e2e-injectorapp:pr2455-linux-amd64
+        image: dapriotest/e2e-injectorapp
         ports:
         - containerPort: 3000
         imagePullPolicy: Always

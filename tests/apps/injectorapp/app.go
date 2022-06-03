@@ -33,6 +33,7 @@ import (
 
 const (
 	appPort         = 3000
+	secretKey       = "secret-key"
 	secretStoreName = "local-secret-store"
 	/* #nosec */
 	secretURL = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
@@ -57,7 +58,7 @@ func volumeMountTest() (int, appResponse) {
 
 	// the secret store will be only able to get the value
 	// if the volume is mounted correctly.
-	url, err := url.Parse(fmt.Sprintf(secretURL, secretStoreName, "secret-key"))
+	url, err := url.Parse(fmt.Sprintf(secretURL, secretStoreName, secretKey))
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: fmt.Sprintf("Failed to parse secret url: %v", err)}
 	}
@@ -87,9 +88,7 @@ func volumeMountTest() (int, appResponse) {
 		return http.StatusInternalServerError, appResponse{Message: fmt.Sprintf("Failed to unmarshal secret: %v", err)}
 	}
 
-	log.Printf("Secret value: %s\n", state)
-
-	return http.StatusOK, appResponse{Message: "OK"}
+	return http.StatusOK, appResponse{Message: state[secretKey]}
 }
 
 // commandHandler is the handler for end-to-end test entry point
