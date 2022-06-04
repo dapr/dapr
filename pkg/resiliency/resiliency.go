@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/utils"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -158,6 +159,10 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 	configs := make([]*resiliency_v1alpha.Resiliency, 0, len(files))
 
 	for _, file := range files {
+		if !utils.IsYaml(file.Name()) {
+			log.Warnf("A non-YAML file %s was detected, it will not be loaded", file.Name())
+			continue
+		}
 		filePath := filepath.Join(path, file.Name())
 		b, err := os.ReadFile(filePath)
 		if err != nil {
