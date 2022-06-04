@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -69,4 +70,13 @@ func getResolvSearchDomains(resolvConf []byte) []string {
 	}
 
 	return domains
+}
+
+// IsYaml checks whether the file is yaml or not.
+func IsYaml(fileName string) bool {
+	extension := strings.ToLower(filepath.Ext(fileName))
+	if extension == ".yaml" || extension == ".yml" {
+		return true
+	}
+	return false
 }
