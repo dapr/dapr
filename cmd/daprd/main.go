@@ -161,6 +161,7 @@ import (
 	////////test
 	transaction_loader "github.com/dapr/dapr/pkg/components/transaction"
 	transaction_tcc "github.com/dapr/components-contrib/transaction/tcc"
+	transaction_saga "github.com/dapr/components-contrib/transaction/saga"
 )
 
 var (
@@ -531,6 +532,9 @@ func main() {
 		runtime.WithTransactions(
 			transaction_loader.New("tcc", func() transaction.Transaction {
 				return transaction_tcc.NewTccTransaction(logContrib)
+			}),
+			transaction_loader.New("saga", func() transaction.Transaction {
+				return transaction_saga.NewSagaTransaction(logContrib)
 			}),
 		),
 	)

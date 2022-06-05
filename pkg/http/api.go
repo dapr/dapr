@@ -121,6 +121,7 @@ const (
 	traceparentHeader    = "traceparent"
 	tracestateHeader     = "tracestate"
 	daprAppID            = "dapr-app-id"
+	transactionParam     = "transactionName"
 )
 
 // NewAPI returns a new API.
@@ -1906,18 +1907,58 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 func (a *api) constructTransactionEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet},
-			Route:   "transaction/{transactionName}/try",
+			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
+			Route:   "transaction/{transactionName}/start",
 			Version: apiVersionV1,
-			Handler: a.onTransactionTry,
+			Handler: a.onDistributeTransaction,
 		},
 	}
 }
 
-func (a *api) onTransactionTry(reqCtx *fasthttp.RequestCtx) {
-	log.Debug("calling transaction components")
-	transaction := a.transactions["transactions"]
-	for time := 1; time < 3; time++ {
-		transaction.Try(time)
+func (a *api) getTransactionWithRequestValidation(reqCtx *fasthttp.RequestCtx) (transaction.Transaction, string, error) {
+	if a.transactions == nil || len(a.transactions) == 0 {
+		msg := NewErrorResponse("ERR_TRANSACTION_NOT_CONFIGURED", messages.ErrTransactionsNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
 	}
+
+	transactionName := a.getTransactionName(reqCtx)
+	if a.transactions[transactionName] == nil {
+		msg := NewErrorResponse("ERR_TRANSACTION_NOT_FOUND", fmt.Sprintf(messages.ErrTransactionNotFound, transactionName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+	return a.transactions[transactionName], transactionName, nil
+}
+
+func (a *api) getTransactionName(reqCtx *fasthttp.RequestCtx) string {
+	return reqCtx.UserValue(transactionParam).(string)
+}
+
+func (a *api) onDistributeTransaction(reqCtx *fasthttp.RequestCtx) {
+	log.Debug("calling transaction components")
+	transactionInstance, transactionName, err := a.getTransactionWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+	reqs := []transaction.OpenTransactionRequest{}
+	log.Debug("request body :", reqCtx.PostBody())
+	err = json.Unmarshal(reqCtx.PostBody(), &reqs)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+	if len(reqs) == 0 {
+		respond(reqCtx, withEmpty())
+		return
+	}
+	log.Debug(reqs)
+	log.Debug("transactionName is ", transactionName)
+	transactionInstance.Open(reqs)
+	respond(reqCtx, withEmpty())
 }

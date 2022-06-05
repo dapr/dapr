@@ -74,4 +74,9 @@ const (
 	ErrConfigurationStoreNotFound       = "error configuration stores %s not found"
 	ErrConfigurationGet                 = "fail to get %s from Configuration store %s: %s"
 	ErrConfigurationSubscribe           = "fail to subscribe %s from Configuration store %s: %s"
+
+	// Transactions.
+	ErrTransactionsNotConfigured 	= "error transaction not configured"
+	ErrTransactionNotFound 			= "transaction %s not found"
+
 )
