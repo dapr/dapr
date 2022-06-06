@@ -119,6 +119,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 			Annotations: buildDaprAnnotations(appDesc),
 		},
 		Spec: apiv1.PodSpec{
+			InitContainers: appDesc.InitContainers,
 			Containers: []apiv1.Container{
 				{
 					Name:            appDesc.AppName,
@@ -131,9 +132,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 							ContainerPort: DefaultContainerPort,
 						},
 					},
-					Env:          appEnv,
-					Command:      appDesc.Command,
-					VolumeMounts: appDesc.VolumeMounts,
+					Env: appEnv,
 				},
 			},
 			Affinity: &apiv1.Affinity{

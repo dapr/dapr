@@ -41,22 +41,6 @@ func TestMain(m *testing.M) {
 
 	// These apps will be deployed for injector test before starting actual test
 	// and will be cleaned up after all tests are finished automatically
-	initApps := []kube.AppDescription{
-		{
-			AppName:      fmt.Sprintf("%s-init", appName),
-			RegistryName: "docker.io",
-			ImageName:    "busybox",
-			Replicas:     1,
-			VolumeMounts: []apiv1.VolumeMount{
-				{
-					Name:      "storage-volume",
-					MountPath: "/tmp/storage",
-				},
-			},
-			Command: []string{"/bin/sh", "-c", "echo '{\"secret-key\": \"secret-value\"}' > /tmp/storage/secrets.json"},
-		},
-	}
-
 	testApps := []kube.AppDescription{
 		{
 			AppName:           appName,
@@ -78,10 +62,24 @@ func TestMain(m *testing.M) {
 					},
 				},
 			},
+			InitContainers: []apiv1.Container{
+				{
+					Name:            fmt.Sprintf("%s-init", appName),
+					Image:           "docker.io/busybox",
+					ImagePullPolicy: apiv1.PullIfNotPresent,
+					Command:         []string{"/bin/sh", "-c", "echo '{\"secret-key\": \"secret-value\"}' > /tmp/storage/secrets.json"},
+					VolumeMounts: []apiv1.VolumeMount{
+						{
+							Name:      "storage-volume",
+							MountPath: "/tmp/storage",
+						},
+					},
+				},
+			},
 		},
 	}
 
-	tr = runner.NewTestRunner(appName, testApps, nil, initApps)
+	tr = runner.NewTestRunner(appName, testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
