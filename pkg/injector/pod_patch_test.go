@@ -260,6 +260,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--enable-api-logging=false",
+			"--disable-builtin-k8s-secret-store=false",
 			"--log-as-json",
 			"--enable-mtls",
 		}
