@@ -93,6 +93,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.Config != "" {
 		annotationObject["dapr.io/config"] = appDesc.Config
 	}
+	if appDesc.DaprVolumeMounts != "" {
+		annotationObject["dapr.io/volume-mounts"] = appDesc.DaprVolumeMounts
+	}
 	return annotationObject
 }
 
@@ -128,7 +131,9 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 							ContainerPort: DefaultContainerPort,
 						},
 					},
-					Env: appEnv,
+					Env:          appEnv,
+					Command:      appDesc.Command,
+					VolumeMounts: appDesc.VolumeMounts,
 				},
 			},
 			Affinity: &apiv1.Affinity{
@@ -158,6 +163,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 					Name: appDesc.ImageSecret,
 				},
 			},
+			Volumes: appDesc.Volumes,
 		},
 	}
 }
