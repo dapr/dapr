@@ -1908,7 +1908,7 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
-			Route:   "transaction/{transactionName}/start",
+			Route:   "transaction/{transactionName}/open",
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransaction,
 		},
@@ -1939,7 +1939,7 @@ func (a *api) getTransactionName(reqCtx *fasthttp.RequestCtx) string {
 
 func (a *api) onDistributeTransaction(reqCtx *fasthttp.RequestCtx) {
 	log.Debug("calling transaction components")
-	transactionInstance, transactionName, err := a.getTransactionWithRequestValidation(reqCtx)
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
 	if err != nil {
 		log.Debug(err)
 		return
@@ -1956,6 +1956,7 @@ func (a *api) onDistributeTransaction(reqCtx *fasthttp.RequestCtx) {
 		respond(reqCtx, withEmpty())
 		return
 	}
+	log.Debug(reqs)
 	transactionInstance.Open(reqs)
 	respond(reqCtx, withEmpty())
 }
