@@ -42,6 +42,7 @@ type AppDescription struct {
 	DaprMemoryRequest  string            `json:",omitempty"`
 	Namespace          *string           `json:",omitempty"`
 	IsJob              bool              `json:",omitempty"`
+	SecretStoreDisable bool              `json:",omitempty"`
 	PlacementAddresses []string          `json:",omitempty"`
 }
 

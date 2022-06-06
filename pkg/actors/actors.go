@@ -87,7 +87,7 @@ type actorsRuntime struct {
 	store                    state.Store
 	transactionalStore       state.TransactionalStore
 	placement                *internal.ActorPlacement
-	grpcConnectionFn         func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error)
+	grpcConnectionFn         func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
 	config                   Config
 	actorsTable              *sync.Map
 	activeTimers             *sync.Map
@@ -143,7 +143,7 @@ var ErrDaprResponseHeader = errors.New("error indicated via actor header respons
 func NewActors(
 	stateStore state.Store,
 	appChannel channel.AppChannel,
-	grpcConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error),
+	grpcConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error),
 	config Config,
 	certChain *dapr_credentials.CertChain,
 	tracingSpec configuration.TracingSpec,
@@ -356,9 +356,10 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, err = a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, true, false)
-			if err != nil {
-				return nil, err
+			_, teardown, cerr := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, true, false)
+			teardown()
+			if cerr != nil {
+				return nil, cerr
 			}
 			continue
 		}
@@ -449,7 +450,8 @@ func (a *actorsRuntime) callRemoteActor(
 	targetAddress, targetID string,
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, false, false)
+	conn, teardown, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.config.Namespace, false, false, false)
+	defer teardown()
 	if err != nil {
 		return nil, err
 	}
