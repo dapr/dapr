@@ -1944,8 +1944,7 @@ func (a *api) onDistributeTransaction(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	reqs := []transaction.OpenTransactionRequest{}
-	log.Debug("request body :", reqCtx.PostBody())
+	var reqs []transaction.OpenTransactionRequest
 	err = json.Unmarshal(reqCtx.PostBody(), &reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
@@ -1957,8 +1956,6 @@ func (a *api) onDistributeTransaction(reqCtx *fasthttp.RequestCtx) {
 		respond(reqCtx, withEmpty())
 		return
 	}
-	log.Debug(reqs)
-	log.Debug("transactionName is ", transactionName)
 	transactionInstance.Open(reqs)
 	respond(reqCtx, withEmpty())
 }
