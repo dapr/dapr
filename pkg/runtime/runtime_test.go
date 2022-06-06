@@ -2884,7 +2884,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 			},
 		}}
 
-		err := r.beginPubSub("failPubsub", &failingPubsub)
+		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["failingSubTopic"])
@@ -2906,7 +2906,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		}}
 
 		start := time.Now()
-		err := r.beginPubSub("failPubsub", &failingPubsub)
+		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
 		end := time.Now()
 
 		// This is eaten, technically.
@@ -2944,7 +2944,7 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 }
 
 // Subscribe is a mock subscribe method.
-func (m *mockSubscribePubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+func (m *mockSubscribePubSub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	m.handlers[req.Topic] = handler
 	return nil
 }
@@ -3590,7 +3590,7 @@ func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 }
 
 // Subscribe is a mock subscribe method.
-func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+func (m *mockPublishPubSub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	return nil
 }
 
@@ -4052,7 +4052,7 @@ func TestStopWithErrors(t *testing.T) {
 	require.NoError(t, rt.initSecretStore(mockSecretsComponent))
 	rt.nameResolver = &mockNameResolver{closeErr: testErr}
 
-	err := rt.shutdownComponents()
+	err := rt.shutdownOutputComponents()
 	assert.Error(t, err)
 	var merr *multierror.Error
 	merr, ok := err.(*multierror.Error)
@@ -4062,7 +4062,7 @@ func TestStopWithErrors(t *testing.T) {
 
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
 	rt.stopActor()
-	assert.NoError(t, rt.shutdownComponents())
+	assert.NoError(t, rt.shutdownOutputComponents())
 }
 
 func TestFindMatchingRoute(t *testing.T) {
