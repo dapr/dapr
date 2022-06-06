@@ -46,9 +46,9 @@ func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
+
 	go operator.NewOperator(config, certChainPath, !disableLeaderElection).Run(ctx)
-	// The webhooks use their own controller context and stops on SIGTERM and SIGINT.
-	go operator.RunWebhooks(!disableLeaderElection)
+	go operator.RunWebhooks(ctx, !disableLeaderElection)
 
 	<-ctx.Done() // Wait for SIGTERM and SIGINT.
 

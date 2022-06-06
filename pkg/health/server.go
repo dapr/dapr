@@ -61,8 +61,6 @@ func (s *server) Run(ctx context.Context, port int) error {
 		Handler: router,
 	}
 
-	doneCh := make(chan struct{})
-
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -72,22 +70,22 @@ func (s *server) Run(ctx context.Context, port int) error {
 				time.Second*5,
 			)
 			defer cancel()
-			srv.Shutdown(shutdownCtx) // nolint: errcheck
-		case <-doneCh:
+			err := srv.Shutdown(shutdownCtx)
+			if err != nil {
+				s.log.Errorf("Error while shutting down healthz server: %v", err)
+			}
 		}
 	}()
 
 	s.log.Infof("Healthz server is listening on %s", srv.Addr)
+
+	// Blocking call
 	err := srv.ListenAndServe()
-	if err != nil {
-		if err == http.ErrServerClosed {
-			err = nil
-		} else {
-			s.log.Errorf("Healthz server error: %s", err)
-		}
+	if err != http.ErrServerClosed {
+		return err
 	}
-	close(doneCh)
-	return err
+
+	return nil
 }
 
 // healthz is a health endpoint handler.
