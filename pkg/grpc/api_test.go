@@ -1134,9 +1134,8 @@ func TestGetConfiguration(t *testing.T) {
 			return req.Keys[0] == goodKey
 		})).Return(
 		&configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:   goodKey,
+			Items: map[string]*configuration.Item{
+				goodKey: {
 					Value: "test-data",
 				},
 			},
@@ -1147,17 +1146,14 @@ func TestGetConfiguration(t *testing.T) {
 			return req.Keys[0] == "good-key1" && req.Keys[1] == goodKey2 && req.Keys[2] == "good-key3"
 		})).Return(
 		&configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:   "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value: "test-data",
 				},
-				{
-					Key:   goodKey2,
+				goodKey2: {
 					Value: "test-data",
 				},
-				{
-					Key:   "good-key3",
+				"good-key3": {
 					Value: "test-data",
 				},
 			},
@@ -1197,9 +1193,8 @@ func TestGetConfiguration(t *testing.T) {
 			keys:          []string{goodKey},
 			errorExcepted: false,
 			expectedResponse: &runtimev1pb.GetConfigurationResponse{
-				Items: []*commonv1pb.ConfigurationItem{
-					{
-						Key:   goodKey,
+				Items: map[string]*commonv1pb.ConfigurationItem{
+					goodKey: {
 						Value: "test-data",
 					},
 				},
@@ -1212,17 +1207,14 @@ func TestGetConfiguration(t *testing.T) {
 			keys:          []string{"good-key1", goodKey2, "good-key3"},
 			errorExcepted: false,
 			expectedResponse: &runtimev1pb.GetConfigurationResponse{
-				Items: []*commonv1pb.ConfigurationItem{
-					{
-						Key:   "good-key1",
+				Items: map[string]*commonv1pb.ConfigurationItem{
+					"good-key1": {
 						Value: "test-data",
 					},
-					{
-						Key:   goodKey2,
+					goodKey2: {
 						Value: "test-data",
 					},
-					{
-						Key:   "good-key3",
+					"good-key3": {
 						Value: "test-data",
 					},
 				},
@@ -1278,9 +1270,8 @@ func TestSubscribeConfiguration(t *testing.T) {
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
 			if len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey {
 				_ = f(context.Background(), &configuration.UpdateEvent{
-					Items: []*configuration.Item{
-						{
-							Key:   goodKey,
+					Items: map[string]*configuration.Item{
+						goodKey: {
 							Value: "test-data",
 						},
 					},
@@ -1297,13 +1288,11 @@ func TestSubscribeConfiguration(t *testing.T) {
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
 			if len(tempReq.Keys) == 2 && tempReq.Keys[0] == goodKey && tempReq.Keys[1] == goodKey2 {
 				_ = f(context.Background(), &configuration.UpdateEvent{
-					Items: []*configuration.Item{
-						{
-							Key:   goodKey,
+					Items: map[string]*configuration.Item{
+						goodKey: {
 							Value: "test-data",
 						},
-						{
-							Key:   goodKey2,
+						goodKey2: {
 							Value: "test-data2",
 						},
 					},
@@ -1338,7 +1327,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 		storeName        string
 		keys             []string
 		errorExcepted    bool
-		expectedResponse []*commonv1pb.ConfigurationItem
+		expectedResponse map[string]*commonv1pb.ConfigurationItem
 		expectedError    codes.Code
 	}{
 		{
@@ -1346,9 +1335,8 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:     "store1",
 			keys:          []string{goodKey},
 			errorExcepted: false,
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
 			},
@@ -1359,7 +1347,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:        "no-store",
 			keys:             []string{goodKey},
 			errorExcepted:    true,
-			expectedResponse: []*commonv1pb.ConfigurationItem{},
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -1367,7 +1355,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:        "store1",
 			keys:             []string{"error-key"},
 			errorExcepted:    true,
-			expectedResponse: []*commonv1pb.ConfigurationItem{},
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -1375,13 +1363,11 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:     "store1",
 			keys:          []string{goodKey, goodKey2},
 			errorExcepted: false,
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
-				{
-					Key:   goodKey2,
+				goodKey2: {
 					Value: "test-data2",
 				},
 			},
@@ -1451,9 +1437,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 					default:
 					}
 					if err := f(context.Background(), &configuration.UpdateEvent{
-						Items: []*configuration.Item{
-							{
-								Key:   goodKey,
+						Items: map[string]*configuration.Item{
+							goodKey: {
 								Value: "test-data",
 							},
 						},
@@ -1484,13 +1469,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 					default:
 					}
 					if err := f(context.Background(), &configuration.UpdateEvent{
-						Items: []*configuration.Item{
-							{
-								Key:   goodKey,
+						Items: map[string]*configuration.Item{
+							goodKey: {
 								Value: "test-data",
 							},
-							{
-								Key:   goodKey2,
+							goodKey2: {
 								Value: "test-data2",
 							},
 						},
@@ -1523,16 +1506,15 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 		testName         string
 		storeName        string
 		keys             []string
-		expectedResponse []*commonv1pb.ConfigurationItem
+		expectedResponse map[string]*commonv1pb.ConfigurationItem
 		expectedError    codes.Code
 	}{
 		{
 			testName:  "Test unsubscribe",
 			storeName: "store1",
 			keys:      []string{goodKey},
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
 			},
@@ -1542,13 +1524,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			testName:  "Test unsubscribe with multi keys",
 			storeName: "store1",
 			keys:      []string{goodKey, goodKey2},
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
-				{
-					Key:   goodKey2,
+				goodKey2: {
 					Value: "test-data2",
 				},
 			},
@@ -2387,8 +2367,7 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, r.Items)
 		assert.Len(t, r.Items, 1)
-		assert.Equal(t, "key1", r.Items[0].Key)
-		assert.Equal(t, "val1", r.Items[0].Value)
+		assert.Equal(t, "val1", r.Items["key1"])
 	})
 }
 
@@ -2439,8 +2418,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 
 		assert.NotNil(t, r)
 		assert.Len(t, r.Items, 1)
-		assert.Equal(t, "key1", r.Items[0].Key)
-		assert.Equal(t, "val1", r.Items[0].Value)
+		assert.Equal(t, "val1", r.Items["key1"])
 	})
 
 	t.Run("get all configuration item for empty list", func(t *testing.T) {
@@ -2487,10 +2465,8 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 
 		assert.NotNil(t, r)
 		assert.Len(t, r.Items, 2)
-		assert.Equal(t, "key1", r.Items[0].Key)
-		assert.Equal(t, "val1", r.Items[0].Value)
-		assert.Equal(t, "key2", r.Items[1].Key)
-		assert.Equal(t, "val2", r.Items[1].Value)
+		assert.Equal(t, "val1", r.Items["key1"])
+		assert.Equal(t, "val2", r.Items["key2"])
 	})
 }
 
@@ -3038,26 +3014,19 @@ func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
 }
 
 func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
-	items := []*configuration.Item{
-		{
-			Key:   "key1",
-			Value: "val1",
-		}, {
-			Key:   "key2",
-			Value: "val2",
-		},
+	items := map[string]*configuration.Item{
+		"key1": {Value: "val1"},
+		"key2": {Value: "val2"},
 	}
 
-	res := make([]*configuration.Item, 0, 16)
+	res := make(map[string]*configuration.Item)
 
 	if len(req.Keys) == 0 {
 		res = items
 	} else {
-		for _, item := range items {
-			for _, key := range req.Keys {
-				if item.Key == key {
-					res = append(res, item)
-				}
+		for _, key := range req.Keys {
+			if val, ok := items[key]; ok {
+				res[key] = val
 			}
 		}
 	}
@@ -3068,26 +3037,19 @@ func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest
 }
 
 func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
-	items := []*configuration.Item{
-		{
-			Key:   "key1",
-			Value: "val1",
-		}, {
-			Key:   "key2",
-			Value: "val2",
-		},
+	items := map[string]*configuration.Item{
+		"key1": {Value: "val1"},
+		"key2": {Value: "val2"},
 	}
 
-	res := make([]*configuration.Item, 0, 16)
+	res := make(map[string]*configuration.Item)
 
 	if len(req.Keys) == 0 {
 		res = items
 	} else {
-		for _, item := range items {
-			for _, key := range req.Keys {
-				if item.Key == key {
-					res = append(res, item)
-				}
+		for _, key := range req.Keys {
+			if val, ok := items[key]; ok {
+				res[key] = val
 			}
 		}
 	}

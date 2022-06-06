@@ -111,9 +111,8 @@ func (f *FailingConfigurationStore) Init(metadata configuration.Metadata) error 
 
 func (f *FailingConfigurationStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
 	handler(ctx, &configuration.UpdateEvent{
-		Items: []*configuration.Item{
-			{
-				Key:   req.Metadata["key"],
+		Items: map[string]*configuration.Item{
+			req.Metadata["key"]: &configuration.Item{
 				Value: "testConfig",
 			},
 		},
