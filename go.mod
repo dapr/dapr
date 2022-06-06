@@ -372,3 +372,5 @@ replace (
 )
 
 replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
+
+replace github.com/dapr/components-contrib => github.com/beiwei30/components-contrib v0.4.1-0.20220603163116-fa6cff30d029
