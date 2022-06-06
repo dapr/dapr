@@ -2388,7 +2388,7 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, r.Items)
 		assert.Len(t, r.Items, 1)
-		assert.Equal(t, "val1", r.Items["key1"])
+		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
 }
 
@@ -2439,7 +2439,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 
 		assert.NotNil(t, r)
 		assert.Len(t, r.Items, 1)
-		assert.Equal(t, "val1", r.Items["key1"])
+		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
 
 	t.Run("get all configuration item for empty list", func(t *testing.T) {
@@ -2486,8 +2486,8 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 
 		assert.NotNil(t, r)
 		assert.Len(t, r.Items, 2)
-		assert.Equal(t, "val1", r.Items["key1"])
-		assert.Equal(t, "val2", r.Items["key2"])
+		assert.Equal(t, "val1", r.Items["key1"].Value)
+		assert.Equal(t, "val2", r.Items["key2"].Value)
 	})
 }
 
