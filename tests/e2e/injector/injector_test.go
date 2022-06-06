@@ -17,6 +17,7 @@ limitations under the License.
 package injector_e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -32,6 +33,13 @@ const (
 	appName         = "injectorapp"
 	numHealthChecks = 60 // Number of get calls before starting tests.
 )
+
+// requestResponse represents a request or response for the APIs in the app.
+type requestResponse struct {
+	Message   string `json:"message,omitempty"`
+	StartTime int    `json:"start_time,omitempty"`
+	EndTime   int    `json:"end_time,omitempty"`
+}
 
 var tr *runner.TestRunner
 
@@ -100,6 +108,11 @@ func TestDaprVolumeMount(t *testing.T) {
 
 	// assert
 	require.NoError(t, err)
+
+	var appResp requestResponse
+	err = json.Unmarshal(resp, &appResp)
+	require.NoError(t, err)
+
 	require.Equal(t, 200, statusCode)
-	require.Equal(t, "secret-value", string(resp))
+	require.Equal(t, "secret-value", appResp.Message)
 }
