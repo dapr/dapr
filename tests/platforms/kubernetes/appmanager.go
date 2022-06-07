@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -114,27 +115,36 @@ func (m *AppManager) Init() error {
 	}
 
 	log.Printf("Deploying app %v ...", m.app.AppName)
-	if m.app.IsJob {
-		// Deploy app and wait until deployment is done
-		if _, err := m.ScheduleJob(); err != nil {
-			return err
-		}
+	backoff.RetryNotify(
+		func() error {
+			if m.app.IsJob {
+				// Deploy app and wait until deployment is done
+				if _, err := m.ScheduleJob(); err != nil {
+					return err
+				}
 
-		// Wait until app is deployed completely
-		if _, err := m.WaitUntilJobState(m.IsJobCompleted); err != nil {
-			return err
-		}
-	} else {
-		// Deploy app and wait until deployment is done
-		if _, err := m.Deploy(); err != nil {
-			return err
-		}
+				// Wait until app is deployed completely
+				if _, err := m.WaitUntilJobState(m.IsJobCompleted); err != nil {
+					return err
+				}
+			} else {
+				// Deploy app and wait until deployment is done
+				if _, err := m.Deploy(); err != nil {
+					return err
+				}
 
-		// Wait until app is deployed completely
-		if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
-			return err
-		}
-	}
+				// Wait until app is deployed completely
+				if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		backoff.WithMaxRetries(backoff.NewConstantBackOff(10*time.Second), 3),
+		func(err error, d time.Duration) {
+			log.Printf("Deployment failed with error: %v; retrying in %s", err, d)
+		},
+	)
 	log.Printf("App %v has been deployed.", m.app.AppName)
 
 	if m.logPrefix != "" {
@@ -260,12 +270,24 @@ func (m *AppManager) Deploy() (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	obj := buildDeploymentObject(m.namespace, m.app)
 
-	result, err := deploymentsClient.Create(context.TODO(), obj, metav1.CreateOptions{})
-	if err != nil {
-		return nil, err
-	}
+	// Retry in cae of failure
+	var result *appsv1.Deployment
+	err := backoff.RetryNotify(
+		func() error {
+			innerResult, innerErr := deploymentsClient.Create(context.TODO(), obj, metav1.CreateOptions{})
+			if innerErr != nil {
+				return innerErr
+			}
+			result = innerResult
+			return nil
+		},
+		backoff.WithMaxRetries(backoff.NewConstantBackOff(10*time.Second), 3),
+		func(err error, d time.Duration) {
+			log.Printf("App deployment request failed: %v; retrying in %s", err, d)
+		},
+	)
 
-	return result, nil
+	return result, err
 }
 
 // WaitUntilDeploymentState waits until isState returns true.
