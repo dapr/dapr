@@ -162,7 +162,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.logLevel`          | Log level                                                               | `info`                  |
 | `dapr_sidecar_injector.image.name`        | Docker image name for Dapr runtime sidecar to inject into an application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`|
 | `dapr_sidecar_injector.injectorImage.name` | Docker image name for sidecar injector service (`global.registry/dapr_sidecar_injector.injectorImage.name`) | `dapr`|
-| `dapr_sidecar_injector.webhookFailurePolicy` | Failure policy for the sidecar injector                              | `Ignore`                |
+| `dapr_sidecar_injector.webhookFailurePolicy` | Failure policy for the sidecar injector (`Ignore` or `Fail`)         | `Fail`                |
 | `dapr_sidecar_injector.runAsNonRoot`      | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_sidecar_injector.resources`         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
