@@ -54,7 +54,7 @@ func TestMain(m *testing.M) {
 			Name:     "local-secret-store",
 			TypeName: "secretstores.local.file",
 			MetaData: map[string]string{
-				"secretsFile": "/tmp/secrets/secrets.json",
+				"secretsFile": `"/tmp/secrets/secrets.json"`,
 			},
 		},
 	}
