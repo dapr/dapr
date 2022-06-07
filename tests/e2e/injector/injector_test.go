@@ -49,6 +49,16 @@ func TestMain(m *testing.M) {
 
 	// These apps will be deployed for injector test before starting actual test
 	// and will be cleaned up after all tests are finished automatically
+	comps := []kube.ComponentDescription{
+		{
+			Name:     "local-secret-store",
+			TypeName: "secretstores.local.file",
+			MetaData: map[string]string{
+				"secretsFile": "/tmp/secrets/secrets.json",
+			},
+		},
+	}
+
 	testApps := []kube.AppDescription{
 		{
 			AppName:           appName,
@@ -87,7 +97,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner(appName, testApps, nil, nil)
+	tr = runner.NewTestRunner(appName, testApps, comps, nil)
 	os.Exit(tr.Start(m))
 }
 
