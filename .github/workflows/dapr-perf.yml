@@ -16,7 +16,7 @@
 # - PERF_AZURE_STORAGE_ACCOUNT and PERF_AZURE_STORAGE_KEY: Credentials for the Storage Account where to store the result of perf tests
 # - DAPR_BOT_TOKEN: Token for the Dapr bot
 #
-# Optional secets:
+# Optional secrets:
 # - AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
 # - AZURE_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
 

@@ -15,7 +15,7 @@
 # - AZURE_CREDENTIALS: JSON object containing the Azure service principal credentials. Docs: https://github.com/Azure/login#configure-a-service-principal-with-a-secret
 # - DAPR_BOT_TOKEN: Token for the Dapr bot
 #
-# Optional secets:
+# Optional secrets:
 # - AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
 # - AZURE_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
 
