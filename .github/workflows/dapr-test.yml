@@ -253,11 +253,6 @@ jobs:
           fi
           make docker-build
         shell: bash
-      - name: Build e2e test apps
-        if: env.TEST_PREFIX != ''
-        run: |
-          make build-e2e-app-all
-        shell: bash
       - name: Wait for Azure Container Registry deployment
         if: env.TEST_PREFIX != ''
         run: |
@@ -279,11 +274,17 @@ jobs:
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash
-      - name: Push all container images to the registry
+      - name: Push container images
         if: env.TEST_PREFIX != ''
         run: |
           make docker-push
-          make push-e2e-app-all
+        shell: bash
+      - name: Build and push e2e test apps
+        if: env.TEST_PREFIX != ''
+        run: |
+          go install github.com/google/go-containerregistry/cmd/crane@latest
+
+          make build-push-e2e-app-all
         shell: bash
 
   test-e2e:

@@ -101,6 +101,11 @@ ifeq ($(DAPR_TEST_TAG),)
 	$(error DAPR_TEST_TAG environment variable must be set)
 endif
 
+check-e2e-cache:
+ifeq ($(DAPR_CACHE_REGISTRY),)
+	$(error DAPR_CACHE_REGISTRY environment variable must be set)
+endif
+
 define genTestAppImageBuild
 .PHONY: build-e2e-app-$(1)
 build-e2e-app-$(1): check-e2e-env
@@ -110,7 +115,7 @@ ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
 else ifeq ($(DAPR_CACHE_REGISTRY),)
 	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
 else
-	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) $(1) $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG) $(DOCKERFILE)
+	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) $(1) $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG) "false" $(DOCKERFILE)
 endif
 endef
 
@@ -126,6 +131,19 @@ endef
 # Generate test app image push targets
 $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImagePush,$(ITEM))))
 
+define genTestAppImageBuildPush
+.PHONY: build-push-e2e-app-$(1)
+build-push-e2e-app-$(1): check-e2e-env check-e2e-cache
+ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
+	make build-e2e-app-$(1) push-e2e-app-$(1)
+else
+	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) $(1) $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG) "true" $(DOCKERFILE)
+endif
+endef
+
+# Generate test app image build-push targets
+$(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageBuildPush,$(ITEM))))
+
 define genTestAppImageKindPush
 .PHONY: push-kind-e2e-app-$(1)
 push-kind-e2e-app-$(1): check-e2e-env
@@ -138,11 +156,7 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageKindPush,$(ITEM))))
 define genPerfTestAppImageBuild
 .PHONY: build-perf-app-$(1)
 build-perf-app-$(1): check-e2e-env
-ifeq ($(DAPR_CACHE_REGISTRY),)
-	$(DOCKER) build -f $(PERF_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(PERF_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
-else
-	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) perf/$(1) $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG) $(DOCKERFILE)
-endif
+	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) perf/$(1) $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG) "false" $(DOCKERFILE)
 endef
 
 # Generate perf app image build targets
@@ -153,6 +167,15 @@ define genPerfAppImagePush
 push-perf-app-$(1): check-e2e-env
 	$(DOCKER) push $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
 endef
+
+define genPerfAppImageBuildPush
+.PHONY: build-push-perf-app-$(1)
+build-push-perf-app-$(1): check-e2e-env check-e2e-cache
+	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) perf/$(1) $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG) "true" $(DOCKERFILE)
+endef
+
+# Generate perf app image build-push targets
+$(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImageBuildPush,$(ITEM))))
 
 define genPerfAppImageKindPush
 .PHONY: push-kind-perf-app-$(1)
@@ -181,6 +204,8 @@ $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImageKindPush,$(ITEM)))
 BUILD_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),build-e2e-app-$(ITEM))
 # Enumerate test app push targets
 PUSH_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),push-e2e-app-$(ITEM))
+# Enumerate test app build-push targets
+BUILD_PUSH_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),build-push-e2e-app-$(ITEM))
 # Enumerate test app push targets
 PUSH_KIND_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),push-kind-e2e-app-$(ITEM))
 
@@ -188,6 +213,8 @@ PUSH_KIND_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),push-kind-e2e-app-$(
 BUILD_PERF_APPS_TARGETS:=$(foreach ITEM,$(PERF_TEST_APPS),build-perf-app-$(ITEM))
 # Enumerate perf app push targets
 PUSH_PERF_APPS_TARGETS:=$(foreach ITEM,$(PERF_TEST_APPS),push-perf-app-$(ITEM))
+# Enumerate perf app build-push targets
+BUILD_PUSH_PERF_APPS_TARGETS:=$(foreach ITEM,$(PERF_TEST_APPS),build-push-perf-app-$(ITEM))
 # Enumerate perf app kind push targets
 PUSH_KIND_PERF_APPS_TARGETS:=$(foreach ITEM,$(PERF_TEST_APPS),push-kind-perf-app-$(ITEM))
 
@@ -197,6 +224,10 @@ build-e2e-app-all: $(BUILD_E2E_APPS_TARGETS)
 # push test app image to the registry
 push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 
+# build and push test app image to the registry
+# can be faster because it uses cache and copies images directly
+build-push-e2e-app-all: $(BUILD_PUSH_E2E_APPS_TARGETS)
+
 # push test app image to kind cluster
 push-kind-e2e-app-all: $(PUSH_KIND_E2E_APPS_TARGETS)
 
@@ -205,6 +236,10 @@ build-perf-app-all: $(BUILD_PERF_APPS_TARGETS)
 
 # push perf app image to the registry
 push-perf-app-all: $(PUSH_PERF_APPS_TARGETS)
+
+# build and push perf app image to the registry
+# can be faster because it uses cache and copies images directly
+build-push-perf-app-all: $(BUILD_PUSH_PERF_APPS_TARGETS)
 
 # push perf app image to kind cluster
 push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
