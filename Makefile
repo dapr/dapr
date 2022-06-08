@@ -55,9 +55,9 @@ endif
 export GOARCH ?= $(TARGET_ARCH_LOCAL)
 
 ifeq ($(GOARCH),amd64)
-	LATEST_TAG=latest
+	LATEST_TAG?=latest
 else
-	LATEST_TAG=latest-$(GOARCH)
+	LATEST_TAG?=latest-$(GOARCH)
 endif
 
 LOCAL_OS := $(shell uname)
@@ -241,8 +241,15 @@ release: build archive
 ################################################################################
 .PHONY: test
 test: test-deps
-	gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json --format standard-quiet -- ./pkg/... ./utils/... ./cmd/... $(COVERAGE_OPTS) --tags=unit
-	go test ./tests/...
+	CGO_ENABLED=$(CGO) \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
+			--format standard-quiet \
+			-- \
+				./pkg/... ./utils/... ./cmd/... \
+				$(COVERAGE_OPTS) --tags=unit
+	CGO_ENABLED=$(CGO) \
+		go test ./tests/...
 
 ################################################################################
 # Target: lint                                                                 #
