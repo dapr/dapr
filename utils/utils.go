@@ -100,6 +100,27 @@ func ParseEnvString(envStr string) []corev1.EnvVar {
 	return envVars
 }
 
+// ParseVolumeMountsString parses the annotation and returns volume mounts.
+// The format of the annotation is: "mountPath1:hostPath1,mountPath2:hostPath2"
+// The readOnly parameter applies to all mounts.
+func ParseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.VolumeMount {
+	volumeMounts := make([]corev1.VolumeMount, 0)
+
+	vs := strings.Split(volumeMountStr, ",")
+	for _, v := range vs {
+		vmount := strings.Split(strings.TrimSpace(v), ":")
+		if len(vmount) != 2 {
+			continue
+		}
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      vmount[0],
+			MountPath: vmount[1],
+			ReadOnly:  readOnly,
+		})
+	}
+	return volumeMounts
+}
+
 // StringSliceContains return true if an array containe the "str" string.
 func StringSliceContains(needle string, haystack []string) bool {
 	for _, item := range haystack {

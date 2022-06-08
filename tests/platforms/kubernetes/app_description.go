@@ -15,6 +15,8 @@ package kubernetes
 
 import (
 	"encoding/json"
+
+	apiv1 "k8s.io/api/core/v1"
 )
 
 // AppDescription holds the deployment information of test app.
@@ -43,6 +45,9 @@ type AppDescription struct {
 	Namespace          *string           `json:",omitempty"`
 	IsJob              bool              `json:",omitempty"`
 	SecretStoreDisable bool              `json:",omitempty"`
+	DaprVolumeMounts   string            `json:",omitempty"`
+	Volumes            []apiv1.Volume    `json:",omitempty"`
+	InitContainers     []apiv1.Container `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {
