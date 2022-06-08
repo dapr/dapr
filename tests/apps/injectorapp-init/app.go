@@ -21,7 +21,7 @@ import (
 
 func main() {
 	data := []byte(`{"secret-key": "secret-value"}`)
-	err := os.WriteFile("/tmp/storage/secrets.json", data, fs.ModeAppend)
+	err := os.WriteFile("/tmp/storage/secrets.json", data, fs.ModePerm)
 	if err != nil {
 		log.Printf("failed to write secret file: %v", err)
 	} else {
