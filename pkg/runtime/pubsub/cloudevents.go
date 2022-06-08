@@ -41,9 +41,17 @@ func NewCloudEvent(req *CloudEvent) (map[string]interface{}, error) {
 }
 
 func NewBinaryCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]interface{}, error) {
-	if contrib_contenttype.IsCloudEventContentType(req.DataContentType) {
-		return contrib_pubsub.FromCloudEventBinaryMode(req.Topic, req.Pubsub, req.TraceID, req.TraceState, req.DataContentType, metadata)
+	// return type needs to be `map[string]interface{}`
+	result_mdata := make(map[string]interface{})
+	for k, v := range metadata {
+		result_mdata[k] = v
 	}
-	return contrib_pubsub.NewCloudEventsHeaders(uuid.New().String(), req.ID, contrib_pubsub.DefaultCloudEventType,
-		"", req.Topic, req.Pubsub, req.DataContentType, req.TraceID, req.TraceState), nil
+
+	traceId := req.TraceID
+	if !contrib_contenttype.IsCloudEventContentType(req.DataContentType) {
+		traceId = uuid.New().String()
+	}
+
+	contrib_pubsub.UpdateCloudEventMetadata(result_mdata, req.Topic, req.Pubsub, traceId, req.TraceID, req.TraceState, req.DataContentType)
+	return result_mdata, nil
 }
