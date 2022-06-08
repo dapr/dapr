@@ -160,7 +160,7 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 
 	for _, file := range files {
 		if !utils.IsYaml(file.Name()) {
-			log.Warnf("A non-YAML file %s was detected, it will not be loaded", file.Name())
+			log.Warnf("A non-YAML resiliency file %s was detected, it will not be loaded", file.Name())
 			continue
 		}
 		filePath := filepath.Join(path, file.Name())

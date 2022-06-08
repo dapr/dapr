@@ -54,8 +54,8 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 
 	for _, file := range files {
 		if !file.IsDir() {
-			if !s.isYaml(file.Name()) {
-				log.Warnf("A non-YAML file %s was detected, it will not be loaded", file.Name())
+			if !utils.IsYaml(file.Name()) {
+				log.Warnf("A non-YAML component file %s was detected, it will not be loaded", file.Name())
 				continue
 			}
 			components := s.loadComponentsFromFile(file.Name())
@@ -84,11 +84,6 @@ func (s *StandaloneComponents) loadComponentsFromFile(filename string) []compone
 		log.Warnf("daprd load components error when parsing components yaml resource in %s : %s", path, err)
 	}
 	return components
-}
-
-// isYaml checks whether the file is yaml or not.
-func (s *StandaloneComponents) isYaml(fileName string) bool {
-	return utils.IsYaml(fileName)
 }
 
 // decodeYaml decodes the yaml document.

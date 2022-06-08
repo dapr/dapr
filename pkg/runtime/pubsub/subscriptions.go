@@ -232,7 +232,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 	for _, f := range files {
 		if !f.IsDir() {
 			if !utils.IsYaml(f.Name()) {
-				log.Warnf("A non-YAML file %s was detected, it will not be loaded", f.Name())
+				log.Warnf("A non-YAML pubsub file %s was detected, it will not be loaded", f.Name())
 				continue
 			}
 			filePath := filepath.Join(componentsPath, f.Name())
