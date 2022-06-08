@@ -82,10 +82,8 @@ func TestMain(m *testing.M) {
 			},
 			InitContainers: []apiv1.Container{
 				{
-					Name:            fmt.Sprintf("%s-init", appName),
-					Image:           "docker.io/busybox",
-					ImagePullPolicy: apiv1.PullIfNotPresent,
-					Command:         []string{"/bin/sh", "-c", "echo '{\"secret-key\": \"secret-value\"}' > /tmp/storage/secrets.json"},
+					Name:  fmt.Sprintf("%s-init", appName),
+					Image: fmt.Sprintf("%s/e2e-%s-init:%s", imageRegistry(), appName, imageTag()),
 					VolumeMounts: []apiv1.VolumeMount{
 						{
 							Name:      "storage-volume",
@@ -125,4 +123,28 @@ func TestDaprVolumeMount(t *testing.T) {
 
 	require.Equal(t, 200, statusCode)
 	require.Equal(t, "secret-value", appResp.Message)
+}
+
+func imageRegistry() string {
+	reg := os.Getenv("DAPR_TEST_REGISTRY")
+	if reg == "" {
+		return "docker.io/dapriotest"
+	}
+	return reg
+}
+
+func imageSecret() string {
+	secret := os.Getenv("DAPR_TEST_REGISTRY_SECRET")
+	if secret == "" {
+		return ""
+	}
+	return secret
+}
+
+func imageTag() string {
+	tag := os.Getenv("DAPR_TEST_TAG")
+	if tag == "" {
+		return "latest"
+	}
+	return tag
 }

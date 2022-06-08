@@ -40,9 +40,8 @@ spec:
         dapr.io/volume-mounts: "storage-volume:/tmp/secrets/"
     spec:
       initContainers:
-        - name: init-injectorapp
-          image: busybox:1.35.0
-          command: ['sh', '-c', 'echo ''{"secret-key": "secret-value"}'' > /tmp/storage/secrets.json']
+        - name: injectorapp-init
+          image: dapriotest/e2e-injectorapp-init
           volumeMounts:
             - mountPath: /tmp/storage
               name: storage-volume
