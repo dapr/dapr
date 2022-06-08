@@ -282,8 +282,6 @@ jobs:
       - name: Build and push e2e test apps
         if: env.TEST_PREFIX != ''
         run: |
-          go install github.com/google/go-containerregistry/cmd/crane@latest
-
           make build-push-e2e-app-all
         shell: bash
 

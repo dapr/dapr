@@ -108,15 +108,16 @@ endif
 
 define genTestAppImageBuild
 .PHONY: build-e2e-app-$(1)
-build-e2e-app-$(1): check-e2e-env
-ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
-	CGO_ENABLED=0 GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -o $(E2E_TESTAPP_DIR)/$(1)/app$(BINARY_EXT_LOCAL) $(E2E_TESTAPP_DIR)/$(1)/app.go
-	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
-else ifeq ($(DAPR_CACHE_REGISTRY),)
-	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
-else
-	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) $(1) $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG) "false" $(DOCKERFILE)
-endif
+build-e2e-app-$(1): check-e2e-env compile-build-tools
+	$(BUILD_TOOLS) e2e build \
+		--name "$(1)" \
+		--appdir "$(E2E_TESTAPP_DIR)" \
+		--dest-registry "$(DAPR_TEST_REGISTRY)" \
+		--dest-tag "$(DAPR_TEST_TAG)" \
+		--dockerfile "$(DOCKERFILE)" \
+		--target-os "$(TARGET_OS)" \
+		--target-arch "$(TARGET_ARCH)" \
+		--cache-registry "$(DAPR_CACHE_REGISTRY)"
 endef
 
 # Generate test app image build targets
@@ -124,8 +125,11 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageBuild,$(ITEM))))
 
 define genTestAppImagePush
 .PHONY: push-e2e-app-$(1)
-push-e2e-app-$(1): check-e2e-env
-	$(DOCKER) push $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+push-e2e-app-$(1): check-e2e-env compile-build-tools
+	$(BUILD_TOOLS) e2e push \
+		--name "$(1)" \
+		--dest-registry "$(DAPR_TEST_REGISTRY)" \
+		--dest-tag "$(DAPR_TEST_TAG)"
 endef
 
 # Generate test app image push targets
@@ -133,12 +137,16 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImagePush,$(ITEM))))
 
 define genTestAppImageBuildPush
 .PHONY: build-push-e2e-app-$(1)
-build-push-e2e-app-$(1): check-e2e-env check-e2e-cache
-ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
-	make build-e2e-app-$(1) push-e2e-app-$(1)
-else
-	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) $(1) $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG) "true" $(DOCKERFILE)
-endif
+build-push-e2e-app-$(1): check-e2e-env check-e2e-cache compile-build-tools
+	$(BUILD_TOOLS) e2e build-and-push \
+		--name "$(1)" \
+		--appdir "$(E2E_TESTAPP_DIR)" \
+		--dest-registry "$(DAPR_TEST_REGISTRY)" \
+		--dest-tag "$(DAPR_TEST_TAG)" \
+		--dockerfile "$(DOCKERFILE)" \
+		--target-os "$(TARGET_OS)" \
+		--target-arch "$(TARGET_ARCH)" \
+		--cache-registry "$(DAPR_CACHE_REGISTRY)"
 endef
 
 # Generate test app image build-push targets
@@ -155,8 +163,13 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageKindPush,$(ITEM))))
 
 define genPerfTestAppImageBuild
 .PHONY: build-perf-app-$(1)
-build-perf-app-$(1): check-e2e-env
-	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) perf/$(1) $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG) "false" $(DOCKERFILE)
+build-perf-app-$(1): check-e2e-env compile-build-tools
+	$(BUILD_TOOLS) perf build \
+		--name "$(1)" \
+		--appdir "$(E2E_TESTAPP_DIR)" \
+		--dest-registry "$(DAPR_TEST_REGISTRY)" \
+		--dest-tag "$(DAPR_TEST_TAG)" \
+		--cache-registry "$(DAPR_CACHE_REGISTRY)"
 endef
 
 # Generate perf app image build targets
@@ -164,14 +177,22 @@ $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfTestAppImageBuild,$(ITEM))
 
 define genPerfAppImagePush
 .PHONY: push-perf-app-$(1)
-push-perf-app-$(1): check-e2e-env
-	$(DOCKER) push $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
+push-perf-app-$(1): check-e2e-env compile-build-tools
+	$(BUILD_TOOLS) perf push \
+		--name "$(1)" \
+		--dest-registry "$(DAPR_TEST_REGISTRY)" \
+		--dest-tag "$(DAPR_TEST_TAG)"
 endef
 
 define genPerfAppImageBuildPush
 .PHONY: build-push-perf-app-$(1)
-build-push-perf-app-$(1): check-e2e-env check-e2e-cache
-	./tests/build_cache_images.sh $(DAPR_CACHE_REGISTRY) perf/$(1) $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG) "true" $(DOCKERFILE)
+build-push-perf-app-$(1): check-e2e-env check-e2e-cache compile-build-tools
+	$(BUILD_TOOLS) perf build-and-push \
+		--name "$(1)" \
+		--appdir "$(E2E_TESTAPP_DIR)" \
+		--dest-registry "$(DAPR_TEST_REGISTRY)" \
+		--dest-tag "$(DAPR_TEST_TAG)" \
+		--cache-registry "$(DAPR_CACHE_REGISTRY)"
 endef
 
 # Generate perf app image build-push targets

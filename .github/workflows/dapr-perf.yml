@@ -234,8 +234,6 @@ jobs:
       - name: Build and push perf test apps
         if: env.TEST_PREFIX != ''
         run: |
-          go install github.com/google/go-containerregistry/cmd/crane@latest
-
           make build-push-perf-app-all
         shell: bash
 
