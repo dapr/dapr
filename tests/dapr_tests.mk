@@ -43,6 +43,8 @@ middleware \
 job-publisher \
 resiliencyapp \
 resiliencyapp_grpc \
+injectorapp \
+injectorapp-init \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc
@@ -284,11 +286,11 @@ setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
-	kubectl describe all -n $(DAPR_TEST_NAMESPACE) > '$(DAPR_CONTAINER_LOG_PATH)/control_plane_k8s_resources.txt'
+	$(KUBECTL) describe all -n $(DAPR_TEST_NAMESPACE) > '$(DAPR_CONTAINER_LOG_PATH)/control_plane_k8s_resources.txt'
 
 save-dapr-control-plane-k8s-logs:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
-	kubectl logs -l 'app.kubernetes.io/name=dapr' -n $(DAPR_TEST_NAMESPACE) > '$(DAPR_CONTAINER_LOG_PATH)/control_plane_containers.log'
+	$(KUBECTL) logs -l 'app.kubernetes.io/name=dapr' --tail=-1 -n $(DAPR_TEST_NAMESPACE) > '$(DAPR_CONTAINER_LOG_PATH)/control_plane_containers.log' --all-containers
 
 # Apply default config yaml to turn mTLS off for testing (mTLS is enabled by default)
 setup-disable-mtls:
@@ -342,7 +344,7 @@ setup-test-components: setup-app-configurations
 # Setup kind
 setup-kind:
 	kind create cluster --config ./tests/config/kind.yaml --name kind
-	kubectl cluster-info --context kind-kind
+	$(KUBECTL) cluster-info --context kind-kind
 	# Setup registry
 	docker run -d --restart=always -p 5000:5000 --name kind-registry registry:2
 	# Connect the registry to the KinD network.
