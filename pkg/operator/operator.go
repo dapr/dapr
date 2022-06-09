@@ -15,6 +15,7 @@ package operator
 
 import (
 	"context"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
@@ -48,7 +49,6 @@ type Operator interface {
 }
 
 type operator struct {
-	ctx         context.Context
 	daprHandler *handlers.DaprHandler
 	apiServer   api.Server
 
@@ -132,14 +132,11 @@ func (o *operator) syncComponent(obj interface{}) {
 
 func (o *operator) Run(ctx context.Context) {
 	defer runtimeutil.HandleCrash()
-	o.ctx = ctx
-	log.Infof("Dapr Operator is started")
+	log.Infof("Dapr Operator is starting")
 
 	go func() {
 		if err := o.mgr.Start(ctx); err != nil {
-			if err != nil {
-				log.Fatalf("failed to start controller manager, err: %s", err)
-			}
+			log.Fatalf("failed to start controller manager, err: %s", err)
 		}
 	}()
 	if !o.mgr.GetCache().WaitForCacheSync(ctx) {
@@ -150,7 +147,7 @@ func (o *operator) Run(ctx context.Context) {
 	// load certs from disk
 	var certChain *credentials.CertChain
 	log.Info("getting tls certificates")
-	watchCtx, watchCancel := context.WithCancel(ctx)
+	watchCtx, watchCancel := context.WithTimeout(ctx, time.Minute)
 	fsevent := make(chan struct{})
 	go func() {
 		log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
@@ -159,6 +156,9 @@ func (o *operator) Run(ctx context.Context) {
 			log.Fatal("error starting watch on filesystem: %s", err)
 		}
 		close(fsevent)
+		if watchCtx.Err() == context.DeadlineExceeded {
+			log.Fatal("timeout while waiting to load tls certificates")
+		}
 	}()
 	for {
 		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
@@ -173,10 +173,9 @@ func (o *operator) Run(ctx context.Context) {
 	}
 	watchCancel()
 
+	healthzServer := health.NewServer(log)
 	go func() {
-		healthzServer := health.NewServer(log)
-		healthzServer.Ready()
-
+		// blocking call
 		err := healthzServer.Run(ctx, healthzPort)
 		if err != nil {
 			log.Fatalf("failed to start healthz server: %s", err)
@@ -184,7 +183,10 @@ func (o *operator) Run(ctx context.Context) {
 	}()
 
 	// blocking call
-	o.apiServer.Run(certChain)
+	o.apiServer.Run(ctx, certChain, func() {
+		healthzServer.Ready()
+		log.Infof("Dapr Operator started")
+	})
 
 	log.Infof("Dapr Operator is shutting down")
 }
