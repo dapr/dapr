@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetInectorConfig(t *testing.T) {
+func TestGetInjectorConfig(t *testing.T) {
 	t.Run("with kube cluster domain env", func(t *testing.T) {
 		os.Setenv("TLS_CERT_FILE", "test-cert-file")
 		os.Setenv("TLS_KEY_FILE", "test-key-file")
