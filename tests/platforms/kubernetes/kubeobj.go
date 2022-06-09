@@ -94,6 +94,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.Config != "" {
 		annotationObject["dapr.io/config"] = appDesc.Config
 	}
+	if appDesc.DaprVolumeMounts != "" {
+		annotationObject["dapr.io/volume-mounts"] = appDesc.DaprVolumeMounts
+	}
 
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
@@ -121,6 +124,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 			Annotations: buildDaprAnnotations(appDesc),
 		},
 		Spec: apiv1.PodSpec{
+			InitContainers: appDesc.InitContainers,
 			Containers: []apiv1.Container{
 				{
 					Name:            appDesc.AppName,
@@ -163,6 +167,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 					Name: appDesc.ImageSecret,
 				},
 			},
+			Volumes: appDesc.Volumes,
 		},
 	}
 }
