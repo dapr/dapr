@@ -16,7 +16,6 @@ package main
 import (
 	"flag"
 	"path/filepath"
-	"time"
 
 	"k8s.io/client-go/util/homedir"
 
@@ -49,10 +48,8 @@ func main() {
 	conf := utils.GetConfig()
 	daprClient, _ := scheme.NewForConfig(conf)
 
+	healthzServer := health.NewServer(log)
 	go func() {
-		healthzServer := health.NewServer(log)
-		healthzServer.Ready()
-
 		healthzErr := healthzServer.Run(ctx, healthzPort)
 		if healthzErr != nil {
 			log.Fatalf("failed to start healthz server: %s", healthzErr)
@@ -64,11 +61,14 @@ func main() {
 		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}
 
-	injector.NewInjector(uids, cfg, daprClient, kubeClient).Run(ctx)
+	inj := injector.NewInjector(uids, cfg, daprClient, kubeClient)
 
-	shutdownDuration := 5 * time.Second
-	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
-	<-time.After(shutdownDuration)
+	// Blocking call
+	inj.Run(ctx, func() {
+		healthzServer.Ready()
+	})
+
+	log.Infof("Dapr sidecar injector shut down")
 }
 
 func init() {
