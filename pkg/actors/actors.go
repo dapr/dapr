@@ -83,29 +83,28 @@ type Actors interface {
 }
 
 type actorsRuntime struct {
-	appChannel               channel.AppChannel
-	store                    state.Store
-	transactionalStore       state.TransactionalStore
-	placement                *internal.ActorPlacement
-	grpcConnectionFn         func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
-	config                   Config
-	actorsTable              *sync.Map
-	activeTimers             *sync.Map
-	activeTimersLock         *sync.RWMutex
-	activeReminders          *sync.Map
-	remindersLock            *sync.RWMutex
-	remindersMigrationLock   *sync.Mutex
-	activeRemindersLock      *sync.RWMutex
-	reminders                map[string][]actorReminderReference
-	evaluationLock           *sync.RWMutex
-	evaluationBusy           bool
-	evaluationChan           chan bool
-	appHealthy               *atomic.Bool
-	certChain                *dapr_credentials.CertChain
-	tracingSpec              configuration.TracingSpec
-	actorTypeMetadataEnabled bool
-	resiliency               resiliency.Provider
-	storeName                string
+	appChannel             channel.AppChannel
+	store                  state.Store
+	transactionalStore     state.TransactionalStore
+	placement              *internal.ActorPlacement
+	grpcConnectionFn       func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
+	config                 Config
+	actorsTable            *sync.Map
+	activeTimers           *sync.Map
+	activeTimersLock       *sync.RWMutex
+	activeReminders        *sync.Map
+	remindersLock          *sync.RWMutex
+	remindersMigrationLock *sync.Mutex
+	activeRemindersLock    *sync.RWMutex
+	reminders              map[string][]actorReminderReference
+	evaluationLock         *sync.RWMutex
+	evaluationBusy         bool
+	evaluationChan         chan bool
+	appHealthy             *atomic.Bool
+	certChain              *dapr_credentials.CertChain
+	tracingSpec            configuration.TracingSpec
+	resiliency             resiliency.Provider
+	storeName              string
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -160,28 +159,27 @@ func NewActors(
 	}
 
 	return &actorsRuntime{
-		appChannel:               appChannel,
-		config:                   config,
-		store:                    stateStore,
-		transactionalStore:       transactionalStore,
-		grpcConnectionFn:         grpcConnectionFn,
-		actorsTable:              &sync.Map{},
-		activeTimers:             &sync.Map{},
-		activeTimersLock:         &sync.RWMutex{},
-		activeReminders:          &sync.Map{},
-		remindersLock:            &sync.RWMutex{},
-		remindersMigrationLock:   &sync.Mutex{},
-		activeRemindersLock:      &sync.RWMutex{},
-		reminders:                map[string][]actorReminderReference{},
-		evaluationLock:           &sync.RWMutex{},
-		evaluationBusy:           false,
-		evaluationChan:           make(chan bool),
-		appHealthy:               atomic.NewBool(true),
-		certChain:                certChain,
-		tracingSpec:              tracingSpec,
-		actorTypeMetadataEnabled: configuration.IsFeatureEnabled(features, configuration.ActorTypeMetadata),
-		resiliency:               resiliency,
-		storeName:                stateStoreName,
+		appChannel:             appChannel,
+		config:                 config,
+		store:                  stateStore,
+		transactionalStore:     transactionalStore,
+		grpcConnectionFn:       grpcConnectionFn,
+		actorsTable:            &sync.Map{},
+		activeTimers:           &sync.Map{},
+		activeTimersLock:       &sync.RWMutex{},
+		activeReminders:        &sync.Map{},
+		remindersLock:          &sync.RWMutex{},
+		remindersMigrationLock: &sync.Mutex{},
+		activeRemindersLock:    &sync.RWMutex{},
+		reminders:              map[string][]actorReminderReference{},
+		evaluationLock:         &sync.RWMutex{},
+		evaluationBusy:         false,
+		evaluationChan:         make(chan bool),
+		appHealthy:             atomic.NewBool(true),
+		certChain:              certChain,
+		tracingSpec:            tracingSpec,
+		resiliency:             resiliency,
+		storeName:              stateStoreName,
 	}
 }
 
@@ -1256,10 +1254,6 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 }
 
 func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *ActorMetadata) error {
-	if !a.actorTypeMetadataEnabled {
-		return nil
-	}
-
 	metadataKey := constructCompositeKey("actors", actorType, "metadata")
 	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
 	return policy(func(ctx context.Context) error {
@@ -1277,17 +1271,6 @@ func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *A
 func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*ActorMetadata, error) {
 	if a.store == nil {
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
-	}
-
-	if !a.actorTypeMetadataEnabled {
-		return &ActorMetadata{
-			ID: metadataZeroID,
-			RemindersMetadata: ActorRemindersMetadata{
-				partitionsEtag: nil,
-				PartitionCount: 0,
-			},
-			Etag: nil,
-		}, nil
 	}
 
 	result := ActorMetadata{
@@ -1340,10 +1323,6 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 }
 
 func (a *actorsRuntime) migrateRemindersForActorType(actorType string, actorMetadata *ActorMetadata) error {
-	if !a.actorTypeMetadataEnabled {
-		return nil
-	}
-
 	reminderPartitionCount := a.config.GetRemindersPartitionCountForType(actorType)
 	if actorMetadata.RemindersMetadata.PartitionCount == reminderPartitionCount {
 		return nil
