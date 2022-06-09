@@ -22,7 +22,7 @@ import (
 
 const webhookCAName = "dapr-webhook-ca"
 
-func RunWebhooks(enableLeaderElection bool) {
+func RunWebhooks(ctx context.Context, enableLeaderElection bool) {
 	conf, err := ctrl.GetConfig()
 	if err != nil {
 		log.Fatalf("unable to get controller runtime configuration, err: %s", err)
@@ -62,8 +62,6 @@ func RunWebhooks(enableLeaderElection bool) {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		log.Fatalf("unable to set up ready check: %v", err)
 	}
-
-	ctx := ctrl.SetupSignalHandler()
 
 	go patchCRDs(ctx, conf, "subscriptions.dapr.io")
 
