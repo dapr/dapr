@@ -1,0 +1,151 @@
+//go:build e2e
+// +build e2e
+
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package injector_e2e
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"testing"
+
+	"github.com/dapr/dapr/tests/e2e/utils"
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
+	"github.com/dapr/dapr/tests/runner"
+	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
+)
+
+const (
+	appName         = "injectorapp"
+	numHealthChecks = 60 // Number of get calls before starting tests.
+)
+
+// requestResponse represents a request or response for the APIs in the app.
+type requestResponse struct {
+	Message   string `json:"message,omitempty"`
+	StartTime int    `json:"start_time,omitempty"`
+	EndTime   int    `json:"end_time,omitempty"`
+}
+
+var tr *runner.TestRunner
+
+func TestMain(m *testing.M) {
+	utils.SetupLogs(appName)
+	utils.InitHTTPClient(true)
+
+	// These apps will be deployed for injector test before starting actual test
+	// and will be cleaned up after all tests are finished automatically
+	comps := []kube.ComponentDescription{
+		{
+			Name:     "local-secret-store",
+			TypeName: "secretstores.local.file",
+			MetaData: map[string]string{
+				"secretsFile": `"/tmp/secrets/secrets.json"`,
+			},
+		},
+	}
+
+	testApps := []kube.AppDescription{
+		{
+			AppName:           appName,
+			DaprEnabled:       true,
+			ImageName:         fmt.Sprintf("e2e-%s", appName),
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			DaprMemoryLimit:   "200Mi",
+			DaprMemoryRequest: "100Mi",
+			AppMemoryLimit:    "200Mi",
+			AppMemoryRequest:  "100Mi",
+			DaprVolumeMounts:  "storage-volume:/tmp/secrets/",
+			Volumes: []apiv1.Volume{
+				{
+					Name: "storage-volume",
+					VolumeSource: apiv1.VolumeSource{
+						EmptyDir: &apiv1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			InitContainers: []apiv1.Container{
+				{
+					Name:            fmt.Sprintf("%s-init", appName),
+					Image:           fmt.Sprintf("%s/e2e-%s-init:%s", imageRegistry(), appName, imageTag()),
+					ImagePullPolicy: apiv1.PullAlways,
+					VolumeMounts: []apiv1.VolumeMount{
+						{
+							Name:      "storage-volume",
+							MountPath: "/tmp/storage",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	tr = runner.NewTestRunner(appName, testApps, comps, nil)
+	os.Exit(tr.Start(m))
+}
+
+func TestDaprVolumeMount(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// setup
+	url := fmt.Sprintf("%s/tests/testVolumeMount", externalURL)
+
+	// act
+	resp, statusCode, err := utils.HTTPPostWithStatus(url, []byte{})
+
+	// assert
+	require.NoError(t, err)
+
+	var appResp requestResponse
+	err = json.Unmarshal(resp, &appResp)
+	require.NoError(t, err)
+
+	require.Equal(t, 200, statusCode)
+	require.Equal(t, "secret-value", appResp.Message)
+}
+
+func imageRegistry() string {
+	reg := os.Getenv("DAPR_TEST_REGISTRY")
+	if reg == "" {
+		return "docker.io/dapriotest"
+	}
+	return reg
+}
+
+func imageSecret() string {
+	secret := os.Getenv("DAPR_TEST_REGISTRY_SECRET")
+	if secret == "" {
+		return ""
+	}
+	return secret
+}
+
+func imageTag() string {
+	tag := os.Getenv("DAPR_TEST_TAG")
+	if tag == "" {
+		return "latest"
+	}
+	return tag
+}
