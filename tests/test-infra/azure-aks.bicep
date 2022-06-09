@@ -96,8 +96,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           maxPods: 110
           availabilityZones: [
             '1'
-            '2'
-            '3'
           ]
           enableNodePublicIP: false
           vnetSubnetID: enableWindows ? aksVNet::defaultSubnet.id : null
@@ -117,8 +115,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           maxPods: 110
           availabilityZones: [
             '1'
-            '2'
-            '3'
           ]
           nodeLabels: {}
           nodeTaints: []
