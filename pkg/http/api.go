@@ -84,6 +84,9 @@ type api struct {
 	configurationSubscribe     map[string]chan struct{}
 	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
+	pubSubs                    map[string]pubsub.PubSub
+	inputBindings              map[string]bindings.InputBinding
+	outputBindings             map[string]bindings.OutputBinding
 	secretsConfiguration       map[string]config.SecretsScope
 	actor                      actors.Actors
 	pubsubAdapter              runtime_pubsub.Adapter
@@ -146,6 +149,9 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	lockStores map[string]lock.Store,
 	secretStores map[string]secretstores.SecretStore,
+	pubSubs map[string]pubsub.PubSub,
+	inputBindings map[string]bindings.InputBinding,
+	outputBindings map[string]bindings.OutputBinding,
 	secretsConfiguration map[string]config.SecretsScope,
 	configurationStores map[string]configuration.Store,
 	pubsubAdapter runtime_pubsub.Adapter,
@@ -170,6 +176,9 @@ func NewAPI(
 		lockStores:                 lockStores,
 		transactionalStateStores:   transactionalStateStores,
 		secretStores:               secretStores,
+		pubSubs:                    pubSubs,
+		inputBindings:              inputBindings,
+		outputBindings:             outputBindings,
 		secretsConfiguration:       secretsConfiguration,
 		configurationStores:        configurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
@@ -419,9 +428,15 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz/{components}/{componentName}",
+			Route:   "healthz/{componentKind}/{componentName}",
 			Version: apiVersionV1,
 			Handler: a.onGetComponentHealthz,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "healthz/components",
+			Version: apiVersionV1,
+			Handler: a.onGetAllComponentsHealthz,
 		},
 	}
 }
@@ -2046,22 +2061,89 @@ func (a *api) getComponent(reqCtx *fasthttp.RequestCtx) (component interface{}, 
 	case "statestore":
 		if statestore := a.stateStores[componentName]; statestore != nil {
 			component = statestore
+			// state.Ping(statestore)
 		}
 	case "pubsub":
 		if pubsub := a.pubsubAdapter.GetPubSub(componentName); pubsub != nil {
 			component = pubsub
 		}
-
 	case "secretstore":
 		if secretstore := a.secretStores[componentName]; secretstore != nil {
 			component = secretstore
+		}
+	case "inputbinding":
+		if inputbinding := a.inputBindings[componentName]; inputbinding != nil {
+			component = inputbinding
+		}
+	case "outputbinding":
+		if outputbinding := a.outputBindings[componentName]; outputbinding != nil {
+			component = outputbinding
 		}
 	}
 
 	return
 }
 
+func (a *api) onGetAllComponentsHealthz(reqCtx *fasthttp.RequestCtx) {
+	numberOfComponents := len(a.stateStores) + len(a.secretStores) + len(a.pubSubs) + len(a.inputBindings) + len(a.outputBindings)
+	hresp := ComponentHealthResponse{
+		Results: make([]ComponentHealth, numberOfComponents),
+		// Error:   "",
+	}
+	i := 0
+	for name, _ := range a.stateStores {
+		a.allComponentsHealthResponePopulator("statestore", hresp, i, reqCtx, name)
+		i++
+	}
+	for name, _ := range a.secretStores {
+		a.allComponentsHealthResponePopulator("secretstore", hresp, i, reqCtx, name)
+		i++
+	}
+	for name, _ := range a.pubSubs {
+		a.allComponentsHealthResponePopulator("pubsub", hresp, i, reqCtx, name)
+		i++
+	}
+	for name, _ := range a.inputBindings {
+		a.allComponentsHealthResponePopulator("inputbinding", hresp, i, reqCtx, name)
+		i++
+	}
+	for name, _ := range a.outputBindings {
+		a.allComponentsHealthResponePopulator("outputbinding", hresp, i, reqCtx, name)
+		i++
+	}
+
+	b, _ := json.Marshal(hresp)
+	respond(reqCtx, withJSON(fasthttp.StatusOK, b))
+}
+
+func (a *api) allComponentsHealthResponePopulator(componentType string, hresp ComponentHealthResponse, ind int, reqCtx *fasthttp.RequestCtx, name string) {
+	reqCtx.SetUserValue(componentKindParam, componentType)
+	reqCtx.SetUserValue(componentNameParam, name)
+	status, err := a.onGetComponentHealthzUtil(reqCtx)
+	if err != nil {
+		hresp.Results[ind].Component = name
+		hresp.Results[ind].Status = HealthStatus(NOT_OK)
+		hresp.Results[ind].Error = err.Error()
+		// {
+		// 	Component: name,
+		// 	Status:    NOT_OK,
+		// 	Error:     err.Error(),
+		// }
+	} else if status == "OK" {
+		hresp.Results[ind].Component = name
+		hresp.Results[ind].Status = HealthStatus(OK)
+		// ComponentHealth{
+		// 	Component: name,
+		// 	Status:    OK,
+		// }
+	}
+}
+
 func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
+	a.onGetComponentHealthzUtil(reqCtx)
+}
+
+func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx) (Status string, err error) {
 	component, componentKind, componentName := a.getComponent(reqCtx)
 
 	if component == nil {
@@ -2070,21 +2152,23 @@ func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
 			fmt.Sprintf(messages.ErrComponentNotFound, componentKind, componentName))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
-
-		return
+		return "", fmt.Errorf("ERR_%s_NOT_FOUND", componentKind)
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
 		err := pinger.Ping()
 
 		if err != nil {
+			log.Info("error while ping in http api is: " + componentName + err.Error())
 			msg := NewErrorResponse(
 				fmt.Sprintf("ERR_%s_HEALTH_NOT_READY", strings.ToUpper(componentKind)),
 				fmt.Sprintf(messages.ErrComponentHealthNotReady, componentName))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			log.Debug(msg)
+			return "", fmt.Errorf("ERR_%s_HEALTH_NOT_READY", componentKind)
 		} else {
-			respond(reqCtx, withEmpty())
+			respond(reqCtx, withError(fasthttp.StatusNoContent, NewErrorResponse("IT IS OK", "IT IS OK MSG")))
+			return "OK", nil
 		}
 	} else {
 		msg := NewErrorResponse(
@@ -2093,6 +2177,7 @@ func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
 
 		respond(reqCtx, withError(fasthttp.StatusNotImplemented, msg))
 		log.Debug(msg)
+		return "", fmt.Errorf("ERR_%s_NOT_IMPLEMENTED", componentKind)
 	}
 }
 
