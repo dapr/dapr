@@ -184,6 +184,8 @@ func (i *injector) Run(ctx context.Context, onReady func()) {
 	}
 
 	ln.Close()
+
+	log.Info("Sidecar injector stopped")
 }
 
 func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {

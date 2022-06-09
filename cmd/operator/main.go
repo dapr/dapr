@@ -15,7 +15,6 @@ package main
 
 import (
 	"flag"
-	"time"
 
 	"k8s.io/klog"
 
@@ -51,10 +50,6 @@ func main() {
 	go operator.RunWebhooks(ctx, !disableLeaderElection)
 
 	<-ctx.Done() // Wait for SIGTERM and SIGINT.
-
-	shutdownDuration := 5 * time.Second
-	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
-	<-time.After(shutdownDuration)
 }
 
 func init() {
