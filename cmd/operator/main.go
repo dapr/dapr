@@ -15,7 +15,6 @@ package main
 
 import (
 	"flag"
-	"time"
 
 	"k8s.io/klog"
 
@@ -46,15 +45,11 @@ func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
+
 	go operator.NewOperator(config, certChainPath, !disableLeaderElection).Run(ctx)
-	// The webhooks use their own controller context and stops on SIGTERM and SIGINT.
-	go operator.RunWebhooks(!disableLeaderElection)
+	go operator.RunWebhooks(ctx, !disableLeaderElection)
 
 	<-ctx.Done() // Wait for SIGTERM and SIGINT.
-
-	shutdownDuration := 5 * time.Second
-	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
-	<-time.After(shutdownDuration)
 }
 
 func init() {

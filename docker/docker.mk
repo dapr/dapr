@@ -25,16 +25,16 @@ DAPR_SENTRY_IMAGE_NAME=sentry
 BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)
 
 ifeq ($(TARGET_OS), windows)
-  DOCKERFILE:=Dockerfile-windows
+  DOCKERFILE?=Dockerfile-windows
   BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(origin DEBUG), undefined)
-  DOCKERFILE:=Dockerfile
+  DOCKERFILE?=Dockerfile
   BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(DEBUG),0)
-  DOCKERFILE:=Dockerfile
+  DOCKERFILE?=Dockerfile
   BIN_PATH := $(BIN_PATH)/release
 else
-  DOCKERFILE:=Dockerfile-debug
+  DOCKERFILE?=Dockerfile-debug
   BIN_PATH := $(BIN_PATH)/debug
 endif
 
@@ -47,7 +47,7 @@ else
 endif
 
 # Supported docker image architecture
-DOCKERMUTI_ARCH=linux-amd64 linux-arm linux-arm64 windows-amd64
+DOCKER_MULTI_ARCH?=linux-amd64 linux-arm linux-arm64 windows-amd64
 
 ################################################################################
 # Target: docker-build, docker-push                                            #
@@ -131,15 +131,15 @@ docker-push-kind: docker-build
 
 # publish muti-arch docker image to the registry
 docker-manifest-create: check-docker-env
-	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
 ifeq ($(LATEST_RELEASE),true)
-	$(DOCKER) manifest create $(DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
 endif
 
 docker-publish: docker-manifest-create
