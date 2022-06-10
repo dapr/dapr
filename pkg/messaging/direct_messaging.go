@@ -162,7 +162,7 @@ func (d *directMessaging) invokeWithRetry(
 		if !d.resiliency.PolicyDefined(app.id, resiliency.Endpoint) {
 			retriesExhaustedPath := false // Used to track final error state.
 			nullifyResponsePath := false  // Used to track final response state.
-			policy := d.resiliency.EndpointPolicy(ctx, app.id, app.address, true)
+			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
 			var resp *invokev1.InvokeMethodResponse
 			err := policy(func(ctx context.Context) (rErr error) {
 				retriesExhaustedPath = false

@@ -46,13 +46,13 @@ func TestNoOp(t *testing.T) {
 		{
 			name: "endpoint",
 			fn: func(ctx context.Context) Runner {
-				return policy.EndpointPolicy(ctx, "test", "test", false)
+				return policy.EndpointPolicy(ctx, "test", "test")
 			},
 		},
 		{
 			name: "endpoint error",
 			fn: func(ctx context.Context) Runner {
-				return policy.EndpointPolicy(ctx, "test", "test", false)
+				return policy.EndpointPolicy(ctx, "test", "test")
 			},
 			err: errors.New("endpoint error"),
 		},
@@ -94,6 +94,19 @@ func TestNoOp(t *testing.T) {
 				return policy.ComponentInboundPolicy(ctx, "test")
 			},
 			err: errors.New("component inbound error"),
+		},
+		{
+			name: "built-in",
+			fn: func(ctx context.Context) Runner {
+				return policy.BuiltInPolicy(ctx, BuiltInServiceRetries)
+			},
+		},
+		{
+			name: "built-in error",
+			fn: func(ctx context.Context) Runner {
+				return policy.BuiltInPolicy(ctx, BuiltInServiceRetries)
+			},
+			err: errors.New("built-in error"),
 		},
 	}
 
