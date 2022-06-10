@@ -121,7 +121,7 @@ func loadCertChains(certChainPath string) *credentials.CertChain {
 	tlsCreds := credentials.NewTLSCredentials(certChainPath)
 
 	log.Info("mTLS enabled, getting tls certificates")
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	fsevent := make(chan struct{})
 	go func() {
@@ -131,6 +131,9 @@ func loadCertChains(certChainPath string) *credentials.CertChain {
 			log.Fatal("error starting watch on filesystem: %s", err)
 		}
 		close(fsevent)
+		if ctx.Err() == context.DeadlineExceeded {
+			log.Fatal("timeout while waiting to load tls certificates")
+		}
 	}()
 	for {
 		chain, err := credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
