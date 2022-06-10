@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -847,6 +848,17 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	if resources != nil {
 		c.Resources = *resources
 	}
+
+	if runtime.GOOS == "windows" {
+		c.Lifecycle = &corev1.Lifecycle{
+			PostStart: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/setup-certificates.cmd"},
+				},
+			},
+		}
+	}
+
 	return c, nil
 }
 
