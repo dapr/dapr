@@ -202,7 +202,7 @@ dapr.yaml: check-docker-env
 	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
-		--include-crds=true  --set global.ha.enabled=$(HA_MODE) --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
+		--include-crds=true  --set global.ha.enabled=false --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
 # Target: upload-helmchart
@@ -223,7 +223,7 @@ docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
 		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) --wait --timeout 5m0s \
-		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
+		--set global.ha.enabled=false --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
 		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
