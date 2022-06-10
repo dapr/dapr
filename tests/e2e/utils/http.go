@@ -16,7 +16,6 @@ package utils
 import (
 	"bytes"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -121,12 +120,12 @@ func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 
 // HTTPGetRaw is a helper to make GET request call to url.
 func HTTPGetRaw(url string) (*http.Response, error) {
-	return httpClient.Get(sanitizeHTTPURL(url))
+	return httpClient.Get(SanitizeHTTPURL(url))
 }
 
 // HTTPPost is a helper to make POST request call to url.
 func HTTPPost(url string, data []byte) ([]byte, error) {
-	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
+	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +136,7 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 
 // HTTPPatch is a helper to make PATCH request call to url.
 func HTTPPatch(url string, data []byte) ([]byte, error) {
-	req, err := http.NewRequest("PATCH", sanitizeHTTPURL(url), bytes.NewBuffer(data))
+	req, err := http.NewRequest("PATCH", SanitizeHTTPURL(url), bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +152,7 @@ func HTTPPatch(url string, data []byte) ([]byte, error) {
 
 // HTTPPostWithStatus is a helper to make POST request call to url.
 func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
-	resp, err := httpClient.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
+	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		// From the Do method for the client.Post
 		// An error is returned if caused by client policy (such as
@@ -174,7 +173,7 @@ func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
 
 // HTTPDelete calls a given URL with the HTTP DELETE method.
 func HTTPDelete(url string) ([]byte, error) {
-	req, err := http.NewRequest("DELETE", sanitizeHTTPURL(url), nil)
+	req, err := http.NewRequest("DELETE", SanitizeHTTPURL(url), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -193,9 +192,10 @@ func HTTPDelete(url string) ([]byte, error) {
 	return body, nil
 }
 
-func sanitizeHTTPURL(url string) string {
+// SanitizeHTTPURL prepends the prefix "http://" to a URL if not present
+func SanitizeHTTPURL(url string) string {
 	if !strings.HasPrefix(url, "http") {
-		url = fmt.Sprintf("http://%s", url)
+		url = "http://" + url
 	}
 
 	return url
