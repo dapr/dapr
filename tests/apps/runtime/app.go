@@ -23,9 +23,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dapr/dapr/tests/apps/utils"
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (

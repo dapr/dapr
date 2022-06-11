@@ -24,10 +24,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dapr/dapr/tests/apps/utils"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"k8s.io/apimachinery/pkg/util/sets"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (

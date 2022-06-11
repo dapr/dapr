@@ -22,8 +22,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/dapr/dapr/tests/apps/utils"
 	"github.com/gorilla/mux"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const appPort = 3000
