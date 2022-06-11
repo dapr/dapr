@@ -67,6 +67,8 @@ var (
 	callTracking map[string][]CallRecord
 )
 
+var httpClient = newHTTPClient()
+
 // Endpoint handling.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler() called")
@@ -466,13 +468,12 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Invoking resiliency service with %s", protocol)
 
 	if protocol == "http" {
-		client := newHTTPClient()
 		url := "http://localhost:3500/v1.0/invoke/resiliencyapp/method/resiliencyInvocation"
 
 		req, _ := http.NewRequest("POST", url, r.Body)
 		defer r.Body.Close()
 
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -546,15 +547,13 @@ func TestInvokeActorMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Invoking resiliency actor with %s", protocol)
 
 	if protocol == "http" {
-		client := &http.Client{
-			Timeout: 1 * time.Minute,
-		}
+		httpClient.Timeout = time.Minute
 		url := "http://localhost:3500/v1.0/actors/resiliencyActor/1/method/resiliencyMethod"
 
 		req, _ := http.NewRequest("PUT", url, r.Body)
 		defer r.Body.Close()
 
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			log.Printf("An error occurred calling actors: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)

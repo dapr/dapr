@@ -14,21 +14,16 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
+	"github.com/dapr/dapr/tests/apps/utils"
 	"github.com/gorilla/mux"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 const appPort = 3000
@@ -38,6 +33,8 @@ const (
 	/* #nosec */
 	secretURL = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
 )
+
+var httpClient = utils.NewHTTPClient()
 
 // daprSecret represents a secret in Dapr.
 type daprSecret struct {
@@ -71,7 +68,7 @@ func get(key, store string) (*map[string]string, int, error) {
 	log.Printf("Fetching state from %s", url)
 	// url is created from user input, it is OK since this is a test app only and will not run in prod.
 	/* #nosec */
-	res, err := http.Get(url)
+	res, err := httpClient.Get(url)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
 	}
@@ -194,6 +191,9 @@ func epoch() int {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test/{command}", handler).Methods("POST")
 
@@ -202,37 +202,8 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func startServer() {
-	// Create a server capable of supporting HTTP2 Cleartext connections
-	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
-	h2s := &http2.Server{}
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: h2c.NewHandler(appRouter(), h2s),
-	}
-
-	// Stop the server when we get a termination signal
-	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		// Wait for cancelation signal
-		<-stopCh
-		log.Println("Shutdown signal received")
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	// Blocking call
-	err := server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
-	}
-	log.Println("Server shut down")
-}
-
 func main() {
 	log.Printf("Secret App - listening on http://localhost:%d", appPort)
 	log.Printf("Secret endpoint - to be saved at %s", secretURL)
-	startServer()
+	utils.StartServer(appPort, appRouter, true)
 }
