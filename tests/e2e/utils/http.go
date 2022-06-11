@@ -35,7 +35,7 @@ const (
 var httpClient *http.Client
 
 func InitHTTPClient(enableHTTP2 bool) {
-	if enableHTTP2 {
+	if enableHTTP2 && false {
 		httpClient = &http.Client{
 			Timeout: DefaultProbeTimeout,
 			// Configure for HTT/2 Cleartext (without TLS) and with prior knowledge
