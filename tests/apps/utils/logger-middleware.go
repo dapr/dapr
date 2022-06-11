@@ -15,6 +15,9 @@ func LoggerMiddleware(next http.Handler) http.Handler {
 		// Check if we have a request ID or generate one
 		reqID := r.URL.Query().Get("reqid")
 		if reqID == "" {
+			reqID = r.Header.Get("x-daprtest-reqid")
+		}
+		if reqID == "" {
 			reqID = "m-" + uuid.New().String()
 		}
 
