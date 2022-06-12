@@ -7,5 +7,4 @@ USER ContainerAdministrator
 
 ARG PKG_FILES
 WORKDIR /
-COPY /setup-certificates.cmd /
 COPY /$PKG_FILES.exe /

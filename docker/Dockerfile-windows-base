@@ -11,4 +11,6 @@ FROM mcr.microsoft.com/windows/nanoserver:$WINDOWS_VERSION
 COPY --from=servercore /windows/system32/netapi32.dll /windows/system32/netapi32.dll
 
 # certoc is required to add new certificates to the root store.
-COPY --from=servercore /windows/system32/certoc.exe /windows/system32/certoc.exe 
+COPY --from=servercore /windows/system32/certoc.exe /windows/system32/certoc.exe
+
+COPY custom-scripts/setup-certificates.cmd /setup-certificates.cmd
