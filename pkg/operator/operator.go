@@ -85,8 +85,15 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 		LeaderElectionID:   "operator.dapr.io",
 	})
 	if err != nil {
-		log.Fatal("unable to start manager")
+		log.Fatalf("unable to start manager, err: %s", err)
 	}
+
+	wd := &DaprWatchdog{}
+	err = mgr.Add(wd)
+	if err != nil {
+		log.Fatalf("unable to add watchdog controller, err: %s", err)
+	}
+
 	daprHandler := handlers.NewDaprHandler(mgr)
 	if err := daprHandler.Init(); err != nil {
 		log.Fatalf("unable to initialize handler, err: %s", err)
@@ -110,6 +117,7 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 			},
 		})
 	}
+
 	return o
 }
 
