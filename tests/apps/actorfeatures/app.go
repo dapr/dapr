@@ -30,6 +30,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -634,12 +635,31 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 
 // epoch returns the current unix epoch timestamp
 func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
+	return int(time.Now().UnixMilli())
 }
 
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check if we have a request ID or generate one
+			reqID := r.URL.Query().Get("reqid")
+			if reqID == "" {
+				reqID = "s-" + uuid.New().String()
+			}
+
+			log.Printf("Received request %s: %s %s", r.Method, r.URL.Path, reqID)
+
+			// Process the request
+			start := time.Now()
+			next.ServeHTTP(w, r)
+			dur := time.Now().Sub(start)
+			log.Printf("Request %s: completed in %s", reqID, dur)
+		})
+	})
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
