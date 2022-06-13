@@ -90,15 +90,15 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	var policy resiliency.Runner
 	if len(v) == 0 {
 		noOp := resiliency.NoOp{}
-		policy = noOp.EndpointPolicy(serverStream.Context(), "", "", false)
+		policy = noOp.EndpointPolicy(serverStream.Context(), "", "")
 	} else {
 		isLocal, err := s.isLocalFn(v[0])
 
 		if err == nil && isLocal {
-			policy = s.resiliency.EndpointPolicy(serverStream.Context(), v[0], fmt.Sprintf("%s:%s", v[0], fullMethodName), false)
+			policy = s.resiliency.EndpointPolicy(serverStream.Context(), v[0], fmt.Sprintf("%s:%s", v[0], fullMethodName))
 		} else {
 			noOp := resiliency.NoOp{}
-			policy = noOp.EndpointPolicy(serverStream.Context(), "", "", false)
+			policy = noOp.EndpointPolicy(serverStream.Context(), "", "")
 		}
 	}
 
