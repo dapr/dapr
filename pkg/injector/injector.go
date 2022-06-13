@@ -122,35 +122,34 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
-	allowedUids := []string{}
 	allowedList := strings.Split(cfg.AllowedControllerServiceAccounts, ",")
 	allowedList = append(allowedList, allowedControllersServiceAccounts...)
-	for i, allowedControllersServiceAccount := range allowedList {
-		saUUID, err := getServiceAccount(ctx, kubeClient, allowedControllersServiceAccount)
-		// i == 0 => "replicaset-controller" is the only one mandatory
-		if err != nil {
-			if i == 0 {
-				return nil, err
-			}
-			log.Warnf("Unable to get SA %s UID (%s)", allowedControllersServiceAccount, err)
-			continue
-		}
-		allowedUids = append(allowedUids, saUUID)
-	}
 
-	return allowedUids, nil
+	return getServiceAccount(ctx, kubeClient, allowedList)
 }
 
-func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedControllersServiceAccount string) (string, error) {
+func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedControllersServiceAccounts []string) ([]string, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, getKubernetesServiceAccountTimeoutSeconds*time.Second)
 	defer cancel()
 
-	sa, err := kubeClient.CoreV1().ServiceAccounts(metav1.NamespaceSystem).Get(ctxWithTimeout, allowedControllersServiceAccount, metav1.GetOptions{})
+	serviceaccounts, err := kubeClient.CoreV1().ServiceAccounts("").List(ctxWithTimeout, metav1.ListOptions{})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return string(sa.ObjectMeta.UID), nil
+	allowedUids := []string{}
+
+	for _, allowedServiceAccount := range allowedControllersServiceAccounts {
+		for _, sa := range serviceaccounts.Items {
+			if sa.Name == allowedServiceAccount {
+				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
+				break
+			}
+		}
+		log.Warnf("Unable to get SA %s UID (%s)", allowedServiceAccount, err)
+	}
+
+	return allowedUids, nil
 }
 
 func (i *injector) Run(ctx context.Context, onReady func()) {
