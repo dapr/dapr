@@ -123,6 +123,7 @@ const (
 	tracestateHeader     = "tracestate"
 	daprAppID            = "dapr-app-id"
 	transactionParam     = "transactionName"
+	transactionState     = "transactionstate"
 )
 
 // NewAPI returns a new API.
@@ -1971,7 +1972,7 @@ func (a *api) onDistributeTransaction(reqCtx *fasthttp.RequestCtx) {
 		requestId = newUuid.String()
 	}
 
-	transactionState := a.stateStores["transactions"]
+	transactionState := a.stateStores[transactionState]
 	stateReqs := []state.SetRequest{}
 	for k, _ := range subTransactions {
 		stateReqs = append(stateReqs, state.SetRequest{
