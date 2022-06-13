@@ -43,10 +43,12 @@ const (
 	defaultEndpointCacheSize = 100
 	defaultActorCacheSize    = 5000
 
-	builtInServiceRetries            = "DaprBuiltInServiceRetries"
-	Endpoint              PolicyType = "endpoint"
-	Component             PolicyType = "component"
-	Actor                 PolicyType = "actor"
+	BuiltInServiceRetries       BuiltInPolicyName = "DaprBuiltInServiceRetries"
+	BuiltInActorRetries         BuiltInPolicyName = "DaprBuiltInActorRetries"
+	BuiltInActorReminderRetries BuiltInPolicyName = "DaprBuiltInActorReminderRetries"
+	Endpoint                    PolicyType        = "endpoint"
+	Component                   PolicyType        = "component"
+	Actor                       PolicyType        = "actor"
 )
 
 // ActorCircuitBreakerScope indicates the scope of the circuit breaker for an actor.
@@ -66,7 +68,7 @@ type (
 	// resiliency scenarios in the runtime.
 	Provider interface {
 		// EndpointPolicy returns the policy for a service endpoint.
-		EndpointPolicy(ctx context.Context, service string, endpoint string, useBuiltIn bool) Runner
+		EndpointPolicy(ctx context.Context, service string, endpoint string) Runner
 		// ActorPolicy returns the policy for an actor instance to be used before the lock is acquired.
 		ActorPreLockPolicy(ctx context.Context, actorType string, id string) Runner
 		// ActorPolicy returns the policy for an actor instance to be used after the lock is acquired.
@@ -75,6 +77,8 @@ type (
 		ComponentOutboundPolicy(ctx context.Context, name string) Runner
 		// ComponentInboundPolicy returns the inbound policy for a component.
 		ComponentInboundPolicy(ctx context.Context, name string) Runner
+		// BuiltInPolicy are used to replace existing retries in Dapr which may not bind specifically to one of the above categories.
+		BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner
 		// PolicyDefined returns a boolean stating if the given target has a policy.
 		PolicyDefined(target string, policyType PolicyType) bool
 	}
@@ -137,7 +141,8 @@ type (
 		Timeout string
 	}
 
-	PolicyType string
+	BuiltInPolicyName string
+	PolicyType        string
 )
 
 // Ensure `*Resiliency` satisfies the `Provider` interface.
@@ -255,11 +260,32 @@ func (r *Resiliency) DecodeConfiguration(c *resiliency_v1alpha.Resiliency) error
 // Adds policies that cover the existing retries in Dapr like service invocation.
 func (r *Resiliency) addBuiltInPolicies() {
 	// Cover retries for remote service invocation, but don't overwrite anything that is already present.
-	if _, ok := r.retries[builtInServiceRetries]; !ok {
-		r.retries[builtInServiceRetries] = &retry.Config{
+	if _, ok := r.retries[fmt.Sprintf("%s", BuiltInServiceRetries)]; !ok {
+		r.retries[fmt.Sprintf("%s", BuiltInServiceRetries)] = &retry.Config{
 			Policy:     retry.PolicyConstant,
 			MaxRetries: 3,
 			Duration:   time.Second,
+		}
+	}
+
+	// Cover retries for remote actor invocation, but don't overwrite anything that is already present.
+	if _, ok := r.retries[fmt.Sprintf("%s", BuiltInActorRetries)]; !ok {
+		r.retries[fmt.Sprintf("%s", BuiltInActorRetries)] = &retry.Config{
+			Policy:     retry.PolicyConstant,
+			MaxRetries: 3,
+			Duration:   time.Second,
+		}
+	}
+
+	// Cover retries for actor reminder operations, but don't overwrite anything that is already present.
+	if _, ok := r.retries[fmt.Sprintf("%s", BuiltInActorReminderRetries)]; !ok {
+		r.retries[fmt.Sprintf("%s", BuiltInActorReminderRetries)] = &retry.Config{
+			Policy:              retry.PolicyExponential,
+			InitialInterval:     500 * time.Millisecond,
+			RandomizationFactor: 0.5,
+			Multiplier:          1.5,
+			MaxInterval:         60 * time.Second,
+			MaxElapsedTime:      15 * time.Minute,
 		}
 	}
 }
@@ -381,7 +407,7 @@ func (r *Resiliency) decodeTargets(c *resiliency_v1alpha.Resiliency) (err error)
 }
 
 // EndpointPolicy returns the policy for a service endpoint.
-func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint string, useBuiltIn bool) Runner {
+func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint string) Runner {
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
@@ -419,8 +445,6 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 				}
 			}
 		}
-	} else if useBuiltIn {
-		rc = r.retries[builtInServiceRetries]
 	}
 
 	return Policy(ctx, r.log, operationName, t, rc, cb)
@@ -545,6 +569,15 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 	return Policy(ctx, r.log, operationName, t, rc, cb)
 }
 
+// BuiltInPolicy returns a policy that represents a specific built-in retry scenario.
+func (r *Resiliency) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner {
+	var t time.Duration
+	var cb *breaker.CircuitBreaker
+	stringName := fmt.Sprintf("%s", name)
+	return Policy(ctx, r.log, stringName, t, r.retries[stringName], cb)
+}
+
+// Returns true if a target has a defined policy.
 func (r *Resiliency) PolicyDefined(target string, policyType PolicyType) bool {
 	var exists bool
 	switch policyType {

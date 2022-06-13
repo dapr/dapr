@@ -233,7 +233,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 			filePath := filepath.Join(componentsPath, f.Name())
 			b, err := os.ReadFile(filePath)
 			if err != nil {
-				log.Errorf("failed to read file %s: %s", filePath, err)
+				log.Warnf("failed to read file %s: %s", filePath, err)
 				continue
 			}
 

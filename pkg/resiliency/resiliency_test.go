@@ -178,7 +178,7 @@ func TestPoliciesForTargets(t *testing.T) {
 		{
 			name: "endpoint",
 			create: func(r *Resiliency) Runner {
-				return r.EndpointPolicy(ctx, "appB", "127.0.0.1:3500", false)
+				return r.EndpointPolicy(ctx, "appB", "127.0.0.1:3500")
 			},
 		},
 		{
@@ -295,8 +295,8 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 
 func TestBuiltInPoliciesAreCreated(t *testing.T) {
 	r := FromConfigurations(log, &resiliency_v1alpha.Resiliency{})
-	assert.NotNil(t, r.retries[builtInServiceRetries])
-	retry := r.retries[builtInServiceRetries]
+	assert.NotNil(t, r.retries[fmt.Sprintf("%s", BuiltInServiceRetries)])
+	retry := r.retries[fmt.Sprintf("%s", BuiltInServiceRetries)]
 	assert.Equal(t, int64(3), retry.MaxRetries)
 	assert.Equal(t, time.Second, retry.Duration)
 }
@@ -325,4 +325,12 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 	assert.True(t, config.PolicyDefined("definedApp", Endpoint))
 	assert.True(t, config.PolicyDefined("definedActor", Actor))
 	assert.True(t, config.PolicyDefined("definedComponent", Component))
+}
+
+func TestResiliencyHasBuiltInPolicy(t *testing.T) {
+	r := FromConfigurations(log, &resiliency_v1alpha.Resiliency{})
+	assert.NotNil(t, r)
+	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInServiceRetries))
+	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInActorRetries))
+	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInActorReminderRetries))
 }

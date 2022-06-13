@@ -179,5 +179,5 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
 	require.Greater(t, tp90Latency, 0.0)
-	require.LessOrEqual(t, tp90Latency, 2.0)
+	require.LessOrEqual(t, tp90Latency, 3.0)
 }
