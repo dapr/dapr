@@ -1181,6 +1181,8 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		a.resiliency,
 		a.stateStores,
 		a.secretStores,
+		a.inputBindings,
+		a.outputBindings,
 		a.secretsConfiguration,
 		a.configurationStores,
 		a.lockStores,

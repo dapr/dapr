@@ -428,7 +428,7 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "healthz/{componentKind}/{componentName}",
+			Route:   "healthz/components/{componentName}",
 			Version: apiVersionV1,
 			Handler: a.onGetComponentHealthz,
 		},
@@ -2053,131 +2053,117 @@ func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) getComponent(reqCtx *fasthttp.RequestCtx) (component interface{}, componentKind string, componentName string) {
-	componentKind = reqCtx.UserValue(componentKindParam).(string)
-	componentName = reqCtx.UserValue(componentNameParam).(string)
-
+func (a *api) getComponent(componentKind string, componentName string) (component interface{}) {
 	switch componentKind {
-	case "statestore":
+	case "state":
 		if statestore := a.stateStores[componentName]; statestore != nil {
 			component = statestore
-			// state.Ping(statestore)
 		}
 	case "pubsub":
 		if pubsub := a.pubsubAdapter.GetPubSub(componentName); pubsub != nil {
 			component = pubsub
 		}
-	case "secretstore":
+	case "secretstores":
 		if secretstore := a.secretStores[componentName]; secretstore != nil {
 			component = secretstore
 		}
-	case "inputbinding":
+	case "bindings":
 		if inputbinding := a.inputBindings[componentName]; inputbinding != nil {
 			component = inputbinding
-		}
-	case "outputbinding":
-		if outputbinding := a.outputBindings[componentName]; outputbinding != nil {
+		} else if outputbinding := a.outputBindings[componentName]; outputbinding != nil {
 			component = outputbinding
 		}
 	}
-
 	return
 }
 
 func (a *api) onGetAllComponentsHealthz(reqCtx *fasthttp.RequestCtx) {
-	numberOfComponents := len(a.stateStores) + len(a.secretStores) + len(a.pubSubs) + len(a.inputBindings) + len(a.outputBindings)
+	components := a.getComponentsFn()
 	hresp := ComponentHealthResponse{
-		Results: make([]ComponentHealth, numberOfComponents),
-		// Error:   "",
+		Results: make([]ComponentHealth, len(components)),
 	}
 	i := 0
-	for name, _ := range a.stateStores {
-		a.allComponentsHealthResponePopulator("statestore", hresp, i, reqCtx, name)
+	for _, comp := range components {
+		a.allComponentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
 		i++
 	}
-	for name, _ := range a.secretStores {
-		a.allComponentsHealthResponePopulator("secretstore", hresp, i, reqCtx, name)
-		i++
-	}
-	for name, _ := range a.pubSubs {
-		a.allComponentsHealthResponePopulator("pubsub", hresp, i, reqCtx, name)
-		i++
-	}
-	for name, _ := range a.inputBindings {
-		a.allComponentsHealthResponePopulator("inputbinding", hresp, i, reqCtx, name)
-		i++
-	}
-	for name, _ := range a.outputBindings {
-		a.allComponentsHealthResponePopulator("outputbinding", hresp, i, reqCtx, name)
-		i++
-	}
-
 	b, _ := json.Marshal(hresp)
 	respond(reqCtx, withJSON(fasthttp.StatusOK, b))
 }
 
-func (a *api) allComponentsHealthResponePopulator(componentType string, hresp ComponentHealthResponse, ind int, reqCtx *fasthttp.RequestCtx, name string) {
-	reqCtx.SetUserValue(componentKindParam, componentType)
-	reqCtx.SetUserValue(componentNameParam, name)
-	status, err := a.onGetComponentHealthzUtil(reqCtx)
+func (a *api) allComponentsHealthResponsePopulator(componentType string, hresp ComponentHealthResponse, ind int, name string) {
+	status, err := a.onGetComponentHealthzUtil(nil, componentType, name)
+	hresp.Results[ind].Component = name
+	hresp.Results[ind].Type = componentType
+	hresp.Results[ind].Status = status
 	if err != nil {
-		hresp.Results[ind].Component = name
-		hresp.Results[ind].Status = HealthStatus(NOT_OK)
 		hresp.Results[ind].Error = err.Error()
-		// {
-		// 	Component: name,
-		// 	Status:    NOT_OK,
-		// 	Error:     err.Error(),
-		// }
-	} else if status == "OK" {
-		hresp.Results[ind].Component = name
-		hresp.Results[ind].Status = HealthStatus(OK)
-		// ComponentHealth{
-		// 	Component: name,
-		// 	Status:    OK,
-		// }
 	}
 }
 
 func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
-	a.onGetComponentHealthzUtil(reqCtx)
+	componentName := reqCtx.UserValue(componentNameParam).(string)
+	components := a.getComponentsFn()
+	found := false
+	for _, comp := range components {
+		if componentName == comp.Name {
+			found = true
+			a.onGetComponentHealthzUtil(reqCtx, strings.Split(comp.Spec.Type, ".")[0], comp.Name)
+			break
+		}
+	}
+	if !found {
+		msg := NewErrorResponse(
+			fmt.Sprintf("ERR_COMPONENT_WITH_NAME_%s_NOT_FOUND", componentName),
+			fmt.Sprintf(messages.ErrComponentWitNameNotFound, componentName))
+		if reqCtx != nil {
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		}
+		log.Debug(msg)
+	}
 }
 
-func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx) (Status string, err error) {
-	component, componentKind, componentName := a.getComponent(reqCtx)
+func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKind string, componentName string) (status HealthStatus, err error) {
+	component := a.getComponent(componentKind, componentName)
 
 	if component == nil {
 		msg := NewErrorResponse(
-			fmt.Sprintf("ERR_%s_NOT_FOUND", componentKind),
+			fmt.Sprintf("ERR_COMPONENT_%s_NOT_FOUND", componentKind),
 			fmt.Sprintf(messages.ErrComponentNotFound, componentKind, componentName))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		if reqCtx != nil {
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		}
 		log.Debug(msg)
-		return "", fmt.Errorf("ERR_%s_NOT_FOUND", componentKind)
+		return HealthStatus(UNDEFINED), fmt.Errorf("ERR_COMPONENT_%s_NOT_FOUND", componentKind)
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
 		err := pinger.Ping()
 
 		if err != nil {
-			log.Info("error while ping in http api is: " + componentName + err.Error())
 			msg := NewErrorResponse(
-				fmt.Sprintf("ERR_%s_HEALTH_NOT_READY", strings.ToUpper(componentKind)),
-				fmt.Sprintf(messages.ErrComponentHealthNotReady, componentName))
-			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+				fmt.Sprintf("ERR_%s_HEALTH_NOT_OK", strings.ToUpper(componentKind)),
+				fmt.Sprintf(messages.ErrComponentHealthNotOK, componentName))
+			if reqCtx != nil {
+				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			}
 			log.Debug(msg)
-			return "", fmt.Errorf("ERR_%s_HEALTH_NOT_READY", componentKind)
+			return HealthStatus(NOT_OK), fmt.Errorf("ERR_%s_HEALTH_NOT_OK", componentKind)
 		} else {
-			respond(reqCtx, withError(fasthttp.StatusNoContent, NewErrorResponse("IT IS OK", "IT IS OK MSG")))
-			return "OK", nil
+			if reqCtx != nil {
+				respond(reqCtx, withEmpty())
+			}
+			return HealthStatus(OK), nil
 		}
 	} else {
 		msg := NewErrorResponse(
-			fmt.Sprintf("ERR_%s_NOT_IMPLEMENTED", componentName),
+			fmt.Sprintf("ERR_PING_NOT_IMPLEMENTED_BY_%s", componentName),
 			fmt.Sprintf(messages.ErrComponentNotImplemented, componentName))
-
-		respond(reqCtx, withError(fasthttp.StatusNotImplemented, msg))
+		if reqCtx != nil {
+			respond(reqCtx, withError(fasthttp.StatusNotImplemented, msg))
+		}
 		log.Debug(msg)
-		return "", fmt.Errorf("ERR_%s_NOT_IMPLEMENTED", componentKind)
+		return HealthStatus(UNDEFINED), fmt.Errorf("ERR_PING_NOT_IMPLEMENTED_BY_%s", componentKind)
 	}
 }
 

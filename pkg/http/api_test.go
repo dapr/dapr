@@ -3350,7 +3350,6 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	assert.Equal(t, 400, resp.StatusCode)
 }
 
-<<<<<<< HEAD
 const (
 	queryTestRequestOK = `{
 	"filter": {
@@ -3381,9 +3380,8 @@ const (
 }`
 	queryTestRequestSyntaxErr = `syntax error`
 )
-=======
+
 var throwError = false
->>>>>>> 9eddf991 (add statestore health check endpoint.)
 
 type fakeStateStore struct {
 	counter int
@@ -3848,10 +3846,10 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	var fakeStore state.Store = fakeStateStore{}
 	fakeSecretStore := daprt.FakeSecretStore{}
 	fakeSecretStores := map[string]secretstores.SecretStore{
-		"store1": fakeSecretStore,
+		"secretstore1": fakeSecretStore,
 	}
 	secretsConfiguration := map[string]config.SecretsScope{
-		"store1": {
+		"secretstore1": {
 			DefaultAccess: config.AllowAccess,
 			DeniedSecrets: []string{"not-allowed"},
 		},
@@ -3863,17 +3861,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	}
 
 	testAPI := &api{
-<<<<<<< HEAD
-<<<<<<< HEAD
-		actor: nil,
-=======
-		actor:       nil,
-		json:        jsoniter.ConfigFastest,
-		stateStores: fakeStores,
->>>>>>> 9eddf991 (add statestore health check endpoint.)
-=======
 		actor:                nil,
-		json:                 jsoniter.ConfigFastest,
 		secretsConfiguration: secretsConfiguration,
 		secretStores:         fakeSecretStores,
 		stateStores:          fakeStores,
@@ -3889,7 +3877,61 @@ func TestV1HealthzEndpoint(t *testing.T) {
 				}
 			},
 		},
->>>>>>> b7b6e3d3 (Add health check api.)
+		getComponentsFn: func() []components_v1alpha1.Component {
+			return []components_v1alpha1.Component{
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "store1",
+					},
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    "state.mockType1",
+						Version: "v1.0",
+						Metadata: []components_v1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent1",
+								Value: components_v1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "pubsubname",
+					},
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    "pubsub.mockType2",
+						Version: "v1.0",
+						Metadata: []components_v1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent2",
+								Value: components_v1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "secretstore1",
+					},
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    "secretstores.mockType3",
+						Version: "v1.0",
+						Metadata: []components_v1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent3",
+								Value: components_v1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
+							},
+						},
+					},
+				},
+			}
+		},
 	}
 
 	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
@@ -3910,21 +3952,21 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	})
 
 	t.Run("StateStore healthz - 204 No Content", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/healthz/statestore/%s", storeName)
+		apiPath := fmt.Sprintf("v1.0/healthz/components/%s", storeName)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
 	t.Run("StateStore healthz - 400 Not Found", func(t *testing.T) {
-		apiPath := "v1.0/healthz/statestore/NotExists"
+		apiPath := "v1.0/healthz/components/NotExists"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
 	t.Run("StateStore healthz - 500 Internal Server Error", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/healthz/statestore/%s", storeName)
+		apiPath := fmt.Sprintf("v1.0/healthz/components/%s", storeName)
 		throwError = true
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
@@ -3932,28 +3974,28 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	})
 
 	t.Run("Pubsub healthz - 204 No Content", func(t *testing.T) {
-		apiPath := "v1.0/healthz/pubsub/pubsubname"
+		apiPath := "v1.0/healthz/components/pubsubname"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
 	t.Run("Pubsub healthz - 400 Not Found", func(t *testing.T) {
-		apiPath := "v1.0/healthz/pubsub/NotExists"
+		apiPath := "v1.0/healthz/components/NotExists"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
 	t.Run("SecretStore healthz - 204 No Content", func(t *testing.T) {
-		apiPath := "v1.0/healthz/secretstore/store1"
+		apiPath := "v1.0/healthz/components/secretstore1"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
 	t.Run("SecretStore healthz - 400 Not Found", func(t *testing.T) {
-		apiPath := "v1.0/healthz/secretstore/NotExists"
+		apiPath := "v1.0/healthz/components/NotExists"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 400, resp.StatusCode)

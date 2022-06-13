@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -77,6 +78,7 @@ type API interface {
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
+	CheckAllComponentsHealth(ctx context.Context, in *runtimev1pb.CheckAllComponentsHealthRequest) (*runtimev1pb.CheckAllComponentsHealthResponse, error)
 	CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
@@ -119,6 +121,8 @@ type api struct {
 	stateStores                map[string]state.Store
 	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
+	inputBindings              map[string]bindings.InputBinding
+	outputBindings             map[string]bindings.OutputBinding
 	secretsConfiguration       map[string]config.SecretsScope
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
@@ -132,6 +136,7 @@ type api struct {
 	appProtocol                string
 	extendedMetadata           sync.Map
 	components                 []components_v1alpha.Component
+	getComponentsFn            func() []components_v1alpha.Component
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
 }
@@ -271,6 +276,8 @@ func NewAPI(
 	resiliency resiliency.Provider,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
+	inputBindings map[string]bindings.InputBinding,
+	outputBindings map[string]bindings.OutputBinding,
 	secretsConfiguration map[string]config.SecretsScope,
 	configurationStores map[string]configuration.Store,
 	lockStores map[string]lock.Store,
@@ -300,6 +307,8 @@ func NewAPI(
 		appChannel:                 appChannel,
 		pubsubAdapter:              pubsubAdapter,
 		stateStores:                stateStores,
+		inputBindings:              inputBindings,
+		outputBindings:             outputBindings,
 		transactionalStateStores:   transactionalStateStores,
 		secretStores:               secretStores,
 		configurationStores:        configurationStores,
@@ -310,6 +319,7 @@ func NewAPI(
 		tracingSpec:                tracingSpec,
 		accessControlList:          accessControlList,
 		appProtocol:                appProtocol,
+		getComponentsFn:            getComponentsFn,
 		shutdown:                   shutdown,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 	}
@@ -674,7 +684,7 @@ func (a *api) getStateStore(name string) (state.Store, error) {
 
 func (a *api) getComponent(componentKind string, componentName string) (component interface{}) {
 	switch componentKind {
-	case "statestore":
+	case "state":
 		if statestore := a.stateStores[componentName]; statestore != nil {
 			component = statestore
 		}
@@ -682,24 +692,77 @@ func (a *api) getComponent(componentKind string, componentName string) (componen
 		if pubsub := a.pubsubAdapter.GetPubSub(componentName); pubsub != nil {
 			component = pubsub
 		}
-
-	case "secretstore":
+	case "secretstores":
 		if secretstore := a.secretStores[componentName]; secretstore != nil {
 			component = secretstore
 		}
+	case "bindings":
+		if inputbinding := a.inputBindings[componentName]; inputbinding != nil {
+			component = inputbinding
+		} else if outputbinding := a.outputBindings[componentName]; outputbinding != nil {
+			component = outputbinding
+		}
 	}
-
 	return
 }
 
-func (a *api) CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
-	component := a.getComponent(in.ComponentKind, in.ComponentName)
+func (a *api) CheckAllComponentsHealth(ctx context.Context, in *runtimev1pb.CheckAllComponentsHealthRequest) (*runtimev1pb.CheckAllComponentsHealthResponse, error) {
+	apiServerLogger.Info("CheckAllComponentsHealth is called")
 
-	if component == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound, in.ComponentKind, in.ComponentName)
+	i := 0
+	components := a.getComponentsFn()
+	hresp := &runtimev1pb.CheckAllComponentsHealthResponse{
+		Results: make([]*runtimev1pb.CheckAllComponentsHealthItem, len(components)),
+	}
+	for _, comp := range components {
+		a.allComponentsHealthResponePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
+		i++
+	}
+	// b, _ := json.Marshal(hresp)
+	return hresp, nil
+}
+
+func (a *api) allComponentsHealthResponePopulator(componentType string, hresp *runtimev1pb.CheckAllComponentsHealthResponse, ind int, name string) {
+	status, err := a.CheckHealthUtil(componentType, name)
+
+	hresp.Results[ind] = &runtimev1pb.CheckAllComponentsHealthItem{
+		ComponentName: name,
+		Type:          componentType,
+		Status:        status,
+	}
+	if err != nil {
+		hresp.Results[ind].Error = err.Error()
+	}
+}
+
+func (a *api) CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
+	componentName := in.ComponentName
+	found := false
+	components := a.getComponentsFn()
+	for _, comp := range components {
+		if componentName == comp.Name {
+			found = true
+			_, err := a.CheckHealthUtil(strings.Split(comp.Spec.Type, ".")[0], comp.Name)
+			return &emptypb.Empty{}, err
+		}
+	}
+	if !found {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrComponentWitNameNotFound, in.ComponentName)
 		apiServerLogger.Debug(err)
 
 		return &emptypb.Empty{}, err
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (a *api) CheckHealthUtil(componentKind string, componentName string) (out string, err error) {
+	component := a.getComponent(componentKind, componentName)
+
+	if component == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound, componentKind, componentName)
+		apiServerLogger.Debug(err)
+
+		return "undefined", err
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
@@ -707,14 +770,14 @@ func (a *api) CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthReques
 		if err != nil {
 			apiServerLogger.Debug(err)
 
-			return &emptypb.Empty{}, err
+			return "not_ok", err
 		}
 	} else {
-		err := status.Errorf(codes.Unimplemented, messages.ErrComponentNotImplemented, in.ComponentName)
-		return &emptypb.Empty{}, err
+		err := status.Errorf(codes.Unimplemented, messages.ErrComponentNotImplemented, componentName)
+		return "undefined", err
 	}
 
-	return &emptypb.Empty{}, nil
+	return "ok", nil
 }
 
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {

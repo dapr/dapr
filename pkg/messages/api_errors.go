@@ -82,7 +82,8 @@ const (
 	ErrExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store %s"
 	ErrLockStoreNotFound          = "lock store %s not found"
 	ErrStateHealthNotReady        = "state is not ready"
-	ErrComponentHealthNotReady    = "%s is not ready"
+	ErrComponentWitNameNotFound   = "Component With Name %s is not found"
+	ErrComponentHealthNotOK       = "%s is not ok"
 	ErrComponentNotFound          = "%s %s is not found"
-	ErrComponentNotImplemented    = "%s is not imeplemented"
+	ErrComponentNotImplemented    = "Ping is not imeplemented by %s"
 )

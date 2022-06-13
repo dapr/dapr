@@ -29,8 +29,11 @@ service Dapr {
   // Invokes a method on a remote Dapr app.
   rpc InvokeService(InvokeServiceRequest) returns (common.v1.InvokeResponse) {}
 
-  // Check health of components
+  // Check health of a component
   rpc CheckHealth(CheckHealthRequest) returns (google.protobuf.Empty) {}
+
+  // Check health of all registered components
+  rpc CheckAllComponentsHealth(CheckAllComponentsHealthRequest) returns (CheckAllComponentsHealthResponse) {}
 
   // Gets the state for a specific key.
   rpc GetState(GetStateRequest) returns (GetStateResponse) {}
@@ -138,11 +141,24 @@ message GetStateRequest {
   map<string, string> metadata = 4;
 }
 
-// CheckHealthRequest is the message to get key-value states from specific state store.
+// CheckAllComponentsHealthRequest is the message to get health of all components.
+message CheckAllComponentsHealthRequest {}
+
+message CheckAllComponentsHealthItem {
+    string componentName = 1;
+    string type = 2;
+    string status = 3;
+    string error = 4;
+}
+
+message CheckAllComponentsHealthResponse {
+  repeated CheckAllComponentsHealthItem results = 1;
+}
+
+// CheckHealthRequest is the message to get health of a component.
 message CheckHealthRequest {
-  // The name of state store.
+  // The name of component.
   string component_name = 1;
-  string component_kind = 2;
 }
 
 // GetBulkStateRequest is the message to get a list of key-value states from specific state store.

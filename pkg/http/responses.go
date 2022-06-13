@@ -51,20 +51,21 @@ type QueryItem struct {
 
 type ComponentHealthResponse struct {
 	Results []ComponentHealth `json:"results"`
-	// Error   string            `json:"error,omitempty"`
 }
 
 type ComponentHealth struct {
 	Component string       `json:"componentName"`
+	Type      string       `json:"type"`
 	Status    HealthStatus `json:"status"`
 	Error     string       `json:"error,omitempty"`
 }
 
-type HealthStatus int
+type HealthStatus string
 
 const (
-	OK     HealthStatus = 0
-	NOT_OK HealthStatus = 1
+	OK        HealthStatus = "ok"
+	NOT_OK    HealthStatus = "not_ok"
+	UNDEFINED HealthStatus = "undefined"
 )
 
 type option = func(ctx *fasthttp.RequestCtx)
