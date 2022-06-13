@@ -846,7 +846,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	if resources != nil {
 		c.Resources = *resources
 	}
-
 	return c, nil
 }
 
