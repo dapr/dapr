@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -17,7 +18,12 @@ import (
 )
 
 // StartServer starts a HTTP or HTTP2 server
-func StartServer(port int, appRouter func() *mux.Router, enableHTTP2 bool) {
+func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool) {
+	// HTTP/2 is allowed only if the DAPR_TESTS_HTTP2 env var is set
+	if allowHTTP2 {
+		allowHTTP2, _ = strconv.ParseBool(os.Getenv("DAPR_TESTS_HTTP2"))
+	}
+
 	// Create a listener
 	addr := fmt.Sprintf(":%d", port)
 	ln, err := net.Listen("tcp", addr)
@@ -26,7 +32,7 @@ func StartServer(port int, appRouter func() *mux.Router, enableHTTP2 bool) {
 	}
 
 	var server *http.Server
-	if enableHTTP2 {
+	if allowHTTP2 {
 		// Create a server capable of supporting HTTP2 Cleartext connections
 		// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
 		h2s := &http2.Server{}
