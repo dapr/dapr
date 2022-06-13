@@ -43,12 +43,13 @@ const (
 	defaultEndpointCacheSize = 100
 	defaultActorCacheSize    = 5000
 
-	BuiltInServiceRetries       BuiltInPolicyName = "DaprBuiltInServiceRetries"
-	BuiltInActorRetries         BuiltInPolicyName = "DaprBuiltInActorRetries"
-	BuiltInActorReminderRetries BuiltInPolicyName = "DaprBuiltInActorReminderRetries"
-	Endpoint                    PolicyType        = "endpoint"
-	Component                   PolicyType        = "component"
-	Actor                       PolicyType        = "actor"
+	BuiltInServiceRetries        BuiltInPolicyName = "DaprBuiltInServiceRetries"
+	BuiltInActorRetries          BuiltInPolicyName = "DaprBuiltInActorRetries"
+	BuiltInActorReminderRetries  BuiltInPolicyName = "DaprBuiltInActorReminderRetries"
+	BuiltInInitializationRetries BuiltInPolicyName = "DaprBuiltInInitializationRetries"
+	Endpoint                     PolicyType        = "endpoint"
+	Component                    PolicyType        = "component"
+	Actor                        PolicyType        = "actor"
 )
 
 // ActorCircuitBreakerScope indicates the scope of the circuit breaker for an actor.
@@ -215,6 +216,10 @@ func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, op
 // FromConfigurations creates a resiliency provider and decodes the configurations from `c`.
 func FromConfigurations(log logger.Logger, c ...*resiliency_v1alpha.Resiliency) *Resiliency {
 	r := New(log)
+
+	// Add the default policies into the overall resiliency first. This allows customers to overwrite them if desired.
+	r.addBuiltInPolicies()
+
 	for _, config := range c {
 		if err := r.DecodeConfiguration(config); err != nil {
 			log.Errorf("Could not read resiliency %s: %w", &config.ObjectMeta.Name, err)
@@ -248,9 +253,6 @@ func (r *Resiliency) DecodeConfiguration(c *resiliency_v1alpha.Resiliency) error
 		return nil
 	}
 
-	// Add the default policies into the overall resiliency first. This allows customers to overwrite them if desired.
-	r.addBuiltInPolicies()
-
 	if err := r.decodePolicies(c); err != nil {
 		return err
 	}
@@ -260,8 +262,8 @@ func (r *Resiliency) DecodeConfiguration(c *resiliency_v1alpha.Resiliency) error
 // Adds policies that cover the existing retries in Dapr like service invocation.
 func (r *Resiliency) addBuiltInPolicies() {
 	// Cover retries for remote service invocation, but don't overwrite anything that is already present.
-	if _, ok := r.retries[fmt.Sprintf("%s", BuiltInServiceRetries)]; !ok {
-		r.retries[fmt.Sprintf("%s", BuiltInServiceRetries)] = &retry.Config{
+	if _, ok := r.retries[string(BuiltInServiceRetries)]; !ok {
+		r.retries[string(BuiltInServiceRetries)] = &retry.Config{
 			Policy:     retry.PolicyConstant,
 			MaxRetries: 3,
 			Duration:   time.Second,
@@ -269,8 +271,8 @@ func (r *Resiliency) addBuiltInPolicies() {
 	}
 
 	// Cover retries for remote actor invocation, but don't overwrite anything that is already present.
-	if _, ok := r.retries[fmt.Sprintf("%s", BuiltInActorRetries)]; !ok {
-		r.retries[fmt.Sprintf("%s", BuiltInActorRetries)] = &retry.Config{
+	if _, ok := r.retries[string(BuiltInActorRetries)]; !ok {
+		r.retries[string(BuiltInActorRetries)] = &retry.Config{
 			Policy:     retry.PolicyConstant,
 			MaxRetries: 3,
 			Duration:   time.Second,
@@ -278,14 +280,29 @@ func (r *Resiliency) addBuiltInPolicies() {
 	}
 
 	// Cover retries for actor reminder operations, but don't overwrite anything that is already present.
-	if _, ok := r.retries[fmt.Sprintf("%s", BuiltInActorReminderRetries)]; !ok {
-		r.retries[fmt.Sprintf("%s", BuiltInActorReminderRetries)] = &retry.Config{
+	if _, ok := r.retries[string(BuiltInActorReminderRetries)]; !ok {
+		r.retries[string(BuiltInActorReminderRetries)] = &retry.Config{
 			Policy:              retry.PolicyExponential,
 			InitialInterval:     500 * time.Millisecond,
 			RandomizationFactor: 0.5,
 			Multiplier:          1.5,
 			MaxInterval:         60 * time.Second,
 			MaxElapsedTime:      15 * time.Minute,
+		}
+	}
+
+	// Cover retries for initialization, but don't overwrite anything that is already present.
+	if _, ok := r.retries[string(BuiltInInitializationRetries)]; !ok {
+		r.log.Info("Adding initialization policy.")
+		r.retries[string(BuiltInInitializationRetries)] = &retry.Config{
+			Policy:              retry.PolicyExponential,
+			InitialInterval:     time.Millisecond * 500,
+			MaxRetries:          3,
+			MaxInterval:         time.Second,
+			MaxElapsedTime:      time.Second * 10,
+			Duration:            time.Second * 2,
+			Multiplier:          1.5,
+			RandomizationFactor: 0.5,
 		}
 	}
 }
@@ -573,7 +590,8 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 func (r *Resiliency) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner {
 	var t time.Duration
 	var cb *breaker.CircuitBreaker
-	stringName := fmt.Sprintf("%s", name)
+	stringName := string(name)
+	r.log.Infof("Built-in policy (%s): %+v", stringName, r.retries[stringName])
 	return Policy(ctx, r.log, stringName, t, r.retries[stringName], cb)
 }
 
