@@ -35,5 +35,5 @@ FROM mcr.microsoft.com/cbl-mariner/distroless/minimal:${MARINER_VERSION}
 ARG PKG_FILES
 COPY --from=builder /staging/ /
 WORKDIR /
-USER app
+USER 900
 COPY /$PKG_FILES /
