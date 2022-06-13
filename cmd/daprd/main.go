@@ -105,7 +105,7 @@ import (
 	// Bindings.
 	"github.com/dapr/components-contrib/bindings"
 	dingtalk_webhook "github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
-	"github.com/dapr/components-contrib/bindings/alicloud/dubbo"
+
 	"github.com/dapr/components-contrib/bindings/alicloud/oss"
 	"github.com/dapr/components-contrib/bindings/alicloud/tablestore"
 	"github.com/dapr/components-contrib/bindings/apns"
@@ -403,9 +403,6 @@ func main() {
 			}),
 		),
 		runtime.WithOutputBindings(
-			bindings_loader.NewOutput("alicloud.dubbo", func() bindings.OutputBinding {
-				return dubbo.NewDubboOutput(logContrib)
-			}),
 			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
 				return oss.NewAliCloudOSS(logContrib)
 			}),
