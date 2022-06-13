@@ -66,9 +66,7 @@ func init() {
 
 	flag.StringVar(&config, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
-
-	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for controller manager. ")
-
+	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for controller manager")
 	flag.Parse()
 
 	// Apply options to all loggers

@@ -130,23 +130,9 @@ func (o *operator) syncComponent(obj interface{}) {
 	}
 }
 
-func (o *operator) Run(ctx context.Context) {
-	defer runtimeutil.HandleCrash()
-	log.Infof("Dapr Operator is starting")
-
-	go func() {
-		if err := o.mgr.Start(ctx); err != nil {
-			log.Fatalf("failed to start controller manager, err: %s", err)
-		}
-	}()
-	if !o.mgr.GetCache().WaitForCacheSync(ctx) {
-		log.Fatalf("failed to wait for cache sync")
-	}
-	o.prepareConfig()
-
-	// load certs from disk
-	var certChain *credentials.CertChain
+func (o *operator) loadCertChain(ctx context.Context) (certChain *credentials.CertChain) {
 	log.Info("getting tls certificates")
+
 	watchCtx, watchCancel := context.WithTimeout(ctx, time.Minute)
 	fsevent := make(chan struct{})
 	go func() {
@@ -160,6 +146,7 @@ func (o *operator) Run(ctx context.Context) {
 			log.Fatal("timeout while waiting to load tls certificates")
 		}
 	}()
+
 	for {
 		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
 		if err == nil {
@@ -167,12 +154,35 @@ func (o *operator) Run(ctx context.Context) {
 			certChain = chain
 			break
 		}
-		log.Info("tls certificate not found; waiting for disk changes")
+		log.Infof("tls certificate not found; waiting for disk changes. err=%v", err)
 		<-fsevent
 		log.Debug("watcher found activity on filesystem")
 	}
+
 	watchCancel()
 
+	return certChain
+}
+
+func (o *operator) Run(ctx context.Context) {
+	defer runtimeutil.HandleCrash()
+
+	log.Infof("Dapr Operator is starting")
+
+	go func() {
+		if err := o.mgr.Start(ctx); err != nil {
+			log.Fatalf("failed to start controller manager, err: %s", err)
+		}
+	}()
+	if !o.mgr.GetCache().WaitForCacheSync(ctx) {
+		log.Fatalf("failed to wait for cache sync")
+	}
+	o.prepareConfig()
+
+	// load certs from disk
+	certChain := o.loadCertChain(ctx)
+
+	// start healthz server
 	healthzServer := health.NewServer(log)
 	go func() {
 		// blocking call
