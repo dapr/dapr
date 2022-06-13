@@ -23,12 +23,15 @@ IF NOT EXIST "%CERT_DIR%" (
 )
 
 SET FOUND_CERT=0
-FOR /R %CERT_DIR% %%F IN (*) DO (
+
+CD %CERT_DIR%
+FOR /R %%F IN (*) DO (
     SET FOUND_CERT=1
 
     ECHO Adding %%F to the root store
     certoc.exe -addstore root %%F
 )
+CD -
 
 IF %FOUND_CERT% == 0 (
     ECHO No certificates found in %CERT_DIR%, skipping certificate setup

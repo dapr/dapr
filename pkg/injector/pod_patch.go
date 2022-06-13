@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -727,8 +726,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 		},
-		Ports:   ports,
-		Command: cmd,
+		Ports: ports,
+		Args:  append(cmd, args...),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "NAMESPACE",
@@ -743,7 +742,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 				},
 			},
 		},
-		Args: args,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
@@ -847,16 +845,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	}
 	if resources != nil {
 		c.Resources = *resources
-	}
-
-	if runtime.GOOS == "windows" {
-		c.Lifecycle = &corev1.Lifecycle{
-			PostStart: &corev1.LifecycleHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/setup-certificates.cmd"},
-				},
-			},
-		}
 	}
 
 	return c, nil
