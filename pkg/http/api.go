@@ -53,6 +53,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	uuid "github.com/gofrs/uuid"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -1904,6 +1905,9 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
 }
 
+/**
+ * regist transaction component api
+ */
 func (a *api) constructTransactionEndpoints() []Endpoint {
 	return []Endpoint{
 		{
@@ -1915,6 +1919,9 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 	}
 }
 
+/**
+ * switch transaction component instance
+ */
 func (a *api) getTransactionWithRequestValidation(reqCtx *fasthttp.RequestCtx) (transaction.Transaction, string, error) {
 	if a.transactions == nil || len(a.transactions) == 0 {
 		msg := NewErrorResponse("ERR_TRANSACTION_NOT_CONFIGURED", messages.ErrTransactionsNotConfigured)
@@ -1944,19 +1951,36 @@ func (a *api) onDistributeTransaction(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	var reqs []transaction.OpenTransactionRequest
-	err = json.Unmarshal(reqCtx.PostBody(), &reqs)
+	var subTransactions []transaction.SubTransactionRequest
+	err = json.Unmarshal(reqCtx.PostBody(), &subTransactions)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
 	}
-	if len(reqs) == 0 {
+	if len(subTransactions) == 0 {
 		respond(reqCtx, withEmpty())
 		return
 	}
-	log.Debug(reqs)
-	transactionInstance.Open(reqs)
+	log.Debug(subTransactions)
+
+	requestId := string(reqCtx.Request.Header.Peek("request_id"))
+	if requestId == "" {
+		newUuid, _ := uuid.NewV4()
+		requestId = newUuid.String()
+	}
+
+	transactionState := a.stateStores["transactions"]
+	stateReqs := []state.SetRequest{}
+	for k, _ := range subTransactions {
+		stateReqs = append(stateReqs, state.SetRequest{
+			Key:   requestId + "_" + string(k),
+			Value: false,
+		})
+	}
+	transactionState.BulkSet(stateReqs)
+
+	transactionInstance.Open(subTransactions, transactionState, requestId)
 	respond(reqCtx, withEmpty())
 }
