@@ -19,9 +19,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dapr/dapr/utils"
 	"github.com/ghodss/yaml"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/utils"
 
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
