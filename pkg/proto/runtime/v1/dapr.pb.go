@@ -265,10 +265,14 @@ type CheckAllComponentsHealthItem struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// The name of component
 	ComponentName string `protobuf:"bytes,1,opt,name=componentName,proto3" json:"componentName,omitempty"`
-	Type          string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Status        string `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
-	Error         string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	// Type of component
+	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// Status of component, OK or NOT_OK or UNDEFINED
+	Status string `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	// error that is returened in case of health check failure
+	Error string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
 }
 
 func (x *CheckAllComponentsHealthItem) Reset() {
@@ -331,6 +335,7 @@ func (x *CheckAllComponentsHealthItem) GetError() string {
 	return ""
 }
 
+// Final response that would comprise of HealthItems per component basis
 type CheckAllComponentsHealthResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
