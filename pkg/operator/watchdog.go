@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.uber.org/ratelimit"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -19,7 +20,12 @@ const (
 // This controller only runs on the cluster's leader.
 // Currently, this ensures that the sidecar is injected in each pod, otherwise it kills the pod so it can be restarted.
 type DaprWatchdog struct {
-	client client.Client
+	enabled           bool
+	interval          int
+	maxRestartsPerMin int
+
+	client         client.Client
+	restartLimiter ratelimit.Limiter
 }
 
 // NeedLeaderElection makes it so the controller runs on the leader node only.
@@ -30,13 +36,32 @@ func (dw *DaprWatchdog) NeedLeaderElection() bool {
 
 // Start the controller. This method blocks until the context is canceled.
 // Implements sigs.k8s.io/controller-runtime/pkg/manager.Runnable .
-func (dw *DaprWatchdog) Start(ctx context.Context) error {
+func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
+	if !dw.enabled {
+		log.Infof("DaprWatchdog is not enabled")
+		return nil
+	}
+
 	log.Debugf("DaprWatchdog worker started")
+
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
+	if dw.maxRestartsPerMin > 0 {
+		dw.restartLimiter = ratelimit.New(
+			dw.maxRestartsPerMin,
+			ratelimit.Per(time.Minute),
+			ratelimit.WithoutSlack,
+		)
+	} else {
+		dw.restartLimiter = ratelimit.NewUnlimited()
+	}
 
 	// Use a buffered channel to make sure that there's at most one iteration at a given time
 	// and if an iteration isn't done by the time the next one is scheduled to start, no more iterations are added to the queue
 	workCh := make(chan struct{}, 1)
 	defer close(workCh)
+	firstCompleteCh := make(chan struct{})
 	go func() {
 		for {
 			select {
@@ -44,15 +69,25 @@ func (dw *DaprWatchdog) Start(ctx context.Context) error {
 				return
 			case <-workCh:
 				dw.listPods(ctx)
+				if firstCompleteCh != nil {
+					close(firstCompleteCh)
+					firstCompleteCh = nil
+				}
 			}
 		}
 	}()
 
-	// Start an iteration right away, at startup
+	// Start an iteration right away, at startup, then wait for completion
 	workCh <- struct{}{}
+	<-firstCompleteCh
+
+	// If we only run once, exit when it's done
+	if dw.interval < 1 {
+		return nil
+	}
 
 	// Repeat on interval
-	t := time.NewTicker(30 * time.Second)
+	t := time.NewTicker(time.Duration(dw.interval) * time.Second)
 	defer t.Stop()
 
 forloop:
@@ -126,6 +161,11 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 		}
 
 		log.Infof("Deleted pod %s", v.Name)
+
+		log.Debugf("Taking a pod restart token")
+		before := time.Now()
+		_ = dw.restartLimiter.Take()
+		log.Debugf("Resumed after pausing for %v", time.Now().Sub(before))
 	}
 
 	log.Debugf("listPods done")

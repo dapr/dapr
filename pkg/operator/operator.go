@@ -48,6 +48,16 @@ type Operator interface {
 	Run(ctx context.Context)
 }
 
+// OperatorOptions contains the options for `NewOperator`.
+type OperatorOptions struct {
+	Config                    string
+	CertChainPath             string
+	LeaderElection            bool
+	WatchdogEnabled           bool
+	WatchdogInterval          int
+	WatchdogMaxRestartsPerMin int
+}
+
 type operator struct {
 	daprHandler *handlers.DaprHandler
 	apiServer   api.Server
@@ -73,7 +83,7 @@ func init() {
 }
 
 // NewOperator returns a new Dapr Operator.
-func NewOperator(config, certChainPath string, enableLeaderElection bool) Operator {
+func NewOperator(opts OperatorOptions) Operator {
 	conf, err := ctrl.GetConfig()
 	if err != nil {
 		log.Fatalf("unable to get controller runtime configuration, err: %s", err)
@@ -81,7 +91,7 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: "0",
-		LeaderElection:     enableLeaderElection,
+		LeaderElection:     opts.LeaderElection,
 		LeaderElectionID:   "operator.dapr.io",
 	})
 	if err != nil {
@@ -90,7 +100,10 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 	mgrClient := mgr.GetClient()
 
 	wd := &DaprWatchdog{
-		client: mgrClient,
+		client:            mgrClient,
+		enabled:           opts.WatchdogEnabled,
+		interval:          opts.WatchdogInterval,
+		maxRestartsPerMin: opts.WatchdogMaxRestartsPerMin,
 	}
 	err = mgr.Add(wd)
 	if err != nil {
@@ -106,11 +119,15 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 		daprHandler:   daprHandler,
 		mgr:           mgr,
 		client:        mgrClient,
-		configName:    config,
-		certChainPath: certChainPath,
+		configName:    opts.Config,
+		certChainPath: opts.CertChainPath,
 	}
 	o.apiServer = api.NewAPIServer(o.client)
-	if componentInformer, err := mgr.GetCache().GetInformer(context.TODO(), &componentsapi.Component{}); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	componentInformer, err := mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
+	cancel()
+	if err != nil {
 		log.Fatalf("unable to get setup components informer, err: %s", err)
 	} else {
 		componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{

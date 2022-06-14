@@ -15,6 +15,8 @@ package main
 
 import (
 	"flag"
+	"strconv"
+	"strings"
 
 	"k8s.io/klog"
 
@@ -28,25 +30,54 @@ import (
 )
 
 var (
-	log                   = logger.NewLogger("dapr.operator")
-	config                string
-	certChainPath         string
-	disableLeaderElection bool
+	log                     = logger.NewLogger("dapr.operator")
+	config                  string
+	certChainPath           string
+	watchInterval           string
+	maxPodRestartsPerMinute int
+	disableLeaderElection   bool
 )
 
 const (
+	// defaultCredentialsPath is the default path for the credentials (the K8s mountpoint by default).
 	defaultCredentialsPath = "/var/run/dapr/credentials"
 
 	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
+
+	// defaultWatchInterval is the default value for watch-interval, in seconds (note this is a string).
+	defaultWatchInterval = "120"
+
+	// defaultMaxPodRestartsPerMinute is the default value for max-pod-restarts-per-minute.
+	defaultMaxPodRestartsPerMinute = 20
 )
 
 func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
+	operatorOpts := operator.OperatorOptions{
+		Config:                    config,
+		CertChainPath:             certChainPath,
+		LeaderElection:            !disableLeaderElection,
+		WatchdogEnabled:           false,
+		WatchdogInterval:          0,
+		WatchdogMaxRestartsPerMin: maxPodRestartsPerMinute,
+	}
+
+	if watchInterval != "0" {
+		operatorOpts.WatchdogEnabled = true
+		if strings.ToLower(watchInterval) != "once" {
+			wi, err := strconv.ParseInt(watchInterval, 10, 31)
+			if err != nil {
+				log.Fatalf("invalid value for watch-interval: cannot parse number")
+			}
+			operatorOpts.WatchdogInterval = int(wi)
+		}
+	}
+
 	ctx := signals.Context()
 
-	go operator.NewOperator(config, certChainPath, !disableLeaderElection).Run(ctx)
+	go operator.NewOperator(operatorOpts).Run(ctx)
 	go operator.RunWebhooks(ctx, !disableLeaderElection)
 
 	<-ctx.Done() // Wait for SIGTERM and SIGINT.
@@ -66,7 +97,10 @@ func init() {
 
 	flag.StringVar(&config, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
-	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for controller manager")
+	flag.StringVar(&watchInterval, "watch-interval", defaultWatchInterval, "Interval for polling pods' state, in seconds. Set to '0' to disable, or 'once' to only run once when the operator starts")
+	flag.IntVar(&maxPodRestartsPerMinute, "max-pod-restarts-per-minute", defaultMaxPodRestartsPerMinute, "Maximum number of pods in an invalid state that are restarted per minute")
+	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
+
 	flag.Parse()
 
 	// Apply options to all loggers
