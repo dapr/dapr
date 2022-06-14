@@ -1456,11 +1456,12 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	var err error
 
 	// handle app subscriptions
+	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
+		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log)
+		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
 	}
 	if err != nil {
 		return nil, err
