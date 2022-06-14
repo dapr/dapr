@@ -19,6 +19,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,8 +36,13 @@ const (
 
 var httpClient *http.Client
 
-func InitHTTPClient(enableHTTP2 bool) {
-	if enableHTTP2 {
+func InitHTTPClient(allowHTTP2 bool) {
+	// HTTP/2 is allowed only if the DAPR_TESTS_HTTP2 env var is set
+	if allowHTTP2 {
+		allowHTTP2, _ = strconv.ParseBool(os.Getenv("DAPR_TESTS_HTTP2"))
+	}
+
+	if allowHTTP2 {
 		httpClient = &http.Client{
 			Timeout: DefaultProbeTimeout,
 			// Configure for HTT/2 Cleartext (without TLS) and with prior knowledge
