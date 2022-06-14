@@ -375,6 +375,10 @@ replace (
 
 replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
 
+// TO REMOVE before merging: Replacing components-contrib to use package required from cc_componentsHealth branch of DeepanshuA fork
+// First, comp-contrib PR#1784 needs to be merged
+replace github.com/dapr/components-contrib => github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20220614064036-123356aa4678
+
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
