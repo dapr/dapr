@@ -114,6 +114,8 @@ The Helm chart has the follow configuration options that can be supplied:
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `dapr_operator.replicaCount`              | Number of replicas                                                      | `1`                     |
 | `dapr_operator.logLevel`                  | Log level                                                               | `info`                  |
+| `dapr_operator.watchInterval`             | Interval for polling pods' state, in seconds. Set to `0` to disable, or `once` to only run once when the operator starts | `120` |
+| `dapr_operator.maxPodRestartsPerMinute`   | Maximum number of pods in an invalid state that can be restarted per minute | `20`                |
 | `dapr_operator.image.name`                | Docker image name (`global.registry/dapr_operator.image.name`)          | `dapr`                  |
 | `dapr_operator.runAsNonRoot`              | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_operator.resources`                 | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |

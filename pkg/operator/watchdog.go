@@ -135,7 +135,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 
 		// Filter for pods with the dapr.io/enabled annotation
 		if daprEnabled, ok := v.Annotations[daprEnabledAnnotationKey]; !ok || !utils.IsTruthy(daprEnabled) {
-			log.Debugf("Skipping pod %s: %s is not enabled", v.Name, daprEnabledAnnotationKey)
+			log.Debugf("Skipping pod %s: %s is not true", v.Name, daprEnabledAnnotationKey)
 			continue
 		}
 
