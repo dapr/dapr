@@ -27,13 +27,11 @@ import (
 	"testing"
 	"time"
 
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/agrea/ptr"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-
-	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -44,6 +42,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -53,6 +52,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/kit/logger"
 
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -2237,6 +2237,174 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 	})
 }
 
+func TestV1Alpha1DistributedLock(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	var fakeLockStore lock.Store = &fakeLockStore{}
+
+	storeName := "store1"
+
+	lockStores := map[string]lock.Store{
+		storeName: fakeLockStore,
+	}
+	testAPI := &api{
+		resiliency: resiliency.New(nil),
+		lockStores: lockStores,
+	}
+	fakeServer.StartServer(testAPI.constructDistributedLockEndpoints())
+
+	t.Run("Lock with valid request", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/lock/store1"
+
+		req := lock.TryLockRequest{
+			ResourceID:      "1",
+			LockOwner:       "palpatine",
+			ExpiryInSeconds: 5,
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap)
+		assert.Equal(t, true, rspMap["success"].(bool))
+	})
+
+	t.Run("Lock with invalid resource id", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/lock/store1"
+
+		req := lock.TryLockRequest{
+			ResourceID:      "",
+			LockOwner:       "palpatine",
+			ExpiryInSeconds: 5,
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.JSONBody)
+	})
+
+	t.Run("Lock with invalid owner", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/lock/store1"
+
+		req := lock.TryLockRequest{
+			ResourceID:      "1",
+			LockOwner:       "",
+			ExpiryInSeconds: 5,
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.JSONBody)
+	})
+
+	t.Run("Lock with invalid expiry", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/lock/store1"
+
+		req := lock.TryLockRequest{
+			ResourceID: "1",
+			LockOwner:  "palpatine",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.JSONBody)
+	})
+
+	t.Run("Unlock with valid request", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/unlock/store1"
+
+		req := lock.UnlockRequest{
+			ResourceID: "1",
+			LockOwner:  "palpatine",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap)
+		assert.Equal(t, float64(0), rspMap["status"])
+	})
+
+	t.Run("Unlock with invalid resource id", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/unlock/store1"
+
+		req := lock.UnlockRequest{
+			ResourceID: "",
+			LockOwner:  "palpatine",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap)
+		assert.Equal(t, float64(3), rspMap["status"])
+	})
+
+	t.Run("Unlock with invalid resource id that returns 500", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/unlock/store1"
+
+		req := lock.UnlockRequest{
+			ResourceID: "error",
+			LockOwner:  "palpatine",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.JSONBody)
+	})
+
+	t.Run("Unlock with invalid owner", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/unlock/store1"
+
+		req := lock.UnlockRequest{
+			ResourceID: "1",
+			LockOwner:  "",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap)
+		assert.Equal(t, float64(3), rspMap["status"])
+	})
+}
+
 func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
 	registry := http_middleware_loader.NewRegistry()
 	registry.Register(http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
@@ -2636,7 +2804,7 @@ func TestV1StateEndpoints(t *testing.T) {
 				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
 				assert.Equal(t, 500, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_STATE_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+				assert.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 				testAPI.stateStores = fakeStores
 
 				// act
@@ -3583,6 +3751,73 @@ func (c *fakeConfigurationStore) Subscribe(ctx context.Context, req *configurati
 
 func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
 	return nil
+}
+
+type fakeLockStore struct {
+}
+
+func (l fakeLockStore) Ping() error {
+	return nil
+}
+
+func (l *fakeLockStore) InitLockStore(metadata lock.Metadata) error {
+	return nil
+}
+
+func (l *fakeLockStore) TryLock(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+	if req == nil {
+		return &lock.TryLockResponse{
+			Success: false,
+		}, errors.New("empty request")
+	}
+
+	if req.ExpiryInSeconds == 0 {
+		return &lock.TryLockResponse{
+			Success: false,
+		}, errors.New("invalid expiry")
+	}
+
+	if req.LockOwner == "" {
+		return &lock.TryLockResponse{
+			Success: false,
+		}, errors.New("invalid lockOwner")
+	}
+
+	if req.ResourceID == "lock||" {
+		return &lock.TryLockResponse{
+			Success: false,
+		}, errors.New("invalid resourceId")
+	}
+
+	return &lock.TryLockResponse{
+		Success: true,
+	}, nil
+}
+
+func (l *fakeLockStore) Unlock(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+	if req == nil {
+		return &lock.UnlockResponse{}, errors.New("empty request")
+	}
+
+	if req.LockOwner == "" {
+		return &lock.UnlockResponse{
+			Status: 3,
+		}, nil
+	}
+
+	if req.ResourceID == "lock||" {
+		return &lock.UnlockResponse{
+			Status: 3,
+		}, nil
+	}
+
+	if req.ResourceID == "lock||error" {
+		return &lock.UnlockResponse{}, errors.New("error")
+	}
+
+	return &lock.UnlockResponse{
+		Status: 0,
+	}, nil
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {
