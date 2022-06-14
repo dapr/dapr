@@ -21,10 +21,10 @@ param location string = resourceGroup().location
 param enableWindows bool = false
 
 @description('VM size to use for Linux nodes (agent pool)')
-param linuxVMSize string = 'Standard_DS2_v2'
+param linuxVMSize string = 'Standard_DS3_v2'
 
 @description('VM size to use for Windows nodes, if enabled')
-param windowsVMSize string = 'Standard_DS3_v2'
+param windowsVMSize string = 'Standard_DS4_v2'
 
 @description('If set, sends certain diagnostic logs to Log Analytics')
 param diagLogAnalyticsWorkspaceResourceId string = ''
