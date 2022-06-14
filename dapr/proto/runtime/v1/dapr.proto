@@ -145,12 +145,20 @@ message GetStateRequest {
 message CheckAllComponentsHealthRequest {}
 
 message CheckAllComponentsHealthItem {
+  // The name of component
     string componentName = 1;
+
+  // Type of component
     string type = 2;
+
+  // Status of component, OK or NOT_OK or UNDEFINED
     string status = 3;
+
+  // error that is returened in case of health check failure
     string error = 4;
 }
 
+// Final response that would comprise of HealthItems per component basis
 message CheckAllComponentsHealthResponse {
   repeated CheckAllComponentsHealthItem results = 1;
 }
