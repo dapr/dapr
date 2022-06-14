@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.2
-	github.com/dapr/components-contrib v1.7.1-0.20220610200034-1db4173a9dec
+	github.com/dapr/components-contrib v1.7.1-0.20220614152754-a0ef46265bb7
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.4
@@ -72,7 +72,7 @@ require (
 	cloud.google.com/go/datastore v1.1.0 // indirect
 	cloud.google.com/go/pubsub v1.12.2 // indirect
 	cloud.google.com/go/storage v1.10.0 // indirect
-	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610032651-3780d3e5b8d6 // indirect
+	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20220610080020-48691a404537 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.0 // indirect
 	github.com/AthenZ/athenz v1.10.39 // indirect
@@ -126,7 +126,7 @@ require (
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
 	github.com/andybalholm/brotli v1.0.2 // indirect
 	github.com/antlr/antlr4/runtime/Go/antlr v0.0.0-20210826220005-b48c857c3a0e // indirect
-	github.com/apache/dubbo-getty v1.4.9-0.20220610031447-1bfc340ef6dc // indirect
+	github.com/apache/dubbo-getty v1.4.9-0.20220610060150-8af010f3f3dc // indirect
 	github.com/apache/dubbo-go-hessian2 v1.11.0 // indirect
 	github.com/apache/pulsar-client-go v0.8.1 // indirect
 	github.com/apache/pulsar-client-go/oauth2 v0.0.0-20220120090717-25e59572242e // indirect
