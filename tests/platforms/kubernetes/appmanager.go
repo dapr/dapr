@@ -308,7 +308,8 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 				podStatus[pod.Name] = pod.Status.ContainerStatuses
 			}
-			log.Printf("deployment %s relate pods: %+v", m.app.AppName, podList)
+			j, _ := json.Marshal(podList)
+			log.Printf("deployment %s relate pods: %s", m.app.AppName, string(j))
 		} else {
 			log.Printf("Error list pod for deployment %s. Error was %s", m.app.AppName, err)
 		}
