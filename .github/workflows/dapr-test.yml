@@ -242,16 +242,16 @@ jobs:
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
         shell: bash
-      - name: Build dapr and its docker image
+      - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''
         run: |
           make build
-
           if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
             # For Linux, we use images based on Mariner
-            export DOCKERFILE=Dockerfile-mariner
+            DOCKERFILE=Dockerfile-mariner make docker-build
+          else
+            make docker-build
           fi
-          make docker-build
         shell: bash
       - name: Wait for Azure Container Registry deployment
         if: env.TEST_PREFIX != ''
@@ -274,12 +274,17 @@ jobs:
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash
-      - name: Push container images
+      - name: Push Dapr container images
         if: env.TEST_PREFIX != ''
         run: |
-          make docker-push
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
+            # For Linux, we use images based on Mariner
+            DOCKERFILE=Dockerfile-mariner make docker-push
+          else
+            make docker-push
+          fi
         shell: bash
-      - name: Build and push e2e test apps
+      - name: Build and push E2E test apps
         if: env.TEST_PREFIX != ''
         run: |
           make build-push-e2e-app-all
