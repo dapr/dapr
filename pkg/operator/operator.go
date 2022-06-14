@@ -87,8 +87,11 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 	if err != nil {
 		log.Fatalf("unable to start manager, err: %s", err)
 	}
+	mgrClient := mgr.GetClient()
 
-	wd := &DaprWatchdog{}
+	wd := &DaprWatchdog{
+		client: mgrClient,
+	}
 	err = mgr.Add(wd)
 	if err != nil {
 		log.Fatalf("unable to add watchdog controller, err: %s", err)
@@ -102,7 +105,7 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 	o := &operator{
 		daprHandler:   daprHandler,
 		mgr:           mgr,
-		client:        mgr.GetClient(),
+		client:        mgrClient,
 		configName:    config,
 		certChainPath: certChainPath,
 	}
