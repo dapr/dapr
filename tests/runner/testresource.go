@@ -102,7 +102,6 @@ func (r *TestResources) setup() error {
 
 // TearDown initializes the resources by calling Dispose.
 func (r *TestResources) tearDown() (retErr error) {
-	r.cancel()
 	retErr = nil
 	for dr := r.popActiveResource(); dr != nil; dr = r.popActiveResource() {
 		err := dr.Dispose(false)
@@ -110,6 +109,10 @@ func (r *TestResources) tearDown() (retErr error) {
 			retErr = err
 			fmt.Fprintf(os.Stderr, "Failed to tear down %s. got: %q", dr.Name(), err)
 		}
+	}
+	if r.cancel != nil {
+		r.cancel()
+		r.cancel = nil
 	}
 	return retErr
 }
