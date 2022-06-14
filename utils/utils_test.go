@@ -214,3 +214,24 @@ func TestSetEnvVariables(t *testing.T) {
 		assert.NotEqual(t, "testValue", os.Getenv(""))
 	})
 }
+
+func TestIsYaml(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected bool
+	}{
+		{
+			input:    "a.yaml",
+			expected: true,
+		}, {
+			input:    "a.yml",
+			expected: true,
+		}, {
+			input:    "a.txt",
+			expected: false,
+		},
+	}
+	for _, tc := range testCases {
+		assert.Equal(t, IsYaml(tc.input), tc.expected)
+	}
+}

@@ -15,6 +15,7 @@ package utils
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -151,4 +152,13 @@ func IsTruthy(val string) bool {
 	default:
 		return false
 	}
+}
+
+// IsYaml checks whether the file is yaml or not.
+func IsYaml(fileName string) bool {
+	extension := strings.ToLower(filepath.Ext(fileName))
+	if extension == ".yaml" || extension == ".yml" {
+		return true
+	}
+	return false
 }
