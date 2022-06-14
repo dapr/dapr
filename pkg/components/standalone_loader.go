@@ -18,10 +18,11 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/ghodss/yaml"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/utils"
 
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
@@ -54,7 +55,11 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 	list := []components_v1alpha1.Component{}
 
 	for _, file := range files {
-		if !file.IsDir() && s.isYaml(file.Name()) {
+		if !file.IsDir() {
+			if !utils.IsYaml(file.Name()) {
+				log.Warnf("A non-YAML component file %s was detected, it will not be loaded", file.Name())
+				continue
+			}
 			components := s.loadComponentsFromFile(file.Name())
 			if len(components) > 0 {
 				list = append(list, components...)
@@ -81,15 +86,6 @@ func (s *StandaloneComponents) loadComponentsFromFile(filename string) []compone
 		log.Warnf("daprd load components error when parsing components yaml resource in %s : %s", path, err)
 	}
 	return components
-}
-
-// isYaml checks whether the file is yaml or not.
-func (s *StandaloneComponents) isYaml(fileName string) bool {
-	extension := strings.ToLower(filepath.Ext(fileName))
-	if extension == ".yaml" || extension == ".yml" {
-		return true
-	}
-	return false
 }
 
 // decodeYaml decodes the yaml document.
