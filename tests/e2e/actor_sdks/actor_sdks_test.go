@@ -61,18 +61,16 @@ func TestMain(m *testing.M) {
 			Replicas:         1,
 			IngressEnabled:   true,
 			MetricsEnabled:   true,
-			AppMemoryLimit:   "500Mi",
+			AppMemoryLimit:   "600Mi",
 			AppMemoryRequest: "200Mi",
 		},
 		{
-			AppName:          "actorpython",
-			DaprEnabled:      true,
-			ImageName:        "e2e-actorpython",
-			Replicas:         1,
-			IngressEnabled:   true,
-			MetricsEnabled:   true,
-			AppMemoryLimit:   "200Mi",
-			AppMemoryRequest: "100Mi",
+			AppName:        "actorpython",
+			DaprEnabled:    true,
+			ImageName:      "e2e-actorpython",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 
@@ -86,20 +84,18 @@ func TestMain(m *testing.M) {
 				Replicas:         1,
 				IngressEnabled:   true,
 				MetricsEnabled:   true,
-				AppMemoryLimit:   "500Mi",
+				AppMemoryLimit:   "600Mi",
 				AppMemoryRequest: "200Mi",
 			},
 			// Disables PHP test for Windows temporarily due to issues with its Windows container.
 			// See https://github.com/dapr/dapr/issues/2953
 			kube.AppDescription{
-				AppName:          "actorphp",
-				DaprEnabled:      true,
-				ImageName:        "e2e-actorphp",
-				Replicas:         1,
-				IngressEnabled:   true,
-				MetricsEnabled:   true,
-				AppMemoryLimit:   "200Mi",
-				AppMemoryRequest: "100Mi",
+				AppName:        "actorphp",
+				DaprEnabled:    true,
+				ImageName:      "e2e-actorphp",
+				Replicas:       1,
+				IngressEnabled: true,
+				MetricsEnabled: true,
 			})
 	}
 

@@ -82,8 +82,6 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 			DaprCPULimit:   "2.0",
 			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
 			Config:         "reentrantconfig",
 			AppPort:        22222,
 		},

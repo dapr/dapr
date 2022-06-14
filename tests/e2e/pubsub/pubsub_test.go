@@ -419,8 +419,8 @@ func TestMain(m *testing.M) {
 			Replicas:         1,
 			IngressEnabled:   true,
 			MetricsEnabled:   true,
-			AppMemoryLimit:   "200Mi",
-			AppMemoryRequest: "100Mi",
+			AppMemoryLimit:   "400Mi",
+			AppMemoryRequest: "200Mi",
 		},
 		{
 			AppName:          subscriberAppName,
@@ -429,8 +429,8 @@ func TestMain(m *testing.M) {
 			Replicas:         1,
 			IngressEnabled:   true,
 			MetricsEnabled:   true,
-			AppMemoryLimit:   "200Mi",
-			AppMemoryRequest: "100Mi",
+			AppMemoryLimit:   "400Mi",
+			AppMemoryRequest: "200Mi",
 		},
 	}
 
