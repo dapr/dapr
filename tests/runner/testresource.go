@@ -14,6 +14,7 @@ limitations under the License.
 package runner
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -22,7 +23,7 @@ import (
 // Disposable is an interface representing the disposable test resources.
 type Disposable interface {
 	Name() string
-	Init() error
+	Init(ctx context.Context) error
 	Dispose(wait bool) error
 }
 
@@ -32,6 +33,8 @@ type TestResources struct {
 	resourcesLock       sync.Mutex
 	activeResources     []Disposable
 	activeResourcesLock sync.Mutex
+	ctx                 context.Context
+	cancel              context.CancelFunc
 }
 
 // Add adds Disposable resource to resources queue.
@@ -85,8 +88,10 @@ func (r *TestResources) FindActiveResource(name string) Disposable {
 
 // Setup initializes the resources by calling Setup.
 func (r *TestResources) setup() error {
+	r.ctx, r.cancel = context.WithCancel(context.Background())
+
 	for dr := r.dequeueResource(); dr != nil; dr = r.dequeueResource() {
-		err := dr.Init()
+		err := dr.Init(r.ctx)
 		r.pushActiveResource(dr)
 		if err != nil {
 			return err
@@ -97,6 +102,7 @@ func (r *TestResources) setup() error {
 
 // TearDown initializes the resources by calling Dispose.
 func (r *TestResources) tearDown() (retErr error) {
+	r.cancel()
 	retErr = nil
 	for dr := r.popActiveResource(); dr != nil; dr = r.popActiveResource() {
 		err := dr.Dispose(false)
