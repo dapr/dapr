@@ -30,8 +30,6 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/agrea/ptr"
-	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	routing "github.com/fasthttp/router"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -43,6 +41,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
+	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -3753,8 +3754,7 @@ func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configura
 	return nil
 }
 
-type fakeLockStore struct {
-}
+type fakeLockStore struct{}
 
 func (l fakeLockStore) Ping() error {
 	return nil
