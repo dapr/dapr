@@ -4,9 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/dapr/dapr/utils"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/dapr/dapr/utils"
 )
 
 const (
