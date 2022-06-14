@@ -47,6 +47,9 @@ func (dw *DaprWatchdog) Start(ctx context.Context) error {
 		}
 	}()
 
+	// Start an iteration right away, at startup
+	workCh <- struct{}{}
+
 	// Repeat on interval
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
