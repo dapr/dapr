@@ -45,14 +45,14 @@ const (
 
 var log = logger.NewLogger("dapr.injector")
 
-var allowedControllersServiceAccounts = []string{
-	"replicaset-controller",
-	"deployment-controller",
-	"cronjob-controller",
-	"job-controller",
-	"statefulset-controller",
-	"daemon-set-controller",
-	"tekton-pipelines-controller",
+var AllowedServiceAccountInfos = []string{
+	"replicaset-controller:kube-system",
+	"deployment-controller:kube-system",
+	"cronjob-controller:kube-system",
+	"job-controller:kube-system",
+	"statefulset-controller:kube-system",
+	"daemon-set-controller:kube-system",
+	"tekton-pipelines-controller:tekton-pipelines",
 }
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
@@ -122,13 +122,14 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
-	allowedList := strings.Split(cfg.AllowedControllerServiceAccounts, ",")
-	allowedList = append(allowedList, allowedControllersServiceAccounts...)
+	allowedList := strings.Split(cfg.AllowedServiceAccountInfos, ",")
+	allowedList = append(allowedList, AllowedServiceAccountInfos...)
 
 	return getServiceAccount(ctx, kubeClient, allowedList)
 }
 
-func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedControllersServiceAccounts []string) ([]string, error) {
+// getServiceAccount parses "service-account:namespace" k/v list and returns an array of UID.
+func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedServiceAcccountInfos []string) ([]string, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, getKubernetesServiceAccountTimeoutSeconds*time.Second)
 	defer cancel()
 
@@ -139,14 +140,15 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 
 	allowedUids := []string{}
 
-	for _, allowedServiceAccount := range allowedControllersServiceAccounts {
+	for _, allowedServiceInfo := range allowedServiceAcccountInfos {
+		serviceAccountInfo := strings.Split(allowedServiceInfo, ":")
 		for _, sa := range serviceaccounts.Items {
-			if sa.Name == allowedServiceAccount {
+			if sa.Name == serviceAccountInfo[0] && sa.Namespace == serviceAccountInfo[1] {
 				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
 				break
 			}
 		}
-		log.Warnf("Unable to get SA %s UID (%s)", allowedServiceAccount, err)
+		log.Warnf("Unable to get SA %s UID (%s)", allowedServiceInfo, err)
 	}
 
 	return allowedUids, nil

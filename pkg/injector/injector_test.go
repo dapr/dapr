@@ -698,7 +698,7 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	uids, err := getServiceAccount(context.TODO(), client, allowedControllersServiceAccounts)
+	uids, err := getServiceAccount(context.TODO(), client, AllowedServiceAccountInfos)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(uids))
 }
