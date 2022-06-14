@@ -352,12 +352,7 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 		},
 	}
 	c := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
-	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{
-		{
-			Name:    config.ActorTypeMetadata,
-			Enabled: true,
-		},
-	}, resiliency.New(log), "actorStore")
+	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{}, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
 }
