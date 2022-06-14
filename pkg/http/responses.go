@@ -63,9 +63,9 @@ type ComponentHealth struct {
 type HealthStatus string
 
 const (
-	OK        HealthStatus = "ok"
-	NOT_OK    HealthStatus = "not_ok"
-	UNDEFINED HealthStatus = "undefined"
+	Ok        HealthStatus = "ok"
+	Not_Ok    HealthStatus = "not_ok"
+	Undefined HealthStatus = "undefined"
 )
 
 type option = func(ctx *fasthttp.RequestCtx)

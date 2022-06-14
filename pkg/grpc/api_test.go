@@ -77,7 +77,6 @@ const (
 	goodKey             = "good-key"
 	goodKey2            = "good-key2"
 	mockSubscribeID     = "mockId"
-	reqGoodKey          = "fakeAPI||good-key"
 )
 
 var testResiliency = &v1alpha1.Resiliency{
@@ -1429,6 +1428,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 		})
 	}
 }
+
 func TestCheckStoreHealth(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeSecretStore := daprt.FakeSecretStore{}

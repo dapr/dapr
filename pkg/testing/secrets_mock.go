@@ -86,6 +86,7 @@ func (c FailingSecretStore) Init(metadata secretstores.Metadata) error {
 func (c FailingSecretStore) Close() error {
 	return nil
 }
+
 func (c FakeSecretStore) Ping() error {
 	return nil
 }

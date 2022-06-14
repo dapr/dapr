@@ -122,7 +122,6 @@ const (
 	actorTypeParam           = "actorType"
 	actorIDParam             = "actorId"
 	storeNameParam           = "storeName"
-	componentKindParam       = "components"
 	componentNameParam       = "componentName"
 	stateKeyParam            = "key"
 	configurationKeyParam    = "key"
@@ -2131,7 +2130,7 @@ func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKi
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		}
 		log.Debug(msg)
-		return HealthStatus(UNDEFINED), fmt.Errorf("ERR_COMPONENT_%s_NOT_FOUND", componentKind)
+		return HealthStatus(Undefined), fmt.Errorf("ERR_COMPONENT_%s_NOT_FOUND", componentKind)
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
@@ -2145,12 +2144,12 @@ func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKi
 				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			}
 			log.Debug(msg)
-			return HealthStatus(NOT_OK), fmt.Errorf("ERR_%s_HEALTH_NOT_OK", componentKind)
+			return HealthStatus(Not_Ok), fmt.Errorf("ERR_%s_HEALTH_NOT_OK", componentKind)
 		} else {
 			if reqCtx != nil {
 				respond(reqCtx, withEmpty())
 			}
-			return HealthStatus(OK), nil
+			return HealthStatus(Ok), nil
 		}
 	} else {
 		msg := NewErrorResponse(
@@ -2160,7 +2159,7 @@ func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKi
 			respond(reqCtx, withError(fasthttp.StatusNotImplemented, msg))
 		}
 		log.Debug(msg)
-		return HealthStatus(UNDEFINED), fmt.Errorf("ERR_PING_NOT_IMPLEMENTED_BY_%s", componentKind)
+		return HealthStatus(Undefined), fmt.Errorf("ERR_PING_NOT_IMPLEMENTED_BY_%s", componentKind)
 	}
 }
 
