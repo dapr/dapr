@@ -30,24 +30,55 @@ func (dw *DaprWatchdog) NeedLeaderElection() bool {
 // Start the controller. This method blocks until the context is canceled.
 // Implements sigs.k8s.io/controller-runtime/pkg/manager.Runnable .
 func (dw *DaprWatchdog) Start(ctx context.Context) error {
-	log.Infof("DaprWatchdog started")
+	log.Debugf("DaprWatchdog worker started")
+
+	// Use a buffered channel to make sure that there's at most one iteration at a given time
+	// and if an iteration isn't done by the time the next one is scheduled to start, no more iterations are added to the queue
+	workCh := make(chan struct{}, 1)
+	defer close(workCh)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-workCh:
+				dw.listPods(ctx)
+			}
+		}
+	}()
+
+	// Repeat on interval
 	t := time.NewTicker(30 * time.Second)
+	defer t.Stop()
+
 forloop:
 	for {
 		select {
 		case <-ctx.Done():
-			t.Stop()
 			break forloop
 		case <-t.C:
-			log.Infof("DaprWatchdog tick")
-			dw.listPods(ctx)
+			log.Debugf("DaprWatchdog worker tick")
+			select {
+			case workCh <- struct{}{}:
+				// Successfully queued another iteration
+				log.Debugf("Added listPods iteration to the queue")
+			default:
+				// Do nothing - there's already an iteration in the queue
+				log.Debugf("There's already an iteration in the listPods queue-not adding another one")
+			}
 		}
 	}
-	log.Infof("DaprWatchdog stopping")
+
+	log.Debugf("DaprWatchdog worker stopping")
 	return nil
 }
 
 func (dw *DaprWatchdog) listPods(ctx context.Context) {
+	log.Debugf("listPods started")
+
+	// Request the list of pods
+	// We are not using pagination because we may be deleting pods during the iterations
+	// The client implements some level of caching anyways
 	pod := &corev1.PodList{}
 	err := dw.client.List(ctx, pod,
 		client.InNamespace(GetNamespace()),
@@ -92,4 +123,6 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 
 		log.Infof("Deleted pod %s", v.Name)
 	}
+
+	log.Debugf("listPods done")
 }
