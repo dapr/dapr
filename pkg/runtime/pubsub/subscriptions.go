@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dapr/dapr/utils"
+
 	"github.com/cenkalti/backoff/v4"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
@@ -257,6 +259,10 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 
 	for _, f := range files {
 		if !f.IsDir() {
+			if !utils.IsYaml(f.Name()) {
+				log.Warnf("A non-YAML pubsub file %s was detected, it will not be loaded", f.Name())
+				continue
+			}
 			filePath := filepath.Join(componentsPath, f.Name())
 			b, err := os.ReadFile(filePath)
 			if err != nil {

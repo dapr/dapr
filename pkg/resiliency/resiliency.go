@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/dapr/utils"
+
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru"
 	"gopkg.in/yaml.v2"
@@ -164,6 +166,10 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 	configs := make([]*resiliency_v1alpha.Resiliency, 0, len(files))
 
 	for _, file := range files {
+		if !utils.IsYaml(file.Name()) {
+			log.Warnf("A non-YAML resiliency file %s was detected, it will not be loaded", file.Name())
+			continue
+		}
 		filePath := filepath.Join(path, file.Name())
 		b, err := os.ReadFile(filePath)
 		if err != nil {
