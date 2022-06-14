@@ -737,22 +737,17 @@ func (a *api) allComponentsHealthResponePopulator(componentType string, hresp *r
 
 func (a *api) CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
 	componentName := in.ComponentName
-	found := false
 	components := a.getComponentsFn()
 	for _, comp := range components {
 		if componentName == comp.Name {
-			found = true
 			_, err := a.CheckHealthUtil(strings.Split(comp.Spec.Type, ".")[0], comp.Name)
 			return &emptypb.Empty{}, err
 		}
 	}
-	if !found {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrComponentWitNameNotFound, in.ComponentName)
-		apiServerLogger.Debug(err)
+	err := status.Errorf(codes.InvalidArgument, messages.ErrComponentWitNameNotFound, in.ComponentName)
+	apiServerLogger.Debug(err)
 
-		return &emptypb.Empty{}, err
-	}
-	return &emptypb.Empty{}, nil
+	return &emptypb.Empty{}, err
 }
 
 func (a *api) CheckHealthUtil(componentKind string, componentName string) (out string, err error) {

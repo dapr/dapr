@@ -3872,9 +3872,8 @@ func TestV1HealthzEndpoint(t *testing.T) {
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
 				if pubsubName == "pubsubname" {
 					return &daprt.MockPubSub{}
-				} else {
-					return nil
 				}
+				return nil
 			},
 		},
 		getComponentsFn: func() []components_v1alpha1.Component {

@@ -54,19 +54,11 @@ type ComponentHealthResponse struct {
 }
 
 type ComponentHealth struct {
-	Component string       `json:"componentName"`
-	Type      string       `json:"type"`
-	Status    HealthStatus `json:"status"`
-	Error     string       `json:"error,omitempty"`
+	Component string `json:"componentName"`
+	Type      string `json:"type"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
 }
-
-type HealthStatus string
-
-const (
-	Ok        HealthStatus = "ok"
-	Not_Ok    HealthStatus = "not_ok"
-	Undefined HealthStatus = "undefined"
-)
 
 type option = func(ctx *fasthttp.RequestCtx)
 

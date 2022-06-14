@@ -2119,7 +2119,7 @@ func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKind string, componentName string) (status HealthStatus, err error) {
+func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKind string, componentName string) (healthStatus string, err error) {
 	component := a.getComponent(componentKind, componentName)
 
 	if component == nil {
@@ -2130,12 +2130,11 @@ func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKi
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		}
 		log.Debug(msg)
-		return HealthStatus(Undefined), fmt.Errorf("ERR_COMPONENT_%s_NOT_FOUND", componentKind)
+		return "Undefined", fmt.Errorf("ERR_COMPONENT_%s_NOT_FOUND", componentKind)
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
 		err := pinger.Ping()
-
 		if err != nil {
 			msg := NewErrorResponse(
 				fmt.Sprintf("ERR_%s_HEALTH_NOT_OK", strings.ToUpper(componentKind)),
@@ -2144,23 +2143,21 @@ func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKi
 				respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 			}
 			log.Debug(msg)
-			return HealthStatus(Not_Ok), fmt.Errorf("ERR_%s_HEALTH_NOT_OK", componentKind)
-		} else {
-			if reqCtx != nil {
-				respond(reqCtx, withEmpty())
-			}
-			return HealthStatus(Ok), nil
+			return "Not_Ok", fmt.Errorf("ERR_%s_HEALTH_NOT_OK", componentKind)
 		}
-	} else {
-		msg := NewErrorResponse(
-			fmt.Sprintf("ERR_PING_NOT_IMPLEMENTED_BY_%s", componentName),
-			fmt.Sprintf(messages.ErrComponentNotImplemented, componentName))
 		if reqCtx != nil {
-			respond(reqCtx, withError(fasthttp.StatusNotImplemented, msg))
+			respond(reqCtx, withEmpty())
 		}
-		log.Debug(msg)
-		return HealthStatus(Undefined), fmt.Errorf("ERR_PING_NOT_IMPLEMENTED_BY_%s", componentKind)
+		return "Ok", nil
 	}
+	msg := NewErrorResponse(
+		fmt.Sprintf("ERR_PING_NOT_IMPLEMENTED_BY_%s", componentName),
+		fmt.Sprintf(messages.ErrComponentNotImplemented, componentName))
+	if reqCtx != nil {
+		respond(reqCtx, withError(fasthttp.StatusNotImplemented, msg))
+	}
+	log.Debug(msg)
+	return "Undefined", fmt.Errorf("ERR_PING_NOT_IMPLEMENTED_BY_%s", componentKind)
 }
 
 func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
