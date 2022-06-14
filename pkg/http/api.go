@@ -84,7 +84,6 @@ type api struct {
 	configurationSubscribe     map[string]chan struct{}
 	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
-	pubSubs                    map[string]pubsub.PubSub
 	inputBindings              map[string]bindings.InputBinding
 	outputBindings             map[string]bindings.OutputBinding
 	secretsConfiguration       map[string]config.SecretsScope
@@ -149,7 +148,6 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	lockStores map[string]lock.Store,
 	secretStores map[string]secretstores.SecretStore,
-	pubSubs map[string]pubsub.PubSub,
 	inputBindings map[string]bindings.InputBinding,
 	outputBindings map[string]bindings.OutputBinding,
 	secretsConfiguration map[string]config.SecretsScope,
@@ -176,7 +174,6 @@ func NewAPI(
 		lockStores:                 lockStores,
 		transactionalStateStores:   transactionalStateStores,
 		secretStores:               secretStores,
-		pubSubs:                    pubSubs,
 		inputBindings:              inputBindings,
 		outputBindings:             outputBindings,
 		secretsConfiguration:       secretsConfiguration,
