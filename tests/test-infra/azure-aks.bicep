@@ -88,7 +88,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           name: 'agentpool'
           osDiskSizeGB: osDiskSizeGB
           enableAutoScaling: false
-          count: 3
+          count: 4
           vmSize: linuxVMSize
           osType: 'Linux'
           type: 'VirtualMachineScaleSets'
@@ -109,7 +109,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           osDiskSizeGB: osDiskSizeGB
           osDiskType: 'Ephemeral'
           enableAutoScaling: false
-          count: 2
+          count: 3
           vmSize: windowsVMSize
           osType: 'Windows'
           type: 'VirtualMachineScaleSets'
