@@ -1787,6 +1787,8 @@ github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635/go.mod h1:hkRG
 github.com/tchap/go-patricia v2.2.6+incompatible/go.mod h1:bmLyhP68RS6kStMGxByiQ23RP/odRBOTVjwp2cDyi6I=
 github.com/tebeka/strftime v0.1.3/go.mod h1:7wJm3dZlpr4l/oVK0t1HYIc4rMzQ2XJlOMIUJUJH6XQ=
 github.com/testcontainers/testcontainers-go v0.9.0/go.mod h1:b22BFXhRbg4PJmeMVWh6ftqjyZHgiIl3w274e9r3C2E=
+github.com/tetratelabs/wazero v0.0.0-20220425003459-ad61d9a6ff43 h1:o/PS34ksCpw72GtxUKad1jDMPsgGn6zVRG0BFIOUrsU=
+github.com/tetratelabs/wazero v0.0.0-20220425003459-ad61d9a6ff43/go.mod h1:Y4X/zO4sC2dJjZG9GDYNRbJGogfqFYJY/BbyKlOxXGI=
 github.com/tevid/gohamcrest v1.1.1/go.mod h1:3UvtWlqm8j5JbwYZh80D/PVBt0mJ1eJiYgZMibh0H/k=
 github.com/tidwall/gjson v1.8.1 h1:8j5EE9Hrh3l9Od1OIEDAb7IpezNA20UdRngNAj5N0WU=
 github.com/tidwall/gjson v1.8.1/go.mod h1:5/xDoumyyDNerp2U36lyolv46b3uF/9Bu6OfyQ9GImk=
