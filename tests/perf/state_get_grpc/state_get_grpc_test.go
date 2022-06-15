@@ -14,12 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package state_get
+package state_get_grpc
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -35,7 +36,7 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
-	utils.SetupLogs("state_get")
+	utils.SetupLogs("state_get_grpc")
 
 	testApps := []kube.AppDescription{
 		{
@@ -57,7 +58,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("state_get", testApps, nil, nil)
+	tr = runner.NewTestRunner("state_get_grpc", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
@@ -83,11 +84,12 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 
 	t.Log("running baseline test...")
 	baselineResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Logf("baseline test results: %s", string(baselineResp))
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, baselineResp)
-
-	t.Logf("baseline test results: %s", string(baselineResp))
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
 	// Perform dapr test
 	p.Dapr = "capability=state,target=dapr,method=get,store=inmemorystate,key=abc123"
@@ -97,9 +99,12 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 
 	t.Log("running dapr test...")
 	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Logf("dapr test results: %s", string(daprResp))
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
 	sidecarUsage, err := tr.Platform.GetSidecarUsage("tester")
 	require.NoError(t, err)
@@ -110,7 +115,6 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts("tester")
 	require.NoError(t, err)
 
-	t.Logf("dapr test results: %s", string(daprResp))
 	t.Logf("dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 
 	var daprResult perf.TestResult
@@ -137,7 +141,7 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{baselineResult, daprResult},
-		"State Get",
+		"State Get gRPC",
 		sidecarUsage,
 		appUsage)
 	report.SetTotalRestartCount(restarts)
