@@ -1,6 +1,6 @@
 replicaCount: 1
 logLevel: info
-watchInterval: "120"
+watchInterval: "0"
 maxPodRestartsPerMinute: 20
 
 # Specify full docker image name including registry url to use a custom operator service image

@@ -45,8 +45,8 @@ const (
 	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
 
-	// defaultWatchInterval is the default value for watch-interval, in seconds (note this is a string).
-	defaultWatchInterval = "120"
+	// defaultWatchInterval is the default value for watch-interval, in seconds (note this is a string as `once` is an acceptable value too).
+	defaultWatchInterval = "0"
 
 	// defaultMaxPodRestartsPerMinute is the default value for max-pod-restarts-per-minute.
 	defaultMaxPodRestartsPerMinute = 20
