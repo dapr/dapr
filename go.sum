@@ -569,13 +569,8 @@ github.com/danieljoos/wincred v1.0.2/go.mod h1:SnuYRW9lp1oJrZX/dXJqr0cPK5gYXqx3E
 github.com/danieljoos/wincred v1.1.0/go.mod h1:XYlo+eRTsVA9aHGp7NGjFkPla4m+DCL7hqDjlFjiygg=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-<<<<<<< HEAD
 github.com/dapr/components-contrib v1.7.1-0.20220614152754-a0ef46265bb7 h1:M5pfgfazbJ1Rvmn3VOaeh2ZEqxUbT4LgrEw3bLC20yo=
 github.com/dapr/components-contrib v1.7.1-0.20220614152754-a0ef46265bb7/go.mod h1:ccj6NCpeqraaxz7r5/sSogTin0uymL5i33VR7pRRpHg=
-=======
-github.com/dapr/components-contrib v1.7.1-0.20220613191806-419e296d354b h1:dq/C8HbKCvPr91fw83tclvUmLpQxu+3WR9kkxhHcuy0=
-github.com/dapr/components-contrib v1.7.1-0.20220613191806-419e296d354b/go.mod h1:OfKcxfFAuWinwHK1nA/RJcq4RqfCjc+dQ6OCCXrnzMg=
->>>>>>> daprd: add wasm basic http middleware support
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233 h1:M0dWIG8kUxEFU57IqTWeqptNqlBsfosFgsA5Ov7rJ8g=
 github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233/go.mod h1:y8r0VqUNKyd6xBXp7gQjwA59wlCLGfKzL5J8iJsN09w=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -1792,12 +1787,9 @@ github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635/go.mod h1:hkRG
 github.com/tchap/go-patricia v2.2.6+incompatible/go.mod h1:bmLyhP68RS6kStMGxByiQ23RP/odRBOTVjwp2cDyi6I=
 github.com/tebeka/strftime v0.1.3/go.mod h1:7wJm3dZlpr4l/oVK0t1HYIc4rMzQ2XJlOMIUJUJH6XQ=
 github.com/testcontainers/testcontainers-go v0.9.0/go.mod h1:b22BFXhRbg4PJmeMVWh6ftqjyZHgiIl3w274e9r3C2E=
-<<<<<<< HEAD
-github.com/tevid/gohamcrest v1.1.1/go.mod h1:3UvtWlqm8j5JbwYZh80D/PVBt0mJ1eJiYgZMibh0H/k=
-=======
 github.com/tetratelabs/wazero v0.0.0-20220425003459-ad61d9a6ff43 h1:o/PS34ksCpw72GtxUKad1jDMPsgGn6zVRG0BFIOUrsU=
 github.com/tetratelabs/wazero v0.0.0-20220425003459-ad61d9a6ff43/go.mod h1:Y4X/zO4sC2dJjZG9GDYNRbJGogfqFYJY/BbyKlOxXGI=
->>>>>>> daprd: add wasm basic http middleware support
+github.com/tevid/gohamcrest v1.1.1/go.mod h1:3UvtWlqm8j5JbwYZh80D/PVBt0mJ1eJiYgZMibh0H/k=
 github.com/tidwall/gjson v1.8.1 h1:8j5EE9Hrh3l9Od1OIEDAb7IpezNA20UdRngNAj5N0WU=
 github.com/tidwall/gjson v1.8.1/go.mod h1:5/xDoumyyDNerp2U36lyolv46b3uF/9Bu6OfyQ9GImk=
 github.com/tidwall/match v1.0.3 h1:FQUVvBImDutD8wJLN6c5eMzWtjgONK9MwIBCOrUJKeE=

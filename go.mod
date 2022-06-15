@@ -64,7 +64,6 @@ require (
 
 require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/dapr/components-contrib v1.7.1-0.20220613191806-419e296d354b
 	github.com/golang/mock v1.6.0
 )
 
