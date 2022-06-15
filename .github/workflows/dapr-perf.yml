@@ -362,22 +362,30 @@ jobs:
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD_SIZE: 1024
         run: make test-perf-service_invocation_grpc
-      - name: Run Perf test state_get
+      - name: Run Perf test state_get_grpc
         if: env.TEST_PREFIX != ''
         env:
           DAPR_PERF_QPS: 1000
           DAPR_PERF_CONNECTIONS: 16
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD_SIZE: 0
-        run: make test-perf-state_get
-      - name: Run Perf test pubsub_publish
+        run: make test-perf-state_get_grpc
+      - name: Run Perf test state_get_http
         if: env.TEST_PREFIX != ''
         env:
           DAPR_PERF_QPS: 1000
           DAPR_PERF_CONNECTIONS: 16
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD_SIZE: 0
-        run: make test-perf-pubsub_publish
+        run: make test-perf-state_get_http
+      - name: Run Perf test pubsub_publish_grpc
+        if: env.TEST_PREFIX != ''
+        env:
+          DAPR_PERF_QPS: 1000
+          DAPR_PERF_CONNECTIONS: 16
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD_SIZE: 0
+        run: make test-perf-pubsub_publish_grpc
       - name: Run Perf test actor_timer in Java
         if: env.TEST_PREFIX != ''
         env:

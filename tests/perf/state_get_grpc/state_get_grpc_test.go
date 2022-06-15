@@ -125,7 +125,7 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	err = json.Unmarshal(baselineResp, &baselineResult)
 	require.NoError(t, err)
 
-	percentiles := map[int]string{1: "75th", 2: "90th"}
+	percentiles := map[int]string{1: "50th", 2: "75th", 3: "90th", 4: "99th"}
 	tp90Latency := 0.0
 
 	for k, v := range percentiles {
@@ -138,6 +138,10 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 		}
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 	}
+	avg := (daprResult.DurationHistogram.Avg - baselineResult.DurationHistogram.Avg) * 1000
+	t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineResult.DurationHistogram.Avg*1000))
+	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprResult.DurationHistogram.Avg*1000))
+	t.Logf("added latency avg: %sms", fmt.Sprintf("%.2f", avg))
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{baselineResult, daprResult},
