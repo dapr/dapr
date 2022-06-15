@@ -143,6 +143,7 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
 	}
+	t.Logf("Actual QPS: %.2f, expected QPS: %d", daprResult.ActualQPS, p.QPS)
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{daprResult},
