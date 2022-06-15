@@ -20,10 +20,9 @@ import (
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/propagation"
+	otelcodes "go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -41,11 +40,10 @@ const (
 
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
 func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
-	sampler := diag_utils.TraceSampler(spec.SamplingRate)
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		var (
-			span             *trace.Span
-			spanKind         trace.StartOption
+			span             trace.Span
+			spanKind         trace.SpanStartOption
 			prefixedMetadata map[string]string
 			reqSpanAttr      map[string]string
 		)
@@ -60,7 +58,8 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			spanKind = trace.WithSpanKind(trace.SpanKindClient)
 		}
 
-		ctx, span = trace.StartSpanWithRemoteParent(ctx, info.FullMethod, sc, sampler, spanKind)
+		ctx = trace.ContextWithRemoteSpanContext(ctx, sc)
+		ctx, span = tracer.Start(ctx, info.FullMethod, spanKind)
 
 		isSampled := span.SpanContext().IsSampled()
 
@@ -77,7 +76,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			for key, value := range reqSpanAttr {
 				prefixedMetadata[key] = value
 			}
-			AddAttributesToSpan(span, prefixedMetadata)
+			AddAttributesToSpan(&span, prefixedMetadata)
 
 			// Correct the span name based on API.
 			if sname, ok := reqSpanAttr[daprAPISpanNameInternal]; ok {
@@ -87,11 +86,11 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 
 		// Add grpc-trace-bin header for all non-invocation api's
 		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
-			traceContextBinary := propagation.Binary(span.SpanContext())
+			traceContextBinary := diag_utils.BinaryFromSpanContext(span.SpanContext())
 			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
 		}
 
-		UpdateSpanStatusFromGRPCError(span, err)
+		UpdateSpanStatusFromGRPCError(&span, err)
 		span.End()
 
 		return resp, err
@@ -105,7 +104,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 			return handler(srv, ss)
 		}
 
-		var span *trace.Span
+		var span trace.Span
 		spanName := info.FullMethod
 
 		ctx := ss.Context()
@@ -119,9 +118,8 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		targetID := vals[0]
 		wrapped := grpc_middleware.WrapServerStream(ss)
 		sc, _ := SpanContextFromIncomingGRPCMetadata(ctx)
-		sampler := diag_utils.TraceSampler(spec.SamplingRate)
 
-		var spanKind trace.StartOption
+		var spanKind trace.SpanStartOption
 
 		if appID == targetID {
 			spanKind = trace.WithSpanKind(trace.SpanKindServer)
@@ -129,13 +127,15 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 			spanKind = trace.WithSpanKind(trace.SpanKindClient)
 		}
 
-		ctx, span = trace.StartSpanWithRemoteParent(ctx, spanName, sc, sampler, spanKind)
+		ctx = trace.ContextWithRemoteSpanContext(ctx, sc)
+		ctx, span = tracer.Start(ctx, spanName, spanKind)
+
 		wrapped.WrappedContext = ctx
 		err := handler(srv, wrapped)
 
-		addSpanMetadataAndUpdateStatus(ctx, span, info.FullMethod, appID, nil, true)
+		addSpanMetadataAndUpdateStatus(ctx, &span, info.FullMethod, appID, nil, true)
 
-		UpdateSpanStatusFromGRPCError(span, err)
+		UpdateSpanStatusFromGRPCError(&span, err)
 		span.End()
 
 		return err
@@ -144,12 +144,12 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 
 func addSpanMetadataAndUpdateStatus(ctx context.Context, span *trace.Span, fullMethod, appID string, req interface{}, stream bool) {
 	var prefixedMetadata map[string]string
-	if span.SpanContext().TraceOptions.IsSampled() {
+	if (*span).SpanContext().IsSampled() {
 		// users can add dapr- prefix if they want to see the header values in span attributes.
 		prefixedMetadata = userDefinedMetadata(ctx)
 	}
 
-	if span.SpanContext().TraceOptions.IsSampled() {
+	if (*span).SpanContext().IsSampled() {
 		// Populates dapr- prefixed header first
 		AddAttributesToSpan(span, prefixedMetadata)
 
@@ -163,7 +163,7 @@ func addSpanMetadataAndUpdateStatus(ctx context.Context, span *trace.Span, fullM
 
 		// Correct the span name based on API.
 		if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
-			span.SetName(sname)
+			(*span).SetName(sname)
 		}
 	}
 }
@@ -193,11 +193,11 @@ func UpdateSpanStatusFromGRPCError(span *trace.Span, err error) {
 		return
 	}
 
-	s, ok := status.FromError(err)
+	_, ok := status.FromError(err)
 	if ok {
-		span.SetStatus(trace.Status{Code: int32(s.Code()), Message: s.Message()})
+		(*span).SetStatus(otelcodes.Ok, "")
 	} else {
-		span.SetStatus(trace.Status{Code: int32(codes.Internal), Message: err.Error()})
+		(*span).SetStatus(otelcodes.Error, err.Error())
 	}
 }
 
@@ -213,7 +213,7 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 	}
 	traceContext := md[grpcTraceContextKey]
 	if len(traceContext) > 0 {
-		sc, ok = propagation.FromBinary([]byte(traceContext[0]))
+		sc, ok = diag_utils.SpanContextFromBinary([]byte(traceContext[0]))
 	} else {
 		// add workaround to fallback on checking traceparent header
 		// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
@@ -223,7 +223,8 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 		if len(traceContext) > 0 {
 			sc, ok = SpanContextFromW3CString(traceContext[0])
 			if ok && len(md[tracestateHeader]) > 0 {
-				sc.Tracestate = TraceStateFromW3CString(md[tracestateHeader][0])
+				ts := TraceStateFromW3CString(md[tracestateHeader][0])
+				sc.WithTraceState(*ts)
 			}
 		}
 	}
@@ -232,7 +233,7 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 
 // SpanContextToGRPCMetadata appends binary serialized SpanContext to the outgoing GRPC context.
 func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContext) context.Context {
-	traceContextBinary := propagation.Binary(spanContext)
+	traceContextBinary := diag_utils.BinaryFromSpanContext(spanContext)
 	if len(traceContextBinary) == 0 {
 		return ctx
 	}

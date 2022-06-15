@@ -455,7 +455,7 @@ func (a *actorsRuntime) callRemoteActor(
 	}
 
 	span := diag_utils.SpanFromContext(ctx)
-	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	ctx = diag.SpanContextToGRPCMetadata(ctx, (*span).SpanContext())
 	client := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := client.CallActor(ctx, req.Proto())
 	if err != nil {
