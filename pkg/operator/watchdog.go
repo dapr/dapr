@@ -42,7 +42,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 		return nil
 	}
 
-	log.Debugf("DaprWatchdog worker started")
+	log.Infof("DaprWatchdog worker starting")
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
@@ -63,6 +63,7 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 	defer close(workCh)
 	firstCompleteCh := make(chan struct{})
 	go func() {
+		defer log.Infof("DaprWatchdog worker stopped")
 		for {
 			select {
 			case <-ctx.Done():
@@ -76,6 +77,8 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 			}
 		}
 	}()
+
+	log.Infof("DaprWatchdog worker started")
 
 	// Start an iteration right away, at startup, then wait for completion
 	workCh <- struct{}{}
@@ -108,12 +111,12 @@ forloop:
 		}
 	}
 
-	log.Debugf("DaprWatchdog worker stopping")
+	log.Infof("DaprWatchdog worker stopping")
 	return nil
 }
 
 func (dw *DaprWatchdog) listPods(ctx context.Context) {
-	log.Debugf("listPods started")
+	log.Infof("DaprWatchdog started checking pods")
 
 	// Request the list of pods
 	// We are not using pagination because we may be deleting pods during the iterations
@@ -168,5 +171,5 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 		log.Debugf("Resumed after pausing for %v", time.Now().Sub(before))
 	}
 
-	log.Debugf("listPods done")
+	log.Infof("DaprWatchdog completed checking pods")
 }
