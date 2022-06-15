@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/dapr/utils"
+
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru"
 	"gopkg.in/yaml.v2"
@@ -164,6 +166,10 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 	configs := make([]*resiliency_v1alpha.Resiliency, 0, len(files))
 
 	for _, file := range files {
+		if !utils.IsYaml(file.Name()) {
+			log.Warnf("A non-YAML resiliency file %s was detected, it will not be loaded", file.Name())
+			continue
+		}
 		filePath := filepath.Join(path, file.Name())
 		b, err := os.ReadFile(filePath)
 		if err != nil {
@@ -325,6 +331,12 @@ func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error
 		if err = retry.DecodeConfig(&rc, m); err != nil {
 			return fmt.Errorf("invalid retry configuration %q: %w", name, err)
 		}
+
+		if r.isBuiltInPolicy(name) && rc.MaxRetries < 3 {
+			r.log.Warnf("Attempted override of %s did not meet minimum retry count, resetting to 3.", name)
+			rc.MaxRetries = 3
+		}
+
 		r.retries[name] = &rc
 	}
 
@@ -421,6 +433,21 @@ func (r *Resiliency) decodeTargets(c *resiliency_v1alpha.Resiliency) (err error)
 	}
 
 	return nil
+}
+
+func (r *Resiliency) isBuiltInPolicy(name string) bool {
+	switch name {
+	case string(BuiltInServiceRetries):
+		fallthrough
+	case string(BuiltInActorRetries):
+		fallthrough
+	case string(BuiltInActorReminderRetries):
+		fallthrough
+	case string(BuiltInInitializationRetries):
+		return true
+	default:
+		return false
+	}
 }
 
 // EndpointPolicy returns the policy for a service endpoint.
