@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -83,11 +84,12 @@ func TestPubsubPublishGrpcPerformance(t *testing.T) {
 
 	t.Log("running baseline test...")
 	baselineResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Logf("baseline test results: %s", string(baselineResp))
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, baselineResp)
-
-	t.Logf("baseline test results: %s", string(baselineResp))
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
 	// Perform dapr test
 	p.Dapr = "capability=pubsub,target=dapr,method=publish,store=inmemorypubsub,topic=topic123,contenttype=text/plain"
@@ -97,9 +99,12 @@ func TestPubsubPublishGrpcPerformance(t *testing.T) {
 
 	t.Log("running dapr test...")
 	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Logf("dapr test results: %s", string(daprResp))
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
 	sidecarUsage, err := tr.Platform.GetSidecarUsage("tester")
 	require.NoError(t, err)
@@ -110,7 +115,6 @@ func TestPubsubPublishGrpcPerformance(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts("tester")
 	require.NoError(t, err)
 
-	t.Logf("dapr test results: %s", string(daprResp))
 	t.Logf("dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 
 	var daprResult perf.TestResult
