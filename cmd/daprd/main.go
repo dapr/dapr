@@ -160,6 +160,7 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	"github.com/dapr/components-contrib/middleware/http/routerchecker"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
+	wasm_basic "github.com/dapr/components-contrib/middleware/http/wasm/basic"
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -552,6 +553,9 @@ func main() {
 			}),
 			http_middleware_loader.New("routerchecker", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 				return routerchecker.NewMiddleware(log).GetHandler(metadata)
+			}),
+			http_middleware_loader.New("wasm.basic", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return wasm_basic.NewMiddleware(log).GetHandler(metadata)
 			}),
 		),
 	)
