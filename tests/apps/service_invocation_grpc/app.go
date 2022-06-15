@@ -20,15 +20,16 @@ import (
 	"log"
 	"net"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 // server is our user app

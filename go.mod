@@ -62,7 +62,6 @@ require (
 )
 
 require (
-	contrib.go.opencensus.io/exporter/zipkin v0.1.2
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/golang/mock v1.6.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.7.0
