@@ -34,6 +34,9 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -75,6 +78,7 @@ type api struct {
 	getComponentsFn          func() []components_v1alpha1.Component
 	resiliency               resiliency.Provider
 	stateStores              map[string]state.Store
+	lockStores               map[string]lock.Store
 	configurationStores      map[string]configuration.Store
 	configurationSubscribe   map[string]chan struct{}
 	transactionalStateStores map[string]state.TransactionalStore
@@ -135,6 +139,7 @@ func NewAPI(
 	getComponentsFn func() []components_v1alpha1.Component,
 	resiliency resiliency.Provider,
 	stateStores map[string]state.Store,
+	lockStores map[string]lock.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
 	configurationStores map[string]configuration.Store,
@@ -156,6 +161,7 @@ func NewAPI(
 		resiliency:               resiliency,
 		directMessaging:          directMessaging,
 		stateStores:              stateStores,
+		lockStores:               lockStores,
 		transactionalStateStores: transactionalStateStores,
 		secretStores:             secretStores,
 		secretsConfiguration:     secretsConfiguration,
@@ -182,6 +188,7 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
+	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
@@ -429,6 +436,23 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 	}
 }
 
+func (a *api) constructDistributedLockEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "lock/{storeName}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onLock,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "unlock/{storeName}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onUnlock,
+		},
+	}
+}
+
 func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 	body := reqCtx.PostBody()
@@ -630,7 +654,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
@@ -645,6 +669,25 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 		return nil, "", errors.New(msg.Message)
 	}
 	return a.stateStores[storeName], storeName, nil
+}
+
+func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lock.Store, string, error) {
+	if a.lockStores == nil || len(a.lockStores) == 0 {
+		msg := NewErrorResponse("ERR_LOCK_STORE_NOT_CONFIGURED", messages.ErrLockStoresNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+
+	storeName := a.getStateStoreName(reqCtx)
+
+	if a.lockStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_LOCK_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrLockStoreNotFound, storeName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+	return a.lockStores[storeName], storeName, nil
 }
 
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
@@ -764,6 +807,90 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		}
 	}
 	return nil
+}
+
+func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getLockStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	req := lock.TryLockRequest{}
+	err = json.Unmarshal(reqCtx.PostBody(), &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+
+	var resp *lock.TryLockResponse
+	req.ResourceID, err = lock_loader.GetModifiedLockKey(req.ResourceID, storeName, a.id)
+	if err != nil {
+		msg := NewErrorResponse("ERR_TRY_LOCK", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = store.TryLock(&req)
+		return rErr
+	})
+	if err != nil {
+		msg := NewErrorResponse("ERR_TRY_LOCK", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	b, _ := json.Marshal(resp)
+	respond(reqCtx, withJSON(200, b))
+}
+
+func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getLockStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	req := lock.UnlockRequest{}
+	err = json.Unmarshal(reqCtx.PostBody(), &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+
+	var resp *lock.UnlockResponse
+	req.ResourceID, err = lock_loader.GetModifiedLockKey(req.ResourceID, storeName, a.id)
+	if err != nil {
+		msg := NewErrorResponse("ERR_UNLOCK", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = store.Unlock(&req)
+		return rErr
+	})
+	if err != nil {
+		msg := NewErrorResponse("ERR_UNLOCK", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	b, _ := json.Marshal(resp)
+	respond(reqCtx, withJSON(200, b))
 }
 
 func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
@@ -1906,7 +2033,7 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
