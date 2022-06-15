@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package state_get
+package state_get_grpc
 
 import (
 	"encoding/json"
@@ -36,7 +36,7 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
-	utils.SetupLogs("state_get")
+	utils.SetupLogs("state_get_grpc")
 
 	testApps := []kube.AppDescription{
 		{
@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("state_get", testApps, nil, nil)
+	tr = runner.NewTestRunner("state_get_grpc", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
@@ -141,7 +141,7 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{baselineResult, daprResult},
-		"State Get",
+		"State Get gRPC",
 		sidecarUsage,
 		appUsage)
 	report.SetTotalRestartCount(restarts)
