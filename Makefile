@@ -227,6 +227,10 @@ upload-helmchart:
 ################################################################################
 
 PULL_POLICY?=Always
+ADDITIONAL_HELM_SET ?= ""
+ifneq ($(ADDITIONAL_HELM_SET),)
+	ADDITIONAL_HELM_SET := --set $(ADDITIONAL_HELM_SET)
+endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
@@ -237,7 +241,8 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
 		--set global.imagePullPolicy=$(PULL_POLICY) --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
 		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
-		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) $(HELM_CHART_DIR)
+		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) \
+		$(ADDITIONAL_HELM_SET) $(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #
