@@ -78,6 +78,7 @@ func NewAppManager(kubeClients *KubeClient, namespace string, app AppDescription
 		client:    kubeClients,
 		namespace: namespace,
 		app:       app,
+		ctx:       context.Background(),
 	}
 }
 
