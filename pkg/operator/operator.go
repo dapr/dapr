@@ -54,7 +54,7 @@ type Options struct {
 	CertChainPath             string
 	LeaderElection            bool
 	WatchdogEnabled           bool
-	WatchdogInterval          int
+	WatchdogInterval          time.Duration
 	WatchdogMaxRestartsPerMin int
 }
 

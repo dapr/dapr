@@ -15,8 +15,8 @@ package main
 
 import (
 	"flag"
-	"strconv"
 	"strings"
+	"time"
 
 	"k8s.io/klog"
 
@@ -64,14 +64,20 @@ func main() {
 		WatchdogMaxRestartsPerMin: maxPodRestartsPerMinute,
 	}
 
-	if watchInterval != "0" {
+	switch strings.ToLower(watchInterval) {
+	case "0", "false", "f", "no", "off":
+		// Disabled - do nothing
+	default:
 		operatorOpts.WatchdogEnabled = true
-		if strings.ToLower(watchInterval) != "once" { //nolint:gocritic
-			wi, err := strconv.ParseInt(watchInterval, 10, 31)
+		if watchInterval != "once" {
+			dur, err := time.ParseDuration(watchInterval)
 			if err != nil {
-				log.Fatalf("invalid value for watch-interval: cannot parse number")
+				log.Fatalf("invalid value for watch-interval: %s", err)
 			}
-			operatorOpts.WatchdogInterval = int(wi)
+			if dur < time.Second {
+				log.Fatalf("invalid watch-interval value: if not '0' or 'once', must be at least 1s")
+			}
+			operatorOpts.WatchdogInterval = dur
 		}
 	}
 
@@ -97,7 +103,7 @@ func init() {
 
 	flag.StringVar(&config, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
-	flag.StringVar(&watchInterval, "watch-interval", defaultWatchInterval, "Interval for polling pods' state, in seconds. Set to '0' to disable, or 'once' to only run once when the operator starts")
+	flag.StringVar(&watchInterval, "watch-interval", defaultWatchInterval, "Interval for polling pods' state, e.g. '2m'. Set to '0' to disable, or 'once' to only run once when the operator starts")
 	flag.IntVar(&maxPodRestartsPerMinute, "max-pod-restarts-per-minute", defaultMaxPodRestartsPerMinute, "Maximum number of pods in an invalid state that can be restarted per minute")
 	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
 

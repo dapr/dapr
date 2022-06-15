@@ -21,7 +21,7 @@ const (
 // Currently, this ensures that the sidecar is injected in each pod, otherwise it kills the pod so it can be restarted.
 type DaprWatchdog struct {
 	enabled           bool
-	interval          int
+	interval          time.Duration
 	maxRestartsPerMin int
 
 	client         client.Client
@@ -82,12 +82,12 @@ func (dw *DaprWatchdog) Start(parentCtx context.Context) error {
 	<-firstCompleteCh
 
 	// If we only run once, exit when it's done
-	if dw.interval < 1 {
+	if dw.interval < time.Second {
 		return nil
 	}
 
 	// Repeat on interval
-	t := time.NewTicker(time.Duration(dw.interval) * time.Second)
+	t := time.NewTicker(dw.interval)
 	defer t.Stop()
 
 forloop:
