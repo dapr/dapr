@@ -16,16 +16,5 @@ package cmd
 func init() {
 	// e2eCmd represents the e2e command
 	var e2eCmd = getCmdE2EPerf("e2e")
-
 	rootCmd.AddCommand(e2eCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// e2eCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// e2eCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

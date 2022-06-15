@@ -13,7 +13,9 @@ limitations under the License.
 
 package main
 
-import "build-tools/cmd"
+import (
+	"build-tools/cmd"
+)
 
 func main() {
 	cmd.Execute()

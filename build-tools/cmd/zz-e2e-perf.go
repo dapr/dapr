@@ -143,11 +143,13 @@ func (c *cmdE2EPerf) buildCmd(cmd *cobra.Command, args []string) error {
 	// Target image and tag
 	destImage := c.getDestImage()
 
-	// If cache is enable, try pulling from cache first
+	// Compute the hash of the folder with the app, then returns the full Docker image name (including the tag, which is based on the hash)
 	cachedImage, err := c.getCachedImage()
 	if err != nil {
 		return err
 	}
+
+	// If cache is enabled, try pulling from cache first
 	if c.flags.CacheRegistry != "" {
 		fmt.Printf("Looking for image %s in cache…\n", cachedImage)
 
@@ -231,7 +233,7 @@ func (c *cmdE2EPerf) buildAndPushCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Returns the cached image and tag
+// Returns the cached image name and tag
 func (c *cmdE2EPerf) getCachedImage() (string, error) {
 	// Get the hash of the files in the directory
 	hashDir, err := c.getHashDir()
@@ -244,7 +246,7 @@ func (c *cmdE2EPerf) getCachedImage() (string, error) {
 	return cachedImage, nil
 }
 
-// Returns the target image and tag
+// Returns the target image name and tag
 func (c *cmdE2EPerf) getDestImage() string {
 	return fmt.Sprintf("%s/%s-%s:%s", c.flags.DestRegistry, c.cmdType, c.flags.Name, c.flags.DestTag)
 }

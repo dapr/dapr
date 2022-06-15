@@ -226,7 +226,7 @@ jobs:
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash
-      - name: Push container images
+      - name: Push Dapr container images
         if: env.TEST_PREFIX != ''
         run: |
           make docker-push
