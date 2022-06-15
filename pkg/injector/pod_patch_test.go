@@ -30,7 +30,7 @@ const defaultTestConfig = "config"
 func TestLogAsJSONEnabled(t *testing.T) {
 	t.Run("dapr.io/log-as-json is true", func(t *testing.T) {
 		fakeAnnotation := map[string]string{
-			daprLogAsJSON: trueString,
+			daprLogAsJSON: "true",
 		}
 
 		assert.Equal(t, true, logAsJSONEnabled(fakeAnnotation))
@@ -101,7 +101,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
-		annotations[daprLogAsJSON] = trueString
+		annotations[daprLogAsJSON] = "true"
 		annotations[daprAPITokenSecret] = "secret"
 		annotations[daprAppTokenSecret] = "appsecret"
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
@@ -151,10 +151,10 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
-		annotations[daprLogAsJSON] = trueString
+		annotations[daprLogAsJSON] = "true"
 		annotations[daprAPITokenSecret] = "secret"
 		annotations[daprAppTokenSecret] = "appsecret"
-		annotations[daprEnableDebugKey] = trueString
+		annotations[daprEnableDebugKey] = "true"
 		annotations[daprDebugPortKey] = "55555"
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
