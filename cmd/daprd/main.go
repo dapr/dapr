@@ -106,6 +106,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	dingtalk_webhook "github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
 
+	"github.com/dapr/components-contrib/bindings/alicloud/dubbo"
 	"github.com/dapr/components-contrib/bindings/alicloud/oss"
 	"github.com/dapr/components-contrib/bindings/alicloud/tablestore"
 	"github.com/dapr/components-contrib/bindings/apns"
@@ -159,6 +160,7 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	"github.com/dapr/components-contrib/middleware/http/routerchecker"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
+	wasm_basic "github.com/dapr/components-contrib/middleware/http/wasm/basic"
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -403,6 +405,9 @@ func main() {
 			}),
 		),
 		runtime.WithOutputBindings(
+			bindings_loader.NewOutput("alicloud.dubbo", func() bindings.OutputBinding {
+				return dubbo.NewDubboOutput(logContrib)
+			}),
 			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
 				return oss.NewAliCloudOSS(logContrib)
 			}),
@@ -548,6 +553,9 @@ func main() {
 			}),
 			http_middleware_loader.New("routerchecker", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 				return routerchecker.NewMiddleware(log).GetHandler(metadata)
+			}),
+			http_middleware_loader.New("wasm.basic", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return wasm_basic.NewMiddleware(log).GetHandler(metadata)
 			}),
 		),
 	)
