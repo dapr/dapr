@@ -48,8 +48,8 @@ type Operator interface {
 	Run(ctx context.Context)
 }
 
-// OperatorOptions contains the options for `NewOperator`.
-type OperatorOptions struct {
+// Options contains the options for `NewOperator`.
+type Options struct {
 	Config                    string
 	CertChainPath             string
 	LeaderElection            bool
@@ -83,7 +83,7 @@ func init() {
 }
 
 // NewOperator returns a new Dapr Operator.
-func NewOperator(opts OperatorOptions) Operator {
+func NewOperator(opts Options) Operator {
 	conf, err := ctrl.GetConfig()
 	if err != nil {
 		log.Fatalf("unable to get controller runtime configuration, err: %s", err)
@@ -111,7 +111,8 @@ func NewOperator(opts OperatorOptions) Operator {
 	}
 
 	daprHandler := handlers.NewDaprHandler(mgr)
-	if err := daprHandler.Init(); err != nil {
+	err = daprHandler.Init()
+	if err != nil {
 		log.Fatalf("unable to initialize handler, err: %s", err)
 	}
 

@@ -55,7 +55,7 @@ const (
 func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
-	operatorOpts := operator.OperatorOptions{
+	operatorOpts := operator.Options{
 		Config:                    config,
 		CertChainPath:             certChainPath,
 		LeaderElection:            !disableLeaderElection,
@@ -66,7 +66,7 @@ func main() {
 
 	if watchInterval != "0" {
 		operatorOpts.WatchdogEnabled = true
-		if strings.ToLower(watchInterval) != "once" {
+		if strings.ToLower(watchInterval) != "once" { //nolint:gocritic
 			wi, err := strconv.ParseInt(watchInterval, 10, 31)
 			if err != nil {
 				log.Fatalf("invalid value for watch-interval: cannot parse number")
