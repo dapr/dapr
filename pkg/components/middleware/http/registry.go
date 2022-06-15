@@ -27,7 +27,7 @@ import (
 type (
 	// Middleware is a HTTP middleware component definition.
 	Middleware struct {
-		Name          string
+		Names         []string
 		FactoryMethod FactoryMethod
 	}
 
@@ -46,9 +46,13 @@ type (
 )
 
 // New creates a Middleware.
-func New(name string, factoryMethod FactoryMethod) Middleware {
+func New(name string, factoryMethod FactoryMethod, aliases ...string) Middleware {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return Middleware{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -63,7 +67,9 @@ func NewRegistry() Registry {
 // Register registers one or more new HTTP middlewares.
 func (p *httpMiddlewareRegistry) Register(components ...Middleware) {
 	for _, component := range components {
-		p.middleware[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			p.middleware[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 

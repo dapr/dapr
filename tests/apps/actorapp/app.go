@@ -15,21 +15,17 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
+	"github.com/dapr/dapr/tests/apps/utils"
+
 	"github.com/gorilla/mux"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 const (
@@ -221,6 +217,9 @@ func epoch() int {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
@@ -234,36 +233,7 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func startServer() {
-	// Create a server capable of supporting HTTP2 Cleartext connections
-	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
-	h2s := &http2.Server{}
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: h2c.NewHandler(appRouter(), h2s),
-	}
-
-	// Stop the server when we get a termination signal
-	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		// Wait for cancelation signal
-		<-stopCh
-		log.Println("Shutdown signal received")
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	// Blocking call
-	err := server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
-	}
-	log.Println("Server shut down")
-}
-
 func main() {
 	log.Printf("Actor App - listening on http://localhost:%d", appPort)
-	startServer()
+	utils.StartServer(appPort, appRouter, true)
 }

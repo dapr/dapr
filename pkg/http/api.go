@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	nethttp "net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,6 +33,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -73,6 +75,8 @@ type api struct {
 	getComponentsFn          func() []components_v1alpha1.Component
 	resiliency               resiliency.Provider
 	stateStores              map[string]state.Store
+	configurationStores      map[string]configuration.Store
+	configurationSubscribe   map[string]chan struct{}
 	transactionalStateStores map[string]state.TransactionalStore
 	secretStores             map[string]secretstores.SecretStore
 	secretsConfiguration     map[string]config.SecretsScope
@@ -101,24 +105,26 @@ type metadata struct {
 }
 
 const (
-	apiVersionV1         = "v1.0"
-	apiVersionV1alpha1   = "v1.0-alpha1"
-	idParam              = "id"
-	methodParam          = "method"
-	topicParam           = "topic"
-	actorTypeParam       = "actorType"
-	actorIDParam         = "actorId"
-	storeNameParam       = "storeName"
-	stateKeyParam        = "key"
-	secretStoreNameParam = "secretStoreName"
-	secretNameParam      = "key"
-	nameParam            = "name"
-	consistencyParam     = "consistency"
-	concurrencyParam     = "concurrency"
-	pubsubnameparam      = "pubsubname"
-	traceparentHeader    = "traceparent"
-	tracestateHeader     = "tracestate"
-	daprAppID            = "dapr-app-id"
+	apiVersionV1             = "v1.0"
+	apiVersionV1alpha1       = "v1.0-alpha1"
+	idParam                  = "id"
+	methodParam              = "method"
+	topicParam               = "topic"
+	actorTypeParam           = "actorType"
+	actorIDParam             = "actorId"
+	storeNameParam           = "storeName"
+	stateKeyParam            = "key"
+	configurationKeyParam    = "key"
+	configurationSubscribeID = "configurationSubscribeID"
+	secretStoreNameParam     = "secretStoreName"
+	secretNameParam          = "key"
+	nameParam                = "name"
+	consistencyParam         = "consistency"
+	concurrencyParam         = "concurrency"
+	pubsubnameparam          = "pubsubname"
+	traceparentHeader        = "traceparent"
+	tracestateHeader         = "tracestate"
+	daprAppID                = "dapr-app-id"
 )
 
 // NewAPI returns a new API.
@@ -131,6 +137,7 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
+	configurationStores map[string]configuration.Store,
 	pubsubAdapter runtime_pubsub.Adapter,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
@@ -152,6 +159,8 @@ func NewAPI(
 		transactionalStateStores: transactionalStateStores,
 		secretStores:             secretStores,
 		secretsConfiguration:     secretsConfiguration,
+		configurationStores:      configurationStores,
+		configurationSubscribe:   make(map[string]chan struct{}),
 		actor:                    actor,
 		pubsubAdapter:            pubsubAdapter,
 		sendToOutputBindingFn:    sendToOutputBindingFn,
@@ -171,6 +180,7 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, metadataEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
@@ -392,6 +402,29 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Route:   "healthz/outbound",
 			Version: apiVersionV1,
 			Handler: a.onGetOutboundHealthz,
+		},
+	}
+}
+
+func (a *api) constructConfigurationEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onGetConfiguration,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}/subscribe",
+			Version: apiVersionV1alpha1,
+			Handler: a.onSubscribeConfiguration,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "configuration/{configurationSubscribeID}/unsubscribe",
+			Version: apiVersionV1alpha1,
+			Handler: a.onUnsubscribeConfiguration,
 		},
 	}
 }
@@ -675,6 +708,213 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	respond(reqCtx, withJSON(fasthttp.StatusOK, resp.Data), withEtag(resp.ETag), withMetadata(resp.Metadata))
+}
+
+func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
+	if a.configurationStores == nil || len(a.configurationStores) == 0 {
+		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_CONFIGURED", messages.ErrConfigurationStoresNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+
+	storeName := a.getStateStoreName(reqCtx)
+
+	if a.configurationStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+	return a.configurationStores[storeName], storeName, nil
+}
+
+type subscribeConfigurationResponse struct {
+	ID string `json:"id"`
+}
+
+type configurationEventHandler struct {
+	api        *api
+	storeName  string
+	appChannel channel.AppChannel
+	res        resiliency.Provider
+}
+
+func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
+	for _, item := range e.Items {
+		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, item.Key))
+		req.WithHTTPExtension(nethttp.MethodPost, "")
+		eventBody, _ := json.Marshal(e)
+		req.WithRawData(eventBody, invokev1.JSONContentType)
+
+		policy := h.res.ComponentInboundPolicy(ctx, h.storeName)
+		err := policy(func(ctx context.Context) (err error) {
+			resp, err := h.appChannel.InvokeMethod(ctx, req)
+			if err != nil {
+				return err
+			}
+
+			if resp != nil && resp.Status().Code != nethttp.StatusOK {
+				return errors.Errorf("Error sending configuration item to application, status %d", resp.Status().Code)
+			}
+			return nil
+		})
+		if err != nil {
+			log.Error(errors.Wrap(err, "error sending configuration item to the app"))
+		}
+	}
+	return nil
+}
+
+func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	metadata := getMetadataFromRequest(reqCtx)
+	subscribeKeys := make([]string, 0)
+
+	keys := make([]string, 0)
+	queryKeys := reqCtx.QueryArgs().PeekMulti(configurationKeyParam)
+	for _, queryKeyByte := range queryKeys {
+		keys = append(keys, string(queryKeyByte))
+	}
+
+	// empty list means subscribing to all configuration keys
+	if len(keys) == 0 {
+		getConfigurationReq := &configuration.GetRequest{
+			Keys:     []string{},
+			Metadata: metadata,
+		}
+
+		start := time.Now()
+		policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+		var getResponse *configuration.GetResponse
+		err = policy(func(ctx context.Context) (rErr error) {
+			getResponse, rErr = store.Get(ctx, getConfigurationReq)
+			return rErr
+		})
+		elapsed := diag.ElapsedSince(start)
+		diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+
+		if err != nil {
+			msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+		items := getResponse.Items
+		for _, item := range items {
+			subscribeKeys = append(subscribeKeys, item.Key)
+		}
+	} else {
+		subscribeKeys = append(subscribeKeys, keys...)
+	}
+
+	req := configuration.SubscribeRequest{
+		Keys:     subscribeKeys,
+		Metadata: metadata,
+	}
+
+	// create handler
+	handler := &configurationEventHandler{
+		api:        a,
+		storeName:  storeName,
+		appChannel: a.appChannel,
+		res:        a.resiliency,
+	}
+
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+	var subscribeID string
+	err = policy(func(ctx context.Context) (rErr error) {
+		subscribeID, rErr = store.Subscribe(ctx, &req, handler.updateEventHandler)
+		return rErr
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
+
+	if err != nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	respBytes, _ := json.Marshal(&subscribeConfigurationResponse{
+		ID: subscribeID,
+	})
+	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
+}
+
+func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+	subscribeID := string(reqCtx.QueryArgs().Peek(configurationSubscribeID))
+
+	req := configuration.UnsubscribeRequest{
+		ID: subscribeID,
+	}
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+	err = policy(func(ctx context.Context) (rErr error) {
+		return store.Unsubscribe(ctx, &req)
+	})
+	elapsed := diag.ElapsedSince(start)
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
+
+	respond(reqCtx, withJSON(fasthttp.StatusOK, nil))
+}
+
+func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	metadata := getMetadataFromRequest(reqCtx)
+
+	keys := make([]string, 0)
+	queryKeys := reqCtx.QueryArgs().PeekMulti(configurationKeyParam)
+	for _, queryKeyByte := range queryKeys {
+		keys = append(keys, string(queryKeyByte))
+	}
+	req := configuration.GetRequest{
+		Keys:     keys,
+		Metadata: metadata,
+	}
+
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+	var getResponse *configuration.GetResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		getResponse, rErr = store.Get(ctx, &req)
+		return rErr
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+
+	if err != nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_GET", fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	if getResponse == nil || getResponse.Items == nil || len(getResponse.Items) == 0 {
+		respond(reqCtx, withEmpty())
+		return
+	}
+
+	respBytes, _ := json.Marshal(getResponse.Items)
+
+	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
 }
 
 func extractEtag(reqCtx *fasthttp.RequestCtx) (bool, string) {
@@ -1003,7 +1243,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Save headers to internal metadata
 	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
 
-	policy := a.resiliency.EndpointPolicy(reqCtx, targetID, fmt.Sprintf("%s:%s", targetID, invokeMethodName), false)
+	policy := a.resiliency.EndpointPolicy(reqCtx, targetID, fmt.Sprintf("%s:%s", targetID, invokeMethodName))
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
 	var resp *invokev1.InvokeMethodResponse
 	var body []byte

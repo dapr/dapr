@@ -3,6 +3,7 @@ package runtime
 import (
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
+	"github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pubsub"
@@ -16,6 +17,7 @@ type (
 		secretStores    []secretstores.SecretStore
 		states          []state.State
 		configurations  []configuration.Configuration
+		locks           []lock.Lock
 		pubsubs         []pubsub.PubSub
 		nameResolutions []nameresolution.NameResolution
 		inputBindings   []bindings.InputBinding
@@ -47,6 +49,12 @@ func WithStates(states ...state.State) Option {
 func WithConfigurations(configurations ...configuration.Configuration) Option {
 	return func(o *runtimeOpts) {
 		o.configurations = append(o.configurations, configurations...)
+	}
+}
+
+func WithLocks(locks ...lock.Lock) Option {
+	return func(o *runtimeOpts) {
+		o.locks = append(o.locks, locks...)
 	}
 }
 

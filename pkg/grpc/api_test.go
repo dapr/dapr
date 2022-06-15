@@ -24,6 +24,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+
+	"github.com/dapr/components-contrib/lock"
+
 	"github.com/agrea/ptr"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
@@ -961,6 +965,7 @@ func TestSaveState(t *testing.T) {
 		return reqs[0].Key == errorStoreKey
 	})).Return(errors.New("failed to save state with error-key"))
 
+	// Setup dapr api server
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
@@ -970,6 +975,7 @@ func TestSaveState(t *testing.T) {
 	server := startDaprAPIServer(port, fakeAPI, "")
 	defer server.Stop()
 
+	// create client
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
@@ -1009,6 +1015,7 @@ func TestSaveState(t *testing.T) {
 		},
 	}
 
+	// test and assert
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
 			req := &runtimev1pb.SaveStateRequest{
@@ -1033,6 +1040,7 @@ func TestSaveState(t *testing.T) {
 }
 
 func TestGetState(t *testing.T) {
+	// Setup mock store
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == goodStoreKey
@@ -3093,4 +3101,223 @@ func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.Subs
 
 func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
 	return nil
+}
+
+func TestTryLockRequestToComponentRequest(t *testing.T) {
+	req := TryLockRequestToComponentRequest(&runtimev1pb.TryLockRequest{
+		StoreName:       "redis",
+		ResourceId:      "resourceId",
+		LockOwner:       "owner1",
+		ExpiryInSeconds: 1000,
+	})
+	assert.True(t, req.ResourceID == "resourceId")
+	assert.True(t, req.LockOwner == "owner1")
+	assert.True(t, req.ExpiryInSeconds == 1000)
+	req = TryLockRequestToComponentRequest(nil)
+	assert.NotNil(t, req)
+}
+
+func TestTryLockResponseToGrpcResponse(t *testing.T) {
+	resp := TryLockResponseToGrpcResponse(&lock.TryLockResponse{
+		Success: true,
+	})
+	assert.True(t, resp.Success)
+	resp2 := TryLockResponseToGrpcResponse(nil)
+	assert.NotNil(t, resp2)
+}
+
+func TestUnlockGrpcToComponentRequest(t *testing.T) {
+	req := UnlockGrpcToComponentRequest(&runtimev1pb.UnlockRequest{
+		StoreName:  "redis",
+		ResourceId: "resourceId",
+		LockOwner:  "owner1",
+	})
+	assert.True(t, req.ResourceID == "resourceId")
+	assert.True(t, req.LockOwner == "owner1")
+	req = UnlockGrpcToComponentRequest(nil)
+	assert.NotNil(t, req)
+}
+
+func TestUnlockResponseToGrpcResponse(t *testing.T) {
+	resp := UnlockResponseToGrpcResponse(&lock.UnlockResponse{Status: lock.Success})
+	assert.True(t, resp.Status == runtimev1pb.UnlockResponse_SUCCESS)
+	resp2 := UnlockResponseToGrpcResponse(nil)
+	assert.NotNil(t, resp2)
+}
+
+func TestTryLock(t *testing.T) {
+	t.Run("error when lock store not configured", func(t *testing.T) {
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+		req := &runtimev1pb.TryLockRequest{
+			StoreName: "abc",
+		}
+		_, err := api.TryLockAlpha1(context.Background(), req)
+		assert.Equal(t, "rpc error: code = FailedPrecondition desc = lock store is not configured", err.Error())
+	})
+
+	t.Run("InvalidArgument: ResourceID empty", func(t *testing.T) {
+		ctl := gomock.NewController(t)
+		defer ctl.Finish()
+
+		mockLockStore := daprt.NewMockStore(ctl)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+		req := &runtimev1pb.TryLockRequest{
+			StoreName: "abc",
+		}
+		_, err := api.TryLockAlpha1(context.Background(), req)
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = ResourceId is empty in lock store abc", err.Error())
+	})
+
+	t.Run("InvalidArgument: LockOwner empty", func(t *testing.T) {
+		ctl := gomock.NewController(t)
+		defer ctl.Finish()
+
+		mockLockStore := daprt.NewMockStore(ctl)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+		req := &runtimev1pb.TryLockRequest{
+			StoreName:  "abc",
+			ResourceId: "resource",
+		}
+		_, err := api.TryLockAlpha1(context.Background(), req)
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = LockOwner is empty in lock store abc", err.Error())
+	})
+
+	t.Run("InvalidArgument: ExpiryInSeconds is not positive", func(t *testing.T) {
+		ctl := gomock.NewController(t)
+		defer ctl.Finish()
+
+		mockLockStore := daprt.NewMockStore(ctl)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+
+		req := &runtimev1pb.TryLockRequest{
+			StoreName:  "abc",
+			ResourceId: "resource",
+			LockOwner:  "owner",
+		}
+		_, err := api.TryLockAlpha1(context.Background(), req)
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = ExpiryInSeconds is not positive in lock store abc", err.Error())
+	})
+
+	t.Run("InvalidArgument: lock store not found", func(t *testing.T) {
+		ctl := gomock.NewController(t)
+		defer ctl.Finish()
+
+		mockLockStore := daprt.NewMockStore(ctl)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+
+		req := &runtimev1pb.TryLockRequest{
+			StoreName:       "abc",
+			ResourceId:      "resource",
+			LockOwner:       "owner",
+			ExpiryInSeconds: 1,
+		}
+		_, err := api.TryLockAlpha1(context.Background(), req)
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = lock store abc not found", err.Error())
+	})
+
+	t.Run("Success", func(t *testing.T) {
+		ctl := gomock.NewController(t)
+		defer ctl.Finish()
+
+		mockLockStore := daprt.NewMockStore(ctl)
+
+		mockLockStore.EXPECT().TryLock(gomock.Any()).DoAndReturn(func(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+			assert.Equal(t, "lock||resource", req.ResourceID)
+			assert.Equal(t, "owner", req.LockOwner)
+			assert.Equal(t, int32(1), req.ExpiryInSeconds)
+			return &lock.TryLockResponse{
+				Success: true,
+			}, nil
+		})
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+		req := &runtimev1pb.TryLockRequest{
+			StoreName:       "mock",
+			ResourceId:      "resource",
+			LockOwner:       "owner",
+			ExpiryInSeconds: 1,
+		}
+		resp, err := api.TryLockAlpha1(context.Background(), req)
+		assert.Nil(t, err)
+		assert.Equal(t, true, resp.Success)
+	})
+}
+
+func TestUnlock(t *testing.T) {
+	t.Run("error when lock store not configured", func(t *testing.T) {
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+
+		req := &runtimev1pb.UnlockRequest{
+			StoreName: "abc",
+		}
+		_, err := api.UnlockAlpha1(context.Background(), req)
+		assert.Equal(t, "rpc error: code = FailedPrecondition desc = lock store is not configured", err.Error())
+	})
+
+	t.Run("InvalidArgument: ResourceId empty", func(t *testing.T) {
+		ctl := gomock.NewController(t)
+		defer ctl.Finish()
+
+		mockLockStore := daprt.NewMockStore(ctl)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+
+		req := &runtimev1pb.UnlockRequest{
+			StoreName: "abc",
+		}
+		_, err := api.UnlockAlpha1(context.Background(), req)
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = ResourceId is empty in lock store abc", err.Error())
+	})
+
+	t.Run("InvalidArgument: lock owner empty", func(t *testing.T) {
+		ctl := gomock.NewController(t)
+		defer ctl.Finish()
+
+		mockLockStore := daprt.NewMockStore(ctl)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+		req := &runtimev1pb.UnlockRequest{
+			StoreName:  "abc",
+			ResourceId: "resource",
+		}
+		_, err := api.UnlockAlpha1(context.Background(), req)
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = LockOwner is empty in lock store abc", err.Error())
+	})
+
+	t.Run("InvalidArgument: lock store not found", func(t *testing.T) {
+		ctl := gomock.NewController(t)
+		defer ctl.Finish()
+
+		mockLockStore := daprt.NewMockStore(ctl)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+
+		req := &runtimev1pb.UnlockRequest{
+			StoreName:  "abc",
+			ResourceId: "resource",
+			LockOwner:  "owner",
+		}
+		_, err := api.UnlockAlpha1(context.Background(), req)
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = lock store abc not found", err.Error())
+	})
+
+	t.Run("normal", func(t *testing.T) {
+		ctl := gomock.NewController(t)
+		defer ctl.Finish()
+
+		mockLockStore := daprt.NewMockStore(ctl)
+
+		mockLockStore.EXPECT().Unlock(gomock.Any()).DoAndReturn(func(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+			assert.Equal(t, "lock||resource", req.ResourceID)
+			assert.Equal(t, "owner", req.LockOwner)
+			return &lock.UnlockResponse{
+				Status: lock.Success,
+			}, nil
+		})
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil)
+		req := &runtimev1pb.UnlockRequest{
+			StoreName:  "mock",
+			ResourceId: "resource",
+			LockOwner:  "owner",
+		}
+		resp, err := api.UnlockAlpha1(context.Background(), req)
+		assert.Nil(t, err)
+		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status)
+	})
 }

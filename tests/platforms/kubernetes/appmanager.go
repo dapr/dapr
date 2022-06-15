@@ -15,6 +15,7 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -123,12 +124,6 @@ func (m *AppManager) Init() error {
 		if _, err := m.WaitUntilJobState(m.IsJobCompleted); err != nil {
 			return err
 		}
-
-		if m.logPrefix != "" {
-			if err := m.StreamContainerLogs(); err != nil {
-				log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
-			}
-		}
 	} else {
 		// Deploy app and wait until deployment is done
 		if _, err := m.Deploy(); err != nil {
@@ -139,14 +134,14 @@ func (m *AppManager) Init() error {
 		if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
 			return err
 		}
-
-		if m.logPrefix != "" {
-			if err := m.StreamContainerLogs(); err != nil {
-				log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
-			}
-		}
 	}
 	log.Printf("App %v has been deployed.", m.app.AppName)
+
+	if m.logPrefix != "" {
+		if err := m.StreamContainerLogs(); err != nil {
+			log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
+		}
+	}
 
 	if !m.app.IsJob {
 		// Job cannot have side car validated because it is shutdown on successful completion.
@@ -212,6 +207,9 @@ func (m *AppManager) Dispose(wait bool) error {
 		if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
 			return err
 		}
+	} else {
+		// Wait 2 seconds for logs to come in
+		time.Sleep(2 * time.Second)
 	}
 
 	if m.forwarder != nil {
@@ -310,7 +308,8 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 				podStatus[pod.Name] = pod.Status.ContainerStatuses
 			}
-			log.Printf("deployment %s relate pods: %+v", m.app.AppName, podList)
+			j, _ := json.Marshal(podList)
+			log.Printf("deployment %s relate pods: %s", m.app.AppName, string(j))
 		} else {
 			log.Printf("Error list pod for deployment %s. Error was %s", m.app.AppName, err)
 		}
@@ -390,10 +389,13 @@ func (m *AppManager) ValidateSidecar() error {
 		for _, container := range pod.Spec.Containers {
 			if container.Name == DaprSideCarName {
 				daprdFound = true
+				break
 			}
 		}
+
 		if !daprdFound {
-			return fmt.Errorf("cannot find dapr sidecar in pod %s", pod.Name)
+			found, _ := json.Marshal(pod.Spec.Containers)
+			return fmt.Errorf("cannot find dapr sidecar in pod %s. Found containers=%v", pod.Name, string(found))
 		}
 	}
 
@@ -762,27 +764,10 @@ func (m *AppManager) StreamContainerLogs() error {
 				}
 				defer fh.Close()
 
-				for {
-					buf := make([]byte, 2000)
-					numBytes, err := stream.Read(buf)
-					if numBytes == 0 {
-						continue
-					}
-
-					if err == io.EOF {
-						break
-					}
-
-					if err != nil {
-						log.Printf("Error reading log stream for %s. Error was %s", filename, err)
-						return
-					}
-
-					_, err = fh.Write(buf[:numBytes])
-					if err != nil {
-						log.Printf("Error writing to %s. Error was %s", filename, err)
-						return
-					}
+				_, err = io.Copy(fh, stream)
+				if err != nil {
+					log.Printf("Error reading log stream for %s. Error was %s", filename, err)
+					return
 				}
 
 				log.Printf("Saved container logs to %s", filename)

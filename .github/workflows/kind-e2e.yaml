@@ -217,6 +217,14 @@ jobs:
       run: |
         make save-dapr-control-plane-k8s-logs
 
+    # Container log files can be bigger than the maximum file size allowed by GitHub
+    - name: Compress logs
+      if: always()
+      run: |
+        gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
+        gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
+      shell: bash
+
     - name: Upload container logs
       if: always()
       uses: actions/upload-artifact@master
@@ -225,11 +233,11 @@ jobs:
         path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
 
     - name: Upload test logs
-        if: always()
-        uses: actions/upload-artifact@master
-        with:
-          name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_test_logs
-          path: ${{ env.DAPR_TEST_LOG_PATH }}
+      if: always()
+      uses: actions/upload-artifact@master
+      with:
+        name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_test_logs
+        path: ${{ env.DAPR_TEST_LOG_PATH }}
 
     - name: Upload test results
       if: always()

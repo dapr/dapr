@@ -28,6 +28,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/components-contrib/lock"
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+
 	"github.com/cenkalti/backoff"
 
 	"github.com/google/uuid"
@@ -114,6 +117,7 @@ const (
 	stateComponent                  ComponentCategory = "state"
 	middlewareComponent             ComponentCategory = "middleware"
 	configurationComponent          ComponentCategory = "configuration"
+	lockComponent                   ComponentCategory = "lock"
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
 	kubernetesSecretStore                             = "kubernetes"
@@ -126,6 +130,7 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	stateComponent,
 	middlewareComponent,
 	configurationComponent,
+	lockComponent,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -191,6 +196,9 @@ type DaprRuntime struct {
 
 	configurationStoreRegistry configuration_loader.Registry
 	configurationStores        map[string]configuration.Store
+
+	lockStoreRegistry lock_loader.Registry
+	lockStores        map[string]lock.Store
 
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentDependents map[string][]components_v1alpha1.Component
@@ -263,6 +271,9 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretsConfiguration:       map[string]config.SecretsScope{},
 		configurationStoreRegistry: configuration_loader.NewRegistry(),
 		configurationStores:        map[string]configuration.Store{},
+
+		lockStoreRegistry: lock_loader.NewRegistry(),
+		lockStores:        map[string]lock.Store{},
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
@@ -423,6 +434,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
+	a.lockStoreRegistry.Register(opts.locks...)
 
 	go a.processComponents()
 
@@ -433,8 +445,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Warnf("failed to watch component updates: %s", err)
 		}
 	}
-
-	a.appendBuiltinSecretStore()
+	if !a.runtimeConfig.DisableBuiltinK8sSecretStore {
+		a.appendBuiltinSecretStore()
+	}
 	err = a.loadComponents(opts)
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
@@ -606,7 +619,7 @@ func (a *DaprRuntime) sendToDeadLetterIfConfigured(name string, msg *pubsub.NewM
 	return true, err
 }
 
-func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
+func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps pubsub.PubSub) error {
 	var publishFunc func(ctx context.Context, msg *pubsubSubscribedMessage) error
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
@@ -633,7 +646,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 		routeMetadata := route.metadata
 		routeRules := route.rules
-		if err := ps.Subscribe(pubsub.SubscribeRequest{
+		if err := ps.Subscribe(subscribeCtx, pubsub.SubscribeRequest{
 			Topic:    topic,
 			Metadata: route.metadata,
 		}, func(ctx context.Context, msg *pubsub.NewMessage) error {
@@ -809,6 +822,7 @@ func (a *DaprRuntime) initProxy() {
 	log.Info("gRPC proxy enabled")
 }
 
+// begin components updates for kubernetes mode.
 func (a *DaprRuntime) beginComponentsUpdates() error {
 	if a.runtimeConfig.Mode != modes.KubernetesMode {
 		return nil
@@ -1146,6 +1160,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.stateStores,
 		a.secretStores,
 		a.secretsConfiguration,
+		a.configurationStores,
 		a.getPublishAdapter(),
 		a.actor,
 		a.sendToOutputBinding,
@@ -1213,7 +1228,7 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.resiliency, a.stateStores, a.secretStores, a.secretsConfiguration, a.configurationStores,
-		a.getPublishAdapter(), a.directMessaging, a.actor,
+		a.lockStores, a.getPublishAdapter(), a.directMessaging, a.actor,
 		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents, a.ShutdownWithWait)
 }
 
@@ -1346,6 +1361,40 @@ func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 	return nil
 }
 
+func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
+	// create the component
+	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
+	if err != nil {
+		log.Warnf("error creating lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
+		return err
+	}
+	if store == nil {
+		return nil
+	}
+	// initialization
+	props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
+	err = store.InitLockStore(lock.Metadata{
+		Properties: props,
+	})
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+		log.Warnf("error initializing lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		return err
+	}
+	// save lock related configuration
+	a.lockStores[s.ObjectMeta.Name] = store
+	err = lock_loader.SaveLockConfiguration(s.ObjectMeta.Name, props)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+		log.Warnf("error save lock keyprefix: %s", err.Error())
+		return err
+	}
+	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
+
+	return nil
+}
+
 // Refer for state store api decision  https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
 func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
@@ -1457,11 +1506,12 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	var err error
 
 	// handle app subscriptions
+	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
+		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log)
+		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
 	}
 	if err != nil {
 		return nil, err
@@ -2066,6 +2116,8 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 		return a.initState(comp)
 	case configurationComponent:
 		return a.initConfiguration(comp)
+	case lockComponent:
+		return a.initLock(comp)
 	}
 	return nil
 }
@@ -2088,21 +2140,13 @@ func (a *DaprRuntime) stopActor() {
 	}
 }
 
-// shutdownComponents allows for a graceful shutdown of all runtime internal operations or components.
-func (a *DaprRuntime) shutdownComponents() error {
-	log.Info("Shutting down all components")
+// shutdownOutputComponents allows for a graceful shutdown of all runtime internal operations of components that are not source of more work.
+// These are all components except input bindings and pubsub.
+func (a *DaprRuntime) shutdownOutputComponents() error {
+	log.Info("Shutting down all remaining components")
 	var merr error
 
 	// Close components if they implement `io.Closer`
-	for name, binding := range a.inputBindings {
-		if closer, ok := binding.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing input binding %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
-	}
 	for name, binding := range a.outputBindings {
 		if closer, ok := binding.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
@@ -2121,6 +2165,17 @@ func (a *DaprRuntime) shutdownComponents() error {
 			}
 		}
 	}
+	for name, stateStore := range a.stateStores {
+		if closer, ok := stateStore.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing state store %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	// Close pubsub publisher
+	// The subscriber part is closed when a.ctx is canceled
 	for name, pubSub := range a.pubSubs {
 		if err := pubSub.Close(); err != nil {
 			err = fmt.Errorf("error closing pub sub %s: %w", name, err)
@@ -2128,10 +2183,12 @@ func (a *DaprRuntime) shutdownComponents() error {
 			log.Warn(err)
 		}
 	}
-	for name, stateStore := range a.stateStores {
-		if closer, ok := stateStore.(io.Closer); ok {
+	// Close bindings if they implement `io.Closer`
+	// TODO: Separate the input part of bindings and close output here, then close the input via cancelation of a.ctx
+	for name, binding := range a.inputBindings {
+		if closer, ok := binding.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing state store %s: %w", name, err)
+				err = fmt.Errorf("error closing input binding %s: %w", name, err)
 				merr = multierror.Append(merr, err)
 				log.Warn(err)
 			}
@@ -2166,9 +2223,11 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 
+	log.Infof("dapr shutting down.")
+
+	log.Infof("Stopping PubSub subscribers")
 	a.cancel()
 	a.stopActor()
-	log.Infof("dapr shutting down.")
 	log.Info("Stopping Dapr APIs")
 	for _, closer := range a.apiClosers {
 		if err := closer.Close(); err != nil {
@@ -2180,7 +2239,7 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	}
 	log.Infof("Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
-	a.shutdownComponents()
+	a.shutdownOutputComponents()
 	a.shutdownC <- nil
 }
 
@@ -2461,8 +2520,9 @@ func componentDependency(compCategory ComponentCategory, name string) string {
 }
 
 func (a *DaprRuntime) startSubscribing() {
+	// PubSub subscribers are stopped via cancelation of the main runtime's context
 	for name, pubsub := range a.pubSubs {
-		if err := a.beginPubSub(name, pubsub); err != nil {
+		if err := a.beginPubSub(a.ctx, name, pubsub); err != nil {
 			log.Errorf("error occurred while beginning pubsub %s: %s", name, err)
 		}
 	}

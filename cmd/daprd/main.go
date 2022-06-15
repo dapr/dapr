@@ -19,6 +19,8 @@ import (
 	"strings"
 	"syscall"
 
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+
 	"github.com/valyala/fasthttp"
 	"go.uber.org/automaxprocs/maxprocs"
 
@@ -74,7 +76,7 @@ import (
 
 	// Pub/Sub.
 	pubs "github.com/dapr/components-contrib/pubsub"
-	pubsub_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
+	pubsub_aws_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
 	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
@@ -87,6 +89,7 @@ import (
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
+	"github.com/dapr/components-contrib/pubsub/rocketmq"
 
 	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -102,6 +105,8 @@ import (
 	// Bindings.
 	"github.com/dapr/components-contrib/bindings"
 	dingtalk_webhook "github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
+
+	"github.com/dapr/components-contrib/bindings/alicloud/dubbo"
 	"github.com/dapr/components-contrib/bindings/alicloud/oss"
 	"github.com/dapr/components-contrib/bindings/alicloud/tablestore"
 	"github.com/dapr/components-contrib/bindings/apns"
@@ -124,6 +129,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/graphql"
 	"github.com/dapr/components-contrib/bindings/http"
+	"github.com/dapr/components-contrib/bindings/huawei/obs"
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
@@ -154,12 +160,17 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	"github.com/dapr/components-contrib/middleware/http/routerchecker"
 	"github.com/dapr/components-contrib/middleware/http/sentinel"
+	wasm_basic "github.com/dapr/components-contrib/middleware/http/wasm/basic"
 
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/dapr/components-contrib/configuration"
 	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
+
+	// Lock.
+	"github.com/dapr/components-contrib/lock"
+	lock_redis "github.com/dapr/components-contrib/lock/redis"
 )
 
 var (
@@ -283,7 +294,15 @@ func main() {
 				return configuration_redis.NewRedisConfigurationStore(logContrib)
 			}),
 		),
+		runtime.WithLocks(
+			lock_loader.New("redis", func() lock.Store {
+				return lock_redis.NewStandaloneRedisLock(logContrib)
+			}),
+		),
 		runtime.WithPubSubs(
+			pubsub_loader.New("aws.snssqs", func() pubs.PubSub {
+				return pubsub_aws_snssqs.NewSnsSqs(logContrib)
+			}, "snssqs"), // alias "snssqs" for backwards-compatibility; see dapr/components-contrib#1753
 			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
 				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
 			}),
@@ -314,11 +333,11 @@ func main() {
 			pubsub_loader.New("rabbitmq", func() pubs.PubSub {
 				return rabbitmq.NewRabbitMQ(logContrib)
 			}),
+			pubsub_loader.New("rocketmq", func() pubs.PubSub {
+				return rocketmq.NewRocketMQ(logContrib)
+			}),
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)
-			}),
-			pubsub_loader.New("snssqs", func() pubs.PubSub {
-				return pubsub_snssqs.NewSnsSqs(logContrib)
 			}),
 			pubsub_loader.New("in-memory", func() pubs.PubSub {
 				return pubsub_inmemory.New(logContrib)
@@ -386,6 +405,9 @@ func main() {
 			}),
 		),
 		runtime.WithOutputBindings(
+			bindings_loader.NewOutput("alicloud.dubbo", func() bindings.OutputBinding {
+				return dubbo.NewDubboOutput(logContrib)
+			}),
 			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
 				return oss.NewAliCloudOSS(logContrib)
 			}),
@@ -497,6 +519,9 @@ func main() {
 			bindings_loader.NewOutput("graphql", func() bindings.OutputBinding {
 				return graphql.NewGraphQL(logContrib)
 			}),
+			bindings_loader.NewOutput("huawei.obs", func() bindings.OutputBinding {
+				return obs.NewHuaweiOBS(logContrib)
+			}),
 		),
 		runtime.WithHTTPMiddleware(
 			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
@@ -528,6 +553,9 @@ func main() {
 			}),
 			http_middleware_loader.New("routerchecker", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
 				return routerchecker.NewMiddleware(log).GetHandler(metadata)
+			}),
+			http_middleware_loader.New("wasm.basic", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+				return wasm_basic.NewMiddleware(log).GetHandler(metadata)
 			}),
 		),
 	)
