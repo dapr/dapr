@@ -202,9 +202,6 @@ type DaprRuntime struct {
 	proxy messaging.Proxy
 
 	resiliency resiliency.Provider
-
-	// TODO: Remove feature flag once feature is ratified
-	featureRoutingEnabled bool
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -477,9 +474,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		}
 	}
 
-	// TODO: Remove feature flag once feature is ratified
-	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
-
 	if opts.componentsCallback != nil {
 		if err = opts.componentsCallback(ComponentRegistry{
 			Actors:          a.actor,
@@ -657,7 +651,7 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 				return nil
 			}
 
-			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
+			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent)
 			if err != nil {
 				log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
 				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
@@ -704,13 +698,13 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess bool, err error) {
+func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
 	hasRules := len(rules) > 0
 	if hasRules {
 		data := map[string]interface{}{
 			"event": cloudEvent,
 		}
-		rule, err := matchRoutingRule(rules, data, routingEnabled)
+		rule, err := matchRoutingRule(rules, data)
 		if err != nil {
 			return "", false, err
 		}
@@ -722,14 +716,10 @@ func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}, rou
 	return "", false, nil
 }
 
-func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{}, routingEnabled bool) (*runtime_pubsub.Rule, error) {
+func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{}) (*runtime_pubsub.Rule, error) {
 	for _, rule := range rules {
 		if rule.Match == nil {
 			return rule, nil
-		}
-		// If routing is not enabled, skip match evaluation.
-		if !routingEnabled {
-			continue
 		}
 		iResult, err := rule.Match.Eval(data)
 		if err != nil {
@@ -1110,6 +1100,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.getComponents,
 		a.resiliency,
 		a.stateStores,
+		a.lockStores,
 		a.secretStores,
 		a.secretsConfiguration,
 		a.configurationStores,

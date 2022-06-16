@@ -143,6 +143,17 @@ func SetEnvVariables(variables map[string]string) error {
 	return nil
 }
 
+// IsTruthy returns true if a string is a truthy value.
+// Truthy values are "y", "yes", "true", "t", "on", "1" (case-insensitive); everything else is false.
+func IsTruthy(val string) bool {
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "y", "yes", "true", "t", "on", "1":
+		return true
+	default:
+		return false
+	}
+}
+
 // IsYaml checks whether the file is yaml or not.
 func IsYaml(fileName string) bool {
 	extension := strings.ToLower(filepath.Ext(fileName))
