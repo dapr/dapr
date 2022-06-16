@@ -117,10 +117,10 @@ endif
 
 define genTestAppImageBuild
 .PHONY: build-e2e-app-$(1)
-build-e2e-app-$(1): check-e2e-env compile-build-tools
-	$(BUILD_TOOLS) e2e build \
+build-e2e-app-$(1): check-e2e-env
+	$(RUN_BUILD_TOOLS) e2e build \
 		--name "$(1)" \
-		--appdir "$(E2E_TESTAPP_DIR)" \
+		--appdir "../$(E2E_TESTAPP_DIR)" \
 		--dest-registry "$(DAPR_TEST_REGISTRY)" \
 		--dest-tag "$(DAPR_TEST_TAG)" \
 		--dockerfile "$(DOCKERFILE)" \
@@ -134,8 +134,8 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageBuild,$(ITEM))))
 
 define genTestAppImagePush
 .PHONY: push-e2e-app-$(1)
-push-e2e-app-$(1): check-e2e-env compile-build-tools
-	$(BUILD_TOOLS) e2e push \
+push-e2e-app-$(1): check-e2e-env
+	$(RUN_BUILD_TOOLS) e2e push \
 		--name "$(1)" \
 		--dest-registry "$(DAPR_TEST_REGISTRY)" \
 		--dest-tag "$(DAPR_TEST_TAG)"
@@ -146,10 +146,10 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImagePush,$(ITEM))))
 
 define genTestAppImageBuildPush
 .PHONY: build-push-e2e-app-$(1)
-build-push-e2e-app-$(1): check-e2e-env check-e2e-cache compile-build-tools
-	$(BUILD_TOOLS) e2e build-and-push \
+build-push-e2e-app-$(1): check-e2e-env check-e2e-cache
+	$(RUN_BUILD_TOOLS) e2e build-and-push \
 		--name "$(1)" \
-		--appdir "$(E2E_TESTAPP_DIR)" \
+		--appdir "../$(E2E_TESTAPP_DIR)" \
 		--dest-registry "$(DAPR_TEST_REGISTRY)" \
 		--dest-tag "$(DAPR_TEST_TAG)" \
 		--dockerfile "$(DOCKERFILE)" \
@@ -172,10 +172,10 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageKindPush,$(ITEM))))
 
 define genPerfTestAppImageBuild
 .PHONY: build-perf-app-$(1)
-build-perf-app-$(1): check-e2e-env compile-build-tools
-	$(BUILD_TOOLS) perf build \
+build-perf-app-$(1): check-e2e-env
+	$(RUN_BUILD_TOOLS) perf build \
 		--name "$(1)" \
-		--appdir "$(E2E_TESTAPP_DIR)" \
+		--appdir "../$(E2E_TESTAPP_DIR)" \
 		--dest-registry "$(DAPR_TEST_REGISTRY)" \
 		--dest-tag "$(DAPR_TEST_TAG)" \
 		--cache-registry "$(DAPR_CACHE_REGISTRY)"
@@ -186,8 +186,8 @@ $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfTestAppImageBuild,$(ITEM))
 
 define genPerfAppImagePush
 .PHONY: push-perf-app-$(1)
-push-perf-app-$(1): check-e2e-env compile-build-tools
-	$(BUILD_TOOLS) perf push \
+push-perf-app-$(1): check-e2e-env
+	$(RUN_BUILD_TOOLS) perf push \
 		--name "$(1)" \
 		--dest-registry "$(DAPR_TEST_REGISTRY)" \
 		--dest-tag "$(DAPR_TEST_TAG)"
@@ -195,10 +195,10 @@ endef
 
 define genPerfAppImageBuildPush
 .PHONY: build-push-perf-app-$(1)
-build-push-perf-app-$(1): check-e2e-env check-e2e-cache compile-build-tools
-	$(BUILD_TOOLS) perf build-and-push \
+build-push-perf-app-$(1): check-e2e-env check-e2e-cache
+	$(RUN_BUILD_TOOLS) perf build-and-push \
 		--name "$(1)" \
-		--appdir "$(E2E_TESTAPP_DIR)" \
+		--appdir "../$(E2E_TESTAPP_DIR)" \
 		--dest-registry "$(DAPR_TEST_REGISTRY)" \
 		--dest-tag "$(DAPR_TEST_TAG)" \
 		--cache-registry "$(DAPR_CACHE_REGISTRY)"
