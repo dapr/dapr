@@ -4071,7 +4071,7 @@ func TestFindMatchingRoute(t *testing.T) {
 	rules := []*runtime_pubsub.Rule{r}
 	path, shouldProcess, err := findMatchingRoute(rules, map[string]interface{}{
 		"type": "MyEventType",
-	}, true)
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "mypath", path)
 	assert.True(t, shouldProcess)
