@@ -90,8 +90,10 @@ jobs:
         if: env.CHECKOUT_REPO != ''
         run: |
           BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
           SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
-          TEST_PREFIX="daprperf${SUFFIX}"
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
           echo "Test prefix is ${TEST_PREFIX}"
           echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-Perf-${TEST_PREFIX}" >> $GITHUB_ENV
@@ -196,8 +198,10 @@ jobs:
         if: env.CHECKOUT_REPO != ''
         run: |
           BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
           SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
-          TEST_PREFIX="daprperf${SUFFIX}"
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
           echo "Test prefix is ${TEST_PREFIX}"
           echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_REGISTRY=${TEST_PREFIX}acr.azurecr.io" >> $GITHUB_ENV
@@ -318,8 +322,10 @@ jobs:
         if: env.CHECKOUT_REPO != ''
         run: |
           BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
           SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
-          TEST_PREFIX="daprperf${SUFFIX}"
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
           echo "Test prefix is ${TEST_PREFIX}"
           echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_REGISTRY=${TEST_PREFIX}acr.azurecr.io" >> $GITHUB_ENV
@@ -482,8 +488,10 @@ jobs:
       - name: Build test prefix
         run: |
           BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
           SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
-          TEST_PREFIX="daprperf${SUFFIX}"
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
           echo "Test prefix is ${TEST_PREFIX}"
           echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
         shell: bash
