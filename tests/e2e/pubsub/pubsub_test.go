@@ -397,7 +397,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		// only error response is expected to validate dead letter
 		sort.Strings(sentMessages.ReceivedByTopicDeadLetter)
 		sort.Strings(appResp.ReceivedByTopicDeadLetter)
-		assert.Equal(t, sentMessages.ReceivedByTopicDead, appResp.ReceivedByTopicDead, "different messages received in Topic Dead")
+		assert.Equal(t, sentMessages.ReceivedByTopicDeadLetter, appResp.ReceivedByTopicDeadLetter, "different messages received in Topic Dead")
 	}
 }
 
