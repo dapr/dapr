@@ -684,6 +684,8 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 				if configured, _ := a.sendToDeadLetterIfConfigured(name, msg); !configured {
 					return err
 				}
+
+				return nil
 			}
 			return err
 		}); err != nil {
@@ -1688,10 +1690,8 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		err := json.Unmarshal(body, &appResponse)
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-			// Return no error so message does not get reprocessed.
-			err = nil
-			return err
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
+			return nil
 		}
 
 		switch appResponse.Status {
