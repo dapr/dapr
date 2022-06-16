@@ -17,11 +17,16 @@ type Config struct {
 	Credentials credentials.TLSCredentials
 }
 
+// GetNamespace returns the namespace for Dapr.
+func GetNamespace() string {
+	return os.Getenv("NAMESPACE")
+}
+
 // LoadConfiguration loads the Kubernetes configuration and returns an Operator Config.
 func LoadConfiguration(name string, client client.Client) (*Config, error) {
 	var conf v1alpha1.Configuration
 	key := types.NamespacedName{
-		Namespace: os.Getenv("NAMESPACE"),
+		Namespace: GetNamespace(),
 		Name:      name,
 	}
 	if err := client.Get(context.Background(), key, &conf); err != nil {
