@@ -167,6 +167,10 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 }
 
 func testPublish(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
+	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-topic", protocol, nil, "")
+	require.NoError(t, err)
+	offset += numberOfMessagesToPublish + 1
+
 	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
@@ -183,10 +187,6 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 		"rawPayload": "true",
 	}
 	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
-	require.NoError(t, err)
-	offset += numberOfMessagesToPublish + 1
-
-	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
@@ -265,6 +265,9 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
 
 		callInitialize(t, publisherExternalURL, protocol)
+	} else {
+		// Sleep a few seconds to ensure there's time for all messages to be delivered at least once, so if they have to be sent to the DLQ, they can be before we change the desired response status
+		time.Sleep(5 * time.Second)
 	}
 
 	// set to respond with success
