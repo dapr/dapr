@@ -42,8 +42,6 @@ const (
 	SpiffeIDPrefix               = "spiffe://"
 	HTTPProtocol                 = "http"
 	GRPCProtocol                 = "grpc"
-	ActorTypeMetadata    Feature = "Actor.TypeMetadata"
-	PubSubRouting        Feature = "PubSub.Routing"
 	Resiliency           Feature = "Resiliency"
 	NoDefaultContentType Feature = "ServiceInvocation.NoDefaultContentType"
 )

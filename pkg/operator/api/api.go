@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -57,7 +58,7 @@ var log = logger.NewLogger("dapr.operator.api")
 
 // Server runs the Dapr API server for components and configurations.
 type Server interface {
-	Run(certChain *dapr_credentials.CertChain)
+	Run(ctx context.Context, certChain *dapr_credentials.CertChain, onReady func())
 	OnComponentUpdated(component *componentsapi.Component)
 }
 
@@ -78,22 +79,50 @@ func NewAPIServer(client client.Client) Server {
 }
 
 // Run starts a new gRPC server.
-func (a *apiServer) Run(certChain *dapr_credentials.CertChain) {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
-	if err != nil {
-		log.Fatal("error starting tcp listener: %s", err)
-	}
+func (a *apiServer) Run(ctx context.Context, certChain *dapr_credentials.CertChain, onReady func()) {
+	log.Info("starting gRPC server on port %d", serverPort)
 
 	opts, err := dapr_credentials.GetServerOptions(certChain)
 	if err != nil {
-		log.Fatal("error creating gRPC options: %s", err)
+		log.Fatal("error creating gRPC options: %v", err)
 	}
 	s := grpc.NewServer(opts...)
 	operatorv1pb.RegisterOperatorServer(s, a)
 
-	log.Info("starting gRPC server")
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("gRPC server error: %v", err)
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
+	if err != nil {
+		log.Fatal("error starting tcp listener: %v", err)
+	}
+
+	if onReady != nil {
+		onReady()
+	}
+
+	go func() {
+		if shutdownErr := s.Serve(lis); shutdownErr != nil {
+			log.Fatalf("gRPC server error: %v", shutdownErr)
+		}
+	}()
+
+	// Block until context is done
+	<-ctx.Done()
+
+	// Graceful shutdown
+	stopCh := make(chan struct{})
+	go func() {
+		s.GracefulStop()
+		close(stopCh)
+	}()
+	select {
+	case <-time.After(5 * time.Second):
+		// Forceful shutdown after 5 seconds
+		s.Stop()
+	case <-stopCh:
+	}
+
+	err = lis.Close()
+	if err != nil {
+		log.Errorf("failed to close tcp listener: %v", err)
 	}
 }
 

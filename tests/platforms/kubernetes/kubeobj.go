@@ -78,6 +78,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
 			"dapr.io/enable-api-logging":                "true",
+			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
 		}
 		if !appDesc.IsJob {
 			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)
@@ -91,6 +92,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	}
 	if appDesc.Config != "" {
 		annotationObject["dapr.io/config"] = appDesc.Config
+	}
+	if appDesc.DaprVolumeMounts != "" {
+		annotationObject["dapr.io/volume-mounts"] = appDesc.DaprVolumeMounts
 	}
 	return annotationObject
 }
@@ -115,6 +119,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 			Annotations: buildDaprAnnotations(appDesc),
 		},
 		Spec: apiv1.PodSpec{
+			InitContainers: appDesc.InitContainers,
 			Containers: []apiv1.Container{
 				{
 					Name:            appDesc.AppName,
@@ -157,6 +162,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 					Name: appDesc.ImageSecret,
 				},
 			},
+			Volumes: appDesc.Volumes,
 		},
 	}
 }

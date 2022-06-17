@@ -181,6 +181,7 @@ jobs:
       run: |
         make setup-helm-init
         make create-test-namespace
+        export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
         if [[ "${{ matrix.mode }}" == "ha" ]]; then
           export HA_MODE=true
         else
@@ -216,6 +217,14 @@ jobs:
       if: always()
       run: |
         make save-dapr-control-plane-k8s-logs
+
+    # Container log files can be bigger than the maximum file size allowed by GitHub
+    - name: Compress logs
+      if: always()
+      run: |
+        gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
+        gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
+      shell: bash
 
     - name: Upload container logs
       if: always()

@@ -66,9 +66,9 @@ type DaprClient interface {
 	SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error)
 	// UnSubscribeConfiguration unsubscribe the subscription of configuration
 	UnsubscribeConfigurationAlpha1(ctx context.Context, in *UnsubscribeConfigurationRequest, opts ...grpc.CallOption) (*UnsubscribeConfigurationResponse, error)
-	// Distributed Lock API
-	// A non-blocking method trying to get a lock with ttl.
+	// TryLockAlpha1 tries to get a lock with an expiry.
 	TryLockAlpha1(ctx context.Context, in *TryLockRequest, opts ...grpc.CallOption) (*TryLockResponse, error)
+	// UnlockAlpha1 unlocks a lock.
 	UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
@@ -411,9 +411,9 @@ type DaprServer interface {
 	SubscribeConfigurationAlpha1(*SubscribeConfigurationRequest, Dapr_SubscribeConfigurationAlpha1Server) error
 	// UnSubscribeConfiguration unsubscribe the subscription of configuration
 	UnsubscribeConfigurationAlpha1(context.Context, *UnsubscribeConfigurationRequest) (*UnsubscribeConfigurationResponse, error)
-	// Distributed Lock API
-	// A non-blocking method trying to get a lock with ttl.
+	// TryLockAlpha1 tries to get a lock with an expiry.
 	TryLockAlpha1(context.Context, *TryLockRequest) (*TryLockResponse, error)
+	// UnlockAlpha1 unlocks a lock.
 	UnlockAlpha1(context.Context, *UnlockRequest) (*UnlockResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)

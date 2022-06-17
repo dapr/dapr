@@ -2884,7 +2884,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 			},
 		}}
 
-		err := r.beginPubSub("failPubsub", &failingPubsub)
+		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["failingSubTopic"])
@@ -2906,7 +2906,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		}}
 
 		start := time.Now()
-		err := r.beginPubSub("failPubsub", &failingPubsub)
+		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
 		end := time.Now()
 
 		// This is eaten, technically.
@@ -2944,7 +2944,7 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 }
 
 // Subscribe is a mock subscribe method.
-func (m *mockSubscribePubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+func (m *mockSubscribePubSub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	m.handlers[req.Topic] = handler
 	return nil
 }
@@ -3203,6 +3203,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		4,
 		false,
 		time.Second,
+		true,
 		true)
 
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
@@ -3267,7 +3268,7 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-func (b *mockBinding) Read(handler func(context.Context, *bindings.ReadResponse) ([]byte, error)) error {
+func (b *mockBinding) Read(handler bindings.Handler) error {
 	b.data = string(testInputBindingData)
 	metadata := map[string]string{}
 	if b.metadata != nil {
@@ -3589,7 +3590,7 @@ func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 }
 
 // Subscribe is a mock subscribe method.
-func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+func (m *mockPublishPubSub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	return nil
 }
 
@@ -4051,7 +4052,7 @@ func TestStopWithErrors(t *testing.T) {
 	require.NoError(t, rt.initSecretStore(mockSecretsComponent))
 	rt.nameResolver = &mockNameResolver{closeErr: testErr}
 
-	err := rt.shutdownComponents()
+	err := rt.shutdownOutputComponents()
 	assert.Error(t, err)
 	var merr *multierror.Error
 	merr, ok := err.(*multierror.Error)
@@ -4061,7 +4062,7 @@ func TestStopWithErrors(t *testing.T) {
 
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
 	rt.stopActor()
-	assert.NoError(t, rt.shutdownComponents())
+	assert.NoError(t, rt.shutdownOutputComponents())
 }
 
 func TestFindMatchingRoute(t *testing.T) {
@@ -4070,7 +4071,7 @@ func TestFindMatchingRoute(t *testing.T) {
 	rules := []*runtime_pubsub.Rule{r}
 	path, shouldProcess, err := findMatchingRoute(rules, map[string]interface{}{
 		"type": "MyEventType",
-	}, true)
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "mypath", path)
 	assert.True(t, shouldProcess)

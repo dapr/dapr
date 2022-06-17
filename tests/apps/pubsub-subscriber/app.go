@@ -14,7 +14,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -22,18 +21,14 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"k8s.io/apimachinery/pkg/util/sets"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
@@ -201,7 +196,10 @@ func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
 }
 
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
-	reqID := uuid.New().String()
+	reqID, ok := r.Context().Value("reqid").(string)
+	if reqID == "" || !ok {
+		reqID = uuid.New().String()
+	}
 
 	msg, err := readMessageBody(reqID, r)
 
@@ -331,8 +329,8 @@ func unique(slice []string) []string {
 
 // the test calls this to get the messages received
 func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
-	reqID := r.URL.Query().Get("reqid")
-	if reqID == "" {
+	reqID, ok := r.Context().Value("reqid").(string)
+	if reqID == "" || !ok {
 		reqID = "s-" + uuid.New().String()
 	}
 
@@ -388,6 +386,9 @@ func appRouter() *mux.Router {
 	log.Printf("Called appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 
 	router.HandleFunc("/getMessages", getReceivedMessages).Methods("POST")
@@ -417,39 +418,10 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func startServer() {
-	// Create a server capable of supporting HTTP2 Cleartext connections
-	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
-	h2s := &http2.Server{}
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: h2c.NewHandler(appRouter(), h2s),
-	}
-
-	// Stop the server when we get a termination signal
-	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		// Wait for cancelation signal
-		<-stopCh
-		log.Println("Shutdown signal received")
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	// Blocking call
-	err := server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
-	}
-	log.Println("Server shut down")
-}
-
 func main() {
 	// initialize sets on application start
 	initializeSets()
 
 	log.Printf("Dapr E2E test app: pubsub - listening on http://localhost:%d", appPort)
-	startServer()
+	utils.StartServer(appPort, appRouter, true)
 }

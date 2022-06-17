@@ -99,8 +99,6 @@ type API interface {
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
-	// Distributed Lock API
-	// A non-blocking method trying to get a lock with ttl.
 	TryLockAlpha1(ctx context.Context, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error)
 	UnlockAlpha1(ctx context.Context, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error)
 	// Gets metadata of the sidecar
@@ -480,7 +478,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
-	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method), false)
+	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
 	var resp *invokev1.InvokeMethodResponse
 	var requestErr bool
 	respError := policy(func(ctx context.Context) (rErr error) {
@@ -1624,16 +1622,10 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 		items := resp.GetItems()
 		for _, item := range items {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, item.Key)]; !ok {
-				subscribeKeys = append(subscribeKeys, item.Key)
-			}
+			subscribeKeys = append(subscribeKeys, item.Key)
 		}
 	} else {
-		for _, k := range request.Keys {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
-				subscribeKeys = append(subscribeKeys, k)
-			}
-		}
+		subscribeKeys = append(subscribeKeys, request.Keys...)
 	}
 
 	req := &configuration.SubscribeRequest{

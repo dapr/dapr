@@ -14,6 +14,10 @@
 # Required secrets:
 # - AZURE_CREDENTIALS: JSON object containing the Azure service principal credentials. Docs: https://github.com/Azure/login#configure-a-service-principal-with-a-secret
 # - DAPR_BOT_TOKEN: Token for the Dapr bot
+#
+# Optional secrets:
+# - AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
+# - AZURE_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
 
 name: dapr-test
 
@@ -123,6 +127,8 @@ jobs:
                 location1=${REGION1} \
                 location2=${REGION2} \
                 dateTag="${DATE_TAG}" \
+                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
+                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
               && success=true \
               && break \
               || sleep 120
@@ -240,7 +246,13 @@ jobs:
         if: env.TEST_PREFIX != ''
         run: |
           make build
-          make docker-build
+
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
+            # For Linux, we use images based on Mariner
+            DOCKERFILE=Dockerfile-mariner make docker-build
+          else
+            make docker-build
+          fi
         shell: bash
       - name: Build e2e test apps
         if: env.TEST_PREFIX != ''
@@ -271,7 +283,12 @@ jobs:
       - name: Push all container images to the registry
         if: env.TEST_PREFIX != ''
         run: |
-          make docker-push
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
+            # For Linux, we use images based on Mariner
+            DOCKERFILE=Dockerfile-mariner make docker-push
+          else
+            make docker-push
+          fi
           make push-e2e-app-all
         shell: bash
 
@@ -393,6 +410,8 @@ jobs:
         shell: bash
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
+        env:
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
