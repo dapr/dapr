@@ -42,7 +42,6 @@ const (
 	SpiffeIDPrefix               = "spiffe://"
 	HTTPProtocol                 = "http"
 	GRPCProtocol                 = "grpc"
-	PubSubRouting        Feature = "PubSub.Routing"
 	Resiliency           Feature = "Resiliency"
 	NoDefaultContentType Feature = "ServiceInvocation.NoDefaultContentType"
 )

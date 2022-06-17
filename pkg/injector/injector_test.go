@@ -240,7 +240,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = "config1"
 		annotations[daprAppPortKey] = appPort
-		annotations[daprLogAsJSON] = "true"
+		annotations[daprLogAsJSON] = "true" //nolint:goconst
 		annotations[daprCPULimitKey] = "100m"
 		annotations[daprMemoryLimitKey] = "1Gi"
 

@@ -115,7 +115,6 @@ const (
 	defaultHealthzProbeThreshold      = 3
 	apiVersionV1                      = "v1.0"
 	defaultMtlsEnabled                = true
-	trueString                        = "true"
 	defaultDaprHTTPStreamRequestBody  = false
 	defaultAPILoggingEnabled          = false
 	defaultBuiltinSecretStoreDisabled = false
@@ -467,9 +466,7 @@ func getBoolAnnotationOrDefault(annotations map[string]string, key string, defau
 	if !ok {
 		return defaultValue
 	}
-	s := strings.ToLower(enabled)
-	// trueString is used to silence a lint error.
-	return (s == "y") || (s == "yes") || (s == trueString) || (s == "on") || (s == "1")
+	return utils.IsTruthy(enabled)
 }
 
 func getStringAnnotationOrDefault(annotations map[string]string, key, defaultValue string) string {

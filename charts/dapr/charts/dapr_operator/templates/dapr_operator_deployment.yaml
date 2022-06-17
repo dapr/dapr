@@ -153,8 +153,12 @@ spec:
         - "/operator"
         - "--"
 {{- end }}
+        - "--watch-interval"
+        - "{{ .Values.watchInterval }}"
+        - "--max-pod-restarts-per-minute"
+        - "{{ .Values.maxPodRestartsPerMinute }}"
         - "--log-level"
-        - {{ .Values.logLevel }}
+        - "{{ .Values.logLevel }}"
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}

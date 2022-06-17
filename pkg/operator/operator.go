@@ -48,6 +48,16 @@ type Operator interface {
 	Run(ctx context.Context)
 }
 
+// Options contains the options for `NewOperator`.
+type Options struct {
+	Config                    string
+	CertChainPath             string
+	LeaderElection            bool
+	WatchdogEnabled           bool
+	WatchdogInterval          time.Duration
+	WatchdogMaxRestartsPerMin int
+}
+
 type operator struct {
 	daprHandler *handlers.DaprHandler
 	apiServer   api.Server
@@ -73,7 +83,7 @@ func init() {
 }
 
 // NewOperator returns a new Dapr Operator.
-func NewOperator(config, certChainPath string, enableLeaderElection bool) Operator {
+func NewOperator(opts Options) Operator {
 	conf, err := ctrl.GetConfig()
 	if err != nil {
 		log.Fatalf("unable to get controller runtime configuration, err: %s", err)
@@ -81,26 +91,44 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: "0",
-		LeaderElection:     enableLeaderElection,
+		LeaderElection:     opts.LeaderElection,
 		LeaderElectionID:   "operator.dapr.io",
 	})
 	if err != nil {
-		log.Fatal("unable to start manager")
+		log.Fatalf("unable to start manager, err: %s", err)
 	}
+	mgrClient := mgr.GetClient()
+
+	wd := &DaprWatchdog{
+		client:            mgrClient,
+		enabled:           opts.WatchdogEnabled,
+		interval:          opts.WatchdogInterval,
+		maxRestartsPerMin: opts.WatchdogMaxRestartsPerMin,
+	}
+	err = mgr.Add(wd)
+	if err != nil {
+		log.Fatalf("unable to add watchdog controller, err: %s", err)
+	}
+
 	daprHandler := handlers.NewDaprHandler(mgr)
-	if err := daprHandler.Init(); err != nil {
+	err = daprHandler.Init()
+	if err != nil {
 		log.Fatalf("unable to initialize handler, err: %s", err)
 	}
 
 	o := &operator{
 		daprHandler:   daprHandler,
 		mgr:           mgr,
-		client:        mgr.GetClient(),
-		configName:    config,
-		certChainPath: certChainPath,
+		client:        mgrClient,
+		configName:    opts.Config,
+		certChainPath: opts.CertChainPath,
 	}
 	o.apiServer = api.NewAPIServer(o.client)
-	if componentInformer, err := mgr.GetCache().GetInformer(context.TODO(), &componentsapi.Component{}); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	componentInformer, err := mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
+	cancel()
+	if err != nil {
 		log.Fatalf("unable to get setup components informer, err: %s", err)
 	} else {
 		componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -110,6 +138,7 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 			},
 		})
 	}
+
 	return o
 }
 
@@ -130,23 +159,9 @@ func (o *operator) syncComponent(obj interface{}) {
 	}
 }
 
-func (o *operator) Run(ctx context.Context) {
-	defer runtimeutil.HandleCrash()
-	log.Infof("Dapr Operator is starting")
-
-	go func() {
-		if err := o.mgr.Start(ctx); err != nil {
-			log.Fatalf("failed to start controller manager, err: %s", err)
-		}
-	}()
-	if !o.mgr.GetCache().WaitForCacheSync(ctx) {
-		log.Fatalf("failed to wait for cache sync")
-	}
-	o.prepareConfig()
-
-	// load certs from disk
-	var certChain *credentials.CertChain
+func (o *operator) loadCertChain(ctx context.Context) (certChain *credentials.CertChain) {
 	log.Info("getting tls certificates")
+
 	watchCtx, watchCancel := context.WithTimeout(ctx, time.Minute)
 	fsevent := make(chan struct{})
 	go func() {
@@ -160,6 +175,7 @@ func (o *operator) Run(ctx context.Context) {
 			log.Fatal("timeout while waiting to load tls certificates")
 		}
 	}()
+
 	for {
 		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
 		if err == nil {
@@ -167,12 +183,35 @@ func (o *operator) Run(ctx context.Context) {
 			certChain = chain
 			break
 		}
-		log.Info("tls certificate not found; waiting for disk changes")
+		log.Infof("tls certificate not found; waiting for disk changes. err=%v", err)
 		<-fsevent
 		log.Debug("watcher found activity on filesystem")
 	}
+
 	watchCancel()
 
+	return certChain
+}
+
+func (o *operator) Run(ctx context.Context) {
+	defer runtimeutil.HandleCrash()
+
+	log.Infof("Dapr Operator is starting")
+
+	go func() {
+		if err := o.mgr.Start(ctx); err != nil {
+			log.Fatalf("failed to start controller manager, err: %s", err)
+		}
+	}()
+	if !o.mgr.GetCache().WaitForCacheSync(ctx) {
+		log.Fatalf("failed to wait for cache sync")
+	}
+	o.prepareConfig()
+
+	// load certs from disk
+	certChain := o.loadCertChain(ctx)
+
+	// start healthz server
 	healthzServer := health.NewServer(log)
 	go func() {
 		// blocking call
