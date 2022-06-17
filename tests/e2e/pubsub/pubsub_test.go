@@ -359,11 +359,12 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		}
 
 		log.Printf(
-			"subscriber received %d/%d messages on pubsub-a-topic, %d/%d on pubsub-b-topic and %d/%d on pubsub-c-topic and %d/%d on pubsub-raw-topic",
+			"subscriber received %d/%d messages on pubsub-a-topic, %d/%d on pubsub-b-topic and %d/%d on pubsub-c-topic, %d/%d on pubsub-raw-topic and %d/%d on dead letter topic",
 			len(appResp.ReceivedByTopicA), len(sentMessages.ReceivedByTopicA),
 			len(appResp.ReceivedByTopicB), len(sentMessages.ReceivedByTopicB),
 			len(appResp.ReceivedByTopicC), len(sentMessages.ReceivedByTopicC),
 			len(appResp.ReceivedByTopicRaw), len(sentMessages.ReceivedByTopicRaw),
+			len(appResp.ReceivedByTopicDeadLetter), len(sentMessages.ReceivedByTopicDeadLetter),
 		)
 
 		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
@@ -372,7 +373,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) ||
 			(validateDeadLetter && len(appResp.ReceivedByTopicDeadLetter) != len(sentMessages.ReceivedByTopicDeadLetter)) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(5 * time.Second)
+			time.Sleep(10 * time.Second)
 		} else {
 			break
 		}
