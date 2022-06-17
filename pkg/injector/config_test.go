@@ -15,7 +15,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		os.Setenv("SIDECAR_IMAGE_PULL_POLICY", "Always")
 		os.Setenv("NAMESPACE", "test-namespace")
 		os.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
-		os.Setenv("ALLOWED_SERVICE_ACCOUNT_INFOS", "test-service-account1:test1,test-service-account2:test2")
+		os.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test-service-account1:test1,test-service-account2:test2")
 		defer clearenv()
 
 		cfg, err := GetConfig()
