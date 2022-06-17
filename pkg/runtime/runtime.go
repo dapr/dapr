@@ -679,12 +679,9 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 					pubsub:     name,
 				})
 			})
-			log.Infof("Error processing message %v: %v", cloudEvent, err)
 			if err != nil && err != context.Canceled {
 				// Sending msg to dead letter queue, if no DLQ is configured, return error for backwards compatibility(component level retry).
-				configured, _ := a.sendToDeadLetterIfConfigured(name, msg)
-				log.Infof("Error processing message %v: %v (DLQ configured? %v)", cloudEvent, err, configured)
-				if !configured {
+				if configured, _ := a.sendToDeadLetterIfConfigured(name, msg); !configured {
 					return err
 				}
 
