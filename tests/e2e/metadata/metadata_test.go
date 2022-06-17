@@ -59,7 +59,7 @@ func testGetMetadata(t *testing.T, metadataAppExternalURL string) {
 	resp, err := utils.HTTPGet(url)
 	require.NoError(t, err)
 	require.NotEmpty(t, resp, "response must not be empty!")
-	metadata := mockMetadata{}
+	var metadata mockMetadata
 	err = json.Unmarshal(resp, &metadata)
 	require.NoError(t, err)
 	for _, comp := range metadata.RegisteredComponents {

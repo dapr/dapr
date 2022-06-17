@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -40,10 +41,23 @@ const (
 
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
-	StartTime  int    `json:"start_time,omitempty"`
-	EndTime    int    `json:"end_time,omitempty"`
-	Message    string `json:"message,omitempty"`
-	StatusCode int    `json:"status_code,omitempty"`
+	StartTime int    `json:"start_time,omitempty"`
+	EndTime   int    `json:"end_time,omitempty"`
+	Message   string `json:"message,omitempty"`
+}
+
+type mockMetadata struct {
+	ID                   string                     `json:"id"`
+	ActiveActorsCount    []actors.ActiveActorsCount `json:"actors"`
+	Extended             map[string]string          `json:"extended"`
+	RegisteredComponents []mockRegisteredComponent  `json:"components"`
+}
+
+type mockRegisteredComponent struct {
+	Name         string   `json:"name"`
+	Type         string   `json:"type"`
+	Version      string   `json:"version"`
+	Capabilities []string `json:"capabilities"`
 }
 
 func indexHandler(w http.ResponseWriter, _ *http.Request) {
@@ -51,34 +65,36 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func getMetadata() (data []byte, err error) {
+func getMetadata() (data mockMetadata, err error) {
+	var metadata mockMetadata
 	res, err := http.Get(metadataURL)
 	if err != nil {
-		return nil, fmt.Errorf("could not get sidecar metadata %s", err.Error())
+		return metadata, fmt.Errorf("could not get sidecar metadata %s", err.Error())
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("could not load value for Metadata: %s", err.Error())
+		return metadata, fmt.Errorf("could not load value for Metadata: %s", err.Error())
 	}
 	if res.StatusCode != http.StatusOK {
 		log.Printf("Non 200 StatusCode: %d\n", res.StatusCode)
 
-		return nil, fmt.Errorf("got err response for get Metadata: %s", body)
+		return metadata, fmt.Errorf("got err response for get Metadata: %s", body)
 	}
-	return body, nil
+	err = json.Unmarshal(body, &metadata)
+	return metadata, nil
 }
 
 // handles all APIs
 func handler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing request for %s", r.URL.RequestURI())
 
-	var metadata []byte
+	var metadata mockMetadata
 	var err error
 	res := requestResponse{}
 	uri := r.URL.RequestURI()
-	var statusCode int
+	statusCode := http.StatusOK
 
 	res.StartTime = epoch()
 
@@ -87,16 +103,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	case "getMetadata":
 		metadata, err = getMetadata()
 		if err != nil {
-			fmt.Println("in handler getMetadata error")
-			res.StatusCode = http.StatusInternalServerError
+			statusCode = http.StatusInternalServerError
 			res.Message = err.Error()
-		} else {
-			res.StatusCode = http.StatusOK
-			res.Message = string(metadata)
 		}
 	default:
 		err = fmt.Errorf("invalid URI: %s", uri)
-		res.StatusCode = http.StatusBadRequest
+		statusCode = http.StatusBadRequest
 		res.Message = err.Error()
 	}
 
@@ -106,8 +118,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(res.StatusCode)
-	json.NewEncoder(w).Encode(res.Message)
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(metadata)
 }
 
 // epoch returns the current unix epoch timestamp
