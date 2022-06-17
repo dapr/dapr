@@ -680,14 +680,13 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 				})
 			})
 			if err != nil && err != context.Canceled {
-				// Sending msg to dead letter queue, if no DLQ is configured, return error for backwards compatibility(component level retry).
+				// Sending msg to dead letter queue, if no DLQ is configured, then return nil to drop the message
 				if configured, _ := a.sendToDeadLetterIfConfigured(name, msg); !configured {
-					return err
+					return nil
 				}
-
-				return nil
+				return err
 			}
-			return err
+			return nil
 		}); err != nil {
 			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
 		}
