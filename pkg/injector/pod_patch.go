@@ -642,7 +642,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		log.Warn(err)
 	}
 
-	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
+	httpStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
 
 	ports := []corev1.ContainerPort{
 		{
@@ -803,7 +803,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		c.Args = append(c.Args, "--app-ssl")
 	}
 
-	if HTTPStreamRequestBodyEnabled {
+	if httpStreamRequestBodyEnabled {
 		c.Args = append(c.Args, "--http-stream-request-body")
 	}
 
