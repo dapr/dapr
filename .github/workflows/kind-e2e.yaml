@@ -54,6 +54,7 @@ jobs:
       GOVER: 1.18
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      PULL_POLICY: IfNotPresent
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
