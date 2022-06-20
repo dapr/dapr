@@ -355,12 +355,39 @@ func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
 	assert.Equal(t, int64(3), r.retries[string(BuiltInServiceRetries)].MaxRetries)
 }
 
+func TestResiliencyProtectedPolicyCannotBeChanged(t *testing.T) {
+	config := &resiliency_v1alpha.Resiliency{
+		Spec: resiliency_v1alpha.ResiliencySpec{
+			Policies: resiliency_v1alpha.Policies{
+				Retries: map[string]resiliency_v1alpha.Retry{
+					string(BuiltInActorNotFoundRetries): {
+						Policy:     "constant",
+						Duration:   "5s",
+						MaxRetries: 10,
+					},
+				},
+			},
+		},
+	}
+	r := FromConfigurations(log, config)
+	assert.NotNil(t, r)
+	assert.Equal(t, int64(5), r.retries[string(BuiltInActorNotFoundRetries)].MaxRetries)
+}
+
 func TestResiliencyIsBuiltInPolicy(t *testing.T) {
 	r := FromConfigurations(log)
 	assert.NotNil(t, r)
 	assert.True(t, r.isBuiltInPolicy(string(BuiltInServiceRetries)))
 	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorRetries)))
 	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorReminderRetries)))
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorNotFoundRetries)))
 	assert.True(t, r.isBuiltInPolicy(string(BuiltInInitializationRetries)))
 	assert.False(t, r.isBuiltInPolicy("Not a built in"))
+}
+
+func TestResiliencyIsProtectedPolicy(t *testing.T) {
+	r := FromConfigurations(log)
+	assert.True(t, r.isProtectedPolicy(string(BuiltInActorNotFoundRetries)))
+	assert.False(t, r.isProtectedPolicy(string(BuiltInActorRetries)))
+	assert.False(t, r.isProtectedPolicy("Random name"))
 }
