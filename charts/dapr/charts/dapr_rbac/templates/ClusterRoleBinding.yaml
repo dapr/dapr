@@ -34,7 +34,7 @@ rules:
     verbs: ["get", "patch"]
   - apiGroups: [""]
     resources: ["serviceaccounts"]
-    verbs: ["get"]
+    verbs: ["get", "list"]
   - apiGroups: ["apps"]
     resources: ["deployments", "deployments/finalizers"]
     verbs: [ "get", "list", "watch", "update"]
