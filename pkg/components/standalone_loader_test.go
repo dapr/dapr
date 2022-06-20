@@ -68,22 +68,6 @@ name: statestore`
 	})
 }
 
-func TestIsYaml(t *testing.T) {
-	request := &StandaloneComponents{
-		config: config.StandaloneConfig{
-			ComponentsPath: "test_component_path",
-		},
-	}
-
-	assert.True(t, request.isYaml("test.yaml"))
-	assert.True(t, request.isYaml("test.YAML"))
-	assert.True(t, request.isYaml("test.yml"))
-	assert.True(t, request.isYaml("test.YML"))
-	assert.False(t, request.isYaml("test.md"))
-	assert.False(t, request.isYaml("test.txt"))
-	assert.False(t, request.isYaml("test.sh"))
-}
-
 func TestStandaloneDecodeValidYaml(t *testing.T) {
 	request := &StandaloneComponents{
 		config: config.StandaloneConfig{

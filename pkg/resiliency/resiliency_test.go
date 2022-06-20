@@ -294,9 +294,9 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 }
 
 func TestBuiltInPoliciesAreCreated(t *testing.T) {
-	r := FromConfigurations(log, &resiliency_v1alpha.Resiliency{})
-	assert.NotNil(t, r.retries[fmt.Sprintf("%s", BuiltInServiceRetries)])
-	retry := r.retries[fmt.Sprintf("%s", BuiltInServiceRetries)]
+	r := FromConfigurations(log)
+	assert.NotNil(t, r.retries[string(BuiltInServiceRetries)])
+	retry := r.retries[string(BuiltInServiceRetries)]
 	assert.Equal(t, int64(3), retry.MaxRetries)
 	assert.Equal(t, time.Second, retry.Duration)
 }
@@ -328,9 +328,39 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 }
 
 func TestResiliencyHasBuiltInPolicy(t *testing.T) {
-	r := FromConfigurations(log, &resiliency_v1alpha.Resiliency{})
+	r := FromConfigurations(log)
 	assert.NotNil(t, r)
 	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInServiceRetries))
 	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInActorRetries))
 	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInActorReminderRetries))
+	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInInitializationRetries))
+}
+
+func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
+	config := &resiliency_v1alpha.Resiliency{
+		Spec: resiliency_v1alpha.ResiliencySpec{
+			Policies: resiliency_v1alpha.Policies{
+				Retries: map[string]resiliency_v1alpha.Retry{
+					string(BuiltInServiceRetries): {
+						Policy:     "constant",
+						Duration:   "5s",
+						MaxRetries: 1,
+					},
+				},
+			},
+		},
+	}
+	r := FromConfigurations(log, config)
+	assert.NotNil(t, r)
+	assert.Equal(t, int64(3), r.retries[string(BuiltInServiceRetries)].MaxRetries)
+}
+
+func TestResiliencyIsBuiltInPolicy(t *testing.T) {
+	r := FromConfigurations(log)
+	assert.NotNil(t, r)
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInServiceRetries)))
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorRetries)))
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorReminderRetries)))
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInInitializationRetries)))
+	assert.False(t, r.isBuiltInPolicy("Not a built in"))
 }

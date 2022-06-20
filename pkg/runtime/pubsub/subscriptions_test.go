@@ -24,6 +24,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -148,7 +149,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 			}
 			s.Scopes = []string{fmt.Sprintf("%v", i)}
 
-			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v", dir, i))
+			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v.yaml", dir, i))
 		}
 
 		subs := DeclarativeSelfHosted(dir, log)
@@ -163,6 +164,17 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Metadata["testName"])
 			}
 		}
+	})
+
+	t.Run("will not load non yaml file", func(t *testing.T) {
+		s := testDeclarativeSubscriptionV1()
+		s.Scopes = []string{"scope1"}
+
+		filePath := filepath.Join(dir, "sub.txt")
+		writeSubscriptionToDisk(s, filePath)
+
+		subs := DeclarativeSelfHosted(dir, log)
+		assert.Len(t, subs, 2)
 	})
 
 	t.Run("no subscriptions loaded", func(t *testing.T) {
@@ -219,7 +231,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 			}
 			s.Scopes = []string{iStr}
 
-			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v", dir, i))
+			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v.yaml", dir, i))
 		}
 
 		subs := DeclarativeSelfHosted(dir, log)
@@ -336,7 +348,7 @@ func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.
 func TestHTTPSubscriptions(t *testing.T) {
 	t.Run("topics received, no errors", func(t *testing.T) {
 		m := mockHTTPSubscriptions{}
-		subs, err := GetSubscriptionsHTTP(&m, log)
+		subs, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), false)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -355,7 +367,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 			successThreshold: 3,
 		}
 
-		subs, err := GetSubscriptionsHTTP(&m, log)
+		subs, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), false)
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -375,7 +387,36 @@ func TestHTTPSubscriptions(t *testing.T) {
 			alwaysError: true,
 		}
 
-		_, err := GetSubscriptionsHTTP(&m, log)
+		_, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), false)
+		require.Error(t, err)
+	})
+
+	t.Run("error from app, success after retries with resiliency", func(t *testing.T) {
+		m := mockUnstableHTTPSubscriptions{
+			successThreshold: 3,
+		}
+
+		subs, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), true)
+		assert.Equal(t, m.successThreshold, m.callCount)
+		require.NoError(t, err)
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 3) {
+				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
+		}
+	})
+
+	t.Run("error from app, retries exhausted with resiliency", func(t *testing.T) {
+		m := mockUnstableHTTPSubscriptions{
+			alwaysError: true,
+		}
+
+		_, err := GetSubscriptionsHTTP(&m, log, resiliency.FromConfigurations(log), true)
 		require.Error(t, err)
 	})
 }
@@ -458,7 +499,7 @@ func (m *mockGRPCSubscriptions) ListTopicSubscriptions(ctx context.Context, in *
 func TestGRPCSubscriptions(t *testing.T) {
 	t.Run("topics received, no errors", func(t *testing.T) {
 		m := mockGRPCSubscriptions{}
-		subs, err := GetSubscriptionsGRPC(&m, log)
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -477,7 +518,7 @@ func TestGRPCSubscriptions(t *testing.T) {
 			successThreshold: 3,
 		}
 
-		subs, err := GetSubscriptionsGRPC(&m, log)
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -498,7 +539,38 @@ func TestGRPCSubscriptions(t *testing.T) {
 			unimplemented:    true,
 		}
 
-		_, err := GetSubscriptionsGRPC(&m, log)
+		_, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
+		require.Error(t, err)
+		assert.Equal(t, 1, m.callCount)
+	})
+
+	t.Run("error from app, success after retries with resiliency", func(t *testing.T) {
+		m := mockUnstableGRPCSubscriptions{
+			successThreshold: 3,
+		}
+
+		subs, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
+		assert.Equal(t, m.successThreshold, m.callCount)
+		require.NoError(t, err)
+		if assert.Len(t, subs, 1) {
+			assert.Equal(t, "topic1", subs[0].Topic)
+			if assert.Len(t, subs[0].Rules, 3) {
+				assert.Equal(t, "myroute.v3", subs[0].Rules[0].Path)
+				assert.Equal(t, "myroute.v2", subs[0].Rules[1].Path)
+				assert.Equal(t, "myroute", subs[0].Rules[2].Path)
+			}
+			assert.Equal(t, "pubsub", subs[0].PubsubName)
+			assert.Equal(t, "testValue", subs[0].Metadata["testName"])
+		}
+	})
+
+	t.Run("server is running, app returns unimplemented error, no retries with resiliency", func(t *testing.T) {
+		m := mockUnstableGRPCSubscriptions{
+			successThreshold: 3,
+			unimplemented:    true,
+		}
+
+		_, err := GetSubscriptionsGRPC(&m, log, resiliency.FromConfigurations(log), false)
 		require.Error(t, err)
 		assert.Equal(t, 1, m.callCount)
 	})

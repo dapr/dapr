@@ -20,6 +20,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/admission/v1"
@@ -44,14 +45,14 @@ const (
 
 var log = logger.NewLogger("dapr.injector")
 
-var allowedControllersServiceAccounts = []string{
-	"replicaset-controller",
-	"deployment-controller",
-	"cronjob-controller",
-	"job-controller",
-	"statefulset-controller",
-	"daemon-set-controller",
-	"tekton-pipelines-controller",
+var AllowedServiceAccountInfos = []string{
+	"replicaset-controller:kube-system",
+	"deployment-controller:kube-system",
+	"cronjob-controller:kube-system",
+	"job-controller:kube-system",
+	"statefulset-controller:kube-system",
+	"daemon-set-controller:kube-system",
+	"tekton-pipelines-controller:tekton-pipelines",
 }
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
@@ -120,34 +121,37 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
-func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient kubernetes.Interface) ([]string, error) {
-	allowedUids := []string{}
-	for i, allowedControllersServiceAccount := range allowedControllersServiceAccounts {
-		saUUID, err := getServiceAccount(ctx, kubeClient, allowedControllersServiceAccount)
-		// i == 0 => "replicaset-controller" is the only one mandatory
-		if err != nil {
-			if i == 0 {
-				return nil, err
-			}
-			log.Warnf("Unable to get SA %s UID (%s)", allowedControllersServiceAccount, err)
-			continue
-		}
-		allowedUids = append(allowedUids, saUUID)
-	}
+func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
+	allowedList := strings.Split(cfg.AllowedServiceAccounts, ",")
+	allowedList = append(allowedList, AllowedServiceAccountInfos...)
 
-	return allowedUids, nil
+	return getServiceAccount(ctx, kubeClient, allowedList)
 }
 
-func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedControllersServiceAccount string) (string, error) {
+// getServiceAccount parses "service-account:namespace" k/v list and returns an array of UID.
+func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedServiceAcccountInfos []string) ([]string, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, getKubernetesServiceAccountTimeoutSeconds*time.Second)
 	defer cancel()
 
-	sa, err := kubeClient.CoreV1().ServiceAccounts(metav1.NamespaceSystem).Get(ctxWithTimeout, allowedControllersServiceAccount, metav1.GetOptions{})
+	serviceaccounts, err := kubeClient.CoreV1().ServiceAccounts("").List(ctxWithTimeout, metav1.ListOptions{})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return string(sa.ObjectMeta.UID), nil
+	allowedUids := []string{}
+
+	for _, allowedServiceInfo := range allowedServiceAcccountInfos {
+		serviceAccountInfo := strings.Split(allowedServiceInfo, ":")
+		for _, sa := range serviceaccounts.Items {
+			if sa.Name == serviceAccountInfo[0] && sa.Namespace == serviceAccountInfo[1] {
+				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
+				break
+			}
+		}
+		log.Warnf("Unable to get SA %s UID (%s)", allowedServiceInfo, err)
+	}
+
+	return allowedUids, nil
 }
 
 func (i *injector) Run(ctx context.Context, onReady func()) {

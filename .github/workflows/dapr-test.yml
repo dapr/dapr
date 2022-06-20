@@ -303,6 +303,7 @@ jobs:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
       TEST_OUTPUT_FILE_PREFIX: "test_report"
+      PULL_POLICY: IfNotPresent
     strategy:
       fail-fast: false
       matrix:
@@ -410,6 +411,8 @@ jobs:
         shell: bash
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
+        env:
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
