@@ -48,6 +48,7 @@ const (
 	BuiltInServiceRetries        BuiltInPolicyName = "DaprBuiltInServiceRetries"
 	BuiltInActorRetries          BuiltInPolicyName = "DaprBuiltInActorRetries"
 	BuiltInActorReminderRetries  BuiltInPolicyName = "DaprBuiltInActorReminderRetries"
+	BuiltInActorNotFoundRetries  BuiltInPolicyName = "DaprBuiltInActorNotFoundRetries"
 	BuiltInInitializationRetries BuiltInPolicyName = "DaprBuiltInInitializationRetries"
 	Endpoint                     PolicyType        = "endpoint"
 	Component                    PolicyType        = "component"
@@ -299,7 +300,6 @@ func (r *Resiliency) addBuiltInPolicies() {
 
 	// Cover retries for initialization, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInInitializationRetries)]; !ok {
-		r.log.Info("Adding initialization policy.")
 		r.retries[string(BuiltInInitializationRetries)] = &retry.Config{
 			Policy:              retry.PolicyExponential,
 			InitialInterval:     time.Millisecond * 500,
@@ -309,6 +309,14 @@ func (r *Resiliency) addBuiltInPolicies() {
 			Duration:            time.Second * 2,
 			Multiplier:          1.5,
 			RandomizationFactor: 0.5,
+		}
+	}
+
+	if _, ok := r.retries[string(BuiltInActorNotFoundRetries)]; !ok {
+		r.retries[string(BuiltInActorNotFoundRetries)] = &retry.Config{
+			Policy:     retry.PolicyConstant,
+			MaxRetries: 5,
+			Duration:   time.Second,
 		}
 	}
 }
@@ -332,12 +340,16 @@ func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error
 			return fmt.Errorf("invalid retry configuration %q: %w", name, err)
 		}
 
-		if r.isBuiltInPolicy(name) && rc.MaxRetries < 3 {
-			r.log.Warnf("Attempted override of %s did not meet minimum retry count, resetting to 3.", name)
-			rc.MaxRetries = 3
-		}
+		if !r.isProtectedPolicy(name) {
+			if r.isBuiltInPolicy(name) && rc.MaxRetries < 3 {
+				r.log.Warnf("Attempted override of %s did not meet minimum retry count, resetting to 3.", name)
+				rc.MaxRetries = 3
+			}
 
-		r.retries[name] = &rc
+			r.retries[name] = &rc
+		} else {
+			r.log.Warnf("Attempted to override protected policy %s which is not allowed. Ignoring provided policy and using default.", name)
+		}
 	}
 
 	for name, t := range policies.CircuitBreakers {
@@ -444,6 +456,17 @@ func (r *Resiliency) isBuiltInPolicy(name string) bool {
 	case string(BuiltInActorReminderRetries):
 		fallthrough
 	case string(BuiltInInitializationRetries):
+		fallthrough
+	case string(BuiltInActorNotFoundRetries):
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *Resiliency) isProtectedPolicy(name string) bool {
+	switch name {
+	case string(BuiltInActorNotFoundRetries):
 		return true
 	default:
 		return false
@@ -618,7 +641,6 @@ func (r *Resiliency) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) 
 	var t time.Duration
 	var cb *breaker.CircuitBreaker
 	stringName := string(name)
-	r.log.Infof("Built-in policy (%s): %+v", stringName, r.retries[stringName])
 	return Policy(ctx, r.log, stringName, t, r.retries[stringName], cb)
 }
 
