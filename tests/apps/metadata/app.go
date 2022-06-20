@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
+
 	"github.com/gorilla/mux"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
