@@ -33,6 +33,8 @@ import (
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
 
+const testLabel = "service-invocation-grpc"
+
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
@@ -56,6 +58,9 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": testLabel + "-testapp",
+			},
 		},
 		{
 			AppName:           "tester",
@@ -73,6 +78,12 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": testLabel + "-tester",
+			},
+			PodAffinityLabels: map[string]string{
+				"daprtest": testLabel + "-testapp",
+			},
 		},
 	}
 
@@ -185,5 +196,5 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
 	require.Greater(t, tp90Latency, 0.0)
-	require.LessOrEqual(t, tp90Latency, 3.0)
+	require.LessOrEqual(t, tp90Latency, 2.0)
 }

@@ -111,11 +111,29 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		}
 	}
 
+	labels := appDesc.Labels
+	if len(labels) == 0 {
+		labels = make(map[string]string, 1)
+	}
+	labels[TestAppLabelKey] = appDesc.AppName
+
+	var podAffinity *apiv1.PodAffinity
+	if len(appDesc.PodAffinityLabels) > 0 {
+		podAffinity = &apiv1.PodAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []apiv1.PodAffinityTerm{
+				{
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: appDesc.PodAffinityLabels,
+					},
+					TopologyKey: "topology.kubernetes.io/zone",
+				},
+			},
+		}
+	}
+
 	return apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				TestAppLabelKey: appDesc.AppName,
-			},
+			Labels:      labels,
 			Annotations: buildDaprAnnotations(appDesc),
 		},
 		Spec: apiv1.PodSpec{
@@ -156,6 +174,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 						},
 					},
 				},
+				PodAffinity: podAffinity,
 			},
 			ImagePullSecrets: []apiv1.LocalObjectReference{
 				{
