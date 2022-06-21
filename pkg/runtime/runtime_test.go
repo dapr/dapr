@@ -4276,7 +4276,7 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	require.NoError(t, rt.initState(cStateStore))
 
 	capabilities := rt.getComponentsCapabilitesMap()
-	assert.Equal(t, 4, len(capabilities))
+	assert.Equal(t, 3, len(capabilities))
 }
 
 func runGRPCApp(port int) (func(), error) {

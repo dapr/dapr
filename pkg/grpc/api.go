@@ -1477,7 +1477,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
 			Type:         comp.Spec.Type,
-			Capabilities: componentsCapabilties[comp.Name],
+			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1486,6 +1486,13 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		RegisteredComponents: registeredComponents,
 	}
 	return response, nil
+}
+
+func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+	if val, ok := dict[key]; ok {
+		return val
+	}
+	return make([]string, 0)
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.

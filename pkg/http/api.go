@@ -1824,7 +1824,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
 			Type:         comp.Spec.Type,
-			Capabilities: componentsCapabilties[comp.Name],
+			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1844,6 +1844,13 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respond(reqCtx, withJSON(fasthttp.StatusOK, mtdBytes))
 	}
+}
+
+func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+	if val, ok := dict[key]; ok {
+		return val
+	}
+	return make([]string, 0)
 }
 
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
