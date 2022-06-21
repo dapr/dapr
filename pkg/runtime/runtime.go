@@ -464,12 +464,14 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	grpcAPI.SetDirectMessaging(a.directMessaging)
 
-	err = a.initActors()
-	if err != nil {
-		log.Warnf("failed to init actors: %v", err)
-	} else {
-		a.daprHTTPAPI.SetActorRuntime(a.actor)
-		grpcAPI.SetActorRuntime(a.actor)
+	if len(a.runtimeConfig.PlacementAddresses) != 0 {
+		err = a.initActors()
+		if err != nil {
+			log.Warnf("failed to init actors: %v", err)
+		} else {
+			a.daprHTTPAPI.SetActorRuntime(a.actor)
+			grpcAPI.SetActorRuntime(a.actor)
+		}
 	}
 
 	if opts.componentsCallback != nil {
@@ -1109,6 +1111,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.sendToOutputBinding,
 		a.globalConfig.Spec.TracingSpec,
 		a.ShutdownWithWait,
+		a.getComponentsCapabilitesMap,
 	)
 	serverConf := http.NewServerConfig(
 		a.runtimeConfig.ID,
@@ -1170,9 +1173,25 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.resiliency, a.stateStores, a.secretStores, a.secretsConfiguration, a.configurationStores,
-		a.lockStores, a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents, a.ShutdownWithWait)
+	return grpc.NewAPI(a.runtimeConfig.ID,
+		a.appChannel,
+		a.resiliency,
+		a.stateStores,
+		a.secretStores,
+		a.secretsConfiguration,
+		a.configurationStores,
+		a.lockStores,
+		a.getPublishAdapter(),
+		a.directMessaging,
+		a.actor,
+		a.sendToOutputBinding,
+		a.globalConfig.Spec.TracingSpec,
+		a.accessControlList,
+		string(a.runtimeConfig.ApplicationProtocol),
+		a.getComponents,
+		a.ShutdownWithWait,
+		a.getComponentsCapabilitesMap,
+	)
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
@@ -1382,17 +1401,20 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 			return err
 		}
 
-		// set specified actor store if "actorStateStore" is true in the spec.
-		actorStoreSpecified := props[actorStateStore]
-		if actorStoreSpecified == "true" {
-			a.actorStateStoreLock.Lock()
-			if a.actorStateStoreName == "" {
-				log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
-				a.actorStateStoreName = s.ObjectMeta.Name
-			} else if a.actorStateStoreName != s.ObjectMeta.Name {
-				log.Fatalf("detected duplicate actor state store: %s", s.ObjectMeta.Name)
+		// when placement address list is not empty, set specified actor store.
+		if len(a.runtimeConfig.PlacementAddresses) != 0 {
+			// set specified actor store if "actorStateStore" is true in the spec.
+			actorStoreSpecified := props[actorStateStore]
+			if actorStoreSpecified == "true" {
+				a.actorStateStoreLock.Lock()
+				if a.actorStateStoreName == "" {
+					log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
+					a.actorStateStoreName = s.ObjectMeta.Name
+				} else if a.actorStateStoreName != s.ObjectMeta.Name {
+					log.Fatalf("detected duplicate actor state store: %s", s.ObjectMeta.Name)
+				}
+				a.actorStateStoreLock.Unlock()
 			}
-			a.actorStateStoreLock.Unlock()
 		}
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 	}
@@ -1868,8 +1890,12 @@ func (a *DaprRuntime) initActors() error {
 	if a.actorStateStoreName == "" {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort, a.namespace, a.appConfig)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features, a.resiliency, a.actorStateStoreName)
+	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID,
+		a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort,
+		a.namespace, a.appConfig)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig,
+		a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features,
+		a.resiliency, a.actorStateStoreName)
 	err = act.Init()
 	if err == nil {
 		a.actor = act
@@ -2428,6 +2454,42 @@ func (a *DaprRuntime) getComponents() []components_v1alpha1.Component {
 	comps := make([]components_v1alpha1.Component, len(a.components))
 	copy(comps, a.components)
 	return comps
+}
+
+func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
+	capabilities := make(map[string][]string)
+	for key, store := range a.stateStores {
+		features := store.Features()
+		stateStoreCapabilities := featureTypeToString(features)
+		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
+			stateStoreCapabilities = append(stateStoreCapabilities, "ACTOR")
+		}
+		capabilities[key] = stateStoreCapabilities
+	}
+	for key := range a.inputBindings {
+		capabilities[key] = []string{"INPUT_BINDING"}
+	}
+	for key := range a.outputBindings {
+		if val, found := capabilities[key]; found {
+			capabilities[key] = append(val, "OUTPUT_BINDING")
+		} else {
+			capabilities[key] = []string{"OUTPUT_BINDING"}
+		}
+	}
+	return capabilities
+}
+
+// converts components Features from FeatureType to string
+func featureTypeToString(features interface{}) []string {
+	featureStr := make([]string, 0)
+	switch reflect.TypeOf(features).Kind() {
+	case reflect.Slice:
+		val := reflect.ValueOf(features)
+		for i := 0; i < val.Len(); i++ {
+			featureStr = append(featureStr, val.Index(i).String())
+		}
+	}
+	return featureStr
 }
 
 func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
