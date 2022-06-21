@@ -4,7 +4,7 @@ import (
 	"os"
 )
 
-const (
+var (
 	// RootCertFilename is the filename that holds the root certificate.
 	RootCertFilename = "ca.crt"
 	// IssuerCertFilename is the filename that holds the issuer certificate.

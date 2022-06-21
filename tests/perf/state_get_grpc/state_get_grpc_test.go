@@ -125,8 +125,8 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	err = json.Unmarshal(baselineResp, &baselineResult)
 	require.NoError(t, err)
 
-	percentiles := map[int]string{1: "50th", 2: "75th", 3: "90th", 4: "99th"}
-	tp90Latency := 0.0
+	percentiles := []string{"50th", "75th", "90th", "99th"}
+	var tp90Latency float64
 
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
@@ -160,5 +160,5 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
 	require.Greater(t, tp90Latency, 0.0)
-	require.LessOrEqual(t, tp90Latency, 3.0)
+	require.LessOrEqual(t, tp90Latency, 2.0)
 }
