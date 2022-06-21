@@ -4222,6 +4222,63 @@ func TestGRPCProxy(t *testing.T) {
 	})
 }
 
+func TestGetComponentsCapabilitiesMap(t *testing.T) {
+	cPubSub := components_v1alpha1.Component{}
+	cPubSub.ObjectMeta.Name = "mockPubSub"
+	cPubSub.Spec.Type = "pubsub.mockPubSub"
+
+	cStateStore := components_v1alpha1.Component{}
+	cStateStore.ObjectMeta.Name = "testStateStoreName"
+	cStateStore.Spec.Type = "state.mockState"
+
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	defer stopRuntime(t, rt)
+
+	mockStateStore := new(daprt.MockStateStore)
+	rt.stateStoreRegistry.Register(
+		state_loader.New("mockState", func() state.Store {
+			return mockStateStore
+		}),
+	)
+
+	mockStateStore.On("Init", mock.Anything).Return(nil)
+
+	mockPubSub := new(daprt.MockPubSub)
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		}),
+	)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil)
+
+	rt.bindingsRegistry.RegisterInputBindings(
+		bindings_loader.NewInput("testInputBinding", func() bindings.InputBinding {
+			return &daprt.MockBinding{}
+		}),
+	)
+	cin := components_v1alpha1.Component{}
+	cin.ObjectMeta.Name = "testInputBinding"
+	cin.Spec.Type = "bindings.testInputBinding"
+
+	rt.bindingsRegistry.RegisterOutputBindings(
+		bindings_loader.NewOutput("testOutputBinding", func() bindings.OutputBinding {
+			return &daprt.MockBinding{}
+		}),
+	)
+	cout := components_v1alpha1.Component{}
+	cout.ObjectMeta.Name = "testOutputBinding"
+	cout.Spec.Type = "bindings.testOutputBinding"
+
+	require.NoError(t, rt.initInputBinding(cin))
+	require.NoError(t, rt.initOutputBinding(cout))
+	require.NoError(t, rt.initPubSub(cPubSub))
+	require.NoError(t, rt.initState(cStateStore))
+
+	capabilities := rt.getComponentsCapabilitesMap()
+	assert.Equal(t, 3, len(capabilities))
+}
+
 func runGRPCApp(port int) (func(), error) {
 	serverListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {

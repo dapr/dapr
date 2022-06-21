@@ -71,34 +71,36 @@ type API interface {
 }
 
 type api struct {
-	endpoints                []Endpoint
-	publicEndpoints          []Endpoint
-	directMessaging          messaging.DirectMessaging
-	appChannel               channel.AppChannel
-	getComponentsFn          func() []components_v1alpha1.Component
-	resiliency               resiliency.Provider
-	stateStores              map[string]state.Store
-	lockStores               map[string]lock.Store
-	configurationStores      map[string]configuration.Store
-	configurationSubscribe   map[string]chan struct{}
-	transactionalStateStores map[string]state.TransactionalStore
-	secretStores             map[string]secretstores.SecretStore
-	secretsConfiguration     map[string]config.SecretsScope
-	actor                    actors.Actors
-	pubsubAdapter            runtime_pubsub.Adapter
-	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	id                       string
-	extendedMetadata         sync.Map
-	readyStatus              bool
-	outboundReadyStatus      bool
-	tracingSpec              config.TracingSpec
-	shutdown                 func()
+	endpoints                  []Endpoint
+	publicEndpoints            []Endpoint
+	directMessaging            messaging.DirectMessaging
+	appChannel                 channel.AppChannel
+	getComponentsFn            func() []components_v1alpha1.Component
+	resiliency                 resiliency.Provider
+	stateStores                map[string]state.Store
+	lockStores                 map[string]lock.Store
+	configurationStores        map[string]configuration.Store
+	configurationSubscribe     map[string]chan struct{}
+	transactionalStateStores   map[string]state.TransactionalStore
+	secretStores               map[string]secretstores.SecretStore
+	secretsConfiguration       map[string]config.SecretsScope
+	actor                      actors.Actors
+	pubsubAdapter              runtime_pubsub.Adapter
+	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	id                         string
+	extendedMetadata           sync.Map
+	readyStatus                bool
+	outboundReadyStatus        bool
+	tracingSpec                config.TracingSpec
+	shutdown                   func()
+	getComponentsCapabilitesFn func() map[string][]string
 }
 
 type registeredComponent struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Version string `json:"version"`
+	Name         string   `json:"name"`
+	Type         string   `json:"type"`
+	Version      string   `json:"version"`
+	Capabilities []string `json:"capabilities"`
 }
 
 type metadata struct {
@@ -148,6 +150,7 @@ func NewAPI(
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
 	shutdown func(),
+	getComponentsCapabilitiesFn func() map[string][]string,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -156,23 +159,24 @@ func NewAPI(
 		}
 	}
 	api := &api{
-		appChannel:               appChannel,
-		getComponentsFn:          getComponentsFn,
-		resiliency:               resiliency,
-		directMessaging:          directMessaging,
-		stateStores:              stateStores,
-		lockStores:               lockStores,
-		transactionalStateStores: transactionalStateStores,
-		secretStores:             secretStores,
-		secretsConfiguration:     secretsConfiguration,
-		configurationStores:      configurationStores,
-		configurationSubscribe:   make(map[string]chan struct{}),
-		actor:                    actor,
-		pubsubAdapter:            pubsubAdapter,
-		sendToOutputBindingFn:    sendToOutputBindingFn,
-		id:                       appID,
-		tracingSpec:              tracingSpec,
-		shutdown:                 shutdown,
+		appChannel:                 appChannel,
+		getComponentsFn:            getComponentsFn,
+		resiliency:                 resiliency,
+		directMessaging:            directMessaging,
+		stateStores:                stateStores,
+		lockStores:                 lockStores,
+		transactionalStateStores:   transactionalStateStores,
+		secretStores:               secretStores,
+		secretsConfiguration:       secretsConfiguration,
+		configurationStores:        configurationStores,
+		configurationSubscribe:     make(map[string]chan struct{}),
+		actor:                      actor,
+		pubsubAdapter:              pubsubAdapter,
+		sendToOutputBindingFn:      sendToOutputBindingFn,
+		id:                         appID,
+		tracingSpec:                tracingSpec,
+		shutdown:                   shutdown,
+		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -1812,15 +1816,15 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	if a.actor != nil {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
-
+	componentsCapabilties := a.getComponentsCapabilitesFn()
 	components := a.getComponentsFn()
 	registeredComponents := make([]registeredComponent, 0, len(components))
-
 	for _, comp := range components {
 		registeredComp := registeredComponent{
-			Name:    comp.Name,
-			Version: comp.Spec.Version,
-			Type:    comp.Spec.Type,
+			Name:         comp.Name,
+			Version:      comp.Spec.Version,
+			Type:         comp.Spec.Type,
+			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1840,6 +1844,13 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respond(reqCtx, withJSON(fasthttp.StatusOK, mtdBytes))
 	}
+}
+
+func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+	if val, ok := dict[key]; ok {
+		return val
+	}
+	return make([]string, 0)
 }
 
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
