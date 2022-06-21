@@ -254,6 +254,7 @@ jobs:
           fi
         shell: bash
       - name: Wait for Azure Container Registry deployment
+        timeout-minutes: 30
         if: env.TEST_PREFIX != ''
         run: |
           elapsed=0
