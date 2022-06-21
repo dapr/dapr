@@ -295,6 +295,7 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
 		resiliencyProvider = resiliency_config.FromConfigurations(log, resiliencyConfigs...)
+		log.Info("Resiliency configuration loaded.")
 	} else {
 		log.Debug("Resiliency is not enabled.")
 		resiliencyProvider = &resiliency_config.NoOp{}

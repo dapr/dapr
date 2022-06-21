@@ -319,9 +319,25 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	a.placement.WaitUntilPlacementTableIsReady()
 
 	actor := req.Actor()
-	targetActorAddress, appID := a.placement.LookupActor(actor.GetActorType(), actor.GetActorId())
-	if targetActorAddress == "" {
-		return nil, errors.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
+	targetActorAddress, appID := "", ""
+	// Retry here to allow placement table dissemination/rebalancing to happen.
+	var policy resiliency.Runner
+	if a.isResiliencyEnabled {
+		policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorNotFoundRetries)
+	} else {
+		noOp := resiliency.NoOp{}
+		policy = noOp.BuiltInPolicy(ctx, resiliency.BuiltInActorNotFoundRetries)
+	}
+	rErr := policy(func(ctx context.Context) error {
+		targetActorAddress, appID = a.placement.LookupActor(actor.GetActorType(), actor.GetActorId())
+		if targetActorAddress == "" {
+			return errors.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
+		}
+		return nil
+	})
+
+	if rErr != nil {
+		return nil, rErr
 	}
 
 	var resp *invokev1.InvokeMethodResponse
@@ -597,7 +613,22 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 
 func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
 	key := constructCompositeKey(req.ActorType, req.ActorID)
-	_, exists := a.actorsTable.Load(key)
+	exists := false
+	var policy resiliency.Runner
+	if a.isResiliencyEnabled {
+		policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorNotFoundRetries)
+	} else {
+		noOp := resiliency.NoOp{}
+		policy = noOp.BuiltInPolicy(ctx, resiliency.BuiltInActorNotFoundRetries)
+	}
+	policy(func(ctx context.Context) error {
+		_, exists = a.actorsTable.Load(key)
+
+		if !exists {
+			return fmt.Errorf("Actor")
+		}
+		return nil
+	})
 	return exists
 }
 
