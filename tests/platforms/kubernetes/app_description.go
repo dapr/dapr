@@ -46,8 +46,11 @@ type AppDescription struct {
 	IsJob              bool              `json:",omitempty"`
 	SecretStoreDisable bool              `json:",omitempty"`
 	DaprVolumeMounts   string            `json:",omitempty"`
+	Labels             map[string]string `json:",omitempty"` // Adds custom labels to pods
+	PodAffinityLabels  map[string]string `json:",omitempty"` // If set, adds a podAffinity rule matching those labels
 	Volumes            []apiv1.Volume    `json:",omitempty"`
 	InitContainers     []apiv1.Container `json:",omitempty"`
+	PlacementAddresses []string          `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {
