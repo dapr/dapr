@@ -145,7 +145,7 @@ func TestPubsubPublishGrpcPerformance(t *testing.T) {
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{baselineResult, daprResult},
-		"State Get",
+		"Pubsub Publish Grpc",
 		sidecarUsage,
 		appUsage)
 	report.SetTotalRestartCount(restarts)

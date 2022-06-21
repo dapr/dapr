@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/utils"
 )
 
 const (
@@ -49,6 +50,9 @@ const (
 
 	// Environment variable for setting Kubernetes node affinity ARCH.
 	TargetArchEnvVar = "TARGET_ARCH"
+
+	// Environmental variable to disable API logging
+	DisableAPILoggingEnvVar = "NO_API_LOGGING"
 )
 
 var (
@@ -60,6 +64,9 @@ var (
 
 	// TargetArch is the default architecture affinity for Kubernetes nodes.
 	TargetArch = "amd64"
+
+	// Controls whether API logging is enabled
+	EnableAPILogging = true
 )
 
 // buildDaprAnnotations creates the Kubernetes Annotations object for dapr test app.
@@ -77,7 +84,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
-			"dapr.io/enable-api-logging":                "true",
+			"dapr.io/enable-api-logging":                strconv.FormatBool(EnableAPILogging),
 			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
 		}
 		if !appDesc.IsJob {
@@ -111,11 +118,29 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		}
 	}
 
+	labels := appDesc.Labels
+	if len(labels) == 0 {
+		labels = make(map[string]string, 1)
+	}
+	labels[TestAppLabelKey] = appDesc.AppName
+
+	var podAffinity *apiv1.PodAffinity
+	if len(appDesc.PodAffinityLabels) > 0 {
+		podAffinity = &apiv1.PodAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []apiv1.PodAffinityTerm{
+				{
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: appDesc.PodAffinityLabels,
+					},
+					TopologyKey: "topology.kubernetes.io/zone",
+				},
+			},
+		}
+	}
+
 	return apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				TestAppLabelKey: appDesc.AppName,
-			},
+			Labels:      labels,
 			Annotations: buildDaprAnnotations(appDesc),
 		},
 		Spec: apiv1.PodSpec{
@@ -156,6 +181,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 						},
 					},
 				},
+				PodAffinity: podAffinity,
 			},
 			ImagePullSecrets: []apiv1.LocalObjectReference{
 				{
@@ -279,5 +305,9 @@ func init() {
 	}
 	if arch, ok := os.LookupEnv(TargetArchEnvVar); ok {
 		TargetArch = arch
+	}
+	{
+		v, _ := os.LookupEnv(DisableAPILoggingEnvVar)
+		EnableAPILogging = !utils.IsTruthy(v)
 	}
 }
