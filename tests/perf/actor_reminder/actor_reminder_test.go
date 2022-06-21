@@ -62,6 +62,9 @@ func TestMain(m *testing.M) {
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": actorType,
 			},
+			Labels: map[string]string{
+				"daprtest": serviceApplicationName,
+			},
 		},
 		{
 			AppName:           clientApplicationName,
@@ -78,6 +81,12 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": clientApplicationName,
+			},
+			PodAffinityLabels: map[string]string{
+				"daprtest": serviceApplicationName,
+			},
 		},
 	}
 
