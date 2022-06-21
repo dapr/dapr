@@ -400,9 +400,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	span := diag_utils.SpanFromContext(ctx)
 	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
+	corID := diag.SpanContextToW3CString((*span).SpanContext())
 	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
+	traceState := diag.TraceStateToW3CString((*span).SpanContext())
 
 	body := []byte{}
 	if in.Data != nil {

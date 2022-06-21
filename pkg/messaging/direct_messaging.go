@@ -231,7 +231,7 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 
 func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 	span := diag_utils.SpanFromContext(ctx)
-	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	ctx = diag.SpanContextToGRPCMetadata(ctx, (*span).SpanContext())
 
 	return ctx
 }

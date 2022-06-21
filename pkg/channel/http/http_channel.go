@@ -25,7 +25,6 @@ import (
 	nethttp "net/http"
 
 	"github.com/valyala/fasthttp"
-	"go.opencensus.io/plugin/ochttp/propagation/tracecontext"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -222,8 +221,8 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
 	span := diag_utils.SpanFromContext(ctx)
-	httpFormat := &tracecontext.HTTPFormat{}
-	tp, ts := httpFormat.SpanContextToHeaders(span.SpanContext())
+	tp := diag.SpanContextToW3CString((*span).SpanContext())
+	ts := diag.TraceStateToW3CString((*span).SpanContext())
 	channelReq.Header.Set("traceparent", tp)
 	if ts != "" {
 		channelReq.Header.Set("tracestate", ts)

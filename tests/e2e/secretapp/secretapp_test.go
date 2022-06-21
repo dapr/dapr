@@ -169,7 +169,6 @@ func generateTestCases() []testCase {
 }
 
 func generateTestCasesForDisabledSecretStore() []testCase {
-
 	return []testCase{
 		{
 			"valid secret but secret store should not be found",

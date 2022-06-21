@@ -28,7 +28,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -476,15 +476,15 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 
 	// pass the trace context to output binding in metadata
 	if span := diag_utils.SpanFromContext(reqCtx); span != nil {
-		sc := span.SpanContext()
+		sc := (*span).SpanContext()
 		if req.Metadata == nil {
 			req.Metadata = map[string]string{}
 		}
 		// if sc is not empty context, set traceparent Header.
-		if sc != (trace.SpanContext{}) {
+		if !sc.Equal(trace.SpanContext{}) {
 			req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
 		}
-		if sc.Tracestate != nil {
+		if sc.TraceState().Len() == 0 {
 			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
 		}
 	}
@@ -1912,9 +1912,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
+	corID := diag.SpanContextToW3CString((*span).SpanContext())
 	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
+	traceState := diag.TraceStateToW3CString((*span).SpanContext())
 
 	data := body
 

@@ -20,8 +20,7 @@ import (
 	"strconv"
 	"strings"
 
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/propagation"
+	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
@@ -366,10 +365,10 @@ func ErrorFromInternalStatus(internalStatus *internalv1pb.Status) error {
 func processGRPCToHTTPTraceHeaders(ctx context.Context, traceContext string, setHeader func(string, string)) {
 	// attach grpc-trace-bin value in traceparent and tracestate header
 	decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-	sc, ok := propagation.FromBinary(decoded)
+	sc, ok := diag_utils.SpanContextFromBinary(decoded)
 	if !ok {
 		span := diag_utils.SpanFromContext(ctx)
-		sc = span.SpanContext()
+		sc = (*span).SpanContext()
 	}
 	diag.SpanContextToHTTPHeaders(sc, setHeader)
 }
@@ -377,7 +376,7 @@ func processGRPCToHTTPTraceHeaders(ctx context.Context, traceContext string, set
 func processHTTPToHTTPTraceHeaders(ctx context.Context, traceparentValue, traceStateValue string, setHeader func(string, string)) {
 	if traceparentValue == "" {
 		span := diag_utils.SpanFromContext(ctx)
-		diag.SpanContextToHTTPHeaders(span.SpanContext(), setHeader)
+		diag.SpanContextToHTTPHeaders((*span).SpanContext(), setHeader)
 	} else {
 		setHeader(traceparentHeader, traceparentValue)
 		if traceStateValue != "" {
@@ -390,10 +389,11 @@ func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, tracepare
 	var sc trace.SpanContext
 	var ok bool
 	if sc, ok = diag.SpanContextFromW3CString(traceparentValue); ok {
-		sc.Tracestate = diag.TraceStateFromW3CString(traceStateValue)
+		ts := diag.TraceStateFromW3CString(traceStateValue)
+		sc = sc.WithTraceState(*ts)
 	} else {
 		span := diag_utils.SpanFromContext(ctx)
-		sc = span.SpanContext()
+		sc = (*span).SpanContext()
 	}
 	// Workaround for lack of grpc-trace-bin support in OpenTelemetry (unlike OpenCensus), tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 	// grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
@@ -401,13 +401,13 @@ func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, tracepare
 	diag.SpanContextToHTTPHeaders(sc, func(header, value string) {
 		md.Set(header, value)
 	})
-	md.Set(tracebinMetadata, string(propagation.Binary(sc)))
+	md.Set(tracebinMetadata, string(diag_utils.BinaryFromSpanContext(sc)))
 }
 
 func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctracebinValue string) {
 	if grpctracebinValue == "" {
 		span := diag_utils.SpanFromContext(ctx)
-		sc := span.SpanContext()
+		sc := (*span).SpanContext()
 
 		// Workaround for lack of grpc-trace-bin support in OpenTelemetry (unlike OpenCensus), tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 		// grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
@@ -415,14 +415,14 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 		diag.SpanContextToHTTPHeaders(sc, func(header, value string) {
 			md.Set(header, value)
 		})
-		md.Set(tracebinMetadata, string(propagation.Binary(sc)))
+		md.Set(tracebinMetadata, string(diag_utils.BinaryFromSpanContext(sc)))
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(grpctracebinValue)
 		if err == nil {
 			// Workaround for lack of grpc-trace-bin support in OpenTelemetry (unlike OpenCensus), tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 			// grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
 			// TODO : Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827
-			if sc, ok := propagation.FromBinary(decoded); ok {
+			if sc, ok := diag_utils.SpanContextFromBinary(decoded); ok {
 				diag.SpanContextToHTTPHeaders(sc, func(header, value string) {
 					md.Set(header, value)
 				})
