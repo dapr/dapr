@@ -464,12 +464,14 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	grpcAPI.SetDirectMessaging(a.directMessaging)
 
-	err = a.initActors()
-	if err != nil {
-		log.Warnf("failed to init actors: %v", err)
-	} else {
-		a.daprHTTPAPI.SetActorRuntime(a.actor)
-		grpcAPI.SetActorRuntime(a.actor)
+	if len(a.runtimeConfig.PlacementAddresses) != 0 {
+		err = a.initActors()
+		if err != nil {
+			log.Warnf("failed to init actors: %v", err)
+		} else {
+			a.daprHTTPAPI.SetActorRuntime(a.actor)
+			grpcAPI.SetActorRuntime(a.actor)
+		}
 	}
 
 	if opts.componentsCallback != nil {
@@ -1382,17 +1384,20 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 			return err
 		}
 
-		// set specified actor store if "actorStateStore" is true in the spec.
-		actorStoreSpecified := props[actorStateStore]
-		if actorStoreSpecified == "true" {
-			a.actorStateStoreLock.Lock()
-			if a.actorStateStoreName == "" {
-				log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
-				a.actorStateStoreName = s.ObjectMeta.Name
-			} else if a.actorStateStoreName != s.ObjectMeta.Name {
-				log.Fatalf("detected duplicate actor state store: %s", s.ObjectMeta.Name)
+		// when placement address list is not empty, set specified actor store.
+		if len(a.runtimeConfig.PlacementAddresses) != 0 {
+			// set specified actor store if "actorStateStore" is true in the spec.
+			actorStoreSpecified := props[actorStateStore]
+			if actorStoreSpecified == "true" {
+				a.actorStateStoreLock.Lock()
+				if a.actorStateStoreName == "" {
+					log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
+					a.actorStateStoreName = s.ObjectMeta.Name
+				} else if a.actorStateStoreName != s.ObjectMeta.Name {
+					log.Fatalf("detected duplicate actor state store: %s", s.ObjectMeta.Name)
+				}
+				a.actorStateStoreLock.Unlock()
 			}
-			a.actorStateStoreLock.Unlock()
 		}
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 	}
@@ -1868,8 +1873,12 @@ func (a *DaprRuntime) initActors() error {
 	if a.actorStateStoreName == "" {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort, a.namespace, a.appConfig)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features, a.resiliency, a.actorStateStoreName)
+	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID,
+		a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort,
+		a.namespace, a.appConfig)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig,
+		a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features,
+		a.resiliency, a.actorStateStoreName)
 	err = act.Init()
 	if err == nil {
 		a.actor = act

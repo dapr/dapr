@@ -3631,6 +3631,31 @@ func TestInitActors(t *testing.T) {
 		hosted := len(r.appConfig.Entities) > 0
 		assert.False(t, hosted)
 	})
+
+	t.Run("placement enable = false", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, r)
+
+		err := r.initActors()
+		assert.NotNil(t, err)
+	})
+
+	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, r)
+
+		assert.Nil(t, r.actor)
+		assert.NotNil(t, r.stateStores)
+	})
+
+	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, r)
+
+		assert.Equal(t, "", r.actorStateStoreName)
+		err := r.initActors()
+		assert.NotNil(t, err)
+	})
 }
 
 func TestInitBindings(t *testing.T) {

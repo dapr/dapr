@@ -291,7 +291,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	}
 
 	if b.config == nil {
-		config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
+		config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
 		b.config = &config
 	}
 
@@ -315,8 +315,16 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
+	config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
 	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+
+	return a.(*actorsRuntime)
+}
+
+func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
+	spec := config.TracingSpec{SamplingRate: "1"}
+	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
+	a := NewActors(nil, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
 }
@@ -343,7 +351,7 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 			},
 		},
 	}
-	c := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	c := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
 	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{}, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
@@ -359,6 +367,12 @@ func newTestActorsRuntime() *actorsRuntime {
 	appChannel := new(mockAppChannel)
 
 	return newTestActorsRuntimeWithMock(appChannel)
+}
+
+func newTestActorsRuntimeWithoutPlacement() *actorsRuntime {
+	appChannel := new(mockAppChannel)
+
+	return newTestActorsRuntimeWithMockWithoutPlacement(appChannel)
 }
 
 func getTestActorTypeAndID() (string, string) {
@@ -2075,7 +2089,7 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
@@ -2103,7 +2117,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
 	reentrantAppChannel.callLog = []string{}
@@ -2131,7 +2145,7 @@ func TestReentrancyStackLimit(t *testing.T) {
 	stackDepth := 0
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
@@ -2361,5 +2375,17 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, 4, failingState.Failure.CallCount[callKey]) // Should be called 2 more times.
 		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+}
+
+func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntimeWithoutPlacement()
+
+	t.Run("placement is empty", func(t *testing.T) {
+		assert.Nil(t, testActorsRuntime.placement)
+	})
+
+	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
+		assert.Nil(t, testActorsRuntime.store)
 	})
 }
