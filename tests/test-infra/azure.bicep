@@ -29,6 +29,12 @@ param diagLogAnalyticsWorkspaceResourceId string = ''
 @description('If set, sends certain diagnostic logs to Azure Storage')
 param diagStorageResourceId string = ''
 
+@description('If enabled, deploy Cosmos DB')
+param enableCosmosDB bool = true
+
+@description('If enabled, deploy Service Bus')
+param enableServiceBus bool = true
+
 // Deploy an AKS cluster
 module aksModule './azure-aks.bicep' = {
   name: 'azure-aks'
@@ -42,7 +48,7 @@ module aksModule './azure-aks.bicep' = {
 }
 
 // Deploy a Cosmos DB account
-module cosmosdbModule './azure-cosmosdb.bicep' = {
+module cosmosdbModule './azure-cosmosdb.bicep' = if (enableCosmosDB) {
   name: 'azure-cosmosdb'
   params: {
     namePrefix: namePrefix
@@ -51,7 +57,7 @@ module cosmosdbModule './azure-cosmosdb.bicep' = {
 }
 
 // Deploy a Service Bus namespace and all the topics/subscriptions
-module serviceBusModule './azure-servicebus.bicep' = {
+module serviceBusModule './azure-servicebus.bicep' = if (enableServiceBus) {
   name: 'azure-servicebus'
   params: {
     namePrefix: namePrefix
