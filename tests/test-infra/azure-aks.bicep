@@ -156,7 +156,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
   tags: {}
   sku: {
     name: 'Basic'
-    tier: 'Free'
+    tier: 'Paid'
   }
   identity: {
     type: 'SystemAssigned'
