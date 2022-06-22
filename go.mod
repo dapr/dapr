@@ -72,7 +72,6 @@ require (
 	cloud.google.com/go/compute v1.5.0 // indirect
 	cloud.google.com/go/datastore v1.1.0 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
-	cloud.google.com/go/kms v1.4.0 // indirect
 	cloud.google.com/go/pubsub v1.12.2 // indirect
 	cloud.google.com/go/secretmanager v1.4.0 // indirect
 	cloud.google.com/go/storage v1.10.0 // indirect
@@ -146,7 +145,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.2.0 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b // indirect
-	github.com/camunda-cloud/zeebe/clients/go v1.0.1 // indirect
+	github.com/camunda/zeebe/clients/go/v8 v8.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/coreos/go-oidc v2.1.0+incompatible // indirect
 	github.com/creasty/defaults v1.5.2 // indirect
