@@ -1807,7 +1807,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = key.(string)
+		temp[key.(string)] = value.(string)
 
 		return true
 	})
