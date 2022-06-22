@@ -147,6 +147,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/twitter"
 	bindings_zeebe_command "github.com/dapr/components-contrib/bindings/zeebe/command"
 	bindings_zeebe_jobworker "github.com/dapr/components-contrib/bindings/zeebe/jobworker"
+	"github.com/dapr/components-contrib/bindings/commercetools"
 
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
@@ -521,6 +522,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("huawei.obs", func() bindings.OutputBinding {
 				return obs.NewHuaweiOBS(logContrib)
+			}),
+			bindings_loader.NewOutput("commercetools", func() bindings.OutputBinding {
+				return commercetools.NewCommercetools(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
