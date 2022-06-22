@@ -30,10 +30,10 @@ service Dapr {
   rpc InvokeService(InvokeServiceRequest) returns (common.v1.InvokeResponse) {}
 
   // Check health of a component
-  rpc CheckHealth(CheckHealthRequest) returns (google.protobuf.Empty) {}
+  rpc CheckHealthAlpha1(CheckHealthRequest) returns (google.protobuf.Empty) {}
 
   // Check health of all registered components
-  rpc CheckAllComponentsHealth(CheckAllComponentsHealthRequest) returns (CheckAllComponentsHealthResponse) {}
+  rpc CheckAllComponentsHealthAlpha1(CheckAllComponentsHealthRequest) returns (CheckAllComponentsHealthResponse) {}
 
   // Gets the state for a specific key.
   rpc GetState(GetStateRequest) returns (GetStateResponse) {}

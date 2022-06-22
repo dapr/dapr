@@ -425,13 +425,13 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 		{
 			Methods: []string{fasthttp.MethodGet},
 			Route:   "healthz/components/{componentName}",
-			Version: apiVersionV1,
+			Version: apiVersionV1alpha1,
 			Handler: a.onGetComponentHealthz,
 		},
 		{
 			Methods: []string{fasthttp.MethodGet},
 			Route:   "healthz/components",
-			Version: apiVersionV1,
+			Version: apiVersionV1alpha1,
 			Handler: a.onGetAllComponentsHealthz,
 		},
 	}

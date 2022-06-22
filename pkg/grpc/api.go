@@ -78,8 +78,8 @@ type API interface {
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
-	CheckAllComponentsHealth(ctx context.Context, in *runtimev1pb.CheckAllComponentsHealthRequest) (*runtimev1pb.CheckAllComponentsHealthResponse, error)
-	CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error)
+	CheckAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckAllComponentsHealthRequest) (*runtimev1pb.CheckAllComponentsHealthResponse, error)
+	CheckHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
@@ -706,9 +706,7 @@ func (a *api) getComponent(componentKind string, componentName string) (componen
 	return
 }
 
-func (a *api) CheckAllComponentsHealth(ctx context.Context, in *runtimev1pb.CheckAllComponentsHealthRequest) (*runtimev1pb.CheckAllComponentsHealthResponse, error) {
-	apiServerLogger.Info("CheckAllComponentsHealth is called")
-
+func (a *api) CheckAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckAllComponentsHealthRequest) (*runtimev1pb.CheckAllComponentsHealthResponse, error) {
 	i := 0
 	components := a.getComponentsFn()
 	hresp := &runtimev1pb.CheckAllComponentsHealthResponse{
@@ -735,7 +733,7 @@ func (a *api) allComponentsHealthResponePopulator(componentType string, hresp *r
 	}
 }
 
-func (a *api) CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
+func (a *api) CheckHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
 	componentName := in.ComponentName
 	components := a.getComponentsFn()
 	for _, comp := range components {

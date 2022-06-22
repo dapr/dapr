@@ -168,7 +168,7 @@ func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeB
 	return &runtimev1pb.InvokeBindingResponse{}, nil
 }
 
-func (m *mockGRPCAPI) CheckHealth(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
+func (m *mockGRPCAPI) CheckHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
 
@@ -1567,7 +1567,7 @@ func TestCheckStoreHealth(t *testing.T) {
 				ComponentName: tt.componentName,
 			}
 
-			_, err := client.CheckHealth(context.Background(), req)
+			_, err := client.CheckHealthAlpha1(context.Background(), req)
 
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
