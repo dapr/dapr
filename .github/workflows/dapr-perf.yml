@@ -222,6 +222,7 @@ jobs:
           make build-perf-app-all
         shell: bash
       - name: Wait for Azure Container Registry deployment
+        timeout-minutes: 30
         if: env.TEST_PREFIX != ''
         run: |
           until az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"

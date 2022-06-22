@@ -1111,6 +1111,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.sendToOutputBinding,
 		a.globalConfig.Spec.TracingSpec,
 		a.ShutdownWithWait,
+		a.getComponentsCapabilitesMap,
 	)
 	serverConf := http.NewServerConfig(
 		a.runtimeConfig.ID,
@@ -1172,9 +1173,25 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.resiliency, a.stateStores, a.secretStores, a.secretsConfiguration, a.configurationStores,
-		a.lockStores, a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents, a.ShutdownWithWait)
+	return grpc.NewAPI(a.runtimeConfig.ID,
+		a.appChannel,
+		a.resiliency,
+		a.stateStores,
+		a.secretStores,
+		a.secretsConfiguration,
+		a.configurationStores,
+		a.lockStores,
+		a.getPublishAdapter(),
+		a.directMessaging,
+		a.actor,
+		a.sendToOutputBinding,
+		a.globalConfig.Spec.TracingSpec,
+		a.accessControlList,
+		string(a.runtimeConfig.ApplicationProtocol),
+		a.getComponents,
+		a.ShutdownWithWait,
+		a.getComponentsCapabilitesMap,
+	)
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
@@ -2437,6 +2454,42 @@ func (a *DaprRuntime) getComponents() []components_v1alpha1.Component {
 	comps := make([]components_v1alpha1.Component, len(a.components))
 	copy(comps, a.components)
 	return comps
+}
+
+func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
+	capabilities := make(map[string][]string)
+	for key, store := range a.stateStores {
+		features := store.Features()
+		stateStoreCapabilities := featureTypeToString(features)
+		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
+			stateStoreCapabilities = append(stateStoreCapabilities, "ACTOR")
+		}
+		capabilities[key] = stateStoreCapabilities
+	}
+	for key := range a.inputBindings {
+		capabilities[key] = []string{"INPUT_BINDING"}
+	}
+	for key := range a.outputBindings {
+		if val, found := capabilities[key]; found {
+			capabilities[key] = append(val, "OUTPUT_BINDING")
+		} else {
+			capabilities[key] = []string{"OUTPUT_BINDING"}
+		}
+	}
+	return capabilities
+}
+
+// converts components Features from FeatureType to string
+func featureTypeToString(features interface{}) []string {
+	featureStr := make([]string, 0)
+	switch reflect.TypeOf(features).Kind() {
+	case reflect.Slice:
+		val := reflect.ValueOf(features)
+		for i := 0; i < val.Len(); i++ {
+			featureStr = append(featureStr, val.Index(i).String())
+		}
+	}
+	return featureStr
 }
 
 func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
