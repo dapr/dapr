@@ -225,7 +225,7 @@ GO_TOOLS="\
     github.com/go-delve/delve/cmd/dlv@latest \
     github.com/josharian/impl@latest \
     github.com/fatih/gomodifytags@latest \
-    github.com/golang/protobuf/protoc-gen-go@latest \
+    google.golang.org/protobuf/cmd/protoc-gen-go@latest \
     github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
 if [ "${INSTALL_GO_TOOLS}" = "true" ]; then
     echo "Installing common Go tools..."

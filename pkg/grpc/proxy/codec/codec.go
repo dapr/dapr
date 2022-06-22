@@ -4,8 +4,8 @@
 package codec
 
 import (
-	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc/encoding"
+	"google.golang.org/protobuf/proto"
 )
 
 // Name is the name by which the proxy codec is registered in the encoding codec registry
