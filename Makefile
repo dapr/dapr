@@ -281,9 +281,6 @@ endef
 $(foreach MODFILE,$(MODFILES),$(eval $(call modtidy-target,$(MODFILE))))
 
 # Enumerate all generated modtidy targets
-# Note that the order of execution matters: root and tests/certification go.mod
-# are dependencies in each certification test. This order is preserved by the
-# tree walk when finding the go.mod files.
 TIDY_MODFILES:=$(foreach ITEM,$(MODFILES),modtidy-$(ITEM))
 
 # Define modtidy-all action trigger to run make on all generated modtidy targets

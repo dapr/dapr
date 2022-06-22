@@ -23,8 +23,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/any"
-
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
@@ -347,7 +345,7 @@ func TestGetCallCountGRPC(w http.ResponseWriter, r *http.Request) {
 		Id: "resiliencyappgrpc",
 		Message: &commonv1pb.InvokeRequest{
 			Method: "GetCallCount",
-			Data:   &any.Any{},
+			Data:   &anypb.Any{},
 			HttpExtension: &commonv1pb.HTTPExtension{
 				Verb: commonv1pb.HTTPExtension_POST,
 			},
