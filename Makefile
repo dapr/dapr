@@ -219,6 +219,10 @@ upload-helmchart:
 ################################################################################
 
 PULL_POLICY?=Always
+ADDITIONAL_HELM_SET ?= ""
+ifneq ($(ADDITIONAL_HELM_SET),)
+	ADDITIONAL_HELM_SET := --set $(ADDITIONAL_HELM_SET)
+endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
@@ -229,7 +233,8 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
 		--set global.imagePullPolicy=$(PULL_POLICY) --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
 		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
-		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) $(HELM_CHART_DIR)
+		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) \
+		$(ADDITIONAL_HELM_SET) $(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #
@@ -262,6 +267,30 @@ lint:
 	$(GOLANGCI_LINT) run --timeout=20m
 
 ################################################################################
+# Target: modtidy-all                                                          #
+################################################################################
+MODFILES := $(shell find . -name go.mod)
+
+define modtidy-target
+.PHONY: modtidy-$(1)
+modtidy-$(1):
+	cd $(shell dirname $(1)); go mod tidy -compat=1.18; cd -
+endef
+
+# Generate modtidy target action for each go.mod file
+$(foreach MODFILE,$(MODFILES),$(eval $(call modtidy-target,$(MODFILE))))
+
+# Enumerate all generated modtidy targets
+# Note that the order of execution matters: root and tests/certification go.mod
+# are dependencies in each certification test. This order is preserved by the
+# tree walk when finding the go.mod files.
+TIDY_MODFILES:=$(foreach ITEM,$(MODFILES),modtidy-$(ITEM))
+
+# Define modtidy-all action trigger to run make on all generated modtidy targets
+.PHONY: modtidy-all
+modtidy-all: $(TIDY_MODFILES)
+
+################################################################################
 # Target: modtidy                                                              #
 ################################################################################
 .PHONY: modtidy
@@ -272,7 +301,7 @@ modtidy:
 # Target: format                                                              #
 ################################################################################
 .PHONY: format
-format: modtidy
+format: modtidy-all
 	gofumpt -l -w . && goimports -local github.com/dapr/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./pkg/proto/*")
 
 ################################################################################

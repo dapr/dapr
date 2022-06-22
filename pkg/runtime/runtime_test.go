@@ -3631,6 +3631,31 @@ func TestInitActors(t *testing.T) {
 		hosted := len(r.appConfig.Entities) > 0
 		assert.False(t, hosted)
 	})
+
+	t.Run("placement enable = false", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, r)
+
+		err := r.initActors()
+		assert.NotNil(t, err)
+	})
+
+	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, r)
+
+		assert.Nil(t, r.actor)
+		assert.NotNil(t, r.stateStores)
+	})
+
+	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, r)
+
+		assert.Equal(t, "", r.actorStateStoreName)
+		err := r.initActors()
+		assert.NotNil(t, err)
+	})
 }
 
 func TestInitBindings(t *testing.T) {
@@ -4071,7 +4096,7 @@ func TestFindMatchingRoute(t *testing.T) {
 	rules := []*runtime_pubsub.Rule{r}
 	path, shouldProcess, err := findMatchingRoute(rules, map[string]interface{}{
 		"type": "MyEventType",
-	}, true)
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "mypath", path)
 	assert.True(t, shouldProcess)
@@ -4195,6 +4220,63 @@ func TestGRPCProxy(t *testing.T) {
 		require.NoError(t, stream1.CloseSend(), "no error on close send")
 		require.NoError(t, stream2.CloseSend(), "no error on close send")
 	})
+}
+
+func TestGetComponentsCapabilitiesMap(t *testing.T) {
+	cPubSub := components_v1alpha1.Component{}
+	cPubSub.ObjectMeta.Name = "mockPubSub"
+	cPubSub.Spec.Type = "pubsub.mockPubSub"
+
+	cStateStore := components_v1alpha1.Component{}
+	cStateStore.ObjectMeta.Name = "testStateStoreName"
+	cStateStore.Spec.Type = "state.mockState"
+
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	defer stopRuntime(t, rt)
+
+	mockStateStore := new(daprt.MockStateStore)
+	rt.stateStoreRegistry.Register(
+		state_loader.New("mockState", func() state.Store {
+			return mockStateStore
+		}),
+	)
+
+	mockStateStore.On("Init", mock.Anything).Return(nil)
+
+	mockPubSub := new(daprt.MockPubSub)
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		}),
+	)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil)
+
+	rt.bindingsRegistry.RegisterInputBindings(
+		bindings_loader.NewInput("testInputBinding", func() bindings.InputBinding {
+			return &daprt.MockBinding{}
+		}),
+	)
+	cin := components_v1alpha1.Component{}
+	cin.ObjectMeta.Name = "testInputBinding"
+	cin.Spec.Type = "bindings.testInputBinding"
+
+	rt.bindingsRegistry.RegisterOutputBindings(
+		bindings_loader.NewOutput("testOutputBinding", func() bindings.OutputBinding {
+			return &daprt.MockBinding{}
+		}),
+	)
+	cout := components_v1alpha1.Component{}
+	cout.ObjectMeta.Name = "testOutputBinding"
+	cout.Spec.Type = "bindings.testOutputBinding"
+
+	require.NoError(t, rt.initInputBinding(cin))
+	require.NoError(t, rt.initOutputBinding(cout))
+	require.NoError(t, rt.initPubSub(cPubSub))
+	require.NoError(t, rt.initState(cStateStore))
+
+	capabilities := rt.getComponentsCapabilitesMap()
+	assert.Equal(t, 3, len(capabilities))
 }
 
 func runGRPCApp(port int) (func(), error) {

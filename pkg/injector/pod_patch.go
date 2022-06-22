@@ -80,6 +80,7 @@ const (
 	daprVolumeMountsReadWriteKey      = "dapr.io/volume-mounts-rw"
 	daprDisableBuiltinK8sSecretStore  = "dapr.io/disable-builtin-k8s-secret-store"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
+	daprPlacementAddressesKey         = "dapr.io/placement-host-address"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -115,7 +116,6 @@ const (
 	defaultHealthzProbeThreshold      = 3
 	apiVersionV1                      = "v1.0"
 	defaultMtlsEnabled                = true
-	trueString                        = "true"
 	defaultDaprHTTPStreamRequestBody  = false
 	defaultAPILoggingEnabled          = false
 	defaultBuiltinSecretStoreDisabled = false
@@ -390,6 +390,14 @@ func getMetricsPort(annotations map[string]string) int {
 	return int(getInt32AnnotationOrDefault(annotations, daprMetricsPortKey, defaultMetricsPort))
 }
 
+func getPlacementAddresses(annotations map[string]string) string {
+	return getStringAnnotation(annotations, daprPlacementAddressesKey)
+}
+
+func existPlacementAddressesAnnotation(annotations map[string]string) bool {
+	return existAnnotation(annotations, daprPlacementAddressesKey)
+}
+
 func getEnableDebug(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprEnableDebugKey, defaultSidecarDebug)
 }
@@ -467,9 +475,7 @@ func getBoolAnnotationOrDefault(annotations map[string]string, key string, defau
 	if !ok {
 		return defaultValue
 	}
-	s := strings.ToLower(enabled)
-	// trueString is used to silence a lint error.
-	return (s == "y") || (s == "yes") || (s == trueString) || (s == "on") || (s == "1")
+	return utils.IsTruthy(enabled)
 }
 
 func getStringAnnotationOrDefault(annotations map[string]string, key, defaultValue string) string {
@@ -481,6 +487,11 @@ func getStringAnnotationOrDefault(annotations map[string]string, key, defaultVal
 
 func getStringAnnotation(annotations map[string]string, key string) string {
 	return annotations[key]
+}
+
+func existAnnotation(annotations map[string]string, key string) bool {
+	_, exist := annotations[key]
+	return exist
 }
 
 func getInt32AnnotationOrDefault(annotations map[string]string, key string, defaultValue int) int32 {
@@ -646,6 +657,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	}
 
 	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
+
+	if existPlacementAddressesAnnotation(annotations) {
+		placementServiceAddress = getPlacementAddresses(annotations)
+	}
 
 	ports := []corev1.ContainerPort{
 		{

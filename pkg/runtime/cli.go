@@ -209,8 +209,10 @@ func FromFlags() (*DaprRuntime, error) {
 	if len(daprAPIListenAddressList) == 0 {
 		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
 	}
-	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration, *enableAPILogging, *disableBuiltinK8sSecretStore)
+	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins,
+		*config, *componentsPath, appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList,
+		publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize,
+		*unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration, *enableAPILogging, *disableBuiltinK8sSecretStore)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
@@ -295,6 +297,7 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
 		resiliencyProvider = resiliency_config.FromConfigurations(log, resiliencyConfigs...)
+		log.Info("Resiliency configuration loaded.")
 	} else {
 		log.Debug("Resiliency is not enabled.")
 		resiliencyProvider = &resiliency_config.NoOp{}
