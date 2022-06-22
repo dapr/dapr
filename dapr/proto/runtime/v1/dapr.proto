@@ -479,6 +479,7 @@ message RegisteredComponents {
   string name = 1;
   string type = 2;
   string version = 3;
+  repeated string capabilities = 4;
 }
 
 message SetMetadataRequest {

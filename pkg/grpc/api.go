@@ -131,6 +131,7 @@ type api struct {
 	extendedMetadata           sync.Map
 	components                 []components_v1alpha.Component
 	shutdown                   func()
+	getComponentsCapabilitesFn func() map[string][]string
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
@@ -280,6 +281,7 @@ func NewAPI(
 	appProtocol string,
 	getComponentsFn func() []components_v1alpha.Component,
 	shutdown func(),
+	getComponentsCapabilitiesFn func() map[string][]string,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -289,24 +291,25 @@ func NewAPI(
 	}
 
 	return &api{
-		directMessaging:          directMessaging,
-		actor:                    actor,
-		id:                       appID,
-		resiliency:               resiliency,
-		appChannel:               appChannel,
-		pubsubAdapter:            pubsubAdapter,
-		stateStores:              stateStores,
-		transactionalStateStores: transactionalStateStores,
-		secretStores:             secretStores,
-		configurationStores:      configurationStores,
-		configurationSubscribe:   make(map[string]chan struct{}),
-		lockStores:               lockStores,
-		secretsConfiguration:     secretsConfiguration,
-		sendToOutputBindingFn:    sendToOutputBindingFn,
-		tracingSpec:              tracingSpec,
-		accessControlList:        accessControlList,
-		appProtocol:              appProtocol,
-		shutdown:                 shutdown,
+		directMessaging:            directMessaging,
+		actor:                      actor,
+		id:                         appID,
+		resiliency:                 resiliency,
+		appChannel:                 appChannel,
+		pubsubAdapter:              pubsubAdapter,
+		stateStores:                stateStores,
+		transactionalStateStores:   transactionalStateStores,
+		secretStores:               secretStores,
+		configurationStores:        configurationStores,
+		configurationSubscribe:     make(map[string]chan struct{}),
+		lockStores:                 lockStores,
+		secretsConfiguration:       secretsConfiguration,
+		sendToOutputBindingFn:      sendToOutputBindingFn,
+		tracingSpec:                tracingSpec,
+		accessControlList:          accessControlList,
+		appProtocol:                appProtocol,
+		shutdown:                   shutdown,
+		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 	}
 }
 
@@ -1468,12 +1471,13 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		return true
 	})
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
-
+	componentsCapabilties := a.getComponentsCapabilitesFn()
 	for _, comp := range a.components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
-			Name:    comp.Name,
-			Version: comp.Spec.Version,
-			Type:    comp.Spec.Type,
+			Name:         comp.Name,
+			Version:      comp.Spec.Version,
+			Type:         comp.Spec.Type,
+			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1482,6 +1486,13 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		RegisteredComponents: registeredComponents,
 	}
 	return response, nil
+}
+
+func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+	if val, ok := dict[key]; ok {
+		return val
+	}
+	return make([]string, 0)
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.
