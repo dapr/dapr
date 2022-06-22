@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
 	"github.com/pkg/errors"
@@ -39,17 +41,19 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/kit/logger"
 
-	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -1778,6 +1782,12 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
+		getComponentsCapabilitesFn: func() map[string][]string {
+			capsMap := make(map[string][]string)
+			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
+			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
+			return capsMap
+		},
 	}
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
@@ -1787,8 +1797,18 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
 		"extended": make(map[string]string),
 		"components": []map[string]interface{}{
-			{"name": "MockComponent1Name", "type": "mock.component1Type", "version": "v1.0"},
-			{"name": "MockComponent2Name", "type": "mock.component2Type", "version": "v1.0"},
+			{
+				"name":         "MockComponent1Name",
+				"type":         "mock.component1Type",
+				"version":      "v1.0",
+				"capabilities": []string{"mock.feat.MockComponent1Name"},
+			},
+			{
+				"name":         "MockComponent2Name",
+				"type":         "mock.component2Type",
+				"version":      "v1.0",
+				"capabilities": []string{"mock.feat.MockComponent2Name"},
+			},
 		},
 	}
 	expectedBodyBytes, _ := json.Marshal(expectedBody)
@@ -2127,6 +2147,278 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 		// TODO Check back as how to assert on generated span ID
 		// assert.NotEmpty(t, resp.JSONBody, "failed to generate trace context with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
+	})
+}
+
+func TestV1Alpha1ConfigurationGet(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	var fakeConfigurationStore configuration.Store = &fakeConfigurationStore{}
+
+	storeName := "store1"
+	badStoreName := "nonExistStore"
+
+	fakeConfigurationStores := map[string]configuration.Store{
+		storeName: fakeConfigurationStore,
+	}
+	testAPI := &api{
+		resiliency:          resiliency.New(nil),
+		configurationStores: fakeConfigurationStores,
+	}
+	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
+
+	t.Run("Get configurations with a good key", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s?key=%s", storeName, "good-key1")
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good key should return 204")
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		assert.Equal(t, 1, len(resp.JSONBody.([]interface{})))
+		rspMap := resp.JSONBody.([]interface{})[0]
+		assert.NotNil(t, rspMap)
+		assert.Equal(t, "good-key1", rspMap.(map[string]interface{})["key"].(string))
+		assert.Equal(t, "good-value1", rspMap.(map[string]interface{})["value"].(string))
+		assert.Equal(t, "version1", rspMap.(map[string]interface{})["version"].(string))
+		metadata := rspMap.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+	})
+	t.Run("Get Configurations with good keys", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s?key=%s&key=%s", storeName, "good-key1", "good-key2")
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good keys should return 200")
+		assert.NotNil(t, resp.JSONBody)
+		assert.Equal(t, 2, len(resp.JSONBody.([]interface{})))
+		rspMap1 := resp.JSONBody.([]interface{})[0]
+		assert.NotNil(t, rspMap1)
+		assert.Equal(t, "good-key1", rspMap1.(map[string]interface{})["key"].(string))
+		assert.Equal(t, "good-value1", rspMap1.(map[string]interface{})["value"].(string))
+		assert.Equal(t, "version1", rspMap1.(map[string]interface{})["version"].(string))
+		metadata := rspMap1.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+
+		rspMap2 := resp.JSONBody.([]interface{})[1]
+		assert.NotNil(t, rspMap2)
+		assert.Equal(t, "good-key2", rspMap2.(map[string]interface{})["key"].(string))
+		assert.Equal(t, "good-value2", rspMap2.(map[string]interface{})["value"].(string))
+		assert.Equal(t, "version2", rspMap2.(map[string]interface{})["version"].(string))
+		metadata2 := rspMap2.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
+	})
+
+	t.Run("Get All Configurations with empty key", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s", storeName)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with empty key should return 200")
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		assert.Equal(t, 2, len(resp.JSONBody.([]interface{})))
+		rspMap1 := resp.JSONBody.([]interface{})[0]
+		assert.NotNil(t, rspMap1)
+		assert.Equal(t, "good-key1", rspMap1.(map[string]interface{})["key"].(string))
+		assert.Equal(t, "good-value1", rspMap1.(map[string]interface{})["value"].(string))
+		assert.Equal(t, "version1", rspMap1.(map[string]interface{})["version"].(string))
+		metadata := rspMap1.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+
+		rspMap2 := resp.JSONBody.([]interface{})[1]
+		assert.NotNil(t, rspMap2)
+		assert.Equal(t, "good-key2", rspMap2.(map[string]interface{})["key"].(string))
+		assert.Equal(t, "good-value2", rspMap2.(map[string]interface{})["value"].(string))
+		assert.Equal(t, "version2", rspMap2.(map[string]interface{})["version"].(string))
+		metadata2 := rspMap2.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
+	})
+
+	t.Run("Get Configurations with bad key", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s?key=%s", storeName, "bad-key")
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 500, resp.StatusCode, "Accessing configuration store with bad key should return 500")
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_CONFIGURATION_GET", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "fail to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
+	})
+
+	t.Run("Get with none exist configurations store", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s?key=%s", badStoreName, "good-key1")
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 400, resp.StatusCode, "Accessing configuration store with none exist configurations store should return 400")
+		assert.NotNil(t, resp.ErrorBody)
+		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "error configuration stores nonExistStore not found", resp.ErrorBody["message"])
+	})
+}
+
+func TestV1Alpha1DistributedLock(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	var fakeLockStore lock.Store = &fakeLockStore{}
+
+	storeName := "store1"
+
+	lockStores := map[string]lock.Store{
+		storeName: fakeLockStore,
+	}
+	testAPI := &api{
+		resiliency: resiliency.New(nil),
+		lockStores: lockStores,
+	}
+	fakeServer.StartServer(testAPI.constructDistributedLockEndpoints())
+
+	t.Run("Lock with valid request", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/lock/store1"
+
+		req := lock.TryLockRequest{
+			ResourceID:      "1",
+			LockOwner:       "palpatine",
+			ExpiryInSeconds: 5,
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap)
+		assert.Equal(t, true, rspMap["success"].(bool))
+	})
+
+	t.Run("Lock with invalid resource id", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/lock/store1"
+
+		req := lock.TryLockRequest{
+			ResourceID:      "",
+			LockOwner:       "palpatine",
+			ExpiryInSeconds: 5,
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.JSONBody)
+	})
+
+	t.Run("Lock with invalid owner", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/lock/store1"
+
+		req := lock.TryLockRequest{
+			ResourceID:      "1",
+			LockOwner:       "",
+			ExpiryInSeconds: 5,
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.JSONBody)
+	})
+
+	t.Run("Lock with invalid expiry", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/lock/store1"
+
+		req := lock.TryLockRequest{
+			ResourceID: "1",
+			LockOwner:  "palpatine",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.JSONBody)
+	})
+
+	t.Run("Unlock with valid request", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/unlock/store1"
+
+		req := lock.UnlockRequest{
+			ResourceID: "1",
+			LockOwner:  "palpatine",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap)
+		assert.Equal(t, float64(0), rspMap["status"])
+	})
+
+	t.Run("Unlock with invalid resource id", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/unlock/store1"
+
+		req := lock.UnlockRequest{
+			ResourceID: "",
+			LockOwner:  "palpatine",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap)
+		assert.Equal(t, float64(3), rspMap["status"])
+	})
+
+	t.Run("Unlock with invalid resource id that returns 500", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/unlock/store1"
+
+		req := lock.UnlockRequest{
+			ResourceID: "error",
+			LockOwner:  "palpatine",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.JSONBody)
+	})
+
+	t.Run("Unlock with invalid owner", func(t *testing.T) {
+		apiPath := "v1.0-alpha1/unlock/store1"
+
+		req := lock.UnlockRequest{
+			ResourceID: "1",
+			LockOwner:  "",
+		}
+
+		b, _ := json.Marshal(&req)
+
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// assert
+		assert.NotNil(t, resp.JSONBody)
+		rspMap := resp.JSONBody.(map[string]interface{})
+		assert.NotNil(t, rspMap)
+		assert.Equal(t, float64(3), rspMap["status"])
 	})
 }
 
@@ -2529,7 +2821,7 @@ func TestV1StateEndpoints(t *testing.T) {
 				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
 				assert.Equal(t, 500, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_STATE_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+				assert.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 				testAPI.stateStores = fakeStores
 
 				// act
@@ -3390,6 +3682,158 @@ func TestV1SecretEndpoints(t *testing.T) {
 		assert.Equal(t, 2, failingStore.Failure.CallCount["bulkTimeout"])
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
+}
+
+type fakeConfigurationStore struct {
+	counter int
+}
+
+func (c fakeConfigurationStore) Ping() error {
+	return nil
+}
+
+func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
+	if len(req.Keys) == 0 {
+		return &configuration.GetResponse{
+			Items: []*configuration.Item{
+				{
+					Key:     "good-key1",
+					Value:   "good-value1",
+					Version: "version1",
+					Metadata: map[string]string{
+						"metadata-key1": "metadata-value1",
+					},
+				}, {
+					Key:     "good-key2",
+					Value:   "good-value2",
+					Version: "version2",
+					Metadata: map[string]string{
+						"metadata-key2": "metadata-value2",
+					},
+				},
+			},
+		}, nil
+	}
+
+	if len(req.Keys) == 1 && req.Keys[0] == "good-key1" {
+		return &configuration.GetResponse{
+			Items: []*configuration.Item{{
+				Key:     "good-key1",
+				Value:   "good-value1",
+				Version: "version1",
+				Metadata: map[string]string{
+					"metadata-key1": "metadata-value1",
+				},
+			}},
+		}, nil
+	}
+
+	if len(req.Keys) == 2 && req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" {
+		return &configuration.GetResponse{
+			Items: []*configuration.Item{
+				{
+					Key:     "good-key1",
+					Value:   "good-value1",
+					Version: "version1",
+					Metadata: map[string]string{
+						"metadata-key1": "metadata-value1",
+					},
+				}, {
+					Key:     "good-key2",
+					Value:   "good-value2",
+					Version: "version2",
+					Metadata: map[string]string{
+						"metadata-key2": "metadata-value2",
+					},
+				},
+			},
+		}, nil
+	}
+
+	if req.Keys[0] == "bad-key" {
+		return nil, errors.New("get key error: bad-key")
+	}
+
+	return nil, errors.New("get key error: value not found")
+}
+
+func (c fakeConfigurationStore) Init(metadata configuration.Metadata) error {
+	c.counter = 0
+	return nil
+}
+
+func (c *fakeConfigurationStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
+	return "", nil
+}
+
+func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
+	return nil
+}
+
+type fakeLockStore struct{}
+
+func (l fakeLockStore) Ping() error {
+	return nil
+}
+
+func (l *fakeLockStore) InitLockStore(metadata lock.Metadata) error {
+	return nil
+}
+
+func (l *fakeLockStore) TryLock(req *lock.TryLockRequest) (*lock.TryLockResponse, error) {
+	if req == nil {
+		return &lock.TryLockResponse{
+			Success: false,
+		}, errors.New("empty request")
+	}
+
+	if req.ExpiryInSeconds == 0 {
+		return &lock.TryLockResponse{
+			Success: false,
+		}, errors.New("invalid expiry")
+	}
+
+	if req.LockOwner == "" {
+		return &lock.TryLockResponse{
+			Success: false,
+		}, errors.New("invalid lockOwner")
+	}
+
+	if req.ResourceID == "lock||" {
+		return &lock.TryLockResponse{
+			Success: false,
+		}, errors.New("invalid resourceId")
+	}
+
+	return &lock.TryLockResponse{
+		Success: true,
+	}, nil
+}
+
+func (l *fakeLockStore) Unlock(req *lock.UnlockRequest) (*lock.UnlockResponse, error) {
+	if req == nil {
+		return &lock.UnlockResponse{}, errors.New("empty request")
+	}
+
+	if req.LockOwner == "" {
+		return &lock.UnlockResponse{
+			Status: 3,
+		}, nil
+	}
+
+	if req.ResourceID == "lock||" {
+		return &lock.UnlockResponse{
+			Status: 3,
+		}, nil
+	}
+
+	if req.ResourceID == "lock||error" {
+		return &lock.UnlockResponse{}, errors.New("error")
+	}
+
+	return &lock.UnlockResponse{
+		Status: 0,
+	}, nil
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {

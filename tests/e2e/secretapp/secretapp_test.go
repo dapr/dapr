@@ -168,6 +168,34 @@ func generateTestCases() []testCase {
 	}
 }
 
+func generateTestCasesForDisabledSecretStore() []testCase {
+
+	return []testCase{
+		{
+			"valid secret but secret store should not be found",
+			newRequest(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
+			newResponse(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
+			true,
+			500,
+			"ERR_SECRET_STORES_NOT_CONFIGURED",
+		},
+	}
+}
+
+var secretAppTests = []struct {
+	app       string
+	testCases []testCase
+}{
+	{
+		"secretapp",
+		generateTestCases(),
+	},
+	{
+		"secretapp-disable",
+		generateTestCasesForDisabledSecretStore(),
+	},
+}
+
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
@@ -186,6 +214,16 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 			MetricsEnabled: true,
 		},
+		{
+			Config:             "secretappconfig",
+			AppName:            "secretapp-disable",
+			DaprEnabled:        true,
+			ImageName:          "e2e-secretapp",
+			Replicas:           1,
+			IngressEnabled:     true,
+			MetricsEnabled:     true,
+			SecretStoreDisable: true,
+		},
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
@@ -193,40 +231,42 @@ func TestMain(m *testing.M) {
 }
 
 func TestSecretApp(t *testing.T) {
-	externalURL := tr.Platform.AcquireAppExternalURL(appName)
-	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-	testCases := generateTestCases()
+	for _, tt := range secretAppTests {
+		externalURL := tr.Platform.AcquireAppExternalURL(tt.app)
+		require.NotEmpty(t, externalURL, "external URL must not be empty!")
+		testCases := tt.testCases
 
-	// This initial probe makes the test wait a little bit longer when needed,
-	// making this test less flaky due to delays in the deployment.
-	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-	require.NoError(t, err)
+		// This initial probe makes the test wait a little bit longer when needed,
+		// making this test less flaky due to delays in the deployment.
+		_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+		require.NoError(t, err)
 
-	// Now we are ready to run the actual tests
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// setup
-			body, err := json.Marshal(tc.request)
-			require.NoError(t, err)
-			url := fmt.Sprintf("%s/test/get", externalURL)
-
-			// act
-			resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
-
-			// assert
-			if !tc.errorExpected {
+		// Now we are ready to run the actual tests
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				// setup
+				body, err := json.Marshal(tc.request)
 				require.NoError(t, err)
+				url := fmt.Sprintf("%s/test/get", externalURL)
 
-				var appResp requestResponse
-				err = json.Unmarshal(resp, &appResp)
-				require.NoError(t, err)
+				// act
+				resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
 
-				require.True(t, reflect.DeepEqual(tc.expectedResponse, appResp))
-				require.Equal(t, tc.statusCode, statusCode, "Expected statusCode to be equal")
-			} else {
-				require.Contains(t, string(resp), tc.errorString, "Expected error string to match")
-				require.Equal(t, tc.statusCode, statusCode, "Expected statusCode to be equal")
-			}
-		})
+				// assert
+				if !tc.errorExpected {
+					require.NoError(t, err)
+
+					var appResp requestResponse
+					err = json.Unmarshal(resp, &appResp)
+					require.NoError(t, err)
+
+					require.True(t, reflect.DeepEqual(tc.expectedResponse, appResp))
+					require.Equal(t, tc.statusCode, statusCode, "Expected statusCode to be equal")
+				} else {
+					require.Contains(t, string(resp), tc.errorString, "Expected error string to match")
+					require.Equal(t, tc.statusCode, statusCode, "Expected statusCode to be equal")
+				}
+			})
+		}
 	}
 }

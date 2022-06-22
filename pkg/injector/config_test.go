@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetInectorConfig(t *testing.T) {
+func TestGetInjectorConfig(t *testing.T) {
 	t.Run("with kube cluster domain env", func(t *testing.T) {
 		os.Setenv("TLS_CERT_FILE", "test-cert-file")
 		os.Setenv("TLS_KEY_FILE", "test-key-file")
@@ -15,6 +15,7 @@ func TestGetInectorConfig(t *testing.T) {
 		os.Setenv("SIDECAR_IMAGE_PULL_POLICY", "Always")
 		os.Setenv("NAMESPACE", "test-namespace")
 		os.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
+		os.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test-service-account1:test1,test-service-account2:test2")
 		defer clearenv()
 
 		cfg, err := GetConfig()
@@ -25,6 +26,7 @@ func TestGetInectorConfig(t *testing.T) {
 		assert.Equal(t, "Always", cfg.SidecarImagePullPolicy)
 		assert.Equal(t, "test-namespace", cfg.Namespace)
 		assert.Equal(t, "cluster.local", cfg.KubeClusterDomain)
+		assert.Equal(t, "test-service-account1:test1,test-service-account2:test2", cfg.AllowedServiceAccounts)
 	})
 
 	t.Run("not set kube cluster domain env", func(t *testing.T) {
@@ -54,4 +56,5 @@ func clearenv() {
 	os.Unsetenv("SIDECAR_IMAGE_PULL_POLICY")
 	os.Unsetenv("NAMESPACE")
 	os.Unsetenv("KUBE_CLUSTER_DOMAIN")
+	os.Unsetenv("ALLOWED_SERVICE_ACCOUNT_INFOS")
 }

@@ -202,9 +202,6 @@ type DaprRuntime struct {
 	proxy messaging.Proxy
 
 	resiliency resiliency.Provider
-
-	// TODO: Remove feature flag once feature is ratified
-	featureRoutingEnabled bool
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -395,8 +392,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Warnf("failed to watch component updates: %s", err)
 		}
 	}
-
-	a.appendBuiltinSecretStore()
+	if !a.runtimeConfig.DisableBuiltinK8sSecretStore {
+		a.appendBuiltinSecretStore()
+	}
 	err = a.loadComponents(opts)
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
@@ -466,16 +464,15 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	grpcAPI.SetDirectMessaging(a.directMessaging)
 
-	err = a.initActors()
-	if err != nil {
-		log.Warnf("failed to init actors: %v", err)
-	} else {
-		a.daprHTTPAPI.SetActorRuntime(a.actor)
-		grpcAPI.SetActorRuntime(a.actor)
+	if len(a.runtimeConfig.PlacementAddresses) != 0 {
+		err = a.initActors()
+		if err != nil {
+			log.Warnf("failed to init actors: %v", err)
+		} else {
+			a.daprHTTPAPI.SetActorRuntime(a.actor)
+			grpcAPI.SetActorRuntime(a.actor)
+		}
 	}
-
-	// TODO: Remove feature flag once feature is ratified
-	a.featureRoutingEnabled = config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PubSubRouting)
 
 	if opts.componentsCallback != nil {
 		if err = opts.componentsCallback(ComponentRegistry{
@@ -568,7 +565,7 @@ func (a *DaprRuntime) sendToDeadLetterIfConfigured(name string, msg *pubsub.NewM
 	return true, err
 }
 
-func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
+func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps pubsub.PubSub) error {
 	var publishFunc func(ctx context.Context, msg *pubsubSubscribedMessage) error
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
@@ -595,7 +592,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 		routeMetadata := route.metadata
 		routeRules := route.rules
-		if err := ps.Subscribe(pubsub.SubscribeRequest{
+		if err := ps.Subscribe(subscribeCtx, pubsub.SubscribeRequest{
 			Topic:    topic,
 			Metadata: route.metadata,
 		}, func(ctx context.Context, msg *pubsub.NewMessage) error {
@@ -654,7 +651,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				return nil
 			}
 
-			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
+			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent)
 			if err != nil {
 				log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
 				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
@@ -689,6 +686,8 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 				if configured, _ := a.sendToDeadLetterIfConfigured(name, msg); !configured {
 					return err
 				}
+
+				return nil
 			}
 			return err
 		}); err != nil {
@@ -701,13 +700,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess bool, err error) {
+func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
 	hasRules := len(rules) > 0
 	if hasRules {
 		data := map[string]interface{}{
 			"event": cloudEvent,
 		}
-		rule, err := matchRoutingRule(rules, data, routingEnabled)
+		rule, err := matchRoutingRule(rules, data)
 		if err != nil {
 			return "", false, err
 		}
@@ -719,14 +718,10 @@ func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}, rou
 	return "", false, nil
 }
 
-func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{}, routingEnabled bool) (*runtime_pubsub.Rule, error) {
+func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{}) (*runtime_pubsub.Rule, error) {
 	for _, rule := range rules {
 		if rule.Match == nil {
 			return rule, nil
-		}
-		// If routing is not enabled, skip match evaluation.
-		if !routingEnabled {
-			continue
 		}
 		iResult, err := rule.Match.Eval(data)
 		if err != nil {
@@ -1107,13 +1102,16 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.getComponents,
 		a.resiliency,
 		a.stateStores,
+		a.lockStores,
 		a.secretStores,
 		a.secretsConfiguration,
+		a.configurationStores,
 		a.getPublishAdapter(),
 		a.actor,
 		a.sendToOutputBinding,
 		a.globalConfig.Spec.TracingSpec,
 		a.ShutdownWithWait,
+		a.getComponentsCapabilitesMap,
 	)
 	serverConf := http.NewServerConfig(
 		a.runtimeConfig.ID,
@@ -1175,9 +1173,25 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.resiliency, a.stateStores, a.secretStores, a.secretsConfiguration, a.configurationStores,
-		a.lockStores, a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents, a.ShutdownWithWait)
+	return grpc.NewAPI(a.runtimeConfig.ID,
+		a.appChannel,
+		a.resiliency,
+		a.stateStores,
+		a.secretStores,
+		a.secretsConfiguration,
+		a.configurationStores,
+		a.lockStores,
+		a.getPublishAdapter(),
+		a.directMessaging,
+		a.actor,
+		a.sendToOutputBinding,
+		a.globalConfig.Spec.TracingSpec,
+		a.accessControlList,
+		string(a.runtimeConfig.ApplicationProtocol),
+		a.getComponents,
+		a.ShutdownWithWait,
+		a.getComponentsCapabilitesMap,
+	)
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
@@ -1387,17 +1401,20 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 			return err
 		}
 
-		// set specified actor store if "actorStateStore" is true in the spec.
-		actorStoreSpecified := props[actorStateStore]
-		if actorStoreSpecified == "true" {
-			a.actorStateStoreLock.Lock()
-			if a.actorStateStoreName == "" {
-				log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
-				a.actorStateStoreName = s.ObjectMeta.Name
-			} else if a.actorStateStoreName != s.ObjectMeta.Name {
-				log.Fatalf("detected duplicate actor state store: %s", s.ObjectMeta.Name)
+		// when placement address list is not empty, set specified actor store.
+		if len(a.runtimeConfig.PlacementAddresses) != 0 {
+			// set specified actor store if "actorStateStore" is true in the spec.
+			actorStoreSpecified := props[actorStateStore]
+			if actorStoreSpecified == "true" {
+				a.actorStateStoreLock.Lock()
+				if a.actorStateStoreName == "" {
+					log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
+					a.actorStateStoreName = s.ObjectMeta.Name
+				} else if a.actorStateStoreName != s.ObjectMeta.Name {
+					log.Fatalf("detected duplicate actor state store: %s", s.ObjectMeta.Name)
+				}
+				a.actorStateStoreLock.Unlock()
 			}
-			a.actorStateStoreLock.Unlock()
 		}
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 	}
@@ -1454,11 +1471,12 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	var err error
 
 	// handle app subscriptions
+	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
+		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log)
+		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
 	}
 	if err != nil {
 		return nil, err
@@ -1694,10 +1712,8 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		err := json.Unmarshal(body, &appResponse)
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-			// Return no error so message does not get reprocessed.
-			err = nil
-			return err
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
+			return nil
 		}
 
 		switch appResponse.Status {
@@ -1874,8 +1890,12 @@ func (a *DaprRuntime) initActors() error {
 	if a.actorStateStoreName == "" {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort, a.namespace, a.appConfig)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features, a.resiliency, a.actorStateStoreName)
+	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID,
+		a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort,
+		a.namespace, a.appConfig)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig,
+		a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features,
+		a.resiliency, a.actorStateStoreName)
 	err = act.Init()
 	if err == nil {
 		a.actor = act
@@ -2087,21 +2107,13 @@ func (a *DaprRuntime) stopActor() {
 	}
 }
 
-// shutdownComponents allows for a graceful shutdown of all runtime internal operations or components.
-func (a *DaprRuntime) shutdownComponents() error {
-	log.Info("Shutting down all components")
+// shutdownOutputComponents allows for a graceful shutdown of all runtime internal operations of components that are not source of more work.
+// These are all components except input bindings and pubsub.
+func (a *DaprRuntime) shutdownOutputComponents() error {
+	log.Info("Shutting down all remaining components")
 	var merr error
 
 	// Close components if they implement `io.Closer`
-	for name, binding := range a.inputBindings {
-		if closer, ok := binding.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing input binding %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
-	}
 	for name, binding := range a.outputBindings {
 		if closer, ok := binding.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
@@ -2120,6 +2132,17 @@ func (a *DaprRuntime) shutdownComponents() error {
 			}
 		}
 	}
+	for name, stateStore := range a.stateStores {
+		if closer, ok := stateStore.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing state store %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	// Close pubsub publisher
+	// The subscriber part is closed when a.ctx is canceled
 	for name, pubSub := range a.pubSubs {
 		if err := pubSub.Close(); err != nil {
 			err = fmt.Errorf("error closing pub sub %s: %w", name, err)
@@ -2127,10 +2150,12 @@ func (a *DaprRuntime) shutdownComponents() error {
 			log.Warn(err)
 		}
 	}
-	for name, stateStore := range a.stateStores {
-		if closer, ok := stateStore.(io.Closer); ok {
+	// Close bindings if they implement `io.Closer`
+	// TODO: Separate the input part of bindings and close output here, then close the input via cancelation of a.ctx
+	for name, binding := range a.inputBindings {
+		if closer, ok := binding.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing state store %s: %w", name, err)
+				err = fmt.Errorf("error closing input binding %s: %w", name, err)
 				merr = multierror.Append(merr, err)
 				log.Warn(err)
 			}
@@ -2165,9 +2190,11 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 
+	log.Infof("dapr shutting down.")
+
+	log.Infof("Stopping PubSub subscribers")
 	a.cancel()
 	a.stopActor()
-	log.Infof("dapr shutting down.")
 	log.Info("Stopping Dapr APIs")
 	for _, closer := range a.apiClosers {
 		if err := closer.Close(); err != nil {
@@ -2176,7 +2203,7 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	}
 	log.Infof("Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
-	a.shutdownComponents()
+	a.shutdownOutputComponents()
 	a.shutdownC <- nil
 }
 
@@ -2429,6 +2456,42 @@ func (a *DaprRuntime) getComponents() []components_v1alpha1.Component {
 	return comps
 }
 
+func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
+	capabilities := make(map[string][]string)
+	for key, store := range a.stateStores {
+		features := store.Features()
+		stateStoreCapabilities := featureTypeToString(features)
+		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
+			stateStoreCapabilities = append(stateStoreCapabilities, "ACTOR")
+		}
+		capabilities[key] = stateStoreCapabilities
+	}
+	for key := range a.inputBindings {
+		capabilities[key] = []string{"INPUT_BINDING"}
+	}
+	for key := range a.outputBindings {
+		if val, found := capabilities[key]; found {
+			capabilities[key] = append(val, "OUTPUT_BINDING")
+		} else {
+			capabilities[key] = []string{"OUTPUT_BINDING"}
+		}
+	}
+	return capabilities
+}
+
+// converts components Features from FeatureType to string
+func featureTypeToString(features interface{}) []string {
+	featureStr := make([]string, 0)
+	switch reflect.TypeOf(features).Kind() {
+	case reflect.Slice:
+		val := reflect.ValueOf(features)
+		for i := 0; i < val.Len(); i++ {
+			featureStr = append(featureStr, val.Index(i).String())
+		}
+	}
+	return featureStr
+}
+
 func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	if !a.runtimeConfig.mtlsEnabled {
 		log.Info("mTLS is disabled. Skipping certificate request and tls validation")
@@ -2457,8 +2520,9 @@ func componentDependency(compCategory ComponentCategory, name string) string {
 }
 
 func (a *DaprRuntime) startSubscribing() {
+	// PubSub subscribers are stopped via cancelation of the main runtime's context
 	for name, pubsub := range a.pubSubs {
-		if err := a.beginPubSub(name, pubsub); err != nil {
+		if err := a.beginPubSub(a.ctx, name, pubsub); err != nil {
 			log.Errorf("error occurred while beginning pubsub %s: %s", name, err)
 		}
 	}

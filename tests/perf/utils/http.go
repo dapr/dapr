@@ -45,6 +45,7 @@ func HTTPGetNTimes(url string, n int) ([]byte, error) {
 	var res []byte
 	var err error
 	for i := n - 1; i >= 0; i-- {
+		res, err = HTTPGet(url)
 		if err == nil {
 			return res, nil
 		}

@@ -14,6 +14,8 @@ limitations under the License.
 package kubernetes
 
 import (
+	"context"
+
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -65,7 +67,7 @@ func (do *DaprComponent) Name() string {
 	return do.component.Name
 }
 
-func (do *DaprComponent) Init() error {
+func (do *DaprComponent) Init(ctx context.Context) error {
 	_, err := do.addComponent()
 	return err
 }
