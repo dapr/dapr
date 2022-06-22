@@ -60,5 +60,6 @@ func TestProtoCodec_ReadYourWrites(t *testing.T) {
 	err = proxyCd.Unmarshal(out2p1, p2)
 	require.NoError(t, err, "unmarshalling must go ok")
 
-	require.Equal(t, *p1, *p2)
+	require.Equal(t, p1.ProtoReflect(), p2.ProtoReflect())
+	require.Equal(t, p1.Value, p2.Value)
 }
