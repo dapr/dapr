@@ -124,6 +124,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
 	"github.com/dapr/components-contrib/bindings/azure/storagequeues"
+	"github.com/dapr/components-contrib/bindings/commercetools"
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
@@ -147,7 +148,6 @@ import (
 	"github.com/dapr/components-contrib/bindings/twitter"
 	bindings_zeebe_command "github.com/dapr/components-contrib/bindings/zeebe/command"
 	bindings_zeebe_jobworker "github.com/dapr/components-contrib/bindings/zeebe/jobworker"
-	"github.com/dapr/components-contrib/bindings/commercetools"
 
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
