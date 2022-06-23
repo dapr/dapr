@@ -22,7 +22,6 @@ import (
 	"io"
 	"net"
 	gohttp "net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -1953,8 +1952,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 func TestAPIToken(t *testing.T) {
 	token := "1234"
 
-	os.Setenv("DAPR_API_TOKEN", token)
-	defer os.Unsetenv("DAPR_API_TOKEN")
+	t.Setenv("DAPR_API_TOKEN", token)
 
 	fakeHeaderMetadata := map[string][]string{
 		"Accept-Encoding": {"gzip"},
