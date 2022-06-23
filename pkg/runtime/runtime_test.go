@@ -3221,14 +3221,9 @@ func TestMTLS(t *testing.T) {
 		rt.runtimeConfig.mtlsEnabled = true
 		rt.runtimeConfig.SentryServiceAddress = "1.1.1.1"
 
-		os.Setenv(certs.TrustAnchorsEnvVar, testCertRoot)
-		os.Setenv(certs.CertChainEnvVar, "a")
-		os.Setenv(certs.CertKeyEnvVar, "b")
-		defer func() {
-			os.Unsetenv(certs.TrustAnchorsEnvVar)
-			os.Unsetenv(certs.CertChainEnvVar)
-			os.Unsetenv(certs.CertKeyEnvVar)
-		}()
+		t.Setenv(certs.TrustAnchorsEnvVar, testCertRoot)
+		t.Setenv(certs.CertChainEnvVar, "a")
+		t.Setenv(certs.CertKeyEnvVar, "b")
 
 		certChain, err := security.GetCertChain()
 		assert.Nil(t, err)
@@ -3448,8 +3443,7 @@ func TestNamespace(t *testing.T) {
 	})
 
 	t.Run("non-empty namespace", func(t *testing.T) {
-		os.Setenv("NAMESPACE", "a")
-		defer os.Unsetenv("NAMESPACE")
+		t.Setenv("NAMESPACE", "a")
 
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
@@ -3469,8 +3463,7 @@ func TestPodName(t *testing.T) {
 	})
 
 	t.Run("non-empty podName", func(t *testing.T) {
-		os.Setenv("POD_NAME", "testPodName")
-		defer os.Unsetenv("POD_NAME")
+		t.Setenv("POD_NAME", "testPodName")
 
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
