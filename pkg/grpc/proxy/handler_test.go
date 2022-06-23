@@ -221,6 +221,27 @@ func (s *ProxyHappySuite) TestPingStream_StressTest() {
 	}
 }
 
+func (s *ProxyHappySuite) TestPingStream_MultipleThreads() {
+	doneChan := make(chan bool)
+	for i := 0; i < 4; i++ {
+		go func() {
+			for j := 0; j < 10; j++ {
+				s.TestPingStream_StressTest()
+			}
+			doneChan <- true
+		}()
+	}
+
+	for i := 0; i < 4; i++ {
+		select {
+		case <-time.After(time.Second * 5):
+			assert.Fail(s.T(), "Timed out waiting for proxy to return.")
+		case <-doneChan:
+			continue
+		}
+	}
+}
+
 func (s *ProxyHappySuite) SetupSuite() {
 	var err error
 
