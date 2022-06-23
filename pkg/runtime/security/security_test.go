@@ -1,7 +1,6 @@
 package security
 
 import (
-	"os"
 	"runtime"
 	"testing"
 
@@ -24,14 +23,9 @@ Iklq0JnMgJU7nS+VpVvlgBN8
 
 func TestGetTrustAnchors(t *testing.T) {
 	t.Run("invalid root cert", func(t *testing.T) {
-		os.Setenv(certs.TrustAnchorsEnvVar, "111")
-		os.Setenv(certs.CertChainEnvVar, "111")
-		os.Setenv(certs.CertKeyEnvVar, "111")
-		defer func() {
-			os.Unsetenv(certs.TrustAnchorsEnvVar)
-			os.Unsetenv(certs.CertChainEnvVar)
-			os.Unsetenv(certs.CertKeyEnvVar)
-		}()
+		t.Setenv(certs.TrustAnchorsEnvVar, "111")
+		t.Setenv(certs.CertChainEnvVar, "111")
+		t.Setenv(certs.CertKeyEnvVar, "111")
 
 		certChain, _ := GetCertChain()
 		caPool, err := CertPool(certChain.Cert)
@@ -40,14 +34,9 @@ func TestGetTrustAnchors(t *testing.T) {
 	})
 
 	t.Run("valid root cert", func(t *testing.T) {
-		os.Setenv(certs.TrustAnchorsEnvVar, testRootCert)
-		os.Setenv(certs.CertChainEnvVar, "111")
-		os.Setenv(certs.CertKeyEnvVar, "111")
-		defer func() {
-			os.Unsetenv(certs.TrustAnchorsEnvVar)
-			os.Unsetenv(certs.CertChainEnvVar)
-			os.Unsetenv(certs.CertKeyEnvVar)
-		}()
+		t.Setenv(certs.TrustAnchorsEnvVar, testRootCert)
+		t.Setenv(certs.CertChainEnvVar, "111")
+		t.Setenv(certs.CertKeyEnvVar, "111")
 
 		certChain, err := GetCertChain()
 		assert.Nil(t, err)
@@ -77,14 +66,9 @@ func TestGenerateSidecarCSR(t *testing.T) {
 }
 
 func TestInitSidecarAuthenticator(t *testing.T) {
-	os.Setenv(certs.TrustAnchorsEnvVar, testRootCert)
-	os.Setenv(certs.CertChainEnvVar, "111")
-	os.Setenv(certs.CertKeyEnvVar, "111")
-	defer func() {
-		os.Unsetenv(certs.TrustAnchorsEnvVar)
-		os.Unsetenv(certs.CertChainEnvVar)
-		os.Unsetenv(certs.CertKeyEnvVar)
-	}()
+	t.Setenv(certs.TrustAnchorsEnvVar, testRootCert)
+	t.Setenv(certs.CertChainEnvVar, "111")
+	t.Setenv(certs.CertKeyEnvVar, "111")
 
 	certChain, _ := GetCertChain()
 	_, err := GetSidecarAuthenticator("localhost:5050", certChain)

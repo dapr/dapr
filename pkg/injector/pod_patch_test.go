@@ -25,7 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-const defaultTestConfig = "config"
+const (
+	defaultTestConfig     = "config"
+	defaultAPITokenSecret = "secret"
+	defaultAppTokenSecret = "appsecret"
+)
 
 func TestLogAsJSONEnabled(t *testing.T) {
 	t.Run("dapr.io/log-as-json is true", func(t *testing.T) {
@@ -102,9 +106,12 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
 		annotations[daprLogAsJSON] = "true"
-		annotations[daprAPITokenSecret] = "secret"
-		annotations[daprAppTokenSecret] = "appsecret"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+		annotations[daprAPITokenSecret] = defaultAPITokenSecret
+		annotations[daprAppTokenSecret] = defaultAppTokenSecret
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always",
+			"dapr-system", "controlplane:9000", "placement:50000", nil,
+			nil, nil, "", "", "", "sentry:50000", true,
+			"pod_identity")
 
 		expectedArgs := []string{
 			"--mode", "kubernetes",
@@ -138,9 +145,9 @@ func TestGetSideCarContainer(t *testing.T) {
 		// POD_NAME
 		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAPITokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAppTokenSecret, container.Env[7].ValueFrom.SecretKeyRef.Name)
 		// default image
 		assert.Equal(t, "darpio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -152,11 +159,14 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprAppPortKey] = "5000"
 		annotations[daprLogAsJSON] = "true"
-		annotations[daprAPITokenSecret] = "secret"
-		annotations[daprAppTokenSecret] = "appsecret"
+		annotations[daprAPITokenSecret] = defaultAPITokenSecret
+		annotations[daprAppTokenSecret] = defaultAppTokenSecret
 		annotations[daprEnableDebugKey] = "true"
 		annotations[daprDebugPortKey] = "55555"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always",
+			"dapr-system", "controlplane:9000", "placement:50000", nil,
+			nil, nil, "", "", "", "sentry:50000", true,
+			"pod_identity")
 
 		expectedArgs := []string{
 			"--listen=:55555",
@@ -199,17 +209,81 @@ func TestGetSideCarContainer(t *testing.T) {
 		// POD_NAME
 		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAPITokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, defaultAppTokenSecret, container.Env[7].ValueFrom.SecretKeyRef.Name)
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
+
+	t.Run("get sidecar container with an empty placement addresses", func(t *testing.T) {
+		annotations := map[string]string{}
+		annotations[daprConfigKey] = defaultTestConfig
+		annotations[daprAppPortKey] = "5000"
+		annotations[daprLogAsJSON] = "true"
+		annotations[daprAPITokenSecret] = defaultAPITokenSecret
+		annotations[daprAppTokenSecret] = defaultAppTokenSecret
+		annotations[daprEnableDebugKey] = "true"
+		annotations[daprPlacementAddressesKey] = ""
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always",
+			"dapr-system", "controlplane:9000", "placement:50000",
+			nil, nil, nil, "", "", "", "sentry:50000", true,
+			"pod_identity")
+
+		expectedArgs := []string{
+			"--listen=:40000",
+			"--accept-multiclient",
+			"--headless=true",
+			"--log",
+			"--api-version=2",
+			"exec",
+			"/daprd",
+			"--",
+			"--mode", "kubernetes",
+			"--dapr-http-port", "3500",
+			"--dapr-grpc-port", "50001",
+			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
+			"--app-port", "5000",
+			"--app-id", "app_id",
+			"--control-plane-address", "controlplane:9000",
+			"--app-protocol", "http",
+			"--placement-host-address", "",
+			"--config", defaultTestConfig,
+			"--log-level", "info",
+			"--app-max-concurrency", "-1",
+			"--sentry-address", "sentry:50000",
+			"--enable-metrics=true",
+			"--metrics-port", "9090",
+			"--dapr-http-max-request-size", "-1",
+			"--dapr-http-read-buffer-size", "-1",
+			"--dapr-graceful-shutdown-seconds", "-1",
+			"--enable-api-logging=false",
+			"--disable-builtin-k8s-secret-store=false",
+			"--log-as-json",
+			"--enable-mtls",
+		}
+
+		assert.Equal(t, "/dlv", container.Command[0])
+		// NAMESPACE
+		assert.Equal(t, "dapr-system", container.Env[0].Value)
+		// DAPR_API_TOKEN
+		assert.Equal(t, defaultAPITokenSecret, container.Env[6].ValueFrom.SecretKeyRef.Name)
+		// DAPR_APP_TOKEN
+		assert.Equal(t, defaultAppTokenSecret, container.Env[7].ValueFrom.SecretKeyRef.Name)
+		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
+	})
+
 	t.Run("get sidecar container override listen address", func(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprListenAddresses] = "1.2.3.4,::1"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always",
+			"dapr-system", "controlplane:9000", "placement:50000", nil,
+			nil, nil, "", "", "", "sentry:50000", true,
+			"pod_identity")
 
 		expectedArgs := []string{
 			"--mode", "kubernetes",
@@ -244,7 +318,8 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprGracefulShutdownSeconds] = "invalid"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system",
+			"controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
 			"--mode", "kubernetes",
@@ -279,7 +354,8 @@ func TestGetSideCarContainer(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = defaultTestConfig
 		annotations[daprGracefulShutdownSeconds] = "5"
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system",
+			"controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
 			"--mode", "kubernetes",
@@ -316,7 +392,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			daprImage: image,
 		}
 
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system",
+			"controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		assert.Equal(t, image, container.Image)
 	})
@@ -326,7 +403,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			daprUnixDomainSocketPath: "",
 		}
 
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system",
+			"controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		assert.Equal(t, 0, len(container.VolumeMounts))
 	})
@@ -339,7 +417,8 @@ func TestGetSideCarContainer(t *testing.T) {
 
 		socketMount := &corev1.VolumeMount{Name: unixDomainSocketVolume, MountPath: socketPath}
 
-		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", socketMount, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system",
+			"controlplane:9000", "placement:50000", socketMount, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		assert.Equal(t, []corev1.VolumeMount{*socketMount}, container.VolumeMounts)
 	})

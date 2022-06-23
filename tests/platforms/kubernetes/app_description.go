@@ -50,6 +50,7 @@ type AppDescription struct {
 	PodAffinityLabels  map[string]string `json:",omitempty"` // If set, adds a podAffinity rule matching those labels
 	Volumes            []apiv1.Volume    `json:",omitempty"`
 	InitContainers     []apiv1.Container `json:",omitempty"`
+	PlacementAddresses []string          `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {

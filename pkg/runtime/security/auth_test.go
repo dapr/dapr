@@ -2,7 +2,6 @@ package security
 
 import (
 	"crypto/x509"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,8 +31,7 @@ func TestGetCurrentSignedCert(t *testing.T) {
 func TestGetSentryIdentifier(t *testing.T) {
 	t.Run("with identity in env", func(t *testing.T) {
 		envID := "cluster.local"
-		os.Setenv("SENTRY_LOCAL_IDENTITY", envID)
-		defer os.Unsetenv("SENTRY_LOCAL_IDENTITY")
+		t.Setenv("SENTRY_LOCAL_IDENTITY", envID)
 
 		id := getSentryIdentifier("app1")
 		assert.Equal(t, envID, id)

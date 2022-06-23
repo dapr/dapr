@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -45,10 +46,10 @@ const (
 	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests.
 	DaprTestNamespaceEnvVar = "DAPR_TEST_NAMESPACE"
 
-	// Environment variable for setting Kubernetes node affinity OS.
+	// TargetOsEnvVar Environment variable for setting Kubernetes node affinity OS.
 	TargetOsEnvVar = "TARGET_OS"
 
-	// Environment variable for setting Kubernetes node affinity ARCH.
+	// TargetArchEnvVar Environment variable for setting Kubernetes node affinity ARCH.
 	TargetArchEnvVar = "TARGET_ARCH"
 
 	// Environmental variable to disable API logging
@@ -102,6 +103,10 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	}
 	if appDesc.DaprVolumeMounts != "" {
 		annotationObject["dapr.io/volume-mounts"] = appDesc.DaprVolumeMounts
+	}
+
+	if len(appDesc.PlacementAddresses) != 0 {
+		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}
 	return annotationObject
 }
