@@ -2003,7 +2003,7 @@ func (a *DaprRuntime) processComponents() {
 		if err != nil {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
 			if !comp.Spec.IgnoreErrors {
-				log.Warnf("process component error daprd process will exited, gracefully to stop")
+				log.Warnf("error processing component, daprd process will exit gracefully")
 				a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
 				log.Fatalf(e)
 			}

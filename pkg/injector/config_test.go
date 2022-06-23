@@ -1,7 +1,6 @@
 package injector
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,14 +8,13 @@ import (
 
 func TestGetInjectorConfig(t *testing.T) {
 	t.Run("with kube cluster domain env", func(t *testing.T) {
-		os.Setenv("TLS_CERT_FILE", "test-cert-file")
-		os.Setenv("TLS_KEY_FILE", "test-key-file")
-		os.Setenv("SIDECAR_IMAGE", "daprd-test-image")
-		os.Setenv("SIDECAR_IMAGE_PULL_POLICY", "Always")
-		os.Setenv("NAMESPACE", "test-namespace")
-		os.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
-		os.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test-service-account1:test1,test-service-account2:test2")
-		defer clearenv()
+		t.Setenv("TLS_CERT_FILE", "test-cert-file")
+		t.Setenv("TLS_KEY_FILE", "test-key-file")
+		t.Setenv("SIDECAR_IMAGE", "daprd-test-image")
+		t.Setenv("SIDECAR_IMAGE_PULL_POLICY", "Always")
+		t.Setenv("NAMESPACE", "test-namespace")
+		t.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
+		t.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test-service-account1:test1,test-service-account2:test2")
 
 		cfg, err := GetConfig()
 		assert.Nil(t, err)
@@ -30,13 +28,12 @@ func TestGetInjectorConfig(t *testing.T) {
 	})
 
 	t.Run("not set kube cluster domain env", func(t *testing.T) {
-		os.Setenv("TLS_CERT_FILE", "test-cert-file")
-		os.Setenv("TLS_KEY_FILE", "test-key-file")
-		os.Setenv("SIDECAR_IMAGE", "daprd-test-image")
-		os.Setenv("SIDECAR_IMAGE_PULL_POLICY", "IfNotPresent")
-		os.Setenv("NAMESPACE", "test-namespace")
-		os.Setenv("KUBE_CLUSTER_DOMAIN", "")
-		defer clearenv()
+		t.Setenv("TLS_CERT_FILE", "test-cert-file")
+		t.Setenv("TLS_KEY_FILE", "test-key-file")
+		t.Setenv("SIDECAR_IMAGE", "daprd-test-image")
+		t.Setenv("SIDECAR_IMAGE_PULL_POLICY", "IfNotPresent")
+		t.Setenv("NAMESPACE", "test-namespace")
+		t.Setenv("KUBE_CLUSTER_DOMAIN", "")
 
 		cfg, err := GetConfig()
 		assert.Nil(t, err)
@@ -47,14 +44,4 @@ func TestGetInjectorConfig(t *testing.T) {
 		assert.Equal(t, "test-namespace", cfg.Namespace)
 		assert.NotEqual(t, "", cfg.KubeClusterDomain)
 	})
-}
-
-func clearenv() {
-	os.Unsetenv("TLS_CERT_FILE")
-	os.Unsetenv("TLS_KEY_FILE")
-	os.Unsetenv("SIDECAR_IMAGE")
-	os.Unsetenv("SIDECAR_IMAGE_PULL_POLICY")
-	os.Unsetenv("NAMESPACE")
-	os.Unsetenv("KUBE_CLUSTER_DOMAIN")
-	os.Unsetenv("ALLOWED_SERVICE_ACCOUNT_INFOS")
 }
