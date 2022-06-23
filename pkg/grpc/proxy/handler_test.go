@@ -10,7 +10,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-// Code is based on https://github.com/trusch/grpc-proxy
+
+// Based on https://github.com/trusch/grpc-proxy
+// Copyright Michal Witkowski. Licensed under Apache2 license: https://github.com/trusch/grpc-proxy/blob/master/LICENSE.txt
 
 package proxy
 
@@ -25,7 +27,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	pb "github.com/trusch/grpc-proxy/testservice"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,6 +36,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
+	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 

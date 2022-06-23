@@ -38,7 +38,6 @@ require (
 	github.com/prometheus/common v0.34.0
 	github.com/sony/gobreaker v0.4.2-0.20210216022020-dd874f9dd33b
 	github.com/stretchr/testify v1.7.4
-	github.com/trusch/grpc-proxy v0.0.0-20190529073533-02b64529f274
 	github.com/valyala/fasthttp v1.31.1-0.20211216042702-258a4c17b4f4
 	go.opencensus.io v0.23.0
 	go.opentelemetry.io/otel v1.7.0
@@ -368,7 +367,6 @@ require (
 )
 
 replace (
-	github.com/trusch/grpc-proxy => github.com/ItalyPaleAle/grpc-proxy v0.0.0-20220622194522-bb83906fa0cb
 	go.opentelemetry.io/otel => go.opentelemetry.io/otel v0.20.0
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
