@@ -12,7 +12,9 @@ ARG KUBECTL_VERSION="latest"
 ARG HELM_VERSION="latest"
 ARG MINIKUBE_VERSION="latest"
 ARG DAPR_CLI_VERSION="latest"
-ARG PROTOC_VERSION="3.14.0"
+ARG PROTOC_VERSION="21.1"
+ARG PROTOC_GEN_GO_VERSION="1.28"
+ARG GOLANGCI_LINT_VERSION="1.45.2"
 
 # This Dockerfile adds a non-root 'dapr' user with sudo access. However, for Linux,
 # this user's GID/UID must match your local user UID/GID to avoid permission issues
@@ -47,7 +49,7 @@ RUN apt-get update \
     && bash /tmp/staging/go-debian.sh "none" "/usr/local/go" "${GOPATH}" "${USERNAME}" "false" \
     #
     # Install tools for Dapr.
-    && bash /tmp/staging/install-dapr-tools.sh "${DAPR_CLI_VERSION}" "${PROTOC_VERSION}" \
+    && bash /tmp/staging/install-dapr-tools.sh "${DAPR_CLI_VERSION}" "${PROTOC_VERSION}" "${PROTOC_GEN_GO_VERSION}" "${GOLANGCI_LINT_VERSION}" \
     #
     # Install the GitHub CLI.
     && bash /tmp/staging/github-debian.sh "latest" \
