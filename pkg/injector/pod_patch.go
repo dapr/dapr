@@ -781,7 +781,9 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	for _, env := range c.Env {
 		if env.Name == "SSL_CERT_DIR" {
 			userName := "ContainerAdministrator"
-			c.SecurityContext.WindowsOptions.RunAsUserName = &userName
+			c.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
+				RunAsUserName: &userName,
+			}
 		}
 	}
 
