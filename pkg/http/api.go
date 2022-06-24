@@ -986,7 +986,7 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	subscribeID := string(reqCtx.QueryArgs().Peek(configurationSubscribeID))
+	subscribeID := reqCtx.UserValue(configurationSubscribeID).(string)
 
 	req := configuration.UnsubscribeRequest{
 		ID: subscribeID,
@@ -999,7 +999,14 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	elapsed := diag.ElapsedSince(start)
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
 
-	respond(reqCtx, withJSON(fasthttp.StatusOK, nil))
+	if err != nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_UNSUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	respond(reqCtx, withEmpty())
 }
 
 func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
