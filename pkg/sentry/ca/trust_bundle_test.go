@@ -39,7 +39,9 @@ func TestBundleIssuerExpiry(t *testing.T) {
 		Certificate: issuerCert,
 	}
 
-	assert.Equal(t, issuerCert.NotAfter.String(), bundle.GetIssuerCertExpiry().String())
+	exp := bundle.GetIssuerCertExpiry()
+	assert.NotNil(t, exp)
+	assert.Equal(t, issuerCert.NotAfter.String(), exp.String())
 }
 
 func TestBundleIssuerCertMatch(t *testing.T) {

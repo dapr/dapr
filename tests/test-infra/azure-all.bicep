@@ -29,6 +29,18 @@ param location2 string
 @description('Optional value for the date tag for resource groups')
 param dateTag string = ''
 
+@description('If set, sends certain diagnostic logs to Log Analytics')
+param diagLogAnalyticsWorkspaceResourceId string = ''
+
+@description('If set, sends certain diagnostic logs to Azure Storage')
+param diagStorageResourceId string = ''
+
+@description('If enabled, deploy Cosmos DB')
+param enableCosmosDB bool = true
+
+@description('If enabled, deploy Service Bus')
+param enableServiceBus bool = true
+
 // Deploy the Linux cluster in the first location
 resource linuxResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
   name: 'Dapr-E2E-${namePrefix}l'
@@ -44,6 +56,10 @@ module linuxCluster 'azure.bicep' = {
     namePrefix: '${namePrefix}l'
     location: location1
     enableWindows: false
+    diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
+    diagStorageResourceId: diagStorageResourceId
+    enableCosmosDB: enableCosmosDB
+    enableServiceBus: enableServiceBus
   }
 }
 
@@ -62,5 +78,9 @@ module windowsCluster 'azure.bicep' = {
     namePrefix: '${namePrefix}w'
     location: location2
     enableWindows: true
+    diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
+    diagStorageResourceId: diagStorageResourceId
+    enableCosmosDB: enableCosmosDB
+    enableServiceBus: enableServiceBus
   }
 }

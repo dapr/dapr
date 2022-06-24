@@ -79,8 +79,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.tag`                              | Docker image version tag                                                | latest release          |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
-| `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry            | `""`                   |
-| `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`        |
+| `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry           | `""`                    |
+| `global.ha.enabled`                       | Highly Availability mode enabled for control plane                      | `false`                 |
 | `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
 | `global.ha.disruption.minimumAvailable`   | Minimum amount of available instances for control plane. This can either be effective count or %. | ``             |
 | `global.ha.disruption.maximumUnavailable`   | Maximum amount of instances that are allowed to be unavailable for control plane. This can either be effective count or %. | `25%`             |
@@ -114,6 +114,8 @@ The Helm chart has the follow configuration options that can be supplied:
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `dapr_operator.replicaCount`              | Number of replicas                                                      | `1`                     |
 | `dapr_operator.logLevel`                  | Log level                                                               | `info`                  |
+| `dapr_operator.watchInterval`             | Interval for polling pods' state (e.g. `2m`). Set to `0` to disable, or `once` to only run once when the operator starts | `0` |
+| `dapr_operator.maxPodRestartsPerMinute`   | Maximum number of pods in an invalid state that can be restarted per minute | `20`                |
 | `dapr_operator.image.name`                | Docker image name (`global.registry/dapr_operator.image.name`)          | `dapr`                  |
 | `dapr_operator.runAsNonRoot`              | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_operator.resources`                 | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
@@ -122,7 +124,6 @@ The Helm chart has the follow configuration options that can be supplied:
 ### Dapr Placement options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
-| `dapr_placement.replicaCount`             | Number of replicas                                                      | `1`                     |
 | `dapr_placement.replicationFactor`        | Number of consistent hashing virtual node | `100`   |
 | `dapr_placement.logLevel`                 | Service Log level                                                       | `info`                  |
 | `dapr_placement.image.name`               | Service docker image name (`global.registry/dapr_placement.image.name`) | `dapr`   |
@@ -169,7 +170,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.debug.enabled`     | Boolean value for enabling debug mode | `{}` |
 | `dapr_sidecar_injector.kubeClusterDomain` | Domain for this kubernetes cluster. If not set, will auto-detect the cluster domain through the `/etc/resolv.conf` file `search domains` content. | `cluster.local` |
 | `dapr_sidecar_injector.hostNetwork` | Enable hostNetwork mode. This is helpful when working with overlay networks such as Calico CNI and admission webhooks fail | `false` |
-| `dapr_sidecar_injector.healthzPort` | The port used for health checks. Helpful in combination with hostNetwork to avoid port collisions | 8080 |
+| `dapr_sidecar_injector.healthzPort` | The port used for health checks. Helpful in combination with hostNetwork to avoid port collisions | `8080` |
 
 
 

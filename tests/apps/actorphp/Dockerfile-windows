@@ -1,5 +1,5 @@
 ARG WINDOWS_VERSION=1809
-FROM daprio/windows-php-base:$WINDOWS_VERSION
+FROM ghcr.io/dapr/windows-php-base:$WINDOWS_VERSION
 
 WORKDIR /inetpub
 ADD https://getcomposer.org/composer-stable.phar composer.phar

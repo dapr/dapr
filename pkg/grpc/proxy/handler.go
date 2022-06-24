@@ -1,5 +1,5 @@
-// Copyright Michal Witkowski.
-// Code is based on https://github.com/trusch/grpc-proxy
+// Based on https://github.com/trusch/grpc-proxy
+// Copyright Michal Witkowski. Licensed under Apache2 license: https://github.com/trusch/grpc-proxy/blob/master/LICENSE.txt
 
 package proxy
 
@@ -104,7 +104,8 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 
 	cErr := policy(func(ctx context.Context) (rErr error) {
 		// We require that the director's returned context inherits from the serverStream.Context().
-		outgoingCtx, backendConn, err := s.director(serverStream.Context(), fullMethodName)
+		outgoingCtx, backendConn, teardown, err := s.director(serverStream.Context(), fullMethodName)
+		defer teardown()
 		if err != nil {
 			return err
 		}

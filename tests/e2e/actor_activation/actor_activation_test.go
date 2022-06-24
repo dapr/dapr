@@ -82,6 +82,9 @@ func findActorAction(resp []byte, actorID string, action string) bool {
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("actor_activation")
+	utils.InitHTTPClient(true)
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -125,7 +128,7 @@ func TestActorActivation(t *testing.T) {
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 
-		// there is no longer an activate message
+		// there is no longer an activated message
 		require.False(t, findActorActivation(resp, actorID))
 
 		require.True(t, findActorMethodInvokation(resp, actorID))
@@ -137,7 +140,7 @@ func TestActorActivation(t *testing.T) {
 		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 
-		// there is no longer an activate message
+		// there is no longer an activated message
 		require.False(t, findActorActivation(resp, actorID))
 
 		require.True(t, findActorMethodInvokation(resp, actorID))

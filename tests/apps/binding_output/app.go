@@ -22,19 +22,18 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gorilla/mux"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/anypb"
+
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/golang/protobuf/ptypes/any"
-
-	"google.golang.org/grpc"
-
-	"github.com/gorilla/mux"
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
-	appPort      = 3000
-	daprPort     = 3500
-	daprPortGRPC = 50001
+	appPort  = 3000
+	daprPort = 3500
 )
 
 type testCommandRequest struct {
@@ -136,7 +135,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 		Id: "bindinginputgrpc",
 		Message: &commonv1pb.InvokeRequest{
 			Method: "GetReceivedTopics",
-			Data:   &any.Any{},
+			Data:   &anypb.Any{},
 			HttpExtension: &commonv1pb.HTTPExtension{
 				Verb: commonv1pb.HTTPExtension_POST,
 			},
@@ -155,6 +154,9 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/tests/send", testHandler).Methods("POST")
@@ -192,6 +194,5 @@ func main() {
 	initGRPCClient()
 
 	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true)
 }

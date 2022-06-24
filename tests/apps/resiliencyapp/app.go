@@ -20,14 +20,12 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/any"
-
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/apps/utils"
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
@@ -61,6 +59,8 @@ var (
 	daprClient   runtimev1pb.DaprClient
 	callTracking map[string][]CallRecord
 )
+
+var httpClient = utils.NewHTTPClient()
 
 // Endpoint handling.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -281,23 +281,11 @@ func initGRPCClient() {
 	daprClient = runtimev1pb.NewDaprClient(grpcConn)
 }
 
-func newHTTPClient() *http.Client {
-	dialer := &net.Dialer{ //nolint:exhaustivestruct
-		Timeout: 30 * time.Second,
-	}
-	netTransport := &http.Transport{ //nolint:exhaustivestruct
-		DialContext:         dialer.DialContext,
-		TLSHandshakeTimeout: 30 * time.Second,
-	}
-
-	return &http.Client{ //nolint:exhaustivestruct
-		Timeout:   30 * time.Second,
-		Transport: netTransport,
-	}
-}
-
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 
@@ -328,11 +316,11 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
 	callTracking = map[string][]CallRecord{}
 	initGRPCClient()
 
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	log.Printf("Resiliency App - listening on http://localhost:%d", appPort)
+	utils.StartServer(appPort, appRouter, true)
 }
 
 // Test Functions.
@@ -357,7 +345,7 @@ func TestGetCallCountGRPC(w http.ResponseWriter, r *http.Request) {
 		Id: "resiliencyappgrpc",
 		Message: &commonv1pb.InvokeRequest{
 			Method: "GetCallCount",
-			Data:   &any.Any{},
+			Data:   &anypb.Any{},
 			HttpExtension: &commonv1pb.HTTPExtension{
 				Verb: commonv1pb.HTTPExtension_POST,
 			},
@@ -432,13 +420,12 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Invoking resiliency service with %s", protocol)
 
 	if protocol == "http" {
-		client := newHTTPClient()
 		url := "http://localhost:3500/v1.0/invoke/resiliencyapp/method/resiliencyInvocation"
 
 		req, _ := http.NewRequest("POST", url, r.Body)
 		defer r.Body.Close()
 
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -505,7 +492,6 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
 }
 
 func TestInvokeActorMethod(w http.ResponseWriter, r *http.Request) {
@@ -513,15 +499,13 @@ func TestInvokeActorMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Invoking resiliency actor with %s", protocol)
 
 	if protocol == "http" {
-		client := &http.Client{
-			Timeout: 1 * time.Minute,
-		}
+		httpClient.Timeout = time.Minute
 		url := "http://localhost:3500/v1.0/actors/resiliencyActor/1/method/resiliencyMethod"
 
 		req, _ := http.NewRequest("PUT", url, r.Body)
 		defer r.Body.Close()
 
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			log.Printf("An error occurred calling actors: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)

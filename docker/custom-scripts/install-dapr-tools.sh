@@ -12,10 +12,12 @@
 # limitations under the License.
 #
 #
-# Syntax: ./install-dapr-tools.sh [DAPR_CLI_VERSION] [PROTOC_VERSION]
+# Syntax: ./install-dapr-tools.sh [DAPR_CLI_VERSION] [PROTOC_VERSION] [PROTOC_GEN_GO_VERSION] [GOLANGCI_LINT_VERSION]
 
 DAPR_CLI_VERSION=${1:-""}
-PROTOC_VERSION=${2:-"3.14.0"}
+PROTOC_VERSION=${2:-"21.1"}
+PROTOC_GEN_GO_VERSION=${3:-"1.28"}
+GOLANGCI_LINT_VERSION=${4:-"1.45.2"}
 
 set -e
 
@@ -50,3 +52,7 @@ chmod -R 755 /usr/local/bin/protoc
 unzip -o "${PROTOC_ZIP}" -d /usr/local 'include/*'
 chmod -R 755 /usr/local/include/google/protobuf
 rm -f "${PROTOC_ZIP}"
+
+# Install protoc-gen-go and golangci-lint
+go install "google.golang.org/protobuf/cmd/protoc-gen-go@v${PROTOC_GEN_GO_VERSION}"
+go install "github.com/golangci/golangci-lint/cmd/golangci-lint@v${GOLANGCI_LINT_VERSION}"

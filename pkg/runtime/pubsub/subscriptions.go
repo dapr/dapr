@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dapr/dapr/utils"
+
 	"github.com/cenkalti/backoff/v4"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
@@ -26,6 +28,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -41,11 +44,12 @@ const (
 
 type (
 	SubscriptionJSON struct {
-		PubsubName string            `json:"pubsubname"`
-		Topic      string            `json:"topic"`
-		Metadata   map[string]string `json:"metadata,omitempty"`
-		Route      string            `json:"route"`  // Single route from v1alpha1
-		Routes     RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
+		PubsubName      string            `json:"pubsubname"`
+		Topic           string            `json:"topic"`
+		DeadLetterTopic string            `json:"deadLetterTopic"`
+		Metadata        map[string]string `json:"metadata,omitempty"`
+		Route           string            `json:"route"`  // Single route from v1alpha1
+		Routes          RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
 	}
 
 	RoutesJSON struct {
@@ -59,7 +63,7 @@ type (
 	}
 )
 
-func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subscription, error) {
+func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
 	var subscriptions []Subscription
 	var subscriptionItems []SubscriptionJSON
 
@@ -73,14 +77,23 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 	var resp *invokev1.InvokeMethodResponse
 	var err error
 
-	backoff := getSubscriptionsBackoff()
-
-	retry.NotifyRecover(func() error {
-		resp, err = channel.InvokeMethod(ctx, req)
-		return err
-	}, backoff, func(err error, d time.Duration) {
-		log.Debug("failed getting http subscriptions, starting retry")
-	}, func() {})
+	// TODO: Use only resiliency once it is no longer a preview feature.
+	if resiliencyEnabled {
+		policy := r.BuiltInPolicy(ctx, resiliency.BuiltInInitializationRetries)
+		log.Infof("Policy: %+v", policy)
+		err = policy(func(ctx context.Context) (rErr error) {
+			resp, rErr = channel.InvokeMethod(ctx, req)
+			return rErr
+		})
+	} else {
+		backoff := getSubscriptionsBackoff()
+		retry.NotifyRecover(func() error {
+			resp, err = channel.InvokeMethod(ctx, req)
+			return err
+		}, backoff, func(err error, d time.Duration) {
+			log.Debug("failed getting http subscriptions, starting retry")
+		}, func() {})
+	}
 
 	if err != nil {
 		return nil, err
@@ -122,10 +135,11 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) ([]Subs
 			}
 
 			subscriptions[i] = Subscription{
-				PubsubName: si.PubsubName,
-				Topic:      si.Topic,
-				Metadata:   si.Metadata,
-				Rules:      rules,
+				PubsubName:      si.PubsubName,
+				Topic:           si.Topic,
+				Metadata:        si.Metadata,
+				DeadLetterTopic: si.DeadLetterTopic,
+				Rules:           rules,
 			}
 		}
 
@@ -162,28 +176,45 @@ func getSubscriptionsBackoff() backoff.BackOff {
 	return config.NewBackOff()
 }
 
-func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger) ([]Subscription, error) {
+func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger, r resiliency.Provider, resiliencyEnabled bool) ([]Subscription, error) {
 	var subscriptions []Subscription
 
 	var err error
 	var resp *runtimev1pb.ListTopicSubscriptionsResponse
 
-	backoff := getSubscriptionsBackoff()
+	// TODO: Use only resiliency once it is no longer a preview feature.
+	if resiliencyEnabled {
+		policy := r.BuiltInPolicy(context.Background(), resiliency.BuiltInInitializationRetries)
+		err = policy(func(ctx context.Context) (rErr error) {
+			resp, rErr = channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
 
-	retry.NotifyRecover(func() error {
-		resp, err = channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
-
-		if err != nil {
-			if s, ok := status.FromError(err); ok && s != nil {
-				if s.Code() == codes.Unimplemented {
-					return nil
+			if rErr != nil {
+				if s, ok := status.FromError(rErr); ok && s != nil {
+					if s.Code() == codes.Unimplemented {
+						return nil
+					}
 				}
 			}
-		}
-		return err
-	}, backoff, func(err error, d time.Duration) {
-		log.Debug("failed getting gRPC subscriptions, starting retry")
-	}, func() {})
+			return rErr
+		})
+	} else {
+		backoff := getSubscriptionsBackoff()
+
+		retry.NotifyRecover(func() error {
+			resp, err = channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
+
+			if err != nil {
+				if s, ok := status.FromError(err); ok && s != nil {
+					if s.Code() == codes.Unimplemented {
+						return nil
+					}
+				}
+			}
+			return err
+		}, backoff, func(err error, d time.Duration) {
+			log.Debug("failed getting gRPC subscriptions, starting retry")
+		}, func() {})
+	}
 
 	if err != nil {
 		// Unexpected response: both GRPC and HTTP have to log the same level.
@@ -200,10 +231,11 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 				return nil, err
 			}
 			subscriptions = append(subscriptions, Subscription{
-				PubsubName: s.PubsubName,
-				Topic:      s.GetTopic(),
-				Metadata:   s.GetMetadata(),
-				Rules:      rules,
+				PubsubName:      s.PubsubName,
+				Topic:           s.GetTopic(),
+				Metadata:        s.GetMetadata(),
+				DeadLetterTopic: s.DeadLetterTopic,
+				Rules:           rules,
 			})
 		}
 	}
@@ -227,10 +259,14 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 
 	for _, f := range files {
 		if !f.IsDir() {
+			if !utils.IsYaml(f.Name()) {
+				log.Warnf("A non-YAML pubsub file %s was detected, it will not be loaded", f.Name())
+				continue
+			}
 			filePath := filepath.Join(componentsPath, f.Name())
 			b, err := os.ReadFile(filePath)
 			if err != nil {
-				log.Errorf("failed to read file %s: %s", filePath, err)
+				log.Warnf("failed to read file %s: %s", filePath, err)
 				continue
 			}
 
@@ -275,11 +311,12 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 		}
 
 		return &Subscription{
-			Topic:      sub.Spec.Topic,
-			PubsubName: sub.Spec.Pubsubname,
-			Rules:      rules,
-			Metadata:   sub.Spec.Metadata,
-			Scopes:     sub.Scopes,
+			Topic:           sub.Spec.Topic,
+			PubsubName:      sub.Spec.Pubsubname,
+			Rules:           rules,
+			Metadata:        sub.Spec.Metadata,
+			Scopes:          sub.Scopes,
+			DeadLetterTopic: sub.Spec.DeadLetterTopic,
 		}, nil
 
 	default:
@@ -298,8 +335,9 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 					Path: sub.Spec.Route,
 				},
 			},
-			Metadata: sub.Spec.Metadata,
-			Scopes:   sub.Scopes,
+			Metadata:        sub.Spec.Metadata,
+			Scopes:          sub.Scopes,
+			DeadLetterTopic: sub.Spec.DeadLetterTopic,
 		}, nil
 	}
 }

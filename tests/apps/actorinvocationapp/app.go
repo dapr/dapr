@@ -21,6 +21,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/dapr/dapr/tests/apps/utils"
+
 	"github.com/gorilla/mux"
 )
 
@@ -164,6 +166,9 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	// Actor methods are individually bound so we can experiment with missing messages
 	router.HandleFunc("/actors/{actorType}/{actorId}/method/logCall", logCall).Methods("POST", "PUT")
@@ -179,6 +184,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Actor Invocation App - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true)
 }
