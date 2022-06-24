@@ -87,7 +87,7 @@ For more information on the community engagement, developer and contributing gui
 
 ### Contact Us
 
-Reach out with any questions you may have and we'll make sure to answer then as soon as possible!
+Reach out with any questions you may have and we'll make sure to answer them as soon as possible!
 
 | Platform  | Link        |
 |:----------|:------------|
@@ -126,7 +126,7 @@ See the [Development Guide](https://docs.dapr.io/contributing/) to get started w
 | [Java-sdk](https://github.com/dapr/java-sdk) | Dapr SDK for Java
 | [JS-sdk](https://github.com/dapr/js-sdk) | Dapr SDK for JavaScript
 | [Python-sdk](https://github.com/dapr/python-sdk) | Dapr SDK for Python
-| [Dotnet-sdk](https://github.com/dapr/dotnet-sdk) | Dapr SDK for .NET Core
+| [Dotnet-sdk](https://github.com/dapr/dotnet-sdk) | Dapr SDK for .NET
 | [Rust-sdk](https://github.com/dapr/rust-sdk) | Dapr SDK for Rust
 | [Cpp-sdk](https://github.com/dapr/cpp-sdk) | Dapr SDK for C++
 | [PHP-sdk](https://github.com/dapr/php-sdk) | Dapr SDK for PHP

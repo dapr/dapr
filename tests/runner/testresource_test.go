@@ -14,6 +14,7 @@ limitations under the License.
 package runner
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -31,7 +32,7 @@ func (m *MockDisposable) Name() string {
 	return args.String(0)
 }
 
-func (m *MockDisposable) Init() error {
+func (m *MockDisposable) Init(ctx context.Context) error {
 	args := m.Called()
 	return args.Error(0)
 }

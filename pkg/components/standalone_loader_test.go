@@ -14,7 +14,7 @@ import (
 const configPrefix = "."
 
 func writeTempConfig(path, content string) error {
-	return os.WriteFile(filepath.Join(configPrefix, path), []byte(content), fs.FileMode(0644))
+	return os.WriteFile(filepath.Join(configPrefix, path), []byte(content), fs.FileMode(0o644))
 }
 
 func TestLoadComponentsFromFile(t *testing.T) {
@@ -66,22 +66,6 @@ name: statestore`
 		components := request.loadComponentsFromFile(filename)
 		assert.Len(t, components, 0)
 	})
-}
-
-func TestIsYaml(t *testing.T) {
-	request := &StandaloneComponents{
-		config: config.StandaloneConfig{
-			ComponentsPath: "test_component_path",
-		},
-	}
-
-	assert.True(t, request.isYaml("test.yaml"))
-	assert.True(t, request.isYaml("test.YAML"))
-	assert.True(t, request.isYaml("test.yml"))
-	assert.True(t, request.isYaml("test.YML"))
-	assert.False(t, request.isYaml("test.md"))
-	assert.False(t, request.isYaml("test.txt"))
-	assert.False(t, request.isYaml("test.sh"))
 }
 
 func TestStandaloneDecodeValidYaml(t *testing.T) {

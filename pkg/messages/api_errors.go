@@ -38,7 +38,7 @@ const (
 	ErrChannelInvoke         = "error invoking app channel: %s"
 
 	// Actor.
-	ErrActorRuntimeNotFound      = "actor runtime is not configured"
+	ErrActorRuntimeNotFound      = "the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: \"true\" in your state store component file?"
 	ErrActorInstanceMissing      = "actor instance is missing"
 	ErrActorInvoke               = "error invoke actor method: %s"
 	ErrActorReminderCreate       = "error creating actor reminder: %s"
@@ -74,4 +74,11 @@ const (
 	ErrConfigurationStoreNotFound       = "error configuration stores %s not found"
 	ErrConfigurationGet                 = "fail to get %s from Configuration store %s: %s"
 	ErrConfigurationSubscribe           = "fail to subscribe %s from Configuration store %s: %s"
+
+	//	Lock
+	ErrLockStoresNotConfigured    = "lock store is not configured"
+	ErrResourceIDEmpty            = "ResourceId is empty in lock store %s"
+	ErrLockOwnerEmpty             = "LockOwner is empty in lock store %s"
+	ErrExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store %s"
+	ErrLockStoreNotFound          = "lock store %s not found"
 )

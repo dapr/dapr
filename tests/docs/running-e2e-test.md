@@ -82,11 +82,14 @@ If you are starting from scratch and just want to build dapr, deploy it, and run
    make delete-test-namespace
    ```
 
+    > Note: please make sure that you have executed helm uninstall command before you deleted dapr test namespace. Otherwise if you directly deleted the dapr test namespace without helm unisntall command and re-installed dapr control plane, the dapr sidecar injector won't work and fail for "bad certificate". And you have already run into this problem, you can recover by helm uninstall command. See https://github.com/dapr/dapr/issues/4612
+
 3. Build, deploy, run tests from start to finish
 
    ```bash
    make e2e-build-deploy-run
    ```
+
 
 ### Option 2: Step by step guide
 
@@ -290,3 +293,46 @@ make create-test-namespace
 ```
 
 After this, run the E2E tests as per instructions above, making sure to use the newly-created Azure Container Registry as Docker registry (make sure you maintain the environmental variables set in the steps above).
+
+### Collect container and diagnostic logs from AKS
+
+You can optionally configure AKS to collect certain logs, including:
+
+- All container logs, sent to Azure Log Analytics
+- Diagnostic logs (`kube-apiserver` and `kube-controller-manager`), sent to Azure Log Analytics
+- Audit logs (`kube-audit`), sent to Azure Storage
+
+To do that, first provision the required resources by deploying the `azure-aks-diagnostic.bicep` template (this template is not part of the `azure.bicep` or `azure-all.bicep` templates, as it's considered shared infrastructure):
+
+```sh
+# Name of the resource group where to deploy the diagnostic resources
+DIAG_RESOURCE_GROUP="MyDaprTestLogs"
+
+# Name prefix for the diagnostic resources (should be globally-unique)
+DIAG_NAME_PREFIX="mydaprdiag42"
+
+# Create a resource group
+az group create \
+  --resource-group "${DIAG_RESOURCE_GROUP}" \
+  --location "${AZURE_REGION}"
+
+# Deploy the test infrastructure
+az deployment group create \
+  --resource-group "${DIAG_RESOURCE_GROUP}" \
+  --template-file ./tests/test-infra/azure-aks-diagnostic.bicep \
+  --parameters name=${DIAG_NAME_PREFIX} location=${AZURE_REGION}
+```
+
+The output of the last command includes two values that are resource IDs:
+
+- `diagLogAnalyticsWorkspaceResourceId`, for example: `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`
+- `diagStorageResourceId`, for example: `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`
+
+Use those values as parameters when deploying the `azure.bicep` or `azure-all.bicep` templates. For example:
+
+```sh
+az deployment group create \
+  --resource-group "${TEST_RESOURCE_GROUP}" \
+  --template-file ./tests/test-infra/azure.bicep \
+  --parameters namePrefix=${TEST_PREFIX} location=${AZURE_REGION} enableWindows=${ENABLE_WINDOWS} diagLogAnalyticsWorkspaceResourceId=... diagStorageResourceId=...
+```

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
@@ -33,6 +34,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
 
@@ -44,7 +46,7 @@ var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type messageClientConnection func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error)
+type messageClientConnection func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
 
 // DirectMessaging is the API interface for invoking a remote app.
 type DirectMessaging interface {
@@ -65,6 +67,8 @@ type directMessaging struct {
 	maxRequestBodySize  int
 	proxy               Proxy
 	readBufferSize      int
+	resiliency          resiliency.Provider
+	isResiliencyEnabled bool
 }
 
 type remoteApp struct {
@@ -80,7 +84,14 @@ func NewDirectMessaging(
 	appChannel channel.AppChannel,
 	clientConnFn messageClientConnection,
 	resolver nr.Resolver,
-	tracingSpec config.TracingSpec, maxRequestBodySize int, proxy Proxy, readBufferSize int, streamRequestBody bool) DirectMessaging {
+	tracingSpec config.TracingSpec,
+	maxRequestBodySize int,
+	proxy Proxy,
+	readBufferSize int,
+	streamRequestBody bool,
+	resiliency resiliency.Provider,
+	isResiliencyEnabled bool,
+) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 
@@ -98,6 +109,8 @@ func NewDirectMessaging(
 		maxRequestBodySize:  maxRequestBodySize,
 		proxy:               proxy,
 		readBufferSize:      readBufferSize,
+		resiliency:          resiliency,
+		isResiliencyEnabled: isResiliencyEnabled,
 	}
 
 	if proxy != nil {
@@ -142,7 +155,49 @@ func (d *directMessaging) invokeWithRetry(
 	backoffInterval time.Duration,
 	app remoteApp,
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
-	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	req *invokev1.InvokeMethodRequest,
+) (*invokev1.InvokeMethodResponse, error) {
+	// TODO: Once resiliency is out of preview, we can have this be the only path.
+	if d.isResiliencyEnabled {
+		if !d.resiliency.PolicyDefined(app.id, resiliency.Endpoint) {
+			retriesExhaustedPath := false // Used to track final error state.
+			nullifyResponsePath := false  // Used to track final response state.
+			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
+			var resp *invokev1.InvokeMethodResponse
+			err := policy(func(ctx context.Context) (rErr error) {
+				retriesExhaustedPath = false
+				resp, rErr = fn(ctx, app.id, app.namespace, app.address, req)
+				if rErr == nil {
+					return nil
+				}
+
+				code := status.Code(rErr)
+				if code == codes.Unavailable || code == codes.Unauthenticated {
+					_, teardown, connerr := d.connectionCreatorFn(ctx, app.address, app.id, app.namespace, false, true, false)
+					defer teardown()
+					if connerr != nil {
+						nullifyResponsePath = true
+						return backoff.Permanent(connerr)
+					}
+					retriesExhaustedPath = true
+					return rErr
+				}
+				return backoff.Permanent(rErr)
+			})
+			// To maintain consistency with the existing built-in retries, we do some transformations/error handling.
+			if retriesExhaustedPath {
+				return nil, errors.Errorf("failed to invoke target %s after %v retries. Error: %s", app.id, numRetries, err.Error())
+			}
+
+			if nullifyResponsePath {
+				resp = nil
+			}
+
+			// We're safe to Unwrap here because it's either nil or a permanent error which contains the Unwrap method.
+			return resp, errors.Unwrap(err)
+		}
+		return fn(ctx, app.id, app.namespace, app.address, req)
+	}
 	for i := 0; i < numRetries; i++ {
 		resp, err := fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {
@@ -154,7 +209,8 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, connerr := d.connectionCreatorFn(context.TODO(), app.address, app.id, app.namespace, false, true, false)
+			_, teardown, connerr := d.connectionCreatorFn(context.TODO(), app.address, app.id, app.namespace, false, true, false)
+			defer teardown()
 			if connerr != nil {
 				return nil, connerr
 			}
@@ -181,7 +237,8 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
+	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
+	defer teardown()
 	if err != nil {
 		return nil, err
 	}

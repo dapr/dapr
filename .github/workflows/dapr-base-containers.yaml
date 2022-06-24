@@ -14,17 +14,25 @@
 name: dapr-base-containers
 
 on:
+  # Manual trigger
+  workflow_dispatch:
+  # Dispatch on external events
   repository_dispatch:
     types: [windows-base]
 jobs:
   build:
-    name: Build base windows images
+    name: Build base Windows images
     runs-on: windows-2019
     env:
       WINDOWS_VERSION: 1809
       TARGET_OS: windows
-      DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
     steps:
+      - name: Set up for manual runs
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
       - name: Parse event payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@0.3.0
@@ -45,17 +53,51 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
-      - name: docker login
-        if: env.CHECKOUT_REPO != ''
+      - name: Set REPO_OWNER
+        shell: bash
+        run: |
+          REPO_OWNER=${{ github.repository_owner }}
+          # Lowercase the value
+          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
+      - name: Docker Hub login
+        if: env.CHECKOUT_REPO != '' && env.DAPR_REGISTRY != ''
+        env:
+          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: Build docker windows base images
+      - name: GitHub container registry login
         if: env.CHECKOUT_REPO != ''
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Windows base images for Docker Hub
+        if: env.CHECKOUT_REPO != '' && env.DAPR_REGISTRY != ''
+        env:
+          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
         run: |
           echo "Build docker image..."
           make docker-windows-base-build
-      - name: Push docker windows base images
+      - name: Push Windows base images to Docker Hub
+        if: env.CHECKOUT_REPO != '' && env.DAPR_REGISTRY != ''
+        env:
+          DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+        run: |
+          echo "Push docker image..."
+          make docker-windows-base-push
+      # If the images were built for Docker Hub, this step is cached
+      - name: Build Windows base images for GHCR
         if: env.CHECKOUT_REPO != ''
+        env:
+          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
           echo "Build docker image..."
+          make docker-windows-base-build
+      - name: Push Windows base images to GHCR
+        if: env.CHECKOUT_REPO != ''
+        env:
+          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
+        run: |
+          echo "Push docker image..."
           make docker-windows-base-push

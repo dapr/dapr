@@ -104,7 +104,8 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 
 	cErr := policy(func(ctx context.Context) (rErr error) {
 		// We require that the director's returned context inherits from the serverStream.Context().
-		outgoingCtx, backendConn, err := s.director(serverStream.Context(), fullMethodName)
+		outgoingCtx, backendConn, teardown, err := s.director(serverStream.Context(), fullMethodName)
+		defer teardown()
 		if err != nil {
 			return err
 		}

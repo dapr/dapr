@@ -24,6 +24,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -38,6 +39,12 @@ var log = logger.NewLogger("dapr.test")
 
 func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
 	resiliency := resiliency_v1alpha.Resiliency{
+		TypeMeta: v1.TypeMeta{
+			Kind: "Resiliency",
+		},
+		ObjectMeta: v1.ObjectMeta{
+			Name: "resiliency",
+		},
 		Spec: resiliency_v1alpha.ResiliencySpec{
 			Policies: resiliency_v1alpha.Policies{
 				Timeouts: map[string]string{
@@ -227,6 +234,27 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 	resiliency := LoadKubernetesResiliency(log, "default", "default",
 		getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.NotNil(t, resiliency)
+	assert.Len(t, resiliency, 1)
+	assert.Equal(t, "Resiliency", resiliency[0].TypeMeta.Kind)
+	assert.Equal(t, "resiliency", resiliency[0].ObjectMeta.Name)
+}
+
+func TestLoadStandaloneResiliency(t *testing.T) {
+	t.Run("test load resiliency", func(t *testing.T) {
+		configs := LoadStandaloneResiliency(log, "app1", "./testdata")
+		assert.NotNil(t, configs)
+		assert.Len(t, configs, 2)
+		assert.Equal(t, "Resiliency", configs[0].Kind)
+		assert.Equal(t, "resiliency", configs[0].Name)
+		assert.Equal(t, "Resiliency", configs[1].Kind)
+		assert.Equal(t, "resiliency", configs[1].Name)
+	})
+
+	t.Run("test load resiliency skips other types", func(t *testing.T) {
+		configs := LoadStandaloneResiliency(log, "app1", "../components")
+		assert.NotNil(t, configs)
+		assert.Len(t, configs, 0)
+	})
 }
 
 func TestParseActorCircuitBreakerScope(t *testing.T) {
@@ -291,4 +319,103 @@ func TestResiliencyScopeIsRespected(t *testing.T) {
 
 	resiliencies = LoadStandaloneResiliency(log, "app3", "./testdata")
 	assert.Len(t, resiliencies, 1)
+}
+
+func TestBuiltInPoliciesAreCreated(t *testing.T) {
+	r := FromConfigurations(log)
+	assert.NotNil(t, r.retries[string(BuiltInServiceRetries)])
+	retry := r.retries[string(BuiltInServiceRetries)]
+	assert.Equal(t, int64(3), retry.MaxRetries)
+	assert.Equal(t, time.Second, retry.Duration)
+}
+
+func TestResiliencyHasTargetDefined(t *testing.T) {
+	r := &resiliency_v1alpha.Resiliency{
+		Spec: resiliency_v1alpha.ResiliencySpec{
+			Targets: resiliency_v1alpha.Targets{
+				Apps: map[string]resiliency_v1alpha.EndpointPolicyNames{
+					"definedApp": {},
+				},
+				Actors: map[string]resiliency_v1alpha.ActorPolicyNames{
+					"definedActor": {},
+				},
+				Components: map[string]resiliency_v1alpha.ComponentPolicyNames{
+					"definedComponent": {},
+				},
+			},
+		},
+	}
+	config := FromConfigurations(log, r)
+
+	assert.False(t, config.PolicyDefined("badApp", Endpoint))
+	assert.False(t, config.PolicyDefined("badActor", Actor))
+	assert.False(t, config.PolicyDefined("badComponent", Component))
+	assert.True(t, config.PolicyDefined("definedApp", Endpoint))
+	assert.True(t, config.PolicyDefined("definedActor", Actor))
+	assert.True(t, config.PolicyDefined("definedComponent", Component))
+}
+
+func TestResiliencyHasBuiltInPolicy(t *testing.T) {
+	r := FromConfigurations(log)
+	assert.NotNil(t, r)
+	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInServiceRetries))
+	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInActorRetries))
+	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInActorReminderRetries))
+	assert.NotNil(t, r.BuiltInPolicy(context.Background(), BuiltInInitializationRetries))
+}
+
+func TestResiliencyCannotLowerBuiltInRetriesPastThree(t *testing.T) {
+	config := &resiliency_v1alpha.Resiliency{
+		Spec: resiliency_v1alpha.ResiliencySpec{
+			Policies: resiliency_v1alpha.Policies{
+				Retries: map[string]resiliency_v1alpha.Retry{
+					string(BuiltInServiceRetries): {
+						Policy:     "constant",
+						Duration:   "5s",
+						MaxRetries: 1,
+					},
+				},
+			},
+		},
+	}
+	r := FromConfigurations(log, config)
+	assert.NotNil(t, r)
+	assert.Equal(t, int64(3), r.retries[string(BuiltInServiceRetries)].MaxRetries)
+}
+
+func TestResiliencyProtectedPolicyCannotBeChanged(t *testing.T) {
+	config := &resiliency_v1alpha.Resiliency{
+		Spec: resiliency_v1alpha.ResiliencySpec{
+			Policies: resiliency_v1alpha.Policies{
+				Retries: map[string]resiliency_v1alpha.Retry{
+					string(BuiltInActorNotFoundRetries): {
+						Policy:     "constant",
+						Duration:   "5s",
+						MaxRetries: 10,
+					},
+				},
+			},
+		},
+	}
+	r := FromConfigurations(log, config)
+	assert.NotNil(t, r)
+	assert.Equal(t, int64(5), r.retries[string(BuiltInActorNotFoundRetries)].MaxRetries)
+}
+
+func TestResiliencyIsBuiltInPolicy(t *testing.T) {
+	r := FromConfigurations(log)
+	assert.NotNil(t, r)
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInServiceRetries)))
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorRetries)))
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorReminderRetries)))
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInActorNotFoundRetries)))
+	assert.True(t, r.isBuiltInPolicy(string(BuiltInInitializationRetries)))
+	assert.False(t, r.isBuiltInPolicy("Not a built in"))
+}
+
+func TestResiliencyIsProtectedPolicy(t *testing.T) {
+	r := FromConfigurations(log)
+	assert.True(t, r.isProtectedPolicy(string(BuiltInActorNotFoundRetries)))
+	assert.False(t, r.isProtectedPolicy(string(BuiltInActorRetries)))
+	assert.False(t, r.isProtectedPolicy("Random name"))
 }

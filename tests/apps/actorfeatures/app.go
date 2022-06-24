@@ -20,12 +20,13 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 
 	"github.com/gorilla/mux"
 )
@@ -46,7 +47,7 @@ const (
 	secondsToWaitInMethod           = 5
 )
 
-var httpClient = newHTTPClient()
+var httpClient = utils.NewHTTPClient()
 
 type daprActor struct {
 	actorType string
@@ -116,10 +117,12 @@ type TempTransactionalDelete struct {
 	Key string `json:"key"`
 }
 
-var actorLogs = []actorLogEntry{}
-var actorLogsMutex = &sync.Mutex{}
-var registeredActorType = getActorType()
-var actors sync.Map
+var (
+	actorLogs           = []actorLogEntry{}
+	actorLogsMutex      = &sync.Mutex{}
+	registeredActorType = getActorType()
+	actors              sync.Map
+)
 
 var envOverride sync.Map
 
@@ -208,7 +211,7 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
-	var daprConfigResponse = daprConfig{
+	daprConfigResponse := daprConfig{
 		[]string{getActorType()},
 		actorIdleTimeout,
 		actorScanInterval,
@@ -483,7 +486,6 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			return err
 		}
 	} else if testName == "getstatetest" {
-
 		// perform a get on a key saved above
 		url := fmt.Sprintf(actorGetStateURLFormat, actorType, id, "key1")
 
@@ -546,7 +548,6 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			return err
 		}
 	} else if testName == "getstatetest2" {
-
 		// perform a get on an existing key
 		url := fmt.Sprintf(actorGetStateURLFormat, actorType, id, "key1")
 
@@ -603,7 +604,8 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 	defer res.Body.Close()
 
 	if res.StatusCode != expectedHTTPStatusCode {
-		errBody, err := io.ReadAll(res.Body)
+		var errBody []byte
+		errBody, err = io.ReadAll(res.Body)
 		if err == nil {
 			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody))
 			return nil, t
@@ -628,12 +630,15 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 
 // epoch returns the current unix epoch timestamp
 func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
+	return int(time.Now().UnixMilli())
 }
 
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
@@ -662,23 +667,7 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func newHTTPClient() *http.Client {
-	dialer := &net.Dialer{ //nolint:exhaustivestruct
-		Timeout: 5 * time.Second,
-	}
-	netTransport := &http.Transport{ //nolint:exhaustivestruct
-		DialContext:         dialer.DialContext,
-		TLSHandshakeTimeout: 5 * time.Second,
-	}
-
-	return &http.Client{ //nolint:exhaustivestruct
-		Timeout:   30 * time.Second,
-		Transport: netTransport,
-	}
-}
-
 func main() {
 	log.Printf("Actor App - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true)
 }

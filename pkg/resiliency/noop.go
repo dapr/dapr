@@ -64,3 +64,13 @@ func (*NoOp) ComponentOutboundPolicy(ctx context.Context, name string) Runner {
 		return oper(ctx)
 	}
 }
+
+func (*NoOp) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner {
+	return func(oper Operation) error {
+		return oper(ctx)
+	}
+}
+
+func (*NoOp) PolicyDefined(target string, policyType PolicyType) bool {
+	return true
+}

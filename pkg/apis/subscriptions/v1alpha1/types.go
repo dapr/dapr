@@ -35,12 +35,12 @@ type Subscription struct {
 type SubscriptionSpec struct {
 	Topic      string `json:"topic"`
 	Pubsubname string `json:"pubsubname"`
+
 	// +optional
-	Metadata map[string]string `json:"metadata,omitempty"`
-	Route    string            `json:"route"`
-	// Use data as payload.
-	// +optional
-	DataAsPayload bool `json:"dataAsPayload,omitempty"`
+	Metadata        map[string]string `json:"metadata,omitempty"`
+	Route           string            `json:"route"`
+	DeadLetterTopic string            `json:"deadLetterTopic,omitempty"`
+	DataAsPayload   bool              `json:"dataAsPayload,omitempty"`
 }
 
 // +kubebuilder:object:root=true
