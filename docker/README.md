@@ -18,7 +18,9 @@ The Dev Container can be rebuilt with custom options. Relevant args (and their d
 * `HELM_VERSION` (default: `latest`)
 * `MINIKUBE_VERSION` (default: `latest`)
 * `DAPR_CLI_VERSION` (default: `latest`)
-* `PROTOC_VERSION` (default: `3.14.0"`)
+* `PROTOC_VERSION` (default: `21.1`)
+* `PROTOC_GEN_GO_VERSION` (default: `1.28`)
+* `GOLANGCI_LINT_VERSION` (default: `1.45.2`)
 
 ### Setup multi-arch Docker builds
 

@@ -1,5 +1,5 @@
-// Copyright Michal Witkowski.
-// Code is based on https://github.com/trusch/grpc-proxy
+// Based on https://github.com/trusch/grpc-proxy
+// Copyright Michal Witkowski. Licensed under Apache2 license: https://github.com/trusch/grpc-proxy/blob/master/LICENSE.txt
 
 package proxy
 
