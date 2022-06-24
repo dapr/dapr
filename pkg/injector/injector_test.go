@@ -15,6 +15,7 @@ package injector
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -240,7 +241,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = "config1"
 		annotations[daprAppPortKey] = appPort
-		annotations[daprLogAsJSON] = "true"
+		annotations[daprLogAsJSON] = "true" //nolint:goconst
 		annotations[daprCPULimitKey] = "100m"
 		annotations[daprMemoryLimitKey] = "1Gi"
 
@@ -672,4 +673,32 @@ func TestHandleRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAllowedControllersServiceAccountUID(t *testing.T) {
+	client := kubernetesfake.NewSimpleClientset()
+
+	testCases := []struct {
+		name      string
+		namespace string
+	}{
+		{"replicaset-controller", metav1.NamespaceSystem},
+		{"tekton-pipelines-controller", "tekton-pipelines"},
+		{"test", "test"},
+	}
+
+	for _, testCase := range testCases {
+		sa := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      testCase.name,
+				Namespace: testCase.namespace,
+			},
+		}
+		_, err := client.CoreV1().ServiceAccounts(testCase.namespace).Create(context.TODO(), sa, metav1.CreateOptions{})
+		assert.NoError(t, err)
+	}
+
+	uids, err := getServiceAccount(context.TODO(), client, AllowedServiceAccountInfos)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(uids))
 }

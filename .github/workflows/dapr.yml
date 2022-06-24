@@ -36,7 +36,7 @@ jobs:
     env:
       GOVER: "1.18"
       GOLANGCILINT_VER: v1.45.2
-      PROTOC_VERSION: "3.14.0"
+      PROTOC_VERSION: "21.1"
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org

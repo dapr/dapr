@@ -27,6 +27,7 @@ type Config struct {
 	SidecarImagePullPolicy string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
 	Namespace              string `envconfig:"NAMESPACE" required:"true"`
 	KubeClusterDomain      string `envconfig:"KUBE_CLUSTER_DOMAIN"`
+	AllowedServiceAccounts string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
 }
 
 // NewConfigWithDefaults returns a Config object with default values already

@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/dapr/dapr/tests/perf"
@@ -57,6 +58,9 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": serviceApplicationName,
+			},
 		},
 		{
 			AppName:           clientApplicationName,
@@ -74,6 +78,12 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": clientApplicationName,
+			},
+			PodAffinityLabels: map[string]string{
+				"daprtest": serviceApplicationName,
+			},
 		},
 	}
 
@@ -114,6 +124,8 @@ func TestActorActivate(t *testing.T) {
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
 	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
 	require.NoError(t, err)
@@ -143,6 +155,7 @@ func TestActorActivate(t *testing.T) {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
 	}
+	t.Logf("Actual QPS: %.2f, expected QPS: %d", daprResult.ActualQPS, p.QPS)
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{daprResult},
