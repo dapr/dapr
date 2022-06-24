@@ -784,6 +784,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			c.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
 				RunAsUserName: &userName,
 			}
+			break
 		}
 	}
 
