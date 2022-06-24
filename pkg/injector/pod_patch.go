@@ -775,6 +775,16 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
 
+	// This is a special case that requires administrator priveleges in Windows containers
+	// to install the certificates to the root store. If this environment variable is set,
+	// the container security context should be set to run as administrator.
+	for _, env := range c.Env {
+		if env.Name == "SSL_CERT_DIR" {
+			userName := "ContainerAdministrator"
+			c.SecurityContext.WindowsOptions.RunAsUserName = &userName
+		}
+	}
+
 	if socketVolumeMount != nil {
 		c.VolumeMounts = []corev1.VolumeMount{*socketVolumeMount}
 	}
