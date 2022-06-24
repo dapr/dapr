@@ -19,6 +19,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 
+	"github.com/dapr/kit/logger"
+
 	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -26,7 +28,6 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.test")
@@ -181,7 +182,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionToDisk(s, filePath)
 
 		subs := DeclarativeSelfHosted(dir, log)
-		assert.Len(t, subs, 2)
+		assert.Len(t, subs, 3)
 	})
 
 	t.Run("no subscriptions loaded", func(t *testing.T) {

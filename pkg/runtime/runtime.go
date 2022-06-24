@@ -653,7 +653,7 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 				return nil
 			}
 
-			routePath, shouldProcess, dataAsPayload, err := findMatchingRoute(routeRules, cloudEvent, a.featureRoutingEnabled)
+			routePath, shouldProcess, dataAsPayload, err := findMatchingRoute(routeRules, cloudEvent)
 			if err != nil {
 				log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
 				if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
@@ -676,7 +676,7 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 				if cloudData == nil {
 					log.Warnf("event %v in pubsub %s and topic %s is configured to use data as payload, but data was missing. Use cloud event instead", cloudEvent[pubsub.IDField], name, msg.Topic)
 				} else {
-					data, err = a.json.Marshal(cloudData)
+					data, err = json.Marshal(cloudData)
 					if err != nil {
 						log.Errorf("error serializing cloud event data in pubsub %s and topic %s: %s", name, msg.Topic, err)
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
@@ -715,7 +715,7 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}, routingEnabled bool) (path string, shouldProcess, dataAsPayload bool, err error) {
+func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}) (path string, shouldProcess, dataAsPayload bool, err error) {
 	hasRules := len(rules) > 0
 	if hasRules {
 		data := map[string]interface{}{
