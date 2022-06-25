@@ -28,7 +28,6 @@ import (
 
 	"github.com/dapr/components-contrib/configuration"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -879,7 +878,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	key, err := state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
 	if err != nil {
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 	req := state.DeleteRequest{
 		Key:      key,
@@ -907,23 +906,23 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*empty.Empty, error) {
+func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
 		key, err1 := state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
 		if err1 != nil {
-			return &empty.Empty{}, err1
+			return &emptypb.Empty{}, err1
 		}
 		req := state.DeleteRequest{
 			Key:      key,

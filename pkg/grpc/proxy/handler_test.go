@@ -10,7 +10,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-// Code is based on https://github.com/trusch/grpc-proxy
+
+// Based on https://github.com/trusch/grpc-proxy
+// Copyright Michal Witkowski. Licensed under Apache2 license: https://github.com/trusch/grpc-proxy/blob/master/LICENSE.txt
 
 package proxy
 
@@ -25,7 +27,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	pb "github.com/trusch/grpc-proxy/testservice"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,6 +36,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
+	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
@@ -51,6 +53,7 @@ const (
 
 // asserting service is implemented on the server side and serves as a handler for stuff.
 type assertingService struct {
+	pb.UnimplementedTestServiceServer
 	t *testing.T
 }
 
@@ -130,7 +133,8 @@ func (s *ProxyHappySuite) TestPingEmptyCarriesClientMetadata() {
 	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
 	out, err := s.testClient.PingEmpty(ctx, &pb.Empty{})
 	require.NoError(s.T(), err, "PingEmpty should succeed without errors")
-	require.Equal(s.T(), &pb.PingResponse{Value: pingDefaultValue, Counter: 42}, out)
+	require.Equal(s.T(), pingDefaultValue, out.Value)
+	require.Equal(s.T(), int32(42), out.Counter)
 }
 
 func (s *ProxyHappySuite) TestPingEmpty_StressTest() {
@@ -146,7 +150,8 @@ func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
 	// This is an awkward calling convention... but meh.
 	out, err := s.testClient.Ping(s.ctx(), &pb.PingRequest{Value: "foo"}, grpc.Header(&headerMd), grpc.Trailer(&trailerMd))
 	require.NoError(s.T(), err, "Ping should succeed without errors")
-	require.Equal(s.T(), &pb.PingResponse{Value: "foo", Counter: 42}, out)
+	require.Equal(s.T(), "foo", out.Value)
+	require.Equal(s.T(), int32(42), out.Counter)
 	assert.Contains(s.T(), headerMd, serverHeaderMdKey, "server response headers must contain server data")
 	assert.Len(s.T(), trailerMd, 1, "server response trailers must contain server data")
 }
