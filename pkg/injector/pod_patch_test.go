@@ -142,7 +142,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		}
 
 		// Command should be empty, image's entrypoint to be used.
-		assert.Equal(t, "", container.Command[0])
+		assert.Equal(t, 0, len(container.Command))
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// POD_NAME
@@ -208,7 +208,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		}
 
 		// Command should be empty, image's entrypoint to be used.
-		assert.Equal(t, "", container.Command[0])
+		assert.Equal(t, 0, len(container.Command))
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// POD_NAME
@@ -272,7 +272,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		}
 
 		// Command should be empty, image's entrypoint to be used.
-		assert.Equal(t, "", container.Command[0])
+		assert.Equal(t, 0, len(container.Command))
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
