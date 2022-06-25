@@ -114,6 +114,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
@@ -140,6 +141,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-mtls",
 		}
 
+		// Command should be empty, image's entrypoint to be used.
+		assert.Equal(t, "", container.Command[0])
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// POD_NAME
@@ -169,6 +172,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"pod_identity")
 
 		expectedArgs := []string{
+			"/dlv",
 			"--listen=:55555",
 			"--accept-multiclient",
 			"--headless=true",
@@ -203,7 +207,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-mtls",
 		}
 
-		assert.Equal(t, "/dlv", container.Command[0])
+		// Command should be empty, image's entrypoint to be used.
+		assert.Equal(t, "", container.Command[0])
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// POD_NAME
@@ -231,6 +236,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"pod_identity")
 
 		expectedArgs := []string{
+			"/dlv",
 			"--listen=:40000",
 			"--accept-multiclient",
 			"--headless=true",
@@ -265,7 +271,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-mtls",
 		}
 
-		assert.Equal(t, "/dlv", container.Command[0])
+		// Command should be empty, image's entrypoint to be used.
+		assert.Equal(t, "", container.Command[0])
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
@@ -286,6 +293,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
@@ -322,6 +330,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
@@ -358,6 +367,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
@@ -430,6 +440,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
