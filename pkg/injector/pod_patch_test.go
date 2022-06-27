@@ -468,6 +468,34 @@ func TestGetSideCarContainer(t *testing.T) {
 
 		assert.EqualValues(t, expectedArgs, container.Args)
 	})
+
+	t.Run("sidecar container should have the correct user configured", func(t *testing.T) {
+		testCases := []struct {
+			envVars string
+			isAdmin bool
+		}{
+			{
+				"SSL_CERT_DIR=/tmp/certificates",
+				true,
+			},
+			{
+				"SSL_CERT_FILE=/tmp/certificates/cert.pem",
+				false,
+			},
+		}
+		for _, tc := range testCases {
+			annotations := map[string]string{}
+			annotations[daprEnvKey] = tc.envVars
+			container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+
+			if tc.isAdmin {
+				assert.NotNil(t, container.SecurityContext.WindowsOptions, "SecurityContext.WindowsOptions should not be nil")
+				assert.Equal(t, "ContainerAdministrator", *container.SecurityContext.WindowsOptions.RunAsUserName, "SecurityContext.WindowsOptions.RunAsUserName should be ContainerAdministrator")
+			} else {
+				assert.Nil(t, container.SecurityContext.WindowsOptions)
+			}
+		}
+	})
 }
 
 func TestImagePullPolicy(t *testing.T) {
