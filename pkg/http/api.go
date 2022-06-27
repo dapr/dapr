@@ -1746,7 +1746,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		resp, rErr = a.actor.Call(ctx, req)
 		return rErr
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
