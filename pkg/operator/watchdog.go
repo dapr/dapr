@@ -122,9 +122,8 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 	// We are not using pagination because we may be deleting pods during the iterations
 	// The client implements some level of caching anyways
 	pod := &corev1.PodList{}
-	err := dw.client.List(ctx, pod,
-		client.InNamespace(GetNamespace()),
-	)
+	err := dw.client.List(ctx, pod, &client.ListOptions{Namespace: ""})
+
 	if err != nil {
 		log.Errorf("Failed to list pods. Error: %v", err)
 		return
