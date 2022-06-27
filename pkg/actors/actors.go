@@ -917,8 +917,11 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			if repetitionsLeft > 0 {
 				repetitionsLeft--
 			}
-			if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime); err != nil {
-				log.Errorf("error updating reminder track: %v", err)
+			_, exists = a.activeReminders.Load(reminderKey)
+			if exists {
+				if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime); err != nil {
+					log.Errorf("error updating reminder track: %v", err)
+				}
 			}
 			// if reminder is not repetitive, proceed with reminder deletion
 			if years == 0 && months == 0 && days == 0 && period == 0 {
