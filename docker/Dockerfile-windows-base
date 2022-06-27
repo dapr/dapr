@@ -13,4 +13,4 @@ COPY --from=servercore /windows/system32/netapi32.dll /windows/system32/netapi32
 # certoc is required to add new certificates to the root store.
 COPY --from=servercore /windows/system32/certoc.exe /windows/system32/certoc.exe
 
-COPY custom-scripts/setup-certificates.cmd /setup-certificates.cmd
+COPY windows-base-scripts/setup-certificates.cmd /setup-certificates.cmd

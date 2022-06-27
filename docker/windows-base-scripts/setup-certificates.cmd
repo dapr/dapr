@@ -1,5 +1,5 @@
 @ECHO OFF
-@REM Copyright 2021 The Dapr Authors
+@REM Copyright 2022 The Dapr Authors
 @REM Licensed under the Apache License, Version 2.0 (the "License");
 @REM you may not use this file except in compliance with the License.
 @REM You may obtain a copy of the License at
