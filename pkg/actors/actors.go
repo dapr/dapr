@@ -349,7 +349,11 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, targetActorAddress, appID, req)
 	}
 
-	if err != nil && !errors.Is(err, ErrDaprResponseHeader) {
+	if err != nil {
+		if errors.Is(err, ErrDaprResponseHeader) {
+			// We return the response to maintain the .NET Actor contract which communicates errors via the body, but resiliency needs the error to retry.
+			return resp, err
+		}
 		return nil, err
 	}
 	return resp, nil
@@ -521,7 +525,17 @@ func (a *actorsRuntime) callRemoteActor(
 		return nil, err
 	}
 
-	return invokev1.InternalInvokeResponse(resp)
+	invokeResponse, invokeErr := invokev1.InternalInvokeResponse(resp)
+	if invokeErr != nil {
+		return nil, invokeErr
+	}
+
+	// Generated gRPC client eats the response when we send
+	if _, ok := invokeResponse.Headers()["X-Daprerrorresponseheader"]; ok {
+		return invokeResponse, ErrDaprResponseHeader
+	}
+
+	return invokeResponse, nil
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
