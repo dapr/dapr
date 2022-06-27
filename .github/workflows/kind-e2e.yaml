@@ -175,7 +175,8 @@ jobs:
 
     - name: Build and push test apps
       run: |
-        make build-push-e2e-app-all
+        make build-e2e-app-all
+        make push-e2e-app-all
 
     - name: Setup Dapr
       run: |

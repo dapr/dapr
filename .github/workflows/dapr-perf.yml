@@ -216,6 +216,11 @@ jobs:
           make build
           make docker-build
         shell: bash
+      - name: Build e2e test apps
+        if: env.TEST_PREFIX != ''
+        run: |
+          make build-perf-app-all
+        shell: bash
       - name: Wait for Azure Container Registry deployment
         timeout-minutes: 30
         if: env.TEST_PREFIX != ''
@@ -231,15 +236,11 @@ jobs:
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash
-      - name: Push Dapr container images
+      - name: Push all container images to the registry
         if: env.TEST_PREFIX != ''
         run: |
           make docker-push
-        shell: bash
-      - name: Build and push perf test apps
-        if: env.TEST_PREFIX != ''
-        run: |
-          make build-push-perf-app-all
+          make push-perf-app-all
         shell: bash
 
   test-perf:
