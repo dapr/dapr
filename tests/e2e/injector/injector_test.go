@@ -54,7 +54,7 @@ func TestMain(m *testing.M) {
 			Name:     "local-secret-store",
 			TypeName: "secretstores.local.file",
 			MetaData: map[string]string{
-				"secretsFile": `"/tmp/secrets/secrets.json"`,
+				"secretsFile": `"/tmp/testdata/secrets.json"`,
 			},
 		},
 	}
@@ -71,7 +71,7 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
-			DaprVolumeMounts:  "storage-volume:/tmp/secrets/",
+			DaprVolumeMounts:  "storage-volume:/tmp/testdata/",
 			Volumes: []apiv1.Volume{
 				{
 					Name: "storage-volume",
