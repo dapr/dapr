@@ -154,7 +154,7 @@ resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2021-11-01' = {
   sku: {
     name: 'Premium'
     tier: 'Premium'
-    capacity: 8
+    capacity: 4
   }
   properties: {
     disableLocalAuth: false
