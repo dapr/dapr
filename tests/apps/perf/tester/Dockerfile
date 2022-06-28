@@ -1,5 +1,6 @@
 FROM golang:1.18 as build_env
 
+ENV CGO_ENABLED=0
 WORKDIR /app
 COPY app.go go.mod ./
 RUN go get -d -v && go build -o tester .
