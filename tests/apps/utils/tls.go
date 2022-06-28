@@ -11,6 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// This utility is a modified version of https://go.dev/src/crypto/tls/generate_cert.go
+
 package utils
 
 import (
@@ -22,15 +24,19 @@ import (
 	"encoding/pem"
 	"log"
 	"math/big"
+	"net"
 	"os"
+	"strings"
 	"time"
 )
 
-// GenerateTLSCertAndKey creates two new files
-// 1. cert.pem: contains the TLS certificate
-// 2. key.pem: contains the TLS key
-// If the files already exist, they are overwritten.
-func GenerateTLSCertAndKey(validFrom time.Time, validFor time.Duration) error {
+// GenerateTLSCertAndKey generates a self-signed X.509 certificate for a TLS server.
+// Outputs to 'cert.pem' and 'key.pem' and will overwrite existing files.
+//
+// host: Comma-separated hostnames and IPs to generate a certificate for
+// validFrom: The time the certificate is valid from
+// validFor: The duration the certificate is valid for
+func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Duration) error {
 	// *********************
 	// Generate private key
 	// *********************
@@ -63,14 +69,22 @@ func GenerateTLSCertAndKey(validFrom time.Time, validFor time.Duration) error {
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			Organization: []string{"Dapr"},
-			CommonName:   "Root CA",
 		},
 		NotBefore:             validFrom,
 		NotAfter:              validFrom.Add(validFor),
-		KeyUsage:              x509.KeyUsageCertSign,
+		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
+	}
+
+	hosts := strings.Split(host, ",")
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			certTemplate.IPAddresses = append(certTemplate.IPAddresses, ip)
+		} else {
+			certTemplate.DNSNames = append(certTemplate.DNSNames, h)
+		}
 	}
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &tlsKey.PublicKey, tlsKey)
