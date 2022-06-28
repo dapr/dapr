@@ -369,6 +369,12 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onRenameActorReminder,
 		},
+		{
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
+			Route:   "actors/{actorType}/{actorId}/publish/{pubsubname}/{topic:*}",
+			Version: apiVersionV1,
+			Handler: a.onActorPublish,
+		},
 	}
 }
 
@@ -1878,7 +1884,18 @@ func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
 	}()
 }
 
+func (a *api) onActorPublish(reqCtx *fasthttp.RequestCtx) {
+	log.Warn("This is a hardcoded warning. No worries")
+	actortype := reqCtx.UserValue(actorTypeParam).(string)
+	actorid := reqCtx.UserValue(actorIDParam).(string)
+	a.onPubSubPublish(reqCtx, actortype, actorid)
+}
+
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
+	a.onPubSubPublish(reqCtx, "", "")
+}
+
+func (a *api) onPubSubPublish(reqCtx *fasthttp.RequestCtx, actortype string, actorid string) {
 	if a.pubsubAdapter == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1945,6 +1962,8 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          pubsubName,
+			ActorType:       actortype,
+			ActorID:         actorid,
 		})
 		if err != nil {
 			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",

@@ -29,6 +29,8 @@ type CloudEvent struct {
 	DataContentType string
 	TraceID         string
 	TraceState      string
+	ActorType       string
+	ActorID         string
 }
 
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
