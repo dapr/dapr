@@ -16,7 +16,6 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -398,11 +397,8 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 	fakeExternalIP := "10.10.10.100"
 	testApp := testAppDescription()
 
-	// Set fake minikube node IP address
-	oldMinikubeIP := os.Getenv(MiniKubeIPEnvVar)
-
 	t.Run("Minikube environment", func(t *testing.T) {
-		os.Setenv(MiniKubeIPEnvVar, fakeMinikubeNodeIP)
+		t.Setenv(MiniKubeIPEnvVar, fakeMinikubeNodeIP)
 
 		client := newFakeKubeClient()
 		// Set up reactor to fake verb
@@ -435,7 +431,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 	t.Run("Kubernetes environment", func(t *testing.T) {
 		getVerbCalled := 0
 		const expectedGetVerbCalled = 2
-		os.Setenv(MiniKubeIPEnvVar, "")
+		t.Setenv(MiniKubeIPEnvVar, "")
 
 		client := newFakeKubeClient()
 		// Set up reactor to fake verb
@@ -483,9 +479,6 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf("%s:%d", fakeExternalIP, fakeNodePort), externalURL)
 		assert.Equal(t, expectedGetVerbCalled, getVerbCalled)
 	})
-
-	// Recover minikube ip environment variable
-	os.Setenv(MiniKubeIPEnvVar, oldMinikubeIP)
 }
 
 func TestWaitUntilServiceStateDeleted(t *testing.T) {
