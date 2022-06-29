@@ -22,9 +22,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -135,7 +135,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 		Id: "bindinginputgrpc",
 		Message: &commonv1pb.InvokeRequest{
 			Method: "GetReceivedTopics",
-			Data:   &any.Any{},
+			Data:   &anypb.Any{},
 			HttpExtension: &commonv1pb.HTTPExtension{
 				Verb: commonv1pb.HTTPExtension_POST,
 			},

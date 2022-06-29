@@ -14,7 +14,6 @@ limitations under the License.
 package config
 
 import (
-	"os"
 	"sort"
 	"testing"
 
@@ -58,7 +57,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 	}
 
 	t.Run("Parse environment variables", func(t *testing.T) {
-		os.Setenv("DAPR_SECRET", "keepitsecret")
+		t.Setenv("DAPR_SECRET", "keepitsecret")
 		config, _, err := LoadStandaloneConfiguration("./testdata/env_variables_config.yaml")
 		assert.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")

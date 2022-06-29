@@ -66,12 +66,22 @@ ifeq ($(LOCAL_OS),Linux)
 else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
 else
-   TARGET_OS_LOCAL ?= windows
+   TARGET_OS_LOCAL = windows
    PROTOC_GEN_GO_NAME := "protoc-gen-go.exe"
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_NAME+= "v1.26.0"
+PROTOC_GEN_GO_NAME+= "v1.28.0"
+
+ifeq ($(TARGET_OS_LOCAL),windows)
+	BUILD_TOOLS_BIN ?= build-tools.exe
+	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
+	RUN_BUILD_TOOLS ?= cd .build-tools; go.exe run .
+else
+	BUILD_TOOLS_BIN ?= build-tools
+	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
+	RUN_BUILD_TOOLS ?= cd .build-tools; go run .
+endif
 
 # Default docker container and e2e test targst.
 TARGET_OS ?= linux
@@ -281,9 +291,6 @@ endef
 $(foreach MODFILE,$(MODFILES),$(eval $(call modtidy-target,$(MODFILE))))
 
 # Enumerate all generated modtidy targets
-# Note that the order of execution matters: root and tests/certification go.mod
-# are dependencies in each certification test. This order is preserved by the
-# tree walk when finding the go.mod files.
 TIDY_MODFILES:=$(foreach ITEM,$(MODFILES),modtidy-$(ITEM))
 
 # Define modtidy-all action trigger to run make on all generated modtidy targets
@@ -316,8 +323,8 @@ check: format test lint
 ################################################################################
 .PHONY: init-proto
 init-proto:
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.26
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2.0
 
 ################################################################################
 # Target: gen-proto                                                            #
@@ -360,14 +367,14 @@ check-diff:
 ################################################################################
 .PHONY: check-proto-version
 check-proto-version: ## Checking the version of proto related tools
-	@test "$(shell protoc --version)" = "libprotoc 3.14.0" \
-	|| { echo "please use protoc 3.14.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	@test "$(shell protoc --version)" = "libprotoc 3.21.1" \
+	|| { echo "please use protoc 3.21.1 (protobuf 21.1) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
-	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc 1.1.0" \
-	|| { echo "please use protoc-gen-go-grpc 1.1.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc 1.2.0" \
+	|| { echo "please use protoc-gen-go-grpc 1.2.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 	@test "$(shell protoc-gen-go --version 2>&1)" = "$(PROTOC_GEN_GO_NAME)" \
-	|| { echo "please use protoc-gen-go v1.26.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+	|| { echo "please use protoc-gen-go v1.28.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
 # Target: check-proto-diff                                                           #
@@ -384,6 +391,14 @@ check-proto-diff:
 	git diff --exit-code ./pkg/proto/runtime/v1/dapr_grpc.pb.go # check no changes
 	git diff --exit-code ./pkg/proto/sentry/v1/sentry.pb.go # check no changes
 
+
+################################################################################
+# Target: compile-build-tools                                                              #
+################################################################################
+compile-build-tools:
+ifeq (,$(wildcard $(BUILD_TOOLS)))
+	cd .build-tools; CGO_ENABLED=$(CGO) GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go build -o $(BUILD_TOOLS_BIN) .
+endif
 
 ################################################################################
 # Target: codegen                                                              #

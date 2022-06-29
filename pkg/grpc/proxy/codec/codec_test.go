@@ -10,7 +10,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-// Code is based on https://github.com/trusch/grpc-proxy
+
+// Based on https://github.com/trusch/grpc-proxy
+// Copyright Michal Witkowski. Licensed under Apache2 license: https://github.com/trusch/grpc-proxy/blob/master/LICENSE.txt
 
 package codec
 
@@ -19,8 +21,9 @@ import (
 
 	_ "github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	pb "github.com/trusch/grpc-proxy/testservice"
 	"google.golang.org/grpc/encoding"
+
+	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 )
 
 func TestCodec_ReadYourWrites(t *testing.T) {
@@ -60,5 +63,6 @@ func TestProtoCodec_ReadYourWrites(t *testing.T) {
 	err = proxyCd.Unmarshal(out2p1, p2)
 	require.NoError(t, err, "unmarshalling must go ok")
 
-	require.Equal(t, *p1, *p2)
+	require.Equal(t, p1.ProtoReflect(), p2.ProtoReflect())
+	require.Equal(t, p1.Value, p2.Value)
 }
