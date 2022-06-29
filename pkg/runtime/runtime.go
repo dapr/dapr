@@ -2150,17 +2150,6 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 			log.Warn(err)
 		}
 	}
-	// Close bindings if they implement `io.Closer`
-	// TODO: Separate the input part of bindings and close output here, then close the input via cancelation of a.ctx
-	for name, binding := range a.inputBindings {
-		if closer, ok := binding.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing input binding %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
-	}
 	if closer, ok := a.nameResolver.(io.Closer); ok {
 		if err := closer.Close(); err != nil {
 			err = fmt.Errorf("error closing name resolver: %w", err)
@@ -2192,7 +2181,7 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 
 	log.Infof("dapr shutting down.")
 
-	log.Infof("Stopping PubSub subscribers")
+	log.Infof("Stopping PubSub subscribers and input bindings")
 	a.cancel()
 	a.stopActor()
 	log.Info("Stopping Dapr APIs")
