@@ -288,8 +288,8 @@ require (
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
 	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b // indirect
 	github.com/savsgio/gotils v0.0.0-20210217112953-d4a072536008 // indirect
-	github.com/sendgrid/rest v2.6.3+incompatible // indirect
-	github.com/sendgrid/sendgrid-go v3.5.0+incompatible // indirect
+	github.com/sendgrid/rest v2.6.9+incompatible // indirect
+	github.com/sendgrid/sendgrid-go v3.11.1+incompatible // indirect
 	github.com/shirou/gopsutil v3.20.11+incompatible // indirect
 	github.com/shirou/gopsutil/v3 v3.21.6 // indirect
 	github.com/sijms/go-ora/v2 v2.2.22 // indirect
@@ -373,6 +373,8 @@ replace (
 )
 
 replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
+
+replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20220629203416-07ba3de80dc8
 
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
