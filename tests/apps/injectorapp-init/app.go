@@ -17,9 +17,20 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"time"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
-func main() {
+func writeTLSCerts() {
+	host := "" // TODO: figure this out
+	validFrom := time.Now()
+	validFor := time.Hour
+	directory := "/tmp/testdata"
+	utils.GenerateTLSCertAndKey(host, validFrom, validFor, directory)
+}
+
+func writeSecrets() {
 	data := []byte(`{"secret-key": "secret-value"}`)
 	err := os.WriteFile("/tmp/testdata/secrets.json", data, fs.ModePerm)
 	if err != nil {
@@ -27,4 +38,12 @@ func main() {
 	} else {
 		log.Printf("secret file is written")
 	}
+}
+
+func main() {
+	// used by the injector test to validate volume mount
+	writeSecrets()
+
+	// used by the injector test to validate root cert installation feature
+	writeTLSCerts()
 }

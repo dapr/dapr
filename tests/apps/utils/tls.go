@@ -26,6 +26,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"path"
 	"strings"
 	"time"
 )
@@ -36,7 +37,8 @@ import (
 // host: Comma-separated hostnames and IPs to generate a certificate for
 // validFrom: The time the certificate is valid from
 // validFor: The duration the certificate is valid for
-func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Duration) error {
+// directory: Path to write the files to
+func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Duration, directory string) error {
 	// *********************
 	// Generate private key
 	// *********************
@@ -51,7 +53,7 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		return err
 	}
 
-	if err := bytesToPemFile("key.pem", "EC PRIVATE KEY", b); err != nil {
+	if err := bytesToPemFile(path.Join(directory, "key.pem"), "EC PRIVATE KEY", b); err != nil {
 		log.Printf("Unable to write key.pem: %v", err)
 		return err
 	}
@@ -93,7 +95,7 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		return err
 	}
 
-	if err := bytesToPemFile("cert.pem", "CERTIFICATE", certBytes); err != nil {
+	if err := bytesToPemFile(path.Join(directory, "cert.pem"), "CERTIFICATE", certBytes); err != nil {
 		log.Printf("Unable to write cert.pem: %v", err)
 		return err
 	}
