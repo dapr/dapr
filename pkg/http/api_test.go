@@ -292,6 +292,139 @@ func TestPubSubEndpoints(t *testing.T) {
 		}
 	})
 
+	fakeServer.StartServer(testAPI.constructActorEndpoints())
+
+	t.Run("Publish actor successfully - 204 No Content", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/fakeTopic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{key\"\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		}
+	})
+
+	t.Run("Publish actor multi path successfully - 204 No Content", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/A/B/C", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		}
+	})
+
+	t.Run("Publish actor unsuccessfully - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/errorpubsub/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+		}
+	})
+
+	t.Run("Publish actor without topic name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish actor without topic name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish actor with topic name '/' - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname//", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "success publishing with %s", method)
+		}
+	})
+	t.Run("Publish actor without topic or pubsub name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish actor without topic or pubsub name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Pubsub actor not configured - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		savePubSubAdapter := testAPI.pubsubAdapter
+		testAPI.pubsubAdapter = nil
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+		}
+		testAPI.pubsubAdapter = savePubSubAdapter
+	})
+
+	t.Run("Pubsub actor not configured - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/errnotfound/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "pubsub 'errnotfound' not found", resp.ErrorBody["message"])
+		}
+	})
+
+	t.Run("Pubsub actor not configured - 403", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/errnotallowed/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
+		}
+	})
+
 	fakeServer.Shutdown()
 }
 

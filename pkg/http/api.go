@@ -1885,7 +1885,6 @@ func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onActorPublish(reqCtx *fasthttp.RequestCtx) {
-	log.Warn("This is a hardcoded warning. No worries")
 	actortype := reqCtx.UserValue(actorTypeParam).(string)
 	actorid := reqCtx.UserValue(actorIDParam).(string)
 	a.onPubSubPublish(reqCtx, actortype, actorid)
