@@ -73,6 +73,7 @@ type API interface {
 
 	// Dapr Service methods
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
+	PublishActorEvent(ctx context.Context, in *runtimev1pb.PublishActorEventRequest) (*emptypb.Empty, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
@@ -368,6 +369,112 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, err
 	}
 	return resp.Proto(), nil
+}
+
+func (a *api) PublishActorEvent(ctx context.Context, in *runtimev1pb.PublishActorEventRequest) (*emptypb.Empty, error) {
+	if a.pubsubAdapter == nil {
+		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	pubsubName := in.PubsubName
+	if pubsubName == "" {
+		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	topic := in.Topic
+	if topic == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	rawPayload, metaErr := contrib_metadata.IsRawPayload(in.Metadata)
+	if metaErr != nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	span := diag_utils.SpanFromContext(ctx)
+	// Populate W3C traceparent to cloudevent envelope
+	corID := diag.SpanContextToW3CString(span.SpanContext())
+	// Populate W3C tracestate to cloudevent envelope
+	traceState := diag.TraceStateToW3CString(span.SpanContext())
+
+	body := []byte{}
+	if in.Data != nil {
+		body = in.Data
+	}
+
+	data := body
+
+	if !rawPayload {
+		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+			ID:              a.id,
+			Topic:           in.Topic,
+			DataContentType: in.DataContentType,
+			Data:            body,
+			TraceID:         corID,
+			TraceState:      traceState,
+			Pubsub:          in.PubsubName,
+			ActorType:       in.ActorType,
+			ActorID:         in.ActorId,
+		})
+		if err != nil {
+			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+			apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
+
+		features := thepubsub.Features()
+		pubsub.ApplyMetadata(envelope, features, in.Metadata)
+
+		data, err = json.Marshal(envelope)
+		if err != nil {
+			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+			apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
+	}
+
+	req := pubsub.PublishRequest{
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Data:       data,
+		Metadata:   in.Metadata,
+	}
+
+	start := time.Now()
+	err := a.pubsubAdapter.Publish(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
+
+	if err != nil {
+		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
+			nerr = status.Errorf(codes.PermissionDenied, err.Error())
+		}
+
+		if errors.As(err, &runtime_pubsub.NotFoundError{}) {
+			nerr = status.Errorf(codes.NotFound, err.Error())
+		}
+		apiServerLogger.Debug(nerr)
+		return &emptypb.Empty{}, nerr
+	}
+
+	return &emptypb.Empty{}, nil
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {

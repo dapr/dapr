@@ -53,6 +53,9 @@ service Dapr {
   // Publishes events to the specific topic.
   rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
 
+  // Publishes an event from an actor with a specific topic.
+  rpc PublishActorEvent(PublishActorEventRequest) returns (google.protobuf.Empty) {}
+
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
 
@@ -285,6 +288,33 @@ message PublishEventRequest {
   // metadata property:
   // - key : the key of the message.
   map<string, string> metadata = 5;
+}
+
+// PublishActorEventRequest is the message to publish event from an actor with data to pubsub topic
+message PublishActorEventRequest {
+  //The type of the actor
+  string actor_type = 1;
+
+  //The id of the actor
+  string actor_id = 2;
+
+  // The name of the pubsub component
+  string pubsub_name = 3;
+
+  // The pubsub topic
+  string topic = 4;
+
+  // The data which will be published to topic.
+  bytes data = 5;
+
+  // The content type for the data (optional).
+  string data_content_type = 6;
+
+  // The metadata passing to pub components
+  //
+  // metadata property:
+  // - key : the key of the message.
+  map<string, string> metadata = 7;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings

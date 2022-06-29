@@ -158,6 +158,10 @@ func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishE
 	return &emptypb.Empty{}, nil
 }
 
+func (m *mockGRPCAPI) PublishActorEvent(ctx context.Context, in *runtimev1pb.PublishActorEventRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
 func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	return &commonv1pb.InvokeResponse{}, nil
 }
@@ -1790,6 +1794,82 @@ func TestDeleteState(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPublishActorTopic(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+
+	srv := &api{
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			PublishFn: func(req *pubsub.PublishRequest) error {
+				if req.Topic == "error-topic" {
+					return errors.New("error when publish")
+				}
+
+				if req.Topic == "err-not-found" {
+					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+				}
+
+				if req.Topic == "err-not-allowed" {
+					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				}
+
+				return nil
+			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				return &daprt.MockPubSub{}
+			},
+		},
+	}
+	server := startTestServerAPI(port, srv)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	_, err := client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+		ActorType:  "fakeActorType",
+		ActorId:    "fakeActorID",
+		PubsubName: "pubsub",
+	})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+		ActorType:  "fakeActorType",
+		ActorId:    "fakeActorID",
+		PubsubName: "pubsub",
+		Topic:      "topic",
+	})
+	assert.Nil(t, err)
+
+	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+		ActorType:  "fakeActorType",
+		ActorId:    "fakeActorID",
+		PubsubName: "pubsub",
+		Topic:      "error-topic",
+	})
+	assert.Equal(t, codes.Internal, status.Code(err))
+
+	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+		ActorType:  "fakeActorType",
+		ActorId:    "fakeActorID",
+		PubsubName: "pubsub",
+		Topic:      "err-not-found",
+	})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+
+	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+		ActorType:  "fakeActorType",
+		ActorId:    "fakeActorID",
+		PubsubName: "pubsub",
+		Topic:      "err-not-allowed",
+	})
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestPublishTopic(t *testing.T) {
