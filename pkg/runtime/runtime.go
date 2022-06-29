@@ -1074,14 +1074,14 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	return appResponseBody, nil
 }
 
-func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
-	err := binding.Read(func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
+func (a *DaprRuntime) readFromBinding(subscribeCtx context.Context, name string, binding bindings.InputBinding) error {
+	err := binding.Read(subscribeCtx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		if resp != nil {
 			start := time.Now()
 			b, err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
 			elapsed := diag.ElapsedSince(start)
 
-			diag.DefaultComponentMonitoring.InputBindingEvent(context.TODO(), name, err == nil, elapsed)
+			diag.DefaultComponentMonitoring.InputBindingEvent(context.Background(), name, err == nil, elapsed)
 
 			if err != nil {
 				log.Debugf("error from app consumer for binding [%s]: %s", name, err)
@@ -2528,22 +2528,21 @@ func (a *DaprRuntime) startSubscribing() {
 	}
 }
 
-func (a *DaprRuntime) startReadingFromBindings() error {
+func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	if a.appChannel == nil {
 		return errors.New("app channel not initialized")
 	}
 	for name, binding := range a.inputBindings {
-		go func(name string, binding bindings.InputBinding) {
-			if !a.isAppSubscribedToBinding(name) {
-				log.Infof("app has not subscribed to binding %s.", name)
-				return
-			}
+		if !a.isAppSubscribedToBinding(name) {
+			log.Infof("app has not subscribed to binding %s.", name)
+			continue
+		}
 
-			err := a.readFromBinding(name, binding)
-			if err != nil {
-				log.Errorf("error reading from input binding %s: %s", name, err)
-			}
-		}(name, binding)
+		err = a.readFromBinding(a.ctx, name, binding)
+		if err != nil {
+			log.Errorf("error reading from input binding %s: %s", name, err)
+			continue
+		}
 	}
 	return nil
 }
