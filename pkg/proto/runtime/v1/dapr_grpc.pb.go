@@ -42,8 +42,8 @@ type DaprClient interface {
 	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Publishes an event from an actor with a specific topic.
-	PublishActorEvent(ctx context.Context, in *PublishActorEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// PublishActorEventAlpha1 Publishes an event from an actor with a specific topic.
+	PublishActorEventAlpha1(ctx context.Context, in *PublishActorEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -173,9 +173,9 @@ func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, 
 	return out, nil
 }
 
-func (c *daprClient) PublishActorEvent(ctx context.Context, in *PublishActorEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *daprClient) PublishActorEventAlpha1(ctx context.Context, in *PublishActorEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PublishActorEvent", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PublishActorEventAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -398,8 +398,8 @@ type DaprServer interface {
 	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
-	// Publishes an event from an actor with a specific topic.
-	PublishActorEvent(context.Context, *PublishActorEventRequest) (*emptypb.Empty, error)
+	// PublishActorEventAlpha1 Publishes an event from an actor with a specific topic.
+	PublishActorEventAlpha1(context.Context, *PublishActorEventRequest) (*emptypb.Empty, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -471,8 +471,8 @@ func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *Execute
 func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
 }
-func (UnimplementedDaprServer) PublishActorEvent(context.Context, *PublishActorEventRequest) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PublishActorEvent not implemented")
+func (UnimplementedDaprServer) PublishActorEventAlpha1(context.Context, *PublishActorEventRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PublishActorEventAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeBinding not implemented")
@@ -705,20 +705,20 @@ func _Dapr_PublishEvent_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_PublishActorEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Dapr_PublishActorEventAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PublishActorEventRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaprServer).PublishActorEvent(ctx, in)
+		return srv.(DaprServer).PublishActorEventAlpha1(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.Dapr/PublishActorEvent",
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/PublishActorEventAlpha1",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).PublishActorEvent(ctx, req.(*PublishActorEventRequest))
+		return srv.(DaprServer).PublishActorEventAlpha1(ctx, req.(*PublishActorEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1112,8 +1112,8 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_PublishEvent_Handler,
 		},
 		{
-			MethodName: "PublishActorEvent",
-			Handler:    _Dapr_PublishActorEvent_Handler,
+			MethodName: "PublishActorEventAlpha1",
+			Handler:    _Dapr_PublishActorEventAlpha1_Handler,
 		},
 		{
 			MethodName: "InvokeBinding",

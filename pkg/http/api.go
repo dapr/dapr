@@ -373,7 +373,7 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/publish/{pubsubname}/{topic:*}",
 			Version: apiVersionV1,
-			Handler: a.onActorPublish,
+			Handler: a.onActorPublishAlpha1,
 		},
 	}
 }
@@ -1884,14 +1884,14 @@ func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
 	}()
 }
 
-func (a *api) onActorPublish(reqCtx *fasthttp.RequestCtx) {
+func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
+	a.onPubSubPublish(reqCtx, "", "")
+}
+
+func (a *api) onActorPublishAlpha1(reqCtx *fasthttp.RequestCtx) {
 	actortype := reqCtx.UserValue(actorTypeParam).(string)
 	actorid := reqCtx.UserValue(actorIDParam).(string)
 	a.onPubSubPublish(reqCtx, actortype, actorid)
-}
-
-func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
-	a.onPubSubPublish(reqCtx, "", "")
 }
 
 func (a *api) onPubSubPublish(reqCtx *fasthttp.RequestCtx, actortype string, actorid string) {
@@ -1899,7 +1899,6 @@ func (a *api) onPubSubPublish(reqCtx *fasthttp.RequestCtx, actortype string, act
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
-
 		return
 	}
 
@@ -1908,7 +1907,6 @@ func (a *api) onPubSubPublish(reqCtx *fasthttp.RequestCtx, actortype string, act
 		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
 		log.Debug(msg)
-
 		return
 	}
 

@@ -1829,17 +1829,17 @@ func TestPublishActorTopic(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 
-	_, err := client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{})
+	_, err := client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
 		ActorType:  "fakeActorType",
 		ActorId:    "fakeActorID",
 		PubsubName: "pubsub",
 	})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
 		ActorType:  "fakeActorType",
 		ActorId:    "fakeActorID",
 		PubsubName: "pubsub",
@@ -1847,7 +1847,7 @@ func TestPublishActorTopic(t *testing.T) {
 	})
 	assert.Nil(t, err)
 
-	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
 		ActorType:  "fakeActorType",
 		ActorId:    "fakeActorID",
 		PubsubName: "pubsub",
@@ -1855,7 +1855,7 @@ func TestPublishActorTopic(t *testing.T) {
 	})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
-	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
 		ActorType:  "fakeActorType",
 		ActorId:    "fakeActorID",
 		PubsubName: "pubsub",
@@ -1863,7 +1863,7 @@ func TestPublishActorTopic(t *testing.T) {
 	})
 	assert.Equal(t, codes.NotFound, status.Code(err))
 
-	_, err = client.PublishActorEvent(context.Background(), &runtimev1pb.PublishActorEventRequest{
+	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
 		ActorType:  "fakeActorType",
 		ActorId:    "fakeActorID",
 		PubsubName: "pubsub",
