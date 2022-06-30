@@ -1152,8 +1152,8 @@ github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839/go.mod h1
 github.com/influxdata/line-protocol v0.0.0-20210311194329-9aa0e372d097 h1:vilfsDSy7TDxedi9gyBkMvAirat/oRcL0lFdJBf6tdM=
 github.com/influxdata/line-protocol v0.0.0-20210311194329-9aa0e372d097/go.mod h1:xaLFMmpvUxqXtVkUJfg9QmT88cDaCJ3ZKgdZ78oO8Qo=
 github.com/intel/goresctrl v0.2.0/go.mod h1:+CZdzouYFn5EsxgqAQTEzMfwKwuc0fVdMrT9FCCAVRQ=
-github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20220629203416-07ba3de80dc8 h1:2r2qSngfBaam/+3kuylsfQkgNmWY4IyHKhIeRTpiVMs=
-github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20220629203416-07ba3de80dc8/go.mod h1:oZz5OE9u1kBwS5zf9YrMOen0T3EnYZZB0Mc4ONUWqGg=
+github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20220630173212-3595132a79a9 h1:b9tTGz/iY7zoU1JX6ncmD8KAPqT1xjEXrrUzIDRzXKo=
+github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20220630173212-3595132a79a9/go.mod h1:oZz5OE9u1kBwS5zf9YrMOen0T3EnYZZB0Mc4ONUWqGg=
 github.com/j-keck/arping v0.0.0-20160618110441-2cf9dc699c56/go.mod h1:ymszkNOg6tORTn+6F6j+Jc8TOr5osrynvN6ivFWZ2GA=
 github.com/j-keck/arping v1.0.2/go.mod h1:aJbELhR92bSk7tp79AWM/ftfc90EfEi2bQJrbBFOsPw=
 github.com/jackc/chunkreader v1.0.0/go.mod h1:RT6O25fNZIuasFJRyZ4R/Y2BbhasbmZXF9QQ7T3kePo=
