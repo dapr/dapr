@@ -3963,11 +3963,6 @@ func TestStopWithErrors(t *testing.T) {
 
 	testErr := errors.New("mock close error")
 
-	rt.bindingsRegistry.RegisterInputBindings(
-		bindings_loader.NewInput("input", func() bindings.InputBinding {
-			return &mockBinding{closeErr: testErr}
-		}),
-	)
 	rt.bindingsRegistry.RegisterOutputBindings(
 		bindings_loader.NewOutput("output", func() bindings.OutputBinding {
 			return &mockBinding{closeErr: testErr}
@@ -3989,23 +3984,6 @@ func TestStopWithErrors(t *testing.T) {
 		}),
 	)
 
-	mockInputBindingComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type:    "bindings.input",
-			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
-				{
-					Name: "input",
-					Value: components_v1alpha1.DynamicValue{
-						JSON: v1.JSON{},
-					},
-				},
-			},
-		},
-	}
 	mockOutputBindingComponent := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
@@ -4075,7 +4053,6 @@ func TestStopWithErrors(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, rt.initInputBinding(mockInputBindingComponent))
 	require.NoError(t, rt.initOutputBinding(mockOutputBindingComponent))
 	require.NoError(t, rt.initPubSub(mockPubSubComponent))
 	require.NoError(t, rt.initState(mockStateComponent))
@@ -4087,7 +4064,7 @@ func TestStopWithErrors(t *testing.T) {
 	var merr *multierror.Error
 	merr, ok := err.(*multierror.Error)
 	require.True(t, ok)
-	assert.Equal(t, 6, len(merr.Errors))
+	assert.Equal(t, 5, len(merr.Errors))
 }
 
 func stopRuntime(t *testing.T, rt *DaprRuntime) {

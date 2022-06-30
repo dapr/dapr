@@ -2114,6 +2114,7 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 	var merr error
 
 	// Close components if they implement `io.Closer`
+	// Input bindings are closed when a.ctx is canceled
 	for name, binding := range a.outputBindings {
 		if closer, ok := binding.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
