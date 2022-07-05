@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	"github.com/dapr/dapr/pkg/version"
 
 	"github.com/dapr/components-contrib/configuration"
 
@@ -62,7 +63,8 @@ import (
 )
 
 const (
-	daprHTTPStatusHeader = "dapr-http-status"
+	daprHTTPStatusHeader  = "dapr-http-status"
+	daprRuntimeVersionKey = "daprRuntimeVersion"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -289,6 +291,9 @@ func NewAPI(
 		}
 	}
 
+	var extendedMetadata sync.Map
+	extendedMetadata.Store(daprRuntimeVersionKey, version.Version())
+
 	return &api{
 		directMessaging:            directMessaging,
 		actor:                      actor,
@@ -309,6 +314,7 @@ func NewAPI(
 		appProtocol:                appProtocol,
 		shutdown:                   shutdown,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
+		extendedMetadata:           extendedMetadata,
 	}
 }
 

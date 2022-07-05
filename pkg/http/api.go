@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	"github.com/dapr/dapr/pkg/version"
 
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -131,6 +132,7 @@ const (
 	traceparentHeader        = "traceparent"
 	tracestateHeader         = "tracestate"
 	daprAppID                = "dapr-app-id"
+	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
 // NewAPI returns a new API.
@@ -158,6 +160,10 @@ func NewAPI(
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
+
+	var extendedMetadata sync.Map
+	extendedMetadata.Store(daprRuntimeVersionKey, version.Version())
+
 	api := &api{
 		appChannel:                 appChannel,
 		getComponentsFn:            getComponentsFn,
@@ -177,6 +183,7 @@ func NewAPI(
 		tracingSpec:                tracingSpec,
 		shutdown:                   shutdown,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
+		extendedMetadata:           extendedMetadata,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -1807,7 +1814,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = key.(string)
+		temp[key.(string)] = value.(string)
 
 		return true
 	})
