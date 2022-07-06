@@ -5,13 +5,19 @@ import (
 	"testing"
 	"time"
 
+	hcraft "github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/logger"
 )
 
 func TestPlacementHA(t *testing.T) {
+	logger.ApplyOptionsToLoggers(&logger.Options{
+		OutputLevel: "debug",
+	})
+
 	// Get 3 ports
 	ports, err := daprtesting.GetFreePorts(3)
 	if err != nil {
@@ -162,7 +168,18 @@ func TestPlacementHA(t *testing.T) {
 
 func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) *raft.Server {
 	srv := raft.New(fmt.Sprintf("mynode-%d", nodeID), true, peers, "")
-	err := srv.StartRaft(nil)
+	err := srv.StartRaft(&hcraft.Config{
+		ProtocolVersion:    hcraft.ProtocolVersionMax,
+		HeartbeatTimeout:   250 * time.Millisecond,
+		ElectionTimeout:    250 * time.Millisecond,
+		CommitTimeout:      50 * time.Millisecond,
+		MaxAppendEntries:   64,
+		ShutdownOnRemove:   true,
+		TrailingLogs:       10240,
+		SnapshotInterval:   120 * time.Second,
+		SnapshotThreshold:  8192,
+		LeaderLeaseTimeout: 250 * time.Millisecond,
+	})
 	assert.NoError(t, err)
 	return srv
 }
