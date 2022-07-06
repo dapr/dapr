@@ -45,7 +45,6 @@ func TestDestinationHeaders(t *testing.T) {
 		dm := newDirectMessaging()
 		dm.addDestinationAppIDHeaderToMetadata(appID, req)
 		assert.Nil(t, req.Metadata())
-
 	})
 }
 
