@@ -14,6 +14,10 @@
 # Required secrets:
 # - AZURE_CREDENTIALS: JSON object containing the Azure service principal credentials. Docs: https://github.com/Azure/login#configure-a-service-principal-with-a-secret
 # - DAPR_BOT_TOKEN: Token for the Dapr bot
+#
+# Optional secrets:
+# - AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
+# - AZURE_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
 
 name: dapr-test
 
@@ -123,6 +127,8 @@ jobs:
                 location1=${REGION1} \
                 location2=${REGION2} \
                 dateTag="${DATE_TAG}" \
+                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
+                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
               && success=true \
               && break \
               || sleep 120
@@ -236,18 +242,19 @@ jobs:
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
         shell: bash
-      - name: Build dapr and its docker image
+      - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''
         run: |
           make build
-          make docker-build
-        shell: bash
-      - name: Build e2e test apps
-        if: env.TEST_PREFIX != ''
-        run: |
-          make build-e2e-app-all
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
+            # For Linux, we use images based on Mariner
+            DOCKERFILE=Dockerfile-mariner make docker-build
+          else
+            make docker-build
+          fi
         shell: bash
       - name: Wait for Azure Container Registry deployment
+        timeout-minutes: 30
         if: env.TEST_PREFIX != ''
         run: |
           elapsed=0
@@ -268,11 +275,20 @@ jobs:
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash
-      - name: Push all container images to the registry
+      - name: Push Dapr container images
         if: env.TEST_PREFIX != ''
         run: |
-          make docker-push
-          make push-e2e-app-all
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
+            # For Linux, we use images based on Mariner
+            DOCKERFILE=Dockerfile-mariner make docker-push
+          else
+            make docker-push
+          fi
+        shell: bash
+      - name: Build and push E2E test apps
+        if: env.TEST_PREFIX != ''
+        run: |
+          make build-push-e2e-app-all
         shell: bash
 
   test-e2e:
@@ -286,6 +302,7 @@ jobs:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
       TEST_OUTPUT_FILE_PREFIX: "test_report"
+      PULL_POLICY: IfNotPresent
     strategy:
       fail-fast: false
       matrix:
@@ -393,6 +410,8 @@ jobs:
         shell: bash
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
+        env:
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''

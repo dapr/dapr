@@ -168,14 +168,15 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) *raft.Ser
 }
 
 func findLeader(t *testing.T, raftServers []*raft.Server) int {
-	// Maximum 3 seconds
-	const maxAttempts = 30
+	// Maximum 5 seconds
+	const maxAttempts = 50
 
 	attempts := 0
 	for {
 		// Ensure that one node became leader
 		for i, srv := range raftServers {
 			if srv != nil && srv.IsLeader() {
+				t.Logf("leader elected in %d ms: server %d", attempts*100, i)
 				return i
 			}
 		}
@@ -190,7 +191,6 @@ func findLeader(t *testing.T, raftServers []*raft.Server) int {
 func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMember) {
 	state := srv.FSM().State()
 	assert.NotNil(t, state)
-	fmt.Println(state.Members())
 	actual, found := state.Members()[expect.Name]
 	if !assert.True(t, found) {
 		t.FailNow()

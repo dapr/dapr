@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/dapr/dapr/tests/perf"
@@ -30,7 +31,9 @@ import (
 )
 
 const (
-	numHealthChecks = 60 // Number of times to check for endpoint health per app.
+	numHealthChecks        = 60 // Number of times to check for endpoint health per app.
+	serviceApplicationName = "perf-actor-activation-service"
+	clientApplicationName  = "perf-actor-activation-client"
 )
 
 var tr *runner.TestRunner
@@ -40,7 +43,7 @@ func TestMain(m *testing.M) {
 
 	testApps := []kube.AppDescription{
 		{
-			AppName:           "testapp",
+			AppName:           serviceApplicationName,
 			DaprEnabled:       true,
 			ImageName:         "perf-actorjava",
 			Replicas:          1,
@@ -55,9 +58,12 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": serviceApplicationName,
+			},
 		},
 		{
-			AppName:           "tester",
+			AppName:           clientApplicationName,
 			DaprEnabled:       true,
 			ImageName:         "perf-tester",
 			Replicas:          1,
@@ -72,6 +78,12 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": clientApplicationName,
+			},
+			PodAffinityLabels: map[string]string{
+				"daprtest": serviceApplicationName,
+			},
 		},
 	}
 
@@ -83,7 +95,7 @@ func TestActorActivate(t *testing.T) {
 	p := perf.Params()
 
 	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
+	testAppURL := tr.Platform.AcquireAppExternalURL(serviceApplicationName)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
@@ -92,7 +104,7 @@ func TestActorActivate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get the ingress external url of tester app
-	testerAppURL := tr.Platform.AcquireAppExternalURL("tester")
+	testerAppURL := tr.Platform.AcquireAppExternalURL(clientApplicationName)
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
@@ -112,17 +124,19 @@ func TestActorActivate(t *testing.T) {
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
+	// fast fail if daprResp starts with error
+	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
-	appUsage, err := tr.Platform.GetAppUsage("testapp")
+	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
 	require.NoError(t, err)
 
-	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
+	sidecarUsage, err := tr.Platform.GetSidecarUsage(serviceApplicationName)
 	require.NoError(t, err)
 
-	restarts, err := tr.Platform.GetTotalRestarts("testapp")
+	restarts, err := tr.Platform.GetTotalRestarts(serviceApplicationName)
 	require.NoError(t, err)
 
-	testerRestarts, err := tr.Platform.GetTotalRestarts("tester")
+	testerRestarts, err := tr.Platform.GetTotalRestarts(clientApplicationName)
 	require.NoError(t, err)
 
 	t.Logf("dapr test results: %s", string(daprResp))
@@ -141,6 +155,7 @@ func TestActorActivate(t *testing.T) {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
 	}
+	t.Logf("Actual QPS: %.2f, expected QPS: %d", daprResult.ActualQPS, p.QPS)
 
 	report := perf.NewTestReport(
 		[]perf.TestResult{daprResult},

@@ -15,25 +15,17 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
-	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/valyala/fasthttp"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
@@ -76,7 +68,7 @@ type actorCall struct {
 	Method    string `json:"method"`
 }
 
-var httpClient = newHTTPClient()
+var httpClient = utils.NewHTTPClient()
 
 var (
 	actorLogs      = []actorLogEntry{}
@@ -163,7 +155,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err != nil {
-		w.WriteHeader(fasthttp.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -181,7 +173,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 	res, err := httpClient.Do(req)
 	if err != nil {
 		w.Write([]byte(err.Error()))
-		w.WriteHeader(fasthttp.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -190,7 +182,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		w.Write([]byte(err.Error()))
-		w.WriteHeader(fasthttp.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -218,7 +210,7 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if err != nil {
-		w.WriteHeader(fasthttp.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -243,8 +235,8 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := httpClient.Do(req)
 
 	log.Printf("Call status: %d\n", resp.StatusCode)
-	if err != nil || resp.StatusCode == fasthttp.StatusInternalServerError {
-		w.WriteHeader(fasthttp.StatusInternalServerError)
+	if err != nil || resp.StatusCode == http.StatusInternalServerError {
+		w.WriteHeader(http.StatusInternalServerError)
 		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Error %s", mux.Vars(r)["method"]))
 	} else {
 		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Exit %s", mux.Vars(r)["method"]))
@@ -272,6 +264,9 @@ func advanceCallStackForNextRequest(req reentrantRequest) (actorCall, []byte) {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 
@@ -286,51 +281,7 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func newHTTPClient() *http.Client {
-	dialer := &net.Dialer{
-		Timeout: 5 * time.Second,
-	}
-	netTransport := &http.Transport{
-		DialContext:         dialer.DialContext,
-		TLSHandshakeTimeout: 5 * time.Second,
-	}
-
-	return &http.Client{
-		Timeout:   30 * time.Second,
-		Transport: netTransport,
-	}
-}
-
-func startServer() {
-	// Create a server capable of supporting HTTP2 Cleartext connections
-	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
-	h2s := &http2.Server{}
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: h2c.NewHandler(appRouter(), h2s),
-	}
-
-	// Stop the server when we get a termination signal
-	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		// Wait for cancelation signal
-		<-stopCh
-		log.Println("Shutdown signal received")
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	// Blocking call
-	err := server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
-	}
-	log.Println("Server shut down")
-}
-
 func main() {
 	log.Printf("Actor App - listening on http://localhost:%d", appPort)
-	startServer()
+	utils.StartServer(appPort, appRouter, true)
 }

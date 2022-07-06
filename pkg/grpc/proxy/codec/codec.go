@@ -1,11 +1,11 @@
-// Copyright Michal Witkowski.
-// Code is based on https://github.com/trusch/grpc-proxy
+// Based on https://github.com/trusch/grpc-proxy
+// Copyright Michal Witkowski. Licensed under Apache2 license: https://github.com/trusch/grpc-proxy/blob/master/LICENSE.txt
 
 package codec
 
 import (
-	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc/encoding"
+	"google.golang.org/protobuf/proto"
 )
 
 // Name is the name by which the proxy codec is registered in the encoding codec registry

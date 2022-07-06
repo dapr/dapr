@@ -50,7 +50,7 @@ type ClientConnCloser interface {
 type Manager struct {
 	AppClient      ClientConnCloser
 	lock           *sync.RWMutex
-	connectionPool map[string]*grpc.ClientConn
+	connectionPool *connectionPool
 	auth           security.Authenticator
 	mode           modes.DaprMode
 }
@@ -59,7 +59,7 @@ type Manager struct {
 func NewGRPCManager(mode modes.DaprMode) *Manager {
 	return &Manager{
 		lock:           &sync.RWMutex{},
-		connectionPool: map[string]*grpc.ClientConn{},
+		connectionPool: newConnectionPool(),
 		mode:           mode,
 	}
 }
@@ -71,7 +71,7 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 
 // CreateLocalChannel creates a new gRPC AppChannel.
 func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
-	conn, err := g.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled)
+	conn, _, err := g.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled)
 	if err != nil {
 		return nil, errors.Errorf("error establishing connection to app grpc on port %v: %s", port, err)
 	}
@@ -82,19 +82,33 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 }
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist.
-func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	g.lock.RLock()
-	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
-		g.lock.RUnlock()
-		return val, nil
+func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error) {
+	releaseFactory := func(conn *grpc.ClientConn) func() {
+		return func() {
+			g.connectionPool.Release(conn)
+		}
 	}
-	g.lock.RUnlock()
 
-	g.lock.Lock()
-	defer g.lock.Unlock()
-	// read the value once again, as a concurrent writer could create it
-	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
-		return val, nil
+	// share pooled connection
+	if !recreateIfExists {
+		g.lock.RLock()
+		if conn, ok := g.connectionPool.Share(address); ok {
+			g.lock.RUnlock()
+
+			teardown := releaseFactory(conn)
+			return conn, teardown, nil
+		}
+		g.lock.RUnlock()
+
+		g.lock.RLock()
+		// read the value once again, as a concurrent writer could create it
+		if conn, ok := g.connectionPool.Share(address); ok {
+			g.lock.RUnlock()
+
+			teardown := releaseFactory(conn)
+			return conn, teardown, nil
+		}
+		g.lock.RUnlock()
 	}
 
 	opts := []grpc.DialOption{
@@ -110,7 +124,7 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 		signedCert := g.auth.GetCurrentSignedCert()
 		cert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 		if err != nil {
-			return nil, errors.Errorf("error generating x509 Key Pair: %s", err)
+			return nil, func() {}, errors.Errorf("error generating x509 Key Pair: %s", err)
 		}
 
 		var serverName string
@@ -147,14 +161,71 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 	opts = append(opts, customOpts...)
 	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
 	if err != nil {
-		return nil, err
+		return nil, func() {}, err
 	}
 
-	if c, ok := g.connectionPool[address]; ok {
-		c.Close()
+	teardown := releaseFactory(conn)
+	g.lock.Lock()
+	defer g.lock.Unlock()
+	g.connectionPool.Register(address, conn)
+
+	return conn, teardown, nil
+}
+
+type connectionPool struct {
+	pool           map[string]*grpc.ClientConn
+	referenceCount map[*grpc.ClientConn]int
+	referenceLock  *sync.RWMutex
+}
+
+func newConnectionPool() *connectionPool {
+	return &connectionPool{
+		pool:           map[string]*grpc.ClientConn{},
+		referenceCount: map[*grpc.ClientConn]int{},
+		referenceLock:  &sync.RWMutex{},
+	}
+}
+
+func (p *connectionPool) Register(address string, conn *grpc.ClientConn) {
+	if oldConn, ok := p.pool[address]; ok {
+		// oldConn is not used by pool anymore
+		p.Release(oldConn)
 	}
 
-	g.connectionPool[address] = conn
+	p.pool[address] = conn
+	// conn is used by caller and pool
+	// NOTE: pool should also increment referenceCount not to close the pooled connection
 
-	return conn, nil
+	p.referenceLock.Lock()
+	defer p.referenceLock.Unlock()
+	p.referenceCount[conn] = 2
+}
+
+func (p *connectionPool) Share(address string) (*grpc.ClientConn, bool) {
+	conn, ok := p.pool[address]
+	if !ok {
+		return nil, false
+	}
+
+	p.referenceLock.Lock()
+	defer p.referenceLock.Unlock()
+
+	p.referenceCount[conn]++
+	return conn, true
+}
+
+func (p *connectionPool) Release(conn *grpc.ClientConn) {
+	p.referenceLock.Lock()
+	defer p.referenceLock.Unlock()
+
+	if _, ok := p.referenceCount[conn]; !ok {
+		return
+	}
+
+	p.referenceCount[conn]--
+
+	// for concurrent use, connection is closed after all callers release it
+	if p.referenceCount[conn] <= 0 {
+		conn.Close()
+	}
 }

@@ -167,6 +167,10 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 }
 
 func testPublish(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
+	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-topic", protocol, nil, "")
+	require.NoError(t, err)
+	offset += numberOfMessagesToPublish + 1
+
 	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
@@ -183,10 +187,6 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 		"rawPayload": "true",
 	}
 	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
-	require.NoError(t, err)
-	offset += numberOfMessagesToPublish + 1
-
-	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
@@ -265,6 +265,9 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
 
 		callInitialize(t, publisherExternalURL, protocol)
+	} else {
+		// Sleep a few seconds to ensure there's time for all messages to be delivered at least once, so if they have to be sent to the DLQ, they can be before we change the desired response status
+		time.Sleep(5 * time.Second)
 	}
 
 	// set to respond with success
@@ -359,11 +362,12 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		}
 
 		log.Printf(
-			"subscriber received %d/%d messages on pubsub-a-topic, %d/%d on pubsub-b-topic and %d/%d on pubsub-c-topic and %d/%d on pubsub-raw-topic",
+			"subscriber received %d/%d messages on pubsub-a-topic, %d/%d on pubsub-b-topic and %d/%d on pubsub-c-topic, %d/%d on pubsub-raw-topic and %d/%d on dead letter topic",
 			len(appResp.ReceivedByTopicA), len(sentMessages.ReceivedByTopicA),
 			len(appResp.ReceivedByTopicB), len(sentMessages.ReceivedByTopicB),
 			len(appResp.ReceivedByTopicC), len(sentMessages.ReceivedByTopicC),
 			len(appResp.ReceivedByTopicRaw), len(sentMessages.ReceivedByTopicRaw),
+			len(appResp.ReceivedByTopicDeadLetter), len(sentMessages.ReceivedByTopicDeadLetter),
 		)
 
 		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
@@ -372,7 +376,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) ||
 			(validateDeadLetter && len(appResp.ReceivedByTopicDeadLetter) != len(sentMessages.ReceivedByTopicDeadLetter)) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(5 * time.Second)
+			time.Sleep(10 * time.Second)
 		} else {
 			break
 		}
@@ -397,7 +401,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		// only error response is expected to validate dead letter
 		sort.Strings(sentMessages.ReceivedByTopicDeadLetter)
 		sort.Strings(appResp.ReceivedByTopicDeadLetter)
-		assert.Equal(t, sentMessages.ReceivedByTopicDead, appResp.ReceivedByTopicDead, "different messages received in Topic Dead")
+		assert.Equal(t, sentMessages.ReceivedByTopicDeadLetter, appResp.ReceivedByTopicDeadLetter, "different messages received in Topic Dead")
 	}
 }
 
