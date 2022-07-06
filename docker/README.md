@@ -20,7 +20,7 @@ The Dev Container can be rebuilt with custom options. Relevant args (and their d
 * `DAPR_CLI_VERSION` (default: `latest`)
 * `PROTOC_VERSION` (default: `21.1`)
 * `PROTOC_GEN_GO_VERSION` (default: `1.28`)
-* `GOLANGCI_LINT_VERSION` (default: `1.45.2`)
+* `GOLANGCI_LINT_VERSION` (default: `1.46.2`)
 
 ### Setup multi-arch Docker builds
 

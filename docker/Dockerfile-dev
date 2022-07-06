@@ -14,7 +14,7 @@ ARG MINIKUBE_VERSION="latest"
 ARG DAPR_CLI_VERSION="latest"
 ARG PROTOC_VERSION="21.1"
 ARG PROTOC_GEN_GO_VERSION="1.28"
-ARG GOLANGCI_LINT_VERSION="1.45.2"
+ARG GOLANGCI_LINT_VERSION="1.46.2"
 
 # This Dockerfile adds a non-root 'dapr' user with sudo access. However, for Linux,
 # this user's GID/UID must match your local user UID/GID to avoid permission issues
