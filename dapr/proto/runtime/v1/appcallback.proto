@@ -86,8 +86,17 @@ message TopicEventRequest {
 
   // The cloud event extension attributes (custom attributes).
   // Compatible with the cloud events v1.0.2 spec.
-  map<string, google.protobuf.Any> attributes = 10;
+  map<string, CloudEventAttributeValue> attributes = 10;
 
+}
+
+message CloudEventAttributeValue {
+  oneof attr {
+    bool ce_boolean = 1;
+    int32 ce_integer = 2;
+    string ce_string = 3;
+    bytes ce_bytes = 4;
+  }
 }
 
 // TopicEventResponse is response from app on published message

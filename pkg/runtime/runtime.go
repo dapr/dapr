@@ -42,7 +42,6 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1882,22 +1881,41 @@ func extractCloudEventProperty(cloudEvent map[string]interface{}, property strin
 	return ""
 }
 
-func extractCloudEventExtensionAttributes(cloudEvent map[string]interface{}) map[string]*anypb.Any {
+func extractCloudEventExtensionAttributes(cloudEvent map[string]interface{}) map[string]*runtimev1pb.CloudEventAttributeValue {
 	if cloudEvent == nil {
 		return nil
 	}
 
-	extensions := make(map[string]*anypb.Any)
+	extensions := make(map[string]*runtimev1pb.CloudEventAttributeValue)
 	for key, value := range cloudEvent {
+		// skip the standard required and optional cloud event properties (as of the 1.0.2 spec)
 		reservedKeys := []string{pubsub.IDField, pubsub.SourceField, pubsub.SpecVersionField, pubsub.TypeField, pubsub.DataContentTypeField, pubsub.SubjectField, "time", "dataschema"}
 		// if key in list of reserved keys, skip
+		excludeAttribute := false
 		for _, reservedKey := range reservedKeys {
 			if key == reservedKey {
+				excludeAttribute = true
 				continue
 			}
 		}
-		byteValue, _ := json.Marshal(value)
-		extensions[key] = &anypb.Any{Value: byteValue}
+		if excludeAttribute {
+			continue
+		}
+
+		var attribute runtimev1pb.CloudEventAttributeValue
+		// type switch on value
+		switch v := value.(type) {
+		case int:
+			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeInteger{CeInteger: int32(v)}}
+		case bool:
+			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeBoolean{CeBoolean: v}}
+		case string:
+			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeString{CeString: v}}
+		case []byte:
+			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeBytes{CeBytes: v}}
+		}
+
+		extensions[key] = &attribute
 	}
 
 	return extensions
