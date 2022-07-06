@@ -237,7 +237,7 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
+	conn, teardown, err := d.connectionCreatorFn(ctx, appAddress, appID, namespace, false, false, false)
 	defer teardown()
 	if err != nil {
 		return nil, err
@@ -262,13 +262,20 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
-	req.Metadata()[invokev1.DestinationIDHeader] = &internalv1pb.ListStringValue{
+	metadata := req.Metadata()
+	if metadata == nil {
+		return
+	}
+	metadata[invokev1.DestinationIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{appID},
 	}
 }
 
 func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMethodRequest) {
 	metadata := req.Metadata()
+	if metadata == nil {
+		return
+	}
 
 	var forwardedHeaderValue string
 
