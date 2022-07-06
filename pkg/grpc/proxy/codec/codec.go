@@ -4,8 +4,12 @@
 package codec
 
 import (
+	"fmt"
+
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/protobuf/proto"
+
+	protoV1 "github.com/golang/protobuf/proto"
 )
 
 // Name is the name by which the proxy codec is registered in the encoding codec registry
@@ -83,11 +87,25 @@ func (*Proxy) Name() string {
 type protoCodec struct{}
 
 func (*protoCodec) Marshal(v interface{}) ([]byte, error) {
-	return proto.Marshal(v.(proto.Message))
+	switch t := v.(type) {
+	case proto.Message:
+		return proto.Marshal(v.(proto.Message))
+	case protoV1.Message:
+		return protoV1.Marshal(v.(protoV1.Message))
+	default:
+		return nil, fmt.Errorf("failed to marshal, message is %T, want proto.Message", t)
+	}
 }
 
 func (*protoCodec) Unmarshal(data []byte, v interface{}) error {
-	return proto.Unmarshal(data, v.(proto.Message))
+	switch t := v.(type) {
+	case proto.Message:
+		return proto.Unmarshal(data, v.(proto.Message))
+	case protoV1.Message:
+		return protoV1.Unmarshal(data, v.(protoV1.Message))
+	default:
+		return fmt.Errorf("failed to unmarshal, message is %T, want proto.Message", t)
+	}
 }
 
 func (*protoCodec) Name() string {
