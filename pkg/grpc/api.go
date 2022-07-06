@@ -133,6 +133,7 @@ type api struct {
 	components                 []components_v1alpha.Component
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
+	daprRunTimeVersion         string
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
@@ -290,10 +291,6 @@ func NewAPI(
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
-
-	var extendedMetadata sync.Map
-	extendedMetadata.Store(daprRuntimeVersionKey, version.Version())
-
 	return &api{
 		directMessaging:            directMessaging,
 		actor:                      actor,
@@ -314,7 +311,7 @@ func NewAPI(
 		appProtocol:                appProtocol,
 		shutdown:                   shutdown,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
-		extendedMetadata:           extendedMetadata,
+		daprRunTimeVersion:         version.Version(),
 	}
 }
 
@@ -1475,6 +1472,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		temp[key.(string)] = value.(string)
 		return true
 	})
+	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
 	componentsCapabilties := a.getComponentsCapabilitesFn()
 	for _, comp := range a.components {

@@ -1794,7 +1794,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	expectedBody := map[string]interface{}{
 		"id":       "xyz",
 		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
-		"extended": make(map[string]string),
+		"extended": map[string]string{"daprRuntimeVersion": "edge"},
 		"components": []map[string]interface{}{
 			{
 				"name":         "MockComponent1Name",
@@ -1820,6 +1820,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 		testAPI.id = "xyz"
 		testAPI.actor = mockActors
+		testAPI.daprRunTimeVersion = "edge"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 

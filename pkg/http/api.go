@@ -95,6 +95,7 @@ type api struct {
 	tracingSpec                config.TracingSpec
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
+	daprRunTimeVersion         string
 }
 
 type registeredComponent struct {
@@ -160,10 +161,6 @@ func NewAPI(
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
-
-	var extendedMetadata sync.Map
-	extendedMetadata.Store(daprRuntimeVersionKey, version.Version())
-
 	api := &api{
 		appChannel:                 appChannel,
 		getComponentsFn:            getComponentsFn,
@@ -183,7 +180,7 @@ func NewAPI(
 		tracingSpec:                tracingSpec,
 		shutdown:                   shutdown,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
-		extendedMetadata:           extendedMetadata,
+		daprRunTimeVersion:         version.Version(),
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -1818,7 +1815,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 
 		return true
 	})
-
+	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	activeActorsCount := []actors.ActiveActorsCount{}
 	if a.actor != nil {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
