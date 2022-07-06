@@ -42,6 +42,7 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1763,6 +1764,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		Topic:           msg.topic,
 		PubsubName:      msg.metadata[pubsubName],
 		Path:            msg.path,
+		Attributes:      extractCloudEventExtensionAttributes(cloudEvent),
 	}
 
 	if data, ok := cloudEvent[pubsub.DataBase64Field]; ok && data != nil {
@@ -1878,6 +1880,27 @@ func extractCloudEventProperty(cloudEvent map[string]interface{}, property strin
 	}
 
 	return ""
+}
+
+func extractCloudEventExtensionAttributes(cloudEvent map[string]interface{}) map[string]*anypb.Any {
+	if cloudEvent == nil {
+		return nil
+	}
+
+	extensions := make(map[string]*anypb.Any)
+	for key, value := range cloudEvent {
+		reservedKeys := []string{pubsub.IDField, pubsub.SourceField, pubsub.SpecVersionField, pubsub.TypeField, pubsub.DataContentTypeField, pubsub.SubjectField, "time", "dataschema"}
+		// if key in list of reserved keys, skip
+		for _, reservedKey := range reservedKeys {
+			if key == reservedKey {
+				continue
+			}
+		}
+		byteValue, _ := json.Marshal(value)
+		extensions[key] = &anypb.Any{Value: byteValue}
+	}
+
+	return extensions
 }
 
 func (a *DaprRuntime) initActors() error {

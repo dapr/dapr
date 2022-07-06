@@ -16,6 +16,7 @@ syntax = "proto3";
 package dapr.proto.runtime.v1;
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/any.proto";
 import "dapr/proto/common/v1/common.proto";
 
 option csharp_namespace = "Dapr.AppCallback.Autogen.Grpc.v1";
@@ -82,6 +83,11 @@ message TopicEventRequest {
   // The matching path from TopicSubscription/routes (if specified) for this event.
   // This value is used by OnTopicEvent to "switch" inside the handler.
   string path = 9;
+
+  // The cloud event extension attributes (custom attributes).
+  // Compatible with the cloud events v1.0.2 spec.
+  map<string, google.protobuf.Any> attributes = 10;
+
 }
 
 // TopicEventResponse is response from app on published message
