@@ -24,6 +24,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -162,7 +163,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 }
 
 func getOperatorClient(address string) operatorv1pb.OperatorClient {
-	conn, _ := grpc.Dial(address, grpc.WithInsecure())
+	conn, _ := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	return operatorv1pb.NewOperatorClient(conn)
 }
 

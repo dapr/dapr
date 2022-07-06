@@ -102,7 +102,7 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 	defer res.Body.Close()
 
 	if res.StatusCode != expectedHTTPStatusCode {
-		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode)
+		t := fmt.Errorf("expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode)
 		return nil, t
 	}
 

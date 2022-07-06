@@ -607,11 +607,11 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 		var errBody []byte
 		errBody, err = io.ReadAll(res.Body)
 		if err == nil {
-			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody))
+			t := fmt.Errorf("expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody))
 			return nil, t
 		}
 
-		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode)
+		t := fmt.Errorf("expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode)
 		return nil, t
 	}
 

@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/tests/apps/utils"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -559,7 +560,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 	daprAddress := fmt.Sprintf("localhost:%s", "50001")
 
 	fmt.Printf("dapr address is %s\n", daprAddress)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
+	conn, err := grpc.Dial(daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -919,7 +920,7 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 	actualVerb := res.Header.Get("x-dapr-tests-request-method")
 
 	if httpMethod != actualVerb {
-		return appResponse{}, fmt.Errorf("Expected HTTP verb: %s actual %s", httpMethod, actualVerb)
+		return appResponse{}, fmt.Errorf("expected HTTP verb: %s actual %s", httpMethod, actualVerb)
 	}
 
 	var appResp appResponse
@@ -1290,7 +1291,7 @@ func initGRPCClient() {
 	log.Printf("Connecting to dapr using url %s", url)
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}

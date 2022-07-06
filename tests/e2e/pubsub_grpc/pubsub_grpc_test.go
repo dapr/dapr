@@ -38,6 +38,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var tr *runner.TestRunner
@@ -307,7 +308,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
 		require.NoError(t, err)
 	} else {
-		conn, err := grpc.Dial(subscriberExternalURL, grpc.WithInsecure())
+		conn, err := grpc.Dial(subscriberExternalURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			log.Printf("Could not connect to app %s: %s", subscriberExternalURL, err.Error())
 		}

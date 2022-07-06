@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -57,7 +56,7 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool) {
 
 	// Stop the server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, os.Interrupt)
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh

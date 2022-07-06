@@ -29,6 +29,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	daprhttp "github.com/dapr/dapr/pkg/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -606,7 +607,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		statusCode = http.StatusInternalServerError
 		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd)
-		log.Printf(unsupportedCommandMessage)
+		log.Print(unsupportedCommandMessage)
 		res.Message = unsupportedCommandMessage
 	}
 
@@ -791,7 +792,7 @@ func initGRPCClient() {
 	log.Printf("Connecting to dapr using url %s", url)
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}

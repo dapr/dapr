@@ -24,6 +24,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -173,7 +174,7 @@ func initGRPCClient() {
 	log.Printf("Connecting to dapr using url %s", url)
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}

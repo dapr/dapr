@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/metadata"
@@ -231,7 +232,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 	// Setup of the proxy's Director.
 	s.serverClientConn, err = grpc.Dial(
 		s.serverListener.Addr().String(),
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 	)
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
@@ -273,7 +274,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 	clientConn, err := grpc.DialContext(
 		ctx,
 		strings.Replace(s.proxyListener.Addr().String(), "127.0.0.1", "localhost", 1),
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 	)
 	require.NoError(s.T(), err, "must not error on deferred client Dial")

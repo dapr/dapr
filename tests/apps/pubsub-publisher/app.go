@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -343,7 +344,7 @@ func initGRPCClient() {
 	start := time.Now()
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		if grpcConn, err = grpc.Dial(url, grpc.WithInsecure(), grpc.WithBlock()); err == nil {
+		if grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock()); err == nil {
 			break
 		}
 

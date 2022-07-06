@@ -25,6 +25,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/tests/apps/utils"
 )
@@ -102,7 +103,7 @@ func invokeDaprGRPCAPI() error {
 	defer cancel()
 	conn, err := grpc.DialContext(ctx,
 		daprGRPCAddr,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock())
 	if err != nil {
 		return err

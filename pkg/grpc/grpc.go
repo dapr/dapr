@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
@@ -155,7 +156,7 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 	}
 
 	if !transportCredentialsAdded {
-		opts = append(opts, grpc.WithInsecure())
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
 	opts = append(opts, customOpts...)

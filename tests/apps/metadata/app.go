@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -150,7 +149,7 @@ func startServer() {
 
 	// Stop the server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, os.Interrupt)
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh

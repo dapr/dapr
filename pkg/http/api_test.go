@@ -3682,9 +3682,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	})
 }
 
-type fakeConfigurationStore struct {
-	counter int
-}
+type fakeConfigurationStore struct{}
 
 func (c fakeConfigurationStore) Ping() error {
 	return nil
@@ -3756,7 +3754,6 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 }
 
 func (c fakeConfigurationStore) Init(metadata configuration.Metadata) error {
-	c.counter = 0
 	return nil
 }
 

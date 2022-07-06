@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func GetServerOptions(certChain *CertChain) ([]grpc.ServerOption, error) {
@@ -49,7 +50,7 @@ func GetClientOptions(certChain *CertChain, serverName string) ([]grpc.DialOptio
 		}
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)))
 	} else {
-		opts = append(opts, grpc.WithInsecure())
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 	return opts, nil
 }

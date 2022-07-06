@@ -29,6 +29,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -264,7 +265,7 @@ func initGRPCClient() {
 	var grpcConn *grpc.ClientConn
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}
@@ -475,7 +476,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Proxying message: %+v", message)
 		b, _ := json.Marshal(message)
 
-		conn, err := grpc.Dial("localhost:50001", grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.Dial("localhost:50001", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 		if err != nil {
 			log.Fatalf("did not connect: %v", err)
 		}
