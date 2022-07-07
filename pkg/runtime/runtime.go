@@ -1889,13 +1889,28 @@ func extractCloudEventExtensionAttributes(cloudEvent map[string]interface{}) map
 	extensions := make(map[string]*runtimev1pb.CloudEventAttributeValue)
 	for key, value := range cloudEvent {
 		// skip the standard required and optional cloud event properties (as of the 1.0.2 spec)
-		reservedKeys := []string{pubsub.IDField, pubsub.SourceField, pubsub.SpecVersionField, pubsub.TypeField, pubsub.DataContentTypeField, pubsub.SubjectField, "time", "dataschema"}
+		// and also skip some Dapr internal properties
+		reservedKeys := pubsub.GetCloudEventsReservedFields()
 		// if key in list of reserved keys, skip
 		excludeAttribute := false
 		for _, reservedKey := range reservedKeys {
 			if key == reservedKey {
 				excludeAttribute = true
-				continue
+				break
+			}
+		}
+		if excludeAttribute {
+			continue
+		}
+
+		// exclude empty values for traceid, traceparent, and tracestate
+		excludeEmptyKeys := pubsub.GetCloudEventTracingFields()
+		for _, excludeKey := range excludeEmptyKeys {
+			if key == excludeKey {
+				if value == "" || value == nil {
+					excludeAttribute = true
+					break
+				}
 			}
 		}
 		if excludeAttribute {
@@ -1905,8 +1920,16 @@ func extractCloudEventExtensionAttributes(cloudEvent map[string]interface{}) map
 		var attribute runtimev1pb.CloudEventAttributeValue
 		// type switch on value
 		switch v := value.(type) {
-		case int:
-			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeInteger{CeInteger: int32(v)}}
+		case int, int32, int64:
+			// The cloud events spec defines integers to be limited to 32 bits.
+			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeInteger{CeInteger: int32(v.(int))}}
+		case float32, float64:
+			// The cloud events spec only allows for 32 bit integers, no float or decimal numbers
+			if v == float64(int64(v.(float64))) {
+				attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeInteger{CeInteger: int32(v.(float64))}}
+			} else {
+				attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeString{CeString: fmt.Sprintf("%f", v.(float64))}}
+			}
 		case bool:
 			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeBoolean{CeBoolean: v}}
 		case string:
