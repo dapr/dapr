@@ -31,6 +31,32 @@ type CloudEvent struct {
 	TraceState      string
 }
 
+func GetCloudEventsReservedFields() []string {
+	return []string{
+		contrib_pubsub.IDField,
+		contrib_pubsub.SpecVersionField,
+		contrib_pubsub.DataContentTypeField,
+		contrib_pubsub.SourceField,
+		contrib_pubsub.TypeField,
+		contrib_pubsub.TopicField,
+		contrib_pubsub.PubsubField,
+		contrib_pubsub.SubjectField,
+		contrib_pubsub.DataBase64Field,
+		contrib_pubsub.DataField,
+		contrib_pubsub.ExpirationField,
+		"time",
+		"dataschema",
+	}
+}
+
+func GetCloudEventTracingFields() []string {
+	return []string{
+		contrib_pubsub.TraceIDField,
+		contrib_pubsub.TraceParentField,
+		contrib_pubsub.TraceStateField,
+	}
+}
+
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
 func NewCloudEvent(req *CloudEvent) (map[string]interface{}, error) {
 	if contrib_contenttype.IsCloudEventContentType(req.DataContentType) {

@@ -1890,7 +1890,7 @@ func extractCloudEventExtensionAttributes(cloudEvent map[string]interface{}) map
 	for key, value := range cloudEvent {
 		// skip the standard required and optional cloud event properties (as of the 1.0.2 spec)
 		// and also skip some Dapr internal properties
-		reservedKeys := pubsub.GetCloudEventsReservedFields()
+		reservedKeys := runtime_pubsub.GetCloudEventsReservedFields()
 		// if key in list of reserved keys, skip
 		excludeAttribute := false
 		for _, reservedKey := range reservedKeys {
@@ -1904,7 +1904,7 @@ func extractCloudEventExtensionAttributes(cloudEvent map[string]interface{}) map
 		}
 
 		// exclude empty values for traceid, traceparent, and tracestate
-		excludeEmptyKeys := pubsub.GetCloudEventTracingFields()
+		excludeEmptyKeys := runtime_pubsub.GetCloudEventTracingFields()
 		for _, excludeKey := range excludeEmptyKeys {
 			if key == excludeKey {
 				if value == "" || value == nil {
