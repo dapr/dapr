@@ -44,16 +44,11 @@ func GetCloudEventsReservedFields() []string {
 		contrib_pubsub.DataBase64Field,
 		contrib_pubsub.DataField,
 		contrib_pubsub.ExpirationField,
-		"time",
-		"dataschema",
-	}
-}
-
-func GetCloudEventTracingFields() []string {
-	return []string{
 		contrib_pubsub.TraceIDField,
 		contrib_pubsub.TraceParentField,
 		contrib_pubsub.TraceStateField,
+		"time",
+		"dataschema",
 	}
 }
 

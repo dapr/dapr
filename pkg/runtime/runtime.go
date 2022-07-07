@@ -1763,6 +1763,8 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		Topic:           msg.topic,
 		PubsubName:      msg.metadata[pubsubName],
 		Path:            msg.path,
+		Traceparent:     extractCloudEventProperty(cloudEvent, pubsub.TraceParentField),
+		Tracestate:      extractCloudEventProperty(cloudEvent, pubsub.TraceStateField),
 		Attributes:      extractCloudEventExtensionAttributes(cloudEvent),
 	}
 
@@ -1897,20 +1899,6 @@ func extractCloudEventExtensionAttributes(cloudEvent map[string]interface{}) map
 			if key == reservedKey {
 				excludeAttribute = true
 				break
-			}
-		}
-		if excludeAttribute {
-			continue
-		}
-
-		// exclude empty values for traceid, traceparent, and tracestate
-		excludeEmptyKeys := runtime_pubsub.GetCloudEventTracingFields()
-		for _, excludeKey := range excludeEmptyKeys {
-			if key == excludeKey {
-				if value == "" || value == nil {
-					excludeAttribute = true
-					break
-				}
 			}
 		}
 		if excludeAttribute {

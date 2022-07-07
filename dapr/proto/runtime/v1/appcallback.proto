@@ -83,9 +83,15 @@ message TopicEventRequest {
   // This value is used by OnTopicEvent to "switch" inside the handler.
   string path = 9;
 
+  // The trace information of the event.
+  string traceparent = 10;
+
+  // Additional trace information of the event.
+  string tracestate = 11;
+
   // The cloud event extension attributes (custom attributes).
   // Compatible with the cloud events v1.0.2 spec.
-  map<string, CloudEventAttributeValue> attributes = 10;
+  map<string, CloudEventAttributeValue> attributes = 12;
 
 }
 
