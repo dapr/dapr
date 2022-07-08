@@ -168,7 +168,7 @@ func (o *operator) loadCertChain(ctx context.Context) (certChain *credentials.Ce
 		log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
 		err := fswatcher.Watch(watchCtx, o.config.Credentials.Path(), fsevent)
 		if err != nil {
-			log.Fatal("error starting watch on filesystem: %s", err)
+			log.Fatalf("error starting watch on filesystem: %s", err)
 		}
 		close(fsevent)
 		if watchCtx.Err() == context.DeadlineExceeded {
