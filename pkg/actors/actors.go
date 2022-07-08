@@ -96,6 +96,7 @@ type actorsRuntime struct {
 	remindersLock          *sync.RWMutex
 	remindersMigrationLock *sync.Mutex
 	activeRemindersLock    *sync.RWMutex
+	changeRemindersLock    *sync.RWMutex
 	reminders              map[string][]actorReminderReference
 	evaluationLock         *sync.RWMutex
 	evaluationBusy         bool
@@ -172,6 +173,7 @@ func NewActors(
 		remindersLock:          &sync.RWMutex{},
 		remindersMigrationLock: &sync.Mutex{},
 		activeRemindersLock:    &sync.RWMutex{},
+		changeRemindersLock:    &sync.RWMutex{},
 		reminders:              map[string][]actorReminderReference{},
 		evaluationLock:         &sync.RWMutex{},
 		evaluationBusy:         false,
@@ -917,6 +919,8 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			if repetitionsLeft > 0 {
 				repetitionsLeft--
 			}
+
+			a.changeRemindersLock.RLock()
 			_, exists = a.activeReminders.Load(reminderKey)
 			if exists {
 				if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime); err != nil {
@@ -924,8 +928,9 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				}
 			} else {
 				log.Infof("could not find active reminder with key: %s, skipping track update", reminderKey)
-				return
 			}
+			a.changeRemindersLock.RUnlock()
+
 			// if reminder is not repetitive, proceed with reminder deletion
 			if years == 0 && months == 0 && days == 0 && period == 0 {
 				break L
@@ -1706,12 +1711,14 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
 	reminderKey := constructCompositeKey(actorKey, req.Name)
 
+	a.changeRemindersLock.Lock()
 	stop, exists := a.activeReminders.Load(reminderKey)
 	if exists {
 		log.Infof("Found reminder with key: %v. Deleting reminder", reminderKey)
 		close(stop.(chan bool))
 		a.activeReminders.Delete(reminderKey)
 	}
+	a.changeRemindersLock.Unlock()
 
 	var err error
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
