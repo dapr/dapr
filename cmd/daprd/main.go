@@ -171,6 +171,8 @@ import (
 	// Lock.
 	"github.com/dapr/components-contrib/lock"
 	lock_redis "github.com/dapr/components-contrib/lock/redis"
+
+	"github.com/dapr/components-contrib/bindings/alicloud/sls"
 )
 
 var (
@@ -521,6 +523,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("huawei.obs", func() bindings.OutputBinding {
 				return obs.NewHuaweiOBS(logContrib)
+			}),
+			bindings_loader.NewOutput("alicloud.sls", func() bindings.OutputBinding {
+				return sls.NewAliCloudSlsLogstorage(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
