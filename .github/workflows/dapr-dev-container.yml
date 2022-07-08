@@ -14,16 +14,6 @@
 name: dapr-dev-container
 
 on:
-  push:
-    paths:
-      - 'docker/Dockerfile-dev'
-      - 'docker/library-scrips/**'
-      - 'docker/custom-scrips/**'
-  pull_request:
-    paths:
-      - 'docker/Dockerfile-dev'
-      - 'docker/library-scrips/**'
-      - 'docker/custom-scrips/**'
   workflow_dispatch:
 
 jobs:
