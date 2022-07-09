@@ -139,7 +139,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
-		c.ch = make(chan int, 1)
+		c.ch = make(chan struct{}, 1)
 
 		// act
 		var wg sync.WaitGroup
@@ -167,7 +167,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
-		c.ch = make(chan int, 1)
+		c.ch = make(chan struct{}, 1)
 
 		// act
 		var wg sync.WaitGroup
