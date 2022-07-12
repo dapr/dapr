@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.2
-	github.com/dapr/components-contrib v1.8.0-rc.6
+	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220712191927-d38c7867715f
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.4
@@ -376,12 +376,10 @@ replace (
 
 replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
 
-replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20220711204844-5237b21d882b
-
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
 //
-// Then, run `make modtidy-all` in this repository.
+// Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
