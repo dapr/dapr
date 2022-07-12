@@ -617,7 +617,7 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 			var cloudEvent map[string]interface{}
 			data := msg.Data
 			if rawPayload {
-				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
+				cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name, "", "")
 				data, err = json.Marshal(cloudEvent)
 				if err != nil {
 					log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)

@@ -29,6 +29,8 @@ func TestNewCloudEvent(t *testing.T) {
 			Pubsub:          "c",
 			DataContentType: "",
 			TraceID:         "d",
+			ActorType:       "",
+			ActorID:         "",
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "a", ce["source"].(string))
@@ -36,6 +38,8 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "hello", ce["data"].(string))
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
 		assert.Equal(t, "d", ce["traceid"].(string))
+		assert.Equal(t, "", ce["actortype"].(string))
+		assert.Equal(t, "", ce["actorid"].(string))
 	})
 
 	t.Run("raw payload no data", func(t *testing.T) {
@@ -45,6 +49,8 @@ func TestNewCloudEvent(t *testing.T) {
 			Pubsub:          "c",
 			DataContentType: "",
 			TraceID:         "d",
+			ActorType:       "",
+			ActorID:         "",
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "a", ce["source"].(string))
@@ -69,6 +75,8 @@ func TestNewCloudEvent(t *testing.T) {
 			Topic:           "topic1",
 			TraceID:         "trace1",
 			Pubsub:          "pubsub",
+			ActorType:       "",
+			ActorID:         "",
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "world", ce["data"].(string))
@@ -76,5 +84,7 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "topic1", ce["topic"].(string))
 		assert.Equal(t, "trace1", ce["traceid"].(string))
 		assert.Equal(t, "pubsub", ce["pubsubname"].(string))
+		assert.Equal(t, "", ce["actortype"].(string))
+		assert.Equal(t, "", ce["actorid"].(string))
 	})
 }

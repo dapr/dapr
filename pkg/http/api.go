@@ -372,7 +372,7 @@ func (a *api) constructActorEndpoints() []Endpoint {
 		{
 			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/publish/{pubsubname}/{topic:*}",
-			Version: apiVersionV1,
+			Version: apiVersionV1alpha1,
 			Handler: a.onActorPublishAlpha1,
 		},
 	}

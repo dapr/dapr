@@ -295,7 +295,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
 
 	t.Run("Publish actor successfully - 204 No Content", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/fakeTopic", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/fakeTopic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -307,7 +307,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish actor multi path successfully - 204 No Content", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/A/B/C", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/A/B/C", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -319,7 +319,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish actor unsuccessfully - 500 InternalError", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/errorpubsub/topic", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/errorpubsub/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -331,7 +331,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish actor without topic name - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -342,7 +342,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish actor without topic name ending in / - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -353,7 +353,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish actor with topic name '/' - 204", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname//", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname//", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -363,7 +363,7 @@ func TestPubSubEndpoints(t *testing.T) {
 		}
 	})
 	t.Run("Publish actor without topic or pubsub name - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -374,7 +374,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish actor without topic or pubsub name ending in / - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -385,7 +385,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Pubsub actor not configured - 400", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/topic", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/pubsubname/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		savePubSubAdapter := testAPI.pubsubAdapter
 		testAPI.pubsubAdapter = nil
@@ -400,7 +400,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Pubsub actor not configured - 400", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/errnotfound/topic", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/errnotfound/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -413,7 +413,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Pubsub actor not configured - 403", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/errnotallowed/topic", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/actors/fakeActorType/fakeActorID/publish/errnotallowed/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
