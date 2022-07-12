@@ -96,7 +96,6 @@ type actorsRuntime struct {
 	remindersLock          *sync.RWMutex
 	remindersMigrationLock *sync.Mutex
 	activeRemindersLock    *sync.RWMutex
-	changeRemindersLock    *sync.RWMutex
 	reminders              map[string][]actorReminderReference
 	evaluationLock         *sync.RWMutex
 	evaluationBusy         bool
@@ -173,7 +172,6 @@ func NewActors(
 		remindersLock:          &sync.RWMutex{},
 		remindersMigrationLock: &sync.Mutex{},
 		activeRemindersLock:    &sync.RWMutex{},
-		changeRemindersLock:    &sync.RWMutex{},
 		reminders:              map[string][]actorReminderReference{},
 		evaluationLock:         &sync.RWMutex{},
 		evaluationBusy:         false,
@@ -803,7 +801,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 	return &track, nil
 }
 
-func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int, lastInvokeTime time.Time) error {
+func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int, lastInvokeTime time.Time, etag *string) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -818,8 +816,28 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 		return a.store.Set(&state.SetRequest{
 			Key:   constructCompositeKey(actorKey, name),
 			Value: track,
+			ETag:  etag,
+			Options: state.SetStateOption{
+				Concurrency: state.FirstWrite,
+			},
 		})
 	})
+}
+
+func (a *actorsRuntime) getReminderState(actorKey, name string) (*state.GetResponse, error) {
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
+	var resp *state.GetResponse
+	err := policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = a.store.Get(&state.GetRequest{
+			Key: constructCompositeKey(actorKey, name),
+		})
+		return rErr
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool) error {
@@ -831,6 +849,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		period                   time.Duration
 		years, months, days      int
 		repeats, repetitionsLeft int
+		eTag                     *string
 	)
 
 	registeredTime, err := time.Parse(time.RFC3339, reminder.RegisteredTime)
@@ -868,7 +887,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		nextTime = registeredTime
 	}
 
-	go func(reminder *Reminder, years int, months int, days int, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, stop chan bool) {
+	go func(reminder *Reminder, years int, months int, days int, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, eTag *string, stop chan bool) {
 		var (
 			ttlTimer, nextTimer *time.Timer
 			ttlTimerC           <-chan time.Time
@@ -920,16 +939,20 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				repetitionsLeft--
 			}
 
-			a.changeRemindersLock.RLock()
 			_, exists = a.activeReminders.Load(reminderKey)
 			if exists {
-				if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime); err != nil {
+				if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime, eTag); err != nil {
 					log.Errorf("error updating reminder track: %v", err)
+				}
+				resp, err := a.getReminderState(actorKey, reminder.Name)
+				if err != nil {
+					log.Errorf("error retrieving reminder: %v", err)
+				} else {
+					eTag = resp.ETag
 				}
 			} else {
 				log.Infof("could not find active reminder with key: %s, skipping track update", reminderKey)
 			}
-			a.changeRemindersLock.RUnlock()
 
 			// if reminder is not repetitive, proceed with reminder deletion
 			if years == 0 && months == 0 && days == 0 && period == 0 {
@@ -949,7 +972,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		if err != nil {
 			log.Errorf("error deleting reminder: %s", err)
 		}
-	}(reminder, years, months, days, period, nextTime, ttl, repetitionsLeft, stopChannel)
+	}(reminder, years, months, days, period, nextTime, ttl, repetitionsLeft, eTag, stopChannel)
 
 	return nil
 }
@@ -1711,14 +1734,12 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
 	reminderKey := constructCompositeKey(actorKey, req.Name)
 
-	a.changeRemindersLock.Lock()
 	stop, exists := a.activeReminders.Load(reminderKey)
 	if exists {
 		log.Infof("Found reminder with key: %v. Deleting reminder", reminderKey)
 		close(stop.(chan bool))
 		a.activeReminders.Delete(reminderKey)
 	}
-	a.changeRemindersLock.Unlock()
 
 	var err error
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
