@@ -122,7 +122,10 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
-	allowedList := strings.Split(cfg.AllowedServiceAccounts, ",")
+	allowedList := []string{}
+	if cfg.AllowedServiceAccounts != "" {
+		allowedList = append(allowedList, strings.Split(cfg.AllowedServiceAccounts, ",")...)
+	}
 	allowedList = append(allowedList, AllowedServiceAccountInfos...)
 
 	return getServiceAccount(ctx, kubeClient, allowedList)
@@ -139,16 +142,16 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 	}
 
 	allowedUids := []string{}
-
+Loop:
 	for _, allowedServiceInfo := range allowedServiceAcccountInfos {
 		serviceAccountInfo := strings.Split(allowedServiceInfo, ":")
 		for _, sa := range serviceaccounts.Items {
 			if sa.Name == serviceAccountInfo[0] && sa.Namespace == serviceAccountInfo[1] {
 				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
-				break
+				continue Loop
 			}
 		}
-		log.Warnf("Unable to get SA %s UID (%s)", allowedServiceInfo, err)
+		log.Warnf("Unable to get SA %s UID", allowedServiceInfo)
 	}
 
 	return allowedUids, nil
