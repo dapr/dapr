@@ -80,7 +80,6 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	// TODO: Use only resiliency once it is no longer a preview feature.
 	if resiliencyEnabled {
 		policy := r.BuiltInPolicy(ctx, resiliency.BuiltInInitializationRetries)
-		log.Infof("Policy: %+v", policy)
 		err = policy(func(ctx context.Context) (rErr error) {
 			resp, rErr = channel.InvokeMethod(ctx, req)
 			return rErr

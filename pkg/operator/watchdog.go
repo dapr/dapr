@@ -122,9 +122,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 	// We are not using pagination because we may be deleting pods during the iterations
 	// The client implements some level of caching anyways
 	pod := &corev1.PodList{}
-	err := dw.client.List(ctx, pod,
-		client.InNamespace(GetNamespace()),
-	)
+	err := dw.client.List(ctx, pod)
 	if err != nil {
 		log.Errorf("Failed to list pods. Error: %v", err)
 		return
@@ -136,9 +134,11 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 			continue
 		}
 
+		logName := v.Namespace + "/" + v.Name
+
 		// Filter for pods with the dapr.io/enabled annotation
 		if daprEnabled, ok := v.Annotations[daprEnabledAnnotationKey]; !ok || !utils.IsTruthy(daprEnabled) {
-			log.Debugf("Skipping pod %s: %s is not true", v.Name, daprEnabledAnnotationKey)
+			log.Debugf("Skipping pod %s: %s is not true", logName, daprEnabledAnnotationKey)
 			continue
 		}
 
@@ -151,19 +151,19 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 			}
 		}
 		if hasSidecar {
-			log.Debugf("Found Dapr sidecar in pod %s", v.Name)
+			log.Debugf("Found Dapr sidecar in pod %s", logName)
 			continue
 		}
 
 		// Pod doesn't have a sidecar, so we need to kill it so it can be restarted and have the sidecar injected
-		log.Warnf("Pod %s does not have the Dapr sidecar and will be deleted", v.Name)
+		log.Warnf("Pod %s does not have the Dapr sidecar and will be deleted", logName)
 		err = dw.client.Delete(ctx, &v)
 		if err != nil {
-			log.Errorf("Failed to delete pod %s. Error: %v", v.Name, err)
+			log.Errorf("Failed to delete pod %s. Error: %v", logName, err)
 			continue
 		}
 
-		log.Infof("Deleted pod %s", v.Name)
+		log.Infof("Deleted pod %s", logName)
 
 		log.Debugf("Taking a pod restart token")
 		before := time.Now()
