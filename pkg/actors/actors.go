@@ -944,9 +944,9 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime, eTag); err != nil {
 					log.Errorf("error updating reminder track: %v", err)
 				}
-				resp, err := a.getReminderState(actorKey, reminder.Name)
-				if err != nil {
-					log.Errorf("error retrieving reminder: %v", err)
+				resp, gErr := a.getReminderState(actorKey, reminder.Name)
+				if gErr != nil {
+					log.Errorf("error retrieving reminder: %v", gErr)
 				} else {
 					eTag = resp.ETag
 				}
