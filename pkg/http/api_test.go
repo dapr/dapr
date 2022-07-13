@@ -23,6 +23,7 @@ import (
 	"net"
 	gohttp "net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1781,6 +1782,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
+		extendedMetadata: sync.Map{},
 		getComponentsCapabilitesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
@@ -1788,13 +1790,18 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			return capsMap
 		},
 	}
+	// PutMetadata only stroes string(request body)
+	testAPI.extendedMetadata.Store("test", "value")
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
 	expectedBody := map[string]interface{}{
-		"id":       "xyz",
-		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
-		"extended": map[string]string{"daprRuntimeVersion": "edge"},
+		"id":     "xyz",
+		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
+		"extended": map[string]string{
+			"test":               "value",
+			"daprRuntimeVersion": "edge",
+		},
 		"components": []map[string]interface{}{
 			{
 				"name":         "MockComponent1Name",
