@@ -34,7 +34,7 @@ const appPort = 3000
 
 // kubernetes is the name of the secret store
 const (
-	componentHealthcheckUrl = "http://localhost:3500/v1.0-alpha1/healthz/components"
+	componentHealthcheckURL = "http://localhost:3500/v1.0-alpha1/healthz/components"
 )
 
 // requestResponse represents a request or response for the APIs in this app.
@@ -64,7 +64,7 @@ func getComponentsHealth(in string) (data mockAllHealthResponse, err error) {
 	var healthResponse mockAllHealthResponse
 	var res *http.Response
 	var errGet error
-	res, errGet = http.Get(componentHealthcheckUrl)
+	res, errGet = http.Get(componentHealthcheckURL)
 
 	if errGet != nil {
 		return healthResponse, fmt.Errorf("could not get component healthcheck %s", errGet.Error())
@@ -167,6 +167,6 @@ func startServer() {
 
 func main() {
 	log.Printf("ComponentHealth App - listening on http://localhost:%d", appPort)
-	log.Printf("ComponentHealth endpoint - to be served at %s", componentHealthcheckUrl)
+	log.Printf("ComponentHealth endpoint - to be served at %s", componentHealthcheckURL)
 	startServer()
 }
