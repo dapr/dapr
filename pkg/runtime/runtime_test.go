@@ -4261,6 +4261,39 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	assert.Equal(t, 3, len(capabilities))
 }
 
+func TestExtractCloudEventExtensionAttributes(t *testing.T) {
+	sampleCloudEvent, _ := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+		ID:              "a",
+		Topic:           "b",
+		Data:            []byte("hello"),
+		Pubsub:          "c",
+		DataContentType: "",
+		TraceID:         "d",
+	})
+
+	sampleCloudEvent["custombool"] = true
+	sampleCloudEvent["customstring"] = "custom"
+	sampleCloudEvent["customint"] = int32(321)
+	sampleCloudEvent["customBytes"] = []byte("customBytes")
+
+	attributes := extractCloudEventExtensionAttributes(sampleCloudEvent)
+	for attributeName, attributeValue := range attributes {
+		var value interface{}
+		switch attributeValue.Attr.(type) {
+		case *runtimev1pb.CloudEventAttributeValue_CeBoolean:
+			value = attributeValue.GetCeBoolean()
+		case *runtimev1pb.CloudEventAttributeValue_CeString:
+			value = attributeValue.GetCeString()
+		case *runtimev1pb.CloudEventAttributeValue_CeInteger:
+			value = attributeValue.GetCeInteger()
+		case *runtimev1pb.CloudEventAttributeValue_CeBytes:
+			value = attributeValue.GetCeBytes()
+		}
+		assert.Equal(t, sampleCloudEvent[attributeName], value)
+	}
+	assert.Len(t, attributes, 4)
+}
+
 func runGRPCApp(port int) (func(), error) {
 	serverListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {

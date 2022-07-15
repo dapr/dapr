@@ -1909,14 +1909,32 @@ func extractCloudEventExtensionAttributes(cloudEvent map[string]interface{}) map
 		// type switch on value
 		switch v := value.(type) {
 		case int, int32, int64:
+			var number int32
+			switch num := value.(type) {
+			case int:
+				number = int32(num)
+			case int64:
+				number = int32(num)
+			case int32:
+				number = num
+			}
+
 			// The cloud events spec defines integers to be limited to 32 bits.
-			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeInteger{CeInteger: int32(v.(int))}}
+			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeInteger{CeInteger: number}}
 		case float32, float64:
 			// The cloud events spec only allows for 32 bit integers, no float or decimal numbers
-			if v == float64(int64(v.(float64))) {
-				attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeInteger{CeInteger: int32(v.(float64))}}
+			var number float64
+			switch num := value.(type) {
+			case float32:
+				number = float64(num)
+			case float64:
+				number = num
+			}
+
+			if value == float64(int64(number)) {
+				attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeInteger{CeInteger: int32(number)}}
 			} else {
-				attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeString{CeString: fmt.Sprintf("%f", v.(float64))}}
+				attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeString{CeString: fmt.Sprintf("%f", number)}}
 			}
 		case bool:
 			attribute = runtimev1pb.CloudEventAttributeValue{Attr: &runtimev1pb.CloudEventAttributeValue_CeBoolean{CeBoolean: v}}
