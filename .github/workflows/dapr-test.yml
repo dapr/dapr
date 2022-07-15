@@ -387,6 +387,11 @@ jobs:
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
         shell: bash
+      - name: Enable tcpdump
+        run: |
+          sudo tcpdump -nn -i any -w sntp.cap &
+          sleep 1
+        shell: bash
       - name: Connect to Kubernetes
         if: env.TEST_PREFIX != ''
         run: |
@@ -430,13 +435,26 @@ jobs:
         if: always() && env.TEST_PREFIX != ''
         run: |
           make save-dapr-control-plane-k8s-logs
+      - name: Stop tcpdump
+        if: always()
+        run: |
+          sleep 1
+          sudo kill -2 $(pgrep tcpdump)
+          sleep 1
       # Container log files can be bigger than the maximum file size allowed by GitHub
       - name: Compress logs
         if: always()
         run: |
           gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
           gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
+          gzip --fast sntp.cap
         shell: bash
+      - name: Upload tcpdump
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_tcpdump
+          path: sntp.cap.gz
       - name: Upload container logs
         if: always()
         uses: actions/upload-artifact@master
