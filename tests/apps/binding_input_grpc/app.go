@@ -21,8 +21,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/golang/protobuf/ptypes/any"
-	"github.com/golang/protobuf/ptypes/empty"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -129,7 +129,7 @@ func (s *server) GetReceivedTopics(ctx context.Context, in *commonv1pb.InvokeReq
 		log.Printf("Could not encode response: %s", err.Error())
 		return &commonv1pb.InvokeResponse{}, err
 	}
-	data := any.Any{
+	data := anypb.Any{
 		Value: rawResp,
 	}
 	return &commonv1pb.InvokeResponse{
@@ -138,7 +138,7 @@ func (s *server) GetReceivedTopics(ctx context.Context, in *commonv1pb.InvokeReq
 }
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to.
-func (s *server) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
+func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &pb.ListTopicSubscriptionsResponse{
 		Subscriptions: []*pb.TopicSubscription{},
@@ -168,7 +168,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	}, nil
 }
 
-func (s *server) ListInputBindings(ctx context.Context, in *empty.Empty) (*pb.ListInputBindingsResponse, error) {
+func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
 	log.Println("List Input Bindings called")
 	return &pb.ListInputBindingsResponse{
 		Bindings: []string{

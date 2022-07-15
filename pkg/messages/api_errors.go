@@ -74,6 +74,7 @@ const (
 	ErrConfigurationStoreNotFound       = "error configuration stores %s not found"
 	ErrConfigurationGet                 = "fail to get %s from Configuration store %s: %s"
 	ErrConfigurationSubscribe           = "fail to subscribe %s from Configuration store %s: %s"
+	ErrConfigurationUnsubscribe         = "fail to unsubscribe to configuration request %s: %s"
 
 	//	Lock
 	ErrLockStoresNotConfigured    = "lock store is not configured"
