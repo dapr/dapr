@@ -1799,7 +1799,8 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		"id":     "xyz",
 		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
 		"extended": map[string]string{
-			"test": "value",
+			"test":               "value",
+			"daprRuntimeVersion": "edge",
 		},
 		"components": []map[string]interface{}{
 			{
@@ -1826,6 +1827,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 		testAPI.id = "xyz"
 		testAPI.actor = mockActors
+		testAPI.daprRunTimeVersion = "edge"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
