@@ -951,7 +951,8 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 					eTag = resp.ETag
 				}
 			} else {
-				log.Infof("could not find active reminder with key: %s, skipping track update", reminderKey)
+				log.Errorf("could not find active reminder with key: %s", reminderKey)
+				return
 			}
 
 			// if reminder is not repetitive, proceed with reminder deletion
