@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	"github.com/dapr/dapr/pkg/version"
 
 	"github.com/dapr/components-contrib/configuration"
 
@@ -62,7 +63,8 @@ import (
 )
 
 const (
-	daprHTTPStatusHeader = "dapr-http-status"
+	daprHTTPStatusHeader  = "dapr-http-status"
+	daprRuntimeVersionKey = "daprRuntimeVersion"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -131,6 +133,7 @@ type api struct {
 	components                 []components_v1alpha.Component
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
+	daprRunTimeVersion         string
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
@@ -288,7 +291,6 @@ func NewAPI(
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
-
 	return &api{
 		directMessaging:            directMessaging,
 		actor:                      actor,
@@ -309,6 +311,7 @@ func NewAPI(
 		appProtocol:                appProtocol,
 		shutdown:                   shutdown,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
+		daprRunTimeVersion:         version.Version(),
 	}
 }
 
@@ -359,6 +362,11 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
+		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
+		if errors.Is(err, actors.ErrDaprResponseHeader) {
+			return resp.Proto(), nil
+		}
+
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
 	}
@@ -1429,7 +1437,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		resp, rErr = a.actor.Call(ctx, req)
 		return rErr
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.InvokeActorResponse{}, err
@@ -1469,6 +1477,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		temp[key.(string)] = value.(string)
 		return true
 	})
+	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
 	componentsCapabilties := a.getComponentsCapabilitesFn()
 	for _, comp := range a.components {

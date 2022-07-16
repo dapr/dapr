@@ -3290,18 +3290,21 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-func (b *mockBinding) Read(handler bindings.Handler) error {
+func (b *mockBinding) Read(ctx context.Context, handler bindings.Handler) error {
 	b.data = string(testInputBindingData)
 	metadata := map[string]string{}
 	if b.metadata != nil {
 		metadata = b.metadata
 	}
 
-	_, err := handler(context.TODO(), &bindings.ReadResponse{
-		Metadata: metadata,
-		Data:     []byte(b.data),
-	})
-	b.hasError = err != nil
+	go func() {
+		_, err := handler(context.Background(), &bindings.ReadResponse{
+			Metadata: metadata,
+			Data:     []byte(b.data),
+		})
+		b.hasError = err != nil
+	}()
+
 	return nil
 }
 
@@ -3388,7 +3391,10 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
-		rt.readFromBinding(testInputBindingName, &b)
+		ctx, cancel := context.WithCancel(context.Background())
+		rt.readFromBinding(ctx, testInputBindingName, &b)
+		time.Sleep(500 * time.Millisecond)
+		cancel()
 
 		assert.False(t, b.hasError)
 	})
@@ -3421,7 +3427,10 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
-		rt.readFromBinding(testInputBindingName, &b)
+		ctx, cancel := context.WithCancel(context.Background())
+		rt.readFromBinding(ctx, testInputBindingName, &b)
+		time.Sleep(500 * time.Millisecond)
+		cancel()
 
 		assert.True(t, b.hasError)
 	})
@@ -3454,7 +3463,10 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
-		rt.readFromBinding(testInputBindingName, &b)
+		ctx, cancel := context.WithCancel(context.Background())
+		rt.readFromBinding(ctx, testInputBindingName, &b)
+		time.Sleep(500 * time.Millisecond)
+		cancel()
 
 		assert.Equal(t, string(testInputBindingData), b.data)
 	})
@@ -3978,11 +3990,6 @@ func TestStopWithErrors(t *testing.T) {
 
 	testErr := errors.New("mock close error")
 
-	rt.bindingsRegistry.RegisterInputBindings(
-		bindings_loader.NewInput("input", func() bindings.InputBinding {
-			return &mockBinding{closeErr: testErr}
-		}),
-	)
 	rt.bindingsRegistry.RegisterOutputBindings(
 		bindings_loader.NewOutput("output", func() bindings.OutputBinding {
 			return &mockBinding{closeErr: testErr}
@@ -4004,23 +4011,6 @@ func TestStopWithErrors(t *testing.T) {
 		}),
 	)
 
-	mockInputBindingComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type:    "bindings.input",
-			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
-				{
-					Name: "input",
-					Value: components_v1alpha1.DynamicValue{
-						JSON: v1.JSON{},
-					},
-				},
-			},
-		},
-	}
 	mockOutputBindingComponent := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: TestPubsubName,
@@ -4090,7 +4080,6 @@ func TestStopWithErrors(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, rt.initInputBinding(mockInputBindingComponent))
 	require.NoError(t, rt.initOutputBinding(mockOutputBindingComponent))
 	require.NoError(t, rt.initPubSub(mockPubSubComponent))
 	require.NoError(t, rt.initState(mockStateComponent))
@@ -4102,7 +4091,7 @@ func TestStopWithErrors(t *testing.T) {
 	var merr *multierror.Error
 	merr, ok := err.(*multierror.Error)
 	require.True(t, ok)
-	assert.Equal(t, 6, len(merr.Errors))
+	assert.Equal(t, 5, len(merr.Errors))
 }
 
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
