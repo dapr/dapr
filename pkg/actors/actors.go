@@ -798,6 +798,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		RepetitionLeft: -1,
 	}
 	json.Unmarshal(resp.Data, &track)
+	track.Etag = resp.ETag
 	return &track, nil
 }
 
@@ -822,22 +823,6 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 			},
 		})
 	})
-}
-
-func (a *actorsRuntime) getReminderState(actorKey, name string) (*state.GetResponse, error) {
-	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
-	var resp *state.GetResponse
-	err := policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = a.store.Get(&state.GetRequest{
-			Key: constructCompositeKey(actorKey, name),
-		})
-		return rErr
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
 }
 
 func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool) error {
@@ -886,6 +871,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		repetitionsLeft = repeats
 		nextTime = registeredTime
 	}
+	eTag = track.Etag
 
 	go func(reminder *Reminder, years int, months int, days int, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, eTag *string, stop chan bool) {
 		var (
@@ -944,11 +930,11 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime, eTag); err != nil {
 					log.Errorf("error updating reminder track: %v", err)
 				}
-				resp, gErr := a.getReminderState(actorKey, reminder.Name)
+				track, gErr := a.getReminderTrack(actorKey, reminder.Name)
 				if gErr != nil {
 					log.Errorf("error retrieving reminder: %v", gErr)
 				} else {
-					eTag = resp.ETag
+					eTag = track.Etag
 				}
 			} else {
 				log.Errorf("could not find active reminder with key: %s", reminderKey)
