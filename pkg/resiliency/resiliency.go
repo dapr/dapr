@@ -606,7 +606,7 @@ func (r *Resiliency) ActorPostLockPolicy(ctx context.Context, actorType string, 
 	return Policy(ctx, r.log, operationName, t, rc, cb)
 }
 
-// ComponentPolicy returns the output policy for a component.
+// ComponentOutboundPolicy returns the outbound policy for a component.
 func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) Runner {
 	var t time.Duration
 	var rc *retry.Config
@@ -633,7 +633,7 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) R
 	return Policy(ctx, r.log, operationName, t, rc, cb)
 }
 
-// ComponentPolicy returns the policy for a component.
+// ComponentInboundPolicy returns the inbound policy for a component.
 func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Runner {
 	var t time.Duration
 	var rc *retry.Config
