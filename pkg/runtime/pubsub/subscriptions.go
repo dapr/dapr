@@ -26,8 +26,8 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 )

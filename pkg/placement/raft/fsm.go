@@ -22,7 +22,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/dapr/pkg/placement/hashing"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	v1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
 )
 
 // CommandType is the type of raft command in log entry.

@@ -34,8 +34,8 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 )
 

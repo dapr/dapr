@@ -32,7 +32,7 @@ import (
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
 )
 
 const (

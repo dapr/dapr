@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	v1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
 )
 
 func cleanupStates() {

@@ -39,7 +39,7 @@ import (
 	"github.com/dapr/dapr/utils"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
 )
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")

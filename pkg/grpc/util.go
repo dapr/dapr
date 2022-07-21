@@ -14,7 +14,7 @@ limitations under the License.
 package grpc
 
 import (
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
 )
 
 func stateConsistencyToString(c commonv1pb.StateOptions_StateConsistency) string {

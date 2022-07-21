@@ -30,7 +30,7 @@ import (
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/placement/raft"
-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	placementv1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
 )
 
 var log = logger.NewLogger("dapr.placement")

@@ -32,7 +32,7 @@ import (
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 )
 
 type mockComponentUpdateServer struct {

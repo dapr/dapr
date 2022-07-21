@@ -21,7 +21,7 @@ import "dapr/proto/common/v1/common.proto";
 option csharp_namespace = "Dapr.AppCallback.Autogen.Grpc.v1";
 option java_outer_classname = "DaprAppCallbackProtos";
 option java_package = "io.dapr.v1";
-option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+option go_package = "github.com/dapr/dapr/dapr/proto/runtime/v1;runtime";
 
 // AppCallback V1 allows user application to interact with Dapr runtime.
 // User application needs to implement AppCallback service if it needs to

@@ -31,8 +31,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
+	pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 )
 
 const (

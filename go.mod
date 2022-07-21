@@ -46,7 +46,7 @@ require (
 	go.uber.org/ratelimit v0.2.0
 	golang.org/x/net v0.0.0-20220621193019-9d032be2e588
 	google.golang.org/genproto v0.0.0-20220622171453-ea41d75dfa0f
-	google.golang.org/grpc v1.47.0
+	google.golang.org/grpc v1.48.0
 	google.golang.org/protobuf v1.28.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.23.0
@@ -62,6 +62,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/dapr/dapr/dapr v0.0.0-00010101000000-000000000000
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
 )
@@ -375,6 +376,8 @@ replace (
 )
 
 replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
+
+replace github.com/dapr/dapr/dapr => ./dapr
 
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!

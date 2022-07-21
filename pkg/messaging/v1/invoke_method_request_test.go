@@ -22,8 +22,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/config"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
 )
 
 func TestInvokeRequest(t *testing.T) {

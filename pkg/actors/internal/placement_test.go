@@ -29,7 +29,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/placement/hashing"
-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	placementv1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
 )
 
 func TestAddDNSResolverPrefix(t *testing.T) {

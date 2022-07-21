@@ -17,7 +17,7 @@ package dapr.proto.internals.v1;
 
 import "google/protobuf/any.proto";
 
-option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
+option go_package = "github.com/dapr/dapr/dapr/proto/internals/v1;internals";
 
 // Status represents the response status for HTTP and gRPC app channel.
 message Status {

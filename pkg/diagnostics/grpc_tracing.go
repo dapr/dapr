@@ -29,8 +29,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 )
 
 const (

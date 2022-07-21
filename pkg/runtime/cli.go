@@ -34,7 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
-	operator_v1 "github.com/dapr/dapr/pkg/proto/operator/v1"
+	operator_v1 "github.com/dapr/dapr/dapr/proto/operator/v1"
 	resiliency_config "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"

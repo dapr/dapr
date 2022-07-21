@@ -16,7 +16,7 @@ import (
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	sentryv1pb "github.com/dapr/dapr/dapr/proto/sentry/v1"
 )
 
 const (

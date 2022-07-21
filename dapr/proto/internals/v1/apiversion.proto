@@ -15,7 +15,7 @@ syntax = "proto3";
 
 package dapr.proto.internals.v1;
 
-option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
+option go_package = "github.com/dapr/dapr/dapr/proto/internals/v1;internals";
 
 // APIVersion represents the version of Dapr Runtime API.
 enum APIVersion {

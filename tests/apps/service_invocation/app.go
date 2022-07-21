@@ -31,8 +31,8 @@ import (
 	guuid "github.com/google/uuid"
 	"github.com/gorilla/mux"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
 
 	"google.golang.org/grpc"
