@@ -35,9 +35,9 @@ generate() {
     
     for proto_file in "daprclient/daprclient.proto" "dapr/dapr.proto"; do
         echo "Generating ${language} for ${proto_file}"
-        ${root}/bin/protoc --proto_path ${top_root}/pkg/proto/ \
+        ${root}/bin/protoc --proto_path ${top_root}/dapr/proto/ \
             --${tool}_out=${args}:${top_root}/../${language}-sdk/${path} \
-            ${top_root}/pkg/proto/${proto_file} ${@:5}
+            ${top_root}/dapr/proto/${proto_file} ${@:5}
     done
 }
 
@@ -98,7 +98,7 @@ fi
 if [[ "$language" = "all" ]] || [[ "$language" = "python" ]]; then
   # generate python
   mkdir -p ${top_root}/../python-sdk
-  python3 -m grpc.tools.protoc -I${top_root}/pkg/proto \
+  python3 -m grpc.tools.protoc -I${top_root}/dapr/proto \
    --python_out=${top_root}/../python-sdk \
    --grpc_python_out=${top_root}/../python-sdk \
    dapr/dapr.proto \

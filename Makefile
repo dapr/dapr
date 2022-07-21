@@ -309,7 +309,7 @@ modtidy:
 ################################################################################
 .PHONY: format
 format: modtidy-all
-	gofumpt -l -w . && goimports -local github.com/dapr/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./pkg/proto/*")
+	gofumpt -l -w . && goimports -local github.com/dapr/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./dapr/proto/*")
 
 ################################################################################
 # Target: check                                                              #
@@ -381,15 +381,15 @@ check-proto-version: ## Checking the version of proto related tools
 ################################################################################
 .PHONY: check-proto-diff
 check-proto-diff:
-	git diff --exit-code ./pkg/proto/common/v1/common.pb.go # check no changes
-	git diff --exit-code ./pkg/proto/internals/v1/status.pb.go # check no changes
-	git diff --exit-code ./pkg/proto/operator/v1/operator.pb.go # check no changes
-	git diff --exit-code ./pkg/proto/operator/v1/operator_grpc.pb.go # check no changes
-	git diff --exit-code ./pkg/proto/runtime/v1/appcallback.pb.go # check no changes
-	git diff --exit-code ./pkg/proto/runtime/v1/appcallback_grpc.pb.go # check no changes
-	git diff --exit-code ./pkg/proto/runtime/v1/dapr.pb.go # check no changes
-	git diff --exit-code ./pkg/proto/runtime/v1/dapr_grpc.pb.go # check no changes
-	git diff --exit-code ./pkg/proto/sentry/v1/sentry.pb.go # check no changes
+	git diff --exit-code ./dapr/proto/common/v1/common.pb.go # check no changes
+	git diff --exit-code ./dapr/proto/internals/v1/status.pb.go # check no changes
+	git diff --exit-code ./dapr/proto/operator/v1/operator.pb.go # check no changes
+	git diff --exit-code ./dapr/proto/operator/v1/operator_grpc.pb.go # check no changes
+	git diff --exit-code ./dapr/proto/runtime/v1/appcallback.pb.go # check no changes
+	git diff --exit-code ./dapr/proto/runtime/v1/appcallback_grpc.pb.go # check no changes
+	git diff --exit-code ./dapr/proto/runtime/v1/dapr.pb.go # check no changes
+	git diff --exit-code ./dapr/proto/runtime/v1/dapr_grpc.pb.go # check no changes
+	git diff --exit-code ./dapr/proto/sentry/v1/sentry.pb.go # check no changes
 
 
 ################################################################################
