@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
 
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/google/uuid"
