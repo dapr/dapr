@@ -27,10 +27,10 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 const (

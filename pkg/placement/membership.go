@@ -19,9 +19,9 @@ import (
 
 	"google.golang.org/grpc/peer"
 
+	v1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
-	v1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
 
 	"github.com/dapr/kit/retry"
 )

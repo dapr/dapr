@@ -27,10 +27,10 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	v1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
-	v1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 )
 

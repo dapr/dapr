@@ -18,8 +18,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/dapr/proto/common/v1"
+	"github.com/dapr/dapr/pkg/config"
 )
 
 const (

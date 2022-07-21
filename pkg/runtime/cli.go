@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	operator_v1 "github.com/dapr/dapr/dapr/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/acl"
 	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	global_config "github.com/dapr/dapr/pkg/config"
@@ -34,7 +35,6 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
-	operator_v1 "github.com/dapr/dapr/dapr/proto/operator/v1"
 	resiliency_config "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"

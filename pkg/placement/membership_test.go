@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 
-	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/placement/raft"
 )
 
 func cleanupStates() {

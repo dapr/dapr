@@ -30,9 +30,9 @@ import (
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
 
-	daprhttp "github.com/dapr/dapr/pkg/http"
 	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
+	daprhttp "github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 

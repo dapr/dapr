@@ -28,11 +28,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
-	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 )
 
 type mockComponentUpdateServer struct {

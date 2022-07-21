@@ -59,6 +59,8 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -81,8 +83,6 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
-	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
-	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"

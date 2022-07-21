@@ -9,9 +9,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 )
 
 // GetOperatorClient returns a new k8s operator client and the underlying connection.

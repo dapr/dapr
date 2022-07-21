@@ -26,8 +26,8 @@ import (
 	"google.golang.org/grpc"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
+	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/kit/logger"
 )
 

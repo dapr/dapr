@@ -29,8 +29,8 @@ import (
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru"
 
-	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
+	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 

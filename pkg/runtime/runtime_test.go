@@ -64,6 +64,8 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/kit/logger"
 
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
@@ -81,8 +83,6 @@ import (
 	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
-	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"

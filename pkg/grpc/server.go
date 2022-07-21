@@ -30,12 +30,12 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
-	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
-	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 )
 

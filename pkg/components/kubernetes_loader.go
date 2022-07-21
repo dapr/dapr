@@ -22,9 +22,9 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
-	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 )
 
 var log = logger.NewLogger("dapr.runtime.components")

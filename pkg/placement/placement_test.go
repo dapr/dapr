@@ -26,8 +26,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/dapr/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/placement/raft"
 )
 
 const testStreamSendLatency = 50 * time.Millisecond

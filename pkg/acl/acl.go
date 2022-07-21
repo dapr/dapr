@@ -26,9 +26,9 @@ import (
 
 	"github.com/dapr/kit/logger"
 
+	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
 )
 
 var log = logger.NewLogger("dapr.acl")
