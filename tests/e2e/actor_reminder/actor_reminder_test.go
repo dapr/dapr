@@ -520,7 +520,7 @@ func TestActorReminderTracks(t *testing.T) {
 	pReminderBody, pErr := json.Marshal(pReminder)
 	require.NoError(t, pErr)
 
-	t.Run("Actor reminder should register, unregister and be recreated and get should succeed.", func(t *testing.T) {
+	t.Run("Actor reminder should be deleted then recreated and should succeed.", func(t *testing.T) {
 		var wg sync.WaitGroup
 		for iteration := 1; iteration <= numIterations; iteration++ {
 			wg.Add(1)
