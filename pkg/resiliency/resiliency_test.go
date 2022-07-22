@@ -16,6 +16,7 @@ package resiliency
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -418,4 +419,178 @@ func TestResiliencyIsProtectedPolicy(t *testing.T) {
 	assert.True(t, r.isProtectedPolicy(string(BuiltInActorNotFoundRetries)))
 	assert.False(t, r.isProtectedPolicy(string(BuiltInActorRetries)))
 	assert.False(t, r.isProtectedPolicy("Random name"))
+}
+
+func TestDefaultPolicyInterpolation(t *testing.T) {
+	r := FromConfigurations(log)
+
+	// Retry
+	typePolicy, topPolicy := r.expandPolicyTemplate(Endpoint, DefaultRetryTemplate)
+	assert.Equal(t, "DefaultAppRetryPolicy", typePolicy)
+	assert.Equal(t, "DefaultRetryPolicy", topPolicy)
+
+	// Timeout
+	typePolicy, topPolicy = r.expandPolicyTemplate(Actor, DefaultTimeoutTemplate)
+	assert.Equal(t, "DefaultActorTimeoutPolicy", typePolicy)
+	assert.Equal(t, "DefaultTimeoutPolicy", topPolicy)
+
+	// Circuit Breaker
+	typePolicy, topPolicy = r.expandPolicyTemplate(Component, DefaultCircuitBreakerTemplate)
+	assert.Equal(t, "DefaultComponentCircuitBreakerPolicy", typePolicy)
+	assert.Equal(t, "DefaultCircuitBreakerPolicy", topPolicy)
+}
+
+func TestGetDefaultPolicy(t *testing.T) {
+	config := &resiliency_v1alpha.Resiliency{
+		Spec: resiliency_v1alpha.ResiliencySpec{
+			Policies: resiliency_v1alpha.Policies{
+				Retries: map[string]resiliency_v1alpha.Retry{
+					fmt.Sprintf(string(DefaultRetryTemplate), "App"): {
+						Policy:     "constant",
+						Duration:   "5s",
+						MaxRetries: 10,
+					},
+
+					fmt.Sprintf(string(DefaultRetryTemplate), ""): {
+						Policy:     "constant",
+						Duration:   "1s",
+						MaxRetries: 5,
+					},
+				},
+				Timeouts: map[string]string{
+					fmt.Sprintf(string(DefaultTimeoutTemplate), "Actor"): "300s",
+					fmt.Sprintf(string(DefaultTimeoutTemplate), ""):      "60s",
+				},
+				CircuitBreakers: map[string]resiliency_v1alpha.CircuitBreaker{
+					fmt.Sprintf(string(DefaultCircuitBreakerTemplate), "Component"): {
+						MaxRequests: 1,
+						Interval:    "30s",
+						Trip:        "consecutiveFailures > 1",
+						Timeout:     "60s",
+					},
+					fmt.Sprintf(string(DefaultCircuitBreakerTemplate), ""): {
+						MaxRequests: 1,
+						Interval:    "30s",
+						Trip:        "consecutiveFailures > 1",
+						Timeout:     "60s",
+					},
+				},
+			},
+		},
+	}
+
+	r := FromConfigurations(log, config)
+
+	retryName := r.getDefaultRetryPolicy(Endpoint)
+	assert.Equal(t, "DefaultAppRetryPolicy", retryName)
+	retryName = r.getDefaultRetryPolicy(Actor)
+	assert.Equal(t, "DefaultRetryPolicy", retryName)
+
+	timeoutName := r.getDefaultTimeoutPolicy(Actor)
+	assert.Equal(t, "DefaultActorTimeoutPolicy", timeoutName)
+	timeoutName = r.getDefaultTimeoutPolicy(Component)
+	assert.Equal(t, "DefaultTimeoutPolicy", timeoutName)
+
+	cbName := r.getDefaultCircuitBreakerPolicy(Component)
+	assert.Equal(t, "DefaultComponentCircuitBreakerPolicy", cbName)
+	cbName = r.getDefaultCircuitBreakerPolicy(Endpoint)
+	assert.Equal(t, "DefaultCircuitBreakerPolicy", cbName)
+
+	// Delete the top-level defaults and make sure we return an empty string if nothing is defined.
+	delete(r.retries, "DefaultRetryPolicy")
+	delete(r.timeouts, "DefaultTimeoutPolicy")
+	delete(r.circuitBreakers, "DefaultCircuitBreakerPolicy")
+
+	retryName = r.getDefaultRetryPolicy(Actor)
+	assert.Equal(t, "", retryName)
+	timeoutName = r.getDefaultTimeoutPolicy(Component)
+	assert.Equal(t, "", timeoutName)
+	cbName = r.getDefaultCircuitBreakerPolicy(Endpoint)
+	assert.Equal(t, "", cbName)
+}
+
+func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
+	config := &resiliency_v1alpha.Resiliency{
+		Spec: resiliency_v1alpha.ResiliencySpec{
+			Policies: resiliency_v1alpha.Policies{
+				Retries: map[string]resiliency_v1alpha.Retry{
+					"testRetry": {
+						Policy:     "constant",
+						Duration:   "10ms",
+						MaxRetries: 5,
+					},
+					fmt.Sprintf(string(DefaultRetryTemplate), "App"): {
+						Policy:     "constant",
+						Duration:   "10ms",
+						MaxRetries: 10,
+					},
+
+					fmt.Sprintf(string(DefaultRetryTemplate), ""): {
+						Policy:     "constant",
+						Duration:   "10ms",
+						MaxRetries: 3,
+					},
+				},
+				Timeouts: map[string]string{
+					fmt.Sprintf(string(DefaultTimeoutTemplate), ""): "100ms",
+				},
+				CircuitBreakers: map[string]resiliency_v1alpha.CircuitBreaker{
+					fmt.Sprintf(string(DefaultCircuitBreakerTemplate), ""): {
+						Trip:        "consecutiveFailures > 1",
+						MaxRequests: 1,
+						Timeout:     "60s",
+					},
+				},
+			},
+			Targets: resiliency_v1alpha.Targets{
+				Apps: map[string]resiliency_v1alpha.EndpointPolicyNames{
+					"testApp": {
+						Retry: "testRetry",
+					},
+				},
+			},
+		},
+	}
+
+	r := FromConfigurations(log, config)
+
+	// Targeted App
+	policy := r.EndpointPolicy(context.Background(), "testApp", "localhost")
+	count := 0
+	policy(func(ctx context.Context) error {
+		count++
+		return errors.New("Forced failure")
+	})
+	assert.Equal(t, 6, count)
+
+	// Generic App
+	policy = r.EndpointPolicy(context.Background(), "noMatchingTarget", "localhost")
+	count = 0
+	policy(func(ctx context.Context) error {
+		count++
+		return errors.New("Forced failure")
+	})
+	assert.Equal(t, 11, count)
+
+	// Not defined
+	policy = r.ActorPreLockPolicy(context.Background(), "actorType", "actorID")
+	count = 0
+	policy(func(ctx context.Context) error {
+		count++
+		return errors.New("Forced failure")
+	})
+	assert.Equal(t, 4, count)
+
+	// One last one for ActorPostLock which just includes timeouts.
+	policy = r.ActorPostLockPolicy(context.Background(), "actorType", "actorID")
+	count = 0
+	start := time.Now()
+	err := policy(func(ctx context.Context) error {
+		count++
+		time.Sleep(time.Second * 5)
+		return errors.New("Forced failure")
+	})
+	assert.Less(t, time.Since(start), time.Second*5)
+	assert.Equal(t, 1, count)                         // Post lock policies don't have a retry, only pre lock do.
+	assert.NotEqual(t, "Forced failure", err.Error()) // We should've timed out instead.
 }
