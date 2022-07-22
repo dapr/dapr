@@ -17,6 +17,9 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"time"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 func writeSecrets() {
@@ -29,7 +32,33 @@ func writeSecrets() {
 	}
 }
 
+func writeTLSCertAndKey() {
+	host := "localhost"
+	validFrom := time.Now()
+	validFor := time.Hour
+	directory := "/tmp/testdata/certs"
+
+	// ensure that the directory exists
+	if _, err := os.Stat(directory); os.IsNotExist(err) {
+		err := os.MkdirAll(directory, os.ModePerm)
+		if err != nil {
+			log.Printf("failed to create directory: %v", err)
+		}
+	}
+
+	// generate the certs
+	err := utils.GenerateTLSCertAndKey(host, validFrom, validFor, directory)
+	if err != nil {
+		log.Printf("failed to generate TLS cert and key: %v", err)
+	} else {
+		log.Printf("TLS cert and key is generated")
+	}
+}
+
 func main() {
 	// used by the injector test to validate volume mount
 	writeSecrets()
+
+	// used by the injector test to validate root cert installation feature
+	writeTLSCertAndKey()
 }

@@ -35,7 +35,7 @@ const (
 	bindingName     = "secured-binding"
 	/* #nosec */
 	secretURL     = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
-	bindingURL    = "http://localhost:3500/v1.0/bindings/%s"
+	bindingURL    = "http://localhost:3500/v1.0/bindings/%s?metadata.namespace=dapr-tests"
 	tlsCertEnvKey = "DAPR_TESTS_TLS_CERT"
 	tlsKeyEnvKey  = "DAPR_TESTS_TLS_KEY"
 )
@@ -158,31 +158,12 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func writeTLSCertAndKey() error {
-	host := "localhost"
-	validFrom := time.Now()
-	validFor := time.Hour
-	directory := ""
-	err := utils.GenerateTLSCertAndKey(host, validFrom, validFor, directory)
-	if err != nil {
-		log.Printf("failed to generate TLS cert and key: %v", err)
-	} else {
-		log.Printf("TLS cert and key is generated")
-	}
-
-	return err
-}
-
 func main() {
 	log.Printf("Injector App - listening on http://localhost:%d", appPort)
 
-	// used by the injector test to validate root cert installation feature
-	err := writeTLSCertAndKey()
-	if err != nil {
-		// these files are generated in the init app.
-		os.Setenv(tlsCertEnvKey, "cert.pem")
-		os.Setenv(tlsKeyEnvKey, "key.pem")
-	}
+	os.Setenv(tlsCertEnvKey, "/tmp/testdata/certs/cert.pem")
+	os.Setenv(tlsKeyEnvKey, "/tmp/testdata/certs/key.pem")
 
-	utils.StartServer(appPort, appRouter, true, true)
+	// TODO: change this
+	utils.StartServer(appPort, appRouter, true, false)
 }

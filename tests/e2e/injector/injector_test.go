@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 			Name:     "secured-binding",
 			TypeName: "bindings.http",
 			MetaData: map[string]string{
-				"url": `"https://localhost:3000"`,
+				"url": `"http://localhost:3000"`,
 			},
 		},
 	}
@@ -79,12 +79,20 @@ func TestMain(m *testing.M) {
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
 			DaprVolumeMounts:  "storage-volume:/tmp/testdata/",
+			DaprEnv:           "SSL_CERT_DIR=/tmp/testdata/certs",
 			Volumes: []apiv1.Volume{
 				{
 					Name: "storage-volume",
 					VolumeSource: apiv1.VolumeSource{
 						EmptyDir: &apiv1.EmptyDirVolumeSource{},
 					},
+				},
+			},
+			AppVolumeMounts: []apiv1.VolumeMount{
+				{
+					Name:      "storage-volume",
+					MountPath: "/tmp/testdata/",
+					ReadOnly:  true,
 				},
 			},
 			InitContainers: []apiv1.Container{
