@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 			Name:     "secured-binding",
 			TypeName: "bindings.http",
 			MetaData: map[string]string{
-				"url": `"http://localhost:3000"`,
+				"url": `"https://localhost:3001"`,
 			},
 		},
 	}

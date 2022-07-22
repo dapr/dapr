@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -30,12 +31,13 @@ import (
 
 const (
 	appPort         = 3000
+	securedAppPort  = 3001
 	secretKey       = "secret-key"
 	secretStoreName = "local-secret-store"
 	bindingName     = "secured-binding"
 	/* #nosec */
 	secretURL     = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
-	bindingURL    = "http://localhost:3500/v1.0/bindings/%s?metadata.namespace=dapr-tests"
+	bindingURL    = "http://localhost:3500/v1.0/bindings/%s"
 	tlsCertEnvKey = "DAPR_TESTS_TLS_CERT"
 	tlsKeyEnvKey  = "DAPR_TESTS_TLS_KEY"
 )
@@ -101,7 +103,8 @@ func bindingTest() (int, appResponse) {
 	}
 
 	// invoke the binding endpoint
-	resp, err := http.Get(url.String())
+	reqBody := "{\"operation\": \"get\"}"
+	resp, err := http.Post(url.String(), "application/json", strings.NewReader(reqBody))
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: fmt.Sprintf("Failed to get binding: %v", err)}
 	}
@@ -158,12 +161,28 @@ func appRouter() *mux.Router {
 	return router
 }
 
+func securedAppRouter() *mux.Router {
+	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
+	router.HandleFunc("/", indexHandler).Methods("GET")
+
+	router.Use(mux.CORSMethodMiddleware(router))
+
+	return router
+}
+
 func main() {
 	log.Printf("Injector App - listening on http://localhost:%d", appPort)
 
-	os.Setenv(tlsCertEnvKey, "/tmp/testdata/certs/cert.pem")
-	os.Setenv(tlsKeyEnvKey, "/tmp/testdata/certs/key.pem")
+	// start a secured app (with TLS) on an alternate port
+	go func() {
+		os.Setenv(tlsCertEnvKey, "/tmp/testdata/certs/cert.pem")
+		os.Setenv(tlsKeyEnvKey, "/tmp/testdata/certs/key.pem")
+		utils.StartServer(securedAppPort, securedAppRouter, true, true)
+	}()
 
-	// TODO: change this
 	utils.StartServer(appPort, appRouter, true, false)
 }
