@@ -57,6 +57,13 @@ func TestMain(m *testing.M) {
 				"secretsFile": `"/tmp/secrets/secrets.json"`,
 			},
 		},
+		{
+			Name: "secured-binding",
+			TypeName: "bindings.http",
+			MetaData: map[string]string{
+				"url": "https://localhost",
+			},
+		}
 	}
 
 	testApps := []kube.AppDescription{
@@ -132,14 +139,6 @@ func imageRegistry() string {
 		return "docker.io/dapriotest"
 	}
 	return reg
-}
-
-func imageSecret() string {
-	secret := os.Getenv("DAPR_TEST_REGISTRY_SECRET")
-	if secret == "" {
-		return ""
-	}
-	return secret
 }
 
 func imageTag() string {
