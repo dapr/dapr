@@ -19,7 +19,7 @@ func (m *MockBinding) Init(metadata bindings.Metadata) error {
 }
 
 // Read is a mock read method.
-func (m *MockBinding) Read(handler bindings.Handler) error {
+func (m *MockBinding) Read(ctx context.Context, handler bindings.Handler) error {
 	args := m.Called(handler)
 	return args.Error(0)
 }
