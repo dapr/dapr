@@ -142,16 +142,20 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 	}
 
 	allowedUids := []string{}
-Loop:
+
 	for _, allowedServiceInfo := range allowedServiceAcccountInfos {
 		serviceAccountInfo := strings.Split(allowedServiceInfo, ":")
+		found := false
 		for _, sa := range serviceaccounts.Items {
 			if sa.Name == serviceAccountInfo[0] && sa.Namespace == serviceAccountInfo[1] {
 				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
-				continue Loop
+				found = true
+				break
 			}
 		}
-		log.Warnf("Unable to get SA %s UID", allowedServiceInfo)
+		if !found {
+			log.Warnf("Unable to get SA %s UID", allowedServiceInfo)
+		}
 	}
 
 	return allowedUids, nil
