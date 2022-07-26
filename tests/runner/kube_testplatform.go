@@ -14,6 +14,7 @@ limitations under the License.
 package runner
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -22,6 +23,7 @@ import (
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -393,4 +395,9 @@ func getNamespaceOrDefault(namespace *string) string {
 func (c *KubeTestPlatform) GetConfiguration(name string) (*configurationv1alpha1.Configuration, error) {
 	client := c.KubeClient.DaprClientSet.ConfigurationV1alpha1().Configurations(kube.DaprTestNamespace)
 	return client.Get(name, metav1.GetOptions{})
+}
+
+func (c *KubeTestPlatform) GetService(name string) (*corev1.Service, error) {
+	client := c.KubeClient.Services(kube.DaprTestNamespace)
+	return client.Get(context.Background(), name, metav1.GetOptions{})
 }
