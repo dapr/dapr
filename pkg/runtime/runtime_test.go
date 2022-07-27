@@ -4070,6 +4070,7 @@ func TestStopWithErrors(t *testing.T) {
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
 	rt.stopActor()
 	assert.NoError(t, rt.shutdownOutputComponents())
+	time.Sleep(100 * time.Millisecond)
 }
 
 func TestFindMatchingRoute(t *testing.T) {
@@ -4101,12 +4102,12 @@ func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
 }
 
 func TestComponentsCallback(t *testing.T) {
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "OK")
 	}))
-	defer svr.Close()
+	defer srv.Close()
 
-	u, err := url.Parse(svr.URL)
+	u, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 	port, _ := strconv.Atoi(u.Port())
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", port)
