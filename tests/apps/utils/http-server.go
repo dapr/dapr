@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -65,12 +64,7 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 	if enableTLS {
 		certFile, keyFile, err = getTLSCertAndKey()
 		if err != nil {
-			log.Printf("Failed to get TLS cert and key: %v, falling back to HTTP", err)
-			enableTLS = false
-		} else {
-			server.TLSConfig = &tls.Config{
-				ClientAuth: tls.RequestClientCert,
-			}
+			log.Fatalf("Failed to get TLS cert and key: %v", err)
 		}
 	}
 

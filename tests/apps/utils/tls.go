@@ -31,6 +31,11 @@ import (
 	"time"
 )
 
+const (
+	// clockSkew is the margin of error for checking whether a certificate is valid.
+	clockSkew = time.Minute * 5
+)
+
 // GenerateTLSCertAndKey generates a self-signed X.509 certificate for a TLS server.
 // Outputs to 'cert.pem' and 'key.pem' and will overwrite existing files.
 //
@@ -47,7 +52,7 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		return err
 	}
 
-	b, err := x509.MarshalECPrivateKey(tlsKey)
+	b, err := x509.MarshalPKCS8PrivateKey(tlsKey)
 	if err != nil {
 		log.Printf("Unable to marshal ECDSA private key: %v", err)
 		return err
@@ -72,8 +77,8 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		Subject: pkix.Name{
 			Organization: []string{"Dapr"},
 		},
-		NotBefore:             validFrom,
-		NotAfter:              validFrom.Add(validFor),
+		NotBefore:             validFrom.Add(-clockSkew),
+		NotAfter:              validFrom.Add(validFor).Add(clockSkew),
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
