@@ -178,6 +178,10 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 	appID := h.getAppID(wrapper)
 	service := h.createDaprServiceValues(ctx, expectedService, wrapper, appID)
 
+	if err := ctrl.SetControllerReference(wrapper.GetObject(), service, h.Scheme); err != nil {
+		return err
+	}
+
 	service.ObjectMeta.ResourceVersion = daprSvc.ObjectMeta.ResourceVersion
 
 	if err := h.Update(ctx, service); err != nil {

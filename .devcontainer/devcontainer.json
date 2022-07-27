@@ -1,9 +1,9 @@
 {
 	"name": "Dapr Dev Environment",
 	// Update the container version when you publish dev-container
-	"image": "docker.io/daprio/dapr-dev:0.1.7",
+	"image": "ghcr.io/dapr/dapr-dev:0.1.8",
 	// Replace with uncommented line below to build your own local copy of the image
-	// "dockerFile": "../docker/Dockerfile-dev",
+	//"dockerFile": "../docker/Dockerfile-dev",
 	"containerEnv": {
 		// Uncomment to overwrite devcontainer .kube/config and .minikube certs with the localhost versions
 		// each time the devcontainer starts, if the respective .kube-localhost/config and .minikube-localhost

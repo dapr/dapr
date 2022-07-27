@@ -124,6 +124,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
 	"github.com/dapr/components-contrib/bindings/azure/storagequeues"
+	"github.com/dapr/components-contrib/bindings/commercetools"
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
@@ -521,6 +522,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("huawei.obs", func() bindings.OutputBinding {
 				return obs.NewHuaweiOBS(logContrib)
+			}),
+			bindings_loader.NewOutput("commercetools", func() bindings.OutputBinding {
+				return commercetools.NewCommercetools(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

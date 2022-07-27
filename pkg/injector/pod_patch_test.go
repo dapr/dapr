@@ -114,6 +114,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
@@ -140,6 +141,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-mtls",
 		}
 
+		// Command should be empty, image's entrypoint to be used.
+		assert.Equal(t, 0, len(container.Command))
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// POD_NAME
@@ -169,6 +172,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"pod_identity")
 
 		expectedArgs := []string{
+			"/dlv",
 			"--listen=:55555",
 			"--accept-multiclient",
 			"--headless=true",
@@ -203,7 +207,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-mtls",
 		}
 
-		assert.Equal(t, "/dlv", container.Command[0])
+		// Command should be empty, image's entrypoint to be used.
+		assert.Equal(t, 0, len(container.Command))
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// POD_NAME
@@ -231,6 +236,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"pod_identity")
 
 		expectedArgs := []string{
+			"/dlv",
 			"--listen=:40000",
 			"--accept-multiclient",
 			"--headless=true",
@@ -265,7 +271,8 @@ func TestGetSideCarContainer(t *testing.T) {
 			"--enable-mtls",
 		}
 
-		assert.Equal(t, "/dlv", container.Command[0])
+		// Command should be empty, image's entrypoint to be used.
+		assert.Equal(t, 0, len(container.Command))
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// DAPR_API_TOKEN
@@ -286,6 +293,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
@@ -322,6 +330,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
@@ -358,6 +367,7 @@ func TestGetSideCarContainer(t *testing.T) {
 			"controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
@@ -430,6 +440,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 		expectedArgs := []string{
+			"/daprd",
 			"--mode", "kubernetes",
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
@@ -456,6 +467,34 @@ func TestGetSideCarContainer(t *testing.T) {
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
+	})
+
+	t.Run("sidecar container should have the correct user configured", func(t *testing.T) {
+		testCases := []struct {
+			envVars string
+			isAdmin bool
+		}{
+			{
+				"SSL_CERT_DIR=/tmp/certificates",
+				true,
+			},
+			{
+				"SSL_CERT_FILE=/tmp/certificates/cert.pem",
+				false,
+			},
+		}
+		for _, tc := range testCases {
+			annotations := map[string]string{}
+			annotations[daprEnvKey] = tc.envVars
+			container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, nil, nil, "", "", "", "sentry:50000", true, "pod_identity")
+
+			if tc.isAdmin {
+				assert.NotNil(t, container.SecurityContext.WindowsOptions, "SecurityContext.WindowsOptions should not be nil")
+				assert.Equal(t, "ContainerAdministrator", *container.SecurityContext.WindowsOptions.RunAsUserName, "SecurityContext.WindowsOptions.RunAsUserName should be ContainerAdministrator")
+			} else {
+				assert.Nil(t, container.SecurityContext.WindowsOptions)
+			}
+		}
 	})
 }
 
