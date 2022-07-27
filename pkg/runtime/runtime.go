@@ -41,6 +41,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
+	md "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -1095,7 +1096,26 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+	spanContext := trace.SpanContext{}
+
+	// Check the grpc-trace-bin with fallback to traceparent.
+	validTraceparent := false
+	if val, ok := metadata[diag.GRPCTraceContextKey]; ok {
+		if sc, ok := diagUtils.SpanContextFromBinary([]byte(val)); ok {
+			spanContext = sc
+		}
+	} else if val, ok := metadata[diag.TraceparentHeader]; ok {
+		if sc, ok := diag.SpanContextFromW3CString(val); ok {
+			spanContext = sc
+			validTraceparent = true
+			// Only parse the tracestate if we've successfully parsed the traceparent.
+			if val, ok := metadata[diag.TracestateHeader]; ok {
+				ts := diag.TraceStateFromW3CString(val)
+				spanContext.WithTraceState(*ts)
+			}
+		}
+	}
+	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
 	path := a.inputBindingRoutes[bindingName]
@@ -1105,6 +1125,21 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+
+		// Add workaround to fallback on checking traceparent header.
+		// As grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus, tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
+		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path.
+		// TODO: Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827.
+		if validTraceparent {
+			spanContextHeaders := make(map[string]string, 2)
+			diag.SpanContextToHTTPHeaders(span.SpanContext(), func(key string, val string) {
+				spanContextHeaders[key] = val
+			})
+			for key, val := range spanContextHeaders {
+				ctx = md.AppendToOutgoingContext(ctx, key, val)
+			}
+		}
+
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		req := &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
