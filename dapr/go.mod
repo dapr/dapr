@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/dapr
 
-go 1.18
+go 1.16
 
 require (
 	google.golang.org/grpc v1.48.0
