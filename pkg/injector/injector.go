@@ -132,7 +132,7 @@ func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeCl
 }
 
 // getServiceAccount parses "service-account:namespace" k/v list and returns an array of UID.
-func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedServiceAcccountInfos []string) ([]string, error) {
+func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedServiceAccountInfos []string) ([]string, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, getKubernetesServiceAccountTimeoutSeconds*time.Second)
 	defer cancel()
 
@@ -143,7 +143,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 
 	allowedUids := []string{}
 
-	for _, allowedServiceInfo := range allowedServiceAcccountInfos {
+	for _, allowedServiceInfo := range allowedServiceAccountInfos {
 		serviceAccountInfo := strings.Split(allowedServiceInfo, ":")
 		found := false
 		for _, sa := range serviceaccounts.Items {
