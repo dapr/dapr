@@ -237,7 +237,7 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, teardown, err := d.connectionCreatorFn(ctx, appAddress, appID, namespace, false, false, false)
+	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
 	defer teardown()
 	if err != nil {
 		return nil, err
