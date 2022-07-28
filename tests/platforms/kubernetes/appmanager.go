@@ -702,7 +702,7 @@ func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	return nil
 }
 
-// DeleteService deletes deployment for the test app.
+// DeleteService deletes service for the test app.
 func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	serviceClient := m.client.Services(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
@@ -769,7 +769,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	return result, nil
 }
 
-// SaveContainerLogs get container logs for all containers in the pod and saves them to disk.
+// StreamContainerLogs get container logs for all containers in the pod and saves them to disk.
 func (m *AppManager) StreamContainerLogs() error {
 	podClient := m.client.Pods(m.namespace)
 

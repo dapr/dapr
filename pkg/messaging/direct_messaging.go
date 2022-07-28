@@ -193,8 +193,7 @@ func (d *directMessaging) invokeWithRetry(
 				resp = nil
 			}
 
-			// We're safe to Unwrap here because it's either nil or a permanent error which contains the Unwrap method.
-			return resp, errors.Unwrap(err)
+			return resp, err
 		}
 		return fn(ctx, app.id, app.namespace, app.address, req)
 	}
