@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220712191927-d38c7867715f
+	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220721232439-3b96384de90d
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.4
@@ -60,7 +60,6 @@ require (
 )
 
 require (
-	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.7.0
@@ -151,6 +150,7 @@ require (
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b // indirect
 	github.com/camunda/zeebe/clients/go/v8 v8.0.3 // indirect
+	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/coreos/go-oidc v2.1.0+incompatible // indirect
 	github.com/creasty/defaults v1.5.2 // indirect
