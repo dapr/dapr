@@ -1248,7 +1248,7 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
 		log.Warnf("failed to create input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return err
 	}
 	err = binding.Init(bindings.Metadata{
@@ -1257,7 +1257,7 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	})
 	if err != nil {
 		log.Errorf("failed to init input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return err
 	}
 
@@ -1277,7 +1277,7 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
 		log.Warnf("failed to create output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return err
 	}
 
@@ -1288,7 +1288,7 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 		})
 		if err != nil {
 			log.Errorf("failed to init output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
+			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 			return err
 		}
 		log.Infof("successful init for output binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -1302,7 +1302,7 @@ func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
 		log.Warnf("error creating configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
 		return err
 	}
 	if store != nil {
@@ -1311,7 +1311,7 @@ func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 			Properties: props,
 		})
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			log.Warnf("error initializing configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 			return err
 		}
@@ -1328,7 +1328,7 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
 		log.Warnf("error creating lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
 		return err
 	}
 	if store == nil {
@@ -1340,7 +1340,7 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 		Properties: props,
 	})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 		log.Warnf("error initializing lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		return err
 	}
@@ -1348,7 +1348,7 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 	a.lockStores[s.ObjectMeta.Name] = store
 	err = lock_loader.SaveLockConfiguration(s.ObjectMeta.Name, props)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 		log.Warnf("error save lock keyprefix: %s", err.Error())
 		return err
 	}
@@ -1362,7 +1362,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
 		log.Warnf("error creating state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
 		return err
 	}
 	if store != nil {
@@ -1372,7 +1372,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
 		if encErr != nil {
 			log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, encErr)
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
 			return encErr
 		}
 
@@ -1388,7 +1388,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 			Properties: props,
 		})
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			log.Warnf("error initializing state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 			return err
 		}
@@ -1396,7 +1396,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		a.stateStores[s.ObjectMeta.Name] = store
 		err = state_loader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			log.Warnf("error save state keyprefix: %s", err.Error())
 			return err
 		}
@@ -1531,7 +1531,7 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
 		log.Warnf("error creating pub sub %s (%s/%s): %s", &c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return err
 	}
 
@@ -1547,7 +1547,7 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	})
 	if err != nil {
 		log.Warnf("error initializing pub sub %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return err
 	}
 
@@ -2051,6 +2051,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 			return err
 		}
 	case <-time.After(timeout):
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
 	}
 
@@ -2389,7 +2390,7 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
 		log.Warnf("failed to create secret store %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return err
 	}
 
@@ -2398,7 +2399,7 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	})
 	if err != nil {
 		log.Warnf("failed to init secret store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return err
 	}
 

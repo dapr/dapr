@@ -12,13 +12,14 @@ import (
 
 // Tag keys.
 var (
-	componentKey    = tag.MustNewKey("component")
-	failReasonKey   = tag.MustNewKey("reason")
-	operationKey    = tag.MustNewKey("operation")
-	actorTypeKey    = tag.MustNewKey("actor_type")
-	trustDomainKey  = tag.MustNewKey("trustDomain")
-	namespaceKey    = tag.MustNewKey("namespace")
-	policyActionKey = tag.MustNewKey("policyAction")
+	componentKey     = tag.MustNewKey("component")
+	failReasonKey    = tag.MustNewKey("reason")
+	operationKey     = tag.MustNewKey("operation")
+	actorTypeKey     = tag.MustNewKey("actor_type")
+	trustDomainKey   = tag.MustNewKey("trustDomain")
+	namespaceKey     = tag.MustNewKey("namespace")
+	policyActionKey  = tag.MustNewKey("policyAction")
+	componentNameKey = tag.MustNewKey("componentName")
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
@@ -150,7 +151,7 @@ func (s *serviceMetrics) Init(appID string) error {
 	return view.Register(
 		diag_utils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
 		diag_utils.NewMeasureView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
-		diag_utils.NewMeasureView(s.componentInitFailed, []tag.Key{appIDKey, componentKey, failReasonKey}, view.Count()),
+		diag_utils.NewMeasureView(s.componentInitFailed, []tag.Key{appIDKey, componentKey, failReasonKey, componentNameKey}, view.Count()),
 
 		diag_utils.NewMeasureView(s.mtlsInitCompleted, []tag.Key{appIDKey}, view.Count()),
 		diag_utils.NewMeasureView(s.mtlsInitFailed, []tag.Key{appIDKey, failReasonKey}, view.Count()),
@@ -190,11 +191,11 @@ func (s *serviceMetrics) ComponentInitialized(component string) {
 }
 
 // ComponentInitFailed records metric when component initialization is failed.
-func (s *serviceMetrics) ComponentInitFailed(component string, reason string) {
+func (s *serviceMetrics) ComponentInitFailed(component string, reason string, name string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diag_utils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason),
+			diag_utils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason, componentNameKey, name),
 			s.componentInitFailed.M(1))
 	}
 }
