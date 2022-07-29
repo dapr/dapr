@@ -14,7 +14,11 @@ limitations under the License.
 package runtime
 
 import (
+	"reflect"
+	"strings"
 	"testing"
+
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -41,6 +45,119 @@ func TestParsePlacementAddr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.addr, func(t *testing.T) {
 			assert.EqualValues(t, tc.out, parsePlacementAddr(tc.addr))
+		})
+	}
+}
+
+func TestComponentDenyList(t *testing.T) {
+	type args struct {
+		envVar string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    componentDenyList
+		allowed map[string]bool
+	}{
+		{
+			name: "empty",
+			args: args{envVar: ""},
+			want: componentDenyList{
+				list: []componentDenyListItem{},
+			},
+			allowed: map[string]bool{
+				"":                   false,
+				"no.version":         false,
+				"state.foo/v1":       true,
+				"state.foo/v2":       true,
+				"state.bar/v1alpha1": true,
+			},
+		},
+		{
+			name: "one item, no version",
+			args: args{envVar: "state.foo"},
+			want: componentDenyList{
+				list: []componentDenyListItem{
+					{typ: "state.foo", version: ""},
+				},
+			},
+			allowed: map[string]bool{
+				"":                   false,
+				"no.version":         false,
+				"state.foo/v1":       false,
+				"state.foo/v2":       false,
+				"state.bar/v1alpha1": true,
+			},
+		},
+		{
+			name: "one item and version",
+			args: args{envVar: "state.foo/v2"},
+			want: componentDenyList{
+				list: []componentDenyListItem{
+					{typ: "state.foo", version: "v2"},
+				},
+			},
+			allowed: map[string]bool{
+				"state.foo/v1":       true,
+				"state.foo/v2":       false,
+				"state.bar/v1alpha1": true,
+			},
+		},
+		{
+			name: "one item with version, one without",
+			args: args{envVar: "state.foo,state.bar/v2"},
+			want: componentDenyList{
+				list: []componentDenyListItem{
+					{typ: "state.foo", version: ""},
+					{typ: "state.bar", version: "v2"},
+				},
+			},
+			allowed: map[string]bool{
+				"state.foo/v1":       false,
+				"state.foo/v2":       false,
+				"state.bar/v1alpha1": true,
+			},
+		},
+		{
+			name: "invalid items",
+			args: args{envVar: "state.foo,state.bar/v2,foo/bar/v2,"},
+			want: componentDenyList{
+				list: []componentDenyListItem{
+					{typ: "state.foo", version: ""},
+					{typ: "state.bar", version: "v2"},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dl := newComponentDenyList(tt.args.envVar)
+			if !reflect.DeepEqual(dl, tt.want) {
+				t.Errorf("newComponentDenyList() = %v, want %v", dl, tt.want)
+			}
+
+			if len(tt.allowed) == 0 {
+				return
+			}
+
+			for compStr, wantAllowed := range tt.allowed {
+				parts := strings.Split(compStr, "/")
+				typ := parts[0]
+				var ver string
+				if len(parts) > 1 {
+					ver = parts[1]
+				}
+				comp := components_v1alpha1.Component{
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    typ,
+						Version: ver,
+					},
+				}
+
+				if gotAllowed := dl.IsAllowed(comp); gotAllowed != wantAllowed {
+					t.Errorf("IsAllowed(%v) = %v, want %v", compStr, gotAllowed, wantAllowed)
+				}
+			}
 		})
 	}
 }

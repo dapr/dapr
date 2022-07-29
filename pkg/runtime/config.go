@@ -49,34 +49,35 @@ const (
 
 // Config holds the Dapr Runtime configuration.
 type Config struct {
-	ID                           string
-	HTTPPort                     int
-	PublicPort                   *int
-	ProfilePort                  int
-	EnableProfiling              bool
-	APIGRPCPort                  int
-	InternalGRPCPort             int
-	ApplicationPort              int
-	APIListenAddresses           []string
-	ApplicationProtocol          Protocol
-	Mode                         modes.DaprMode
-	PlacementAddresses           []string
-	GlobalConfig                 string
-	AllowedOrigins               string
-	Standalone                   config.StandaloneConfig
-	Kubernetes                   config.KubernetesConfig
-	MaxConcurrency               int
-	mtlsEnabled                  bool
-	SentryServiceAddress         string
-	CertChain                    *credentials.CertChain
-	AppSSL                       bool
-	MaxRequestBodySize           int
-	UnixDomainSocket             string
-	ReadBufferSize               int
-	StreamRequestBody            bool
-	GracefulShutdownDuration     time.Duration
-	EnableAPILogging             bool
-	DisableBuiltinK8sSecretStore bool
+	ID                             string
+	HTTPPort                       int
+	PublicPort                     *int
+	ProfilePort                    int
+	EnableProfiling                bool
+	APIGRPCPort                    int
+	InternalGRPCPort               int
+	ApplicationPort                int
+	APIListenAddresses             []string
+	ApplicationProtocol            Protocol
+	Mode                           modes.DaprMode
+	PlacementAddresses             []string
+	GlobalConfig                   string
+	AllowedOrigins                 string
+	Standalone                     config.StandaloneConfig
+	Kubernetes                     config.KubernetesConfig
+	MaxConcurrency                 int
+	mtlsEnabled                    bool
+	SentryServiceAddress           string
+	CertChain                      *credentials.CertChain
+	AppSSL                         bool
+	MaxRequestBodySize             int
+	UnixDomainSocket               string
+	ReadBufferSize                 int
+	StreamRequestBody              bool
+	GracefulShutdownDuration       time.Duration
+	EnableAPILogging               bool
+	DisableBuiltinK8sSecretStore   bool
+	AdditionalComponentAuthorizers []ComponentAuthorizer
 }
 
 // NewRuntimeConfig returns a new runtime config.

@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/acl"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	global_config "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
@@ -303,11 +304,68 @@ func FromFlags() (*DaprRuntime, error) {
 		resiliencyProvider = &resiliency_config.NoOp{}
 	}
 
+	denyComponentsEnv := os.Getenv("DENY_COMPONENTS")
+	if denyComponentsEnv != "" {
+		denyComponents := newComponentDenyList(denyComponentsEnv)
+		runtimeConfig.AdditionalComponentAuthorizers = []ComponentAuthorizer{
+			denyComponents.IsAllowed,
+		}
+	}
+
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
+}
+
+type componentDenyList struct {
+	list []componentDenyListItem
+}
+
+func newComponentDenyList(envVar string) componentDenyList {
+	parts := strings.Split(envVar, ",")
+	list := make([]componentDenyListItem, len(parts))
+	i := 0
+	for _, comp := range parts {
+		if comp == "" {
+			continue
+		}
+		v := strings.Split(comp, "/")
+		switch len(v) {
+		case 1:
+			list[i] = componentDenyListItem{
+				typ: v[0],
+			}
+			i++
+		case 2:
+			list[i] = componentDenyListItem{
+				typ:     v[0],
+				version: v[1],
+			}
+			i++
+		}
+	}
+	list = list[:i]
+	return componentDenyList{list}
+}
+
+func (dl componentDenyList) IsAllowed(component components_v1alpha1.Component) bool {
+	if component.Spec.Type == "" || component.Spec.Version == "" {
+		return false
+	}
+	for _, li := range dl.list {
+		if li.typ == component.Spec.Type && (li.version == "" || li.version == component.Spec.Version) {
+			log.Warnf("component '%s' cannot be loaded because components of type '%s/%s' are not allowed", component.Name, component.Spec.Type, component.Spec.Version)
+			return false
+		}
+	}
+	return true
+}
+
+type componentDenyListItem struct {
+	typ     string
+	version string
 }
 
 func parsePlacementAddr(val string) []string {
