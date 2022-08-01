@@ -92,6 +92,7 @@ type ConfigurationSpec struct {
 	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
 	Features           []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
 	APISpec            APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
+	ComponentsSpec     ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -200,6 +201,12 @@ type SpiffeID struct {
 type FeatureSpec struct {
 	Name    Feature `json:"name" yaml:"name"`
 	Enabled bool    `json:"enabled" yaml:"enabled"`
+}
+
+// ComponentsSpec describes the configuration for Dapr components
+type ComponentsSpec struct {
+	// Denylist of component types that cannot be instantiated
+	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
 }
 
 // LoadDefaultConfiguration returns the default config.
