@@ -58,7 +58,7 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		return err
 	}
 
-	if err = bytesToPemFile(path.Join(directory, "key.pem"), "EC PRIVATE KEY", b); err != nil {
+	if err = bytesToPemFile(path.Join(directory, "key.pem"), "PRIVATE KEY", b); err != nil {
 		log.Printf("Unable to write key.pem: %v", err)
 		return err
 	}
