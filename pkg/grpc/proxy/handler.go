@@ -1,17 +1,20 @@
-// Copyright Michal Witkowski.
-// Code is based on https://github.com/trusch/grpc-proxy
+// Based on https://github.com/trusch/grpc-proxy
+// Copyright Michal Witkowski. Licensed under Apache2 license: https://github.com/trusch/grpc-proxy/blob/master/LICENSE.txt
 
 package proxy
 
 import (
 	"fmt"
 	"io"
+	"sync"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc/proxy/codec"
@@ -55,9 +58,10 @@ func RegisterService(server *grpc.Server, director StreamDirector, resiliency re
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func TransparentHandler(director StreamDirector, resiliency resiliency.Provider, isLocalFn func(string) (bool, error)) grpc.StreamHandler {
 	streamer := &handler{
-		director:   director,
-		resiliency: resiliency,
-		isLocalFn:  isLocalFn,
+		director:      director,
+		resiliency:    resiliency,
+		isLocalFn:     isLocalFn,
+		bufferedCalls: sync.Map{},
 	}
 	return streamer.handler
 }
@@ -66,15 +70,18 @@ type handler struct {
 	director      StreamDirector
 	resiliency    resiliency.Provider
 	isLocalFn     func(string) (bool, error)
-	bufferedCalls []interface{}
+	bufferedCalls sync.Map
+	headersSent   sync.Map
 }
 
 // handler is where the real magic of proxying happens.
 // It is invoked like any gRPC server stream and uses the gRPC server framing to get and receive bytes from the wire,
 // forwarding it to a ClientStream established against the relevant ClientConn.
 func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error {
-	// Clear the buffered calls on a new request.
-	s.bufferedCalls = []interface{}{}
+	// Create buffered calls for this request.
+	requestID := uuid.New().String()
+	s.bufferedCalls.Store(requestID, []interface{}{})
+	s.headersSent.Store(requestID, false)
 
 	// little bit of gRPC internals never hurt anyone
 	fullMethodName, ok := grpc.MethodFromServerStream(serverStream)
@@ -121,8 +128,8 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		// Explicitly *do not close* s2cErrChan and c2sErrChan, otherwise the select below will not terminate.
 		// Channels do not have to be closed, it is just a control flow mechanism, see
 		// https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
-		s2cErrChan := s.forwardServerToClient(serverStream, clientStream)
-		c2sErrChan := s.forwardClientToServer(clientStream, serverStream)
+		s2cErrChan := s.forwardServerToClient(serverStream, clientStream, requestID)
+		c2sErrChan := s.forwardClientToServer(clientStream, serverStream, requestID)
 		// We don't know which side is going to stop sending first, so we need a select between the two.
 		for i := 0; i < 2; i++ {
 			select {
@@ -153,20 +160,25 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		}
 		return status.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
 	})
-	s.bufferedCalls = []interface{}{}
+	// Clear the request's buffered calls.
+	s.bufferedCalls.Delete(requestID)
+	s.headersSent.Delete(requestID)
 	return cErr
 }
 
-func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
+func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream, requestID string) chan error {
 	ret := make(chan error, 1)
 	go func() {
 		f := &codec.Frame{}
+		syncMapValue, _ := s.headersSent.Load(requestID)
+		localHeaders := syncMapValue.(bool)
 		for i := 0; ; i++ {
 			if err := src.RecvMsg(f); err != nil {
 				ret <- err // this can be io.EOF which is happy case
 				break
 			}
-			if i == 0 {
+			// In the case of retries, don't resend the headers.
+			if i == 0 && !localHeaders {
 				// This is a bit of a hack, but client to server headers are only readable after first client msg is
 				// received but must be written to server stream before the first msg is flushed.
 				// This is the only place to do it nicely.
@@ -177,6 +189,8 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 				if err := dst.SendHeader(md); err != nil {
 					break
 				}
+				localHeaders = true
+				s.headersSent.Store(requestID, true)
 			}
 			if err := dst.SendMsg(f); err != nil {
 				break
@@ -186,26 +200,27 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 	return ret
 }
 
-func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientStream) chan error {
+func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientStream, requestID string) chan error {
 	ret := make(chan error, 1)
 	go func() {
 		f := &codec.Frame{}
-		bufferedSends := s.bufferedCalls
-		if len(bufferedSends) > 0 {
-			for _, msg := range s.bufferedCalls {
-				if err := dst.SendMsg(msg); err != nil {
-					ret <- err
-					return
-				}
+		syncMapValue, _ := s.bufferedCalls.Load(requestID)
+		bufferedFrames := syncMapValue.([]interface{})
+		for _, msg := range bufferedFrames {
+			if err := dst.SendMsg(msg); err != nil {
+				ret <- err
+				return
 			}
 		}
 		for i := 0; ; i++ {
 			if err := src.RecvMsg(f); err != nil {
+				s.bufferedCalls.Store(requestID, bufferedFrames)
 				ret <- err // this can be io.EOF which is happy case
 				break
 			}
-			s.bufferedCalls = append(s.bufferedCalls, f)
+			bufferedFrames = append(bufferedFrames, f)
 			if err := dst.SendMsg(f); err != nil {
+				s.bufferedCalls.Store(requestID, bufferedFrames)
 				break
 			}
 		}

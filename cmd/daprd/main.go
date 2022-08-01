@@ -124,6 +124,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
 	"github.com/dapr/components-contrib/bindings/azure/storagequeues"
+	"github.com/dapr/components-contrib/bindings/commercetools"
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
@@ -166,6 +167,7 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/dapr/components-contrib/configuration"
+	configuration_azure "github.com/dapr/components-contrib/configuration/azure/appconfig"
 	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
 
 	// Lock.
@@ -292,6 +294,11 @@ func main() {
 		runtime.WithConfigurations(
 			configuration_loader.New("redis", func() configuration.Store {
 				return configuration_redis.NewRedisConfigurationStore(logContrib)
+			}),
+		),
+		runtime.WithConfigurations(
+			configuration_loader.New("azure.appconfig", func() configuration.Store {
+				return configuration_azure.NewAzureAppConfigurationStore(logContrib)
 			}),
 		),
 		runtime.WithLocks(
@@ -521,6 +528,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("huawei.obs", func() bindings.OutputBinding {
 				return obs.NewHuaweiOBS(logContrib)
+			}),
+			bindings_loader.NewOutput("commercetools", func() bindings.OutputBinding {
+				return commercetools.NewCommercetools(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

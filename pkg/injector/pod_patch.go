@@ -741,8 +741,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 		},
-		Ports:   ports,
-		Command: cmd,
+		Ports: ports,
+		Args:  append(cmd, args...),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "NAMESPACE",
@@ -757,7 +757,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 				},
 			},
 		},
-		Args: args,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
@@ -775,6 +774,19 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	}
 
 	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
+
+	// This is a special case that requires administrator privileges in Windows containers
+	// to install the certificates to the root store. If this environment variable is set,
+	// the container security context should be set to run as administrator.
+	for _, env := range c.Env {
+		if env.Name == "SSL_CERT_DIR" {
+			userName := "ContainerAdministrator"
+			c.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
+				RunAsUserName: &userName,
+			}
+			break
+		}
+	}
 
 	if socketVolumeMount != nil {
 		c.VolumeMounts = []corev1.VolumeMount{*socketVolumeMount}

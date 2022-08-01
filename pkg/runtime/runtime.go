@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
 
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/google/uuid"
@@ -1074,14 +1074,14 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	return appResponseBody, nil
 }
 
-func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
-	err := binding.Read(func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
+func (a *DaprRuntime) readFromBinding(subscribeCtx context.Context, name string, binding bindings.InputBinding) error {
+	err := binding.Read(subscribeCtx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		if resp != nil {
 			start := time.Now()
 			b, err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
 			elapsed := diag.ElapsedSince(start)
 
-			diag.DefaultComponentMonitoring.InputBindingEvent(context.TODO(), name, err == nil, elapsed)
+			diag.DefaultComponentMonitoring.InputBindingEvent(context.Background(), name, err == nil, elapsed)
 
 			if err != nil {
 				log.Debugf("error from app consumer for binding [%s]: %s", name, err)
@@ -1793,7 +1793,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
 				return ErrUnexpectedEnvelopeData
 			}
-		} else if contenttype.IsJSONContentType(envelope.DataContentType) {
+		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
 			envelope.Data, _ = json.Marshal(data)
 		}
 	}
@@ -2003,7 +2003,7 @@ func (a *DaprRuntime) processComponents() {
 		if err != nil {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
 			if !comp.Spec.IgnoreErrors {
-				log.Warnf("process component error daprd process will exited, gracefully to stop")
+				log.Warnf("error processing component, daprd process will exit gracefully")
 				a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
 				log.Fatalf(e)
 			}
@@ -2114,6 +2114,7 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 	var merr error
 
 	// Close components if they implement `io.Closer`
+	// Input bindings are closed when a.ctx is canceled
 	for name, binding := range a.outputBindings {
 		if closer, ok := binding.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
@@ -2150,17 +2151,6 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 			log.Warn(err)
 		}
 	}
-	// Close bindings if they implement `io.Closer`
-	// TODO: Separate the input part of bindings and close output here, then close the input via cancelation of a.ctx
-	for name, binding := range a.inputBindings {
-		if closer, ok := binding.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing input binding %s: %w", name, err)
-				merr = multierror.Append(merr, err)
-				log.Warn(err)
-			}
-		}
-	}
 	if closer, ok := a.nameResolver.(io.Closer); ok {
 		if err := closer.Close(); err != nil {
 			err = fmt.Errorf("error closing name resolver: %w", err)
@@ -2192,7 +2182,7 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 
 	log.Infof("dapr shutting down.")
 
-	log.Infof("Stopping PubSub subscribers")
+	log.Infof("Stopping PubSub subscribers and input bindings")
 	a.cancel()
 	a.stopActor()
 	log.Info("Stopping Dapr APIs")
@@ -2528,22 +2518,21 @@ func (a *DaprRuntime) startSubscribing() {
 	}
 }
 
-func (a *DaprRuntime) startReadingFromBindings() error {
+func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	if a.appChannel == nil {
 		return errors.New("app channel not initialized")
 	}
 	for name, binding := range a.inputBindings {
-		go func(name string, binding bindings.InputBinding) {
-			if !a.isAppSubscribedToBinding(name) {
-				log.Infof("app has not subscribed to binding %s.", name)
-				return
-			}
+		if !a.isAppSubscribedToBinding(name) {
+			log.Infof("app has not subscribed to binding %s.", name)
+			continue
+		}
 
-			err := a.readFromBinding(name, binding)
-			if err != nil {
-				log.Errorf("error reading from input binding %s: %s", name, err)
-			}
-		}(name, binding)
+		err = a.readFromBinding(a.ctx, name, binding)
+		if err != nil {
+			log.Errorf("error reading from input binding %s: %s", name, err)
+			continue
+		}
 	}
 	return nil
 }

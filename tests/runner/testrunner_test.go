@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	corev1 "k8s.io/api/core/v1"
 
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -103,6 +104,11 @@ func (m *MockPlatform) GetTotalRestarts(appName string) (int, error) {
 func (m *MockPlatform) GetConfiguration(name string) (*configurationv1alpha1.Configuration, error) {
 	args := m.Called(name)
 	return &configurationv1alpha1.Configuration{}, args.Error(0)
+}
+
+func (m *MockPlatform) GetService(name string) (*corev1.Service, error) {
+	args := m.Called(name)
+	return &corev1.Service{}, args.Error(0)
 }
 
 func TestStartRunner(t *testing.T) {

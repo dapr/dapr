@@ -22,8 +22,8 @@ import (
 	"io"
 	"net"
 	gohttp "net/http"
-	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1782,6 +1782,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
+		extendedMetadata: sync.Map{},
 		getComponentsCapabilitesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
@@ -1789,13 +1790,18 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			return capsMap
 		},
 	}
+	// PutMetadata only stroes string(request body)
+	testAPI.extendedMetadata.Store("test", "value")
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
 	expectedBody := map[string]interface{}{
-		"id":       "xyz",
-		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
-		"extended": make(map[string]string),
+		"id":     "xyz",
+		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
+		"extended": map[string]string{
+			"test":               "value",
+			"daprRuntimeVersion": "edge",
+		},
 		"components": []map[string]interface{}{
 			{
 				"name":         "MockComponent1Name",
@@ -1821,6 +1827,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 		testAPI.id = "xyz"
 		testAPI.actor = mockActors
+		testAPI.daprRunTimeVersion = "edge"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
@@ -1953,8 +1960,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 func TestAPIToken(t *testing.T) {
 	token := "1234"
 
-	os.Setenv("DAPR_API_TOKEN", token)
-	defer os.Unsetenv("DAPR_API_TOKEN")
+	t.Setenv("DAPR_API_TOKEN", token)
 
 	fakeHeaderMetadata := map[string][]string{
 		"Accept-Encoding": {"gzip"},
