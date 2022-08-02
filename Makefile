@@ -71,7 +71,18 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_NAME+= "v1.28.0"
+PROTOC_GEN_GO_VERSION = v1.28.0
+PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
+
+ifeq ($(TARGET_OS_LOCAL),windows)
+	BUILD_TOOLS_BIN ?= build-tools.exe
+	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
+	RUN_BUILD_TOOLS ?= cd .build-tools; go.exe run .
+else
+	BUILD_TOOLS_BIN ?= build-tools
+	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
+	RUN_BUILD_TOOLS ?= cd .build-tools; go run .
+endif
 
 ifeq ($(TARGET_OS_LOCAL),windows)
 	BUILD_TOOLS_BIN ?= build-tools.exe
@@ -323,7 +334,7 @@ check: format test lint
 ################################################################################
 .PHONY: init-proto
 init-proto:
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2.0
 
 ################################################################################
