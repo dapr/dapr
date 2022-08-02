@@ -34,6 +34,7 @@ type Config struct {
 	Namespace                     string
 	Reentrancy                    app_config.ReentrancyConfig
 	RemindersStoragePartitions    int
+	Pubsub                        []app_config.PubSubConfig
 	EntityConfigs                 map[string]EntityConfig
 }
 
@@ -71,6 +72,7 @@ func NewConfig(hostAddress, appID string, placementAddresses []string, port int,
 		Namespace:                     namespace,
 		Reentrancy:                    appConfig.Reentrancy,
 		RemindersStoragePartitions:    appConfig.RemindersStoragePartitions,
+		Pubsub:                        make([]app_config.PubSubConfig, 0),
 		EntityConfigs:                 make(map[string]EntityConfig),
 	}
 
@@ -108,6 +110,15 @@ func NewConfig(hostAddress, appID string, placementAddresses []string, port int,
 			} else {
 				log.Warnf("Configuration specified for non-hosted actor type: %s", entity)
 			}
+		}
+	}
+
+	// Check pubsub configuration
+	for _, pubsub := range appConfig.Pubsub {
+		if _, ok := hostedTypes[pubsub.ActorType]; !ok {
+			log.Errorf("Pubsub ActorType: %s is not hosted", pubsub.ActorType)
+		} else {
+			c.Pubsub = append(c.Pubsub, pubsub)
 		}
 	}
 

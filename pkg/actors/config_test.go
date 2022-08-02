@@ -53,6 +53,14 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 		DrainOngoingCallTimeout:    "5s",
 		DrainRebalancedActors:      true,
 		RemindersStoragePartitions: 1,
+		Pubsub: []app_config.PubSubConfig{
+			{
+				PubSubName: "Mypubsub",
+				Topic:      "mytopic",
+				ActorType:  "actor1",
+				Method:     "mymethod",
+			},
+		},
 		EntityConfigs: []app_config.EntityConfig{
 			{
 				Entities:                []string{"actor1", "actor2"},

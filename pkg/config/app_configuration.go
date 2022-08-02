@@ -26,6 +26,9 @@ type ApplicationConfig struct {
 	Reentrancy                 ReentrancyConfig `json:"reentrancy,omitempty"`
 	RemindersStoragePartitions int              `json:"remindersStoragePartitions"`
 
+	// Pubsub for actors, pubsub,topic, actor type and method
+	Pubsub []PubSubConfig `json:"pubsub,omitempty"`
+
 	// Duplicate of the above config so we can assign it to individual entities.
 	EntityConfigs []EntityConfig `json:"entitiesConfig,omitempty"`
 }
@@ -33,6 +36,14 @@ type ApplicationConfig struct {
 type ReentrancyConfig struct {
 	Enabled       bool `json:"enabled"`
 	MaxStackDepth *int `json:"maxStackDepth,omitempty"`
+}
+
+type PubSubConfig struct {
+	PubSubName           string `json:"pubsubName"`
+	Topic                string `json:"topic"`
+	ActorType            string `json:"actorType"`
+	Method               string `json:"method"`
+	ActorIDDataAttribute string `json:"actorIDDataAttribute,omitempty"`
 }
 
 type EntityConfig struct {
