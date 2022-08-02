@@ -8,7 +8,7 @@ This document helps you get started developing Dapr. If you find any problems wh
 
    > On Windows, the Dapr build environment depends on Git BASH that comes as a part of [Git for Windows](https://gitforwindows.org).
    >
-   > Ensure that the Git and Unix tools are part of the `PATH` environment variable, and that the editor experience is integrated with Windows terminal. For example, if [installing Git with chocolatey](https://chocolatey.org/packages/git), you may want to specify:
+   > Ensure that the Git and Unix tools are part of the `PATH` environment variable, and that the editor experience is integrated with the Windows Terminal. For example, if [installing Git with chocolatey](https://chocolatey.org/packages/git), you may want to specify:
    >
    > ```cmd
    > choco install git -y --package-parameters="/GitAndUnixToolsOnPath /WindowsTerminal"
@@ -21,29 +21,13 @@ This document helps you get started developing Dapr. If you find any problems wh
 
 2. Create your [Docker Hub account](https://hub.docker.com/signup) if you don't already have one.
 
-## Golang dev environment
+## Go (Golang)
 
-1. Download and install [Go 1.16 or later](https://golang.org/doc/install#tarball).
-
-   - Make sure that your `GOPATH` and `PATH` environment variables are configured so that go modules can be run. For example:
-
-     **Linux and MacOS**
-
-     ```bash
-     export GOPATH=~/go
-     export PATH=$PATH:$GOPATH/bin
-     ```
-
-     **Windows**
-
-     ```cmd
-     set GOPATH=%USERPROFILE%\go
-     set PATH=%PATH%;%GOPATH%\bin
-     ```
+1. Download and install [Go 1.18 or later](https://golang.org/doc/install#tarball).
 
 2. Install [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Go debugging, if desired.
 
-3. Install [golangci-lint](https://golangci-lint.run/usage/install).
+3. Install [golangci-lint](https://golangci-lint.run/usage/install) version 1.45.2.
 
 ## Setup a Kubernetes development environment
 
@@ -63,30 +47,21 @@ Dapr uses `make` for a variety of build and test actions, and needs to be instal
    sudo apt-get install build-essential
    ```
 
-### MacOS
+### macOS
 
-1. In Xcode Preferences, go to the _Downloads_ tab.
-2. Under _Components_ push the _Install_ button next to _Command Line Tools_.
-3. After the tools are installed, ensure that the tools are switched to the new versions:
+1. Ensure that build tools are installed:
 
-   ```bash
-   sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
+   ```sh
+   xcode-select --install
    ```
 
-4. When completed, you should see `make` and other command line developer tools in `/usr/bin`.
+2. When completed, you should see `make` and other command line developer tools in `/usr/bin`.
 
 ### Windows
 
-1. Install [MinGW v8.1.0](https://chocolatey.org/packages/mingw/8.1.0) with [Chocolatey](https://chocolatey.org/install):
+1. Install MinGW and make with [Chocolatey](https://chocolatey.org/install):
 
    ```cmd
-   choco install mingw --version 8.1.0
-   ```
-
-   > Versions of MinGW newer than 8.1.0 will not contain `mingw32-make.exe`, so the `--version` must be specified.
-
-2. Create a link to `mingw32-make.exe` so that it can be invoked as `make`:
-
-   ```cmd
-   mklink C:\ProgramData\chocolatey\bin\make.exe C:\ProgramData\chocolatey\bin\mingw32-make.exe
+   choco install mingw
+   choco install make
    ```
