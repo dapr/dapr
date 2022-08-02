@@ -19,11 +19,13 @@ package resiliencyapp
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/agrea/ptr"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -37,6 +39,7 @@ type FailureMessage struct {
 	ID              string         `json:"id"`
 	MaxFailureCount *int           `json:"maxFailureCount,omitempty"`
 	Timeout         *time.Duration `json:"timeout,omitempty"`
+	ResponseCode    *int           `json:"responseCode,omitempty"`
 }
 
 type CallRecord struct {
@@ -294,6 +297,9 @@ func TestServiceInvocationResiliency(t *testing.T) {
 		Timeout      *time.Duration
 		shouldFail   bool
 		callType     string
+		targetApp    string
+		expectCount  *int
+		expectStatus *int
 	}{
 		{
 			Name:         "Test invoking app method recovers from failure",
@@ -352,6 +358,22 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			shouldFail:   true,
 			callType:     "grpc_proxy",
 		},
+		{
+			Name:         "Test invoking non-existent app http",
+			FailureCount: &recoverableErrorCount,
+			expectStatus: ptr.Int(500),
+			callType:     "http",
+			targetApp:    "badapp",
+			expectCount:  ptr.Int(0),
+		},
+		{
+			Name:         "Test invoking non-existent app grpc",
+			FailureCount: &recoverableErrorCount,
+			expectStatus: ptr.Int(500),
+			callType:     "grpc",
+			targetApp:    "badapp",
+			expectCount:  ptr.Int(0),
+		},
 	}
 
 	// Get application URLs/wait for healthy.
@@ -368,12 +390,22 @@ func TestServiceInvocationResiliency(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			message := createFailureMessage(tc.FailureCount, tc.Timeout)
 			b, _ := json.Marshal(message)
-			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeService/%s", externalURL, tc.callType), b)
+			u := fmt.Sprintf("%s/tests/invokeService/%s", externalURL, tc.callType)
+			if tc.targetApp != "" {
+				qs := url.Values{
+					"target_app": []string{tc.targetApp},
+				}
+				u += "?" + qs.Encode()
+			}
+			_, code, err := utils.HTTPPostWithStatus(u, b)
 			require.NoError(t, err)
-			if !tc.shouldFail {
-				require.Equal(t, 200, code)
-			} else {
+			switch {
+			case tc.expectStatus != nil:
+				require.Equal(t, *tc.expectStatus, code)
+			case tc.shouldFail:
 				require.Equal(t, 500, code)
+			default:
+				require.Equal(t, 200, code)
 			}
 
 			var callCount map[string][]CallRecord
@@ -384,11 +416,15 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			resp, err := utils.HTTPGet(fmt.Sprintf("%s/%s", externalURL, getCallsURL))
 			require.NoError(t, err)
 
-			json.Unmarshal(resp, &callCount)
-			if tc.shouldFail {
+			err = json.Unmarshal(resp, &callCount)
+			require.NoError(t, err)
+			switch {
+			case tc.expectCount != nil:
+				require.Equal(t, *tc.expectCount, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+			case tc.shouldFail:
 				// First call + 5 retries and no more.
 				require.Equal(t, 6, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
-			} else {
+			default:
 				// First call + 3 retries and recovery.
 				require.Equal(t, 4, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
 			}

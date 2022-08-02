@@ -26,6 +26,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"google.golang.org/grpc"
+	grpccodes "google.golang.org/grpc/codes"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -50,6 +51,7 @@ type FailureMessage struct {
 	ID              string         `json:"id"`
 	MaxFailureCount *int           `json:"maxFailureCount,omitempty"`
 	Timeout         *time.Duration `json:"timeout,omitempty"`
+	ResponseCode    *int           `json:"responseCode,omitempty"`
 }
 
 // SayHello implements helloworld.GreeterServer
@@ -119,6 +121,10 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 		log.Printf("Seen %s %d times.", message.ID, callCount)
 
 		s.callTracking[message.ID] = append(s.callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+
+		if message.ResponseCode != nil {
+			return nil, grpc.Errorf(grpccodes.Code(*message.ResponseCode), "forced failure with status code %d", *message.ResponseCode)
+		}
 
 		if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
 			if message.Timeout != nil {
