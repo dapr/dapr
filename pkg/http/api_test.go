@@ -23,7 +23,6 @@ import (
 	"net"
 	gohttp "net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -61,6 +60,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	dapr_metadata "github.com/dapr/dapr/pkg/metadata"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -1782,8 +1782,8 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
-		extendedMetadata: sync.Map{},
-		getComponentsCapabilitesFn: func() map[string][]string {
+		extendedMetadata: &dapr_metadata.DefaultMetadataStore{},
+		getComponentsCapabilitiesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
@@ -1791,7 +1791,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		},
 	}
 	// PutMetadata only stroes string(request body)
-	testAPI.extendedMetadata.Store("test", "value")
+	_ = testAPI.extendedMetadata.MetadataSet("test", "value")
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 

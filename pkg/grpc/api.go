@@ -60,6 +60,8 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+
+	dapr_metadata "github.com/dapr/dapr/pkg/metadata"
 )
 
 const (
@@ -111,29 +113,29 @@ type API interface {
 }
 
 type api struct {
-	actor                      actors.Actors
-	directMessaging            messaging.DirectMessaging
-	appChannel                 channel.AppChannel
-	resiliency                 resiliency.Provider
-	stateStores                map[string]state.Store
-	transactionalStateStores   map[string]state.TransactionalStore
-	secretStores               map[string]secretstores.SecretStore
-	secretsConfiguration       map[string]config.SecretsScope
-	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
-	configurationSubscribeLock sync.Mutex
-	lockStores                 map[string]lock.Store
-	pubsubAdapter              runtime_pubsub.Adapter
-	id                         string
-	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec                config.TracingSpec
-	accessControlList          *config.AccessControlList
-	appProtocol                string
-	extendedMetadata           sync.Map
-	components                 []components_v1alpha.Component
-	shutdown                   func()
-	getComponentsCapabilitesFn func() map[string][]string
-	daprRunTimeVersion         string
+	actor                       actors.Actors
+	directMessaging             messaging.DirectMessaging
+	appChannel                  channel.AppChannel
+	resiliency                  resiliency.Provider
+	stateStores                 map[string]state.Store
+	transactionalStateStores    map[string]state.TransactionalStore
+	secretStores                map[string]secretstores.SecretStore
+	secretsConfiguration        map[string]config.SecretsScope
+	configurationStores         map[string]configuration.Store
+	configurationSubscribe      map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
+	configurationSubscribeLock  sync.Mutex
+	lockStores                  map[string]lock.Store
+	pubsubAdapter               runtime_pubsub.Adapter
+	id                          string
+	sendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec                 config.TracingSpec
+	accessControlList           *config.AccessControlList
+	appProtocol                 string
+	extendedMetadata            dapr_metadata.MetadataStore
+	components                  []components_v1alpha.Component
+	shutdown                    func()
+	getComponentsCapabilitiesFn func() map[string][]string
+	daprRunTimeVersion          string
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
@@ -284,6 +286,7 @@ func NewAPI(
 	getComponentsFn func() []components_v1alpha.Component,
 	shutdown func(),
 	getComponentsCapabilitiesFn func() map[string][]string,
+	extendedMetadata dapr_metadata.MetadataStore,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -292,26 +295,27 @@ func NewAPI(
 		}
 	}
 	return &api{
-		directMessaging:            directMessaging,
-		actor:                      actor,
-		id:                         appID,
-		resiliency:                 resiliency,
-		appChannel:                 appChannel,
-		pubsubAdapter:              pubsubAdapter,
-		stateStores:                stateStores,
-		transactionalStateStores:   transactionalStateStores,
-		secretStores:               secretStores,
-		configurationStores:        configurationStores,
-		configurationSubscribe:     make(map[string]chan struct{}),
-		lockStores:                 lockStores,
-		secretsConfiguration:       secretsConfiguration,
-		sendToOutputBindingFn:      sendToOutputBindingFn,
-		tracingSpec:                tracingSpec,
-		accessControlList:          accessControlList,
-		appProtocol:                appProtocol,
-		shutdown:                   shutdown,
-		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
-		daprRunTimeVersion:         version.Version(),
+		directMessaging:             directMessaging,
+		actor:                       actor,
+		id:                          appID,
+		resiliency:                  resiliency,
+		appChannel:                  appChannel,
+		pubsubAdapter:               pubsubAdapter,
+		stateStores:                 stateStores,
+		transactionalStateStores:    transactionalStateStores,
+		secretStores:                secretStores,
+		configurationStores:         configurationStores,
+		configurationSubscribe:      make(map[string]chan struct{}),
+		lockStores:                  lockStores,
+		secretsConfiguration:        secretsConfiguration,
+		sendToOutputBindingFn:       sendToOutputBindingFn,
+		tracingSpec:                 tracingSpec,
+		accessControlList:           accessControlList,
+		appProtocol:                 appProtocol,
+		shutdown:                    shutdown,
+		getComponentsCapabilitiesFn: getComponentsCapabilitiesFn,
+		daprRunTimeVersion:          version.Version(),
+		extendedMetadata:            extendedMetadata,
 	}
 }
 
@@ -1470,22 +1474,17 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 }
 
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
-	temp := make(map[string]string)
+	temp, _ := a.extendedMetadata.MetadataGet()
 
-	// Copy synchronously so it can be serialized to JSON.
-	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = value.(string)
-		return true
-	})
 	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
-	componentsCapabilties := a.getComponentsCapabilitesFn()
+	componentsCapabilities := a.getComponentsCapabilitiesFn()
 	for _, comp := range a.components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
 			Type:         comp.Spec.Type,
-			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
+			Capabilities: getOrDefaultCapabilities(componentsCapabilities, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1496,7 +1495,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 	return response, nil
 }
 
-func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 	if val, ok := dict[key]; ok {
 		return val
 	}
@@ -1505,7 +1504,10 @@ func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
 
 // SetMetadata Sets value in extended metadata of the sidecar.
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
-	a.extendedMetadata.Store(in.Key, in.Value)
+	err := a.extendedMetadata.MetadataSet(in.Key, in.Value)
+	if err != nil {
+		return &emptypb.Empty{}, err
+	}
 	return &emptypb.Empty{}, nil
 }
 

@@ -21,7 +21,6 @@ import (
 	nethttp "net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/fasthttp/router"
@@ -55,6 +54,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	dapr_metadata "github.com/dapr/dapr/pkg/metadata"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -72,30 +72,30 @@ type API interface {
 }
 
 type api struct {
-	endpoints                  []Endpoint
-	publicEndpoints            []Endpoint
-	directMessaging            messaging.DirectMessaging
-	appChannel                 channel.AppChannel
-	getComponentsFn            func() []components_v1alpha1.Component
-	resiliency                 resiliency.Provider
-	stateStores                map[string]state.Store
-	lockStores                 map[string]lock.Store
-	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]chan struct{}
-	transactionalStateStores   map[string]state.TransactionalStore
-	secretStores               map[string]secretstores.SecretStore
-	secretsConfiguration       map[string]config.SecretsScope
-	actor                      actors.Actors
-	pubsubAdapter              runtime_pubsub.Adapter
-	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	id                         string
-	extendedMetadata           sync.Map
-	readyStatus                bool
-	outboundReadyStatus        bool
-	tracingSpec                config.TracingSpec
-	shutdown                   func()
-	getComponentsCapabilitesFn func() map[string][]string
-	daprRunTimeVersion         string
+	endpoints                   []Endpoint
+	publicEndpoints             []Endpoint
+	directMessaging             messaging.DirectMessaging
+	appChannel                  channel.AppChannel
+	getComponentsFn             func() []components_v1alpha1.Component
+	resiliency                  resiliency.Provider
+	stateStores                 map[string]state.Store
+	lockStores                  map[string]lock.Store
+	configurationStores         map[string]configuration.Store
+	configurationSubscribe      map[string]chan struct{}
+	transactionalStateStores    map[string]state.TransactionalStore
+	secretStores                map[string]secretstores.SecretStore
+	secretsConfiguration        map[string]config.SecretsScope
+	actor                       actors.Actors
+	pubsubAdapter               runtime_pubsub.Adapter
+	sendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	id                          string
+	extendedMetadata            dapr_metadata.MetadataStore
+	readyStatus                 bool
+	outboundReadyStatus         bool
+	tracingSpec                 config.TracingSpec
+	shutdown                    func()
+	getComponentsCapabilitiesFn func() map[string][]string
+	daprRunTimeVersion          string
 }
 
 type registeredComponent struct {
@@ -154,6 +154,7 @@ func NewAPI(
 	tracingSpec config.TracingSpec,
 	shutdown func(),
 	getComponentsCapabilitiesFn func() map[string][]string,
+	extendedMetadata dapr_metadata.MetadataStore,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -162,25 +163,26 @@ func NewAPI(
 		}
 	}
 	api := &api{
-		appChannel:                 appChannel,
-		getComponentsFn:            getComponentsFn,
-		resiliency:                 resiliency,
-		directMessaging:            directMessaging,
-		stateStores:                stateStores,
-		lockStores:                 lockStores,
-		transactionalStateStores:   transactionalStateStores,
-		secretStores:               secretStores,
-		secretsConfiguration:       secretsConfiguration,
-		configurationStores:        configurationStores,
-		configurationSubscribe:     make(map[string]chan struct{}),
-		actor:                      actor,
-		pubsubAdapter:              pubsubAdapter,
-		sendToOutputBindingFn:      sendToOutputBindingFn,
-		id:                         appID,
-		tracingSpec:                tracingSpec,
-		shutdown:                   shutdown,
-		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
-		daprRunTimeVersion:         version.Version(),
+		appChannel:                  appChannel,
+		getComponentsFn:             getComponentsFn,
+		resiliency:                  resiliency,
+		directMessaging:             directMessaging,
+		stateStores:                 stateStores,
+		lockStores:                  lockStores,
+		transactionalStateStores:    transactionalStateStores,
+		secretStores:                secretStores,
+		secretsConfiguration:        secretsConfiguration,
+		configurationStores:         configurationStores,
+		configurationSubscribe:      make(map[string]chan struct{}),
+		actor:                       actor,
+		pubsubAdapter:               pubsubAdapter,
+		sendToOutputBindingFn:       sendToOutputBindingFn,
+		id:                          appID,
+		tracingSpec:                 tracingSpec,
+		shutdown:                    shutdown,
+		getComponentsCapabilitiesFn: getComponentsCapabilitiesFn,
+		daprRunTimeVersion:          version.Version(),
+		extendedMetadata:            extendedMetadata,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -1814,20 +1816,13 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
-	temp := make(map[string]string)
-
-	// Copy synchronously so it can be serialized to JSON.
-	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = value.(string)
-
-		return true
-	})
+	temp, _ := a.extendedMetadata.MetadataGet()
 	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	activeActorsCount := []actors.ActiveActorsCount{}
 	if a.actor != nil {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
-	componentsCapabilties := a.getComponentsCapabilitesFn()
+	componentsCapabilities := a.getComponentsCapabilitiesFn()
 	components := a.getComponentsFn()
 	registeredComponents := make([]registeredComponent, 0, len(components))
 	for _, comp := range components {
@@ -1835,7 +1830,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
 			Type:         comp.Spec.Type,
-			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
+			Capabilities: getOrDefaultCapabilities(componentsCapabilities, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1857,7 +1852,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 	if val, ok := dict[key]; ok {
 		return val
 	}
@@ -1867,7 +1862,7 @@ func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 	key := fmt.Sprintf("%v", reqCtx.UserValue("key"))
 	body := reqCtx.PostBody()
-	a.extendedMetadata.Store(key, string(body))
+	_ = a.extendedMetadata.MetadataSet(key, string(body))
 	respond(reqCtx, withEmpty())
 }
 

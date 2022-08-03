@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/metadata"
 	"io"
 	"net"
 	nethttp "net/http"
@@ -202,6 +203,8 @@ type DaprRuntime struct {
 	proxy messaging.Proxy
 
 	resiliency resiliency.Provider
+
+	extendedMetadata metadata.MetadataStore
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -270,7 +273,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
 
-		resiliency: resiliencyProvider,
+		resiliency:       resiliencyProvider,
+		extendedMetadata: &metadata.DefaultMetadataStore{},
 	}
 }
 
@@ -1112,6 +1116,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.globalConfig.Spec.TracingSpec,
 		a.ShutdownWithWait,
 		a.getComponentsCapabilitesMap,
+		a.extendedMetadata,
 	)
 	serverConf := http.NewServerConfig(
 		a.runtimeConfig.ID,
@@ -1191,6 +1196,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		a.getComponents,
 		a.ShutdownWithWait,
 		a.getComponentsCapabilitesMap,
+		a.extendedMetadata,
 	)
 }
 

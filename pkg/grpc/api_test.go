@@ -58,6 +58,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	dapr_metadata "github.com/dapr/dapr/pkg/metadata"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -2060,13 +2061,14 @@ func TestGetMetadata(t *testing.T) {
 	fakeAPI := &api{
 		id:         "fakeAPI",
 		components: []components_v1alpha.Component{fakeComponent},
-		getComponentsCapabilitesFn: func() map[string][]string {
+		getComponentsCapabilitiesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 			return capsMap
 		},
+		extendedMetadata: &dapr_metadata.DefaultMetadataStore{},
 	}
-	fakeAPI.extendedMetadata.Store("testKey", "testValue")
+	_ = fakeAPI.extendedMetadata.MetadataSet("testKey", "testValue")
 	server := startDaprAPIServer(port, fakeAPI, "")
 	defer server.Stop()
 
@@ -2089,7 +2091,8 @@ func TestSetMetadata(t *testing.T) {
 	fakeComponent := components_v1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 	fakeAPI := &api{
-		id: "fakeAPI",
+		id:               "fakeAPI",
+		extendedMetadata: &dapr_metadata.DefaultMetadataStore{},
 	}
 	server := startDaprAPIServer(port, fakeAPI, "")
 	defer server.Stop()
@@ -2104,13 +2107,7 @@ func TestSetMetadata(t *testing.T) {
 	}
 	_, err := client.SetMetadata(context.Background(), req)
 	assert.NoError(t, err, "Expected no error")
-	temp := make(map[string]string)
-
-	// Copy synchronously so it can be serialized to JSON.
-	fakeAPI.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = value.(string)
-		return true
-	})
+	temp, _ := fakeAPI.extendedMetadata.MetadataGet()
 
 	assert.Contains(t, temp, "testKey")
 	assert.Equal(t, temp["testKey"], "testValue")
@@ -3154,7 +3151,7 @@ func TestUnlockResponseToGrpcResponse(t *testing.T) {
 
 func TestTryLock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName: "abc",
 		}
@@ -3167,7 +3164,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName: "abc",
 		}
@@ -3180,7 +3177,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:  "abc",
 			ResourceId: "resource",
@@ -3194,7 +3191,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:  "abc",
@@ -3210,7 +3207,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "abc",
@@ -3236,7 +3233,7 @@ func TestTryLock(t *testing.T) {
 				Success: true,
 			}, nil
 		})
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "mock",
 			ResourceId:      "resource",
@@ -3251,7 +3248,7 @@ func TestTryLock(t *testing.T) {
 
 func TestUnlock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName: "abc",
@@ -3265,7 +3262,7 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName: "abc",
@@ -3279,7 +3276,7 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
 			ResourceId: "resource",
@@ -3293,7 +3290,7 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
@@ -3317,7 +3314,7 @@ func TestUnlock(t *testing.T) {
 				Status: lock.Success,
 			}, nil
 		})
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil, &dapr_metadata.DefaultMetadataStore{})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "mock",
 			ResourceId: "resource",
