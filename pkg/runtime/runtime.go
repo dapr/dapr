@@ -18,7 +18,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/dapr/dapr/pkg/version"
 	"io"
 	"net"
 	nethttp "net/http"
@@ -88,6 +87,7 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
+	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 )
 
