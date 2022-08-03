@@ -22,6 +22,7 @@ import (
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -440,15 +441,15 @@ func (m *mockUnstableGRPCSubscriptions) ListTopicSubscriptions(ctx context.Conte
 	}
 
 	return &runtimev1pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*runtimev1pb.TopicSubscription{
+		Subscriptions: []*commonv1pb.TopicSubscription{
 			{
 				PubsubName: "pubsub",
 				Topic:      "topic1",
 				Metadata: map[string]string{
 					"testName": "testValue",
 				},
-				Routes: &runtimev1pb.TopicRoutes{
-					Rules: []*runtimev1pb.TopicRule{
+				Routes: &commonv1pb.TopicRoutes{
+					Rules: []*commonv1pb.TopicRule{
 						{
 							Match: `event.type == "myevent.v3"`,
 							Path:  "myroute.v3",
@@ -471,15 +472,15 @@ type mockGRPCSubscriptions struct {
 
 func (m *mockGRPCSubscriptions) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 	return &runtimev1pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*runtimev1pb.TopicSubscription{
+		Subscriptions: []*commonv1pb.TopicSubscription{
 			{
 				PubsubName: "pubsub",
 				Topic:      "topic1",
 				Metadata: map[string]string{
 					"testName": "testValue",
 				},
-				Routes: &runtimev1pb.TopicRoutes{
-					Rules: []*runtimev1pb.TopicRule{
+				Routes: &commonv1pb.TopicRoutes{
+					Rules: []*commonv1pb.TopicRule{
 						{
 							Match: `event.type == "myevent.v3"`,
 							Path:  "myroute.v3",

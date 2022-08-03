@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1266,7 +1267,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		rt.topicRoutes = nil
-		rt.pubSubs = make(map[string]pubsub.PubSub)
+		rt.pubSubs = make(map[string]pubsubItem)
 
 		return mockPubSub, mockPubSub2
 	}
@@ -1296,7 +1297,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1330,7 +1331,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1358,7 +1359,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1377,7 +1378,10 @@ func TestInitPubSub(t *testing.T) {
 	t.Run("publish adapter not nil, with pub sub component", func(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
-		rts.pubSubs[TestPubsubName], _ = initMockPubSubForRuntime(rts)
+		ps, _ := initMockPubSubForRuntime(rts)
+		rts.pubSubs[TestPubsubName] = pubsubItem{
+			component: ps,
+		}
 		a := rts.getPublishAdapter()
 		assert.NotNil(t, a)
 	})
@@ -1484,7 +1488,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1516,7 +1520,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1580,7 +1584,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1612,7 +1616,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
 		err := rt.Publish(&pubsub.PublishRequest{
@@ -1623,7 +1627,7 @@ func TestInitPubSub(t *testing.T) {
 
 		assert.Nil(t, err)
 
-		rt.pubSubs[TestSecondPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
 		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
@@ -1651,17 +1655,23 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			require.Nil(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
 		})
 		assert.NotNil(t, err)
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
 		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
@@ -1670,46 +1680,66 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("test allowed topics, no scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {allowedTopics: []string{"topic1"}},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("test allowed topics, no scopes, operation not allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {allowedTopics: []string{"topic1"}},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.False(t, a)
 	})
 
 	t.Run("test allowed topics, with scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		rt.scopedPublishings = map[string][]string{TestPubsubName: {"topic1"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"topic1"},
+				scopedPublishings: []string{"topic1"},
+			},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in existing publishing scopes, operation not allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		rt.scopedPublishings = map[string][]string{TestPubsubName: {"topic2"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"topic1"},
+				scopedPublishings: []string{"topic2"},
+			},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.False(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		rt.scopedPublishings = map[string][]string{}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"topic1"},
+				scopedPublishings: []string{},
+			},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("topics A and B in allowed topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"A", "B"}}
-		rt.scopedPublishings = map[string][]string{TestPubsubName: {"A"}}
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"A", "B"},
+				scopedPublishings: []string{"A"},
+			},
+		}
 
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", rt.scopedPublishings[TestPubsubName])
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 
-		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.scopedPublishings[TestPubsubName])
+		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.False(t, b)
 	})
 }
@@ -2221,8 +2251,8 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{Routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].Routes["topic1"] = Route{Rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
 
 	t.Run("ok without result body", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -2331,8 +2361,8 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{Routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].Routes["topic1"] = Route{Rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
 
 	testcases := []struct {
 		Name        string
@@ -2419,8 +2449,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{Routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].Routes["topic1"] = Route{Rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -2754,8 +2784,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.topicRoutes = map[string]TopicRoute{}
 			rt.topicRoutes[TestPubsubName] = TopicRoute{
-				routes: map[string]Route{
-					topic: {rules: []*runtime_pubsub.Rule{{Path: topic}}},
+				Routes: map[string]Route{
+					topic: {Rules: []*runtime_pubsub.Rule{{Path: topic}}},
 				},
 			}
 			var grpcServer *grpc.Server
@@ -2792,6 +2822,305 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPubsubLifecycle(t *testing.T) {
+	rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	defer func() {
+		if rt != nil {
+			stopRuntime(t, rt)
+		}
+	}()
+
+	comp1 := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockPubSub1",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSubAlpha",
+			Version:  "v1",
+			Metadata: []components_v1alpha1.MetadataItem{},
+		},
+	}
+	comp2 := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockPubSub2",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSubBeta",
+			Version:  "v1",
+			Metadata: []components_v1alpha1.MetadataItem{},
+		},
+	}
+	comp3 := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockPubSub3",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSubBeta",
+			Version:  "v1",
+			Metadata: []components_v1alpha1.MetadataItem{},
+		},
+	}
+
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSubAlpha", func() pubsub.PubSub {
+			c := new(daprt.InMemoryPubsub)
+			c.On("Init", mock.AnythingOfType("pubsub.Metadata")).Return(nil)
+			return c
+		}),
+		pubsub_loader.New("mockPubSubBeta", func() pubsub.PubSub {
+			c := new(daprt.InMemoryPubsub)
+			c.On("Init", mock.AnythingOfType("pubsub.Metadata")).Return(nil)
+			return c
+		}),
+	)
+
+	err := rt.processComponentAndDependents(comp1)
+	assert.Nil(t, err)
+	err = rt.processComponentAndDependents(comp2)
+	assert.Nil(t, err)
+	err = rt.processComponentAndDependents(comp3)
+	assert.Nil(t, err)
+
+	forEachPubSub := func(f func(name string, comp *daprt.InMemoryPubsub)) int {
+		i := 0
+		for name, ps := range rt.pubSubs {
+			f(name, ps.component.(*daprt.InMemoryPubsub))
+			i++
+		}
+		return i
+	}
+	getPubSub := func(name string) *daprt.InMemoryPubsub {
+		return rt.pubSubs[name].component.(*daprt.InMemoryPubsub)
+	}
+
+	done := forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+		comp.AssertNumberOfCalls(t, "Init", 1)
+	})
+	require.Equal(t, 3, done)
+
+	subscriptions := make(map[string][]string)
+	messages := make(map[string][]*pubsub.NewMessage)
+	var (
+		subscriptionsCh chan struct{}
+		messagesCh      chan struct{}
+	)
+	forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+		comp.SetOnSubscribedTopicsChanged(func(topics []string) {
+			sort.Strings(topics)
+			subscriptions[name] = topics
+			if subscriptionsCh != nil {
+				subscriptionsCh <- struct{}{}
+			}
+		})
+		comp.SetHandler(func(topic string, msg *pubsub.NewMessage) {
+			if messages[name+"|"+topic] == nil {
+				messages[name+"|"+topic] = []*pubsub.NewMessage{msg}
+			} else {
+				messages[name+"|"+topic] = append(messages[name+"|"+topic], msg)
+			}
+			if messagesCh != nil {
+				messagesCh <- struct{}{}
+			}
+		})
+	})
+
+	setTopicRoutes := func() {
+		rt.topicRoutes = map[string]TopicRoute{
+			"mockPubSub1": {
+				Routes: map[string]Route{
+					"topic1": {
+						Metadata: map[string]string{"rawPayload": "true"},
+						Rules:    []*runtime_pubsub.Rule{{Path: "topic1"}},
+					},
+				},
+			},
+			"mockPubSub2": {
+				Routes: map[string]Route{
+					"topic2": {
+						Metadata: map[string]string{"rawPayload": "true"},
+						Rules:    []*runtime_pubsub.Rule{{Path: "topic2"}},
+					},
+					"topic3": {
+						Metadata: map[string]string{"rawPayload": "true"},
+						Rules:    []*runtime_pubsub.Rule{{Path: "topic3"}},
+					},
+				},
+			},
+		}
+
+		forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+			comp.Calls = nil
+			comp.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
+		})
+	}
+
+	resetState := func() {
+		messages = make(map[string][]*pubsub.NewMessage)
+		forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+			comp.Calls = nil
+		})
+	}
+
+	subscribePredefined := func(t *testing.T) {
+		setTopicRoutes()
+
+		subscriptionsCh = make(chan struct{}, 5)
+		rt.startSubscriptions()
+
+		done := forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+			switch name {
+			case "mockPubSub1":
+				comp.AssertNumberOfCalls(t, "Subscribe", 1)
+			case "mockPubSub2":
+				comp.AssertNumberOfCalls(t, "Subscribe", 2)
+			case "mockPubSub3":
+				comp.AssertNumberOfCalls(t, "Subscribe", 0)
+			}
+		})
+		require.Equal(t, 3, done)
+
+		for i := 0; i < 3; i++ {
+			<-subscriptionsCh
+		}
+		close(subscriptionsCh)
+		subscriptionsCh = nil
+
+		assert.True(t, reflect.DeepEqual(subscriptions["mockPubSub1"], []string{"topic1"}),
+			"expected %v to equal %v", subscriptions["mockPubSub1"], []string{"topic1"})
+		assert.True(t, reflect.DeepEqual(subscriptions["mockPubSub2"], []string{"topic2", "topic3"}),
+			"expected %v to equal %v", subscriptions["mockPubSub2"], []string{"topic2", "topic3"})
+		assert.Len(t, subscriptions["mockPubSub3"], 0)
+	}
+
+	t.Run("subscribe to 3 topics on 2 components", subscribePredefined)
+
+	ciao := []byte("ciao")
+	sendMessages := func(t *testing.T, expect int) {
+		send := []pubsub.PublishRequest{
+			{Data: ciao, PubsubName: "mockPubSub1", Topic: "topic1"},
+			{Data: ciao, PubsubName: "mockPubSub2", Topic: "topic2"},
+			{Data: ciao, PubsubName: "mockPubSub2", Topic: "topic3"},
+			{Data: ciao, PubsubName: "mockPubSub3", Topic: "topic4"},
+			{Data: ciao, PubsubName: "mockPubSub3", Topic: "not-subscribed"},
+		}
+
+		messagesCh = make(chan struct{}, expect+2)
+
+		for _, m := range send {
+			err = rt.Publish(&m)
+			assert.NoError(t, err)
+		}
+
+		for i := 0; i < expect; i++ {
+			<-messagesCh
+		}
+
+		// Sleep to ensure no new messages have come in
+		time.Sleep(10 * time.Millisecond)
+		assert.Len(t, messagesCh, 0)
+
+		close(messagesCh)
+		messagesCh = nil
+	}
+
+	t.Run("messages are delivered to 3 topics", func(t *testing.T) {
+		resetState()
+		sendMessages(t, 3)
+
+		require.Len(t, messages, 3)
+		_ = assert.Len(t, messages["mockPubSub1|topic1"], 1) &&
+			assert.Equal(t, messages["mockPubSub1|topic1"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub2|topic2"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic2"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+	})
+
+	t.Run("unsubscribe from mockPubSub2/topic2", func(t *testing.T) {
+		resetState()
+		comp := getPubSub("mockPubSub2")
+		comp.On("unsubscribed", "topic2").Return(nil).Once()
+
+		err = rt.unsubscribeTopic("mockPubSub2", "topic2")
+		require.NoError(t, err)
+
+		sendMessages(t, 2)
+
+		require.Len(t, messages, 2)
+		_ = assert.Len(t, messages["mockPubSub1|topic1"], 1) &&
+			assert.Equal(t, messages["mockPubSub1|topic1"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+		comp.AssertCalled(t, "unsubscribed", "topic2")
+	})
+
+	t.Run("unsubscribe from mockPubSub1/topic1", func(t *testing.T) {
+		resetState()
+		comp := getPubSub("mockPubSub1")
+		comp.On("unsubscribed", "topic1").Return(nil).Once()
+
+		err = rt.unsubscribeTopic("mockPubSub1", "topic1")
+		require.NoError(t, err)
+
+		sendMessages(t, 1)
+
+		require.Len(t, messages, 1)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+		comp.AssertCalled(t, "unsubscribed", "topic1")
+	})
+
+	t.Run("subscribe to mockPubSub3/topic4", func(t *testing.T) {
+		resetState()
+
+		err = rt.subscribeTopic(rt.pubsubCtx, "mockPubSub3", "topic4", Route{})
+		require.NoError(t, err)
+
+		sendMessages(t, 2)
+
+		require.Len(t, messages, 2)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub3|topic4"], 1) &&
+			assert.Equal(t, messages["mockPubSub3|topic4"][0].Data, ciao)
+	})
+
+	t.Run("stopSubscriptions", func(t *testing.T) {
+		resetState()
+		comp2 := getPubSub("mockPubSub2")
+		comp2.On("unsubscribed", "topic3").Return(nil).Once()
+		comp3 := getPubSub("mockPubSub3")
+		comp3.On("unsubscribed", "topic4").Return(nil).Once()
+
+		rt.stopSubscriptions()
+
+		sendMessages(t, 0)
+
+		require.Len(t, messages, 0)
+		comp2.AssertCalled(t, "unsubscribed", "topic3")
+		comp3.AssertCalled(t, "unsubscribed", "topic4")
+	})
+
+	t.Run("restart subscriptions with pre-defined ones", subscribePredefined)
+
+	t.Run("shutdown", func(t *testing.T) {
+		resetState()
+
+		comp1 := getPubSub("mockPubSub1")
+		comp1.On("unsubscribed", "topic1").Return(nil).Once()
+		comp2 := getPubSub("mockPubSub2")
+		comp2.On("unsubscribed", "topic2").Return(nil).Once()
+		comp2.On("unsubscribed", "topic3").Return(nil).Once()
+
+		stopRuntime(t, rt)
+		rt = nil
+
+		comp1.AssertCalled(t, "unsubscribed", "topic1")
+		comp2.AssertCalled(t, "unsubscribed", "topic2")
+		comp2.AssertCalled(t, "unsubscribed", "topic3")
+	})
 }
 
 func TestPubsubWithResiliency(t *testing.T) {
@@ -2871,20 +3200,28 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
 		r.topicRoutes = make(map[string]TopicRoute)
-		r.topicRoutes["failPubsub"] = TopicRoute{routes: map[string]Route{
+		r.topicRoutes["failPubsub"] = TopicRoute{Routes: map[string]Route{
 			"failingSubTopic": {
-				metadata: map[string]string{
+				Metadata: map[string]string{
 					"rawPayload": "true",
 				},
-				rules: []*runtime_pubsub.Rule{
+				Rules: []*runtime_pubsub.Rule{
 					{
 						Path: "failingPubsub",
 					},
 				},
 			},
 		}}
+		r.pubSubs = map[string]pubsubItem{
+			"failPubsub": {
+				component: &failingPubsub,
+			},
+		}
 
-		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
+		r.topicCtxCancels = map[string]context.CancelFunc{}
+		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
+		defer r.pubsubCancel()
+		err := r.beginPubSub("failPubsub")
 
 		assert.NoError(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["failingSubTopic"])
@@ -2892,21 +3229,29 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 	t.Run("pubsub times out sending event to app with resiliency", func(t *testing.T) {
 		r.topicRoutes = make(map[string]TopicRoute)
-		r.topicRoutes["failPubsub"] = TopicRoute{routes: map[string]Route{
+		r.topicRoutes["failPubsub"] = TopicRoute{Routes: map[string]Route{
 			"timeoutSubTopic": {
-				metadata: map[string]string{
+				Metadata: map[string]string{
 					"rawPayload": "true",
 				},
-				rules: []*runtime_pubsub.Rule{
+				Rules: []*runtime_pubsub.Rule{
 					{
 						Path: "failingPubsub",
 					},
 				},
 			},
 		}}
+		r.pubSubs = map[string]pubsubItem{
+			"failPubsub": {
+				component: &failingPubsub,
+			},
+		}
 
+		r.topicCtxCancels = map[string]context.CancelFunc{}
+		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
+		defer r.pubsubCancel()
 		start := time.Now()
-		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
+		err := r.beginPubSub("failPubsub")
 		end := time.Now()
 
 		// This is eaten, technically.
@@ -2992,12 +3337,12 @@ func TestPubSubDeadLetter(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), req).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
 		// Mock send message to app returns error.
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("failed to send"))
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
@@ -3005,7 +3350,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Data:       []byte(`{"id":"1"}`),
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.pubCount["topic0"])
 		// Ensure the message is sent to dead letter topic.
 		assert.Equal(t, 1, pubsubIns.pubCount["topic1"])
@@ -3040,7 +3385,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
@@ -3048,7 +3393,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Data:       []byte(`{"id":"1"}`),
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
 		// Consider of resiliency, publish message may retry in some cases, make sure the pub count is greater than 1.
 		assert.True(t, pubsubIns.pubCount["topic0"] >= 1)
 		// Make sure every message that is sent to topic0 is sent to its dead letter topic1.
@@ -3442,6 +3787,31 @@ func TestReadInputBindings(t *testing.T) {
 		cancel()
 
 		assert.Equal(t, string(testInputBindingData), b.data)
+	})
+
+	t.Run("start and stop reading", func(t *testing.T) {
+		rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, rt)
+
+		closeCh := make(chan struct{})
+		defer close(closeCh)
+
+		b := &daprt.MockBinding{}
+		b.SetOnReadCloseCh(closeCh)
+		b.On("Read", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil).Once()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		rt.readFromBinding(ctx, testInputBindingName, b)
+		time.Sleep(80 * time.Millisecond)
+		cancel()
+		select {
+		case <-closeCh:
+			// All good
+		case <-time.After(time.Second):
+			t.Fatal("timeout while waiting for binding to stop reading")
+		}
+
+		b.AssertNumberOfCalls(t, "Read", 1)
 	})
 }
 
@@ -4316,4 +4686,9 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 		counter++
 	}
 	return nil
+}
+
+func matchContextInterface(v any) bool {
+	_, ok := v.(context.Context)
+	return ok
 }
