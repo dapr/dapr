@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/dapr/dapr/pkg/version"
 	"io"
 	"net"
 	nethttp "net/http"
@@ -416,6 +417,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// Start proxy
 	a.initProxy()
+
+	// Store dapr runtime metadata
+	a.storeMetadata()
 
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
@@ -1198,6 +1202,11 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		a.getComponentsCapabilitesMap,
 		a.extendedMetadata,
 	)
+}
+
+func (a *DaprRuntime) storeMetadata() {
+	// store dapr runtime version
+	_ = a.extendedMetadata.MetadataSet(metadata.DaprRuntimeVersionKey, version.Version())
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {

@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/version"
 
 	"github.com/dapr/components-contrib/configuration"
 
@@ -65,8 +64,7 @@ import (
 )
 
 const (
-	daprHTTPStatusHeader  = "dapr-http-status"
-	daprRuntimeVersionKey = "daprRuntimeVersion"
+	daprHTTPStatusHeader = "dapr-http-status"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -132,7 +130,7 @@ type api struct {
 	accessControlList           *config.AccessControlList
 	appProtocol                 string
 	extendedMetadata            dapr_metadata.Store
-	components                  []components_v1alpha.Component
+	getComponentsFn             func() []components_v1alpha.Component
 	shutdown                    func()
 	getComponentsCapabilitiesFn func() map[string][]string
 	daprRunTimeVersion          string
@@ -314,7 +312,7 @@ func NewAPI(
 		appProtocol:                 appProtocol,
 		shutdown:                    shutdown,
 		getComponentsCapabilitiesFn: getComponentsCapabilitiesFn,
-		daprRunTimeVersion:          version.Version(),
+		getComponentsFn:             getComponentsFn,
 		extendedMetadata:            extendedMetadata,
 	}
 }
@@ -1476,10 +1474,11 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
 	temp, _ := a.extendedMetadata.MetadataGet()
 
-	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
-	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
+	components := a.getComponentsFn()
+	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(components))
 	componentsCapabilities := a.getComponentsCapabilitiesFn()
-	for _, comp := range a.components {
+
+	for _, comp := range components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
@@ -1488,7 +1487,25 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
+
+	counts := []actors.ActiveActorsCount{}
+	if a.actor != nil {
+		counts = a.actor.GetActiveActorsCount(ctx)
+	}
+
+	activeActorsCounts := make([]*runtimev1pb.ActiveActorsCount, 0, len(counts))
+
+	for _, count := range counts {
+		activeActorsCount := &runtimev1pb.ActiveActorsCount{
+			Type:  count.Type,
+			Count: int32(count.Count),
+		}
+		activeActorsCounts = append(activeActorsCounts, activeActorsCount)
+	}
+
 	response := &runtimev1pb.GetMetadataResponse{
+		Id:                   a.id,
+		ActiveActorsCount:    activeActorsCounts,
 		ExtendedMetadata:     temp,
 		RegisteredComponents: registeredComponents,
 	}

@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net"
 	"strconv"
 	"sync"
@@ -2059,11 +2061,49 @@ func TestGetMetadata(t *testing.T) {
 	fakeComponent := components_v1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 	fakeAPI := &api{
-		id:         "fakeAPI",
-		components: []components_v1alpha.Component{fakeComponent},
+		id: "fakeAPI",
+		getComponentsFn: func() []components_v1alpha.Component {
+			return []components_v1alpha.Component{
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "MockComponent1Name",
+					},
+					Spec: components_v1alpha.ComponentSpec{
+						Type:    "mock.component1Type",
+						Version: "v1.0",
+						Metadata: []components_v1alpha.MetadataItem{
+							{
+								Name: "actorMockComponent1",
+								Value: components_v1alpha.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "MockComponent2Name",
+					},
+					Spec: components_v1alpha.ComponentSpec{
+						Type:    "mock.component2Type",
+						Version: "v1.0",
+						Metadata: []components_v1alpha.MetadataItem{
+							{
+								Name: "actorMockComponent2",
+								Value: components_v1alpha.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
+							},
+						},
+					},
+				},
+			}
+		},
 		getComponentsCapabilitiesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
-			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
+			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
+			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
 		},
 		extendedMetadata: &dapr_metadata.DefaultStore{},
@@ -2078,12 +2118,15 @@ func TestGetMetadata(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 	response, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 	assert.NoError(t, err, "Expected no error")
-	assert.Len(t, response.RegisteredComponents, 1, "One component should be returned")
-	assert.Equal(t, response.RegisteredComponents[0].Name, "testComponent")
+	assert.Len(t, response.RegisteredComponents, 2, "Two component should be returned")
+	assert.Equal(t, response.RegisteredComponents[0].Name, "MockComponent1Name")
+	assert.Equal(t, response.RegisteredComponents[1].Name, "MockComponent2Name")
 	assert.Contains(t, response.ExtendedMetadata, "testKey")
 	assert.Equal(t, response.ExtendedMetadata["testKey"], "testValue")
 	assert.Len(t, response.RegisteredComponents[0].Capabilities, 1, "One capabilities should be returned")
-	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.testComponent")
+	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.MockComponent1Name")
+	assert.Len(t, response.RegisteredComponents[1].Capabilities, 1, "One capabilities should be returned")
+	assert.Equal(t, response.RegisteredComponents[1].Capabilities[0], "mock.feat.MockComponent2Name")
 }
 
 func TestSetMetadata(t *testing.T) {

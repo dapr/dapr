@@ -34,9 +34,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
-	lock_loader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/version"
-
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -45,6 +42,7 @@ import (
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
@@ -95,7 +93,6 @@ type api struct {
 	tracingSpec                 config.TracingSpec
 	shutdown                    func()
 	getComponentsCapabilitiesFn func() map[string][]string
-	daprRunTimeVersion          string
 }
 
 type registeredComponent struct {
@@ -133,7 +130,6 @@ const (
 	traceparentHeader        = "traceparent"
 	tracestateHeader         = "tracestate"
 	daprAppID                = "dapr-app-id"
-	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
 // NewAPI returns a new API.
@@ -181,7 +177,6 @@ func NewAPI(
 		tracingSpec:                 tracingSpec,
 		shutdown:                    shutdown,
 		getComponentsCapabilitiesFn: getComponentsCapabilitiesFn,
-		daprRunTimeVersion:          version.Version(),
 		extendedMetadata:            extendedMetadata,
 	}
 
@@ -1817,7 +1812,6 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	temp, _ := a.extendedMetadata.MetadataGet()
-	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	activeActorsCount := []actors.ActiveActorsCount{}
 	if a.actor != nil {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)

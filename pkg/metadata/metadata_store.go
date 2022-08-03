@@ -4,6 +4,10 @@ import (
 	"sync"
 )
 
+const (
+	DaprRuntimeVersionKey = "daprRuntimeVersion"
+)
+
 // Store is an interface to perform operations on metadata store.
 type Store interface {
 	MetadataGet() (map[string]string, error)
