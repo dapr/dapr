@@ -17,7 +17,6 @@ type DefaultMetadataStore struct {
 
 // NewDefaultMetadataStore build a default metadata store.
 func NewDefaultMetadataStore() DefaultMetadataStore {
-
 	return DefaultMetadataStore{}
 }
 
