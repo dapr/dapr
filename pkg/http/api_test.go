@@ -2285,7 +2285,6 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 
 		rspMap1 := resp1.JSONBody.(interface{})
 		assert.NotNil(t, rspMap1)
-		//rspMap1.(map[string]interface{})["id"].(string)
 		
 		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName,rspMap1.(map[string]interface{})["id"].(string))
 		
