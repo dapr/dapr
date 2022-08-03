@@ -52,7 +52,7 @@ const (
 type Channel struct {
 	client              *fasthttp.Client
 	baseAddress         string
-	ch                  chan int
+	ch                  chan struct{}
 	tracingSpec         config.TracingSpec
 	appHeaderToken      string
 	maxResponseBodySize int
@@ -85,7 +85,7 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 	}
 
 	if maxConcurrency > 0 {
-		c.ch = make(chan int, maxConcurrency)
+		c.ch = make(chan struct{}, maxConcurrency)
 	}
 
 	return c, nil
@@ -167,8 +167,13 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	channelReq := h.constructRequest(ctx, req)
 
 	if h.ch != nil {
-		h.ch <- 1
+		h.ch <- struct{}{}
 	}
+	defer func() {
+		if h.ch != nil {
+			<-h.ch
+		}
+	}()
 
 	// Emit metric when request is sent
 	verb := string(channelReq.Header.Method())
@@ -189,10 +194,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	if err != nil {
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(resp.Header.ContentLength()), elapsedMs)
 		return nil, err
-	}
-
-	if h.ch != nil {
-		<-h.ch
 	}
 
 	rsp := h.parseChannelResponse(req, resp)
