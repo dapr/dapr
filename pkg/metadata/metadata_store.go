@@ -4,24 +4,24 @@ import (
 	"sync"
 )
 
-// MetadataStore is an interface to perform operations on metadata store.
-type MetadataStore interface {
+// Store is an interface to perform operations on metadata store.
+type Store interface {
 	MetadataGet() (map[string]string, error)
 	MetadataSet(key, value string) error
 }
 
-// DefaultMetadataStore is a default implementation of MetadataStore.
-type DefaultMetadataStore struct {
+// DefaultStore is a default implementation of Store.
+type DefaultStore struct {
 	metadata sync.Map
 }
 
-// NewDefaultMetadataStore build a default metadata store.
-func NewDefaultMetadataStore() DefaultMetadataStore {
-	return DefaultMetadataStore{}
+// NewDefaultStore build a default metadata store.
+func NewDefaultStore() DefaultStore {
+	return DefaultStore{}
 }
 
 // MetadataGet get metadata of sidecar.
-func (m *DefaultMetadataStore) MetadataGet() (map[string]string, error) {
+func (m *DefaultStore) MetadataGet() (map[string]string, error) {
 	temp := make(map[string]string)
 
 	// Copy synchronously so it can be serialized to JSON.
@@ -35,7 +35,7 @@ func (m *DefaultMetadataStore) MetadataGet() (map[string]string, error) {
 }
 
 // MetadataSet performs a metadata save operation.
-func (m *DefaultMetadataStore) MetadataSet(key, value string) error {
+func (m *DefaultStore) MetadataSet(key, value string) error {
 	m.metadata.Store(key, value)
 	return nil
 }

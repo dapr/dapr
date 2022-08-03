@@ -1782,7 +1782,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
-		extendedMetadata: &dapr_metadata.DefaultMetadataStore{},
+		extendedMetadata: &dapr_metadata.DefaultStore{},
 		getComponentsCapabilitiesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}

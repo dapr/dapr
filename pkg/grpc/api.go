@@ -131,7 +131,7 @@ type api struct {
 	tracingSpec                 config.TracingSpec
 	accessControlList           *config.AccessControlList
 	appProtocol                 string
-	extendedMetadata            dapr_metadata.MetadataStore
+	extendedMetadata            dapr_metadata.Store
 	components                  []components_v1alpha.Component
 	shutdown                    func()
 	getComponentsCapabilitiesFn func() map[string][]string
@@ -286,7 +286,7 @@ func NewAPI(
 	getComponentsFn func() []components_v1alpha.Component,
 	shutdown func(),
 	getComponentsCapabilitiesFn func() map[string][]string,
-	extendedMetadata dapr_metadata.MetadataStore,
+	extendedMetadata dapr_metadata.Store,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {

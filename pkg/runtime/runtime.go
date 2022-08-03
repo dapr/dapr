@@ -204,7 +204,7 @@ type DaprRuntime struct {
 
 	resiliency resiliency.Provider
 
-	extendedMetadata metadata.MetadataStore
+	extendedMetadata metadata.Store
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -274,7 +274,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 
 		resiliency:       resiliencyProvider,
-		extendedMetadata: &metadata.DefaultMetadataStore{},
+		extendedMetadata: &metadata.DefaultStore{},
 	}
 }
 

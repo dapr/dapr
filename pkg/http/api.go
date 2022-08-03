@@ -89,7 +89,7 @@ type api struct {
 	pubsubAdapter               runtime_pubsub.Adapter
 	sendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	id                          string
-	extendedMetadata            dapr_metadata.MetadataStore
+	extendedMetadata            dapr_metadata.Store
 	readyStatus                 bool
 	outboundReadyStatus         bool
 	tracingSpec                 config.TracingSpec
@@ -154,7 +154,7 @@ func NewAPI(
 	tracingSpec config.TracingSpec,
 	shutdown func(),
 	getComponentsCapabilitiesFn func() map[string][]string,
-	extendedMetadata dapr_metadata.MetadataStore,
+	extendedMetadata dapr_metadata.Store,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
