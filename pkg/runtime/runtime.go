@@ -695,7 +695,6 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 			return err
 		}); err != nil {
 			log.Errorf("%s pubsub subscription to topic %s (%s/%s): %s", initComponentErrorPrefix, topic, name, topic, err)
-			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
 		}
 	}
 
