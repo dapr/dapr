@@ -694,6 +694,7 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 			}
 			return err
 		}); err != nil {
+			log.Errorf("%s pubsub subscription to topic %s (%s/%s): %s", initComponentErrorPrefix, topic, name, topic, err)
 			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
 		}
 	}
@@ -2523,7 +2524,7 @@ func (a *DaprRuntime) startSubscribing() {
 	// PubSub subscribers are stopped via cancelation of the main runtime's context
 	for name, pubsub := range a.pubSubs {
 		if err := a.beginPubSub(a.ctx, name, pubsub); err != nil {
-			log.Errorf("error occurred while beginning pubsub %s: %s", name, err)
+			log.Errorf("%s pubsub %s: %s", initComponentErrorPrefix, name, err)
 		}
 	}
 }
