@@ -43,13 +43,15 @@ jobs:
             for line in $(az group list --query "$QUERY" | jq -c '.[]')
             do
               RG_DATE_STR=$(echo "$line" | jq -r ".date")
-              RG_DATE=$(date --date "$RG_DATE_STR" +'%s')
-              RG_NAME=$(echo "$line" | jq -r ".name")
-              if [ $RG_DATE -lt $DELETE_BEFORE_DATE ] ; then
-                echo "DELETING Resource Group ${RG_NAME} that was deployed on ${RG_DATE_STR}"
-                az group delete --no-wait --yes --name "${RG_NAME}" || true
-              else
-                echo "Keeping Resource Group ${RG_NAME} that was deployed on ${RG_DATE_STR}"
+              if [ "$RG_DATE_STR" != "null" ]; then
+                RG_DATE=$(date --date "$RG_DATE_STR" +'%s')
+                RG_NAME=$(echo "$line" | jq -r ".name")
+                if [ $RG_DATE -lt $DELETE_BEFORE_DATE ] ; then
+                    echo "DELETING Resource Group ${RG_NAME} that was deployed on ${RG_DATE_STR}"
+                    az group delete --no-wait --yes --name "${RG_NAME}" || true
+                else
+                    echo "Keeping Resource Group ${RG_NAME} that was deployed on ${RG_DATE_STR}"
+                fi
               fi
             done
           )

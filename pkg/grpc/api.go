@@ -23,9 +23,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/components-contrib/lock"
+	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	"github.com/dapr/dapr/pkg/version"
+
 	"github.com/dapr/components-contrib/configuration"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -60,7 +63,8 @@ import (
 )
 
 const (
-	daprHTTPStatusHeader = "dapr-http-status"
+	daprHTTPStatusHeader  = "dapr-http-status"
+	daprRuntimeVersionKey = "daprRuntimeVersion"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -96,6 +100,8 @@ type API interface {
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
+	TryLockAlpha1(ctx context.Context, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error)
+	UnlockAlpha1(ctx context.Context, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error)
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -116,6 +122,7 @@ type api struct {
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
+	lockStores                 map[string]lock.Store
 	pubsubAdapter              runtime_pubsub.Adapter
 	id                         string
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -125,6 +132,137 @@ type api struct {
 	extendedMetadata           sync.Map
 	components                 []components_v1alpha.Component
 	shutdown                   func()
+	getComponentsCapabilitesFn func() map[string][]string
+	daprRunTimeVersion         string
+}
+
+func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
+	// 1. validate
+	if a.lockStores == nil || len(a.lockStores) == 0 {
+		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TryLockResponse{}, err
+	}
+	if req.ResourceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
+		return &runtimev1pb.TryLockResponse{}, err
+	}
+	if req.LockOwner == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
+		return &runtimev1pb.TryLockResponse{}, err
+	}
+	if req.ExpiryInSeconds <= 0 {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrExpiryInSecondsNotPositive, req.StoreName)
+		return &runtimev1pb.TryLockResponse{}, err
+	}
+	// 2. find lock component
+	store, ok := a.lockStores[req.StoreName]
+	if !ok {
+		return &runtimev1pb.TryLockResponse{}, status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
+	}
+	// 3. convert request
+	compReq := TryLockRequestToComponentRequest(req)
+	// modify key
+	var err error
+	compReq.ResourceID, err = lock_loader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TryLockResponse{}, err
+	}
+	// 4. delegate to the component
+	compResp, err := store.TryLock(compReq)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.TryLockResponse{}, err
+	}
+	// 5. convert response
+	resp := TryLockResponseToGrpcResponse(compResp)
+	return resp, nil
+}
+
+func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error) {
+	// 1. validate
+	if a.lockStores == nil || len(a.lockStores) == 0 {
+		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
+		apiServerLogger.Debug(err)
+		return newInternalErrorUnlockResponse(), err
+	}
+	if req.ResourceId == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
+		return newInternalErrorUnlockResponse(), err
+	}
+	if req.LockOwner == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
+		return newInternalErrorUnlockResponse(), err
+	}
+	// 2. find store component
+	store, ok := a.lockStores[req.StoreName]
+	if !ok {
+		return newInternalErrorUnlockResponse(), status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
+	}
+	// 3. convert request
+	compReq := UnlockGrpcToComponentRequest(req)
+	// modify key
+	var err error
+	compReq.ResourceID, err = lock_loader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return newInternalErrorUnlockResponse(), err
+	}
+	// 4. delegate to the component
+	compResp, err := store.Unlock(compReq)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return newInternalErrorUnlockResponse(), err
+	}
+	// 5. convert response
+	resp := UnlockResponseToGrpcResponse(compResp)
+	return resp, nil
+}
+
+func newInternalErrorUnlockResponse() *runtimev1pb.UnlockResponse {
+	return &runtimev1pb.UnlockResponse{
+		Status: runtimev1pb.UnlockResponse_INTERNAL_ERROR,
+	}
+}
+
+func TryLockRequestToComponentRequest(req *runtimev1pb.TryLockRequest) *lock.TryLockRequest {
+	result := &lock.TryLockRequest{}
+	if req == nil {
+		return result
+	}
+	result.ResourceID = req.ResourceId
+	result.LockOwner = req.LockOwner
+	result.ExpiryInSeconds = req.ExpiryInSeconds
+	return result
+}
+
+func TryLockResponseToGrpcResponse(compResponse *lock.TryLockResponse) *runtimev1pb.TryLockResponse {
+	result := &runtimev1pb.TryLockResponse{}
+	if compResponse == nil {
+		return result
+	}
+	result.Success = compResponse.Success
+	return result
+}
+
+func UnlockGrpcToComponentRequest(req *runtimev1pb.UnlockRequest) *lock.UnlockRequest {
+	result := &lock.UnlockRequest{}
+	if req == nil {
+		return result
+	}
+	result.ResourceID = req.ResourceId
+	result.LockOwner = req.LockOwner
+	return result
+}
+
+func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.UnlockResponse {
+	result := &runtimev1pb.UnlockResponse{}
+	if compResp == nil {
+		return result
+	}
+	result.Status = runtimev1pb.UnlockResponse_Status(compResp.Status)
+	return result
 }
 
 // NewAPI returns a new gRPC API.
@@ -135,6 +273,7 @@ func NewAPI(
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
 	configurationStores map[string]configuration.Store,
+	lockStores map[string]lock.Store,
 	pubsubAdapter runtime_pubsub.Adapter,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
@@ -144,6 +283,7 @@ func NewAPI(
 	appProtocol string,
 	getComponentsFn func() []components_v1alpha.Component,
 	shutdown func(),
+	getComponentsCapabilitiesFn func() map[string][]string,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -151,25 +291,27 @@ func NewAPI(
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
-
 	return &api{
-		directMessaging:          directMessaging,
-		actor:                    actor,
-		id:                       appID,
-		resiliency:               resiliency,
-		appChannel:               appChannel,
-		pubsubAdapter:            pubsubAdapter,
-		stateStores:              stateStores,
-		transactionalStateStores: transactionalStateStores,
-		secretStores:             secretStores,
-		configurationStores:      configurationStores,
-		configurationSubscribe:   make(map[string]chan struct{}),
-		secretsConfiguration:     secretsConfiguration,
-		sendToOutputBindingFn:    sendToOutputBindingFn,
-		tracingSpec:              tracingSpec,
-		accessControlList:        accessControlList,
-		appProtocol:              appProtocol,
-		shutdown:                 shutdown,
+		directMessaging:            directMessaging,
+		actor:                      actor,
+		id:                         appID,
+		resiliency:                 resiliency,
+		appChannel:                 appChannel,
+		pubsubAdapter:              pubsubAdapter,
+		stateStores:                stateStores,
+		transactionalStateStores:   transactionalStateStores,
+		secretStores:               secretStores,
+		configurationStores:        configurationStores,
+		configurationSubscribe:     make(map[string]chan struct{}),
+		lockStores:                 lockStores,
+		secretsConfiguration:       secretsConfiguration,
+		sendToOutputBindingFn:      sendToOutputBindingFn,
+		tracingSpec:                tracingSpec,
+		accessControlList:          accessControlList,
+		appProtocol:                appProtocol,
+		shutdown:                   shutdown,
+		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
+		daprRunTimeVersion:         version.Version(),
 	}
 }
 
@@ -220,6 +362,11 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
+		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
+		if errors.Is(err, actors.ErrDaprResponseHeader) {
+			return resp.Proto(), nil
+		}
+
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
 	}
@@ -739,7 +886,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	key, err := state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
 	if err != nil {
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 	req := state.DeleteRequest{
 		Key:      key,
@@ -767,23 +914,23 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*empty.Empty, error) {
+func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
 		key, err1 := state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
 		if err1 != nil {
-			return &empty.Empty{}, err1
+			return &emptypb.Empty{}, err1
 		}
 		req := state.DeleteRequest{
 			Key:      key,
@@ -1290,7 +1437,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		resp, rErr = a.actor.Call(ctx, req)
 		return rErr
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.InvokeActorResponse{}, err
@@ -1330,13 +1477,15 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		temp[key.(string)] = value.(string)
 		return true
 	})
+	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
-
+	componentsCapabilties := a.getComponentsCapabilitesFn()
 	for _, comp := range a.components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
-			Name:    comp.Name,
-			Version: comp.Spec.Version,
-			Type:    comp.Spec.Type,
+			Name:         comp.Name,
+			Version:      comp.Spec.Version,
+			Type:         comp.Spec.Type,
+			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1345,6 +1494,13 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		RegisteredComponents: registeredComponents,
 	}
 	return response, nil
+}
+
+func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+	if val, ok := dict[key]; ok {
+		return val
+	}
+	return make([]string, 0)
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.
@@ -1485,16 +1641,10 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 		items := resp.GetItems()
 		for _, item := range items {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, item.Key)]; !ok {
-				subscribeKeys = append(subscribeKeys, item.Key)
-			}
+			subscribeKeys = append(subscribeKeys, item.Key)
 		}
 	} else {
-		for _, k := range request.Keys {
-			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, k)]; !ok {
-				subscribeKeys = append(subscribeKeys, k)
-			}
-		}
+		subscribeKeys = append(subscribeKeys, request.Keys...)
 	}
 
 	req := &configuration.SubscribeRequest{

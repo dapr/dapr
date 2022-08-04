@@ -15,6 +15,10 @@
 # - AZURE_CREDENTIALS: JSON object containing the Azure service principal credentials. Docs: https://github.com/Azure/login#configure-a-service-principal-with-a-secret
 # - PERF_AZURE_STORAGE_ACCOUNT and PERF_AZURE_STORAGE_KEY: Credentials for the Storage Account where to store the result of perf tests
 # - DAPR_BOT_TOKEN: Token for the Dapr bot
+#
+# Optional secrets:
+# - AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
+# - AZURE_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
 
 name: dapr-perf
 
@@ -43,6 +47,8 @@ env:
   MAX_TEST_TIMEOUT: 5400
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "westus3"
+  # Container registry where to cache perf test images
+  DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
 
 jobs:
   deploy-infrastructure:
@@ -84,8 +90,10 @@ jobs:
         if: env.CHECKOUT_REPO != ''
         run: |
           BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
           SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
-          TEST_PREFIX="daprperf${SUFFIX}"
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
           echo "Test prefix is ${TEST_PREFIX}"
           echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-Perf-${TEST_PREFIX}" >> $GITHUB_ENV
@@ -120,6 +128,8 @@ jobs:
                 namePrefix="${{ env.TEST_PREFIX }}" \
                 location=${REGION} \
                 linuxVMSize=Standard_D8s_v4 \
+                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
+                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
             && break || sleep 120
           done
         shell: bash
@@ -179,12 +189,19 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Login to cache registry
+        if: env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+        run: |
+          az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
+        shell: bash
       - name: Build test prefix and set env vars
         if: env.CHECKOUT_REPO != ''
         run: |
           BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
           SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
-          TEST_PREFIX="daprperf${SUFFIX}"
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
           echo "Test prefix is ${TEST_PREFIX}"
           echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_REGISTRY=${TEST_PREFIX}acr.azurecr.io" >> $GITHUB_ENV
@@ -199,12 +216,8 @@ jobs:
           make build
           make docker-build
         shell: bash
-      - name: Build e2e test apps
-        if: env.TEST_PREFIX != ''
-        run: |
-          make build-perf-app-all
-        shell: bash
       - name: Wait for Azure Container Registry deployment
+        timeout-minutes: 30
         if: env.TEST_PREFIX != ''
         run: |
           until az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
@@ -218,11 +231,15 @@ jobs:
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash
-      - name: Push all container images to the registry
+      - name: Push Dapr container images
         if: env.TEST_PREFIX != ''
         run: |
           make docker-push
-          make push-perf-app-all
+        shell: bash
+      - name: Build and push perf test apps
+        if: env.TEST_PREFIX != ''
+        run: |
+          make build-push-perf-app-all
         shell: bash
 
   test-perf:
@@ -236,15 +253,17 @@ jobs:
       GOARCH: amd64
       AZURE_STORAGE_ACCOUNT: ${{ secrets.PERF_AZURE_STORAGE_ACCOUNT }}
       AZURE_STORAGE_ACCESS_KEY: ${{ secrets.PERF_AZURE_STORAGE_KEY }}
+      PULL_POLICY: IfNotPresent
     steps:
       - name: Setup test output
         run: |
           export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
           echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
         shell: bash
-      - name: Set up container log path
+      - name: Set up log paths
         run: |
           echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/perf_tests" >> $GITHUB_ENV
+          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/perf_tests" >> $GITHUB_ENV
         shell: bash
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -266,7 +285,6 @@ jobs:
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
                 `CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
-          shell: bash
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
         uses: actions/setup-go@v3
@@ -305,8 +323,10 @@ jobs:
         if: env.CHECKOUT_REPO != ''
         run: |
           BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
           SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
-          TEST_PREFIX="daprperf${SUFFIX}"
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
           echo "Test prefix is ${TEST_PREFIX}"
           echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_REGISTRY=${TEST_PREFIX}acr.azurecr.io" >> $GITHUB_ENV
@@ -329,6 +349,8 @@ jobs:
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
+        env:
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
@@ -349,6 +371,30 @@ jobs:
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD_SIZE: 1024
         run: make test-perf-service_invocation_grpc
+      - name: Run Perf test state_get_grpc
+        if: env.TEST_PREFIX != ''
+        env:
+          DAPR_PERF_QPS: 1000
+          DAPR_PERF_CONNECTIONS: 16
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD_SIZE: 0
+        run: make test-perf-state_get_grpc
+      - name: Run Perf test state_get_http
+        if: env.TEST_PREFIX != ''
+        env:
+          DAPR_PERF_QPS: 1000
+          DAPR_PERF_CONNECTIONS: 16
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD_SIZE: 0
+        run: make test-perf-state_get_http
+      - name: Run Perf test pubsub_publish_grpc
+        if: env.TEST_PREFIX != ''
+        env:
+          DAPR_PERF_QPS: 1000
+          DAPR_PERF_CONNECTIONS: 16
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD_SIZE: 0
+        run: make test-perf-pubsub_publish_grpc
       - name: Run Perf test actor_timer in Java
         if: env.TEST_PREFIX != ''
         env:
@@ -383,6 +429,12 @@ jobs:
         with:
           name: perf_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: perf_test_logs
+          path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_PREFIX != ''
         env:
@@ -437,8 +489,10 @@ jobs:
       - name: Build test prefix
         run: |
           BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
           SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
-          TEST_PREFIX="daprperf${SUFFIX}"
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
           echo "Test prefix is ${TEST_PREFIX}"
           echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
         shell: bash

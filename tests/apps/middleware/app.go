@@ -22,6 +22,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
@@ -86,6 +88,9 @@ func logCall(w http.ResponseWriter, r *http.Request) {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test/logCall/{service}", testLogCall).Methods("POST")
 	router.HandleFunc("/logCall", logCall).Methods("POST")
@@ -98,6 +103,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Middleware App - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true)
 }

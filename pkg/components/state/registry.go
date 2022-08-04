@@ -23,13 +23,18 @@ import (
 )
 
 type State struct {
-	Name          string
+	Names         []string
 	FactoryMethod func() state.Store
 }
 
-func New(name string, factoryMethod func() state.Store) State {
+// New creates a new State.
+func New(name string, factoryMethod func() state.Store, aliases ...string) State {
+	names := []string{name}
+	if len(aliases) > 0 {
+		names = append(names, aliases...)
+	}
 	return State{
-		Name:          name,
+		Names:         names,
 		FactoryMethod: factoryMethod,
 	}
 }
@@ -55,7 +60,9 @@ func NewRegistry() Registry {
 // // The key is the name of the state store, eg. redis.
 func (s *stateStoreRegistry) Register(components ...State) {
 	for _, component := range components {
-		s.stateStores[createFullName(component.Name)] = component.FactoryMethod
+		for _, name := range component.Names {
+			s.stateStores[createFullName(name)] = component.FactoryMethod
+		}
 	}
 }
 

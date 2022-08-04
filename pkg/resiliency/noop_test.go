@@ -95,6 +95,19 @@ func TestNoOp(t *testing.T) {
 			},
 			err: errors.New("component inbound error"),
 		},
+		{
+			name: "built-in",
+			fn: func(ctx context.Context) Runner {
+				return policy.BuiltInPolicy(ctx, BuiltInServiceRetries)
+			},
+		},
+		{
+			name: "built-in error",
+			fn: func(ctx context.Context) Runner {
+				return policy.BuiltInPolicy(ctx, BuiltInServiceRetries)
+			},
+			err: errors.New("built-in error"),
+		},
 	}
 
 	for _, tt := range tests {

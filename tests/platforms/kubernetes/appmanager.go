@@ -15,6 +15,7 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -58,6 +59,7 @@ type AppManager struct {
 	client    *KubeClient
 	namespace string
 	app       AppDescription
+	ctx       context.Context
 
 	forwarder *PodPortForwarder
 
@@ -76,6 +78,7 @@ func NewAppManager(kubeClients *KubeClient, namespace string, app AppDescription
 		client:    kubeClients,
 		namespace: namespace,
 		app:       app,
+		ctx:       context.Background(),
 	}
 }
 
@@ -90,7 +93,9 @@ func (m *AppManager) App() AppDescription {
 }
 
 // Init installs app by AppDescription.
-func (m *AppManager) Init() error {
+func (m *AppManager) Init(runCtx context.Context) error {
+	m.ctx = runCtx
+
 	// Get or create test namespaces
 	if _, err := m.GetOrCreateNamespace(); err != nil {
 		return err
@@ -123,12 +128,6 @@ func (m *AppManager) Init() error {
 		if _, err := m.WaitUntilJobState(m.IsJobCompleted); err != nil {
 			return err
 		}
-
-		if m.logPrefix != "" {
-			if err := m.StreamContainerLogs(); err != nil {
-				log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
-			}
-		}
 	} else {
 		// Deploy app and wait until deployment is done
 		if _, err := m.Deploy(); err != nil {
@@ -139,14 +138,14 @@ func (m *AppManager) Init() error {
 		if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
 			return err
 		}
-
-		if m.logPrefix != "" {
-			if err := m.StreamContainerLogs(); err != nil {
-				log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
-			}
-		}
 	}
 	log.Printf("App %v has been deployed.", m.app.AppName)
+
+	if m.logPrefix != "" {
+		if err := m.StreamContainerLogs(); err != nil {
+			log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
+		}
+	}
 
 	if !m.app.IsJob {
 		// Job cannot have side car validated because it is shutdown on successful completion.
@@ -212,6 +211,9 @@ func (m *AppManager) Dispose(wait bool) error {
 		if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
 			return err
 		}
+	} else {
+		// Wait 2 seconds for logs to come in
+		time.Sleep(2 * time.Second)
 	}
 
 	if m.forwarder != nil {
@@ -226,7 +228,9 @@ func (m *AppManager) ScheduleJob() (*batchv1.Job, error) {
 	jobsClient := m.client.Jobs(m.namespace)
 	obj := buildJobObject(m.namespace, m.app)
 
-	result, err := jobsClient.Create(context.TODO(), obj, metav1.CreateOptions{})
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	result, err := jobsClient.Create(ctx, obj, metav1.CreateOptions{})
+	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +246,9 @@ func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
-		lastJob, err = jobsClient.Get(context.TODO(), m.app.AppName, metav1.GetOptions{})
+		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		lastJob, err = jobsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
+		cancel()
 		done := isState(lastJob, err)
 		if !done && err != nil {
 			return true, err
@@ -262,7 +268,9 @@ func (m *AppManager) Deploy() (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	obj := buildDeploymentObject(m.namespace, m.app)
 
-	result, err := deploymentsClient.Create(context.TODO(), obj, metav1.CreateOptions{})
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	result, err := deploymentsClient.Create(ctx, obj, metav1.CreateOptions{})
+	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +286,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 		defer cancel()
 		lastDeployment, err = deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
 		done := isState(lastDeployment, err)
@@ -292,7 +300,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 		// get deployment's Pods detail status info
 		podClient := m.client.Pods(m.namespace)
 		// Filter only 'testapp=appName' labeled Pods
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 		defer cancel()
 		podList, err := podClient.List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
@@ -310,7 +318,8 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 				podStatus[pod.Name] = pod.Status.ContainerStatuses
 			}
-			log.Printf("deployment %s relate pods: %+v", m.app.AppName, podList)
+			j, _ := json.Marshal(podList)
+			log.Printf("deployment %s relate pods: %s", m.app.AppName, string(j))
 		} else {
 			log.Printf("Error list pod for deployment %s. Error was %s", m.app.AppName, err)
 		}
@@ -373,9 +382,11 @@ func (m *AppManager) ValidateSidecar() error {
 
 	podClient := m.client.Pods(m.namespace)
 	// Filter only 'testapp=appName' labeled Pods
-	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
+	cancel()
 	if err != nil {
 		return err
 	}
@@ -390,10 +401,13 @@ func (m *AppManager) ValidateSidecar() error {
 		for _, container := range pod.Spec.Containers {
 			if container.Name == DaprSideCarName {
 				daprdFound = true
+				break
 			}
 		}
+
 		if !daprdFound {
-			return fmt.Errorf("cannot find dapr sidecar in pod %s", pod.Name)
+			found, _ := json.Marshal(pod.Spec.Containers)
+			return fmt.Errorf("cannot find dapr sidecar in pod %s. Found containers=%v", pod.Name, string(found))
 		}
 	}
 
@@ -409,9 +423,11 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods
-	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
+	cancel()
 	if err != nil {
 		return false, 0, 0, err
 	}
@@ -452,9 +468,11 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int, error) {
 	podClient := m.client.Pods(m.namespace)
 	// Filter only 'testapp=appName' labeled Pods
-	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
+	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -480,7 +498,9 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 
 	deploymentsClient := m.client.Deployments(m.namespace)
 
-	scale, err := deploymentsClient.GetScale(context.TODO(), m.app.AppName, metav1.GetOptions{})
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	scale, err := deploymentsClient.GetScale(ctx, m.app.AppName, metav1.GetOptions{})
+	cancel()
 	if err != nil {
 		return err
 	}
@@ -492,7 +512,9 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	scale.Spec.Replicas = replicas
 	m.app.Replicas = replicas
 
-	_, err = deploymentsClient.UpdateScale(context.TODO(), m.app.AppName, scale, metav1.UpdateOptions{})
+	ctx, cancel = context.WithTimeout(m.ctx, 15*time.Second)
+	_, err = deploymentsClient.UpdateScale(ctx, m.app.AppName, scale, metav1.UpdateOptions{})
+	cancel()
 
 	return err
 }
@@ -501,7 +523,9 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 func (m *AppManager) SetAppEnv(key, value string) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
-	deployment, err := deploymentsClient.Get(context.TODO(), m.app.AppName, metav1.GetOptions{})
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	deployment, err := deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
+	cancel()
 	if err != nil {
 		return err
 	}
@@ -530,7 +554,9 @@ func (m *AppManager) SetAppEnv(key, value string) error {
 		}
 	}
 
-	_, err = deploymentsClient.Update(context.TODO(), deployment, metav1.UpdateOptions{})
+	ctx, cancel = context.WithTimeout(m.ctx, 15*time.Second)
+	_, err = deploymentsClient.Update(ctx, deployment, metav1.UpdateOptions{})
+	cancel()
 
 	return err
 }
@@ -539,7 +565,9 @@ func (m *AppManager) SetAppEnv(key, value string) error {
 func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
 	obj := buildServiceObject(m.namespace, m.app)
-	result, err := serviceClient.Create(context.TODO(), obj, metav1.CreateOptions{})
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	result, err := serviceClient.Create(ctx, obj, metav1.CreateOptions{})
+	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -567,7 +595,9 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
-		lastService, err = serviceClient.Get(context.TODO(), m.app.AppName, metav1.GetOptions{})
+		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		lastService, err = serviceClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
+		cancel()
 		done := isState(lastService, err)
 		if !done && err != nil {
 			log.Printf("wait for %s: %s", m.app.AppName, err)
@@ -645,7 +675,9 @@ func (m *AppManager) DeleteJob(ignoreNotFound bool) error {
 	jobsClient := m.client.Jobs(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
-	if err := jobsClient.Delete(context.TODO(), m.app.AppName, metav1.DeleteOptions{
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	defer cancel()
+	if err := jobsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
 		return err
@@ -659,7 +691,9 @@ func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
-	if err := deploymentsClient.Delete(context.TODO(), m.app.AppName, metav1.DeleteOptions{
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	defer cancel()
+	if err := deploymentsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
 		return err
@@ -668,12 +702,14 @@ func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	return nil
 }
 
-// DeleteService deletes deployment for the test app.
+// DeleteService deletes service for the test app.
 func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	serviceClient := m.client.Services(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
-	if err := serviceClient.Delete(context.TODO(), m.app.AppName, metav1.DeleteOptions{
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	defer cancel()
+	if err := serviceClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
 		return err
@@ -685,11 +721,15 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 // GetOrCreateNamespace gets or creates namespace unless namespace exists.
 func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
 	namespaceClient := m.client.Namespaces()
-	ns, err := namespaceClient.Get(context.TODO(), m.namespace, metav1.GetOptions{})
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ns, err := namespaceClient.Get(ctx, m.namespace, metav1.GetOptions{})
+	cancel()
 
 	if err != nil && errors.IsNotFound(err) {
 		obj := buildNamespaceObject(m.namespace)
-		ns, err = namespaceClient.Create(context.TODO(), obj, metav1.CreateOptions{})
+		ctx, cancel = context.WithTimeout(m.ctx, 15*time.Second)
+		ns, err = namespaceClient.Create(ctx, obj, metav1.CreateOptions{})
+		cancel()
 		return ns, err
 	}
 
@@ -705,9 +745,11 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods
-	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
+	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -727,14 +769,16 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	return result, nil
 }
 
-// SaveContainerLogs get container logs for all containers in the pod and saves them to disk.
+// StreamContainerLogs get container logs for all containers in the pod and saves them to disk.
 func (m *AppManager) StreamContainerLogs() error {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods
-	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
+	cancel()
 	if err != nil {
 		return err
 	}
@@ -748,41 +792,36 @@ func (m *AppManager) StreamContainerLogs() error {
 					Container: container,
 					Follow:    true,
 				})
-				stream, err := req.Stream(context.TODO())
+				stream, err := req.Stream(m.ctx)
 				if err != nil {
-					log.Printf("Error reading log stream for %s. Error was %s", filename, err)
+					if err != context.Canceled {
+						log.Printf("Error reading log stream for %s. Error was %s", filename, err)
+					} else {
+						log.Printf("Saved container logs to %s", filename)
+					}
 					return
 				}
 				defer stream.Close()
 
 				fh, err := os.Create(filename)
 				if err != nil {
-					log.Printf("Error creating %s. Error was %s", filename, err)
+					if err != context.Canceled {
+						log.Printf("Error creating %s. Error was %s", filename, err)
+					} else {
+						log.Printf("Saved container logs to %s", filename)
+					}
 					return
 				}
 				defer fh.Close()
 
-				for {
-					buf := make([]byte, 2000)
-					numBytes, err := stream.Read(buf)
-					if numBytes == 0 {
-						continue
-					}
-
-					if err == io.EOF {
-						break
-					}
-
-					if err != nil {
+				_, err = io.Copy(fh, stream)
+				if err != nil {
+					if err != context.Canceled {
 						log.Printf("Error reading log stream for %s. Error was %s", filename, err)
-						return
+					} else {
+						log.Printf("Saved container logs to %s", filename)
 					}
-
-					_, err = fh.Write(buf[:numBytes])
-					if err != nil {
-						log.Printf("Error writing to %s. Error was %s", filename, err)
-						return
-					}
+					return
 				}
 
 				log.Printf("Saved container logs to %s", filename)
@@ -804,7 +843,9 @@ func (m *AppManager) GetCPUAndMemory(sidecar bool) (int64, float64, error) {
 	var maxMemory float64 = -1
 	for _, pod := range pods {
 		podName := pod.Name
-		metrics, err := m.client.MetricsClient.MetricsV1beta1().PodMetricses(m.namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		metrics, err := m.client.MetricsClient.MetricsV1beta1().PodMetricses(m.namespace).Get(ctx, podName, metav1.GetOptions{})
+		cancel()
 		if err != nil {
 			return -1, -1, err
 		}
@@ -843,16 +884,20 @@ func (m *AppManager) GetTotalRestarts() (int, error) {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods
-	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
+	cancel()
 	if err != nil {
 		return 0, err
 	}
 
 	restartCount := 0
 	for _, pod := range podList.Items {
-		pod, err := podClient.Get(context.TODO(), pod.GetName(), metav1.GetOptions{})
+		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		pod, err := podClient.Get(ctx, pod.GetName(), metav1.GetOptions{})
+		cancel()
 		if err != nil {
 			return 0, err
 		}

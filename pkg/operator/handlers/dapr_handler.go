@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
+	"github.com/dapr/dapr/utils"
 )
 
 const (
@@ -178,6 +178,10 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 	appID := h.getAppID(wrapper)
 	service := h.createDaprServiceValues(ctx, expectedService, wrapper, appID)
 
+	if err := ctrl.SetControllerReference(wrapper.GetObject(), service, h.Scheme); err != nil {
+		return err
+	}
+
 	service.ObjectMeta.ResourceVersion = daprSvc.ObjectMeta.ResourceVersion
 
 	if err := h.Update(ctx, service); err != nil {
@@ -273,12 +277,7 @@ func (h *DaprHandler) isAnnotatedForDapr(wrapper ObjectWrapper) bool {
 	if !ok {
 		return false
 	}
-	switch strings.ToLower(enabled) {
-	case "y", "yes", "true", "on", "1":
-		return true
-	default:
-		return false
-	}
+	return utils.IsTruthy(enabled)
 }
 
 func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {

@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const appPort = 3000
@@ -105,12 +107,15 @@ func envTest(commandRequest testCommandRequest) (int, appResponse) {
 
 // epoch returns the current unix epoch timestamp
 func epoch() int {
-	return (int)(time.Now().UTC().UnixNano() / 1000000)
+	return int(time.Now().UnixMilli())
 }
 
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/tests/{test}", testHandler).Methods("POST")
@@ -122,6 +127,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true)
 }

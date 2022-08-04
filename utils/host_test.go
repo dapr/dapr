@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,8 +9,7 @@ import (
 func TestGetHostAdress(t *testing.T) {
 	t.Run("DAPR_HOST_IP present", func(t *testing.T) {
 		hostIP := "test.local"
-		os.Setenv(HostIPEnvVar, hostIP)
-		defer os.Unsetenv(HostIPEnvVar)
+		t.Setenv(HostIPEnvVar, hostIP)
 
 		address, err := GetHostAddress()
 		assert.Nil(t, err)
