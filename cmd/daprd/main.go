@@ -177,7 +177,7 @@ import (
 	lock_redis "github.com/dapr/components-contrib/lock/redis"
 
 	// transaction
-	transaction_saga "github.com/dapr/components-contrib/transaction/saga"
+
 	transaction_tcc "github.com/dapr/components-contrib/transaction/tcc"
 	transaction_loader "github.com/dapr/dapr/pkg/components/transaction"
 )
@@ -579,9 +579,11 @@ func main() {
 			transaction_loader.New("tcc", func() transaction.Transaction {
 				return transaction_tcc.NewTccTransaction(logContrib)
 			}),
-			transaction_loader.New("saga", func() transaction.Transaction {
-				return transaction_saga.NewSagaTransaction(logContrib)
-			}),
+			/*
+				transaction_loader.New("saga", func() transaction.Transaction {
+					return transaction_saga.NewSagaTransaction(logContrib)
+				}),
+			*/
 		),
 	)
 	if err != nil {

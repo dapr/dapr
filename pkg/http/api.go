@@ -59,7 +59,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	uuid "github.com/gofrs/uuid"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -2301,9 +2300,9 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
-			Route:   "transaction/{transactionName}/open",
+			Route:   "transaction/{transactionName}/begin",
 			Version: apiVersionV1,
-			Handler: a.onDistributeTransaction,
+			Handler: a.onDistributeTransactionBegin,
 		},
 	}
 }
@@ -2333,43 +2332,46 @@ func (a *api) getTransactionName(reqCtx *fasthttp.RequestCtx) string {
 	return reqCtx.UserValue(transactionParam).(string)
 }
 
-func (a *api) onDistributeTransaction(reqCtx *fasthttp.RequestCtx) {
+func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
 	log.Debug("calling transaction components")
 	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
 	if err != nil {
 		log.Debug(err)
 		return
 	}
-	var subTransactions []transaction.SubTransactionRequest
-	err = json.Unmarshal(reqCtx.PostBody(), &subTransactions)
-	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-	if len(subTransactions) == 0 {
-		respond(reqCtx, withEmpty())
-		return
-	}
-	log.Debug(subTransactions)
+	/*
+		var subTransactions []transaction.SubTransactionRequest
+		err = json.Unmarshal(reqCtx.PostBody(), &subTransactions)
+		if err != nil {
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+			log.Debug(msg)
+			return
+		}
+		if len(subTransactions) == 0 {
+			respond(reqCtx, withEmpty())
+			return
+		}
+		log.Debug(subTransactions)
 
-	requestId := string(reqCtx.Request.Header.Peek("request_id"))
-	if requestId == "" {
-		newUuid, _ := uuid.NewV4()
-		requestId = newUuid.String()
-	}
+		requestId := string(reqCtx.Request.Header.Peek("request_id"))
+		if requestId == "" {
+			newUuid, _ := uuid.NewV4()
+			requestId = newUuid.String()
+		}
 
-	transactionState := a.stateStores[transactionState]
-	stateReqs := []state.SetRequest{}
-	for k, _ := range subTransactions {
-		stateReqs = append(stateReqs, state.SetRequest{
-			Key:   requestId + "_" + string(k),
-			Value: false,
-		})
-	}
-	transactionState.BulkSet(stateReqs)
+		transactionState := a.stateStores[transactionState]
+		stateReqs := []state.SetRequest{}
+		for k, _ := range subTransactions {
+			stateReqs = append(stateReqs, state.SetRequest{
+				Key:   requestId + "_" + string(k),
+				Value: false,
+			})
+		}
+		transactionState.BulkSet(stateReqs)
 
-	transactionInstance.Open(subTransactions, transactionState, requestId)
+		transactionInstance.Open(subTransactions, transactionState, requestId)
+	*/
+	transactionInstance.Try()
 	respond(reqCtx, withEmpty())
 }
