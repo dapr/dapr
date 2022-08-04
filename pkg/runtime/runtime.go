@@ -2054,7 +2054,9 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 		}
 	case <-time.After(timeout):
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-		return fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+		err := fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+		log.Errorf("error initializing component %s (%s/%s): %s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version, err)
+		return err
 	}
 
 	log.Infof("component loaded. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
