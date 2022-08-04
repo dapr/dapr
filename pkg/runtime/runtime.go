@@ -347,7 +347,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Initialize metrics only if MetricSpec is enabled.
 	if a.globalConfig.Spec.MetricSpec.Enabled {
 		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace); err != nil {
-			log.Errorf("failed to initialize metrics: %v", err)
+			log.Errorf("error initializing metrics: %v", err)
 		}
 	}
 
@@ -371,7 +371,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.nameResolutionRegistry.Register(opts.nameResolutions...)
 	err = a.initNameResolution()
 	if err != nil {
-		log.Warnf("failed to init name resolution: %s", err)
+		log.Warnf("error initializing name resolution: %s", err)
 	}
 
 	a.pubSubRegistry.Register(opts.pubsubs...)
@@ -467,7 +467,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
 		if err != nil {
-			log.Warnf("failed to init actors: %v", err)
+			log.Warnf("error initializing actors: %v", err)
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			grpcAPI.SetActorRuntime(a.actor)
@@ -531,14 +531,14 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initOutputBinding(c); err != nil {
-			log.Errorf("failed to init output bindings: %s", err)
+			log.Errorf("error initializing output bindings: %s", err)
 			return err
 		}
 	}
 
 	if a.bindingsRegistry.HasInputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initInputBinding(c); err != nil {
-			log.Errorf("failed to init input bindings: %s", err)
+			log.Errorf("error initializing input bindings: %s", err)
 			return err
 		}
 	}
@@ -1247,7 +1247,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed to create input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
+		log.Errorf("error creating input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return err
 	}
@@ -1256,7 +1256,7 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 		Name:       c.ObjectMeta.Name,
 	})
 	if err != nil {
-		log.Errorf("failed to init input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
+		log.Errorf("error initializing input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return err
 	}
@@ -1276,7 +1276,7 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed to create output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
+		log.Errorf("error creating output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return err
 	}
@@ -1287,7 +1287,7 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 			Name:       c.ObjectMeta.Name,
 		})
 		if err != nil {
-			log.Errorf("failed to init output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
+			log.Errorf("error initializing output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 			return err
 		}
@@ -1301,7 +1301,7 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		log.Errorf("error creating configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
 		return err
 	}
@@ -1312,7 +1312,7 @@ func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 		})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			log.Warnf("error initializing configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+			log.Errorf("error initializing configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 			return err
 		}
 
@@ -1327,7 +1327,7 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 	// create the component
 	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		log.Errorf("error creating lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
 		return err
 	}
@@ -1341,7 +1341,7 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 	})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		log.Warnf("error initializing lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		log.Errorf("error initializing lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		return err
 	}
 	// save lock related configuration
@@ -1349,7 +1349,8 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 	err = lock_loader.SaveLockConfiguration(s.ObjectMeta.Name, props)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		log.Warnf("error save lock keyprefix: %s", err.Error())
+		log.Warnf("failed to save lock keyprefix: %s", err.Error())
+		log.Errorf("error initializing lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		return err
 	}
 	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
@@ -1361,7 +1362,7 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		log.Errorf("error creating state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
 		return err
 	}
@@ -1371,7 +1372,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		secretStore := a.getSecretStore(secretStoreName)
 		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
 		if encErr != nil {
-			log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, encErr)
+			log.Errorf("error creating state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, encErr)
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
 			return encErr
 		}
@@ -1389,7 +1390,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			log.Warnf("error initializing state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+			log.Errorf("error initializing state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 			return err
 		}
 
@@ -1397,7 +1398,8 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		err = state_loader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			log.Warnf("error save state keyprefix: %s", err.Error())
+			log.Warnf("failed to save state keyprefix: %s", err.Error())
+			log.Errorf("error initializing state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 			return err
 		}
 
@@ -1530,7 +1532,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating pub sub %s (%s/%s): %s", &c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
+		log.Errorf("error creating pub sub %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return err
 	}
@@ -1546,7 +1548,7 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 		Properties: properties,
 	})
 	if err != nil {
-		log.Warnf("error initializing pub sub %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
+		log.Errorf("error initializing pub sub %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return err
 	}
@@ -1659,7 +1661,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	if err = resolver.Init(resolverMetadata); err != nil {
-		log.Errorf("failed to initialize name resolution resolver %s: %s", resolverName, err)
+		log.Errorf("error initializing name resolution resolver %s: %s", resolverName, err)
 		return err
 	}
 
@@ -2389,7 +2391,7 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed to create secret store %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
+		log.Errorf("error creating secret store %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
 		return err
 	}
@@ -2398,7 +2400,7 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 	})
 	if err != nil {
-		log.Warnf("failed to init secret store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
+		log.Errorf("error initializing secret store %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		return err
 	}
