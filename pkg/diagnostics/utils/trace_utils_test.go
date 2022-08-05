@@ -29,7 +29,7 @@ func TestSpanFromContext(t *testing.T) {
 	t.Run("fasthttp.RequestCtx, not nil span", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{}
 		var sp trace.Span
-		SpanToFastHTTPContext(ctx, &sp)
+		SpanToFastHTTPContext(ctx, sp)
 
 		assert.NotNil(t, SpanFromContext(ctx))
 	})
@@ -37,8 +37,10 @@ func TestSpanFromContext(t *testing.T) {
 	t.Run("fasthttp.RequestCtx, nil span", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{}
 		SpanToFastHTTPContext(ctx, nil)
-
-		assert.Nil(t, SpanFromContext(ctx))
+		sp := SpanFromContext(ctx)
+		expectedType := "trace.noopSpan"
+		gotType := reflect.TypeOf(sp).String()
+		assert.Equal(t, expectedType, gotType)
 	})
 
 	t.Run("not nil span for context", func(t *testing.T) {
@@ -52,8 +54,8 @@ func TestSpanFromContext(t *testing.T) {
 		newCtx := trace.ContextWithSpan(ctx, sp)
 		gotSp := SpanFromContext(newCtx)
 		assert.NotNil(t, gotSp)
-		assert.Equal(t, expectedTraceID, (*gotSp).SpanContext().TraceID())
-		assert.Equal(t, expectedSpanID, (*gotSp).SpanContext().SpanID())
+		assert.Equal(t, expectedTraceID, gotSp.SpanContext().TraceID())
+		assert.Equal(t, expectedSpanID, gotSp.SpanContext().SpanID())
 	})
 
 	t.Run("nil span for context", func(t *testing.T) {
@@ -63,7 +65,7 @@ func TestSpanFromContext(t *testing.T) {
 		newCtx := trace.ContextWithSpan(ctx, nil)
 		sp := SpanFromContext(newCtx)
 		expectedType := "trace.noopSpan"
-		gotType := reflect.TypeOf(*sp).String()
+		gotType := reflect.TypeOf(sp).String()
 		assert.Equal(t, expectedType, gotType)
 	})
 
@@ -74,7 +76,7 @@ func TestSpanFromContext(t *testing.T) {
 		newCtx := trace.ContextWithSpan(ctx, nil)
 		sp := SpanFromContext(newCtx)
 		expectedType := "trace.noopSpan"
-		gotType := reflect.TypeOf(*sp).String()
+		gotType := reflect.TypeOf(sp).String()
 		assert.Equal(t, expectedType, gotType)
 	})
 }

@@ -1008,7 +1008,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	}
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		ctx = diag.SpanContextToGRPCMetadata(ctx, (*span).SpanContext())
+		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		req := &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
@@ -1030,7 +1030,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent")
 			diag.AddAttributesToSpan(span, m)
 			diag.UpdateSpanStatusFromGRPCError(span, err)
-			(*span).End()
+			span.End()
 		}
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
@@ -1102,7 +1102,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				fmt.Sprintf("%s /%s", nethttp.MethodPost, bindingName))
 			diag.AddAttributesToSpan(span, m)
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
-			(*span).End()
+			span.End()
 		}
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code != nethttp.StatusOK {
@@ -1722,7 +1722,7 @@ func (a *DaprRuntime) initNameResolution() error {
 func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscribedMessage) error {
 	cloudEvent := msg.cloudEvent
 
-	var span *trace.Span
+	var span trace.Span
 
 	req := invokev1.NewInvokeMethodRequest(msg.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
@@ -1751,7 +1751,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		m := diag.ConstructSubscriptionSpanAttributes(msg.topic)
 		diag.AddAttributesToSpan(span, m)
 		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
-		(*span).End()
+		span.End()
 	}
 
 	_, body := resp.RawData()
@@ -1848,7 +1848,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		}
 	}
 
-	var span *trace.Span
+	var span trace.Span
 	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
@@ -1856,7 +1856,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 
 			// no ops if trace is off
 			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-			ctx = diag.SpanContextToGRPCMetadata(ctx, (*span).SpanContext())
+			ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 		} else {
 			log.Warnf("ignored non-string traceid value: %v", iTraceID)
 		}
@@ -1874,7 +1874,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
 		diag.AddAttributesToSpan(span, m)
 		diag.UpdateSpanStatusFromGRPCError(span, err)
-		(*span).End()
+		span.End()
 	}
 
 	if err != nil {

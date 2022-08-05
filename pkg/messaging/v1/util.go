@@ -368,7 +368,7 @@ func processGRPCToHTTPTraceHeaders(ctx context.Context, traceContext string, set
 	sc, ok := diag_utils.SpanContextFromBinary(decoded)
 	if !ok {
 		span := diag_utils.SpanFromContext(ctx)
-		sc = (*span).SpanContext()
+		sc = span.SpanContext()
 	}
 	diag.SpanContextToHTTPHeaders(sc, setHeader)
 }
@@ -376,7 +376,7 @@ func processGRPCToHTTPTraceHeaders(ctx context.Context, traceContext string, set
 func processHTTPToHTTPTraceHeaders(ctx context.Context, traceparentValue, traceStateValue string, setHeader func(string, string)) {
 	if traceparentValue == "" {
 		span := diag_utils.SpanFromContext(ctx)
-		diag.SpanContextToHTTPHeaders((*span).SpanContext(), setHeader)
+		diag.SpanContextToHTTPHeaders(span.SpanContext(), setHeader)
 	} else {
 		setHeader(traceparentHeader, traceparentValue)
 		if traceStateValue != "" {
@@ -393,7 +393,7 @@ func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, tracepare
 		sc = sc.WithTraceState(*ts)
 	} else {
 		span := diag_utils.SpanFromContext(ctx)
-		sc = (*span).SpanContext()
+		sc = span.SpanContext()
 	}
 	// Workaround for lack of grpc-trace-bin support in OpenTelemetry (unlike OpenCensus), tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 	// grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
@@ -407,7 +407,7 @@ func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, tracepare
 func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctracebinValue string) {
 	if grpctracebinValue == "" {
 		span := diag_utils.SpanFromContext(ctx)
-		sc := (*span).SpanContext()
+		sc := span.SpanContext()
 
 		// Workaround for lack of grpc-trace-bin support in OpenTelemetry (unlike OpenCensus), tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 		// grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path

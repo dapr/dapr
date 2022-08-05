@@ -15,6 +15,6 @@ package cmd
 
 func init() {
 	// perfCmd represents the perf command
-	var perfCmd = getCmdE2EPerf("perf")
+	perfCmd := getCmdE2EPerf("perf")
 	rootCmd.AddCommand(perfCmd)
 }

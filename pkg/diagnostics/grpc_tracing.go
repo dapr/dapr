@@ -76,7 +76,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			for key, value := range reqSpanAttr {
 				prefixedMetadata[key] = value
 			}
-			AddAttributesToSpan(&span, prefixedMetadata)
+			AddAttributesToSpan(span, prefixedMetadata)
 
 			// Correct the span name based on API.
 			if sname, ok := reqSpanAttr[daprAPISpanNameInternal]; ok {
@@ -90,7 +90,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
 		}
 
-		UpdateSpanStatusFromGRPCError(&span, err)
+		UpdateSpanStatusFromGRPCError(span, err)
 		span.End()
 
 		return resp, err
@@ -133,23 +133,23 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		wrapped.WrappedContext = ctx
 		err := handler(srv, wrapped)
 
-		addSpanMetadataAndUpdateStatus(ctx, &span, info.FullMethod, appID, nil, true)
+		addSpanMetadataAndUpdateStatus(ctx, span, info.FullMethod, appID, nil, true)
 
-		UpdateSpanStatusFromGRPCError(&span, err)
+		UpdateSpanStatusFromGRPCError(span, err)
 		span.End()
 
 		return err
 	}
 }
 
-func addSpanMetadataAndUpdateStatus(ctx context.Context, span *trace.Span, fullMethod, appID string, req interface{}, stream bool) {
+func addSpanMetadataAndUpdateStatus(ctx context.Context, span trace.Span, fullMethod, appID string, req interface{}, stream bool) {
 	var prefixedMetadata map[string]string
-	if (*span).SpanContext().IsSampled() {
+	if span.SpanContext().IsSampled() {
 		// users can add dapr- prefix if they want to see the header values in span attributes.
 		prefixedMetadata = userDefinedMetadata(ctx)
 	}
 
-	if (*span).SpanContext().IsSampled() {
+	if span.SpanContext().IsSampled() {
 		// Populates dapr- prefixed header first
 		AddAttributesToSpan(span, prefixedMetadata)
 
@@ -163,7 +163,7 @@ func addSpanMetadataAndUpdateStatus(ctx context.Context, span *trace.Span, fullM
 
 		// Correct the span name based on API.
 		if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
-			(*span).SetName(sname)
+			span.SetName(sname)
 		}
 	}
 }
@@ -188,16 +188,16 @@ func userDefinedMetadata(ctx context.Context) map[string]string {
 }
 
 // UpdateSpanStatusFromGRPCError updates tracer span status based on error object.
-func UpdateSpanStatusFromGRPCError(span *trace.Span, err error) {
+func UpdateSpanStatusFromGRPCError(span trace.Span, err error) {
 	if span == nil || err == nil {
 		return
 	}
 
 	_, ok := status.FromError(err)
 	if ok {
-		(*span).SetStatus(otelcodes.Ok, "")
+		span.SetStatus(otelcodes.Ok, "")
 	} else {
-		(*span).SetStatus(otelcodes.Error, err.Error())
+		span.SetStatus(otelcodes.Error, err.Error())
 	}
 }
 

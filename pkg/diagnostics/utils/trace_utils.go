@@ -79,20 +79,20 @@ func IsTracingEnabled(rate string) bool {
 }
 
 // SpanFromContext returns the SpanContext stored in a context, or nil or trace.nooSpan{} if there isn't one. - TODO
-func SpanFromContext(ctx context.Context) *trace.Span {
+func SpanFromContext(ctx context.Context) trace.Span {
 	if reqCtx, ok := ctx.(*fasthttp.RequestCtx); ok {
 		val := reqCtx.UserValue(daprFastHTTPContextKey)
 		if val != nil {
-			return val.(*trace.Span)
+			return val.(trace.Span)
 		}
 	}
 
 	span := trace.SpanFromContext(ctx)
-	return &span
+	return span
 }
 
 // SpanToFastHTTPContext sets span into fasthttp.RequestCtx.
-func SpanToFastHTTPContext(ctx *fasthttp.RequestCtx, span *trace.Span) {
+func SpanToFastHTTPContext(ctx *fasthttp.RequestCtx, span trace.Span) {
 	ctx.SetUserValue(daprFastHTTPContextKey, span)
 }
 

@@ -140,7 +140,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 			Key:       "state",
 		}
 
-		var span *trace.Span
+		var span trace.Span
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
 			span = diag_utils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
@@ -148,7 +148,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 
 		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
 
-		sc := (*span).SpanContext()
+		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
 		spanID := sc.SpanID()
@@ -164,7 +164,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 			Key:       "state",
 		}
 
-		var span *trace.Span
+		var span trace.Span
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
 			span = diag_utils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
@@ -172,7 +172,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 
 		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
 
-		sc := (*span).SpanContext()
+		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
 		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
@@ -188,7 +188,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 			Message: &commonv1pb.InvokeRequest{Method: "method1"},
 		}
 
-		var span *trace.Span
+		var span trace.Span
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
 			span = diag_utils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
@@ -196,8 +196,8 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 
 		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
 
-		sc := (*span).SpanContext()
-		spanString := fmt.Sprintf("%v", *span)
+		sc := span.SpanContext()
+		spanString := fmt.Sprintf("%v", span)
 		assert.True(t, strings.Contains(spanString, "CallLocal/targetID/method1"))
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()

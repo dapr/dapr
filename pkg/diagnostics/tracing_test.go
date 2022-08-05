@@ -125,7 +125,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 		ctx := context.Background()
 
 		_, gotSp := StartInternalCallbackSpan(ctx, "testSpanName", parent, traceSpec)
-		sc := (*gotSp).SpanContext()
+		sc := gotSp.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
 		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))

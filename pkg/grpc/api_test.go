@@ -200,7 +200,7 @@ func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Re
 
 func ExtractSpanContext(ctx context.Context) []byte {
 	span := diag_utils.SpanFromContext(ctx)
-	return []byte(SerializeSpanContext((*span).SpanContext()))
+	return []byte(SerializeSpanContext(span.SpanContext()))
 }
 
 // SerializeSpanContext serializes a span context into a simple string.

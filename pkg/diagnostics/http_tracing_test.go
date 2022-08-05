@@ -348,7 +348,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		)
 		handler(testRequestCtx)
 		span := diag_utils.SpanFromContext(testRequestCtx)
-		sc := (*span).SpanContext()
+		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
 		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
@@ -365,7 +365,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		)
 		handler(testRequestCtx)
 		span := diag_utils.SpanFromContext(testRequestCtx)
-		sc := (*span).SpanContext()
+		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
 		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
@@ -382,7 +382,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		)
 		handler(testRequestCtx)
 		span := diag_utils.SpanFromContext(testRequestCtx)
-		sc := (*span).SpanContext()
+		sc := span.SpanContext()
 		assert.Equal(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
 
@@ -399,7 +399,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		)
 		handler(testRequestCtx)
 		span := diag_utils.SpanFromContext(testRequestCtx)
-		sc := (*span).SpanContext()
+		sc := span.SpanContext()
 		assert.NotEqual(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
 
@@ -417,8 +417,8 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// assert
 		span := diag_utils.SpanFromContext(testRequestCtx)
-		sc := (*span).SpanContext()
-		spanString := fmt.Sprintf("%v", *span)
+		sc := span.SpanContext()
+		spanString := fmt.Sprintf("%v", span)
 		assert.True(t, strings.Contains(spanString, "CallLocal/callee/method1"))
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()

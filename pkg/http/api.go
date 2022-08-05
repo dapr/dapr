@@ -484,7 +484,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 
 	// pass the trace context to output binding in metadata
 	if span := diag_utils.SpanFromContext(reqCtx); span != nil {
-		sc := (*span).SpanContext()
+		sc := span.SpanContext()
 		if req.Metadata == nil {
 			req.Metadata = map[string]string{}
 		}
@@ -1934,9 +1934,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString((*span).SpanContext())
+	corID := diag.SpanContextToW3CString(span.SpanContext())
 	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString((*span).SpanContext())
+	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
 	data := body
 

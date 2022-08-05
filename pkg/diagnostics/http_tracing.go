@@ -52,25 +52,25 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 		next(ctx)
 
 		// Add span attributes only if it is sampled, which reduced the perf impact.
-		if (*span).SpanContext().IsSampled() {
+		if span.SpanContext().IsSampled() {
 			AddAttributesToSpan(span, userDefinedHTTPHeaders(ctx))
 			spanAttr := spanAttributesMapFromHTTPContext(ctx)
 			AddAttributesToSpan(span, spanAttr)
 
 			// Correct the span name based on API.
 			if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
-				(*span).SetName(sname)
+				span.SetName(sname)
 			}
 		}
 
 		// Check if response has traceparent header and add if absent
 		if ctx.Response.Header.Peek(traceparentHeader) == nil {
 			span = diag_utils.SpanFromContext(ctx)
-			SpanContextToHTTPHeaders((*span).SpanContext(), ctx.Response.Header.Set)
+			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
 		}
 
 		UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
-		(*span).End()
+		span.End()
 	}
 }
 
@@ -89,13 +89,13 @@ func userDefinedHTTPHeaders(reqCtx *fasthttp.RequestCtx) map[string]string {
 	return m
 }
 
-func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (*fasthttp.RequestCtx, *trace.Span) {
+func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (*fasthttp.RequestCtx, trace.Span) {
 	sc, _ := SpanContextFromRequest(&ctx.Request)
 	netCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
 	_, span := tracer.Start(netCtx, spanName, kindOption)
-	diag_utils.SpanToFastHTTPContext(ctx, &span)
-	return ctx, &span
+	diag_utils.SpanToFastHTTPContext(ctx, span)
+	return ctx, span
 }
 
 // SpanContextFromRequest extracts a span context from incoming requests.
@@ -117,10 +117,10 @@ func isHealthzRequest(name string) bool {
 }
 
 // UpdateSpanStatusFromHTTPStatus updates trace span status based on response code.
-func UpdateSpanStatusFromHTTPStatus(span *trace.Span, code int) {
+func UpdateSpanStatusFromHTTPStatus(span trace.Span, code int) {
 	if span != nil {
 		statusCode, statusDescription := traceStatusFromHTTPCode(code)
-		(*span).SetStatus(statusCode, statusDescription)
+		span.SetStatus(statusCode, statusDescription)
 	}
 }
 

@@ -177,7 +177,7 @@ func TraceStateFromW3CString(h string) *trace.TraceState {
 }
 
 // AddAttributesToSpan adds the given attributes in the span.
-func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
+func AddAttributesToSpan(span trace.Span, attributes map[string]string) {
 	if span == nil {
 		return
 	}
@@ -190,7 +190,7 @@ func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
 	}
 
 	if len(attrs) > 0 {
-		(*span).SetAttributes(attrs...)
+		span.SetAttributes(attrs...)
 	}
 }
 
@@ -214,7 +214,7 @@ func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 }
 
 // StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
-func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, *trace.Span) {
+func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, trace.Span) {
 	traceEnabled := diag_utils.IsTracingEnabled(spec.SamplingRate)
 	if !traceEnabled {
 		return ctx, nil
@@ -223,5 +223,5 @@ func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trac
 	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
 	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
 
-	return ctx, &span
+	return ctx, span
 }
