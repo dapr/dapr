@@ -655,7 +655,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	policy := a.resiliency.ComponentInboundPolicy(ctx, name)
 	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
 		Topic:    topic,
-		Metadata: route.Metadata,
+		Metadata: route.metadata,
 	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
@@ -663,7 +663,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 		msg.Metadata[pubsubName] = name
 
-		rawPayload, err := contrib_metadata.IsRawPayload(route.Metadata)
+		rawPayload, err := contrib_metadata.IsRawPayload(route.metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
 			if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
@@ -712,7 +712,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			return nil
 		}
 
-		routePath, shouldProcess, err := findMatchingRoute(route.Rules, cloudEvent)
+		routePath, shouldProcess, err := findMatchingRoute(route.rules, cloudEvent)
 		if err != nil {
 			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
 			if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
@@ -797,7 +797,7 @@ func (a *DaprRuntime) beginPubSub(name string) error {
 		return nil
 	}
 
-	for topic, route := range v.Routes {
+	for topic, route := range v.routes {
 		err = a.subscribeTopic(a.pubsubCtx, name, topic, route)
 		if err != nil {
 			// Log the error only
@@ -1616,10 +1616,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 
 	for _, s := range subscriptions {
 		if _, ok := topicRoutes[s.PubsubName]; !ok {
-			topicRoutes[s.PubsubName] = TopicRoute{Routes: make(map[string]Route)}
+			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]Route)}
 		}
 
-		topicRoutes[s.PubsubName].Routes[s.Topic] = Route{Metadata: s.Metadata, Rules: s.Rules}
+		topicRoutes[s.PubsubName].routes[s.Topic] = Route{metadata: s.Metadata, rules: s.Rules}
 		if len(s.DeadLetterTopic) > 0 {
 			deadLetterTopics[pubsubTopicKey(s.PubsubName, s.Topic)] = s.DeadLetterTopic
 		}
@@ -1628,7 +1628,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	if len(topicRoutes) > 0 {
 		for pubsubName, v := range topicRoutes {
 			topics := []string{}
-			for topic := range v.Routes {
+			for topic := range v.routes {
 				topics = append(topics, topic)
 			}
 			log.Infof("app is subscribed to the following topics: %v through pubsub=%s", topics, pubsubName)

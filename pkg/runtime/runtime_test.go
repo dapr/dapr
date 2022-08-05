@@ -2331,8 +2331,8 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{Routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].Routes["topic1"] = Route{Rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
 
 	t.Run("ok without result body", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -2441,8 +2441,8 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{Routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].Routes["topic1"] = Route{Rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
 
 	testcases := []struct {
 		Name        string
@@ -2529,8 +2529,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{Routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].Routes["topic1"] = Route{Rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -2864,8 +2864,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.topicRoutes = map[string]TopicRoute{}
 			rt.topicRoutes[TestPubsubName] = TopicRoute{
-				Routes: map[string]Route{
-					topic: {Rules: []*runtime_pubsub.Rule{{Path: topic}}},
+				routes: map[string]Route{
+					topic: {rules: []*runtime_pubsub.Rule{{Path: topic}}},
 				},
 			}
 			var grpcServer *grpc.Server
@@ -3009,22 +3009,22 @@ func TestPubsubLifecycle(t *testing.T) {
 	setTopicRoutes := func() {
 		rt.topicRoutes = map[string]TopicRoute{
 			"mockPubSub1": {
-				Routes: map[string]Route{
+				routes: map[string]Route{
 					"topic1": {
-						Metadata: map[string]string{"rawPayload": "true"},
-						Rules:    []*runtime_pubsub.Rule{{Path: "topic1"}},
+						metadata: map[string]string{"rawPayload": "true"},
+						rules:    []*runtime_pubsub.Rule{{Path: "topic1"}},
 					},
 				},
 			},
 			"mockPubSub2": {
-				Routes: map[string]Route{
+				routes: map[string]Route{
 					"topic2": {
-						Metadata: map[string]string{"rawPayload": "true"},
-						Rules:    []*runtime_pubsub.Rule{{Path: "topic2"}},
+						metadata: map[string]string{"rawPayload": "true"},
+						rules:    []*runtime_pubsub.Rule{{Path: "topic2"}},
 					},
 					"topic3": {
-						Metadata: map[string]string{"rawPayload": "true"},
-						Rules:    []*runtime_pubsub.Rule{{Path: "topic3"}},
+						metadata: map[string]string{"rawPayload": "true"},
+						rules:    []*runtime_pubsub.Rule{{Path: "topic3"}},
 					},
 				},
 			},
@@ -3280,12 +3280,12 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
 		r.topicRoutes = make(map[string]TopicRoute)
-		r.topicRoutes["failPubsub"] = TopicRoute{Routes: map[string]Route{
+		r.topicRoutes["failPubsub"] = TopicRoute{routes: map[string]Route{
 			"failingSubTopic": {
-				Metadata: map[string]string{
+				metadata: map[string]string{
 					"rawPayload": "true",
 				},
-				Rules: []*runtime_pubsub.Rule{
+				rules: []*runtime_pubsub.Rule{
 					{
 						Path: "failingPubsub",
 					},
@@ -3309,12 +3309,12 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 	t.Run("pubsub times out sending event to app with resiliency", func(t *testing.T) {
 		r.topicRoutes = make(map[string]TopicRoute)
-		r.topicRoutes["failPubsub"] = TopicRoute{Routes: map[string]Route{
+		r.topicRoutes["failPubsub"] = TopicRoute{routes: map[string]Route{
 			"timeoutSubTopic": {
-				Metadata: map[string]string{
+				metadata: map[string]string{
 					"rawPayload": "true",
 				},
-				Rules: []*runtime_pubsub.Rule{
+				rules: []*runtime_pubsub.Rule{
 					{
 						Path: "failingPubsub",
 					},
