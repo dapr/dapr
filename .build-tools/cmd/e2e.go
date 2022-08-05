@@ -15,6 +15,6 @@ package cmd
 
 func init() {
 	// e2eCmd represents the e2e command
-	var e2eCmd = getCmdE2EPerf("e2e")
+	e2eCmd := getCmdE2EPerf("e2e")
 	rootCmd.AddCommand(e2eCmd)
 }
