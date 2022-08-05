@@ -574,13 +574,8 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 		publishFunc = a.publishMessageGRPC
 	}
 	topicRoutes, _ := a.getTopicRoutes()
-	// if err != nil {
-	// 	return err
-	// }
 	v := topicRoutes[name]
-	// if !ok {
-	// 	return nil
-	// }
+
 	for topic, route := range v.routes {
 		allowed := a.isPubSubOperationAllowed(name, topic, a.scopedSubscriptions[name])
 		if !allowed {
