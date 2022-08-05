@@ -133,12 +133,12 @@ var log = logger.NewLogger("dapr.runtime")
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
 
 type Route struct {
-	Metadata map[string]string
-	Rules    []*runtime_pubsub.Rule
+	metadata map[string]string
+	rules    []*runtime_pubsub.Rule
 }
 
 type TopicRoute struct {
-	Routes map[string]Route
+	routes map[string]Route
 }
 
 // DaprRuntime holds all the core components of the runtime.
