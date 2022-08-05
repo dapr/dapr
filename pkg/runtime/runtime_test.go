@@ -38,7 +38,6 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 
-	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
@@ -47,7 +46,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/zipkin"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -881,20 +882,19 @@ func TestSetupTracing(t *testing.T) {
 		name              string
 		tracingConfig     config.TracingSpec
 		hostAddress       string
-		expectedExporters []trace.Exporter
+		expectedExporters []sdktrace.SpanExporter
 		expectedErr       string
 	}{{
 		name:          "no trace exporter",
 		tracingConfig: config.TracingSpec{},
 	}, {
-		name:        "bad host address, failing zipkin",
-		hostAddress: "bad:host:address",
+		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
 			Zipkin: config.ZipkinSpec{
-				EndpointAddress: "http://foo.bar",
+				EndpointAddress: "localhost",
 			},
 		},
-		expectedErr: "too many colons",
+		expectedErr: "invalid collector URL \"localhost\": no scheme or host",
 	}, {
 		name: "zipkin trace exporter",
 		tracingConfig: config.TracingSpec{
@@ -902,22 +902,47 @@ func TestSetupTracing(t *testing.T) {
 				EndpointAddress: "http://foo.bar",
 			},
 		},
-		expectedExporters: []trace.Exporter{&zipkin.Exporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&zipkin.Exporter{}},
+	}, {
+		name: "otel trace http exporter",
+		tracingConfig: config.TracingSpec{
+			Otel: config.OtelSpec{
+				EndpointAddress: "foo.bar",
+				IsSecure:        false,
+				Protocol:        "http",
+			},
+		},
+		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},
+	}, {
+		name: "invalid otel trace exporter protocol",
+		tracingConfig: config.TracingSpec{
+			Otel: config.OtelSpec{
+				EndpointAddress: "foo.bar",
+				IsSecure:        false,
+				Protocol:        "tcp",
+			},
+		},
+		expectedErr: "invalid protocol tcp provided for Otel endpoint",
 	}, {
 		name: "stdout trace exporter",
 		tracingConfig: config.TracingSpec{
 			Stdout: true,
 		},
-		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&diag_utils.StdoutExporter{}},
 	}, {
 		name: "all trace exporters",
 		tracingConfig: config.TracingSpec{
+			Otel: config.OtelSpec{
+				EndpointAddress: "http://foo.bar",
+				IsSecure:        false,
+				Protocol:        "http",
+			},
 			Zipkin: config.ZipkinSpec{
 				EndpointAddress: "http://foo.bar",
 			},
 			Stdout: true,
 		},
-		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}, &otlptrace.Exporter{}},
 	}}
 
 	for _, tc := range testcases {
@@ -928,23 +953,25 @@ func TestSetupTracing(t *testing.T) {
 			if tc.hostAddress != "" {
 				rt.hostAddress = tc.hostAddress
 			}
-			// Setup tracing with the fake trace exporter store to confirm
+			// Setup tracing with the fake tracer provider  store to confirm
 			// the right exporter was registered.
-			exporterStore := &fakeTraceExporterStore{}
-			if err := rt.setupTracing(rt.hostAddress, exporterStore); tc.expectedErr != "" {
+			tpStore := newFakeTracerProviderStore()
+			if err := rt.setupTracing(rt.hostAddress, tpStore); tc.expectedErr != "" {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				assert.Nil(t, err)
 			}
-			for i, exporter := range exporterStore.exporters {
+			for i, exporter := range tpStore.exporters {
 				// Exporter types don't expose internals, so we can only validate that
 				// the right type of  exporter was registered.
 				assert.Equal(t, reflect.TypeOf(tc.expectedExporters[i]), reflect.TypeOf(exporter))
 			}
-			// Setup tracing with the OpenCensus global exporter store.
+			// Setup tracing with the OpenTelemetry trace provider store.
 			// We have no way to validate the result, but we can at least
 			// confirm that nothing blows up.
-			rt.setupTracing(rt.hostAddress, openCensusExporterStore{})
+			if tc.expectedErr == "" {
+				rt.setupTracing(rt.hostAddress, newOpentelemetryTracerProviderStore())
+			}
 		})
 	}
 }
