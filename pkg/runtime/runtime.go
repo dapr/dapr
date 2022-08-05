@@ -2550,7 +2550,17 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 }
 
 func (a *DaprRuntime) initTransaction(s components_v1alpha1.Component) error {
-	transaction, err := a.transactionRegistry.Create(s.Spec.Type, s.Spec.Version)
-	a.transactions[s.ObjectMeta.Name] = transaction
-	return err
+	transactionIns, err := a.transactionRegistry.Create(s.Spec.Type, s.Spec.Version)
+	if err != nil {
+		log.Warnf("error initializing pub sub %s/%s: %s", s.Spec.Type, s.Spec.Version, err)
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+		return err
+	}
+	properties := a.convertMetadataItemsToProperties(s.Spec.Metadata)
+	transactionIns.Init(transaction.Metadata{
+		Properties: properties,
+	})
+
+	a.transactions[s.ObjectMeta.Name] = transactionIns
+	return nil
 }
