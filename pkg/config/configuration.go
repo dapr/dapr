@@ -143,11 +143,19 @@ type TracingSpec struct {
 	SamplingRate string     `json:"samplingRate" yaml:"samplingRate"`
 	Stdout       bool       `json:"stdout" yaml:"stdout"`
 	Zipkin       ZipkinSpec `json:"zipkin" yaml:"zipkin"`
+	Otel         OtelSpec   `json:"otel" yaml:"otel"`
 }
 
-// ZipkinSpec defines Zipkin trace configurations.
+// ZipkinSpec defines Zipkin exporter configurations.
 type ZipkinSpec struct {
 	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
+}
+
+// OtelSpec defines Otel exporter configurations.
+type OtelSpec struct {
+	Protocol        string `json:"protocol" yaml:"protocol"`
+	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
+	IsSecure        bool   `json:"isSecure" yaml:"isSecure"`
 }
 
 // MetricSpec configuration for metrics.
@@ -215,6 +223,9 @@ func LoadDefaultConfiguration() *Configuration {
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
 				SamplingRate: "",
+				Otel: OtelSpec{
+					IsSecure: true,
+				},
 			},
 			MetricSpec: MetricSpec{
 				Enabled: true,

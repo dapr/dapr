@@ -33,13 +33,17 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 
-	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
-	openzipkin "github.com/openzipkin/zipkin-go"
-	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/exporters/zipkin"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -206,6 +210,8 @@ type DaprRuntime struct {
 	proxy messaging.Proxy
 
 	resiliency resiliency.Provider
+
+	tracerProvider *sdktrace.TracerProvider
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -274,6 +280,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
 
+		tracerProvider: nil,
+
 		resiliency: resiliencyProvider,
 	}
 
@@ -334,22 +342,64 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
 // but we do so here to explicitly call out the dependency on having `hostAddress` computed.
-func (a *DaprRuntime) setupTracing(hostAddress string, exporters traceExporterStore) error {
+func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderStore) error {
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
 	if a.globalConfig.Spec.TracingSpec.Stdout {
-		exporters.RegisterExporter(&diag_utils.StdoutExporter{})
+		tpStore.RegisterExporter(diag_utils.NewStdOutExporter())
 	}
 
 	// Register zipkin trace exporter if ZipkinSpec is specified
 	if a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress != "" {
-		localEndpoint, err := openzipkin.NewEndpoint(a.runtimeConfig.ID, hostAddress)
+		zipkinExporter, err := zipkin.New(a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress)
 		if err != nil {
 			return err
 		}
-		reporter := zipkinreporter.NewReporter(a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress)
-		exporter := zipkin.NewExporter(reporter, localEndpoint)
-		exporters.RegisterExporter(exporter)
+		tpStore.RegisterExporter(zipkinExporter)
 	}
+
+	// Register otel trace exporter if OtelSpec is specified
+	if a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress != "" && a.globalConfig.Spec.TracingSpec.Otel.Protocol != "" {
+		endpoint := a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress
+		protocol := a.globalConfig.Spec.TracingSpec.Otel.Protocol
+		if protocol != "http" && protocol != "grpc" {
+			return fmt.Errorf("invalid protocol %v provided for Otel endpoint", protocol)
+		}
+		isSecure := a.globalConfig.Spec.TracingSpec.Otel.IsSecure
+
+		var client otlptrace.Client
+		if protocol == "http" {
+			clientOptions := []otlptracehttp.Option{otlptracehttp.WithEndpoint(endpoint)}
+			if !isSecure {
+				clientOptions = append(clientOptions, otlptracehttp.WithInsecure())
+			}
+			client = otlptracehttp.NewClient(clientOptions...)
+		} else {
+			clientOptions := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
+			if !isSecure {
+				clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
+			}
+			client = otlptracegrpc.NewClient(clientOptions...)
+		}
+		otelExporter, err := otlptrace.New(context.Background(), client)
+		if err != nil {
+			return err
+		}
+		tpStore.RegisterExporter(otelExporter)
+	}
+
+	// Register a resource
+	r := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String(a.runtimeConfig.ID),
+	)
+
+	tpStore.RegisterResource(r)
+
+	// Register a trace sampler based on Sampling settings
+	tpStore.RegisterSampler(diag_utils.TraceSampler(a.globalConfig.Spec.TracingSpec.SamplingRate))
+
+	tpStore.RegisterTracerProvider()
+
 	return nil
 }
 
@@ -376,7 +426,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
 		return errors.Wrap(err, "failed to determine host address")
 	}
-	if err = a.setupTracing(a.hostAddress, openCensusExporterStore{}); err != nil {
+	if err = a.setupTracing(a.hostAddress, newOpentelemetryTracerProviderStore()); err != nil {
 		return errors.Wrap(err, "failed to setup tracing")
 	}
 	// Register and initialize name resolution for service discovery.
@@ -1683,7 +1733,7 @@ func (a *DaprRuntime) initNameResolution() error {
 func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscribedMessage) error {
 	cloudEvent := msg.cloudEvent
 
-	var span *trace.Span
+	var span trace.Span
 
 	req := invokev1.NewInvokeMethodRequest(msg.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
@@ -1809,7 +1859,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		}
 	}
 
-	var span *trace.Span
+	var span trace.Span
 	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
@@ -2211,6 +2261,9 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 		if err := closer.Close(); err != nil {
 			log.Warnf("error closing API: %v", err)
 		}
+	}
+	if a.tracerProvider != nil {
+		a.tracerProvider.Shutdown(context.Background())
 	}
 	log.Infof("Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)

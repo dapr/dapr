@@ -17,14 +17,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/textproto"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/valyala/fasthttp"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/tracestate"
-	"google.golang.org/grpc/codes"
+
+	otelcodes "go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -38,10 +37,7 @@ const (
 	maxTracestateLen  = 512
 	traceparentHeader = "traceparent"
 	tracestateHeader  = "tracestate"
-	trimOWSRegexFmt   = `^[\x09\x20]*(.*[^\x20\x09])[\x09\x20]*$`
 )
-
-var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
 // HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
 func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
@@ -56,7 +52,7 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 		next(ctx)
 
 		// Add span attributes only if it is sampled, which reduced the perf impact.
-		if span.SpanContext().TraceOptions.IsSampled() {
+		if span.SpanContext().IsSampled() {
 			AddAttributesToSpan(span, userDefinedHTTPHeaders(ctx))
 			spanAttr := spanAttributesMapFromHTTPContext(ctx)
 			AddAttributesToSpan(span, spanAttr)
@@ -93,12 +89,11 @@ func userDefinedHTTPHeaders(reqCtx *fasthttp.RequestCtx) map[string]string {
 	return m
 }
 
-func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (*fasthttp.RequestCtx, *trace.Span) {
+func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (*fasthttp.RequestCtx, trace.Span) {
 	sc, _ := SpanContextFromRequest(&ctx.Request)
-	probSamplerOption := diag_utils.TraceSampler(spec.SamplingRate)
+	netCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
-
-	_, span := trace.StartSpanWithRemoteParent(ctx, spanName, sc, kindOption, probSamplerOption)
+	_, span := tracer.Start(netCtx, spanName, kindOption)
 	diag_utils.SpanToFastHTTPContext(ctx, span)
 	return ctx, span
 }
@@ -111,7 +106,8 @@ func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok boo
 	}
 	sc, ok = SpanContextFromW3CString(h)
 	if ok {
-		sc.Tracestate = tracestateFromRequest(req)
+		ts := tracestateFromRequest(req)
+		sc = sc.WithTraceState(*ts)
 	}
 	return sc, ok
 }
@@ -121,45 +117,27 @@ func isHealthzRequest(name string) bool {
 }
 
 // UpdateSpanStatusFromHTTPStatus updates trace span status based on response code.
-func UpdateSpanStatusFromHTTPStatus(span *trace.Span, code int) {
+func UpdateSpanStatusFromHTTPStatus(span trace.Span, code int) {
 	if span != nil {
-		span.SetStatus(traceStatusFromHTTPCode(code))
+		statusCode, statusDescription := traceStatusFromHTTPCode(code)
+		span.SetStatus(statusCode, statusDescription)
 	}
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/http.md#status
-func traceStatusFromHTTPCode(httpCode int) trace.Status {
-	code := codes.Unknown
-	switch httpCode {
-	case http.StatusUnauthorized:
-		code = codes.Unauthenticated
-	case http.StatusForbidden:
-		code = codes.PermissionDenied
-	case http.StatusNotFound:
-		code = codes.NotFound
-	case http.StatusTooManyRequests:
-		code = codes.ResourceExhausted
-	case http.StatusNotImplemented:
-		code = codes.Unimplemented
-	case http.StatusServiceUnavailable:
-		code = codes.Unavailable
-	case http.StatusGatewayTimeout:
-		code = codes.DeadlineExceeded
-	}
+func traceStatusFromHTTPCode(httpCode int) (otelcodes.Code, string) {
+	code := otelcodes.Unset
 
-	if code == codes.Unknown {
-		if httpCode >= 100 && httpCode < 300 {
-			code = codes.OK
-		} else if httpCode >= 300 && httpCode < 400 {
-			code = codes.DeadlineExceeded
-		} else if httpCode >= 400 && httpCode < 500 {
-			code = codes.InvalidArgument
-		} else if httpCode >= 500 {
-			code = codes.Internal
+	if httpCode >= 400 {
+		code = otelcodes.Error
+		statusText := http.StatusText(httpCode)
+		if statusText == "" {
+			statusText = "Unknown"
 		}
+		codeDescription := "Code(" + strconv.FormatInt(int64(httpCode), 10) + "): " + statusText
+		return code, codeDescription
 	}
-
-	return trace.Status{Code: int32(code), Message: code.String()}
+	return code, ""
 }
 
 func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
@@ -171,7 +149,7 @@ func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
 	return s, true
 }
 
-func tracestateFromRequest(req *fasthttp.Request) *tracestate.Tracestate {
+func tracestateFromRequest(req *fasthttp.Request) *trace.TraceState {
 	h, _ := getRequestHeader(req, tracestateHeader)
 	return TraceStateFromW3CString(h)
 }
@@ -179,7 +157,7 @@ func tracestateFromRequest(req *fasthttp.Request) *tracestate.Tracestate {
 // SpanContextToHTTPHeaders adds the spancontext in traceparent and tracestate headers.
 func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, string)) {
 	// if sc is empty context, no ops.
-	if (trace.SpanContext{}) == sc {
+	if sc.Equal(trace.SpanContext{}) {
 		return
 	}
 	h := SpanContextToW3CString(sc)
