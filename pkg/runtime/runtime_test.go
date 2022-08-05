@@ -1940,7 +1940,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		},
 		Auth: components_v1alpha1.Auth{
-			SecretStore: "kubernetes",
+			SecretStore: secretstores_loader.BuiltinKubernetesSecretStore,
 		},
 	}
 
@@ -1957,7 +1957,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
 		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
 				return m
 			}),
 		)
@@ -1965,7 +1965,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		// add Kubernetes component manually
 		rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
-				Name: "kubernetes",
+				Name: secretstores_loader.BuiltinKubernetesSecretStore,
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
@@ -1991,16 +1991,13 @@ func TestProcessComponentSecrets(t *testing.T) {
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
 		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
 				return m
 			}),
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		for _, comp := range rt.builtinSecretStore() {
-			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
-		}
+		assertBuiltInSecretStore(t, rt)
 
 		mod, unready := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "", mod.Spec.Metadata[0].Value.String())
@@ -2214,19 +2211,75 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 // Test InitSecretStore if secretstore.* refers to Kubernetes secret store.
 func TestInitSecretStoresInKubernetesMode(t *testing.T) {
-	rt := NewTestDaprRuntime(modes.KubernetesMode)
-	defer stopRuntime(t, rt)
+	t.Run("built-in secret store is added", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
 
-	m := NewMockKubernetesStore()
-	rt.secretStoresRegistry.Register(
-		secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
-			return m
-		}),
-	)
-	for _, comp := range rt.builtinSecretStore() {
-		err := rt.processComponentAndDependents(comp)
-		assert.Nil(t, err)
-	}
+		m := NewMockKubernetesStore()
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+				return m
+			}),
+		)
+
+		assertBuiltInSecretStore(t, rt)
+	})
+
+	t.Run("disable built-in secret store flag", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
+		rt.runtimeConfig.DisableBuiltinK8sSecretStore = true
+
+		testOk := make(chan struct{})
+		defer close(testOk)
+		go func() {
+			// If the test fails, this call blocks forever, eventually causing a timeout
+			rt.appendBuiltinSecretStore()
+			testOk <- struct{}{}
+		}()
+		select {
+		case <-testOk:
+			return
+		case <-time.After(5 * time.Second):
+			t.Fatalf("test failed")
+		}
+	})
+
+	t.Run("built-in secret store bypasses authorizers", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
+		rt.componentAuthorizers = []ComponentAuthorizer{
+			func(component components_v1alpha1.Component) bool {
+				return false
+			},
+		}
+
+		m := NewMockKubernetesStore()
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+				return m
+			}),
+		)
+
+		assertBuiltInSecretStore(t, rt)
+	})
+}
+
+func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
+	wg := sync.WaitGroup{}
+	go func() {
+		for comp := range rt.pendingComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+			if comp.Name == secretstores_loader.BuiltinKubernetesSecretStore {
+				wg.Done()
+			}
+		}
+	}()
+	wg.Add(1)
+	rt.appendBuiltinSecretStore()
+	wg.Wait()
+	close(rt.pendingComponents)
 }
 
 func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
@@ -3204,7 +3257,13 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 }
 
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
-	testRuntimeConfig := NewRuntimeConfig(
+	testRuntimeConfig := NewTestDaprRuntimeConfig(mode, protocol, appPort)
+
+	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+}
+
+func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *Config {
+	return NewRuntimeConfig(
 		TestRuntimeConfigID,
 		[]string{"10.10.10.12"},
 		"10.10.10.11",
@@ -3231,9 +3290,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		false,
 		time.Second,
 		true,
-		true)
-
-	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		false)
 }
 
 func TestGracefulShutdown(t *testing.T) {
@@ -3603,6 +3660,53 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{"other"}
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+
+	t.Run("no authorizers", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.componentAuthorizers = []ComponentAuthorizer{}
+		// Namespace mismatch, should be accepted anyways
+		rt.namespace = "a"
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = testCompName
+		component.ObjectMeta.Namespace = "b"
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 1)
+		assert.Equal(t, testCompName, comps[0].Name)
+	})
+
+	t.Run("only deny all", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.componentAuthorizers = []ComponentAuthorizer{
+			func(component components_v1alpha1.Component) bool {
+				return false
+			},
+		}
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = testCompName
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+
+	t.Run("additional authorizer denies all", func(t *testing.T) {
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPProtocol), 1024)
+		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component components_v1alpha1.Component) bool {
+			return false
+		})
+		defer stopRuntime(t, rt)
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = testCompName
 
 		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)

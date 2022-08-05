@@ -1,39 +1,44 @@
+
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.5.0
   name: configurations.dapr.io
 spec:
   group: dapr.io
+  names:
+    kind: Configuration
+    listKind: ConfigurationList
+    plural: configurations
+    singular: configuration
+  scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Configuration describes an Dapr configuration setting
+        description: Configuration describes an Dapr configuration setting.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
           spec:
-            description: ConfigurationSpec is the spec for an configuration
+            description: ConfigurationSpec is the spec for an configuration.
             properties:
               accessControl:
-                description: AccessControlSpec is the spec object in ConfigurationSpec
+                description: AccessControlSpec is the spec object in ConfigurationSpec.
                 properties:
                   defaultAction:
                     type: string
                   policies:
                     items:
-                      description: AppPolicySpec defines the policy data structure
-                        for each app
+                      description: AppPolicySpec defines the policy data structure for each app.
                       properties:
                         appId:
                           type: string
@@ -43,8 +48,7 @@ spec:
                           type: string
                         operations:
                           items:
-                            description: AppOperationAction defines the data structure
-                              for each app operation
+                            description: AppOperationAction defines the data structure for each app operation.
                             properties:
                               action:
                                 type: string
@@ -69,12 +73,11 @@ spec:
                     type: string
                 type: object
               api:
-                description: APISpec describes the configuration for Dapr APIs
+                description: APISpec describes the configuration for Dapr APIs.
                 properties:
                   allowed:
                     items:
-                      description: APIAccessRule describes an access rule for allowing
-                        a Dapr API to be enabled and accessible by an app
+                      description: APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
                       properties:
                         name:
                           type: string
@@ -88,9 +91,18 @@ spec:
                       type: object
                     type: array
                 type: object
+              components:
+                description: ComponentsSpec describes the configuration for Dapr components
+                properties:
+                  deny:
+                    description: Denylist of component types that cannot be instantiated
+                    items:
+                      type: string
+                    type: array
+                type: object
               features:
                 items:
-                  description: FeatureSpec defines the features that are enabled/disabled
+                  description: FeatureSpec defines the features that are enabled/disabled.
                   properties:
                     enabled:
                       type: boolean
@@ -102,21 +114,20 @@ spec:
                   type: object
                 type: array
               httpPipeline:
-                description: PipelineSpec defines the middleware pipeline
+                description: PipelineSpec defines the middleware pipeline.
                 properties:
                   handlers:
                     items:
-                      description: HandlerSpec defines a request handlers
+                      description: HandlerSpec defines a request handlers.
                       properties:
                         name:
                           type: string
                         selector:
-                          description: SelectorSpec selects target services to which
-                            the handler is to be applied
+                          description: SelectorSpec selects target services to which the handler is to be applied.
                           properties:
                             fields:
                               items:
-                                description: SelectorField defines a selector fields
+                                description: SelectorField defines a selector fields.
                                 properties:
                                   field:
                                     type: string
@@ -140,8 +151,18 @@ spec:
                 required:
                 - handlers
                 type: object
+              metric:
+                default:
+                  enabled: true
+                description: MetricSpec defines metrics configuration.
+                properties:
+                  enabled:
+                    type: boolean
+                required:
+                - enabled
+                type: object
               mtls:
-                description: MTLSSpec defines mTLS configuration
+                description: MTLSSpec defines mTLS configuration.
                 properties:
                   allowedClockSkew:
                     type: string
@@ -153,12 +174,12 @@ spec:
                 - enabled
                 type: object
               nameResolution:
-                description: NameResolutionSpec is the spec for name resolution configuration
+                description: NameResolutionSpec is the spec for name resolution configuration.
                 properties:
                   component:
                     type: string
                   configuration:
-                    description: DynamicValue is a dynamic value struct for the component.metadata pair value
+                    description: DynamicValue is a dynamic value struct for the component.metadata pair value.
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                   version:
@@ -169,11 +190,11 @@ spec:
                 - version
                 type: object
               secrets:
-                description: SecretsSpec is the spec for secrets configuration
+                description: SecretsSpec is the spec for secrets configuration.
                 properties:
                   scopes:
                     items:
-                      description: SecretsScope defines the scope for secrets
+                      description: SecretsScope defines the scope for secrets.
                       properties:
                         allowedSecrets:
                           items:
@@ -195,39 +216,28 @@ spec:
                 - scopes
                 type: object
               tracing:
-                description: TracingSpec is the spec object in ConfigurationSpec
+                description: TracingSpec defines distributed tracing configuration.
                 properties:
                   samplingRate:
                     type: string
                   zipkin:
-                    type: object
-                    description: Defines the Zipkin trace configurations
+                    description: ZipkinSpec defines Zipkin trace configurations.
                     properties:
                       endpointAddress:
-                        description: The endpoint address of Zipkin server to receive traces
                         type: string
+                    required:
+                    - endpointAddress
+                    type: object
                 required:
                 - samplingRate
-                type: object
-              metric:
-                default:
-                  enabled: true
-                description: MetricSpec defines metrics configuration
-                properties:
-                  enabled:
-                    type: boolean
-                required:
-                - enabled
                 type: object
             type: object
         type: object
     served: true
     storage: true
-  names:
-    kind: Configuration
-    plural: configurations
-    singular: configuration
-    categories:
-    - all
-    - dapr
-  scope: Namespaced
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
