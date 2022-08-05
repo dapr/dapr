@@ -53,6 +53,8 @@ type ConfigurationSpec struct {
 	Features []FeatureSpec `json:"features,omitempty"`
 	// +optional
 	APISpec APISpec `json:"api,omitempty"`
+	// +optional
+	ComponentsSpec ComponentsSpec `json:"components,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -62,8 +64,9 @@ type APISpec struct {
 
 // APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
 type APIAccessRule struct {
-	Name     string `json:"name"`
-	Version  string `json:"version"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// +optional
 	Protocol string `json:"protocol"`
 }
 
@@ -124,8 +127,9 @@ type SelectorField struct {
 
 // TracingSpec defines distributed tracing configuration.
 type TracingSpec struct {
-	SamplingRate string     `json:"samplingRate"`
-	Zipkin       ZipkinSpec `json:"zipkin"`
+	SamplingRate string `json:"samplingRate"`
+	// +optional
+	Zipkin ZipkinSpec `json:"zipkin"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.
@@ -173,6 +177,13 @@ type AccessControlSpec struct {
 type FeatureSpec struct {
 	Name    string `json:"name" yaml:"name"`
 	Enabled bool   `json:"enabled" yaml:"enabled"`
+}
+
+// ComponentsSpec describes the configuration for Dapr components
+type ComponentsSpec struct {
+	// Denylist of component types that cannot be instantiated
+	// +optional
+	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
 }
 
 // +kubebuilder:object:root=true

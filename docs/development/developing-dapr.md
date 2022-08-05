@@ -4,16 +4,17 @@
 
 There are several options for getting an environment up and running for Dapr development:
 
-- Use a [GitHub Codespace](https://docs.dapr.io/contributing/codespaces/) configured for Dapr development. \[Requires [Beta sign-up](https://github.com/features/codespaces/signup)\]
+- Using [GitHub Codespaces](https://docs.dapr.io/contributing/codespaces/) pre-configured for Dapr development is often the quickest path to get started with a development environment for Dapr. ([Learn about Codespaces](https://github.com/features/codespaces))
 - If you are using [Visual Studio Code](https://code.visualstudio.com/), you can [connect to a development container](./setup-dapr-development-using-vscode.md) configured for Dapr development.
 - [Manually install](./setup-dapr-development-env.md) the necessary tools and frameworks for developing Dapr on your device.
 
 ## Cloning the repo
 
-```bash
-cd $GOPATH/src
-mkdir -p github.com/dapr/dapr
-git clone https://github.com/dapr/dapr.git github.com/dapr/dapr
+Contributing to Dapr often requires working with multiple repositories at once. We recommend creating a folder for Dapr and clone all repositories in that folder.
+
+```sh
+mkdir dapr
+git clone https://github.com/dapr/dapr.git dapr/dapr
 ```
 
 ## Build the Dapr binaries
@@ -28,51 +29,52 @@ You can build Dapr binaries with the `make` tool.
 
 - Once built, the release binaries will be found in `./dist/{os}_{arch}/release/`, where `{os}_{arch}` is your current OS and architecture.
 
-  For example, running `make build` on an Intel-based MacOS will generate the directory `./dist/darwin_amd64/release`.
+  For example, running `make build` on an Intel-based macOS will generate the directory `./dist/darwin_amd64/release`.
 
 - To build for your current local environment:
 
-   ```bash
-   cd $GOPATH/src/github.com/dapr/dapr/
+   ```sh
+   cd dapr/dapr
    make build
    ```
 
-- To cross-compile for a different platform:
+- To cross-compile for a different platform, use the `GOOS` and `GOARCH` environmental variables:
 
-   ```bash
+   ```sh
    make build GOOS=windows GOARCH=amd64
    ```
 
-  For example, developers on Windows who prefer to develop in [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install-win10) can use the Linux development environment to cross-compile binaries like `daprd.exe` that run on Windows natively.
+> For example, developers on Windows who prefer to develop in [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install-win10) can use the Linux development environment to cross-compile binaries like `daprd.exe` that run on Windows natively.
 
 ## Run unit tests
 
-```bash
+```sh
 make test
 ```
 
 ## One-line command for local development
 
-```shell
+```sh
 make check
 ```
-This command will:
-- format, test and lint all the code 
-- check if you forget to `git commit` something.
 
-Note: To run linter locally, please use golangci-lint version v1.45.2, otherwise you might encounter errors.
-You can download version v1.45.2 [here](https://github.com/golangci/golangci-lint/releases/tag/v1.45.2) .
+This command will:
+
+- format, test and lint all the code 
+- check if you forgot to `git commit` something
+
+Note: To run linter locally, please use golangci-lint version v1.45.2, otherwise you might encounter errors. You can download version v1.45.2 [here](https://github.com/golangci/golangci-lint/releases/tag/v1.45.2).
 
 ## Debug Dapr
 
-We highly recommend using VSCode with the [Go plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode.Go) for your productivity. If you want to use other code editors, please refer to the list of [editor plugins for Delve](https://github.com/go-delve/delve/blob/master/Documentation/EditorIntegration.md).
+We recommend using VS Code with the [Go extension](https://marketplace.visualstudio.com/items?itemName=golang.Go) for your productivity. If you want to use other code editors, please refer to the list of [editor plugins for Delve](https://github.com/go-delve/delve/blob/master/Documentation/EditorIntegration.md).
 
 This section introduces how to start debugging with the Delve CLI. Please refer to the [Delve documentation](https://github.com/go-delve/delve/tree/master/Documentation) for more details.
 
 ### Start the Dapr runtime with a debugger
 
 ```bash
-$ cd $GOPATH/src/github.com/dapr/dapr/cmd/daprd
+$ cd dapr/dapr/cmd/daprd
 $ dlv debug .
 Type 'help' for list of commands.
 (dlv) break main.main
@@ -91,7 +93,7 @@ This is useful to debug Dapr when the process is running.
    make DEBUG=1 build
    ```
 
-2. Create a component yaml file under `./dist/{os}_{arch}/debug/components` e.g. statestore component yaml
+2. Create a component YAML file under `./dist/{os}_{arch}/debug/components` (for example a statestore component YAML).
 
 3. Start the Dapr runtime
 
@@ -117,24 +119,24 @@ dlv test ./pkg/actors
 
 ### Setting environment variable
 
-- **DAPR_REGISTRY** : should be set to docker.io/<your_docker_hub_account>.
-- **DAPR_TAG** : should be set to whatever value you wish to use for a container image tag.
+- **DAPR_REGISTRY** : should be set to `docker.io/<your_docker_hub_account>`.
+- **DAPR_TAG** : should be set to whatever value you wish to use for a container image tag (`dev` is a common choice).
 
-#### Linux/macOS
+On Linux/macOS:
 
 ```bash
 export DAPR_REGISTRY=docker.io/<your_docker_hub_account>
 export DAPR_TAG=dev
 ```
 
-#### Windows
+On Windows:
 
 ```cmd
 set DAPR_REGISTRY=docker.io/<your_docker_hub_account>
 set DAPR_TAG=dev
 ```
 
-### Building the Container Image
+### Building the container image
 
 ```bash
 # Build Linux binaries
@@ -144,7 +146,7 @@ make build-linux
 make docker-build
 ```
 
-## Push the Container Image
+## Push the container image
 
 To push the image to DockerHub, complete your `docker login` and run:
 
@@ -152,7 +154,7 @@ To push the image to DockerHub, complete your `docker login` and run:
 make docker-push
 ```
 
-## Deploy Dapr With Your Changes
+## Deploy Dapr with your Changes
 
 Now we'll deploy Dapr with your changes.
 
@@ -176,7 +178,7 @@ make docker-deploy-k8s
 
 ## Verifying your changes
 
-Once Dapr is deployed, print the Dapr pods:
+Once Dapr is deployed, list the Dapr pods:
 
 ```bash
 $ kubectl get pod -n dapr-system
@@ -187,9 +189,13 @@ dapr-placement-5d6465f8d5-pz2qt         1/1     Running   0          4d3h
 dapr-sidecar-injector-dc489d7bc-k2h4q   1/1     Running   0          4d3h
 ```
 
-## Debug Dapr in a Kubernetes Deployment
+## Debug Dapr in a Kubernetes deployment
 
 Refer to the [Dapr Docs](https://docs.dapr.io/developing-applications/debugging/debug-k8s/) on how to:
 
 - [Debug the Dapr control plane on Kubernetes](https://docs.dapr.io/developing-applications/debugging/debug-k8s/debug-dapr-services/)
 - [Debug the Dapr sidecar (daprd) on Kubernetes](https://docs.dapr.io/developing-applications/debugging/debug-k8s/debug-daprd/)
+
+## See also
+
+- Setting up a development environment [for building Dapr components](https://github.com/dapr/components-contrib/blob/master/docs/developing-component.md)
