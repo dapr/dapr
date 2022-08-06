@@ -2304,6 +2304,18 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransactionBegin,
 		},
+		{
+			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
+			Route:   "transaction/{transactionName}/commit",
+			Version: apiVersionV1,
+			Handler: a.onDistributeTransactionCommit,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
+			Route:   "transaction/{transactionName}/rollback",
+			Version: apiVersionV1,
+			Handler: a.onDistributeTransactionRollback,
+		},
 	}
 }
 
@@ -2332,46 +2344,51 @@ func (a *api) getTransactionName(reqCtx *fasthttp.RequestCtx) string {
 	return reqCtx.UserValue(transactionParam).(string)
 }
 
+// Begin a distribute transaction
 func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
-	log.Debug("calling transaction components")
 	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
 	if err != nil {
 		log.Debug(err)
 		return
 	}
-	/*
-		var subTransactions []transaction.SubTransactionRequest
-		err = json.Unmarshal(reqCtx.PostBody(), &subTransactions)
-		if err != nil {
-			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-			log.Debug(msg)
-			return
-		}
-		if len(subTransactions) == 0 {
-			respond(reqCtx, withEmpty())
-			return
-		}
-		log.Debug(subTransactions)
+	// TODO Regist Distribute transaction XID and banch subTransactionId
 
-		requestId := string(reqCtx.Request.Header.Peek("request_id"))
-		if requestId == "" {
-			newUuid, _ := uuid.NewV4()
-			requestId = newUuid.String()
-		}
+	transactionInstance.Begin()
 
-		transactionState := a.stateStores[transactionState]
-		stateReqs := []state.SetRequest{}
-		for k, _ := range subTransactions {
-			stateReqs = append(stateReqs, state.SetRequest{
-				Key:   requestId + "_" + string(k),
-				Value: false,
-			})
-		}
-		transactionState.BulkSet(stateReqs)
+	// inject the XID and subIds into *api
 
-		transactionInstance.Open(subTransactions, transactionState, requestId)
-	*/
-	transactionInstance.Try()
 	respond(reqCtx, withEmpty())
+}
+
+// Commit a distribute transaction
+func (a *api) onDistributeTransactionCommit(reqCtx *fasthttp.RequestCtx) {
+
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	respond(reqCtx, withEmpty())
+}
+
+// Rollback a distribute transaction
+func (a *api) onDistributeTransactionRollback(reqCtx *fasthttp.RequestCtx) {
+
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	respond(reqCtx, withEmpty())
+}
+
+// each banch distribute transaciton work and modify the state
+func (a *api) distributeTransactionTry(reqCtx *fasthttp.RequestCtx) {
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
 }
