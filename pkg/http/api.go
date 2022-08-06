@@ -2332,7 +2332,7 @@ func (a *api) getTransactionWithRequestValidation(reqCtx *fasthttp.RequestCtx) (
 
 	transactionStoreName := a.getTransactionStoreName(reqCtx)
 	if a.transactions[transactionStoreName] == nil {
-		msg := NewErrorResponse("ERR_TRANSACTION_NOT_FOUND", fmt.Sprintf(messages.ErrTransactionNotFound, transactionName))
+		msg := NewErrorResponse("ERR_TRANSACTION_NOT_FOUND", fmt.Sprintf(messages.ErrTransactionNotFound, transactionStoreName))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
@@ -2367,8 +2367,8 @@ func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// inject the XID and subIds into *api
-
-	respond(reqCtx, withJSON(fasthttp.StatusOK, reqs))
+	response, _ := json.Marshal(reqs)
+	respond(reqCtx, withJSON(fasthttp.StatusOK, response))
 }
 
 // Commit a distribute transaction
