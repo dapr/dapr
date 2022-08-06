@@ -177,8 +177,7 @@ import (
 	lock_redis "github.com/dapr/components-contrib/lock/redis"
 
 	// transaction
-
-	transaction_tcc "github.com/dapr/components-contrib/transaction/tcc"
+	transaction_redis "github.com/dapr/components-contrib/transaction/redis"
 	transaction_loader "github.com/dapr/dapr/pkg/components/transaction"
 )
 
@@ -576,14 +575,9 @@ func main() {
 			}),
 		),
 		runtime.WithTransactions(
-			transaction_loader.New("tcc", func() transaction.Transaction {
-				return transaction_tcc.NewTccTransaction(logContrib)
+			transaction_loader.New("redis", func() transaction.Transaction {
+				return transaction_redis.NewTccTransaction(logContrib)
 			}),
-			/*
-				transaction_loader.New("saga", func() transaction.Transaction {
-					return transaction_saga.NewSagaTransaction(logContrib)
-				}),
-			*/
 		),
 	)
 	if err != nil {
