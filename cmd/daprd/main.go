@@ -132,6 +132,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/http"
 	"github.com/dapr/components-contrib/bindings/huawei/obs"
 	"github.com/dapr/components-contrib/bindings/influx"
+	"github.com/dapr/components-contrib/bindings/ipfs"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
 	"github.com/dapr/components-contrib/bindings/localstorage"
@@ -484,6 +485,9 @@ func main() {
 			bindings_loader.NewOutput("influx", func() bindings.OutputBinding {
 				return influx.NewInflux(logContrib)
 			}),
+			bindings_loader.NewOutput("ipfs", func() bindings.OutputBinding {
+				return ipfs.NewIPFSBinding(logContrib)
+			}, "web3.ipfs"),
 			bindings_loader.NewOutput("kafka", func() bindings.OutputBinding {
 				return kafka.NewKafka(logContrib)
 			}),
