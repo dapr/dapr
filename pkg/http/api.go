@@ -136,7 +136,7 @@ const (
 	tracestateHeader         = "tracestate"
 	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
-	transactionParam         = "transactionName"
+	transactionStoreName     = "transactionStoreName"
 	transactionState         = "transactionstate"
 )
 
@@ -2300,19 +2300,19 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
-			Route:   "transaction/{transactionName}/begin",
+			Route:   "transaction/{transactionStoreName}/begin",
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransactionBegin,
 		},
 		{
 			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
-			Route:   "transaction/{transactionName}/commit",
+			Route:   "transaction/{transactionStoreName}/commit",
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransactionCommit,
 		},
 		{
 			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
-			Route:   "transaction/{transactionName}/rollback",
+			Route:   "transaction/{transactionStoreName}/rollback",
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransactionRollback,
 		},
@@ -2330,18 +2330,18 @@ func (a *api) getTransactionWithRequestValidation(reqCtx *fasthttp.RequestCtx) (
 		return nil, "", errors.New(msg.Message)
 	}
 
-	transactionName := a.getTransactionName(reqCtx)
-	if a.transactions[transactionName] == nil {
+	transactionStoreName := a.getTransactionStoreName(reqCtx)
+	if a.transactions[transactionStoreName] == nil {
 		msg := NewErrorResponse("ERR_TRANSACTION_NOT_FOUND", fmt.Sprintf(messages.ErrTransactionNotFound, transactionName))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
 	}
-	return a.transactions[transactionName], transactionName, nil
+	return a.transactions[transactionStoreName], transactionStoreName, nil
 }
 
-func (a *api) getTransactionName(reqCtx *fasthttp.RequestCtx) string {
-	return reqCtx.UserValue(transactionParam).(string)
+func (a *api) getTransactionStoreName(reqCtx *fasthttp.RequestCtx) string {
+	return reqCtx.UserValue(transactionStoreName).(string)
 }
 
 // Begin a distribute transaction
@@ -2368,8 +2368,7 @@ func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
 
 	// inject the XID and subIds into *api
 
-	response, _ := json.Marshal(reqs)
-	respond(reqCtx, withJSON(fasthttp.StatusOK, response))
+	respond(reqCtx, withJSON(fasthttp.StatusOK, reqs))
 }
 
 // Commit a distribute transaction
