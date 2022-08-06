@@ -2351,13 +2351,25 @@ func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	// TODO Regist Distribute transaction XID and banch subTransactionId
-
-	transactionInstance.Begin()
+	// Regist Distribute transaction XID and banch subTransactionId
+	var req transaction.BeginTransactionRequest
+	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+	//
+	reqs, err := transactionInstance.Begin(req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionrRgist, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+	}
 
 	// inject the XID and subIds into *api
 
-	respond(reqCtx, withEmpty())
+	response, _ := json.Marshal(reqs)
+	respond(reqCtx, withJSON(fasthttp.StatusOK, response))
 }
 
 // Commit a distribute transaction
@@ -2368,7 +2380,7 @@ func (a *api) onDistributeTransactionCommit(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-
+	transactionInstance.RollBack()
 	respond(reqCtx, withEmpty())
 }
 
@@ -2380,7 +2392,7 @@ func (a *api) onDistributeTransactionRollback(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-
+	transactionInstance.RollBack()
 	respond(reqCtx, withEmpty())
 }
 
@@ -2391,4 +2403,6 @@ func (a *api) distributeTransactionTry(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
+	transactionInstance.RollBack()
+	respond(reqCtx, withEmpty())
 }
