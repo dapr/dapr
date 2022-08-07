@@ -1,16 +1,11 @@
 package transaction
 
 import (
+	"strings"
+
 	"github.com/dapr/components-contrib/transaction"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/pkg/errors"
-	"strings"
-	_ "strings"
-
-	_ "github.com/pkg/errors"
-
-	_ "github.com/dapr/components-contrib/transaction"
-	_ "github.com/dapr/dapr/pkg/components"
 )
 
 type Transaction struct {

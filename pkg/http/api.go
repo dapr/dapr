@@ -2299,19 +2299,19 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 func (a *api) constructTransactionEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost},
 			Route:   "transaction/{transactionStoreName}/begin",
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransactionBegin,
 		},
 		{
-			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
-			Route:   "transaction/{transactionStoreName}/commit",
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "transaction/{transactionStoreName}/confirm",
 			Version: apiVersionV1,
-			Handler: a.onDistributeTransactionCommit,
+			Handler: a.onDistributeTransactionConfirm,
 		},
 		{
-			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost},
 			Route:   "transaction/{transactionStoreName}/rollback",
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransactionRollback,
@@ -2351,7 +2351,7 @@ func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	// Regist Distribute transaction XID and banch subTransactionId
+	// Regist distribute transaction ID and bunch transactionId
 	var req transaction.BeginTransactionRequest
 	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
@@ -2359,20 +2359,18 @@ func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	//
 	reqs, err := transactionInstance.Begin(req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionrRgist, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 	}
 
-	// inject the XID and subIds into *api
 	response, _ := json.Marshal(reqs)
 	respond(reqCtx, withJSON(fasthttp.StatusOK, response))
 }
 
-// Commit a distribute transaction
-func (a *api) onDistributeTransactionCommit(reqCtx *fasthttp.RequestCtx) {
+// Confirm a distribute transaction
+func (a *api) onDistributeTransactionConfirm(reqCtx *fasthttp.RequestCtx) {
 
 	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
 	if err != nil {
@@ -2395,13 +2393,25 @@ func (a *api) onDistributeTransactionRollback(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, withEmpty())
 }
 
-// each banch distribute transaciton work and modify the state
-func (a *api) distributeTransactionTry(reqCtx *fasthttp.RequestCtx) {
-	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
-	if err != nil {
-		log.Debug(err)
-		return
+// record each bunch transaciton request state
+func (a *api) distributeTransactionTry(transactionStoreName string, transactionId string, bunchTransactionId string, statusCode int, tryRequest transaction.TryTransactionRequest) error {
+	if a.transactions[transactionStoreName] == nil {
+		msg := NewErrorResponse("ERR_TRANSACTION_NOT_FOUND", fmt.Sprintf(messages.ErrTransactionNotFound, transactionStoreName))
+		return withError(fasthttp.StatusBadRequest, msg)
 	}
-	transactionInstance.RollBack()
-	respond(reqCtx, withEmpty())
+	transactionInstance := a.transactions[transactionStoreName]
+
+	if statusCode == fasthttp.StatusOK {
+		// try ok
+		requestStatusOK := 1
+	} else {
+		requestStatusOK := 0
+	}
+
+	err := transactionInstance.Try(transactionId, bunchTransactionId, requestStatusOK, tryRequest)
+	if err != nil {
+		msg := NewErrorResponse("ERR_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionrFailed, err.Error()))
+		return withError(fasthttp.StatusBadRequest, msg)
+	}
+	return nil
 }

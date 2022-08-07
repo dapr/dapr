@@ -87,4 +87,5 @@ const (
 	ErrTransactionsNotConfigured = "error transaction not configured"
 	ErrTransactionNotFound       = "transaction %s not found"
 	ErrTransactionrRgist         = "transaction regist error"
+	ErrTransactionrFailed        = "trasaction has something wrond %s"
 )
