@@ -255,8 +255,8 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if method == "delete-self-reminder" {
-		url := fmt.Sprintf(actorMethodURLFormat, actorType, id, "remind", method)
+	if id == "1001e" {
+		url := fmt.Sprintf(actorMethodURLFormat, actorType, id, "reminder", method)
 		_, e := httpCall("DELETE", url, nil, 204)
 		if e != nil {
 			return
