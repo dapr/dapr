@@ -211,7 +211,7 @@ func TestWrapper(t *testing.T) {
 	deploymentWrapper := getDeployment("test_id", "true")
 	statefulsetWrapper := getStatefulSet("test_id", "true")
 
-	t.Run("get match labal from wrapper", func(t *testing.T) {
+	t.Run("get match label from wrapper", func(t *testing.T) {
 		assert.Equal(t, "test", deploymentWrapper.GetMatchLabels()["app"])
 		assert.Equal(t, "test", statefulsetWrapper.GetMatchLabels()["app"])
 	})
@@ -346,7 +346,7 @@ func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 		ObjectMeta: metadata,
 	}
 
-	stratefulset := appsv1.StatefulSet{
+	statefulset := appsv1.StatefulSet{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: "app",
 		},
@@ -362,7 +362,7 @@ func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 	}
 
 	return &StatefulSetWrapper{
-		stratefulset,
+		statefulset,
 	}
 }
 

@@ -122,7 +122,7 @@ func ParseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.Volu
 	return volumeMounts
 }
 
-// StringSliceContains return true if an array containe the "str" string.
+// StringSliceContains return true if an array contains the "str" string.
 func StringSliceContains(needle string, haystack []string) bool {
 	for _, item := range haystack {
 		if item == needle {
