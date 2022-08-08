@@ -256,7 +256,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	//Specific case to test reminder that deletes itself in its callback
+	// Specific case to test reminder that deletes itself in its callback
 	if id == "1001e" {
 		url := fmt.Sprintf(actorDeleteReminderURLFormat, actorType, id, "reminders", method)
 		_, e := httpCall("DELETE", url, nil, 204)
