@@ -2318,7 +2318,7 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 		},
 
 		{
-			Methods: []string{fasthttp.MethodGet},
+			Methods: []string{fasthttp.MethodPost},
 			Route:   "transaction/{transactionStoreName}/getState",
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransactionGetState,
