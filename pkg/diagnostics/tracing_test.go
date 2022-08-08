@@ -14,11 +14,17 @@ limitations under the License.
 package diagnostics
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/tracestate"
+
+	"github.com/dapr/dapr/pkg/config"
+
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestSpanContextToW3CString(t *testing.T) {
@@ -30,11 +36,12 @@ func TestSpanContextToW3CString(t *testing.T) {
 	})
 	t.Run("valid SpanContext", func(t *testing.T) {
 		expected := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-		sc := trace.SpanContext{
-			TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-			SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-			TraceOptions: trace.TraceOptions(1),
+		scConfig := trace.SpanContextConfig{
+			TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+			SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+			TraceFlags: trace.TraceFlags(1),
 		}
+		sc := trace.NewSpanContext(scConfig)
 		got := SpanContextToW3CString(sc)
 		assert.Equal(t, expected, got)
 	})
@@ -47,12 +54,99 @@ func TestTraceStateToW3CString(t *testing.T) {
 		assert.Empty(t, got)
 	})
 	t.Run("valid Tracestate", func(t *testing.T) {
-		entry := tracestate.Entry{Key: "key", Value: "value"}
-		ts, _ := tracestate.New(nil, entry)
+		ts := trace.TraceState{}
+		ts, _ = ts.Insert("key", "value")
 		sc := trace.SpanContext{}
-		sc.Tracestate = ts
+		sc = sc.WithTraceState(ts)
 		got := TraceStateToW3CString(sc)
 		assert.Equal(t, "key=value", got)
+	})
+}
+
+func TestSpanContextFromW3CString(t *testing.T) {
+	t.Run("empty SpanContext", func(t *testing.T) {
+		sc := "00-00000000000000000000000000000000-0000000000000000-00"
+		expected := trace.SpanContext{}
+		got, _ := SpanContextFromW3CString(sc)
+		assert.Equal(t, expected, got)
+	})
+	t.Run("valid SpanContext", func(t *testing.T) {
+		sc := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+		scConfig := trace.SpanContextConfig{
+			TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+			SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+			TraceFlags: trace.TraceFlags(1),
+		}
+		expected := trace.NewSpanContext(scConfig)
+		got, _ := SpanContextFromW3CString(sc)
+		assert.Equal(t, expected, got)
+	})
+}
+
+func TestTraceStateFromW3CString(t *testing.T) {
+	t.Run("empty Tracestate", func(t *testing.T) {
+		ts := trace.TraceState{}
+		sc := trace.SpanContext{}
+		sc = sc.WithTraceState(ts)
+		scText := TraceStateToW3CString(sc)
+		got := TraceStateFromW3CString(scText)
+		assert.Equal(t, ts, *got)
+	})
+	t.Run("valid Tracestate", func(t *testing.T) {
+		ts := trace.TraceState{}
+		ts, _ = ts.Insert("key", "value")
+		sc := trace.SpanContext{}
+		sc = sc.WithTraceState(ts)
+		scText := TraceStateToW3CString(sc)
+		got := TraceStateFromW3CString(scText)
+		assert.Equal(t, ts, *got)
+	})
+}
+
+func TestStartInternalCallbackSpan(t *testing.T) {
+	exp := newOtelFakeExporter()
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+	)
+	defer func() { _ = tp.Shutdown(context.Background()) }()
+	otel.SetTracerProvider(tp)
+
+	t.Run("traceparent is provided and sampling is enabled", func(t *testing.T) {
+		traceSpec := config.TracingSpec{SamplingRate: "1"}
+
+		scConfig := trace.SpanContextConfig{
+			TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+			SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+			TraceFlags: trace.TraceFlags(1),
+		}
+		parent := trace.NewSpanContext(scConfig)
+
+		ctx := context.Background()
+
+		_, gotSp := StartInternalCallbackSpan(ctx, "testSpanName", parent, traceSpec)
+		sc := gotSp.SpanContext()
+		traceID := sc.TraceID()
+		spanID := sc.SpanID()
+		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
+		assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
+	})
+
+	t.Run("traceparent is provided but sampling is disabled", func(t *testing.T) {
+		traceSpec := config.TracingSpec{SamplingRate: "0"}
+
+		scConfig := trace.SpanContextConfig{
+			TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+			SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+			TraceFlags: trace.TraceFlags(1),
+		}
+		parent := trace.NewSpanContext(scConfig)
+
+		ctx := context.Background()
+
+		ctx, gotSp := StartInternalCallbackSpan(ctx, "testSpanName", parent, traceSpec)
+		assert.Nil(t, gotSp)
+		assert.NotNil(t, ctx)
 	})
 }
 
@@ -70,4 +164,23 @@ func TestOtelConventionStrings(t *testing.T) {
 	assert.Equal(t, "messaging.destination_kind", messagingDestinationKindSpanAttributeKey)
 	assert.Equal(t, "rpc.service", gRPCServiceSpanAttributeKey)
 	assert.Equal(t, "net.peer.name", netPeerNameSpanAttributeKey)
+}
+
+// Otel Fake Exporter implements an open telemetry span exporter that does nothing.
+type otelFakeExporter struct{}
+
+// newOtelFakeExporter returns an Open Telemetry Fake Span Exporter
+
+func newOtelFakeExporter() *otelFakeExporter {
+	return &otelFakeExporter{}
+}
+
+// ExportSpans implements the open telemetry span exporter interface.
+func (e *otelFakeExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	return nil
+}
+
+// Shutdown implements the open telemetry span exporter interface.
+func (e *otelFakeExporter) Shutdown(ctx context.Context) error {
+	return nil
 }

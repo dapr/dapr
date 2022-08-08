@@ -1,9 +1,12 @@
 package trace
 
 import (
-	"strconv"
+	"context"
 
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 
 	"github.com/dapr/kit/logger"
 )
@@ -18,19 +21,33 @@ func NewStringExporter(buffer *string, logger logger.Logger) *Exporter {
 	}
 }
 
-// Exporter is an OpenCensus string exporter.
+// Exporter is an OpenTelemetry string exporter.
 type Exporter struct {
 	Buffer *string
 	logger logger.Logger
 }
 
 // ExportSpan exports span content to the buffer.
-func (se *Exporter) ExportSpan(sd *trace.SpanData) {
-	*se.Buffer = strconv.Itoa(int(sd.Status.Code))
+func (se *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	*se.Buffer = spans[0].Status().Code.String()
+	return nil
+}
+
+// ExportSpan exports span content to the buffer.
+func (se *Exporter) Shutdown(ctx context.Context) error {
+	return nil
 }
 
 // Register creates a new string exporter endpoint and reporter.
 func (se *Exporter) Register(daprID string) {
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
-	trace.RegisterExporter(se)
+	// Register a resource
+	r := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String(daprID),
+	)
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(se),
+		sdktrace.WithResource(r),
+	)
+	otel.SetTracerProvider(tp)
 }
