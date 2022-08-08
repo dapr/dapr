@@ -2316,6 +2316,21 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransactionRollback,
 		},
+
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "transaction/{transactionStoreName}/getState",
+			Version: apiVersionV1,
+			Handler: a.onDistributeTransactionGetState,
+		},
+
+		//// test func
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "transaction/{transactionStoreName}/try",
+			Version: apiVersionV1,
+			Handler: a.onDistributeTransactionTry,
+		},
 	}
 }
 
@@ -2394,24 +2409,73 @@ func (a *api) onDistributeTransactionRollback(reqCtx *fasthttp.RequestCtx) {
 }
 
 // record each bunch transaciton request state
-func (a *api) distributeTransactionTry(transactionStoreName string, transactionId string, bunchTransactionId string, statusCode int, tryRequest transaction.TryTransactionRequest) error {
+/*
+func (a *api) distributeTransactionTry(transactionStoreName string, transactionId string, bunchTransactionId string, statusCode int, tryRequest transaction.TransactionTryRequestParam) error {
 	if a.transactions[transactionStoreName] == nil {
-		msg := NewErrorResponse("ERR_TRANSACTION_NOT_FOUND", fmt.Sprintf(messages.ErrTransactionNotFound, transactionStoreName))
-		return withError(fasthttp.StatusBadRequest, msg)
+		//msg := NewErrorResponse("ERR_TRANSACTION_NOT_FOUND", fmt.Sprintf(messages.ErrTransactionNotFound, transactionStoreName))
+		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionNotFound, transactionStoreName))
 	}
 	transactionInstance := a.transactions[transactionStoreName]
-
+	var requestStatusOK int
 	if statusCode == fasthttp.StatusOK {
 		// try ok
-		requestStatusOK := 1
+		requestStatusOK = 1
 	} else {
-		requestStatusOK := 0
+		requestStatusOK = 0
 	}
 
 	err := transactionInstance.Try(transactionId, bunchTransactionId, requestStatusOK, tryRequest)
 	if err != nil {
-		msg := NewErrorResponse("ERR_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionrFailed, err.Error()))
-		return withError(fasthttp.StatusBadRequest, msg)
+		//msg := NewErrorResponse("ERR_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionrFailed, err.Error()))
+		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionrFailed, err.Error()))
 	}
 	return nil
+}
+*/
+
+// test func
+func (a *api) onDistributeTransactionTry(reqCtx *fasthttp.RequestCtx) {
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+	var req transaction.BunchTransactionTryRequest
+	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+	err = transactionInstance.Try(req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionrRgist, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+	}
+
+	respond(reqCtx, withEmpty())
+}
+
+func (a *api) onDistributeTransactionGetState(reqCtx *fasthttp.RequestCtx) {
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	var req transaction.GetBunchTransactionsRequest
+	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+	reqs, err := transactionInstance.GetBunchTransactions(req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionrRgist, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+	}
+
+	response, _ := json.Marshal(reqs)
+	respond(reqCtx, withJSON(fasthttp.StatusOK, response))
 }
