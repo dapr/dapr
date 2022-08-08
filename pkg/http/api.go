@@ -137,7 +137,7 @@ const (
 	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
 	transactionStoreName     = "transactionStoreName"
-	transactionState         = "transactionstate"
+	transactionStateParam    = "transactionId"
 )
 
 // NewAPI returns a new API.
@@ -2318,8 +2318,8 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 		},
 
 		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "transaction/{transactionStoreName}/getState",
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "transaction/{transactionStoreName}/getState/{transactionId}",
 			Version: apiVersionV1,
 			Handler: a.onDistributeTransactionGetState,
 		},
@@ -2462,15 +2462,15 @@ func (a *api) onDistributeTransactionGetState(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
+	transactionId := reqCtx.UserValue(transactionStateParam).(string)
 
-	var req transaction.GetBunchTransactionsRequest
-	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-	reqs, err := transactionInstance.GetBunchTransactions(req)
+	log.Debug("transaction id is ", transactionId)
+
+	reqs, err := transactionInstance.GetBunchTransactions(
+		transaction.GetBunchTransactionsRequest{
+			TransactionId: transactionId,
+		},
+	)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionrRgist, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
