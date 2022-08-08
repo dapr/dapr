@@ -31,7 +31,9 @@ import (
 )
 
 const (
+	// Although Kubernetes secret store components are disabled, this is the built-in one that will work anyways
 	secretStore       = "kubernetes"
+	badSecretStore    = "vault"
 	nonexistentStore  = "nonexistent"
 	appName           = "secretapp" // App name in Dapr.
 	numHealthChecks   = 60          // Number of get calls before starting tests.
@@ -106,14 +108,10 @@ func newResponse(store string, keyValues ...utils.SimpleKeyValue) requestRespons
 
 func generateTestCases() []testCase {
 	// Just for readability
-	emptyRequest := requestResponse{
-		nil,
-	}
+	emptyRequest := requestResponse{}
 
 	// Just for readability
-	emptyResponse := requestResponse{
-		nil,
-	}
+	emptyResponse := requestResponse{}
 
 	return []testCase{
 		{
@@ -165,11 +163,18 @@ func generateTestCases() []testCase {
 			401,
 			"ERR_SECRET_STORE_NOT_FOUND",
 		},
+		{
+			"secret from the disabled secret store",
+			newRequest(badSecretStore, utils.SimpleKeyValue{allowedSecret, ""}),
+			newResponse("", utils.SimpleKeyValue{allowedSecret, ""}),
+			true,
+			401,
+			"ERR_SECRET_STORE_NOT_FOUND",
+		},
 	}
 }
 
 func generateTestCasesForDisabledSecretStore() []testCase {
-
 	return []testCase{
 		{
 			"valid secret but secret store should not be found",
@@ -206,6 +211,7 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
+			// "secretappconfig" restricts access to the Kubernetes secret store, but the built-in one (called "kubernetes") should work anyways
 			Config:         "secretappconfig",
 			AppName:        appName,
 			DaprEnabled:    true,

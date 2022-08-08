@@ -167,6 +167,7 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/dapr/components-contrib/configuration"
+	configuration_azure "github.com/dapr/components-contrib/configuration/azure/appconfig"
 	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
 
 	// Lock.
@@ -293,6 +294,11 @@ func main() {
 		runtime.WithConfigurations(
 			configuration_loader.New("redis", func() configuration.Store {
 				return configuration_redis.NewRedisConfigurationStore(logContrib)
+			}),
+		),
+		runtime.WithConfigurations(
+			configuration_loader.New("azure.appconfig", func() configuration.Store {
+				return configuration_azure.NewAzureAppConfigurationStore(logContrib)
 			}),
 		),
 		runtime.WithLocks(
