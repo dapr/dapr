@@ -37,6 +37,7 @@ const (
 	actorMethodURLFormat            = daprV1URL + "/actors/%s/%s/%s/%s"
 	actorSaveStateURLFormat         = daprV1URL + "/actors/%s/%s/state/"
 	actorGetStateURLFormat          = daprV1URL + "/actors/%s/%s/state/%s/"
+	actorDeleteReminderURLFormat    = daprV1URL + "/actors/%s/%s/%s/%s"
 	defaultActorType                = "testactorfeatures"                   // Actor type must be unique per test app.
 	actorTypeEnvName                = "TEST_APP_ACTOR_TYPE"                 // To set to change actor type.
 	actorRemindersPartitionsEnvName = "TEST_APP_ACTOR_REMINDERS_PARTITIONS" // To set actor type partition count.
@@ -255,8 +256,9 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	//Specific case to test reminder that deletes itself in its callback
 	if id == "1001e" {
-		url := fmt.Sprintf(actorMethodURLFormat, actorType, id, "reminder", method)
+		url := fmt.Sprintf(actorDeleteReminderURLFormat, actorType, id, "reminders", method)
 		_, e := httpCall("DELETE", url, nil, 204)
 		if e != nil {
 			return
