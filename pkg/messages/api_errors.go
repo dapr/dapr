@@ -86,6 +86,6 @@ const (
 	// Transactions.
 	ErrTransactionsNotConfigured = "error transaction not configured"
 	ErrTransactionNotFound       = "transaction %s not found"
-	ErrTransactionrRgist         = "transaction regist error"
-	ErrTransactionrFailed        = "trasaction has something wrond %s"
+	ErrTransactionRgist          = "transaction regist error"
+	ErrTransactionFailed         = "trasaction has something wrond %s"
 )

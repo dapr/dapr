@@ -2426,8 +2426,8 @@ func (a *api) distributeTransactionTry(transactionStoreName string, transactionI
 
 	err := transactionInstance.Try(transactionId, bunchTransactionId, requestStatusOK, tryRequest)
 	if err != nil {
-		//msg := NewErrorResponse("ERR_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionrFailed, err.Error()))
-		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionrFailed, err.Error()))
+		//msg := NewErrorResponse("ERR_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionFailed, err.Error()))
+		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionFailed, err.Error()))
 	}
 	return nil
 }
@@ -2442,14 +2442,14 @@ func (a *api) onDistributeTransactionTry(reqCtx *fasthttp.RequestCtx) {
 	}
 	var req transaction.BunchTransactionTryRequest
 	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Errror()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
 	}
 	err = transactionInstance.Try(req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionrRgist, err.Error()))
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionRgist, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 	}
 
@@ -2472,7 +2472,7 @@ func (a *api) onDistributeTransactionGetState(reqCtx *fasthttp.RequestCtx) {
 		},
 	)
 	if err != nil {
-		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionrRgist, err.Error()))
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionFailed, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 	}
 
