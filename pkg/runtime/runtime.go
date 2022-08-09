@@ -59,6 +59,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	wfs "github.com/dapr/components-contrib/workflows"
 	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -74,6 +75,7 @@ import (
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
+	workflows_loader "github.com/dapr/dapr/pkg/components/workflows"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -118,6 +120,7 @@ const (
 	middlewareComponent             ComponentCategory = "middleware"
 	configurationComponent          ComponentCategory = "configuration"
 	lockComponent                   ComponentCategory = "lock"
+	workflowComponent               ComponentCategory = "workflow"
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
 )
@@ -127,6 +130,7 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	pubsubComponent,
 	secretStoreComponent,
 	stateComponent,
+	workflowComponent,
 	middlewareComponent,
 	configurationComponent,
 	lockComponent,
@@ -166,6 +170,7 @@ type DaprRuntime struct {
 	directMessaging        messaging.DirectMessaging
 	stateStoreRegistry     state_loader.Registry
 	secretStoresRegistry   secretstores_loader.Registry
+	workflowsRegistry      workflows_loader.Registry
 	nameResolutionRegistry nr_loader.Registry
 	stateStores            map[string]state.Store
 	actor                  actors.Actors
@@ -176,6 +181,7 @@ type DaprRuntime struct {
 	secretStores           map[string]secretstores.SecretStore
 	pubSubRegistry         pubsub_loader.Registry
 	pubSubs                map[string]pubsub.PubSub
+	workFlows              map[string]wfs.Workflow
 	nameResolver           nr.Resolver
 	httpMiddlewareRegistry http_middleware_loader.Registry
 	hostAddress            string
@@ -224,6 +230,7 @@ type ComponentRegistry struct {
 	OutputBindings  map[string]bindings.OutputBinding
 	SecretStores    map[string]secretstores.SecretStore
 	PubSubs         map[string]pubsub.PubSub
+	WorkFlows       map[string]wfs.Workflow
 }
 
 type componentPreprocessRes struct {
@@ -257,10 +264,12 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretStores:           map[string]secretstores.SecretStore{},
 		stateStores:            map[string]state.Store{},
 		pubSubs:                map[string]pubsub.PubSub{},
+		workFlows:              map[string]wfs.Workflow{},
 		stateStoreRegistry:     state_loader.NewRegistry(),
 		bindingsRegistry:       bindings_loader.NewRegistry(),
 		pubSubRegistry:         pubsub_loader.NewRegistry(),
 		secretStoresRegistry:   secretstores_loader.NewRegistry(),
+		workflowsRegistry:      workflows_loader.NewRegistry(),
 		nameResolutionRegistry: nr_loader.NewRegistry(),
 		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
 
@@ -439,6 +448,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.pubSubRegistry.Register(opts.pubsubs...)
 	a.secretStoresRegistry.Register(opts.secretStores...)
 	a.stateStoreRegistry.Register(opts.states...)
+	a.workflowsRegistry.Register(opts.workFlows...)
 	a.configurationStoreRegistry.Register(opts.configurations...)
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
@@ -446,7 +456,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.lockStoreRegistry.Register(opts.locks...)
 
 	go a.processComponents()
-
 	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
 		log.Debug("starting to watch component updates")
 		err = a.beginComponentsUpdates()
@@ -462,7 +471,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	a.flushOutstandingComponents()
-
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
@@ -473,7 +481,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// Start proxy
 	a.initProxy()
-
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
 
@@ -508,20 +515,15 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if a.daprHTTPAPI != nil {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
-
 	a.blockUntilAppIsReady()
-
 	err = a.createAppChannel()
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	grpcAPI.SetAppChannel(a.appChannel)
-
 	a.loadAppConfiguration()
-
 	a.initDirectMessaging(a.nameResolver)
-
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	grpcAPI.SetDirectMessaging(a.directMessaging)
 
@@ -544,6 +546,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			OutputBindings:  a.outputBindings,
 			SecretStores:    a.secretStores,
 			PubSubs:         a.pubSubs,
+			WorkFlows:       a.workFlows,
 		}); err != nil {
 			log.Fatalf("failed to register components with callback: %s", err)
 		}
@@ -1163,6 +1166,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.getComponents,
 		a.resiliency,
 		a.stateStores,
+		a.workFlows,
 		a.lockStores,
 		a.secretStores,
 		a.secretsConfiguration,
@@ -1189,7 +1193,6 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.runtimeConfig.StreamRequestBody,
 		a.runtimeConfig.EnableAPILogging,
 	)
-
 	server := http.NewServer(a.daprHTTPAPI,
 		serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
 	if err := server.StartNonBlocking(); err != nil {
@@ -1238,6 +1241,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		a.appChannel,
 		a.resiliency,
 		a.stateStores,
+		a.workFlows,
 		a.secretStores,
 		a.secretsConfiguration,
 		a.configurationStores,
@@ -1413,6 +1417,33 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 		log.Warnf("error save lock keyprefix: %s", err.Error())
 		return err
 	}
+	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
+
+	return nil
+}
+
+func (a *DaprRuntime) initWorkflow(s components_v1alpha1.Component) error {
+	// create the component
+	workflowComp, err := a.workflowsRegistry.Create(s.Spec.Type, s.Spec.Version)
+	if err != nil {
+		log.Warnf("error creating workflow component %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
+		return err
+	}
+	if workflowComp == nil {
+		return nil
+	}
+	// initialization
+	props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
+	err = workflowComp.Init(wfs.Metadata{
+		Properties: props,
+	})
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+		log.Warnf("error initializing workflow component %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
+		return err
+	}
+	a.workFlows[s.ObjectMeta.Name] = workflowComp
 	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 
 	return nil
@@ -2156,6 +2187,8 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 		return a.initConfiguration(comp)
 	case lockComponent:
 		return a.initLock(comp)
+	case workflowComponent:
+		return a.initWorkflow(comp)
 	}
 	return nil
 }
@@ -2227,6 +2260,16 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 			err = fmt.Errorf("error closing name resolver: %w", err)
 			merr = multierror.Append(merr, err)
 			log.Warn(err)
+		}
+	}
+
+	for name, wf := range a.workFlows {
+		if closer, ok := wf.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing workflows %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
 		}
 	}
 

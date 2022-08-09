@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -116,6 +117,7 @@ type api struct {
 	appChannel                 channel.AppChannel
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
+	workFlows                  map[string]wfs.Workflow
 	transactionalStateStores   map[string]state.TransactionalStore
 	secretStores               map[string]secretstores.SecretStore
 	secretsConfiguration       map[string]config.SecretsScope
@@ -270,6 +272,7 @@ func NewAPI(
 	appID string, appChannel channel.AppChannel,
 	resiliency resiliency.Provider,
 	stateStores map[string]state.Store,
+	workfFlows map[string]wfs.Workflow,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
 	configurationStores map[string]configuration.Store,
@@ -299,6 +302,7 @@ func NewAPI(
 		appChannel:                 appChannel,
 		pubsubAdapter:              pubsubAdapter,
 		stateStores:                stateStores,
+		workFlows:                  workfFlows,
 		transactionalStateStores:   transactionalStateStores,
 		secretStores:               secretStores,
 		configurationStores:        configurationStores,

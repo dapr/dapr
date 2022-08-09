@@ -9,6 +9,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
+	"github.com/dapr/dapr/pkg/components/workflows"
 )
 
 type (
@@ -19,6 +20,7 @@ type (
 		configurations  []configuration.Configuration
 		locks           []lock.Lock
 		pubsubs         []pubsub.PubSub
+		workFlows       []workflows.Workflow
 		nameResolutions []nameresolution.NameResolution
 		inputBindings   []bindings.InputBinding
 		outputBindings  []bindings.OutputBinding
@@ -97,5 +99,12 @@ func WithHTTPMiddleware(httpMiddleware ...http.Middleware) Option {
 func WithComponentsCallback(componentsCallback ComponentsCallback) Option {
 	return func(o *runtimeOpts) {
 		o.componentsCallback = componentsCallback
+	}
+}
+
+// WithWorkflows adds workflow components to the runtime.
+func WithWorkflows(workFlows ...workflows.Workflow) Option {
+	return func(o *runtimeOpts) {
+		o.workFlows = append(o.workFlows, workFlows...)
 	}
 }

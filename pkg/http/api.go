@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
+	"github.com/dapr/components-contrib/workflows"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/version"
 
@@ -42,6 +43,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -79,6 +81,7 @@ type api struct {
 	getComponentsFn            func() []components_v1alpha1.Component
 	resiliency                 resiliency.Provider
 	stateStores                map[string]state.Store
+	workFlows                  map[string]wfs.Workflow
 	lockStores                 map[string]lock.Store
 	configurationStores        map[string]configuration.Store
 	configurationSubscribe     map[string]chan struct{}
@@ -127,6 +130,9 @@ const (
 	secretStoreNameParam     = "secretStoreName"
 	secretNameParam          = "key"
 	nameParam                = "name"
+	workflowId               = "workflowId"
+	workflowRunId            = "workflowRunId"
+	workflowName             = "workflowName"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
 	pubsubnameparam          = "pubsubname"
@@ -144,6 +150,7 @@ func NewAPI(
 	getComponentsFn func() []components_v1alpha1.Component,
 	resiliency resiliency.Provider,
 	stateStores map[string]state.Store,
+	workFlows map[string]wfs.Workflow,
 	lockStores map[string]lock.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
@@ -167,6 +174,7 @@ func NewAPI(
 		resiliency:                 resiliency,
 		directMessaging:            directMessaging,
 		stateStores:                stateStores,
+		workFlows:                  workFlows,
 		lockStores:                 lockStores,
 		transactionalStateStores:   transactionalStateStores,
 		secretStores:               secretStores,
@@ -197,6 +205,7 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
@@ -222,6 +231,29 @@ func (a *api) MarkStatusAsReady() {
 // MarkStatusAsOutboundReady marks the ready status of dapr for outbound traffic.
 func (a *api) MarkStatusAsOutboundReady() {
 	a.outboundReadyStatus = true
+}
+
+func (a *api) constructWorkflowEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "workflows/{workflowId}/{workflowRunId}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onGetWorkflow,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "workflows/{workflowName}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onStartWorkflow,
+		},
+		{
+			Methods: []string{fasthttp.MethodDelete},
+			Route:   "workflows/{workflowId}/{workflowRunId}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onTerminateWorkflow,
+		},
+	}
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {
@@ -698,6 +730,70 @@ func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lo
 	return a.lockStores[storeName], storeName, nil
 }
 
+func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
+	startReq := wfs.StartRequest{}
+
+	wf := reqCtx.UserValue(workflowName).(string)
+	if wf == "" {
+		log.Debug("No workflow, or empty workflow was provided.")
+		return
+	}
+
+	err := json.Unmarshal(reqCtx.PostBody(), &startReq)
+	if err != nil {
+		log.Debug(err)
+	}
+	req := workflows.StartRequest{
+		WorkflowName: startReq.WorkflowName,
+		Options:      startReq.Options,
+		Parameters:   startReq.Parameters,
+	}
+
+	resp, err := a.workFlows["workflows"].Start(reqCtx, &req)
+	if err != nil {
+		log.Debug(err)
+
+	}
+	response, err := json.Marshal(resp)
+	if err != nil {
+		log.Debug(err)
+	}
+	log.Debug(resp)
+	respond(reqCtx, withJSON(200, response))
+}
+
+func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
+
+	req := workflows.WorkflowStruct{
+		WorkflowId:    reqCtx.UserValue(workflowId).(string),
+		WorkflowRunId: reqCtx.UserValue(workflowRunId).(string),
+	}
+
+	resp, err := a.workFlows["workflows"].Get(reqCtx, &req)
+	if err != nil {
+		log.Debug(err)
+	}
+	log.Debug(resp)
+	response, err := json.Marshal(resp)
+	if err != nil {
+		log.Debug(err)
+	}
+	respond(reqCtx, withJSON(200, response))
+}
+
+func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
+
+	req := workflows.WorkflowStruct{
+		WorkflowId:    reqCtx.UserValue(workflowId).(string),
+		WorkflowRunId: reqCtx.UserValue(workflowRunId).(string),
+	}
+	err := a.workFlows["workflows"].Terminate(reqCtx, &req)
+	if err != nil {
+		log.Debug(err)
+
+	}
+
+}
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {

@@ -151,6 +151,12 @@ import (
 
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
+	// Workflows.
+	"github.com/dapr/components-contrib/workflows"
+	temporal "github.com/dapr/components-contrib/workflows/temporal"
+
+	workflows_loader "github.com/dapr/dapr/pkg/components/workflows"
+
 	// HTTP Middleware.
 
 	"github.com/dapr/components-contrib/middleware"
@@ -190,6 +196,11 @@ func main() {
 	}
 
 	err = rt.Run(
+		runtime.WithWorkflows(
+			workflows_loader.New("temporal", func() workflows.Workflow {
+				return temporal.NewTemporalWorkflow(logContrib)
+			}),
+		),
 		runtime.WithSecretStores(
 			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
 				return secretstore_kubernetes.NewKubernetesSecretStore(logContrib)
