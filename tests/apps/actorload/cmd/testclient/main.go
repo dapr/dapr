@@ -14,9 +14,6 @@ limitations under the License.
 package main
 
 import (
-	actor_cl "actorload/pkg/actor/client"
-	cl "actorload/pkg/actor/client"
-	http_client "actorload/pkg/actor/client/http"
 	"errors"
 	"flag"
 	"fmt"
@@ -24,6 +21,10 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	actor_cl "actorload/pkg/actor/client"
+	cl "actorload/pkg/actor/client"
+	http_client "actorload/pkg/actor/client/http"
 
 	"fortio.org/fortio/log"
 	"fortio.org/fortio/periodic"

@@ -283,7 +283,7 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 	for _, item := range resiliencies.Items {
 		b, err := json.Marshal(item)
 		if err != nil {
-			log.Warnf("Error unmarshalling resilienc: %s", err)
+			log.Warnf("Error unmarshalling resiliency: %s", err)
 			continue
 		}
 		resp.Resiliencies = append(resp.Resiliencies, b)
