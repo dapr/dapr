@@ -15,17 +15,21 @@ package utils
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
-	"go.opencensus.io/trace"
+
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestSpanFromContext(t *testing.T) {
 	t.Run("fasthttp.RequestCtx, not nil span", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{}
-		SpanToFastHTTPContext(ctx, &trace.Span{})
+		var sp trace.Span
+		SpanToFastHTTPContext(ctx, sp)
 
 		assert.NotNil(t, SpanFromContext(ctx))
 	})
@@ -33,27 +37,64 @@ func TestSpanFromContext(t *testing.T) {
 	t.Run("fasthttp.RequestCtx, nil span", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{}
 		SpanToFastHTTPContext(ctx, nil)
-
-		assert.Nil(t, SpanFromContext(ctx))
+		sp := SpanFromContext(ctx)
+		expectedType := "trace.noopSpan"
+		gotType := reflect.TypeOf(sp).String()
+		assert.Equal(t, expectedType, gotType)
 	})
 
 	t.Run("not nil span for context", func(t *testing.T) {
 		ctx := context.Background()
-		newCtx := trace.NewContext(ctx, &trace.Span{})
-
-		assert.NotNil(t, SpanFromContext(newCtx))
+		exp := newOtelFakeExporter()
+		tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp))
+		tracer := tp.Tracer("dapr-diagnostics-utils-tests")
+		ctx, sp := tracer.Start(ctx, "testSpan", trace.WithSpanKind(trace.SpanKindClient))
+		expectedTraceID := sp.SpanContext().TraceID()
+		expectedSpanID := sp.SpanContext().SpanID()
+		newCtx := trace.ContextWithSpan(ctx, sp)
+		gotSp := SpanFromContext(newCtx)
+		assert.NotNil(t, gotSp)
+		assert.Equal(t, expectedTraceID, gotSp.SpanContext().TraceID())
+		assert.Equal(t, expectedSpanID, gotSp.SpanContext().SpanID())
 	})
 
 	t.Run("nil span for context", func(t *testing.T) {
 		ctx := context.Background()
-		newCtx := trace.NewContext(ctx, nil)
-
-		assert.Nil(t, SpanFromContext(newCtx))
+		exp := newOtelFakeExporter()
+		_ = sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp))
+		newCtx := trace.ContextWithSpan(ctx, nil)
+		sp := SpanFromContext(newCtx)
+		expectedType := "trace.noopSpan"
+		gotType := reflect.TypeOf(sp).String()
+		assert.Equal(t, expectedType, gotType)
 	})
 
 	t.Run("nil", func(t *testing.T) {
 		ctx := context.Background()
-
-		assert.Nil(t, SpanFromContext(ctx))
+		exp := newOtelFakeExporter()
+		_ = sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp))
+		newCtx := trace.ContextWithSpan(ctx, nil)
+		sp := SpanFromContext(newCtx)
+		expectedType := "trace.noopSpan"
+		gotType := reflect.TypeOf(sp).String()
+		assert.Equal(t, expectedType, gotType)
 	})
+}
+
+// otelFakeExporter implements an open telemetry span exporter that does nothing.
+type otelFakeExporter struct{}
+
+// newOtelFakeExporter returns a otelFakeExporter
+func newOtelFakeExporter() *otelFakeExporter {
+	return &otelFakeExporter{}
+}
+
+// ExportSpans implements the open telemetry span exporter interface.
+func (e *otelFakeExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	return nil
+}
+
+// Shutdown implements the open telemetry span exporter interface.
+func (e *otelFakeExporter) Shutdown(ctx context.Context) error {
+	return nil
 }
