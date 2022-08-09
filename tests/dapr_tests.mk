@@ -68,9 +68,6 @@ pubsub_publish_grpc \
 
 KUBECTL=kubectl
 
-# If should run tests through a VPN tunnel
-TAILSCALE_ENABLED?=false
-
 DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
 DAPR_TEST_LOG_PATH?=./dist/logs
 
@@ -96,13 +93,6 @@ endif
 
 ifeq ($(DAPR_TEST_TAG),)
 DAPR_TEST_TAG=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
-endif
-
-# if tailscale is enabled then a auth key must be provided
-ifeq ($(TAILSCALE_ENABLED),true)
-ifeq ($(TAILSCALE_AUTH_KEY),)
-$(error TAILSCALE_AUTH_KEY environment variable must be set)
-endif
 endif
 
 ifeq ($(DAPR_TEST_ENV),minikube)
@@ -230,7 +220,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-tailscale
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -381,7 +371,9 @@ setup-helm-init:
 
 # setup tailscale
 setup-tailscale:
-ifeq ($(TAILSCALE_ENABLED),true)
+ifeq ($(TAILSCALE_AUTH_KEY),)
+	$(error TAILSCALE_AUTH_KEY environment variable must be set)
+else
 	$(KUBECTL) apply -f ./tests/config/tailscale_role.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/tailscale_rolebinding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/tailscale_sa.yaml --namespace $(DAPR_TEST_NAMESPACE)

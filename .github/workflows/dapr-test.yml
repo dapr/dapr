@@ -304,7 +304,6 @@ jobs:
       TEST_OUTPUT_FILE_PREFIX: "test_report"
       PULL_POLICY: IfNotPresent
       TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
-      TAILSCALE_ENABLED: true
     strategy:
       fail-fast: false
       matrix:
@@ -414,12 +413,9 @@ jobs:
             make setup-test-env-mongodb
           fi
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
-          if [ "${{ env.TAILSCALE_ENABLED }}" == "true" ] ; then
-            make setup-tailscale
-          fi
+          make setup-tailscale
         shell: bash
-      - name: Setup tailscale
-        if: env.TAILSCALE_ENABLED == 'true'
+      - name: Connect to tailscale
         uses: tailscale/github-action@v1
         with:
           authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
