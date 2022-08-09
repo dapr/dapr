@@ -31,15 +31,19 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
 
-	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
-	openzipkin "github.com/openzipkin/zipkin-go"
-	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/exporters/zipkin"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -116,7 +120,6 @@ const (
 	lockComponent                   ComponentCategory = "lock"
 	defaultComponentInitTimeout                       = time.Second * 5
 	defaultGracefulShutdownDuration                   = time.Second * 5
-	kubernetesSecretStore                             = "kubernetes"
 )
 
 var componentCategoriesNeedProcess = []ComponentCategory{
@@ -143,6 +146,10 @@ type Route struct {
 type TopicRoute struct {
 	routes map[string]Route
 }
+
+// Type of function that determines if a component is authorized.
+// The function receives the component and must return true if the component is authorized.
+type ComponentAuthorizer func(component components_v1alpha1.Component) bool
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
@@ -187,6 +194,7 @@ type DaprRuntime struct {
 	inputBindingRoutes     map[string]string
 	shutdownC              chan error
 	apiClosers             []io.Closer
+	componentAuthorizers   []ComponentAuthorizer
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -202,6 +210,8 @@ type DaprRuntime struct {
 	proxy messaging.Proxy
 
 	resiliency resiliency.Provider
+
+	tracerProvider *sdktrace.TracerProvider
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -232,7 +242,7 @@ type pubsubSubscribedMessage struct {
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &DaprRuntime{
+	rt := &DaprRuntime{
 		ctx:                    ctx,
 		cancel:                 cancel,
 		runtimeConfig:          runtimeConfig,
@@ -270,13 +280,23 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
 
+		tracerProvider: nil,
+
 		resiliency: resiliencyProvider,
 	}
+
+	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
+	if globalConfig != nil && len(globalConfig.Spec.ComponentsSpec.Deny) > 0 {
+		dl := newComponentDenyList(globalConfig.Spec.ComponentsSpec.Deny)
+		rt.componentAuthorizers = append(rt.componentAuthorizers, dl.IsAllowed)
+	}
+
+	return rt
 }
 
 // Run performs initialization of the runtime with the runtime and global configurations.
 func (a *DaprRuntime) Run(opts ...Option) error {
-	start := time.Now().UTC()
+	start := time.Now()
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
 	log.Infof("app id: %s", a.runtimeConfig.ID)
 
@@ -290,7 +310,7 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 		return err
 	}
 
-	d := time.Since(start).Seconds() * 1000
+	d := time.Since(start).Milliseconds()
 	log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
 
 	if a.daprHTTPAPI != nil {
@@ -322,22 +342,64 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
 // but we do so here to explicitly call out the dependency on having `hostAddress` computed.
-func (a *DaprRuntime) setupTracing(hostAddress string, exporters traceExporterStore) error {
+func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderStore) error {
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
 	if a.globalConfig.Spec.TracingSpec.Stdout {
-		exporters.RegisterExporter(&diag_utils.StdoutExporter{})
+		tpStore.RegisterExporter(diag_utils.NewStdOutExporter())
 	}
 
 	// Register zipkin trace exporter if ZipkinSpec is specified
 	if a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress != "" {
-		localEndpoint, err := openzipkin.NewEndpoint(a.runtimeConfig.ID, hostAddress)
+		zipkinExporter, err := zipkin.New(a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress)
 		if err != nil {
 			return err
 		}
-		reporter := zipkinreporter.NewReporter(a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress)
-		exporter := zipkin.NewExporter(reporter, localEndpoint)
-		exporters.RegisterExporter(exporter)
+		tpStore.RegisterExporter(zipkinExporter)
 	}
+
+	// Register otel trace exporter if OtelSpec is specified
+	if a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress != "" && a.globalConfig.Spec.TracingSpec.Otel.Protocol != "" {
+		endpoint := a.globalConfig.Spec.TracingSpec.Otel.EndpointAddress
+		protocol := a.globalConfig.Spec.TracingSpec.Otel.Protocol
+		if protocol != "http" && protocol != "grpc" {
+			return fmt.Errorf("invalid protocol %v provided for Otel endpoint", protocol)
+		}
+		isSecure := a.globalConfig.Spec.TracingSpec.Otel.IsSecure
+
+		var client otlptrace.Client
+		if protocol == "http" {
+			clientOptions := []otlptracehttp.Option{otlptracehttp.WithEndpoint(endpoint)}
+			if !isSecure {
+				clientOptions = append(clientOptions, otlptracehttp.WithInsecure())
+			}
+			client = otlptracehttp.NewClient(clientOptions...)
+		} else {
+			clientOptions := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
+			if !isSecure {
+				clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
+			}
+			client = otlptracegrpc.NewClient(clientOptions...)
+		}
+		otelExporter, err := otlptrace.New(context.Background(), client)
+		if err != nil {
+			return err
+		}
+		tpStore.RegisterExporter(otelExporter)
+	}
+
+	// Register a resource
+	r := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String(a.runtimeConfig.ID),
+	)
+
+	tpStore.RegisterResource(r)
+
+	// Register a trace sampler based on Sampling settings
+	tpStore.RegisterSampler(diag_utils.TraceSampler(a.globalConfig.Spec.TracingSpec.SamplingRate))
+
+	tpStore.RegisterTracerProvider()
+
 	return nil
 }
 
@@ -364,7 +426,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
 		return errors.Wrap(err, "failed to determine host address")
 	}
-	if err = a.setupTracing(a.hostAddress, openCensusExporterStore{}); err != nil {
+	if err = a.setupTracing(a.hostAddress, newOpentelemetryTracerProviderStore()); err != nil {
 		return errors.Wrap(err, "failed to setup tracing")
 	}
 	// Register and initialize name resolution for service discovery.
@@ -392,9 +454,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			log.Warnf("failed to watch component updates: %s", err)
 		}
 	}
-	if !a.runtimeConfig.DisableBuiltinK8sSecretStore {
-		a.appendBuiltinSecretStore()
-	}
+
+	a.appendBuiltinSecretStore()
 	err = a.loadComponents(opts)
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
@@ -1672,7 +1733,7 @@ func (a *DaprRuntime) initNameResolution() error {
 func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscribedMessage) error {
 	cloudEvent := msg.cloudEvent
 
-	var span *trace.Span
+	var span trace.Span
 
 	req := invokev1.NewInvokeMethodRequest(msg.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
@@ -1798,7 +1859,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 		}
 	}
 
-	var span *trace.Span
+	var span trace.Span
 	if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
@@ -1904,17 +1965,28 @@ func (a *DaprRuntime) initActors() error {
 }
 
 func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {
-	authorized := []components_v1alpha1.Component{}
+	authorized := make([]components_v1alpha1.Component, len(components))
 
+	i := 0
 	for _, c := range components {
 		if a.isComponentAuthorized(c) {
-			authorized = append(authorized, c)
+			authorized[i] = c
+			i++
 		}
 	}
-	return authorized
+	return authorized[0:i]
 }
 
 func (a *DaprRuntime) isComponentAuthorized(component components_v1alpha1.Component) bool {
+	for _, auth := range a.componentAuthorizers {
+		if !auth(component) {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *DaprRuntime) namespaceComponentAuthorizer(component components_v1alpha1.Component) bool {
 	if a.namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
 		if len(component.Scopes) == 0 {
 			return true
@@ -1955,8 +2027,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	authorizedComps := a.getAuthorizedComponents(comps)
 
 	a.componentsLock.Lock()
-	a.components = make([]components_v1alpha1.Component, len(authorizedComps))
-	copy(a.components, authorizedComps)
+	a.components = authorizedComps
 	a.componentsLock.Unlock()
 
 	for _, comp := range authorizedComps {
@@ -2191,6 +2262,9 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 			log.Warnf("error closing API: %v", err)
 		}
 	}
+	if a.tracerProvider != nil {
+		a.tracerProvider.Shutdown(context.Background())
+	}
 	log.Infof("Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
 	a.shutdownOutputComponents()
@@ -2218,11 +2292,9 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 
 		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
-		if a.runtimeConfig.Mode == modes.KubernetesMode && secretStoreName == kubernetesSecretStore {
-			val := m.Value.Raw
-
+		if a.runtimeConfig.Mode == modes.KubernetesMode && secretStoreName == secretstores_loader.BuiltinKubernetesSecretStore {
 			var jsonVal string
-			err := json.Unmarshal(val, &jsonVal)
+			err := json.Unmarshal(m.Value.Raw, &jsonVal)
 			if err != nil {
 				log.Errorf("error decoding secret: %s", err)
 				continue
@@ -2304,7 +2376,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
 
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("localhost", fmt.Sprintf("%v", a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("localhost", strconv.Itoa(a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
 		if conn != nil {
 			conn.Close()
 			break
@@ -2363,26 +2435,23 @@ func (a *DaprRuntime) createAppChannel() error {
 }
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
-	for _, comp := range a.builtinSecretStore() {
-		a.pendingComponents <- comp
+	if a.runtimeConfig.DisableBuiltinK8sSecretStore {
+		return
 	}
-}
 
-func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
-	// Preload Kubernetes secretstore
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		return []components_v1alpha1.Component{{
+		// Preload Kubernetes secretstore
+		a.pendingComponents <- components_v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "kubernetes",
+				Name: secretstores_loader.BuiltinKubernetesSecretStore,
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
 				Version: components.FirstStableVersion,
 			},
-		}}
+		}
 	}
-	return nil
 }
 
 func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {

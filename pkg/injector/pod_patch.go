@@ -177,7 +177,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 	patchOps := []PatchOperation{}
 	envPatchOps := []PatchOperation{}
-	socketVolumentPatchOps := []PatchOperation{}
+	socketVolumePatchOps := []PatchOperation{}
 	var path string
 	var value interface{}
 	if len(pod.Spec.Containers) == 0 {
@@ -185,7 +185,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		value = []corev1.Container{*sidecarContainer}
 	} else {
 		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
-		socketVolumentPatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketMount)
+		socketVolumePatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketMount)
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
@@ -199,7 +199,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		},
 	)
 	patchOps = append(patchOps, envPatchOps...)
-	patchOps = append(patchOps, socketVolumentPatchOps...)
+	patchOps = append(patchOps, socketVolumePatchOps...)
 
 	return patchOps, nil
 }
@@ -281,8 +281,8 @@ func addVolumeToContainers(containers []corev1.Container, addMounts corev1.Volum
 }
 
 // It does not override existing values for those variables if they have been defined already.
-func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
-	if len(volumentMounts) == 0 {
+func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
+	if len(volumeMounts) == 0 {
 		// If there are no volume mount variables defined in the container, we initialize a slice of environment vars.
 		return []PatchOperation{
 			{
@@ -299,7 +299,7 @@ func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMount
 
 	for _, addMount := range addMounts {
 		isConflict := false
-		for _, mount := range volumentMounts {
+		for _, mount := range volumeMounts {
 			// conflict cases
 			if addMount.Name == mount.Name || addMount.MountPath == mount.MountPath {
 				isConflict = true
