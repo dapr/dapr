@@ -576,7 +576,7 @@ func main() {
 		),
 		runtime.WithTransactions(
 			transaction_loader.New("redis", func() transaction.Transaction {
-				return transaction_redis.NewTccTransaction(logContrib)
+				return transaction_redis.NewDistributeTransaction(logContrib)
 			}),
 		),
 	)
