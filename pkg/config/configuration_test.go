@@ -14,6 +14,7 @@ limitations under the License.
 package config
 
 import (
+	"reflect"
 	"sort"
 	"testing"
 
@@ -98,6 +99,28 @@ func TestMetricSpecForStandAlone(t *testing.T) {
 			config, _, err := LoadStandaloneConfiguration(tc.confFile)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.Enabled)
+		})
+	}
+}
+
+func TestComponentsSpecForStandAlone(t *testing.T) {
+	testCases := []struct {
+		name           string
+		confFile       string
+		componentsDeny []string
+	}{
+		{
+			name:           "component deny list",
+			confFile:       "./testdata/components_config.yaml",
+			componentsDeny: []string{"foo.bar", "hello.world/v1"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config, _, err := LoadStandaloneConfiguration(tc.confFile)
+			assert.NoError(t, err)
+			assert.True(t, reflect.DeepEqual(tc.componentsDeny, config.Spec.ComponentsSpec.Deny))
 		})
 	}
 }
