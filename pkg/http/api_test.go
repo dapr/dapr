@@ -2284,7 +2284,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 		rspMap1 := resp1.JSONBody
 		assert.NotNil(t, rspMap1)
 
-		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"])
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"].(string))
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 
