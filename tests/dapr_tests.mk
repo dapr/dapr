@@ -68,6 +68,9 @@ pubsub_publish_grpc \
 
 KUBECTL=kubectl
 
+# If should run tests through a VPN tunnel
+TAILSCALE_ENABLED?=false
+
 DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
 DAPR_TEST_LOG_PATH?=./dist/logs
 
@@ -93,6 +96,13 @@ endif
 
 ifeq ($(DAPR_TEST_TAG),)
 DAPR_TEST_TAG=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+endif
+
+# if tailscale is enabled then a auth key must be provided
+ifeq ($(TAILSCALE_ENABLED),true)
+ifeq ($(TAILSCALE_AUTH_KEY),)
+$(error TAILSCALE_AUTH_KEY environment variable must be set)
+endif
 endif
 
 ifeq ($(DAPR_TEST_ENV),minikube)
@@ -220,7 +230,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-tailscale
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -368,6 +378,18 @@ setup-helm-init:
 	$(HELM) repo add stable https://charts.helm.sh/stable
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
 	$(HELM) repo update
+
+# setup tailscale
+setup-tailscale:
+ifeq ($(TAILSCALE_ENABLED),true)
+	$(KUBECTL) apply -f ./tests/config/tailscale_role.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/tailscale_rolebinding.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/tailscale_sa.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	@sed -e "s;{{TS_AUTH_KEY}};$(TAILSCALE_AUTH_KEY);g" ./tests/config/tailscale_key.yaml | $(KUBECTL) apply --namespace $(DAPR_TEST_NAMESPACE) -f -
+
+	# Set service CIDR and pod CIDR for the tailscale subrouter
+	@sed -e "s;{{TS_ROUTES}};$(shell kubectl cluster-info dump | grep -m 1 cluster-cidr |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}" | tr -d '\n'),$(shell kubectl cluster-info dump | grep -m 1 service-cluster-ip-range |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}" | tr -d '\n');g" ./tests/config/tailscale_subnet_router.yaml | $(KUBECTL) apply --namespace $(DAPR_TEST_NAMESPACE) -f -
+endif
 
 # install redis to the cluster without password
 setup-test-env-redis:

@@ -1,0 +1,31 @@
+# Copyright (c) 2022 Tailscale Inc & AUTHORS All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: subnet-router
+  labels:
+    app: tailscale
+spec:
+  serviceAccountName: "tailscale"
+  containers:
+    - name: tailscale
+      imagePullPolicy: Always
+      image: "ghcr.io/tailscale/tailscale:latest"
+      env:
+        # Store the state in a k8s secret
+        - name: TS_KUBE_SECRET
+          value: "tailscale-auth"
+        - name: TS_USERSPACE
+          value: "true"
+        - name: TS_AUTH_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tailscale-auth
+              key: AUTH_KEY
+        - name: TS_ROUTES
+          value: "{{TS_ROUTES}}"
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
