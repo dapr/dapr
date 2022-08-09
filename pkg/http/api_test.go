@@ -2277,7 +2277,6 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
 
 	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
-
 		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
 		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
 		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
