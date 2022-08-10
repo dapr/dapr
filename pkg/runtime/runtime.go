@@ -1970,7 +1970,6 @@ func (a *DaprRuntime) initActors() error {
 		return nil
 	}
 	return NewInitError(InitFailure, "actors", err)
-
 }
 
 func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {

@@ -750,7 +750,6 @@ func TestInitState(t *testing.T) {
 		// assert
 		assert.Error(t, err, "expected error")
 		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
-
 	})
 
 	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
