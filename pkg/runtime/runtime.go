@@ -103,8 +103,7 @@ const (
 	// partial hot reloading support for k8s.
 	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 
-	initComponentErrorPrefix   = "error initializing component"
-	createComponentErrorPrefix = "error creating component"
+	componentFormat = "%s (%s/%s)"
 )
 
 type ComponentCategory string
@@ -350,7 +349,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Initialize metrics only if MetricSpec is enabled.
 	if a.globalConfig.Spec.MetricSpec.Enabled {
 		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace); err != nil {
-			log.Errorf("error initializing metrics: %v", err)
+			log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
 		}
 	}
 
@@ -374,7 +373,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.nameResolutionRegistry.Register(opts.nameResolutions...)
 	err = a.initNameResolution()
 	if err != nil {
-		log.Errorf("%s name resolution: %s", initComponentErrorPrefix, err)
+		log.Errorf(err.Error())
 	}
 
 	a.pubSubRegistry.Register(opts.pubsubs...)
@@ -470,7 +469,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
 		if err != nil {
-			log.Warnf("error initializing actors: %v", err)
+			log.Warnf(err.Error())
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			grpcAPI.SetActorRuntime(a.actor)
@@ -534,14 +533,12 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initOutputBinding(c); err != nil {
-			log.Errorf("%s output bindings: %s", initComponentErrorPrefix, err)
 			return err
 		}
 	}
 
 	if a.bindingsRegistry.HasInputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initInputBinding(c); err != nil {
-			log.Errorf("%s input bindings: %s", initComponentErrorPrefix, err)
 			return err
 		}
 	}
@@ -578,7 +575,7 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 	}
 	topicRoutes, err := a.getTopicRoutes()
 	if err != nil {
-		return err
+		return NewInitError(InitFailure, "Topic Routes", err)
 	}
 	v, ok := topicRoutes[name]
 	if !ok {
@@ -694,7 +691,9 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 			}
 			return err
 		}); err != nil {
-			log.Errorf("%s pubsub subscription to topic %s (%s/%s): %s", initComponentErrorPrefix, topic, name, topic, err)
+			fName := fmt.Sprintf("pubsub:%s/topic:%s subscription", name, topic)
+			log.Errorf(NewInitError(InitComponentFailure, fName, err).Error())
+			return nil
 		}
 	}
 
@@ -1250,18 +1249,18 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Errorf("%s input binding %s (%s/%s): %s", createComponentErrorPrefix, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	err = binding.Init(bindings.Metadata{
 		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 		Name:       c.ObjectMeta.Name,
 	})
 	if err != nil {
-		log.Errorf("%s input binding %s (%s/%s): %s", initComponentErrorPrefix, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -1279,9 +1278,9 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Errorf("%s output binding %s (%s/%s): %s", createComponentErrorPrefix, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
 	if binding != nil {
@@ -1290,9 +1289,9 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 			Name:       c.ObjectMeta.Name,
 		})
 		if err != nil {
-			log.Errorf("%s output binding %s (%s/%s): %s", initComponentErrorPrefix, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-			return err
+			fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, err)
 		}
 		log.Infof("successful init for output binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		a.outputBindings[c.ObjectMeta.Name] = binding
@@ -1304,9 +1303,9 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Errorf("%s configuration store %s (%s/%s): %s", createComponentErrorPrefix, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
 		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
@@ -1315,8 +1314,8 @@ func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 		})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			log.Errorf("%s configuration store %s (%s/%s): %s", initComponentErrorPrefix, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-			return err
+			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, err)
 		}
 
 		a.configurationStores[s.ObjectMeta.Name] = store
@@ -1330,9 +1329,9 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 	// create the component
 	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Errorf("%s lock store %s (%s/%s): %s", createComponentErrorPrefix, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store == nil {
 		return nil
@@ -1344,17 +1343,17 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 	})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		log.Errorf("%s lock store %s (%s/%s): %s", initComponentErrorPrefix, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		return err
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 	// save lock related configuration
 	a.lockStores[s.ObjectMeta.Name] = store
 	err = lock_loader.SaveLockConfiguration(s.ObjectMeta.Name, props)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		log.Warnf("failed to save lock keyprefix: %s", err.Error())
-		log.Errorf("%s lock store %s (%s/%s): %s", initComponentErrorPrefix, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		return err
+		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, wrapError)
 	}
 	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 
@@ -1365,9 +1364,9 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Errorf("%s state store %s (%s/%s): %s", createComponentErrorPrefix, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
 		secretStoreName := a.authSecretStoreOrDefault(s)
@@ -1375,9 +1374,9 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		secretStore := a.getSecretStore(secretStoreName)
 		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
 		if encErr != nil {
-			log.Errorf("%s state store encryption %s (%s/%s): %s", createComponentErrorPrefix, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, encErr)
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-			return encErr
+			fName := fmt.Sprintf(componentFormat+" encyption", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(CreateComponentFailure, fName, err)
 		}
 
 		if encKeys.Primary.Key != "" {
@@ -1393,17 +1392,17 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			log.Errorf("%s state store %s (%s/%s): %s", initComponentErrorPrefix, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-			return err
+			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, err)
 		}
 
 		a.stateStores[s.ObjectMeta.Name] = store
 		err = state_loader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			log.Warnf("failed to save state keyprefix: %s", err.Error())
-			log.Errorf("%s state store %s (%s/%s): %s", initComponentErrorPrefix, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-			return err
+			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
+			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, wrapError)
 		}
 
 		// when placement address list is not empty, set specified actor store.
@@ -1535,9 +1534,9 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Errorf("%s pub sub %s (%s/%s): %s", createComponentErrorPrefix, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
 	properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
@@ -1551,9 +1550,9 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 		Properties: properties,
 	})
 	if err != nil {
-		log.Errorf("%s pub sub %s (%s/%s): %s", initComponentErrorPrefix, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	pubsubName := c.ObjectMeta.Name
@@ -1636,7 +1635,8 @@ func (a *DaprRuntime) initNameResolution() error {
 		case modes.StandaloneMode:
 			resolverName = "mdns"
 		default:
-			return errors.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode))
+			fullName := fmt.Sprintf(componentFormat, resolverName, "nameResolution", resolverVersion)
+			return NewInitError(InitComponentFailure, fullName, errors.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode)))
 		}
 	}
 
@@ -1659,15 +1659,15 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	if err != nil {
-		log.Warnf("%s name resolution resolver %s: %s", initComponentErrorPrefix, resolverName, err)
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "creation", resolverName)
-		return err
+		fName := fmt.Sprintf(componentFormat, resolverName, "nameResolution", resolverVersion)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
 	if err = resolver.Init(resolverMetadata); err != nil {
-		log.Errorf("%s name resolution resolver %s: %s", initComponentErrorPrefix, resolverName, err)
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "init", resolverName)
-		return err
+		fName := fmt.Sprintf(componentFormat, resolverName, "nameResolution", resolverVersion)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	a.nameResolver = resolver
@@ -1890,7 +1890,7 @@ func extractCloudEventProperty(cloudEvent map[string]interface{}, property strin
 func (a *DaprRuntime) initActors() error {
 	err := actors.ValidateHostEnvironment(a.runtimeConfig.mtlsEnabled, a.runtimeConfig.Mode, a.namespace)
 	if err != nil {
-		return err
+		return NewInitError(InitFailure, "actors", err)
 	}
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
@@ -1906,8 +1906,10 @@ func (a *DaprRuntime) initActors() error {
 	err = act.Init()
 	if err == nil {
 		a.actor = act
+		return nil
 	}
-	return err
+	return NewInitError(InitFailure, "actors", err)
+
 }
 
 func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {
@@ -2060,8 +2062,8 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 	case <-time.After(timeout):
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		err := fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
-		log.Errorf("%s %s (%s/%s): %s", initComponentErrorPrefix, comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version, err)
-		return err
+		fName := fmt.Sprintf(componentFormat, comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	log.Infof("component loaded. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
@@ -2398,18 +2400,18 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Errorf("%s secret store %s (%s/%s): %s", createComponentErrorPrefix, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
 	err = secretStore.Init(secretstores.Metadata{
 		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 	})
 	if err != nil {
-		log.Errorf("%s secret store %s (%s/%s): %s", initComponentErrorPrefix, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return err
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	a.secretStores[c.ObjectMeta.Name] = secretStore
@@ -2523,7 +2525,7 @@ func (a *DaprRuntime) startSubscribing() {
 	// PubSub subscribers are stopped via cancelation of the main runtime's context
 	for name, pubsub := range a.pubSubs {
 		if err := a.beginPubSub(a.ctx, name, pubsub); err != nil {
-			log.Errorf("%s pubsub %s: %s", initComponentErrorPrefix, name, err)
+			log.Errorf(err.Error())
 		}
 	}
 }

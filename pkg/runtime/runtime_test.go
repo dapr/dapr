@@ -338,7 +338,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testlock (lock.mockLock/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test error when lock version invalid", func(t *testing.T) {
@@ -360,7 +360,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, err.Error(), "couldn't find lock store lock.mockLock/v3")
+		assert.Equal(t, err.Error(), NewInitError(CreateComponentFailure, "testlock (lock.mockLock/v3)", fmt.Errorf("couldn't find lock store lock.mockLock/v3")).Error())
 	})
 
 	t.Run("test error when lock prefix strategy invalid", func(t *testing.T) {
@@ -432,7 +432,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (pubsub.mockPubSub/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test invalid category component", func(t *testing.T) {
@@ -748,7 +748,8 @@ func TestInitState(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected error")
-		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
+
 	})
 
 	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
