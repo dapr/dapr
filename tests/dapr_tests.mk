@@ -369,6 +369,10 @@ setup-helm-init:
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
 	$(HELM) repo update
 
+# Pod and service cidr used by tailscale subnet router
+SERVICE_CIDR=$(shell kubectl cluster-info dump | grep -m 1 cluster-cidr |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}" | tr -d '\n')
+POD_CIDR=$(shell kubectl cluster-info dump | grep -m 1 service-cluster-ip-range |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}" | tr -d '\n')
+
 # setup tailscale
 setup-tailscale:
 ifeq ($(TAILSCALE_AUTH_KEY),)
@@ -380,7 +384,8 @@ else
 	@sed -e "s;{{TS_AUTH_KEY}};$(TAILSCALE_AUTH_KEY);g" ./tests/config/tailscale_key.yaml | $(KUBECTL) apply --namespace $(DAPR_TEST_NAMESPACE) -f -
 
 	# Set service CIDR and pod CIDR for the tailscale subrouter
-	@sed -e "s;{{TS_ROUTES}};$(shell kubectl cluster-info dump | grep -m 1 cluster-cidr |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}" | tr -d '\n'),$(shell kubectl cluster-info dump | grep -m 1 service-cluster-ip-range |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}" | tr -d '\n');g" ./tests/config/tailscale_subnet_router.yaml | $(KUBECTL) apply --namespace $(DAPR_TEST_NAMESPACE) -f -
+
+	@sed -e "s;{{TS_ROUTES}};$(SERVICE_CIDR),$(POD_CIDR);g" ./tests/config/tailscale_subnet_router.yaml | $(KUBECTL) apply --namespace $(DAPR_TEST_NAMESPACE) -f -
 endif
 
 # install redis to the cluster without password
