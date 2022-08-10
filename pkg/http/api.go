@@ -436,8 +436,8 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 			Handler: a.onSubscribeConfiguration,
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "configuration/{configurationSubscribeID}/unsubscribe",
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
 			Version: apiVersionV1alpha1,
 			Handler: a.onUnsubscribeConfiguration,
 		},
