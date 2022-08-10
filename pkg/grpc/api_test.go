@@ -33,7 +33,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -205,7 +205,7 @@ func ExtractSpanContext(ctx context.Context) []byte {
 
 // SerializeSpanContext serializes a span context into a simple string.
 func SerializeSpanContext(ctx trace.SpanContext) string {
-	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
+	return fmt.Sprintf("%s;%s;%d", ctx.SpanID(), ctx.TraceID(), ctx.TraceFlags())
 }
 
 func configureTestTraceExporter(buffer *string) {

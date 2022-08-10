@@ -124,7 +124,7 @@ type ProxyHappySuite struct {
 
 func (s *ProxyHappySuite) ctx() context.Context {
 	// Make all RPC calls last at most 1 sec, meaning all async issues or deadlock will not kill tests.
-	ctx, _ := context.WithTimeout(context.TODO(), 120*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
 	return ctx
 }
 
@@ -210,6 +210,27 @@ func (s *ProxyHappySuite) TestPingStream_StressTest() {
 	}
 }
 
+func (s *ProxyHappySuite) TestPingStream_MultipleThreads() {
+	doneChan := make(chan bool)
+	for i := 0; i < 4; i++ {
+		go func() {
+			for j := 0; j < 10; j++ {
+				s.TestPingStream_StressTest()
+			}
+			doneChan <- true
+		}()
+	}
+
+	for i := 0; i < 4; i++ {
+		select {
+		case <-time.After(time.Second * 5):
+			assert.Fail(s.T(), "Timed out waiting for proxy to return.")
+		case <-doneChan:
+			continue
+		}
+	}
+}
+
 func (s *ProxyHappySuite) SetupSuite() {
 	var err error
 
@@ -267,11 +288,8 @@ func (s *ProxyHappySuite) SetupSuite() {
 
 	time.Sleep(time.Second)
 
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*1)
-	defer cancel()
-
 	clientConn, err := grpc.DialContext(
-		ctx,
+		context.Background(),
 		strings.Replace(s.proxyListener.Addr().String(), "127.0.0.1", "localhost", 1),
 		grpc.WithInsecure(),
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),

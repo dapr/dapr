@@ -59,10 +59,10 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.20.7
-        - v1.21.1
-        - v1.22.0
-        - v1.23.0
+        - v1.21.12
+        - v1.22.9
+        - v1.23.6
+        - v1.24.0
         mode:
         - ha
         - non-ha
@@ -70,24 +70,24 @@ jobs:
         # This is attempting to make it a bit clearer what's being tested.
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
         include:
-        - k8s-version: v1.20.7
-          kind-version: v0.11.1
-          kind-image-sha: sha256:cbeaf907fc78ac97ce7b625e4bf0de16e3ea725daf6b04f930bd14c67c671ff9
-        - k8s-version: v1.21.1
-          kind-version: v0.11.1
-          kind-image-sha: sha256:69860bda5563ac81e3c0057d654b5253219618a22ec3a346306239bba8cfa1a6
-        - k8s-version: v1.22.0
-          kind-version: v0.11.1
-          kind-image-sha: sha256:b8bda84bb3a190e6e028b1760d277454a72267a5454b57db34437c34a588d047
-        - k8s-version: v1.23.0
-          kind-version: v0.11.1
-          kind-image-sha: sha256:49824ab1727c04e56a21a5d8372a402fcd32ea51ac96a2706a12af38934f81ac
+        - k8s-version: v1.21.12
+          kind-version: v0.14.0
+          kind-image-sha: sha256:f316b33dd88f8196379f38feb80545ef3ed44d9197dca1bfd48bcb1583210207
+        - k8s-version: v1.22.9
+          kind-version: v0.14.0
+          kind-image-sha: sha256:8135260b959dfe320206eb36b3aeda9cffcb262f4b44cda6b33f7bb73f453105
+        - k8s-version: v1.23.6
+          kind-version: v0.14.0
+          kind-image-sha: sha256:b1fa224cc6c7ff32455e0b1fd9cbfd3d3bc87ecaa8fcb06961ed1afb3db0f9ae
+        - k8s-version: v1.24.0
+          kind-version: v0.14.0
+          kind-image-sha: sha256:0866296e693efe1fed79d5e6c7af8df71fc73ae45e3679af05342239cdc5bc8e
         exclude:
-        - k8s-version: v1.20.7
+        - k8s-version: v1.21.12
           mode: non-ha
-        - k8s-version: v1.21.1
+        - k8s-version: v1.22.9
           mode: non-ha
-        - k8s-version: v1.22.0
+        - k8s-version: v1.23.6
           mode: non-ha
     steps:
     - name: Set up Go ${{ env.GOVER }}

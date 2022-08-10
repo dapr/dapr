@@ -23,6 +23,7 @@ import (
 	"net"
 	gohttp "net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1781,6 +1782,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
+		extendedMetadata: sync.Map{},
 		getComponentsCapabilitesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
@@ -1788,13 +1790,18 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			return capsMap
 		},
 	}
+	// PutMetadata only stroes string(request body)
+	testAPI.extendedMetadata.Store("test", "value")
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
 	expectedBody := map[string]interface{}{
-		"id":       "xyz",
-		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
-		"extended": make(map[string]string),
+		"id":     "xyz",
+		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
+		"extended": map[string]string{
+			"test":               "value",
+			"daprRuntimeVersion": "edge",
+		},
 		"components": []map[string]interface{}{
 			{
 				"name":         "MockComponent1Name",
@@ -1820,6 +1827,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 		testAPI.id = "xyz"
 		testAPI.actor = mockActors
+		testAPI.daprRunTimeVersion = "edge"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
@@ -2249,6 +2257,38 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
 		assert.Equal(t, "error configuration stores nonExistStore not found", resp.ErrorBody["message"])
+	})
+}
+
+func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	var fakeConfigurationStore configuration.Store = &fakeConfigurationStore{}
+
+	storeName := "store1"
+
+	fakeConfigurationStores := map[string]configuration.Store{
+		storeName: fakeConfigurationStore,
+	}
+	testAPI := &api{
+		resiliency:          resiliency.New(nil),
+		configurationStores: fakeConfigurationStores,
+	}
+	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
+
+	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+
+		rspMap1 := resp1.JSONBody
+		assert.NotNil(t, rspMap1)
+
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"].(string))
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+
+		assert.Equal(t, 204, resp2.StatusCode, "unsubscribe configuration store,should return 204")
 	})
 }
 
