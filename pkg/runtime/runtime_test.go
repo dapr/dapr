@@ -38,7 +38,6 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 
-	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
@@ -47,7 +46,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/zipkin"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -881,20 +882,19 @@ func TestSetupTracing(t *testing.T) {
 		name              string
 		tracingConfig     config.TracingSpec
 		hostAddress       string
-		expectedExporters []trace.Exporter
+		expectedExporters []sdktrace.SpanExporter
 		expectedErr       string
 	}{{
 		name:          "no trace exporter",
 		tracingConfig: config.TracingSpec{},
 	}, {
-		name:        "bad host address, failing zipkin",
-		hostAddress: "bad:host:address",
+		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
 			Zipkin: config.ZipkinSpec{
-				EndpointAddress: "http://foo.bar",
+				EndpointAddress: "localhost",
 			},
 		},
-		expectedErr: "too many colons",
+		expectedErr: "invalid collector URL \"localhost\": no scheme or host",
 	}, {
 		name: "zipkin trace exporter",
 		tracingConfig: config.TracingSpec{
@@ -902,22 +902,47 @@ func TestSetupTracing(t *testing.T) {
 				EndpointAddress: "http://foo.bar",
 			},
 		},
-		expectedExporters: []trace.Exporter{&zipkin.Exporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&zipkin.Exporter{}},
+	}, {
+		name: "otel trace http exporter",
+		tracingConfig: config.TracingSpec{
+			Otel: config.OtelSpec{
+				EndpointAddress: "foo.bar",
+				IsSecure:        false,
+				Protocol:        "http",
+			},
+		},
+		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},
+	}, {
+		name: "invalid otel trace exporter protocol",
+		tracingConfig: config.TracingSpec{
+			Otel: config.OtelSpec{
+				EndpointAddress: "foo.bar",
+				IsSecure:        false,
+				Protocol:        "tcp",
+			},
+		},
+		expectedErr: "invalid protocol tcp provided for Otel endpoint",
 	}, {
 		name: "stdout trace exporter",
 		tracingConfig: config.TracingSpec{
 			Stdout: true,
 		},
-		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&diag_utils.StdoutExporter{}},
 	}, {
 		name: "all trace exporters",
 		tracingConfig: config.TracingSpec{
+			Otel: config.OtelSpec{
+				EndpointAddress: "http://foo.bar",
+				IsSecure:        false,
+				Protocol:        "http",
+			},
 			Zipkin: config.ZipkinSpec{
 				EndpointAddress: "http://foo.bar",
 			},
 			Stdout: true,
 		},
-		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}, &otlptrace.Exporter{}},
 	}}
 
 	for _, tc := range testcases {
@@ -928,23 +953,25 @@ func TestSetupTracing(t *testing.T) {
 			if tc.hostAddress != "" {
 				rt.hostAddress = tc.hostAddress
 			}
-			// Setup tracing with the fake trace exporter store to confirm
+			// Setup tracing with the fake tracer provider  store to confirm
 			// the right exporter was registered.
-			exporterStore := &fakeTraceExporterStore{}
-			if err := rt.setupTracing(rt.hostAddress, exporterStore); tc.expectedErr != "" {
+			tpStore := newFakeTracerProviderStore()
+			if err := rt.setupTracing(rt.hostAddress, tpStore); tc.expectedErr != "" {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				assert.Nil(t, err)
 			}
-			for i, exporter := range exporterStore.exporters {
+			for i, exporter := range tpStore.exporters {
 				// Exporter types don't expose internals, so we can only validate that
 				// the right type of  exporter was registered.
 				assert.Equal(t, reflect.TypeOf(tc.expectedExporters[i]), reflect.TypeOf(exporter))
 			}
-			// Setup tracing with the OpenCensus global exporter store.
+			// Setup tracing with the OpenTelemetry trace provider store.
 			// We have no way to validate the result, but we can at least
 			// confirm that nothing blows up.
-			rt.setupTracing(rt.hostAddress, openCensusExporterStore{})
+			if tc.expectedErr == "" {
+				rt.setupTracing(rt.hostAddress, newOpentelemetryTracerProviderStore())
+			}
 		})
 	}
 }
@@ -1913,7 +1940,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		},
 		Auth: components_v1alpha1.Auth{
-			SecretStore: "kubernetes",
+			SecretStore: secretstores_loader.BuiltinKubernetesSecretStore,
 		},
 	}
 
@@ -1930,7 +1957,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
 		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
 				return m
 			}),
 		)
@@ -1938,7 +1965,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		// add Kubernetes component manually
 		rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
-				Name: "kubernetes",
+				Name: secretstores_loader.BuiltinKubernetesSecretStore,
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
@@ -1964,16 +1991,13 @@ func TestProcessComponentSecrets(t *testing.T) {
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
 		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
 				return m
 			}),
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		for _, comp := range rt.builtinSecretStore() {
-			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
-		}
+		assertBuiltInSecretStore(t, rt)
 
 		mod, unready := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "", mod.Spec.Metadata[0].Value.String())
@@ -2187,19 +2211,75 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 // Test InitSecretStore if secretstore.* refers to Kubernetes secret store.
 func TestInitSecretStoresInKubernetesMode(t *testing.T) {
-	rt := NewTestDaprRuntime(modes.KubernetesMode)
-	defer stopRuntime(t, rt)
+	t.Run("built-in secret store is added", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
 
-	m := NewMockKubernetesStore()
-	rt.secretStoresRegistry.Register(
-		secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
-			return m
-		}),
-	)
-	for _, comp := range rt.builtinSecretStore() {
-		err := rt.processComponentAndDependents(comp)
-		assert.Nil(t, err)
-	}
+		m := NewMockKubernetesStore()
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+				return m
+			}),
+		)
+
+		assertBuiltInSecretStore(t, rt)
+	})
+
+	t.Run("disable built-in secret store flag", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
+		rt.runtimeConfig.DisableBuiltinK8sSecretStore = true
+
+		testOk := make(chan struct{})
+		defer close(testOk)
+		go func() {
+			// If the test fails, this call blocks forever, eventually causing a timeout
+			rt.appendBuiltinSecretStore()
+			testOk <- struct{}{}
+		}()
+		select {
+		case <-testOk:
+			return
+		case <-time.After(5 * time.Second):
+			t.Fatalf("test failed")
+		}
+	})
+
+	t.Run("built-in secret store bypasses authorizers", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
+		rt.componentAuthorizers = []ComponentAuthorizer{
+			func(component components_v1alpha1.Component) bool {
+				return false
+			},
+		}
+
+		m := NewMockKubernetesStore()
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+				return m
+			}),
+		)
+
+		assertBuiltInSecretStore(t, rt)
+	})
+}
+
+func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
+	wg := sync.WaitGroup{}
+	go func() {
+		for comp := range rt.pendingComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+			if comp.Name == secretstores_loader.BuiltinKubernetesSecretStore {
+				wg.Done()
+			}
+		}
+	}()
+	wg.Add(1)
+	rt.appendBuiltinSecretStore()
+	wg.Wait()
+	close(rt.pendingComponents)
 }
 
 func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
@@ -3177,7 +3257,13 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 }
 
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
-	testRuntimeConfig := NewRuntimeConfig(
+	testRuntimeConfig := NewTestDaprRuntimeConfig(mode, protocol, appPort)
+
+	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+}
+
+func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *Config {
+	return NewRuntimeConfig(
 		TestRuntimeConfigID,
 		[]string{"10.10.10.12"},
 		"10.10.10.11",
@@ -3204,9 +3290,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		false,
 		time.Second,
 		true,
-		true)
-
-	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		false)
 }
 
 func TestGracefulShutdown(t *testing.T) {
@@ -3576,6 +3660,53 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{"other"}
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+
+	t.Run("no authorizers", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.componentAuthorizers = []ComponentAuthorizer{}
+		// Namespace mismatch, should be accepted anyways
+		rt.namespace = "a"
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = testCompName
+		component.ObjectMeta.Namespace = "b"
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 1)
+		assert.Equal(t, testCompName, comps[0].Name)
+	})
+
+	t.Run("only deny all", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.componentAuthorizers = []ComponentAuthorizer{
+			func(component components_v1alpha1.Component) bool {
+				return false
+			},
+		}
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = testCompName
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+
+	t.Run("additional authorizer denies all", func(t *testing.T) {
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPProtocol), 1024)
+		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component components_v1alpha1.Component) bool {
+			return false
+		})
+		defer stopRuntime(t, rt)
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = testCompName
 
 		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)
@@ -4070,6 +4201,7 @@ func TestStopWithErrors(t *testing.T) {
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
 	rt.stopActor()
 	assert.NoError(t, rt.shutdownOutputComponents())
+	time.Sleep(100 * time.Millisecond)
 }
 
 func TestFindMatchingRoute(t *testing.T) {
@@ -4101,12 +4233,12 @@ func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
 }
 
 func TestComponentsCallback(t *testing.T) {
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "OK")
 	}))
-	defer svr.Close()
+	defer srv.Close()
 
-	u, err := url.Parse(svr.URL)
+	u, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 	port, _ := strconv.Atoi(u.Port())
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", port)

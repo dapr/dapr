@@ -16,7 +16,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -67,7 +67,7 @@ func volumeMountTest() (int, appResponse) {
 	defer resp.Body.Close()
 
 	// parse the secret value
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: fmt.Sprintf("Failed to read secret: %v", err)}
 	}
