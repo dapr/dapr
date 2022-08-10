@@ -304,6 +304,7 @@ jobs:
       TEST_OUTPUT_FILE_PREFIX: "test_report"
       PULL_POLICY: IfNotPresent
       TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+      TEST_E2E_USE_INTERNAL_IP: true
     strategy:
       fail-fast: false
       matrix:
