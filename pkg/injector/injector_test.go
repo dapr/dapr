@@ -698,7 +698,27 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	uids, err := getServiceAccount(context.TODO(), client, AllowedServiceAccountInfos)
-	assert.NoError(t, err)
-	assert.Equal(t, 2, len(uids))
+	t.Run("injector config has no allowed service account", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(uids))
+	})
+
+	t.Run("injector config has a valid allowed service account", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test"}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(uids))
+	})
+
+	t.Run("injector config has a invalid allowed service account", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "abc:abc"}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(uids))
+	})
+
+	t.Run("injector config has multiple allowed service accounts", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(uids))
+	})
 }
