@@ -303,6 +303,7 @@ jobs:
       TARGET_ARCH: ${{ matrix.target_arch }}
       TEST_OUTPUT_FILE_PREFIX: "test_report"
       PULL_POLICY: IfNotPresent
+      TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -412,7 +413,12 @@ jobs:
             make setup-test-env-mongodb
           fi
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
+          make setup-tailscale
         shell: bash
+      - name: Connect to tailscale
+        uses: tailscale/github-action@v1
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
         env:
