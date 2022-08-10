@@ -2376,7 +2376,7 @@ func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
 	}
 	reqs, err := transactionInstance.Begin(req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionrRgist, err.Error()))
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionRgist, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 	}
 
@@ -2392,7 +2392,9 @@ func (a *api) onDistributeTransactionConfirm(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	transactionInstance.RollBack()
+	var req transaction.BunchTransactionConfirmRequest
+	req = transaction.BunchTransactionConfirmRequest{}
+	transactionInstance.Confirm(req)
 	respond(reqCtx, withEmpty())
 }
 
@@ -2404,7 +2406,9 @@ func (a *api) onDistributeTransactionRollback(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	transactionInstance.RollBack()
+	var req transaction.BunchTransactionRollBackRequest
+	req = transaction.BunchTransactionRollBackRequest{}
+	transactionInstance.RollBack(req)
 	respond(reqCtx, withEmpty())
 }
 
@@ -2442,14 +2446,14 @@ func (a *api) onDistributeTransactionTry(reqCtx *fasthttp.RequestCtx) {
 	}
 	var req transaction.BunchTransactionTryRequest
 	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Errror()))
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
 	}
 	err = transactionInstance.Try(req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionRgist, err.Error()))
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionRgist, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 	}
 
@@ -2472,7 +2476,7 @@ func (a *api) onDistributeTransactionGetState(reqCtx *fasthttp.RequestCtx) {
 		},
 	)
 	if err != nil {
-		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionFailed, err.Error()))
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionFailed, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 	}
 
