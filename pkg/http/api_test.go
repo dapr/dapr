@@ -2260,6 +2260,38 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 	})
 }
 
+func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	var fakeConfigurationStore configuration.Store = &fakeConfigurationStore{}
+
+	storeName := "store1"
+
+	fakeConfigurationStores := map[string]configuration.Store{
+		storeName: fakeConfigurationStore,
+	}
+	testAPI := &api{
+		resiliency:          resiliency.New(nil),
+		configurationStores: fakeConfigurationStores,
+	}
+	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
+
+	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+
+		rspMap1 := resp1.JSONBody
+		assert.NotNil(t, rspMap1)
+
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"].(string))
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+
+		assert.Equal(t, 204, resp2.StatusCode, "unsubscribe configuration store,should return 204")
+	})
+}
+
 func TestV1Alpha1DistributedLock(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
