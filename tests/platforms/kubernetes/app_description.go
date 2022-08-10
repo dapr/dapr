@@ -15,8 +15,15 @@ package kubernetes
 
 import (
 	"encoding/json"
+	"os"
+	"strings"
 
 	apiv1 "k8s.io/api/core/v1"
+)
+
+const (
+	// useServiceInternalIP is used to identify wether the connection between the kubernetes platform could be made using its internal ips.
+	useServiceInternalIP = "TEST_E2E_USE_INTERNAL_IP"
 )
 
 // AppDescription holds the deployment information of test app.
@@ -60,6 +67,11 @@ func (a AppDescription) String() string {
 	// This method overrides the default stringifier to use the custom JSON stringifier which hides ImageSecret
 	j, _ := json.Marshal(a)
 	return string(j)
+}
+
+// ShouldBeExposed returns if the app should be exposed as a loadbalancer/nodeport service.
+func (a AppDescription) ShouldBeExposed() bool {
+	return a.IngressEnabled && !strings.EqualFold(os.Getenv(useServiceInternalIP), "true")
 }
 
 func (a AppDescription) MarshalJSON() ([]byte, error) {

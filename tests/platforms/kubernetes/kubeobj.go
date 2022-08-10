@@ -247,7 +247,7 @@ func buildJobObject(namespace string, appDesc AppDescription) *batchv1.Job {
 func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service {
 	serviceType := apiv1.ServiceTypeClusterIP
 
-	if appDesc.IngressEnabled {
+	if appDesc.ShouldBeExposed() {
 		serviceType = apiv1.ServiceTypeLoadBalancer
 	}
 
