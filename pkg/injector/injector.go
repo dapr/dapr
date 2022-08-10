@@ -122,14 +122,17 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
-	allowedList := strings.Split(cfg.AllowedServiceAccounts, ",")
+	allowedList := []string{}
+	if cfg.AllowedServiceAccounts != "" {
+		allowedList = append(allowedList, strings.Split(cfg.AllowedServiceAccounts, ",")...)
+	}
 	allowedList = append(allowedList, AllowedServiceAccountInfos...)
 
 	return getServiceAccount(ctx, kubeClient, allowedList)
 }
 
 // getServiceAccount parses "service-account:namespace" k/v list and returns an array of UID.
-func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedServiceAcccountInfos []string) ([]string, error) {
+func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedServiceAccountInfos []string) ([]string, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, getKubernetesServiceAccountTimeoutSeconds*time.Second)
 	defer cancel()
 
@@ -140,15 +143,19 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 
 	allowedUids := []string{}
 
-	for _, allowedServiceInfo := range allowedServiceAcccountInfos {
+	for _, allowedServiceInfo := range allowedServiceAccountInfos {
 		serviceAccountInfo := strings.Split(allowedServiceInfo, ":")
+		found := false
 		for _, sa := range serviceaccounts.Items {
 			if sa.Name == serviceAccountInfo[0] && sa.Namespace == serviceAccountInfo[1] {
 				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
+				found = true
 				break
 			}
 		}
-		log.Warnf("Unable to get SA %s UID (%s)", allowedServiceInfo, err)
+		if !found {
+			log.Warnf("Unable to get SA %s UID", allowedServiceInfo)
+		}
 	}
 
 	return allowedUids, nil
