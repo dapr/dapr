@@ -2332,8 +2332,8 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoutes{}
 	rt.topicRoutes[TestPubsubName] = TopicRoutes{
-		"topic1": TopicRoute{
-			routes: Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}},
+		"topic1": TopicRouteElem{
+			rules: []*runtime_pubsub.Rule{{Path: "topic1"}},
 		},
 	}
 
@@ -2445,8 +2445,8 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoutes{}
 	rt.topicRoutes[TestPubsubName] = TopicRoutes{
-		"topic1": TopicRoute{
-			routes: Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}},
+		"topic1": TopicRouteElem{
+			rules: []*runtime_pubsub.Rule{{Path: "topic1"}},
 		},
 	}
 
@@ -2536,8 +2536,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	defer stopRuntime(t, rt)
 	rt.topicRoutes = map[string]TopicRoutes{}
 	rt.topicRoutes[TestPubsubName] = TopicRoutes{
-		"topic1": TopicRoute{
-			routes: Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}},
+		"topic1": TopicRouteElem{
+			rules: []*runtime_pubsub.Rule{{Path: "topic1"}},
 		},
 	}
 
@@ -2873,8 +2873,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.topicRoutes = map[string]TopicRoutes{}
 			rt.topicRoutes[TestPubsubName] = TopicRoutes{
-				topic: TopicRoute{
-					routes: Route{rules: []*runtime_pubsub.Rule{{Path: topic}}},
+				topic: TopicRouteElem{
+					rules: []*runtime_pubsub.Rule{{Path: topic}},
 				},
 			}
 			var grpcServer *grpc.Server
@@ -3017,26 +3017,20 @@ func TestPubsubLifecycle(t *testing.T) {
 
 	setTopicRoutes := func() {
 		rt.topicRoutes = map[string]TopicRoutes{
-			"mockPubSub1": TopicRoutes{
+			"mockPubSub1": {
 				"topic1": {
-					routes: Route{
-						metadata: map[string]string{"rawPayload": "true"},
-						rules:    []*runtime_pubsub.Rule{{Path: "topic1"}},
-					},
+					metadata: map[string]string{"rawPayload": "true"},
+					rules:    []*runtime_pubsub.Rule{{Path: "topic1"}},
 				},
 			},
 			"mockPubSub2": {
 				"topic2": {
-					routes: Route{
-						metadata: map[string]string{"rawPayload": "true"},
-						rules:    []*runtime_pubsub.Rule{{Path: "topic2"}},
-					},
+					metadata: map[string]string{"rawPayload": "true"},
+					rules:    []*runtime_pubsub.Rule{{Path: "topic2"}},
 				},
 				"topic3": {
-					routes: Route{
-						metadata: map[string]string{"rawPayload": "true"},
-						rules:    []*runtime_pubsub.Rule{{Path: "topic3"}},
-					},
+					metadata: map[string]string{"rawPayload": "true"},
+					rules:    []*runtime_pubsub.Rule{{Path: "topic3"}},
 				},
 			},
 		}
@@ -3166,7 +3160,7 @@ func TestPubsubLifecycle(t *testing.T) {
 	t.Run("subscribe to mockPubSub3/topic4", func(t *testing.T) {
 		resetState()
 
-		err = rt.subscribeTopic(rt.pubsubCtx, "mockPubSub3", "topic4", TopicRoute{})
+		err = rt.subscribeTopic(rt.pubsubCtx, "mockPubSub3", "topic4", TopicRouteElem{})
 		require.NoError(t, err)
 
 		sendMessages(t, 2)
@@ -3293,14 +3287,12 @@ func TestPubsubWithResiliency(t *testing.T) {
 		r.topicRoutes = make(map[string]TopicRoutes)
 		r.topicRoutes["failPubsub"] = TopicRoutes{
 			"failingSubTopic": {
-				routes: Route{
-					metadata: map[string]string{
-						"rawPayload": "true",
-					},
-					rules: []*runtime_pubsub.Rule{
-						{
-							Path: "failingPubsub",
-						},
+				metadata: map[string]string{
+					"rawPayload": "true",
+				},
+				rules: []*runtime_pubsub.Rule{
+					{
+						Path: "failingPubsub",
 					},
 				},
 			},
@@ -3324,14 +3316,12 @@ func TestPubsubWithResiliency(t *testing.T) {
 		r.topicRoutes = make(map[string]TopicRoutes)
 		r.topicRoutes["failPubsub"] = TopicRoutes{
 			"timeoutSubTopic": {
-				routes: Route{
-					metadata: map[string]string{
-						"rawPayload": "true",
-					},
-					rules: []*runtime_pubsub.Rule{
-						{
-							Path: "failingPubsub",
-						},
+				metadata: map[string]string{
+					"rawPayload": "true",
+				},
+				rules: []*runtime_pubsub.Rule{
+					{
+						Path: "failingPubsub",
 					},
 				},
 			},

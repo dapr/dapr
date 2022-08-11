@@ -135,15 +135,11 @@ var log = logger.NewLogger("dapr.runtime")
 // was encountered when processing a cloud event's data property.
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
 
-type Route struct {
-	metadata map[string]string
-	rules    []*runtime_pubsub.Rule
-}
+type TopicRoutes map[string]TopicRouteElem
 
-type TopicRoutes map[string]TopicRoute
-
-type TopicRoute struct {
-	routes          Route
+type TopicRouteElem struct {
+	metadata        map[string]string
+	rules           []*runtime_pubsub.Rule
 	deadLetterTopic string
 }
 
@@ -633,7 +629,7 @@ func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, dead
 	return nil
 }
 
-func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, topic string, route TopicRoute) error {
+func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, topic string, route TopicRouteElem) error {
 	subKey := pubsubTopicKey(name, topic)
 
 	allowed := a.isPubSubOperationAllowed(name, topic, a.pubSubs[name].scopedSubscriptions)
@@ -654,7 +650,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	policy := a.resiliency.ComponentInboundPolicy(ctx, name)
 	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
 		Topic:    topic,
-		Metadata: route.routes.metadata,
+		Metadata: route.metadata,
 	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
@@ -662,7 +658,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 		msg.Metadata[pubsubName] = name
 
-		rawPayload, err := contrib_metadata.IsRawPayload(route.routes.metadata)
+		rawPayload, err := contrib_metadata.IsRawPayload(route.metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
 			if route.deadLetterTopic != "" {
@@ -719,7 +715,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			return nil
 		}
 
-		routePath, shouldProcess, err := findMatchingRoute(route.routes.rules, cloudEvent)
+		routePath, shouldProcess, err := findMatchingRoute(route.rules, cloudEvent)
 		if err != nil {
 			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
 			if route.deadLetterTopic != "" {
@@ -1630,13 +1626,11 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 			topicRoutes[s.PubsubName] = TopicRoutes{}
 		}
 
-		r := TopicRoute{
-			routes: Route{metadata: s.Metadata, rules: s.Rules},
+		topicRoutes[s.PubsubName][s.Topic] = TopicRouteElem{
+			metadata:        s.Metadata,
+			rules:           s.Rules,
+			deadLetterTopic: s.DeadLetterTopic,
 		}
-		if s.DeadLetterTopic != "" {
-			r.deadLetterTopic = s.DeadLetterTopic
-		}
-		topicRoutes[s.PubsubName][s.Topic] = r
 	}
 
 	if len(topicRoutes) > 0 {
@@ -1713,7 +1707,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.
-func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]TopicRoute) (err error) {
+func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]TopicRouteElem) (err error) {
 	_, ok := a.pubSubs[name]
 	if !ok {
 		return fmt.Errorf("pubsub component %s does not exist", name)
