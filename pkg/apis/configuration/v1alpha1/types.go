@@ -128,8 +128,18 @@ type SelectorField struct {
 // TracingSpec defines distributed tracing configuration.
 type TracingSpec struct {
 	SamplingRate string `json:"samplingRate"`
+	Stdout       bool   `json:"stdout"`
 	// +optional
 	Zipkin ZipkinSpec `json:"zipkin"`
+	// +optional
+	Otel OtelSpec `json:"otel"`
+}
+
+// OtelSpec defines Otel exporter configurations.
+type OtelSpec struct {
+	Protocol        string `json:"protocol" yaml:"protocol"`
+	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
+	IsSecure        bool   `json:"isSecure" yaml:"isSecure"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.
