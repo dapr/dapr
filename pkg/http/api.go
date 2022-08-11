@@ -48,6 +48,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
+	transaction_loader "github.com/dapr/dapr/pkg/components/transaction"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -2392,9 +2393,15 @@ func (a *api) onDistributeTransactionConfirm(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	var req transaction.BunchTransactionConfirmRequest
-	req = transaction.BunchTransactionConfirmRequest{}
-	transactionInstance.Confirm(req)
+	var req transaction_loader.TransactionConfirmRequest
+	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+	transaction_loader.ConfirmTransaction(transactionInstance, req)
+	//transactionInstance.Confirm(req)
 	respond(reqCtx, withEmpty())
 }
 
@@ -2470,7 +2477,7 @@ func (a *api) onDistributeTransactionGetState(reqCtx *fasthttp.RequestCtx) {
 
 	log.Debug("transaction id is ", transactionId)
 
-	reqs, err := transactionInstance.GetBunchTransactions(
+	reqs, err := transactionInstance.GetBunchTransactionState(
 		transaction.GetBunchTransactionsRequest{
 			TransactionId: transactionId,
 		},
