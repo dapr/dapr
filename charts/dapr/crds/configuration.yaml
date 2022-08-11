@@ -255,7 +255,6 @@ spec:
                     type: object
                 required:
                 - samplingRate
-                - stdout
                 type: object
             type: object
         type: object
