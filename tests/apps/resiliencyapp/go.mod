@@ -1,4 +1,4 @@
-module app
+module resiliencyapp
 
 go 1.18
 
