@@ -131,7 +131,7 @@ const (
 	secretNameParam          = "key"
 	nameParam                = "name"
 	workflowId               = "workflowId"
-	workflowRunId            = "workflowRunId"
+	instanceId               = "instanceId"
 	workflowName             = "workflowName"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
@@ -237,7 +237,7 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "workflows/{workflowId}/{workflowRunId}",
+			Route:   "workflows/{workflowId}/{instanceId}",
 			Version: apiVersionV1alpha1,
 			Handler: a.onGetWorkflow,
 		},
@@ -249,7 +249,7 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodDelete},
-			Route:   "workflows/{workflowId}/{workflowRunId}",
+			Route:   "workflows/{workflowId}/{instanceId}",
 			Version: apiVersionV1alpha1,
 			Handler: a.onTerminateWorkflow,
 		},
@@ -733,8 +733,8 @@ func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lo
 func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 	startReq := wfs.StartRequest{}
 
-	wf := reqCtx.UserValue(workflowName).(string)
-	if wf == "" {
+	wfName := reqCtx.UserValue(workflowName).(string)
+	if wfName == "" {
 		log.Debug("No workflow, or empty workflow was provided.")
 		return
 	}
@@ -744,7 +744,7 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 	}
 	req := workflows.StartRequest{
-		WorkflowName: startReq.WorkflowName,
+		WorkflowName: wfName,
 		Options:      startReq.Options,
 		Parameters:   startReq.Parameters,
 	}
@@ -766,7 +766,7 @@ func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	req := workflows.WorkflowStruct{
 		WorkflowId:    reqCtx.UserValue(workflowId).(string),
-		WorkflowRunId: reqCtx.UserValue(workflowRunId).(string),
+		WorkflowRunId: reqCtx.UserValue(instanceId).(string),
 	}
 
 	resp, err := a.workFlows["workflows"].Get(reqCtx, &req)
@@ -785,7 +785,7 @@ func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	req := workflows.WorkflowStruct{
 		WorkflowId:    reqCtx.UserValue(workflowId).(string),
-		WorkflowRunId: reqCtx.UserValue(workflowRunId).(string),
+		WorkflowRunId: reqCtx.UserValue(instanceId).(string),
 	}
 	err := a.workFlows["workflows"].Terminate(reqCtx, &req)
 	if err != nil {
