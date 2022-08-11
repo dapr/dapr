@@ -648,11 +648,9 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 		return true
 	}
 
-	// TODO: Support the other local k8s clusters
-	if m.minikubeNodeIP() != "" {
-		if len(svc.Spec.Ports) > 0 {
-			return true
-		}
+	if len(svc.Spec.Ports) > 0 {
+		// TODO: Support the other local k8s clusters
+		return m.minikubeNodeIP() != "" || !m.app.ShouldBeExposed()
 	}
 
 	return false
