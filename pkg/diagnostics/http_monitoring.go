@@ -55,6 +55,9 @@ type httpMetrics struct {
 	clientRoundtripLatency *stats.Float64Measure
 	clientCompletedCount   *stats.Int64Measure
 
+	healthProbeCompletedCount  *stats.Int64Measure
+	healthProbeRoundripLatency *stats.Float64Measure
+
 	appID   string
 	enabled bool
 }
@@ -97,6 +100,14 @@ func newHTTPMetrics() *httpMetrics {
 			"http/client/completed_count",
 			"Count of completed requests",
 			stats.UnitDimensionless),
+		healthProbeCompletedCount: stats.Int64(
+			"http/healthprobes/completed_count",
+			"Count of completed health probes",
+			stats.UnitDimensionless),
+		healthProbeRoundripLatency: stats.Float64(
+			"http/healthprobes/roundtrip_latency",
+			"Time between first byte of health probes headers sent to last byte of response received, or terminal error",
+			stats.UnitMilliseconds),
 
 		enabled: false,
 	}
@@ -159,6 +170,25 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	}
 }
 
+func (h *httpMetrics) AppHealthProbeStarted(ctx context.Context) {
+	if h.enabled {
+		stats.RecordWithTags(ctx, diag_utils.WithTags(appIDKey, h.appID))
+	}
+}
+
+func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string, elapsed float64) {
+	if h.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpStatusCodeKey, status),
+			h.healthProbeCompletedCount.M(1))
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpStatusCodeKey, status),
+			h.healthProbeRoundripLatency.M(elapsed))
+	}
+}
+
 func (h *httpMetrics) Init(appID string) error {
 	h.appID = appID
 	h.enabled = true
@@ -174,6 +204,8 @@ func (h *httpMetrics) Init(appID string) error {
 		diag_utils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
 		diag_utils.NewMeasureView(h.clientRoundtripLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultLatencyDistribution),
 		diag_utils.NewMeasureView(h.clientCompletedCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
+		diag_utils.NewMeasureView(h.healthProbeRoundripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diag_utils.NewMeasureView(h.healthProbeCompletedCount, []tag.Key{appIDKey, httpStatusCodeKey}, view.Count()),
 	)
 }
 

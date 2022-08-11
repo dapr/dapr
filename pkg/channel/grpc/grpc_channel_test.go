@@ -16,13 +16,16 @@ package grpc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
+	"log"
 	"net"
 	"net/http"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
@@ -33,29 +36,61 @@ import (
 
 // TODO: Add APIVersion testing
 
-func TestInvokeMethod(t *testing.T) {
+var mockServer *channelt.MockServer
+
+func TestMain(m *testing.M) {
+	// Setup
 	lis, err := net.Listen("tcp", "127.0.0.1:9998")
-	assert.NoError(t, err)
+	if err != nil {
+		log.Fatalf("failed to create listener: %v", err)
+	}
 
 	grpcServer := grpc.NewServer()
+	mockServer = &channelt.MockServer{}
 	go func() {
-		runtimev1pb.RegisterAppCallbackServer(grpcServer, &channelt.MockServer{})
+		runtimev1pb.RegisterAppCallbackServer(grpcServer, mockServer)
+		runtimev1pb.RegisterAppCallbackHealthCheckServer(grpcServer, mockServer)
 		grpcServer.Serve(lis)
+		if err != nil {
+			log.Fatalf("failed to start gRPC server: %v", err)
+		}
 	}()
 
-	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithInsecure())
-	conn, err := grpc.Dial("localhost:9998", opts...)
-	defer close(t, conn)
-	assert.NoError(t, err)
+	// Run tests
+	code := m.Run()
 
+	// Teardown
+	grpcServer.Stop()
+
+	os.Exit(code)
+}
+
+func createConnection(t *testing.T) *grpc.ClientConn {
+	conn, err := grpc.Dial("localhost:9998",
+		grpc.WithInsecure(),
+		grpc.WithBlock(),
+		grpc.WithTimeout(2*time.Second),
+	)
+	require.NoError(t, err, "failed to connect to gRPC server")
+	return conn
+}
+
+func closeConnection(t *testing.T, conn *grpc.ClientConn) {
+	err := conn.Close()
+	require.NoError(t, err, "failed to close client connection")
+}
+
+func TestInvokeMethod(t *testing.T) {
+	conn := createConnection(t)
+	defer closeConnection(t, conn)
 	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", maxRequestBodySize: 4, readBufferSize: 4}
+	ctx := context.Background()
+
 	req := invokev1.NewInvokeMethodRequest("method")
 	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
-	response, err := c.InvokeMethod(context.Background(), req)
+	response, err := c.InvokeMethod(ctx, req)
 	assert.NoError(t, err)
 	contentType, body := response.RawData()
-	grpcServer.Stop()
 
 	assert.Equal(t, "application/json", contentType)
 
@@ -68,9 +103,31 @@ func TestInvokeMethod(t *testing.T) {
 	assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
 }
 
-func close(t *testing.T, c io.Closer) {
-	err := c.Close()
-	if err != nil {
-		assert.Fail(t, fmt.Sprintf("unable to close %s", err))
-	}
+func TestHealthProbe(t *testing.T) {
+	conn := createConnection(t)
+	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", maxRequestBodySize: 4, readBufferSize: 4}
+	ctx := context.Background()
+
+	var (
+		success bool
+		err     error
+	)
+
+	// OK response
+	success, err = c.HealthProbe(ctx)
+	assert.NoError(t, err)
+	assert.True(t, success)
+
+	// Non-2xx status code
+	mockServer.Error = errors.New("test failure")
+	success, err = c.HealthProbe(ctx)
+	assert.NoError(t, err)
+	assert.False(t, success)
+
+	// Closed connection
+	// Should still return no error, but a failed probe
+	closeConnection(t, conn)
+	success, err = c.HealthProbe(ctx)
+	assert.NoError(t, err)
+	assert.False(t, success)
 }

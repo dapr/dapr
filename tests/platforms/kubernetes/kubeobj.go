@@ -89,7 +89,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
 		}
 		if !appDesc.IsJob {
-			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)
+			annotationObject["dapr.io/app-port"] = strconv.Itoa(appDesc.AppPort)
 		}
 	}
 	if appDesc.AppProtocol != "" {
@@ -104,7 +104,21 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.DaprVolumeMounts != "" {
 		annotationObject["dapr.io/volume-mounts"] = appDesc.DaprVolumeMounts
 	}
-
+	if appDesc.EnableAppHealthCheck {
+		annotationObject["dapr.io/enable-app-health-check"] = "true"
+	}
+	if appDesc.AppHealthCheckPath != "" {
+		annotationObject["dapr.io/app-health-check-path"] = appDesc.AppHealthCheckPath
+	}
+	if appDesc.AppHealthProbeInterval != 0 {
+		annotationObject["dapr.io/app-health-probe-interval"] = strconv.Itoa(appDesc.AppHealthProbeInterval)
+	}
+	if appDesc.AppHealthProbeTimeout != 0 {
+		annotationObject["dapr.io/app-health-probe-timeout"] = strconv.Itoa(appDesc.AppHealthProbeTimeout)
+	}
+	if appDesc.AppHealthThreshold != 0 {
+		annotationObject["dapr.io/app-health-threshold"] = strconv.Itoa(appDesc.AppHealthThreshold)
+	}
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}
@@ -248,7 +262,9 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 	}
 
 	targetPort := DefaultContainerPort
-	if appDesc.AppPort > 0 {
+	if appDesc.IngressPort > 0 {
+		targetPort = appDesc.IngressPort
+	} else if appDesc.AppPort > 0 {
 		targetPort = appDesc.AppPort
 	}
 
