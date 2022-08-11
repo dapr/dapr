@@ -417,9 +417,10 @@ jobs:
           make setup-tailscale
         shell: bash
       - name: Connect to tailscale
-        uses: tailscale/github-action@v1
+        uses: tailscale/github-action@e870a1112fcc1faeeeeea3c1b0ce544e5ad01844
         with:
           authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          version: 1.26.2
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
         env:
