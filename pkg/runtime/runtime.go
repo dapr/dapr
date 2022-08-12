@@ -2679,22 +2679,7 @@ func (a *DaprRuntime) startSubscriptions() {
 		if err := a.beginPubSub(pubsubName); err != nil {
 			log.Errorf("error occurred while beginning pubsub %s: %s", pubsubName, err)
 		}
-
-// Stop subscriptions to all topics and cleans the cached topics
-func (a *DaprRuntime) stopSubscriptions() {
-	// Stop all subscriptions by canceling the subscription context
-	if a.pubsubCancel != nil {
-		a.pubsubCancel()
 	}
-	a.pubsubCtx = nil
-	a.pubsubCancel = nil
-
-	// Remove all contexts that are specific to each component (which have been canceled already by canceling pubsubCtx)
-	a.topicCtxCancels = nil
-
-	// Delete the cached topics and routes
-	a.topicRoutes = nil
-	a.deadLetterTopics = nil
 }
 
 // Stop subscriptions to all topics and cleans the cached topics
