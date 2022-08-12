@@ -1,17 +1,19 @@
 package transaction
 
 import (
+	"fmt"
+
 	transactionComponent "github.com/dapr/components-contrib/transaction"
 )
 
 const (
 	defaultState                    = 0
-	stateForTrySuccess              = 1
-	stateForTryFailure              = -1
-	stateForConfirmSuccess          = 2
-	stateForConfirmFailure          = -2
-	stateForRollBackSuccess         = 3
-	stateForRollBackFailure         = -3
+	stateForTrySuccess              = 10
+	stateForTryFailure              = 1
+	stateForConfirmSuccess          = 20
+	stateForConfirmFailure          = 2
+	stateForRollBackSuccess         = 30
+	stateForRollBackFailure         = 3
 	bunchTransactionStateParam      = "state"
 	bunchTransacitonTryRequestParam = "tryRequestParam"
 	requestStatusOK                 = 1
@@ -25,6 +27,7 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, re
 		},
 	)
 	if err != nil {
+		fmt.Print(err)
 		return err
 	}
 	bunchTransactions := reqs.BunchTransactions
@@ -32,8 +35,10 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, re
 		state, _ := bunchTransaction[bunchTransactionStateParam].(int)
 		// pointer of the origin request param
 		bunchTransactionReqsParam := bunchTransaction[bunchTransacitonTryRequestParam]
-		Confirm(bunchTransactionReqsParam)
 		if state != stateForConfirmSuccess {
+			// try to confirm a bunch transaction
+			Confirm(bunchTransactionReqsParam)
+
 			transactionInstance.Confirm(transactionComponent.BunchTransactionConfirmRequest{
 				TransactionId:      reqParam.TransactionId,
 				BunchTransactionId: bunchTransactionId,
@@ -46,5 +51,7 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, re
 }
 
 func Confirm(bunchTransactionReqsParam interface{}) {
+
+	fmt.Print(bunchTransactionReqsParam)
 
 }
