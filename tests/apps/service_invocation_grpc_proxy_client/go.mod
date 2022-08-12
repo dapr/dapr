@@ -1,4 +1,4 @@
-module app
+module service_invocation_grpc_proxy_client
 
 go 1.18
 

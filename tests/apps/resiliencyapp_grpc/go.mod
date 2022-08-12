@@ -1,4 +1,4 @@
-module app
+module resiliencyapp_grpc
 
 go 1.18
 
