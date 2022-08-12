@@ -1,4 +1,4 @@
-module app
+module perf/actorfeatures
 
 go 1.18
 
