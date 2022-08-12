@@ -22,9 +22,6 @@
 name: dapr-test
 
 on:
-  # Run every 2 hours
-  schedule:
-    - cron: '0 */2 * * *'
   # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
@@ -404,6 +401,23 @@ jobs:
         if: env.TEST_PREFIX != '' && env.TEST_CLOUD_ENV != ''
         run: ./tests/test-infra/setup_${{ env.TEST_CLOUD_ENV }}.sh
         shell: bash
+      - name: Setup tailscale subnet router
+        if: env.TEST_PREFIX != ''
+        run: |
+          # Pod and service cidr used by tailscale subnet router
+          POD_CIDR=$(kubectl cluster-info dump | grep -m 1 cluster-cidr |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}")
+          SERVICE_CIDR=$(echo '{"apiVersion":"v1","kind":"Service","metadata":{"name":"tst"},"spec":{"clusterIP":"1.1.1.1","ports":[{"port":443}]}}' | kubectl apply -f - 2>&1 | sed 's/.*valid IPs is //')
+          POD_CIDR=${POD_CIDR} SERVICE_CIDR=${SERVICE_CIDR} make setup-tailscale
+          # Wait for tailscale pod to be ready
+          for i in 1 2 3 4 5; do echo "waiting for tailscale pod" && kubectl logs -l app=tailscale -n ${{ env.DAPR_NAMESPACE }} && kubectl get pods -l app=tailscale -n ${{ env.DAPR_NAMESPACE }} -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' == "True" && break || sleep 10; done
+          echo "tailscale pod is now ready"
+          sleep 5
+          kubectl logs -l app=tailscale -n ${{ env.DAPR_NAMESPACE }}
+      - name: Connect to tailscale VPN
+        uses: tailscale/github-action@e870a1112fcc1faeeeeea3c1b0ce544e5ad01844
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          version: 1.28.0
       - name: Preparing AKS cluster for test
         if: env.TEST_PREFIX != ''
         run: |
@@ -414,13 +428,7 @@ jobs:
             make setup-test-env-mongodb
           fi
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
-          make setup-tailscale
         shell: bash
-      - name: Connect to tailscale
-        uses: tailscale/github-action@e870a1112fcc1faeeeeea3c1b0ce544e5ad01844
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
-          version: 1.26.2
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
         env:
