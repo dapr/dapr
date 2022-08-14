@@ -7,17 +7,14 @@ import (
 )
 
 const (
-	defaultState                    = 0
-	stateForTrySuccess              = 10
-	stateForTryFailure              = 1
-	stateForConfirmSuccess          = 20
-	stateForConfirmFailure          = 2
-	stateForRollBackSuccess         = 30
-	stateForRollBackFailure         = 3
-	bunchTransactionStateParam      = "state"
-	bunchTransacitonTryRequestParam = "tryRequestParam"
-	requestStatusOK                 = 1
-	defaultTransactionSchema        = "tcc"
+	defaultState            = 0
+	stateForTrySuccess      = 10
+	stateForTryFailure      = 1
+	stateForConfirmSuccess  = 20
+	stateForConfirmFailure  = 2
+	stateForRollBackSuccess = 30
+	stateForRollBackFailure = 3
+	requestStatusOK         = 1
 )
 
 func ConfirmTransaction(transactionInstance transactionComponent.Transaction, reqParam TransactionConfirmRequest) error {
@@ -31,13 +28,19 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, re
 		return err
 	}
 	bunchTransactions := reqs.BunchTransactions
+	retryTimes := transactionInstance.GetRetryTimes()
+	schema := transactionInstance.GetTransactionSchema()
+
+	fmt.Printf("disrtibute transaction schema is %s", schema)
+
 	for bunchTransactionId, bunchTransaction := range bunchTransactions {
-		state, _ := bunchTransaction[bunchTransactionStateParam].(int)
+		//state, _ := bunchTransaction[bunchTransactionStateParam].(int)
+		state := bunchTransaction.StatusCode
 		// pointer of the origin request param
-		bunchTransactionReqsParam := bunchTransaction[bunchTransacitonTryRequestParam]
+		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
 		if state != stateForConfirmSuccess {
 			// try to confirm a bunch transaction
-			Confirm(bunchTransactionReqsParam)
+			responseStatusCode := Confirm(bunchTransactionReqsParam, schema, retryTimes)
 
 			transactionInstance.Confirm(transactionComponent.BunchTransactionConfirmRequest{
 				TransactionId:      reqParam.TransactionId,
@@ -50,8 +53,25 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, re
 
 }
 
-func Confirm(bunchTransactionReqsParam interface{}) {
-
+func Confirm(bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
 	fmt.Print(bunchTransactionReqsParam)
+	responseStatusCode := 0
+	switch schema {
+	case "tcc":
+		responseStatusCode = ConfirmTcc(bunchTransactionReqsParam, retryTimes)
+	}
+	return responseStatusCode
+}
+
+func ConfirmTcc(bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, retryTimes int) int {
+	responseStatusCode := 200
+	return responseStatusCode
+}
+
+func RequestServiceInovde(bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam) {
+
+}
+
+func RequestActor(bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam) {
 
 }
