@@ -1,9 +1,14 @@
 package transaction
 
 import (
+	"context"
 	"fmt"
 
 	transactionComponent "github.com/dapr/components-contrib/transaction"
+	"github.com/dapr/dapr/pkg/messaging"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	fasthttp "github.com/valyala/fasthttp"
+	codes "google.golang.org/grpc/codes"
 )
 
 const (
@@ -17,7 +22,7 @@ const (
 	requestStatusOK         = 1
 )
 
-func ConfirmTransaction(transactionInstance transactionComponent.Transaction, reqParam TransactionConfirmRequest) error {
+func ConfirmTransaction(transactionInstance transactionComponent.Transaction, directMessaging messaging.DirectMessaging, reqParam TransactionConfirmRequest) error {
 	reqs, err := transactionInstance.GetBunchTransactions(
 		transactionComponent.GetBunchTransactionsRequest{
 			TransactionId: reqParam.TransactionId,
@@ -41,6 +46,10 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, re
 		if state != stateForConfirmSuccess {
 			// try to confirm a bunch transaction
 			responseStatusCode := Confirm(bunchTransactionReqsParam, schema, retryTimes)
+
+			if responseStatusCode != 200 {
+				return fmt.Errorf("transaction")
+			}
 
 			transactionInstance.Confirm(transactionComponent.BunchTransactionConfirmRequest{
 				TransactionId:      reqParam.TransactionId,
@@ -68,8 +77,29 @@ func ConfirmTcc(bunchTransactionReqsParam *transactionComponent.TransactionTryRe
 	return responseStatusCode
 }
 
-func RequestServiceInovde(bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam) {
+func RequestServiceInovde(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, action string) (int, error) {
+	req := invokev1.NewInvokeMethodRequest(bunchTransactionReqsParam.InvokeMethodName+action).WithHTTPExtension(bunchTransactionReqsParam.Verb, bunchTransactionReqsParam.QueryArgs)
 
+	resp, err := directMessaging.Invoke(context.Background(), bunchTransactionReqsParam.TargetID, req)
+
+	if err != nil {
+		return 0, err
+	}
+
+	// Construct response
+	statusCode := int(resp.Status().Code)
+	if !resp.IsHTTPResponse() {
+		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
+		if statusCode != fasthttp.StatusOK {
+			if _, err := invokev1.ProtobufToJSON(resp.Status()); err != nil {
+				statusCode = fasthttp.StatusInternalServerError
+				return 0, err
+			}
+		}
+	} else if statusCode != fasthttp.StatusOK {
+		return 0, fmt.Errorf("Received non-successful status code: %d", statusCode)
+	}
+	return statusCode, nil
 }
 
 func RequestActor(bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam) {
