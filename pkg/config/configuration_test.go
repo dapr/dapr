@@ -14,7 +14,7 @@ limitations under the License.
 package config
 
 import (
-	"os"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -58,7 +58,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 	}
 
 	t.Run("Parse environment variables", func(t *testing.T) {
-		os.Setenv("DAPR_SECRET", "keepitsecret")
+		t.Setenv("DAPR_SECRET", "keepitsecret")
 		config, _, err := LoadStandaloneConfiguration("./testdata/env_variables_config.yaml")
 		assert.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")
@@ -99,6 +99,28 @@ func TestMetricSpecForStandAlone(t *testing.T) {
 			config, _, err := LoadStandaloneConfiguration(tc.confFile)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.Enabled)
+		})
+	}
+}
+
+func TestComponentsSpecForStandAlone(t *testing.T) {
+	testCases := []struct {
+		name           string
+		confFile       string
+		componentsDeny []string
+	}{
+		{
+			name:           "component deny list",
+			confFile:       "./testdata/components_config.yaml",
+			componentsDeny: []string{"foo.bar", "hello.world/v1"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config, _, err := LoadStandaloneConfiguration(tc.confFile)
+			assert.NoError(t, err)
+			assert.True(t, reflect.DeepEqual(tc.componentsDeny, config.Spec.ComponentsSpec.Deny))
 		})
 	}
 }

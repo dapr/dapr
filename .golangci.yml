@@ -273,7 +273,3 @@ linters:
     - containedctx
     - gosimple
     - forbidigo
-issues:
-  exclude:
-    # staticcheck
-    - 'SA1019: package github.com/golang/protobuf/proto is deprecated: Use the "google.golang.org/protobuf/proto" package instead'

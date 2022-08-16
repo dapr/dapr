@@ -479,6 +479,7 @@ message RegisteredComponents {
   string name = 1;
   string type = 2;
   string version = 3;
+  repeated string capabilities = 4;
 }
 
 message SetMetadataRequest {
@@ -588,8 +589,8 @@ message UnlockRequest {
 message UnlockResponse {
   enum Status {
     SUCCESS = 0;
-    LOCK_UNEXIST = 1;
-    LOCK_BELONG_TO_OTHERS = 2;
+    LOCK_DOES_NOT_EXIST = 1;
+    LOCK_BELONGS_TO_OTHERS = 2;
     INTERNAL_ERROR = 3;
   }
 

@@ -25,12 +25,14 @@ import (
 
 	"github.com/dapr/dapr/utils"
 
+	"github.com/ghodss/yaml"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru"
-	"gopkg.in/yaml.v2"
 
 	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/config"
@@ -45,13 +47,17 @@ const (
 	defaultEndpointCacheSize = 100
 	defaultActorCacheSize    = 5000
 
-	BuiltInServiceRetries        BuiltInPolicyName = "DaprBuiltInServiceRetries"
-	BuiltInActorRetries          BuiltInPolicyName = "DaprBuiltInActorRetries"
-	BuiltInActorReminderRetries  BuiltInPolicyName = "DaprBuiltInActorReminderRetries"
-	BuiltInInitializationRetries BuiltInPolicyName = "DaprBuiltInInitializationRetries"
-	Endpoint                     PolicyType        = "endpoint"
-	Component                    PolicyType        = "component"
-	Actor                        PolicyType        = "actor"
+	BuiltInServiceRetries         BuiltInPolicyName     = "DaprBuiltInServiceRetries"
+	BuiltInActorRetries           BuiltInPolicyName     = "DaprBuiltInActorRetries"
+	BuiltInActorReminderRetries   BuiltInPolicyName     = "DaprBuiltInActorReminderRetries"
+	BuiltInActorNotFoundRetries   BuiltInPolicyName     = "DaprBuiltInActorNotFoundRetries"
+	BuiltInInitializationRetries  BuiltInPolicyName     = "DaprBuiltInInitializationRetries"
+	DefaultRetryTemplate          DefaultPolicyTemplate = "Default%sRetryPolicy"
+	DefaultTimeoutTemplate        DefaultPolicyTemplate = "Default%sTimeoutPolicy"
+	DefaultCircuitBreakerTemplate DefaultPolicyTemplate = "Default%sCircuitBreakerPolicy"
+	Endpoint                      PolicyType            = "App"
+	Component                     PolicyType            = "Component"
+	Actor                         PolicyType            = "Actor"
 )
 
 // ActorCircuitBreakerScope indicates the scope of the circuit breaker for an actor.
@@ -64,6 +70,8 @@ const (
 	ActorCircuitBreakerScopeID
 	// ActorCircuitBreakerScopeBoth indicates both type and type+id are used for scope.
 	ActorCircuitBreakerScopeBoth // Usage is TODO.
+
+	resiliencyKind = "Resiliency"
 )
 
 type (
@@ -144,8 +152,9 @@ type (
 		Timeout string
 	}
 
-	BuiltInPolicyName string
-	PolicyType        string
+	DefaultPolicyTemplate string
+	BuiltInPolicyName     string
+	PolicyType            string
 )
 
 // Ensure `*Resiliency` satisfies the `Provider` interface.
@@ -165,6 +174,10 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 
 	configs := make([]*resiliency_v1alpha.Resiliency, 0, len(files))
 
+	type typeInfo struct {
+		metav1.TypeMeta `json:",inline"`
+	}
+
 	for _, file := range files {
 		if !utils.IsYaml(file.Name()) {
 			log.Warnf("A non-YAML resiliency file %s was detected, it will not be loaded", file.Name())
@@ -177,12 +190,21 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 			continue
 		}
 
+		var ti typeInfo
+		if err = yaml.Unmarshal(b, &ti); err != nil {
+			log.Errorf("Could not determine resource type: %s", err.Error())
+			continue
+		}
+
+		if ti.Kind != resiliencyKind {
+			continue
+		}
+
 		var resiliency resiliency_v1alpha.Resiliency
 		if err = yaml.Unmarshal(b, &resiliency); err != nil {
 			log.Errorf("Could not parse resiliency file %s: %w", file.Name(), err)
 			continue
 		}
-
 		configs = append(configs, &resiliency)
 	}
 
@@ -227,6 +249,8 @@ func FromConfigurations(log logger.Logger, c ...*resiliency_v1alpha.Resiliency) 
 	r.addBuiltInPolicies()
 
 	for _, config := range c {
+		log.Infof("Loading Resiliency configuration: %s", config.Name)
+		log.Debugf("Resiliency configuration (%s): %+v", config.Name, config)
 		if err := r.DecodeConfiguration(config); err != nil {
 			log.Errorf("Could not read resiliency %s: %w", &config.ObjectMeta.Name, err)
 			continue
@@ -299,7 +323,6 @@ func (r *Resiliency) addBuiltInPolicies() {
 
 	// Cover retries for initialization, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInInitializationRetries)]; !ok {
-		r.log.Info("Adding initialization policy.")
 		r.retries[string(BuiltInInitializationRetries)] = &retry.Config{
 			Policy:              retry.PolicyExponential,
 			InitialInterval:     time.Millisecond * 500,
@@ -309,6 +332,14 @@ func (r *Resiliency) addBuiltInPolicies() {
 			Duration:            time.Second * 2,
 			Multiplier:          1.5,
 			RandomizationFactor: 0.5,
+		}
+	}
+
+	if _, ok := r.retries[string(BuiltInActorNotFoundRetries)]; !ok {
+		r.retries[string(BuiltInActorNotFoundRetries)] = &retry.Config{
+			Policy:     retry.PolicyConstant,
+			MaxRetries: 5,
+			Duration:   time.Second,
 		}
 	}
 }
@@ -332,12 +363,16 @@ func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error
 			return fmt.Errorf("invalid retry configuration %q: %w", name, err)
 		}
 
-		if r.isBuiltInPolicy(name) && rc.MaxRetries < 3 {
-			r.log.Warnf("Attempted override of %s did not meet minimum retry count, resetting to 3.", name)
-			rc.MaxRetries = 3
-		}
+		if !r.isProtectedPolicy(name) {
+			if r.isBuiltInPolicy(name) && rc.MaxRetries < 3 {
+				r.log.Warnf("Attempted override of %s did not meet minimum retry count, resetting to 3.", name)
+				rc.MaxRetries = 3
+			}
 
-		r.retries[name] = &rc
+			r.retries[name] = &rc
+		} else {
+			r.log.Warnf("Attempted to override protected policy %s which is not allowed. Ignoring provided policy and using default.", name)
+		}
 	}
 
 	for name, t := range policies.CircuitBreakers {
@@ -444,6 +479,17 @@ func (r *Resiliency) isBuiltInPolicy(name string) bool {
 	case string(BuiltInActorReminderRetries):
 		fallthrough
 	case string(BuiltInInitializationRetries):
+		fallthrough
+	case string(BuiltInActorNotFoundRetries):
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *Resiliency) isProtectedPolicy(name string) bool {
+	switch name {
+	case string(BuiltInActorNotFoundRetries):
 		return true
 	default:
 		return false
@@ -461,6 +507,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 	}
 	policyNames, ok := r.apps[app]
 	if ok {
+		r.log.Debugf("Found Endpoint Policy for %s: %+v", app, policyNames)
 		if policyNames.Timeout != "" {
 			t = r.timeouts[policyNames.Timeout]
 		}
@@ -489,6 +536,39 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 				}
 			}
 		}
+	} else {
+		if defaultNames, ok := r.getDefaultPolicy(Endpoint); ok {
+			r.log.Debugf("Found Default Policy for Endpoint %s: %+v", app, defaultNames)
+			if defaultNames.Retry != "" {
+				rc = r.retries[defaultNames.Retry]
+			}
+			if defaultNames.Timeout != "" {
+				t = r.timeouts[defaultNames.Timeout]
+			}
+
+			if defaultNames.CircuitBreaker != "" {
+				template, ok := r.circuitBreakers[defaultNames.CircuitBreaker]
+				if ok {
+					cache, ok := r.serviceCBs[app]
+					if ok {
+						cbi, ok := cache.Get(endpoint)
+						if ok {
+							cb, _ = cbi.(*breaker.CircuitBreaker)
+						} else {
+							cb = &breaker.CircuitBreaker{
+								Name:        endpoint,
+								MaxRequests: template.MaxRequests,
+								Interval:    template.Interval,
+								Timeout:     template.Timeout,
+								Trip:        template.Trip,
+							}
+							cb.Initialize(r.log)
+							cache.Add(endpoint, cb)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return Policy(ctx, r.log, operationName, t, rc, cb)
@@ -505,6 +585,7 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 	}
 	actorPolicies, ok := r.actors[actorType]
 	if policyNames := actorPolicies.PreLockPolicies; ok {
+		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Retry != "" {
 			rc = r.retries[policyNames.Retry]
 		}
@@ -537,6 +618,43 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 				}
 			}
 		}
+	} else {
+		if defaultNames, ok := r.getDefaultPolicy(Actor); ok {
+			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultNames)
+			if defaultNames.Retry != "" {
+				rc = r.retries[defaultNames.Retry]
+			}
+
+			if defaultNames.CircuitBreaker != "" {
+				template, ok := r.circuitBreakers[defaultNames.CircuitBreaker]
+				if ok {
+					cache, ok := r.actorCBCaches[actorType]
+					if ok {
+						var key string
+						if policyNames.CircuitBreakerScope == ActorCircuitBreakerScopeType {
+							key = actorType
+						} else {
+							key = actorType + "-" + id
+						}
+
+						cbi, ok := cache.Get(key)
+						if ok {
+							cb, _ = cbi.(*breaker.CircuitBreaker)
+						} else {
+							cb = &breaker.CircuitBreaker{
+								Name:        key,
+								MaxRequests: template.MaxRequests,
+								Interval:    template.Interval,
+								Timeout:     template.Timeout,
+								Trip:        template.Trip,
+							}
+							cb.Initialize(r.log)
+							cache.Add(key, cb)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return Policy(ctx, r.log, operationName, t, rc, cb)
@@ -553,15 +671,23 @@ func (r *Resiliency) ActorPostLockPolicy(ctx context.Context, actorType string, 
 	}
 	actorPolicies, ok := r.actors[actorType]
 	if policyNames := actorPolicies.PostLockPolicies; ok {
+		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Timeout != "" {
 			t = r.timeouts[policyNames.Timeout]
+		}
+	} else {
+		if defaultPolicies, ok := r.getDefaultPolicy(Actor); ok {
+			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultPolicies)
+			if defaultPolicies.Timeout != "" {
+				t = r.timeouts[defaultPolicies.Timeout]
+			}
 		}
 	}
 
 	return Policy(ctx, r.log, operationName, t, rc, cb)
 }
 
-// ComponentPolicy returns the output policy for a component.
+// ComponentOutboundPolicy returns the outbound policy for a component.
 func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) Runner {
 	var t time.Duration
 	var rc *retry.Config
@@ -572,6 +698,7 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) R
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
+		r.log.Debugf("Found Component Outbound Policy for component %s: %+v", name, componentPolicies)
 		if componentPolicies.Outbound.Timeout != "" {
 			t = r.timeouts[componentPolicies.Outbound.Timeout]
 		}
@@ -587,7 +714,7 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) R
 	return Policy(ctx, r.log, operationName, t, rc, cb)
 }
 
-// ComponentPolicy returns the policy for a component.
+// ComponentInboundPolicy returns the inbound policy for a component.
 func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Runner {
 	var t time.Duration
 	var rc *retry.Config
@@ -598,6 +725,7 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 	}
 	componentPolicies, ok := r.components[name]
 	if ok {
+		r.log.Debugf("Found Component Inbound Policy for component %s: %+v", name, componentPolicies)
 		if componentPolicies.Inbound.Timeout != "" {
 			t = r.timeouts[componentPolicies.Inbound.Timeout]
 		}
@@ -618,7 +746,6 @@ func (r *Resiliency) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) 
 	var t time.Duration
 	var cb *breaker.CircuitBreaker
 	stringName := string(name)
-	r.log.Infof("Built-in policy (%s): %+v", stringName, r.retries[stringName])
 	return Policy(ctx, r.log, stringName, t, r.retries[stringName], cb)
 }
 
@@ -634,6 +761,50 @@ func (r *Resiliency) PolicyDefined(target string, policyType PolicyType) bool {
 		_, exists = r.actors[target]
 	}
 	return exists
+}
+
+func (r *Resiliency) getDefaultPolicy(policyType PolicyType) (PolicyNames, bool) {
+	policyNames := PolicyNames{
+		Retry:          r.getDefaultRetryPolicy(policyType),
+		Timeout:        r.getDefaultTimeoutPolicy(policyType),
+		CircuitBreaker: r.getDefaultCircuitBreakerPolicy(policyType),
+	}
+
+	return policyNames, (policyNames.Retry != "" || policyNames.Timeout != "" || policyNames.CircuitBreaker != "")
+}
+
+func (r *Resiliency) getDefaultRetryPolicy(policyType PolicyType) string {
+	typeTemplate, topLevelTemplate := r.expandPolicyTemplate(policyType, DefaultRetryTemplate)
+	if _, ok := r.retries[typeTemplate]; ok {
+		return typeTemplate
+	} else if _, ok := r.retries[topLevelTemplate]; ok {
+		return topLevelTemplate
+	}
+	return ""
+}
+
+func (r *Resiliency) getDefaultTimeoutPolicy(policyType PolicyType) string {
+	typeTemplate, topLevelTemplate := r.expandPolicyTemplate(policyType, DefaultTimeoutTemplate)
+	if _, ok := r.timeouts[typeTemplate]; ok {
+		return typeTemplate
+	} else if _, ok := r.timeouts[topLevelTemplate]; ok {
+		return topLevelTemplate
+	}
+	return ""
+}
+
+func (r *Resiliency) getDefaultCircuitBreakerPolicy(policyType PolicyType) string {
+	typeTemplate, topLevelTemplate := r.expandPolicyTemplate(policyType, DefaultCircuitBreakerTemplate)
+	if _, ok := r.circuitBreakers[typeTemplate]; ok {
+		return typeTemplate
+	} else if _, ok := r.circuitBreakers[topLevelTemplate]; ok {
+		return topLevelTemplate
+	}
+	return ""
+}
+
+func (r *Resiliency) expandPolicyTemplate(policyType PolicyType, template DefaultPolicyTemplate) (string, string) {
+	return fmt.Sprintf(string(template), policyType), fmt.Sprintf(string(template), "")
 }
 
 // Get returns a cached circuit breaker if one exists.
@@ -701,7 +872,7 @@ func ParseActorCircuitBreakerScope(val string) (ActorCircuitBreakerScope, error)
 }
 
 func filterResiliencyConfigs(resiliences []*resiliency_v1alpha.Resiliency, runtimeID string) []*resiliency_v1alpha.Resiliency {
-	var filteredResiliencies []*resiliency_v1alpha.Resiliency
+	filteredResiliencies := make([]*resiliency_v1alpha.Resiliency, 0)
 
 	for _, resiliency := range resiliences {
 		if len(resiliency.Scopes) == 0 {

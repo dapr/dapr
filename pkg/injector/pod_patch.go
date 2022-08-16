@@ -80,6 +80,7 @@ const (
 	daprVolumeMountsReadWriteKey      = "dapr.io/volume-mounts-rw"
 	daprDisableBuiltinK8sSecretStore  = "dapr.io/disable-builtin-k8s-secret-store"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
+	daprPlacementAddressesKey         = "dapr.io/placement-host-address"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -176,7 +177,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 	patchOps := []PatchOperation{}
 	envPatchOps := []PatchOperation{}
-	socketVolumentPatchOps := []PatchOperation{}
+	socketVolumePatchOps := []PatchOperation{}
 	var path string
 	var value interface{}
 	if len(pod.Spec.Containers) == 0 {
@@ -184,7 +185,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		value = []corev1.Container{*sidecarContainer}
 	} else {
 		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
-		socketVolumentPatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketMount)
+		socketVolumePatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketMount)
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
@@ -198,7 +199,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		},
 	)
 	patchOps = append(patchOps, envPatchOps...)
-	patchOps = append(patchOps, socketVolumentPatchOps...)
+	patchOps = append(patchOps, socketVolumePatchOps...)
 
 	return patchOps, nil
 }
@@ -280,8 +281,8 @@ func addVolumeToContainers(containers []corev1.Container, addMounts corev1.Volum
 }
 
 // It does not override existing values for those variables if they have been defined already.
-func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
-	if len(volumentMounts) == 0 {
+func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
+	if len(volumeMounts) == 0 {
 		// If there are no volume mount variables defined in the container, we initialize a slice of environment vars.
 		return []PatchOperation{
 			{
@@ -298,7 +299,7 @@ func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMount
 
 	for _, addMount := range addMounts {
 		isConflict := false
-		for _, mount := range volumentMounts {
+		for _, mount := range volumeMounts {
 			// conflict cases
 			if addMount.Name == mount.Name || addMount.MountPath == mount.MountPath {
 				isConflict = true
@@ -387,6 +388,14 @@ func getEnableMetrics(annotations map[string]string) bool {
 
 func getMetricsPort(annotations map[string]string) int {
 	return int(getInt32AnnotationOrDefault(annotations, daprMetricsPortKey, defaultMetricsPort))
+}
+
+func getPlacementAddresses(annotations map[string]string) string {
+	return getStringAnnotation(annotations, daprPlacementAddressesKey)
+}
+
+func existPlacementAddressesAnnotation(annotations map[string]string) bool {
+	return existAnnotation(annotations, daprPlacementAddressesKey)
 }
 
 func getEnableDebug(annotations map[string]string) bool {
@@ -478,6 +487,11 @@ func getStringAnnotationOrDefault(annotations map[string]string, key, defaultVal
 
 func getStringAnnotation(annotations map[string]string, key string) string {
 	return annotations[key]
+}
+
+func existAnnotation(annotations map[string]string, key string) bool {
+	_, exist := annotations[key]
+	return exist
 }
 
 func getInt32AnnotationOrDefault(annotations map[string]string, key string, defaultValue int) int32 {
@@ -644,6 +658,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
 
+	if existPlacementAddressesAnnotation(annotations) {
+		placementServiceAddress = getPlacementAddresses(annotations)
+	}
+
 	ports := []corev1.ContainerPort{
 		{
 			ContainerPort: int32(sidecarHTTPPort),
@@ -723,8 +741,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 		},
-		Ports:   ports,
-		Command: cmd,
+		Ports: ports,
+		Args:  append(cmd, args...),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "NAMESPACE",
@@ -739,7 +757,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 				},
 			},
 		},
-		Args: args,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
@@ -757,6 +774,19 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	}
 
 	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
+
+	// This is a special case that requires administrator privileges in Windows containers
+	// to install the certificates to the root store. If this environment variable is set,
+	// the container security context should be set to run as administrator.
+	for _, env := range c.Env {
+		if env.Name == "SSL_CERT_DIR" {
+			userName := "ContainerAdministrator"
+			c.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
+				RunAsUserName: &userName,
+			}
+			break
+		}
+	}
 
 	if socketVolumeMount != nil {
 		c.VolumeMounts = []corev1.VolumeMount{*socketVolumeMount}

@@ -33,6 +33,8 @@ import (
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
 
+const testLabel = "service-invocation-grpc"
+
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
@@ -56,6 +58,9 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": testLabel + "-testapp",
+			},
 		},
 		{
 			AppName:           "tester",
@@ -73,6 +78,12 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			Labels: map[string]string{
+				"daprtest": testLabel + "-tester",
+			},
+			PodAffinityLabels: map[string]string{
+				"daprtest": testLabel + "-testapp",
+			},
 		},
 	}
 
@@ -150,8 +161,8 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	err = json.Unmarshal(baselineResp, &baselineResult)
 	require.NoError(t, err)
 
-	percentiles := map[int]string{1: "50th", 2: "75th", 3: "90th", 4: "99th"}
-	tp90Latency := 0.0
+	percentiles := []string{"50th", "75th", "90th", "99th"}
+	var tp90Latency float64
 
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
@@ -185,5 +196,5 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
 	require.Greater(t, tp90Latency, 0.0)
-	require.LessOrEqual(t, tp90Latency, 3.0)
+	require.LessOrEqual(t, tp90Latency, 2.5)
 }

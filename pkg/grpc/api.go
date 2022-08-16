@@ -25,10 +25,10 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	"github.com/dapr/dapr/pkg/version"
 
 	"github.com/dapr/components-contrib/configuration"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -63,7 +63,8 @@ import (
 )
 
 const (
-	daprHTTPStatusHeader = "dapr-http-status"
+	daprHTTPStatusHeader  = "dapr-http-status"
+	daprRuntimeVersionKey = "daprRuntimeVersion"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -131,6 +132,8 @@ type api struct {
 	extendedMetadata           sync.Map
 	components                 []components_v1alpha.Component
 	shutdown                   func()
+	getComponentsCapabilitesFn func() map[string][]string
+	daprRunTimeVersion         string
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
@@ -280,6 +283,7 @@ func NewAPI(
 	appProtocol string,
 	getComponentsFn func() []components_v1alpha.Component,
 	shutdown func(),
+	getComponentsCapabilitiesFn func() map[string][]string,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -287,26 +291,27 @@ func NewAPI(
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
-
 	return &api{
-		directMessaging:          directMessaging,
-		actor:                    actor,
-		id:                       appID,
-		resiliency:               resiliency,
-		appChannel:               appChannel,
-		pubsubAdapter:            pubsubAdapter,
-		stateStores:              stateStores,
-		transactionalStateStores: transactionalStateStores,
-		secretStores:             secretStores,
-		configurationStores:      configurationStores,
-		configurationSubscribe:   make(map[string]chan struct{}),
-		lockStores:               lockStores,
-		secretsConfiguration:     secretsConfiguration,
-		sendToOutputBindingFn:    sendToOutputBindingFn,
-		tracingSpec:              tracingSpec,
-		accessControlList:        accessControlList,
-		appProtocol:              appProtocol,
-		shutdown:                 shutdown,
+		directMessaging:            directMessaging,
+		actor:                      actor,
+		id:                         appID,
+		resiliency:                 resiliency,
+		appChannel:                 appChannel,
+		pubsubAdapter:              pubsubAdapter,
+		stateStores:                stateStores,
+		transactionalStateStores:   transactionalStateStores,
+		secretStores:               secretStores,
+		configurationStores:        configurationStores,
+		configurationSubscribe:     make(map[string]chan struct{}),
+		lockStores:                 lockStores,
+		secretsConfiguration:       secretsConfiguration,
+		sendToOutputBindingFn:      sendToOutputBindingFn,
+		tracingSpec:                tracingSpec,
+		accessControlList:          accessControlList,
+		appProtocol:                appProtocol,
+		shutdown:                   shutdown,
+		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
+		daprRunTimeVersion:         version.Version(),
 	}
 }
 
@@ -357,6 +362,11 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
+		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
+		if errors.Is(err, actors.ErrDaprResponseHeader) {
+			return resp.Proto(), nil
+		}
+
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
 	}
@@ -876,7 +886,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	key, err := state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
 	if err != nil {
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 	req := state.DeleteRequest{
 		Key:      key,
@@ -904,23 +914,23 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*empty.Empty, error) {
+func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
 		key, err1 := state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
 		if err1 != nil {
-			return &empty.Empty{}, err1
+			return &emptypb.Empty{}, err1
 		}
 		req := state.DeleteRequest{
 			Key:      key,
@@ -1427,7 +1437,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		resp, rErr = a.actor.Call(ctx, req)
 		return rErr
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.InvokeActorResponse{}, err
@@ -1467,13 +1477,15 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		temp[key.(string)] = value.(string)
 		return true
 	})
+	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
-
+	componentsCapabilties := a.getComponentsCapabilitesFn()
 	for _, comp := range a.components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
-			Name:    comp.Name,
-			Version: comp.Spec.Version,
-			Type:    comp.Spec.Type,
+			Name:         comp.Name,
+			Version:      comp.Spec.Version,
+			Type:         comp.Spec.Type,
+			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1482,6 +1494,13 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		RegisteredComponents: registeredComponents,
 	}
 	return response, nil
+}
+
+func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+	if val, ok := dict[key]; ok {
+		return val
+	}
+	return make([]string, 0)
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.

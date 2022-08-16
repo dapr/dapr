@@ -46,6 +46,13 @@ jobs:
           src: redis:latest
           dst: |
             ghcr.io/${{ github.repository_owner }}/3rdparty/redis:latest
+      - # copy 3rd party redis v6 image from dockerhub to ghcr
+        name: Push Image (redis) to target registries
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: redis:6
+          dst: |
+            ghcr.io/${{ github.repository_owner }}/3rdparty/redis:6
       - # copy 3rd party rejson image from dockerhub to ghcr
         name: Push Image (rejson) to target registries
         uses: akhilerm/tag-push-action@v2.0.0

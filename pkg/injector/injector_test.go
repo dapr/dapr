@@ -15,6 +15,7 @@ package injector
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -672,4 +673,52 @@ func TestHandleRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAllowedControllersServiceAccountUID(t *testing.T) {
+	client := kubernetesfake.NewSimpleClientset()
+
+	testCases := []struct {
+		name      string
+		namespace string
+	}{
+		{"replicaset-controller", metav1.NamespaceSystem},
+		{"tekton-pipelines-controller", "tekton-pipelines"},
+		{"test", "test"},
+	}
+
+	for _, testCase := range testCases {
+		sa := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      testCase.name,
+				Namespace: testCase.namespace,
+			},
+		}
+		_, err := client.CoreV1().ServiceAccounts(testCase.namespace).Create(context.TODO(), sa, metav1.CreateOptions{})
+		assert.NoError(t, err)
+	}
+
+	t.Run("injector config has no allowed service account", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(uids))
+	})
+
+	t.Run("injector config has a valid allowed service account", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test"}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(uids))
+	})
+
+	t.Run("injector config has a invalid allowed service account", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "abc:abc"}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(uids))
+	})
+
+	t.Run("injector config has multiple allowed service accounts", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(uids))
+	})
 }

@@ -124,6 +124,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
 	"github.com/dapr/components-contrib/bindings/azure/storagequeues"
+	"github.com/dapr/components-contrib/bindings/commercetools"
 	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
@@ -166,11 +167,14 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/dapr/components-contrib/configuration"
+	configuration_azure "github.com/dapr/components-contrib/configuration/azure/appconfig"
 	configuration_redis "github.com/dapr/components-contrib/configuration/redis"
 
 	// Lock.
 	"github.com/dapr/components-contrib/lock"
 	lock_redis "github.com/dapr/components-contrib/lock/redis"
+
+	"github.com/dapr/components-contrib/bindings/alicloud/sls"
 )
 
 var (
@@ -294,6 +298,11 @@ func main() {
 				return configuration_redis.NewRedisConfigurationStore(logContrib)
 			}),
 		),
+		runtime.WithConfigurations(
+			configuration_loader.New("azure.appconfig", func() configuration.Store {
+				return configuration_azure.NewAzureAppConfigurationStore(logContrib)
+			}),
+		),
 		runtime.WithLocks(
 			lock_loader.New("redis", func() lock.Store {
 				return lock_redis.NewStandaloneRedisLock(logContrib)
@@ -414,6 +423,9 @@ func main() {
 			bindings_loader.NewOutput("alicloud.tablestore", func() bindings.OutputBinding {
 				return tablestore.NewAliCloudTableStore(log)
 			}),
+			bindings_loader.NewOutput("alicloud.sls", func() bindings.OutputBinding {
+				return sls.NewAliCloudSlsLogstorage(logContrib)
+			}),
 			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
 				return apns.NewAPNS(logContrib)
 			}),
@@ -521,6 +533,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("huawei.obs", func() bindings.OutputBinding {
 				return obs.NewHuaweiOBS(logContrib)
+			}),
+			bindings_loader.NewOutput("commercetools", func() bindings.OutputBinding {
+				return commercetools.NewCommercetools(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

@@ -80,18 +80,18 @@ func NewAPIServer(client client.Client) Server {
 
 // Run starts a new gRPC server.
 func (a *apiServer) Run(ctx context.Context, certChain *dapr_credentials.CertChain, onReady func()) {
-	log.Info("starting gRPC server on port %d", serverPort)
+	log.Infof("starting gRPC server on port %d", serverPort)
 
 	opts, err := dapr_credentials.GetServerOptions(certChain)
 	if err != nil {
-		log.Fatal("error creating gRPC options: %v", err)
+		log.Fatalf("error creating gRPC options: %v", err)
 	}
 	s := grpc.NewServer(opts...)
 	operatorv1pb.RegisterOperatorServer(s, a)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
 	if err != nil {
-		log.Fatal("error starting tcp listener: %v", err)
+		log.Fatalf("error starting tcp listener: %v", err)
 	}
 
 	if onReady != nil {
@@ -283,7 +283,7 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 	for _, item := range resiliencies.Items {
 		b, err := json.Marshal(item)
 		if err != nil {
-			log.Warnf("Error unmarshalling resilienc: %s", err)
+			log.Warnf("Error unmarshalling resiliency: %s", err)
 			continue
 		}
 		resp.Resiliencies = append(resp.Resiliencies, b)

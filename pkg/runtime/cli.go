@@ -53,6 +53,7 @@ func FromFlags() (*DaprRuntime, error) {
 	profilePort := flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
+	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
@@ -82,6 +83,10 @@ func FromFlags() (*DaprRuntime, error) {
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
+
+	if *resourcesPath != "" {
+		componentsPath = resourcesPath
+	}
 
 	if *runtimeVersion {
 		fmt.Println(version.Version())
@@ -209,8 +214,10 @@ func FromFlags() (*DaprRuntime, error) {
 	if len(daprAPIListenAddressList) == 0 {
 		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
 	}
-	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList, publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize, *unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration, *enableAPILogging, *disableBuiltinK8sSecretStore)
+	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins,
+		*config, *componentsPath, appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList,
+		publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize,
+		*unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration, *enableAPILogging, *disableBuiltinK8sSecretStore)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
@@ -295,6 +302,7 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
 		resiliencyProvider = resiliency_config.FromConfigurations(log, resiliencyConfigs...)
+		log.Info("Resiliency configuration loaded.")
 	} else {
 		log.Debug("Resiliency is not enabled.")
 		resiliencyProvider = &resiliency_config.NoOp{}

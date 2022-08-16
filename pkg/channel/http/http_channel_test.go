@@ -138,18 +138,23 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			lock:     sync.Mutex{},
 		}
 		server := httptest.NewServer(&handler)
-		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
-		c.ch = make(chan int, 1)
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			ch:          make(chan struct{}, 1),
+		}
 
 		// act
 		var wg sync.WaitGroup
 		wg.Add(5)
 		for i := 0; i < 5; i++ {
 			go func() {
-				request2 := invokev1.NewInvokeMethodRequest("method")
-				request2.WithRawData(nil, "")
-
-				c.InvokeMethod(ctx, request2)
+				req := invokev1.
+					NewInvokeMethodRequest("method").
+					WithHTTPExtension("GET", "").
+					WithRawData(nil, "")
+				_, err := c.InvokeMethod(ctx, req)
+				assert.NoError(t, err)
 				wg.Done()
 			}()
 		}
@@ -166,21 +171,62 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			lock:     sync.Mutex{},
 		}
 		server := httptest.NewServer(&handler)
-		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
-		c.ch = make(chan int, 1)
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			ch:          make(chan struct{}, 1),
+		}
 
 		// act
 		var wg sync.WaitGroup
 		wg.Add(20)
 		for i := 0; i < 20; i++ {
 			go func() {
-				request2 := invokev1.NewInvokeMethodRequest("method")
-				request2.WithRawData(nil, "")
-				c.InvokeMethod(ctx, request2)
+				req := invokev1.
+					NewInvokeMethodRequest("method").
+					WithHTTPExtension("GET", "").
+					WithRawData(nil, "")
+				_, err := c.InvokeMethod(ctx, req)
+				assert.NoError(t, err)
 				wg.Done()
 			}()
 		}
 		wg.Wait()
+
+		// assert
+		assert.False(t, handler.testFailed)
+		server.Close()
+	})
+
+	t.Run("introduce failures", func(t *testing.T) {
+		handler := testConcurrencyHandler{
+			maxCalls: 5,
+			lock:     sync.Mutex{},
+		}
+		server := httptest.NewServer(&handler)
+		c := Channel{
+			// False address to make first calls fail
+			baseAddress: "http://0.0.0.0:0",
+			client:      &fasthttp.Client{},
+			ch:          make(chan struct{}, 1),
+		}
+
+		// act
+		for i := 0; i < 20; i++ {
+			if i == 10 {
+				c.baseAddress = server.URL
+			}
+			req := invokev1.
+				NewInvokeMethodRequest("method").
+				WithHTTPExtension("GET", "").
+				WithRawData(nil, "")
+			_, err := c.InvokeMethod(ctx, req)
+			if i < 10 {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		}
 
 		// assert
 		assert.False(t, handler.testFailed)

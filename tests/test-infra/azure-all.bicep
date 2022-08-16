@@ -35,6 +35,12 @@ param diagLogAnalyticsWorkspaceResourceId string = ''
 @description('If set, sends certain diagnostic logs to Azure Storage')
 param diagStorageResourceId string = ''
 
+@description('If enabled, deploy Cosmos DB')
+param enableCosmosDB bool = true
+
+@description('If enabled, deploy Service Bus')
+param enableServiceBus bool = true
+
 // Deploy the Linux cluster in the first location
 resource linuxResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
   name: 'Dapr-E2E-${namePrefix}l'
@@ -52,6 +58,8 @@ module linuxCluster 'azure.bicep' = {
     enableWindows: false
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
     diagStorageResourceId: diagStorageResourceId
+    enableCosmosDB: enableCosmosDB
+    enableServiceBus: enableServiceBus
   }
 }
 
@@ -72,5 +80,7 @@ module windowsCluster 'azure.bicep' = {
     enableWindows: true
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
     diagStorageResourceId: diagStorageResourceId
+    enableCosmosDB: enableCosmosDB
+    enableServiceBus: enableServiceBus
   }
 }

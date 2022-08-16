@@ -28,7 +28,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	"github.com/dapr/dapr/pkg/version"
 
 	contrib_metadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -71,34 +72,37 @@ type API interface {
 }
 
 type api struct {
-	endpoints                []Endpoint
-	publicEndpoints          []Endpoint
-	directMessaging          messaging.DirectMessaging
-	appChannel               channel.AppChannel
-	getComponentsFn          func() []components_v1alpha1.Component
-	resiliency               resiliency.Provider
-	stateStores              map[string]state.Store
-	lockStores               map[string]lock.Store
-	configurationStores      map[string]configuration.Store
-	configurationSubscribe   map[string]chan struct{}
-	transactionalStateStores map[string]state.TransactionalStore
-	secretStores             map[string]secretstores.SecretStore
-	secretsConfiguration     map[string]config.SecretsScope
-	actor                    actors.Actors
-	pubsubAdapter            runtime_pubsub.Adapter
-	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	id                       string
-	extendedMetadata         sync.Map
-	readyStatus              bool
-	outboundReadyStatus      bool
-	tracingSpec              config.TracingSpec
-	shutdown                 func()
+	endpoints                  []Endpoint
+	publicEndpoints            []Endpoint
+	directMessaging            messaging.DirectMessaging
+	appChannel                 channel.AppChannel
+	getComponentsFn            func() []components_v1alpha1.Component
+	resiliency                 resiliency.Provider
+	stateStores                map[string]state.Store
+	lockStores                 map[string]lock.Store
+	configurationStores        map[string]configuration.Store
+	configurationSubscribe     map[string]chan struct{}
+	transactionalStateStores   map[string]state.TransactionalStore
+	secretStores               map[string]secretstores.SecretStore
+	secretsConfiguration       map[string]config.SecretsScope
+	actor                      actors.Actors
+	pubsubAdapter              runtime_pubsub.Adapter
+	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	id                         string
+	extendedMetadata           sync.Map
+	readyStatus                bool
+	outboundReadyStatus        bool
+	tracingSpec                config.TracingSpec
+	shutdown                   func()
+	getComponentsCapabilitesFn func() map[string][]string
+	daprRunTimeVersion         string
 }
 
 type registeredComponent struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Version string `json:"version"`
+	Name         string   `json:"name"`
+	Type         string   `json:"type"`
+	Version      string   `json:"version"`
+	Capabilities []string `json:"capabilities"`
 }
 
 type metadata struct {
@@ -129,6 +133,7 @@ const (
 	traceparentHeader        = "traceparent"
 	tracestateHeader         = "tracestate"
 	daprAppID                = "dapr-app-id"
+	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
 // NewAPI returns a new API.
@@ -148,6 +153,7 @@ func NewAPI(
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
 	shutdown func(),
+	getComponentsCapabilitiesFn func() map[string][]string,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -156,23 +162,25 @@ func NewAPI(
 		}
 	}
 	api := &api{
-		appChannel:               appChannel,
-		getComponentsFn:          getComponentsFn,
-		resiliency:               resiliency,
-		directMessaging:          directMessaging,
-		stateStores:              stateStores,
-		lockStores:               lockStores,
-		transactionalStateStores: transactionalStateStores,
-		secretStores:             secretStores,
-		secretsConfiguration:     secretsConfiguration,
-		configurationStores:      configurationStores,
-		configurationSubscribe:   make(map[string]chan struct{}),
-		actor:                    actor,
-		pubsubAdapter:            pubsubAdapter,
-		sendToOutputBindingFn:    sendToOutputBindingFn,
-		id:                       appID,
-		tracingSpec:              tracingSpec,
-		shutdown:                 shutdown,
+		appChannel:                 appChannel,
+		getComponentsFn:            getComponentsFn,
+		resiliency:                 resiliency,
+		directMessaging:            directMessaging,
+		stateStores:                stateStores,
+		lockStores:                 lockStores,
+		transactionalStateStores:   transactionalStateStores,
+		secretStores:               secretStores,
+		secretsConfiguration:       secretsConfiguration,
+		configurationStores:        configurationStores,
+		configurationSubscribe:     make(map[string]chan struct{}),
+		actor:                      actor,
+		pubsubAdapter:              pubsubAdapter,
+		sendToOutputBindingFn:      sendToOutputBindingFn,
+		id:                         appID,
+		tracingSpec:                tracingSpec,
+		shutdown:                   shutdown,
+		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
+		daprRunTimeVersion:         version.Version(),
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -428,8 +436,8 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 			Handler: a.onSubscribeConfiguration,
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "configuration/{configurationSubscribeID}/unsubscribe",
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
 			Version: apiVersionV1alpha1,
 			Handler: a.onUnsubscribeConfiguration,
 		},
@@ -481,10 +489,10 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 			req.Metadata = map[string]string{}
 		}
 		// if sc is not empty context, set traceparent Header.
-		if sc != (trace.SpanContext{}) {
+		if !sc.Equal(trace.SpanContext{}) {
 			req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
 		}
-		if sc.Tracestate != nil {
+		if sc.TraceState().Len() == 0 {
 			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
 		}
 	}
@@ -982,7 +990,7 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	subscribeID := string(reqCtx.QueryArgs().Peek(configurationSubscribeID))
+	subscribeID := reqCtx.UserValue(configurationSubscribeID).(string)
 
 	req := configuration.UnsubscribeRequest{
 		ID: subscribeID,
@@ -995,7 +1003,14 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	elapsed := diag.ElapsedSince(start)
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
 
-	respond(reqCtx, withJSON(fasthttp.StatusOK, nil))
+	if err != nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_UNSUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	respond(reqCtx, withEmpty())
 }
 
 func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
@@ -1735,7 +1750,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		resp, rErr = a.actor.Call(ctx, req)
 		return rErr
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -1803,24 +1818,24 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = key.(string)
+		temp[key.(string)] = value.(string)
 
 		return true
 	})
-
+	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	activeActorsCount := []actors.ActiveActorsCount{}
 	if a.actor != nil {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
-
+	componentsCapabilties := a.getComponentsCapabilitesFn()
 	components := a.getComponentsFn()
 	registeredComponents := make([]registeredComponent, 0, len(components))
-
 	for _, comp := range components {
 		registeredComp := registeredComponent{
-			Name:    comp.Name,
-			Version: comp.Spec.Version,
-			Type:    comp.Spec.Type,
+			Name:         comp.Name,
+			Version:      comp.Spec.Version,
+			Type:         comp.Spec.Type,
+			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1840,6 +1855,13 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respond(reqCtx, withJSON(fasthttp.StatusOK, mtdBytes))
 	}
+}
+
+func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+	if val, ok := dict[key]; ok {
+		return val
+	}
+	return make([]string, 0)
 }
 
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {

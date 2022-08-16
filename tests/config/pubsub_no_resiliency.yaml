@@ -1,0 +1,25 @@
+apiVersion: dapr.io/v1alpha1
+kind: Resiliency
+metadata:
+  name: pubsubnoresiliency
+spec:
+
+  policies:
+
+    retries:
+      twoRetries:
+        policy: constant
+        maxRetries: 2
+      noRetries:
+        policy: constant
+        maxRetries: 0
+
+  targets:
+  
+    components:
+
+      messagebus:
+        inbound:
+          retry: noRetries
+        outbound:
+          retry: noRetries
