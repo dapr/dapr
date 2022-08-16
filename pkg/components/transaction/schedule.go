@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	transactionComponent "github.com/dapr/components-contrib/transaction"
+	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	fasthttp "github.com/valyala/fasthttp"
@@ -39,13 +40,12 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, di
 	fmt.Printf("disrtibute transaction schema is %s", schema)
 
 	for bunchTransactionId, bunchTransaction := range bunchTransactions {
-		//state, _ := bunchTransaction[bunchTransactionStateParam].(int)
 		state := bunchTransaction.StatusCode
 		// pointer of the origin request param
 		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
 		if state != stateForConfirmSuccess {
 			// try to confirm a bunch transaction
-			responseStatusCode := Confirm(bunchTransactionReqsParam, schema, retryTimes)
+			responseStatusCode := Confirm(directMessaging, bunchTransactionReqsParam, schema, retryTimes)
 
 			if responseStatusCode != 200 {
 				return fmt.Errorf("transaction")
@@ -62,46 +62,93 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, di
 
 }
 
-func Confirm(bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
+func Confirm(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
 	fmt.Print(bunchTransactionReqsParam)
 	responseStatusCode := 0
 	switch schema {
 	case "tcc":
-		responseStatusCode = ConfirmTcc(bunchTransactionReqsParam, retryTimes)
+		responseStatusCode = ConfirmTcc(directMessaging, bunchTransactionReqsParam, retryTimes)
 	}
 	return responseStatusCode
 }
 
-func ConfirmTcc(bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, retryTimes int) int {
-	responseStatusCode := 200
+func ConfirmTcc(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, retryTimes int) int {
+	responseStatusCode := 0
+	if bunchTransactionReqsParam.Type == "service-invoke" {
+		responseStatusCode, err := RequestServiceInovde(directMessaging, bunchTransactionReqsParam, "Confirm", retryTimes)
+
+		if err != nil {
+			fmt.Print(err)
+		}
+		return responseStatusCode
+	} else if bunchTransactionReqsParam.Type == "actor" {
+		//responseStatusCode, err := RequestActor(directMessaging, bunchTransactionReqsParam, "Confirm")
+	}
+
 	return responseStatusCode
 }
 
-func RequestServiceInovde(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, action string) (int, error) {
+func RequestServiceInovde(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, action string, retryTimes int) (int, error) {
 	req := invokev1.NewInvokeMethodRequest(bunchTransactionReqsParam.InvokeMethodName+action).WithHTTPExtension(bunchTransactionReqsParam.Verb, bunchTransactionReqsParam.QueryArgs)
 
-	resp, err := directMessaging.Invoke(context.Background(), bunchTransactionReqsParam.TargetID, req)
+	req.WithRawData(bunchTransactionReqsParam.Data, bunchTransactionReqsParam.ContentType)
+	// Save headers to internal metadata
+	req.WithFastHTTPHeaders(bunchTransactionReqsParam.Header)
 
-	if err != nil {
-		return 0, err
-	}
+	ctx := context.Background()
+	i := 1
+	for i <= retryTimes {
+		resp, err := directMessaging.Invoke(ctx, bunchTransactionReqsParam.TargetID, req)
 
-	// Construct response
-	statusCode := int(resp.Status().Code)
-	if !resp.IsHTTPResponse() {
-		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
-		if statusCode != fasthttp.StatusOK {
-			if _, err := invokev1.ProtobufToJSON(resp.Status()); err != nil {
-				statusCode = fasthttp.StatusInternalServerError
-				return 0, err
+		if err != nil {
+			return 0, err
+		}
+		// Construct response
+		statusCode := int(resp.Status().Code)
+		if !resp.IsHTTPResponse() {
+			statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
+			if statusCode != fasthttp.StatusOK {
+				continue
 			}
 		}
-	} else if statusCode != fasthttp.StatusOK {
-		return 0, fmt.Errorf("Received non-successful status code: %d", statusCode)
+
+		if statusCode == fasthttp.StatusOK {
+			return statusCode, nil
+		} else {
+			continue
+		}
+
+		i++
 	}
-	return statusCode, nil
+	return 0, nil
 }
 
-func RequestActor(bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam) {
+func RequestActor(actor actors.Actors, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, action string, retryTimes int) (int, error) {
 
+	req := invokev1.NewInvokeMethodRequest(bunchTransactionReqsParam.InvokeMethodName + action)
+	req.WithActor(bunchTransactionReqsParam.ActorType, bunchTransactionReqsParam.ActorID)
+	req.WithHTTPExtension(bunchTransactionReqsParam.Verb, bunchTransactionReqsParam.QueryArgs)
+	req.WithRawData(bunchTransactionReqsParam.Data, bunchTransactionReqsParam.ContentType)
+
+	ctx := context.Background()
+	i := 1
+	for i <= retryTimes {
+		resp, err := actor.Call(ctx, req)
+		if err != nil {
+			return 0, err
+		}
+		statusCode := int(resp.Status().Code)
+
+		if !resp.IsHTTPResponse() {
+			statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
+		}
+		if statusCode == fasthttp.StatusOK {
+			return statusCode, nil
+		} else {
+			continue
+		}
+		i++
+	}
+
+	return 200, nil
 }
