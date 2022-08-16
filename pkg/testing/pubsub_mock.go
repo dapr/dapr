@@ -85,7 +85,7 @@ type InMemoryPubsub struct {
 	subscribedTopics map[string]subscription
 	topicsCb         func([]string)
 	handler          func(topic string, msg *pubsub.NewMessage)
-	lock             sync.Mutex
+	lock             *sync.Mutex
 }
 
 type subscription struct {
@@ -95,7 +95,7 @@ type subscription struct {
 
 // Init is a mock initialization method.
 func (m *InMemoryPubsub) Init(metadata pubsub.Metadata) error {
-	m.lock = sync.Mutex{}
+	m.lock = &sync.Mutex{}
 	args := m.Called(metadata)
 	return args.Error(0)
 }
@@ -126,13 +126,14 @@ func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
 func (m *InMemoryPubsub) Subscribe(parentCtx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	ctx, cancel := context.WithCancel(parentCtx)
 
+	ch := make(chan *pubsub.NewMessage, 10)
 	m.lock.Lock()
 	if m.subscribedTopics == nil {
 		m.subscribedTopics = map[string]subscription{}
 	}
 	m.subscribedTopics[req.Topic] = subscription{
 		cancel: cancel,
-		send:   make(chan *pubsub.NewMessage, 10),
+		send:   ch,
 	}
 	m.onSubscribedTopicsChanged()
 	m.lock.Unlock()
@@ -140,17 +141,17 @@ func (m *InMemoryPubsub) Subscribe(parentCtx context.Context, req pubsub.Subscri
 	go func() {
 		for {
 			select {
-			case msg := <-m.subscribedTopics[req.Topic].send:
+			case msg := <-ch:
 				if m.handler != nil && msg != nil {
 					go m.handler(req.Topic, msg)
 				}
 			case <-ctx.Done():
+				close(ch)
 				m.lock.Lock()
-				close(m.subscribedTopics[req.Topic].send)
 				delete(m.subscribedTopics, req.Topic)
 				m.onSubscribedTopicsChanged()
-				m.MethodCalled("unsubscribed", req.Topic)
 				m.lock.Unlock()
+				m.MethodCalled("unsubscribed", req.Topic)
 				return
 			}
 		}
