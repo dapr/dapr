@@ -30,6 +30,9 @@ func TestAppHealth_setResult(t *testing.T) {
 		Threshold: threshold,
 	}, nil)
 
+	// Set the initial state to healthy
+	h.setResult(true)
+
 	statusChange := make(chan uint8, 1)
 	unexpectedStatusChanges := atomic.NewUint32(0)
 	h.OnHealthChange(func(status uint8) {
