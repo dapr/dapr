@@ -104,6 +104,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.DaprVolumeMounts != "" {
 		annotationObject["dapr.io/volume-mounts"] = appDesc.DaprVolumeMounts
 	}
+	if appDesc.DaprEnv != "" {
+		annotationObject["dapr.io/env"] = appDesc.DaprEnv
+	}
 
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
@@ -162,7 +165,8 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 							ContainerPort: DefaultContainerPort,
 						},
 					},
-					Env: appEnv,
+					Env:          appEnv,
+					VolumeMounts: appDesc.AppVolumeMounts,
 				},
 			},
 			Affinity: &apiv1.Affinity{
