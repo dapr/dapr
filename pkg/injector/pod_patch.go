@@ -782,7 +782,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		c.Command = cmd
 		c.Args = args
 	} else {
-		c.Args = append(cmd, args...)
+		c.Args = cmd
+		c.Args = append(c.Args, args...)
 	}
 
 	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
