@@ -496,6 +496,40 @@ func TestGetSideCarContainer(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("sidecar container should specify commands only when deployed on ACI virtual-kubelet", func(t *testing.T) {
+		testCases := []struct {
+			tolerations         []corev1.Toleration
+			isACIVirtualKubelet bool
+		}{
+			{
+				[]corev1.Toleration{},
+				false,
+			},
+			{
+				[]corev1.Toleration{
+					{
+						Key:    "azure.com/aci",
+						Effect: "NoSchedule",
+					},
+				},
+				true,
+			},
+		}
+		for _, tc := range testCases {
+			container, _ := getSidecarContainer(map[string]string{}, "app_id", "darpio/dapr", "Always", "dapr-system",
+				"controlplane:9000", "placement:50000", nil, nil, nil, "", "", "",
+				"sentry:50000", true, "pod_identity", tc.tolerations)
+
+			if tc.isACIVirtualKubelet {
+				assert.True(t, len(container.Command) > 0, "Must contain a command")
+				assert.True(t, len(container.Args) > 0, "Must contain arguments")
+			} else {
+				assert.Len(t, container.Command, 0, "Must not contain a command")
+				assert.True(t, len(container.Args) > 0, "Must contain arguments")
+			}
+		}
+	})
 }
 
 func TestImagePullPolicy(t *testing.T) {
