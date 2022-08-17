@@ -1386,6 +1386,35 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	////////////////////////transaction///////////////////
+	hasDistributeTransaction := false
+	var transactionHeader transaction_loader.TransactionRequestHeader
+	var transactionTryRequestParam transaction.TransactionTryRequestParam
+	if len(reqCtx.Request.Header.Peek("distribute-transaction-id")) > 0 &&
+		len(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id")) > 0 &&
+		len(reqCtx.Request.Header.Peek("distribute-transaction-store")) > 0 {
+		// service invoke with distribute transaction
+		hasDistributeTransaction = true
+
+		transactionHeader.TransactionId = string(reqCtx.Request.Header.Peek("distribute-transaction-id"))
+		transactionHeader.BunchTransactionId = string(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id"))
+		transactionHeader.TransactionStoreName = string(reqCtx.Request.Header.Peek("distribute-transaction-store"))
+
+		transactionTryRequestParam = transaction.TransactionTryRequestParam{
+			Type:             "tcc",
+			TargetID:         targetID,
+			InvokeMethodName: invokeMethodName,
+			Verb:             verb,
+			QueryArgs:        reqCtx.QueryArgs().String(),
+			Data:             reqCtx.Request.Body(),
+			ContentType:      string(reqCtx.Request.Header.ContentType()),
+			Header:           &reqCtx.Request.Header,
+		}
+		log.Debug("transactionHeader : ", transactionHeader)
+		log.Debug("transactionTryRequestParam : ", transactionTryRequestParam)
+	}
+	/////////////////////////////////////////////////////
+
 	// Construct internal invoke method request
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, reqCtx.QueryArgs().String())
 	req.WithRawData(reqCtx.Request.Body(), string(reqCtx.Request.Header.ContentType()))
@@ -1411,6 +1440,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 				statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
 			msg = NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr))
+
 			return rErr
 		}
 
@@ -1435,8 +1465,18 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		} else if statusCode != fasthttp.StatusOK {
 			return errors.Errorf("Received non-successful status code: %d", statusCode)
 		}
+
+		if hasDistributeTransaction {
+			log.Debug("strat a try operation in service invoke")
+			a.distributeTransactionTry(transactionHeader, statusCode, transactionTryRequestParam)
+		}
 		return nil
 	})
+
+	if hasDistributeTransaction {
+		log.Debug("strat a try operation in service invoke")
+		a.distributeTransactionTry(transactionHeader, statusCode, transactionTryRequestParam)
+	}
 
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
@@ -1448,6 +1488,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		respond(reqCtx, withError(statusCode, msg))
 		return
 	}
+
 	respond(reqCtx, with(statusCode, body))
 }
 
@@ -2325,13 +2366,15 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 			Handler: a.onDistributeTransactionGetState,
 		},
 
-		//// test func
-		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "transaction/{transactionStoreName}/try",
-			Version: apiVersionV1,
-			Handler: a.onDistributeTransactionTry,
-		},
+		//// test
+		/*
+			{
+				Methods: []string{fasthttp.MethodPost},
+				Route:   "transaction/{transactionStoreName}/try",
+				Version: apiVersionV1,
+				Handler: a.onDistributeTransactionTry,
+			},
+		*/
 	}
 }
 
@@ -2420,13 +2463,12 @@ func (a *api) onDistributeTransactionRollback(reqCtx *fasthttp.RequestCtx) {
 }
 
 // record each bunch transaciton request state
-/*
-func (a *api) distributeTransactionTry(transactionStoreName string, transactionId string, bunchTransactionId string, statusCode int, tryRequest transaction.TransactionTryRequestParam) error {
-	if a.transactions[transactionStoreName] == nil {
-		//msg := NewErrorResponse("ERR_TRANSACTION_NOT_FOUND", fmt.Sprintf(messages.ErrTransactionNotFound, transactionStoreName))
-		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionNotFound, transactionStoreName))
+func (a *api) distributeTransactionTry(transactionHeader transaction_loader.TransactionRequestHeader, statusCode int, tryRequest transaction.TransactionTryRequestParam) error {
+	transactionInstance := a.transactions[transactionHeader.TransactionStoreName]
+	if transactionInstance == nil {
+		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
 	}
-	transactionInstance := a.transactions[transactionStoreName]
+
 	var requestStatusOK int
 	if statusCode == fasthttp.StatusOK {
 		// try ok
@@ -2435,16 +2477,22 @@ func (a *api) distributeTransactionTry(transactionStoreName string, transactionI
 		requestStatusOK = 0
 	}
 
-	err := transactionInstance.Try(transactionId, bunchTransactionId, requestStatusOK, tryRequest)
+	err := transactionInstance.Try(transaction.BunchTransactionTryRequest{
+		TransactionId:      transactionHeader.TransactionId,
+		BunchTransactionId: transactionHeader.BunchTransactionId,
+		StatusCode:         requestStatusOK,
+		TryRequestParam:    &tryRequest,
+	})
+
 	if err != nil {
-		//msg := NewErrorResponse("ERR_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionFailed, err.Error()))
-		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionFailed, err.Error()))
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_TRY", fmt.Sprintf(messages.ErrTransactionRgist, err))
+		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionFailed, msg))
 	}
 	return nil
 }
-*/
 
 // test func
+/*
 func (a *api) onDistributeTransactionTry(reqCtx *fasthttp.RequestCtx) {
 	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
 	if err != nil {
@@ -2465,7 +2513,7 @@ func (a *api) onDistributeTransactionTry(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	respond(reqCtx, withEmpty())
-}
+}*/
 
 func (a *api) onDistributeTransactionGetState(reqCtx *fasthttp.RequestCtx) {
 	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)

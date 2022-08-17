@@ -43,7 +43,7 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, di
 		state := bunchTransaction.StatusCode
 		// pointer of the origin request param
 		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
-		if state != stateForConfirmSuccess {
+		if state == stateForTrySuccess {
 			// try to confirm a bunch transaction
 			responseStatusCode := Confirm(directMessaging, bunchTransactionReqsParam, schema, retryTimes)
 
