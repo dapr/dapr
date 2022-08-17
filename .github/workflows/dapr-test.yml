@@ -22,6 +22,9 @@
 name: dapr-test
 
 on:
+  # Run every 2 hours
+  schedule:
+    - cron: '0 */2 * * *'
   # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
@@ -409,7 +412,13 @@ jobs:
           SERVICE_CIDR=$(echo '{"apiVersion":"v1","kind":"Service","metadata":{"name":"tst"},"spec":{"clusterIP":"1.1.1.1","ports":[{"port":443}]}}' | kubectl apply -f - 2>&1 | sed 's/.*valid IPs is //')
           POD_CIDR=${POD_CIDR} SERVICE_CIDR=${SERVICE_CIDR} make setup-tailscale
           # Wait for tailscale pod to be ready
-          for i in 1 2 3 4 5; do echo "waiting for tailscale pod" && kubectl logs -l app=tailscale -n ${{ env.DAPR_NAMESPACE }} && kubectl get pods -l app=tailscale -n ${{ env.DAPR_NAMESPACE }} -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' == "True" && break || sleep 10; done
+          for i in 1 2 3 4 5; do
+            echo "waiting for tailscale pod" && kubectl logs -l app=tailscale -n ${{ env.DAPR_NAMESPACE }} && [[ $(kubectl get pods -l app=tailscale -n ${{ env.DAPR_NAMESPACE }} -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') == "True" ]] && break || sleep 10
+          done
+          if [[ $(kubectl get pods -l app=tailscale -n ${{ env.DAPR_NAMESPACE }} -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; then
+            echo "tailscale pod couldn't be ready"
+            exit 1
+          fi
           echo "tailscale pod is now ready"
           sleep 5
           kubectl logs -l app=tailscale -n ${{ env.DAPR_NAMESPACE }}
