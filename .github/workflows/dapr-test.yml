@@ -443,7 +443,7 @@ jobs:
         run: kubectl get configurations daprsystem -n ${{ env.DAPR_NAMESPACE }} -o yaml
 
   test-e2e:
-    name: End-to-end ${{ matrix.target_os }} - ${{ strategy.job-index }} tests
+    name: End-to-end ${{ matrix.target_os }} tests - ${{ strategy.job-index }}
     needs:
       - prepare_e2e
       - provide_test_suites
@@ -462,14 +462,19 @@ jobs:
         #test_ctx: ${{ fromJson(needs.prepare_e2e.outputs.test_context) }}
         test_suite: ${{ fromJson(needs.provide_test_suites.outputs.test_suites) }}
     steps:
-      - name: Generate suite hash
+      - name: Output selected tests
         run: |
-          SUITE_HASH=$(echo ${{ matrix.test_suite}} | sha1sum | head -c 10)
+          CURRENT_JOB=${{ strategy.job-index }}
+          TOTAL_TESTS=${{ env.E2E_TEST_SUITE_COUNT }}
+          TEST_SUITE_NUMBER=$(expr $CURRENT_JOB % $TOTAL_TESTS)
+          echo "TEST_SUITE_NUMBER=suite_${TEST_SUITE_NUMBER}" >> $GITHUB_ENV
+          echo "Suite: $TEST_SUITE_NUMBER"
+          echo "${{ matrix.test_suite }}"
         shell: bash
       - name: Set up log paths
         run: |
-          echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ strategy.job-index }}" | sed 's/\\/\//g' >> $GITHUB_ENV
-          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ strategy.job-index }}" | sed 's/\\/\//g' >> $GITHUB_ENV
+          echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ env.TEST_SUITE_NUMBER }}" | sed 's/\\/\//g' >> $GITHUB_ENV
+          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ env.TEST_SUITE_NUMBER }}" | sed 's/\\/\//g' >> $GITHUB_ENV
         shell: bash
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -577,26 +582,26 @@ jobs:
         if: always()
         uses: actions/upload-artifact@master
         with:
-          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ strategy.job-index }}_tcpdump
+          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ env.TEST_SUITE_NUMBER }}_tcpdump
           path: sntp.cap.gz
       - name: Upload container logs
         if: always()
         uses: actions/upload-artifact@master
         with:
-          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ strategy.job-index }}_container_logs
+          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ env.TEST_SUITE_NUMBER }}_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
       - name: Upload test logs
         if: always()
         uses: actions/upload-artifact@master
         with:
-          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ strategy.job-index }}_test_logs
+          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ env.TEST_SUITE_NUMBER }}_test_logs
           path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@master
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
-          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ strategy.job-index }}_e2e.json
+          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ env.TEST_SUITE_NUMBER }}_e2e.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_PREFIX != ''
