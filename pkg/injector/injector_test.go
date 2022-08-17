@@ -230,7 +230,7 @@ func TestGetContainer(t *testing.T) {
 	annotations[daprConfigKey] = "config"
 	annotations[daprAppPortKey] = appPort
 
-	c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
+	c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "", nil)
 
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
@@ -245,7 +245,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprCPULimitKey] = "100m"
 		annotations[daprMemoryLimitKey] = "1Gi"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "", nil)
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Limits.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Limits.Memory().String())
@@ -259,7 +259,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprCPURequestKey] = "100m"
 		annotations[daprMemoryRequestKey] = "1Gi"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "", nil)
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Requests.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Requests.Memory().String())
@@ -271,7 +271,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprAppPortKey] = appPort
 		annotations[daprLogAsJSON] = "true"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "", nil)
 		assert.NotNil(t, c)
 		assert.Len(t, c.Resources.Limits, 0)
 	})
@@ -405,7 +405,7 @@ func TestAppSSL(t *testing.T) {
 		annotations := map[string]string{
 			daprAppSSLKey: "true",
 		}
-		c, _ := getSidecarContainer(annotations, "app", "image", "", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "", nil)
 		found := false
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
@@ -420,7 +420,7 @@ func TestAppSSL(t *testing.T) {
 		annotations := map[string]string{
 			daprAppSSLKey: "false",
 		}
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "", nil)
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
 				t.FailNow()
@@ -430,7 +430,7 @@ func TestAppSSL(t *testing.T) {
 
 	t.Run("get sidecar container not specified", func(t *testing.T) {
 		annotations := map[string]string{}
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "", nil)
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
 				t.FailNow()
@@ -447,7 +447,7 @@ func TestSidecarContainerVolumeMounts(t *testing.T) {
 			{Name: "bar", MountPath: "/bar"},
 		}
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, volumeMounts, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, volumeMounts, "", "", "", "", false, "", nil)
 		assert.Equal(t, 2, len(c.VolumeMounts))
 		assert.Equal(t, volumeMounts[0], c.VolumeMounts[0])
 		assert.Equal(t, volumeMounts[1], c.VolumeMounts[1])
@@ -468,7 +468,7 @@ func TestSidecarContainerVolumeMounts(t *testing.T) {
 			{Name: "bar", MountPath: "/bar"},
 		}
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", &socketVolumeMount, &tokenVolumeMount, volumeMounts, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", &socketVolumeMount, &tokenVolumeMount, volumeMounts, "", "", "", "", false, "", nil)
 		assert.Equal(t, 4, len(c.VolumeMounts))
 		assert.Equal(t, socketVolumeMount, c.VolumeMounts[0])
 		assert.Equal(t, tokenVolumeMount, c.VolumeMounts[1])
