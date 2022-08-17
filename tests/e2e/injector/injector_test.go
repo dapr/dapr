@@ -54,7 +54,14 @@ func TestMain(m *testing.M) {
 			Name:     "local-secret-store",
 			TypeName: "secretstores.local.file",
 			MetaData: map[string]string{
-				"secretsFile": `"/tmp/secrets/secrets.json"`,
+				"secretsFile": `"/tmp/testdata/secrets.json"`,
+			},
+		},
+		{
+			Name:     "secured-binding",
+			TypeName: "bindings.http",
+			MetaData: map[string]string{
+				"url": `"https://localhost:3001"`,
 			},
 		},
 	}
@@ -71,13 +78,21 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
 			AppMemoryRequest:  "100Mi",
-			DaprVolumeMounts:  "storage-volume:/tmp/secrets/",
+			DaprVolumeMounts:  "storage-volume:/tmp/testdata/",
+			DaprEnv:           "SSL_CERT_DIR=/tmp/testdata/certs",
 			Volumes: []apiv1.Volume{
 				{
 					Name: "storage-volume",
 					VolumeSource: apiv1.VolumeSource{
 						EmptyDir: &apiv1.EmptyDirVolumeSource{},
 					},
+				},
+			},
+			AppVolumeMounts: []apiv1.VolumeMount{
+				{
+					Name:      "storage-volume",
+					MountPath: "/tmp/testdata/",
+					ReadOnly:  true,
 				},
 			},
 			InitContainers: []apiv1.Container{
@@ -88,7 +103,7 @@ func TestMain(m *testing.M) {
 					VolumeMounts: []apiv1.VolumeMount{
 						{
 							Name:      "storage-volume",
-							MountPath: "/tmp/storage",
+							MountPath: "/tmp/testdata",
 						},
 					},
 				},
@@ -126,20 +141,33 @@ func TestDaprVolumeMount(t *testing.T) {
 	require.Equal(t, "secret-value", appResp.Message)
 }
 
+func TestDaprSslCertInstallation(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// setup
+	url := fmt.Sprintf("%s/tests/testBinding", externalURL)
+
+	// act
+	_, statusCode, err := utils.HTTPPostWithStatus(url, []byte{})
+
+	// assert
+	require.NoError(t, err)
+
+	require.Equal(t, 200, statusCode)
+}
+
 func imageRegistry() string {
 	reg := os.Getenv("DAPR_TEST_REGISTRY")
 	if reg == "" {
 		return "docker.io/dapriotest"
 	}
 	return reg
-}
-
-func imageSecret() string {
-	secret := os.Getenv("DAPR_TEST_REGISTRY_SECRET")
-	if secret == "" {
-		return ""
-	}
-	return secret
 }
 
 func imageTag() string {
