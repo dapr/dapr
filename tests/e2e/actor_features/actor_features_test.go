@@ -566,12 +566,13 @@ func TestActorFeatures(t *testing.T) {
 
 		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
 
-		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		// get reminder
+		res, err = httpGet(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get reminder. Error='%v' Response='%s'", err, string(res))
 		}
-		require.NoError(t, err, "failed to reset reminder")
+		require.NoError(t, err, "failed to get reminder")
+		require.True(t, len(res) == 0, "Reminder %s exist", reminderName)
 
 		res, err = httpGet(logsURL)
 		if err != nil {
