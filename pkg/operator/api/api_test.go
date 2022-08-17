@@ -167,15 +167,6 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 }
 
-func TestChanGracefullyClose(t *testing.T) {
-	t.Run("close updateChan", func(t *testing.T) {
-		ch := make(chan *componentsapi.Component)
-		instance := initChanGracefully(ch)
-		instance.Close()
-		assert.Equal(t, true, instance.isClosed)
-	})
-}
-
 func TestComponentUpdate(t *testing.T) {
 	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
 		c := componentsapi.Component{

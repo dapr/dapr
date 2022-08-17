@@ -305,7 +305,6 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		delete(a.allConnUpdateChan, key)
 		a.connLock.Unlock()
 	}()
-	chWrapper := initChanGracefully(updateChan)
 	updateComponentFunc := func(c *componentsapi.Component) {
 		if c.Namespace != in.Namespace {
 			return
@@ -328,7 +327,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		if err != nil {
 			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
 			if status.Code(err) == codes.Unavailable {
-				chWrapper.Close()
+				close(updateChan)
 			}
 			return
 		}
@@ -342,33 +341,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			if !ok {
 				return nil
 			}
-			go updateComponentFunc(c)
+			updateComponentFunc(c)
 		}
 	}
-}
-
-// chanGracefully control channel to close gracefully in multi-goroutines.
-type chanGracefully struct {
-	ch       chan *componentsapi.Component
-	isClosed bool
-	sync.Mutex
-}
-
-func initChanGracefully(ch chan *componentsapi.Component) (
-	c *chanGracefully,
-) {
-	return &chanGracefully{
-		ch:       ch,
-		isClosed: false,
-	}
-}
-
-// Close chan be closed non-reentrantly.
-func (c *chanGracefully) Close() {
-	c.Lock()
-	if !c.isClosed {
-		c.isClosed = true
-		close(c.ch)
-	}
-	c.Unlock()
 }
