@@ -240,19 +240,19 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "workflows/{workflowComponent}{workflowType}/{instanceId}",
+			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceId}",
 			Version: apiVersionV1alpha1,
 			Handler: a.onGetWorkflow,
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
-			Route:   "workflows/{workflowComponent}{workflowType}/{instanceId}",
+			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceId}",
 			Version: apiVersionV1alpha1,
 			Handler: a.onStartWorkflow,
 		},
 		{
 			Methods: []string{fasthttp.MethodDelete},
-			Route:   "workflows/{workflowComponent}{workflowType}/{instanceId}",
+			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceId}",
 			Version: apiVersionV1alpha1,
 			Handler: a.onTerminateWorkflow,
 		},
