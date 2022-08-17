@@ -778,7 +778,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	// For other deployments, the Command is passed as a part of Args.
 	// This allows the Docker images to specify an ENTRYPOINT
 	// which is otherwise overridden by Command.
-	// If the ENTRYPOINT is not specified, the first argument is used as the Command.
 	if isACIVirtualKubelet(tolerations) {
 		c.Command = cmd
 		c.Args = args
