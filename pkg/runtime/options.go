@@ -90,3 +90,47 @@ func WithComponentsCallback(componentsCallback ComponentsCallback) Option {
 		o.componentsCallback = componentsCallback
 	}
 }
+
+// withOpts applies all given options to runtime.
+func withOpts(opts ...Option) Option {
+	return func(runtimeOpts *runtimeOpts) {
+		for _, opt := range opts {
+			opt(runtimeOpts)
+		}
+	}
+}
+
+// pluggableLoaders maps a component type to its pluggable component loader.
+var pluggableLoaders = make(map[components.Type]func(components_v1alpha1.PluggableComponent) Option)
+
+func init() {
+	withLoader(components.State, WithStates)
+	withLoader(components.PubSub, WithPubSubs)
+	withLoader(components.InputBinding, WithInputBindings)
+	withLoader(components.OutputBinding, WithOutputBindings)
+	withLoader(components.HTTPMiddleware, WithHTTPMiddleware)
+	withLoader(components.Configuration, WithConfigurations)
+	withLoader(components.Secret, WithSecretStores)
+	withLoader(components.Lock, WithLocks)
+	withLoader(components.NameResolution, WithNameResolutions)
+}
+
+// withLoader adds (or replace) a new pluggable loader to the loader map.
+func withLoader[T any](componentType components.Type, add func(...T) Option) {
+	pluggableLoaders[componentType] = func(pc components_v1alpha1.PluggableComponent) Option {
+		return add(pluggable.MustLoad[T](pc))
+	}
+}
+
+// WithPluggables parses and adds a new component into the target component list.
+func WithPluggables(pluggables ...components_v1alpha1.PluggableComponent) Option {
+	opts := make([]Option, 0)
+	for _, pluggable := range pluggables {
+		load, ok := pluggableLoaders[components.Type(pluggable.Spec.Type)]
+		// ignoring unknown components
+		if ok {
+			opts = append(opts, load(pluggable))
+		}
+	}
+	return withOpts(opts...)
+}

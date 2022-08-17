@@ -296,10 +296,10 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
 	log.Infof("app id: %s", a.runtimeConfig.ID)
 
+	applyOpts := withOpts(opts...)
+
 	var o runtimeOpts
-	for _, opt := range opts {
-		opt(&o)
-	}
+	applyOpts(&o)
 
 	err := a.initRuntime(&o)
 	if err != nil {
@@ -318,7 +318,7 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 }
 
 func (a *DaprRuntime) getNamespace() string {
-	return os.Getenv("NAMESPACE")
+	return os.Getenv("DAPR_NAMESPACE")
 }
 
 func (a *DaprRuntime) getPodName() string {
