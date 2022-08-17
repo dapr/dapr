@@ -742,7 +742,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 		},
 		Ports: ports,
-		Args:  append(cmd, args...),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "NAMESPACE",
@@ -771,6 +770,20 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprLivenessProbePeriodKey, defaultHealthzProbePeriodSeconds),
 			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprLivenessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
+	}
+
+	// This is a special case for virtual kubelets on ACI.
+	// ACI does not support separate Command and Args,
+	// Ref. https://github.com/virtual-kubelet/azure-aci/issues/10.
+	// For other deployments, the Command is passed as a part of Args.
+	// This allows the Docker images to specify an ENTRYPOINT
+	// which is otherwise overridden by Command.
+	// If the ENTRYPOINT is not specified, the first argument is used as the Command.
+	if isACIVirtualKubelet(tolerations) {
+		c.Command = cmd
+		c.Args = args
+	} else {
+		c.Args = append(cmd, args...)
 	}
 
 	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
@@ -919,4 +932,16 @@ func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
 	}
 
 	return volumeMounts
+}
+
+// isACIVirtualKubelet returns true if the pod is scheduled in ACI.
+// If it is an ACI deployment, the pods have a toleration "azure.com/aci".
+// See https://github.com/virtual-kubelet/azure-aci#schedule-a-pod-in-aci
+func isACIVirtualKubelet(ts []corev1.Toleration) bool {
+	for _, t := range ts {
+		if t.Key == "azure.com/aci" {
+			return true
+		}
+	}
+	return false
 }
