@@ -39,6 +39,7 @@ scopes:
 - actor1
 - actor2
 - actorapp
+- actorpubsub
 - actorfeatures
 - reentrantactor
 - actorreminder

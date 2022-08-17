@@ -1,0 +1,45 @@
+# In e2e test, this will not be used to deploy the app to test cluster.
+# This is created for testing purpose in order to deploy this app using kubectl
+# before writing e2e test.
+kind: Service
+apiVersion: v1
+metadata:
+  name: actorpubsub
+  labels:
+    testapp: actorpubsub
+spec:
+  selector:
+    testapp: actorpubsub
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: actorpubsub
+  labels: 
+    testapp: actorpubsub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: actorpubsub
+  template:
+    metadata:
+      labels:
+        testapp: actorpubsub
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "actorpubsub"
+        dapr.io/app-port: "3000"
+    spec:
+      containers:
+      - name: actorpubsub
+        image: docker.io/YOUR_ALIAS/e2e-actorpubsub:dev
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always

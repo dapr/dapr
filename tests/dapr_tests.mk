@@ -37,6 +37,7 @@ actorclientapp \
 actorfeatures \
 actorinvocationapp \
 actorreentrancy \
+actorpubsub \
 runtime \
 runtime_init \
 middleware \
@@ -461,7 +462,9 @@ setup-kind:
 	# Connect the registry to the KinD network.
 	docker network connect "kind" kind-registry
 	# Setup metrics-server
-	helm install ms stable/metrics-server -n kube-system --set=args={--kubelet-insecure-tls}
+	helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+	helm repo update
+	helm install ms metrics-server/metrics-server -n kube-system --set=args={--kubelet-insecure-tls}
 
 describe-kind-env:
 	@echo "\
