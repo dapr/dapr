@@ -813,5 +813,5 @@ func main() {
 
 	log.Printf("State App - listening on http://localhost:%d", appPort)
 	log.Printf("State endpoint - to be saved at %s", fmt.Sprintf(stateURLTemplate, "statestore"))
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }
