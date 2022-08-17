@@ -52,6 +52,8 @@ env:
   AZURE_REGIONS: "westus3"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  # Number of test suites
+  E2E_TEST_SUITE_COUNT: 4
 
 jobs:
   deploy-infrastructure:
@@ -291,8 +293,43 @@ jobs:
           make build-push-e2e-app-all
         shell: bash
 
-  test-e2e:
-    name: End-to-end ${{ matrix.target_os }} tests
+  provide_test_suites:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-test") {
+              var fs = require('fs');
+              // Set environment variables
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+            }
+      - name: Check out code
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: list-tests
+        id: list_tests
+        run: echo "::set-output name=test_suites::$(make -s test-e2e-list-suites)"
+    outputs:
+      test_suites: ${{ steps.list_tests.outputs.test_suites }}
+
+  prepare_e2e:
+    name: Prepare End-to-end ${{ matrix.target_os }} tests
     needs:
       - build
       - deploy-infrastructure
@@ -309,11 +346,6 @@ jobs:
         target_os: [linux, windows]
         target_arch: [amd64]
     steps:
-      - name: Set up log paths
-        run: |
-          echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
-          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
-        shell: bash
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
         run: |
@@ -345,16 +377,6 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
-      - name: Cache Go modules (test)
-        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-tests-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-tests-
       - uses: azure/setup-kubectl@v1
         with:
           version: ${{ env.KUBECTLVER }}
@@ -386,11 +408,6 @@ jobs:
           echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
-        shell: bash
-      - name: Enable tcpdump
-        run: |
-          sudo tcpdump -nn -i any -w sntp.cap &
-          sleep 1
         shell: bash
       - name: Connect to Kubernetes
         if: env.TEST_PREFIX != ''
@@ -424,9 +441,116 @@ jobs:
       - name: Show dapr configurations
         if: env.TEST_PREFIX != ''
         run: kubectl get configurations daprsystem -n ${{ env.DAPR_NAMESPACE }} -o yaml
+
+  test-e2e:
+    name: End-to-end ${{ matrix.target_os }} - ${{ strategy.job-index }} tests
+    needs:
+      - prepare_e2e
+      - provide_test_suites
+    # Always run on Linux as the local OS is irrelevant and this is faster
+    runs-on: ubuntu-latest
+    env:
+      TARGET_OS: ${{ matrix.target_os }}
+      TARGET_ARCH: ${{ matrix.target_arch }}
+      TEST_OUTPUT_FILE_PREFIX: "test_report"
+      PULL_POLICY: IfNotPresent
+    strategy:
+      fail-fast: false
+      matrix:
+        target_os: [linux, windows]
+        target_arch: [amd64]
+        #test_ctx: ${{ fromJson(needs.prepare_e2e.outputs.test_context) }}
+        test_suite: ${{ fromJson(needs.provide_test_suites.outputs.test_suites) }}
+    steps:
+      - name: Generate suite hash
+        run: |
+          SUITE_HASH=$(echo ${{ matrix.test_suite}} | sha1sum | head -c 10)
+        shell: bash
+      - name: Set up log paths
+        run: |
+          echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ strategy.job-index }}" | sed 's/\\/\//g' >> $GITHUB_ENV
+          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ strategy.job-index }}" | sed 's/\\/\//g' >> $GITHUB_ENV
+        shell: bash
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-test") {
+              var fs = require('fs');
+              // Set environment variables
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+            }
+      - name: Build test prefix and set env vars
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          BASE_STR="E2E|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
+          TEST_PREFIX=""
+          if [ "${{ env.TARGET_OS }}" == "windows" ] ; then
+            TEST_PREFIX="dapre2e${SUFFIX}w"
+          else
+            TEST_PREFIX="dapre2e${SUFFIX}l"
+          fi
+          echo "Test prefix is ${TEST_PREFIX}"
+          echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_REGISTRY=${TEST_PREFIX}acr.azurecr.io" >> $GITHUB_ENV
+          echo "TEST_CLUSTER=${TEST_PREFIX}-aks" >> $GITHUB_ENV
+          echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
+      - name: Set up Go ${{ env.GOVER }}
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GOVER }}
+      - name: Check out code
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Cache Go modules (test)
+        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-tests-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-tests-
+      - uses: azure/setup-kubectl@v1
+        with:
+          version: ${{ env.KUBECTLVER }}
+        id: install
+      - name: Login to Azure
+        if: env.CHECKOUT_REPO != ''
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Connect to Kubernetes
+        if: env.TEST_PREFIX != ''
+        run: |
+          az aks get-credentials -n "${{ env.TEST_CLUSTER }}" -g "${{ env.TEST_RESOURCE_GROUP }}"
+      - name: Enable tcpdump
+        run: |
+          sudo tcpdump -nn -i any -w sntp.cap &
+          sleep 1
+        shell: bash
       - name: Run E2E tests
         if: env.TEST_PREFIX != ''
-        run: make test-e2e-all
+        run: DAPR_E2E_TEST="${{ matrix.test_suite }}" make test-e2e-all
       - name: Save control plane K8s resources
         if: always() && env.TEST_PREFIX != ''
         run: |
@@ -453,26 +577,26 @@ jobs:
         if: always()
         uses: actions/upload-artifact@master
         with:
-          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_tcpdump
+          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ strategy.job-index }}_tcpdump
           path: sntp.cap.gz
       - name: Upload container logs
         if: always()
         uses: actions/upload-artifact@master
         with:
-          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_container_logs
+          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ strategy.job-index }}_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
       - name: Upload test logs
         if: always()
         uses: actions/upload-artifact@master
         with:
-          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_logs
+          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ strategy.job-index }}_test_logs
           path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@master
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
-          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
+          name: ${{ env.TARGET_OS }}_${{ env.TARGET_ARCH }}_${{ strategy.job-index }}_e2e.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_PREFIX != ''
@@ -514,6 +638,7 @@ jobs:
     name: Clean up Azure resources
     runs-on: ubuntu-latest
     needs:
+      - prepare_e2e
       - test-e2e
     if: always()
     steps:
