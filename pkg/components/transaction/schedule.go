@@ -8,23 +8,25 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/kit/logger"
 	fasthttp "github.com/valyala/fasthttp"
 	codes "google.golang.org/grpc/codes"
 )
 
-const (
-	defaultState                      = 0
-	stateForTrySuccess                = 10
-	stateForTryFailure                = 1
-	stateForConfirmSuccess            = 20
-	stateForConfirmFailure            = 2
-	stateForRollBackSuccess           = 30
-	stateForRollBackFailure           = 3
-	requestStatusOK                   = 1
+var (
+	// defaultState                      = 0
+	stateForTrySuccess = 10
+	// stateForTryFailure                = 1
+	stateForConfirmSuccess = 20
+	// stateForConfirmFailure            = 2
+	stateForRollbackSuccess = 30
+	stateForRollbackFailure = 3
+	// requestStatusOK                   = 1
 	bunchTransactionServiceInvokeType = "service-invoke"
 	bunchTransactionActorType         = "actore"
-	transactionConfirm                = "confirm"
-	transactionRollBack               = "rollback"
+	transactionConfirm                = "Confirm"
+	transactionRollback               = "Rollback"
+	log                               = logger.NewLogger("dapr.components.transaction")
 )
 
 func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) error {
@@ -35,25 +37,28 @@ func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) e
 		},
 	)
 	if err != nil {
-		fmt.Print(err)
+		log.Debug(err)
 		return err
 	}
 	bunchTransactions := reqs.BunchTransactions
 	retryTimes := transactionInstance.GetRetryTimes()
 	schema := transactionInstance.GetTransactionSchema()
 
-	fmt.Printf("disrtibute transaction schema is %s :", schema)
+	log.Debugf("disrtibute transaction schema is %s :", schema)
+
+	allBunchTransactionConfirmSuccess := true
 
 	for bunchTransactionId, bunchTransaction := range bunchTransactions {
 		state := bunchTransaction.StatusCode
-		// pointer of the origin request param
+		// data of the origin request param
 		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
 		if state == stateForTrySuccess {
 			// try to confirm a bunch transaction
 			responseStatusCode := Confirm(scheduleTransactionRequest, bunchTransactionReqsParam, schema, retryTimes)
 
-			if responseStatusCode != 200 {
-				return fmt.Errorf("transaction")
+			if responseStatusCode != fasthttp.StatusOK {
+				allBunchTransactionConfirmSuccess = false
+				break
 			}
 
 			transactionInstance.Confirm(transactionComponent.BunchTransactionConfirmRequest{
@@ -63,12 +68,79 @@ func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) e
 			})
 		}
 	}
+
+	// all bunch transaction confirm success, release state resource
+	if allBunchTransactionConfirmSuccess {
+		transactionInstance.ReleaseTransactionResource(transactionComponent.ReleaseTransactionRequest{
+			TransactionId: scheduleTransactionRequest.TransactionId,
+		})
+	} else {
+		return fmt.Errorf("fail to confirm distribute transaction")
+	}
+
 	return nil
 
 }
 
+func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error {
+	transactionInstance := scheduleTransactionRequest.TransactionInstance
+	reqs, err := transactionInstance.GetBunchTransactions(
+		transactionComponent.GetBunchTransactionsRequest{
+			TransactionId: scheduleTransactionRequest.TransactionId,
+		},
+	)
+	if err != nil {
+		log.Debug(err)
+		return err
+	}
+	bunchTransactions := reqs.BunchTransactions
+	retryTimes := transactionInstance.GetRetryTimes()
+	schema := transactionInstance.GetTransactionSchema()
+
+	log.Debugf("disrtibute transaction schema is %s :", schema)
+
+	allBunchTransactionRollbackSuccess := true
+
+	for bunchTransactionId, bunchTransaction := range bunchTransactions {
+		state := bunchTransaction.StatusCode
+		// data of the origin request param
+		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
+		if state == stateForTrySuccess {
+			// try to confirm a bunch transaction
+			responseStatusCode := Rollback(scheduleTransactionRequest, bunchTransactionReqsParam, schema, retryTimes)
+
+			if responseStatusCode != fasthttp.StatusOK {
+				allBunchTransactionRollbackSuccess = false
+				transactionInstance.Rollback(transactionComponent.BunchTransactionRollbackRequest{
+					TransactionId:      scheduleTransactionRequest.TransactionId,
+					BunchTransactionId: bunchTransactionId,
+					StatusCode:         stateForRollbackFailure,
+				})
+			} else {
+				transactionInstance.Rollback(transactionComponent.BunchTransactionRollbackRequest{
+					TransactionId:      scheduleTransactionRequest.TransactionId,
+					BunchTransactionId: bunchTransactionId,
+					StatusCode:         stateForRollbackSuccess,
+				})
+			}
+
+		}
+	}
+
+	// all bunch transaction confirm success, release state resource
+	if allBunchTransactionRollbackSuccess {
+		transactionInstance.ReleaseTransactionResource(transactionComponent.ReleaseTransactionRequest{
+			TransactionId: scheduleTransactionRequest.TransactionId,
+		})
+	} else {
+		return fmt.Errorf("fail to rollback all of bunch distribute transaction")
+	}
+
+	return nil
+}
+
 func Confirm(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
-	fmt.Print("switch to a Confrim action with : ", bunchTransactionReqsParam)
+	log.Debug("switch to a Confrim action with : ", bunchTransactionReqsParam)
 	responseStatusCode := 0
 	switch schema {
 	case "tcc":
@@ -77,17 +149,50 @@ func Confirm(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransac
 	return responseStatusCode
 }
 
+func Rollback(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
+	log.Debug("switch to a Rollback action with : ", bunchTransactionReqsParam)
+	responseStatusCode := 0
+	switch schema {
+	case "tcc":
+		responseStatusCode = RollbackTcc(scheduleTransactionRequest, bunchTransactionReqsParam, retryTimes)
+	}
+	return responseStatusCode
+}
+
 func ConfirmTcc(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, retryTimes int) int {
 	responseStatusCode := 0
 	if bunchTransactionReqsParam.Type == bunchTransactionServiceInvokeType {
-		responseStatusCode, err := RequestServiceInovde(scheduleTransactionRequest.DirectMessaging, bunchTransactionReqsParam, "Confirm", retryTimes)
+		responseStatusCode, err := RequestServiceInovde(scheduleTransactionRequest.DirectMessaging, bunchTransactionReqsParam, transactionConfirm, retryTimes)
 
 		if err != nil {
-			fmt.Print(err)
+			log.Debug(err)
 		}
 		return responseStatusCode
 	} else if bunchTransactionReqsParam.Type == bunchTransactionActorType {
-		_, _ = RequestActor(scheduleTransactionRequest.Actor, bunchTransactionReqsParam, "Confirm", retryTimes)
+		responseStatusCode, err := RequestActor(scheduleTransactionRequest.Actor, bunchTransactionReqsParam, transactionConfirm, retryTimes)
+		if err != nil {
+			log.Debug(err)
+		}
+		return responseStatusCode
+	}
+
+	return responseStatusCode
+}
+
+func RollbackTcc(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, retryTimes int) int {
+	responseStatusCode := 0
+	if bunchTransactionReqsParam.Type == bunchTransactionServiceInvokeType {
+		responseStatusCode, err := RequestServiceInovde(scheduleTransactionRequest.DirectMessaging, bunchTransactionReqsParam, transactionRollback, retryTimes)
+		if err != nil {
+			log.Debug(err)
+		}
+		return responseStatusCode
+	} else if bunchTransactionReqsParam.Type == bunchTransactionActorType {
+		responseStatusCode, err := RequestActor(scheduleTransactionRequest.Actor, bunchTransactionReqsParam, transactionRollback, retryTimes)
+		if err != nil {
+			log.Debug(err)
+		}
+		return responseStatusCode
 	}
 
 	return responseStatusCode
@@ -154,5 +259,5 @@ func RequestActor(actor actors.Actors, bunchTransactionReqsParam *transactionCom
 		}
 	}
 
-	return 200, nil
+	return 0, nil
 }

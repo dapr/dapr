@@ -89,4 +89,6 @@ const (
 	ErrTransactionRgist          = "transaction regist error"
 	ErrTransactionFailed         = "trasaction has something wrond %s"
 	ErrTransactionTry            = "transaction try operation has some err %s"
+	ErrTransactionConfirm        = "fail to confirm distribute transaction %s"
+	ErrTransactionRollback       = "fail to rollback distribute transaction %s"
 )

@@ -6,7 +6,7 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 )
 
-type TransactionConfirmRequest struct {
+type TransactionScheduleRequest struct {
 	TransactionId string `json:"transactionId"`
 }
 
