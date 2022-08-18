@@ -44,6 +44,7 @@ import (
 	secretstore_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstore_env "github.com/dapr/components-contrib/secretstores/local/env"
 	secretstore_file "github.com/dapr/components-contrib/secretstores/local/file"
+	"github.com/dapr/components-contrib/secretstores/tencent/ssm"
 
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 
@@ -222,6 +223,9 @@ func main() {
 			}),
 			secretstores_loader.New("huaweicloud.csms", func() secretstores.SecretStore {
 				return csms.NewHuaweiCsmsSecretStore(logContrib)
+			}),
+			secretstores_loader.New("tencent.ssm", func() secretstores.SecretStore {
+				return ssm.NewSSM(logContrib)
 			}),
 		),
 		runtime.WithStates(
