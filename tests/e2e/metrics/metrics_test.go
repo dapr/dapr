@@ -252,7 +252,7 @@ func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) 
 
 func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
 	daprAddress := fmt.Sprintf("localhost:%d", daprPort)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
+	conn, err := grpc.Dial(daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	defer conn.Close()
 

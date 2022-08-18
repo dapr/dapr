@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
 func TestComponentDenyList(t *testing.T) {
@@ -119,8 +119,8 @@ func TestComponentDenyList(t *testing.T) {
 				if len(parts) > 1 {
 					ver = parts[1]
 				}
-				comp := components_v1alpha1.Component{
-					Spec: components_v1alpha1.ComponentSpec{
+				comp := componentsV1alpha1.Component{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    typ,
 						Version: ver,
 					},

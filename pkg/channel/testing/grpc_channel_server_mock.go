@@ -26,6 +26,8 @@ import (
 )
 
 // MockServer implementation of fake user app server.
+//
+//nolint:nosnakecase
 type MockServer struct {
 	Error                    error
 	Subscriptions            []*commonv1pb.TopicSubscription
