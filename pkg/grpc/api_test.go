@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
@@ -2061,8 +2062,16 @@ func TestGetMetadata(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	fakeComponent := components_v1alpha.Component{}
 	fakeComponent.Name = "testComponent"
+
+	mockActors := new(actors.MockActors)
+	mockActors.On("GetActiveActorsCount").Return(actors.ActiveActorsCount{
+		Count: 10,
+		Type:  "abcd",
+	})
+
 	fakeAPI := &api{
-		id: "fakeAPI",
+		id:    "fakeAPI",
+		actor: mockActors,
 		getComponentsFn: func() []components_v1alpha.Component {
 			return []components_v1alpha.Component{
 				{
@@ -2128,6 +2137,8 @@ func TestGetMetadata(t *testing.T) {
 	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.MockComponent1Name")
 	assert.Len(t, response.RegisteredComponents[1].Capabilities, 1, "One capabilities should be returned")
 	assert.Equal(t, response.RegisteredComponents[1].Capabilities[0], "mock.feat.MockComponent2Name")
+	assert.Equal(t, response.GetActiveActorsCount()[0].Type, "abcd")
+	assert.Equal(t, response.GetActiveActorsCount()[0].Count, int32(10))
 }
 
 func TestSetMetadata(t *testing.T) {
