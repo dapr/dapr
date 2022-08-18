@@ -423,5 +423,5 @@ func main() {
 	initializeSets()
 
 	log.Printf("Dapr E2E test app: pubsub - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }
