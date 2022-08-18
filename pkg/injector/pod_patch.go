@@ -807,7 +807,7 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 		},
 	}
 
-	// This is a special case for virtual kubelets on ACI.
+	// This is a special case for virtual kubelets on Azure Container Instances (ACI).
 	// ACI does not support separate Command and Args,
 	// Ref. https://github.com/virtual-kubelet/azure-aci/issues/10.
 	// For other deployments, the Command is passed as a part of Args.
