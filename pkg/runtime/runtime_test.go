@@ -2981,6 +2981,7 @@ func TestPubsubLifecycle(t *testing.T) {
 	require.Equal(t, 3, done)
 
 	subscriptions := make(map[string][]string)
+	var subscriptionsMux sync.Mutex
 	messages := make(map[string][]*pubsub.NewMessage)
 	var (
 		subscriptionsCh chan struct{}
@@ -2989,7 +2990,9 @@ func TestPubsubLifecycle(t *testing.T) {
 	forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
 		comp.SetOnSubscribedTopicsChanged(func(topics []string) {
 			sort.Strings(topics)
+			subscriptionsMux.Lock()
 			subscriptions[name] = topics
+			subscriptionsMux.Unlock()
 			if subscriptionsCh != nil {
 				subscriptionsCh <- struct{}{}
 			}
