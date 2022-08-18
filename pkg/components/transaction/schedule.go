@@ -13,20 +13,25 @@ import (
 )
 
 const (
-	defaultState            = 0
-	stateForTrySuccess      = 10
-	stateForTryFailure      = 1
-	stateForConfirmSuccess  = 20
-	stateForConfirmFailure  = 2
-	stateForRollBackSuccess = 30
-	stateForRollBackFailure = 3
-	requestStatusOK         = 1
+	defaultState                      = 0
+	stateForTrySuccess                = 10
+	stateForTryFailure                = 1
+	stateForConfirmSuccess            = 20
+	stateForConfirmFailure            = 2
+	stateForRollBackSuccess           = 30
+	stateForRollBackFailure           = 3
+	requestStatusOK                   = 1
+	bunchTransactionServiceInvokeType = "service-invoke"
+	bunchTransactionActorType         = "actore"
+	transactionConfirm                = "confirm"
+	transactionRollBack               = "rollback"
 )
 
-func ConfirmTransaction(transactionInstance transactionComponent.Transaction, directMessaging messaging.DirectMessaging, reqParam TransactionConfirmRequest) error {
+func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) error {
+	transactionInstance := scheduleTransactionRequest.TransactionInstance
 	reqs, err := transactionInstance.GetBunchTransactions(
 		transactionComponent.GetBunchTransactionsRequest{
-			TransactionId: reqParam.TransactionId,
+			TransactionId: scheduleTransactionRequest.TransactionId,
 		},
 	)
 	if err != nil {
@@ -45,14 +50,14 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, di
 		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
 		if state == stateForTrySuccess {
 			// try to confirm a bunch transaction
-			responseStatusCode := Confirm(directMessaging, bunchTransactionReqsParam, schema, retryTimes)
+			responseStatusCode := Confirm(scheduleTransactionRequest, bunchTransactionReqsParam, schema, retryTimes)
 
 			if responseStatusCode != 200 {
 				return fmt.Errorf("transaction")
 			}
 
 			transactionInstance.Confirm(transactionComponent.BunchTransactionConfirmRequest{
-				TransactionId:      reqParam.TransactionId,
+				TransactionId:      scheduleTransactionRequest.TransactionId,
 				BunchTransactionId: bunchTransactionId,
 				StatusCode:         stateForConfirmSuccess,
 			})
@@ -62,27 +67,27 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, di
 
 }
 
-func Confirm(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
+func Confirm(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
 	fmt.Print("switch to a Confrim action with : ", bunchTransactionReqsParam)
 	responseStatusCode := 0
 	switch schema {
 	case "tcc":
-		responseStatusCode = ConfirmTcc(directMessaging, bunchTransactionReqsParam, retryTimes)
+		responseStatusCode = ConfirmTcc(scheduleTransactionRequest, bunchTransactionReqsParam, retryTimes)
 	}
 	return responseStatusCode
 }
 
-func ConfirmTcc(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, retryTimes int) int {
+func ConfirmTcc(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, retryTimes int) int {
 	responseStatusCode := 0
-	if bunchTransactionReqsParam.Type == "service-invoke" {
-		responseStatusCode, err := RequestServiceInovde(directMessaging, bunchTransactionReqsParam, "Confirm", retryTimes)
+	if bunchTransactionReqsParam.Type == bunchTransactionServiceInvokeType {
+		responseStatusCode, err := RequestServiceInovde(scheduleTransactionRequest.DirectMessaging, bunchTransactionReqsParam, "Confirm", retryTimes)
 
 		if err != nil {
 			fmt.Print(err)
 		}
 		return responseStatusCode
-	} else if bunchTransactionReqsParam.Type == "actor" {
-		//responseStatusCode, err := RequestActor(directMessaging, bunchTransactionReqsParam, "Confirm")
+	} else if bunchTransactionReqsParam.Type == bunchTransactionActorType {
+		_, _ = RequestActor(scheduleTransactionRequest.Actor, bunchTransactionReqsParam, "Confirm", retryTimes)
 	}
 
 	return responseStatusCode
@@ -132,6 +137,7 @@ func RequestActor(actor actors.Actors, bunchTransactionReqsParam *transactionCom
 	ctx := context.Background()
 	i := 1
 	for i <= retryTimes {
+		i++
 		resp, err := actor.Call(ctx, req)
 		if err != nil {
 			return 0, err
@@ -146,7 +152,6 @@ func RequestActor(actor actors.Actors, bunchTransactionReqsParam *transactionCom
 		} else {
 			continue
 		}
-		i++
 	}
 
 	return 200, nil

@@ -2440,7 +2440,13 @@ func (a *api) onDistributeTransactionConfirm(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	transaction_loader.ConfirmTransaction(transactionInstance, a.directMessaging, req)
+	//transaction_loader.ConfirmTransaction(transactionInstance, a.directMessaging, req)
+	transaction_loader.ConfirmTransaction(transaction_loader.ScheduleTransactionRequest{
+		TransactionId:       req.TransactionId,
+		TransactionInstance: transactionInstance,
+		DirectMessaging:     a.directMessaging,
+		Actor:               a.actor,
+	})
 	//transactionInstance.Confirm(req)
 	respond(reqCtx, withEmpty())
 }
