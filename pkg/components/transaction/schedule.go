@@ -37,7 +37,7 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, di
 	retryTimes := transactionInstance.GetRetryTimes()
 	schema := transactionInstance.GetTransactionSchema()
 
-	fmt.Printf("disrtibute transaction schema is %s", schema)
+	fmt.Printf("disrtibute transaction schema is %s :", schema)
 
 	for bunchTransactionId, bunchTransaction := range bunchTransactions {
 		state := bunchTransaction.StatusCode
@@ -63,7 +63,7 @@ func ConfirmTransaction(transactionInstance transactionComponent.Transaction, di
 }
 
 func Confirm(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
-	fmt.Print(bunchTransactionReqsParam)
+	fmt.Print("switch to a Confrim action with : ", bunchTransactionReqsParam)
 	responseStatusCode := 0
 	switch schema {
 	case "tcc":
@@ -98,6 +98,7 @@ func RequestServiceInovde(directMessaging messaging.DirectMessaging, bunchTransa
 	ctx := context.Background()
 	i := 1
 	for i <= retryTimes {
+		i++
 		resp, err := directMessaging.Invoke(ctx, bunchTransactionReqsParam.TargetID, req)
 
 		if err != nil {
@@ -111,14 +112,12 @@ func RequestServiceInovde(directMessaging messaging.DirectMessaging, bunchTransa
 				continue
 			}
 		}
-
 		if statusCode == fasthttp.StatusOK {
 			return statusCode, nil
 		} else {
 			continue
 		}
 
-		i++
 	}
 	return 0, nil
 }

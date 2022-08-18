@@ -1401,7 +1401,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		transactionHeader.TransactionStoreName = string(reqCtx.Request.Header.Peek("distribute-transaction-store"))
 
 		transactionTryRequestParam = transaction.TransactionTryRequestParam{
-			Type:             "tcc",
+			Type:             "service-invoke",
 			TargetID:         targetID,
 			InvokeMethodName: invokeMethodName,
 			Verb:             verb,
@@ -1466,10 +1466,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			return errors.Errorf("Received non-successful status code: %d", statusCode)
 		}
 
-		if hasDistributeTransaction {
-			log.Debug("strat a try operation in service invoke")
-			a.distributeTransactionTry(transactionHeader, statusCode, transactionTryRequestParam)
-		}
 		return nil
 	})
 
@@ -2432,6 +2428,7 @@ func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onDistributeTransactionConfirm(reqCtx *fasthttp.RequestCtx) {
 
 	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	log.Debug("distribute transaction Confirm operation calling, transactionInstance is : ", transactionInstance)
 	if err != nil {
 		log.Debug(err)
 		return
@@ -2464,8 +2461,12 @@ func (a *api) onDistributeTransactionRollback(reqCtx *fasthttp.RequestCtx) {
 
 // record each bunch transaciton request state
 func (a *api) distributeTransactionTry(transactionHeader transaction_loader.TransactionRequestHeader, statusCode int, tryRequest transaction.TransactionTryRequestParam) error {
+
 	transactionInstance := a.transactions[transactionHeader.TransactionStoreName]
+	log.Debug("distribute transaction Try operation calling, transactionInstance is : ", transactionInstance)
+
 	if transactionInstance == nil {
+		log.Debug(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
 		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
 	}
 
@@ -2485,6 +2486,7 @@ func (a *api) distributeTransactionTry(transactionHeader transaction_loader.Tran
 	})
 
 	if err != nil {
+		log.Debug(fmt.Sprintf(messages.ErrTransactionRgist, err))
 		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_TRY", fmt.Sprintf(messages.ErrTransactionRgist, err))
 		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionFailed, msg))
 	}
