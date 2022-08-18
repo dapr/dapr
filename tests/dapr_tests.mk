@@ -27,6 +27,7 @@ service_invocation_grpc_proxy_server \
 binding_input \
 binding_input_grpc \
 binding_output \
+pubsub-extra \
 pubsub-publisher \
 pubsub-subscriber \
 pubsub-subscriber_grpc \

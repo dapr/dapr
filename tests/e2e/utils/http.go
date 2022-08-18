@@ -132,7 +132,7 @@ func HTTPGetRaw(url string) (*http.Response, error) {
 
 // HTTPPost is a helper to make POST request call to url.
 func HTTPPost(url string, data []byte) ([]byte, error) {
-	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
+	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 
 // HTTPPatch is a helper to make PATCH request call to url.
 func HTTPPatch(url string, data []byte) ([]byte, error) {
-	req, err := http.NewRequest("PATCH", SanitizeHTTPURL(url), bytes.NewBuffer(data))
+	req, err := http.NewRequest("PATCH", SanitizeHTTPURL(url), bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func HTTPPatch(url string, data []byte) ([]byte, error) {
 
 // HTTPPostWithStatus is a helper to make POST request call to url.
 func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
-	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
+	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewReader(data))
 	if err != nil {
 		// From the Do method for the client.Post
 		// An error is returned if caused by client policy (such as
@@ -197,6 +197,27 @@ func HTTPDelete(url string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// HTTPDeleteWithBodyAndStatus calls a given URL with the HTTP DELETE method.
+func HTTPDeleteWithBodyAndStatus(url string, data []byte) ([]byte, int, error) {
+	req, err := http.NewRequest("DELETE", SanitizeHTTPURL(url), bytes.NewReader(data))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	res, err := httpClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer res.Body.Close()
+
+	body, err := extractBody(res.Body)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return body, res.StatusCode, nil
 }
 
 // SanitizeHTTPURL prepends the prefix "http://" to a URL if not present

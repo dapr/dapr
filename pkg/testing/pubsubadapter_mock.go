@@ -16,23 +16,127 @@ limitations under the License.
 package testing
 
 import (
+	"errors"
+	"sync"
+
 	"github.com/dapr/components-contrib/pubsub"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
-// MockPubSubAdapter is mock for PubSubAdapter
+type activeSub struct {
+	name  string
+	topic string
+}
+
+// MockPubSubAdapter is mock for PubSubAdapter.
 type MockPubSubAdapter struct {
-	PublishFn   func(req *pubsub.PublishRequest) error
-	GetPubSubFn func(pubsubName string) pubsub.PubSub
+	PublishFn     func(req *pubsub.PublishRequest) error
+	GetPubSubFn   func(pubsubName string) pubsub.PubSub
+	SubscribeFn   func(subscription *runtime_pubsub.Subscription) error
+	UnsubscribeFn func(name string, topic string) error
+
+	subscriptions []*runtime_pubsub.Subscription
+	lock          *sync.Mutex
+}
+
+// NewMockPubSubAdapter returns a new MockPubSubAdapter.
+func NewMockPubSubAdapter() *MockPubSubAdapter {
+	return &MockPubSubAdapter{
+		subscriptions: make([]*runtime_pubsub.Subscription, 0),
+		lock:          &sync.Mutex{},
+	}
 }
 
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
 func (a *MockPubSubAdapter) Publish(req *pubsub.PublishRequest) error {
-	return a.PublishFn(req)
+	if a.PublishFn != nil {
+		return a.PublishFn(req)
+	}
+	return nil
 }
 
 // GetPubSub is an adapter method to fetch a pubsub
 func (a *MockPubSubAdapter) GetPubSub(pubsubName string) pubsub.PubSub {
-	return a.GetPubSubFn(pubsubName)
+	if a.GetPubSubFn != nil {
+		return a.GetPubSubFn(pubsubName)
+	}
+	return nil
+}
+
+func (a *MockPubSubAdapter) Subscribe(subscription *runtime_pubsub.Subscription) (list []*commonv1pb.TopicSubscription, err error) {
+	if a.subscriptions == nil {
+		panic("object not instantiated")
+	}
+
+	if a.SubscribeFn != nil {
+		err = a.SubscribeFn(subscription)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	for _, v := range a.subscriptions {
+		if v.PubsubName == subscription.PubsubName && v.Topic == subscription.Topic {
+			return nil, errors.New("subscription already exists")
+		}
+	}
+
+	a.subscriptions = append(a.subscriptions, subscription)
+
+	return a.ListSubscriptions()
+}
+
+func (a *MockPubSubAdapter) Unsubscribe(name string, topic string) (list []*commonv1pb.TopicSubscription, err error) {
+	if a.subscriptions == nil {
+		panic("object not instantiated")
+	}
+
+	if a.UnsubscribeFn != nil {
+		err = a.UnsubscribeFn(name, topic)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	i := 0
+	found := false
+	for _, v := range a.subscriptions {
+		if v.PubsubName == name && v.Topic == topic {
+			found = true
+			continue
+		}
+		a.subscriptions[i] = v
+		i++
+	}
+	a.subscriptions = a.subscriptions[0:i]
+
+	if !found {
+		return nil, errors.New("subscription not found")
+	}
+
+	return a.ListSubscriptions()
+}
+
+func (a *MockPubSubAdapter) ListSubscriptions() ([]*commonv1pb.TopicSubscription, error) {
+	if a.subscriptions == nil {
+		panic("object not instantiated")
+	}
+
+	res := make([]*commonv1pb.TopicSubscription, len(a.subscriptions))
+	for i, v := range a.subscriptions {
+		res[i] = v.ToProto()
+	}
+
+	return res, nil
 }

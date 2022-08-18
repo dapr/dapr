@@ -223,9 +223,7 @@ func getSubscriptionsJSONString(topics []string, topics2 []string) string {
 		s = append(s, runtime_pubsub.SubscriptionJSON{
 			PubsubName: TestPubsubName,
 			Topic:      t,
-			Routes: runtime_pubsub.RoutesJSON{
-				Default: t,
-			},
+			Routes:     json.RawMessage(fmt.Sprintf(`{"default":"%s"}`, t)),
 		})
 	}
 
@@ -233,9 +231,7 @@ func getSubscriptionsJSONString(topics []string, topics2 []string) string {
 		s = append(s, runtime_pubsub.SubscriptionJSON{
 			PubsubName: TestSecondPubsubName,
 			Topic:      t,
-			Routes: runtime_pubsub.RoutesJSON{
-				Default: t,
-			},
+			Routes:     json.RawMessage(fmt.Sprintf(`{"default":"%s"}`, t)),
 		})
 	}
 	b, _ := json.Marshal(&s)
@@ -248,9 +244,7 @@ func getSubscriptionCustom(topic, path string) string {
 		{
 			PubsubName: TestPubsubName,
 			Topic:      topic,
-			Routes: runtime_pubsub.RoutesJSON{
-				Default: path,
-			},
+			Routes:     json.RawMessage(fmt.Sprintf(`{"default":"%s"}`, path)),
 		},
 	}
 	b, _ := json.Marshal(&s)
@@ -1413,12 +1407,12 @@ func TestInitPubSub(t *testing.T) {
 		assert.NotNil(t, a)
 	})
 
-	t.Run("get topic routes but app channel is nil", func(t *testing.T) {
+	t.Run("get subscriptions but app channel is nil", func(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		rts.appChannel = nil
-		routes, err := rts.getTopicRoutes()
+		subs, err := rts.getSubscriptions()
 		assert.Nil(t, err)
-		assert.Equal(t, 0, len(routes))
+		assert.Equal(t, 0, len(subs))
 	})
 
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
@@ -2330,10 +2324,11 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoutes{}
-	rt.topicRoutes[TestPubsubName] = TopicRoutes{
-		"topic1": TopicRouteElem{
-			rules: []*runtime_pubsub.Rule{{Path: "topic1"}},
+	rt.topicRoutes = map[string]runtime_pubsub.Subscription{
+		pubsubTopicKey(TestPubsubName, "topic1"): {
+			PubsubName: TestPubsubName,
+			Topic:      "topic1",
+			Rules:      []*runtime_pubsub.Rule{{Path: "topic1"}},
 		},
 	}
 
@@ -2443,10 +2438,11 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoutes{}
-	rt.topicRoutes[TestPubsubName] = TopicRoutes{
-		"topic1": TopicRouteElem{
-			rules: []*runtime_pubsub.Rule{{Path: "topic1"}},
+	rt.topicRoutes = map[string]runtime_pubsub.Subscription{
+		pubsubTopicKey(TestPubsubName, "topic1"): {
+			PubsubName: TestPubsubName,
+			Topic:      "topic1",
+			Rules:      []*runtime_pubsub.Rule{{Path: "topic1"}},
 		},
 	}
 
@@ -2534,10 +2530,11 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoutes{}
-	rt.topicRoutes[TestPubsubName] = TopicRoutes{
-		"topic1": TopicRouteElem{
-			rules: []*runtime_pubsub.Rule{{Path: "topic1"}},
+	rt.topicRoutes = map[string]runtime_pubsub.Subscription{
+		pubsubTopicKey(TestPubsubName, "topic1"): {
+			PubsubName: TestPubsubName,
+			Topic:      "topic1",
+			Rules:      []*runtime_pubsub.Rule{{Path: "topic1"}},
 		},
 	}
 
@@ -2871,11 +2868,11 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
-			rt.topicRoutes = map[string]TopicRoutes{}
-			rt.topicRoutes[TestPubsubName] = TopicRoutes{
-				topic: TopicRouteElem{
-					rules: []*runtime_pubsub.Rule{{Path: topic}},
-				},
+			rt.topicRoutes = map[string]runtime_pubsub.Subscription{}
+			rt.topicRoutes[pubsubTopicKey(TestPubsubName, topic)] = runtime_pubsub.Subscription{
+				PubsubName: TestPubsubName,
+				Topic:      topic,
+				Rules:      []*runtime_pubsub.Rule{{Path: topic}},
 			}
 			var grpcServer *grpc.Server
 
@@ -2914,7 +2911,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 }
 
 func TestPubsubLifecycle(t *testing.T) {
-	rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer func() {
 		if rt != nil {
 			stopRuntime(t, rt)
@@ -3016,24 +3013,26 @@ func TestPubsubLifecycle(t *testing.T) {
 	})
 
 	setTopicRoutes := func() {
-		rt.topicRoutes = map[string]TopicRoutes{
-			"mockPubSub1": {
-				"topic1": {
-					metadata: map[string]string{"rawPayload": "true"},
-					rules:    []*runtime_pubsub.Rule{{Path: "topic1"}},
-				},
+		_ = mockAppChannelSubscriptions(rt, []runtime_pubsub.SubscriptionJSON{
+			{
+				PubsubName: "mockPubSub1",
+				Topic:      "topic1",
+				Metadata:   map[string]string{"rawPayload": "true"},
+				Route:      "topic1",
 			},
-			"mockPubSub2": {
-				"topic2": {
-					metadata: map[string]string{"rawPayload": "true"},
-					rules:    []*runtime_pubsub.Rule{{Path: "topic2"}},
-				},
-				"topic3": {
-					metadata: map[string]string{"rawPayload": "true"},
-					rules:    []*runtime_pubsub.Rule{{Path: "topic3"}},
-				},
+			{
+				PubsubName: "mockPubSub2",
+				Topic:      "topic2",
+				Metadata:   map[string]string{"rawPayload": "true"},
+				Route:      "topic2",
 			},
-		}
+			{
+				PubsubName: "mockPubSub2",
+				Topic:      "topic3",
+				Metadata:   map[string]string{"rawPayload": "true"},
+				Route:      "topic3",
+			},
+		})
 
 		forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
 			comp.Calls = nil
@@ -3128,8 +3127,16 @@ func TestPubsubLifecycle(t *testing.T) {
 		comp := getPubSub("mockPubSub2")
 		comp.On("unsubscribed", "topic2").Return(nil).Once()
 
-		err = rt.unsubscribeTopic("mockPubSub2", "topic2")
-		require.NoError(t, err)
+		res, er := rt.Unsubscribe("mockPubSub2", "topic2")
+		require.NoError(t, er)
+
+		subs := []string{}
+		for _, s := range res {
+			subs = append(subs, pubsubTopicKey(s.PubsubName, s.Topic))
+		}
+		sort.Strings(subs)
+		assert.Equal(t, []string{"mockPubSub1||topic1", "mockPubSub2||topic3"}, subs)
+		assert.Len(t, rt.topicCtxCancels, 2)
 
 		sendMessages(t, 2)
 
@@ -3146,8 +3153,15 @@ func TestPubsubLifecycle(t *testing.T) {
 		comp := getPubSub("mockPubSub1")
 		comp.On("unsubscribed", "topic1").Return(nil).Once()
 
-		err = rt.unsubscribeTopic("mockPubSub1", "topic1")
-		require.NoError(t, err)
+		res, er := rt.Unsubscribe("mockPubSub1", "topic1")
+		require.NoError(t, er)
+		subs := []string{}
+		for _, s := range res {
+			subs = append(subs, pubsubTopicKey(s.PubsubName, s.Topic))
+		}
+		sort.Strings(subs)
+		assert.Equal(t, []string{"mockPubSub2||topic3"}, subs)
+		assert.Len(t, rt.topicCtxCancels, 1)
 
 		sendMessages(t, 1)
 
@@ -3160,7 +3174,10 @@ func TestPubsubLifecycle(t *testing.T) {
 	t.Run("subscribe to mockPubSub3/topic4", func(t *testing.T) {
 		resetState()
 
-		err = rt.subscribeTopic(rt.pubsubCtx, "mockPubSub3", "topic4", TopicRouteElem{})
+		err = rt.subscribeTopic(rt.pubsubCtx, &runtime_pubsub.Subscription{
+			PubsubName: "mockPubSub3",
+			Topic:      "topic4",
+		})
 		require.NoError(t, err)
 
 		sendMessages(t, 2)
@@ -3284,16 +3301,15 @@ func TestPubsubWithResiliency(t *testing.T) {
 	r.appChannel = &failingAppChannel
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
-		r.topicRoutes = make(map[string]TopicRoutes)
-		r.topicRoutes["failPubsub"] = TopicRoutes{
-			"failingSubTopic": {
-				metadata: map[string]string{
-					"rawPayload": "true",
-				},
-				rules: []*runtime_pubsub.Rule{
-					{
-						Path: "failingPubsub",
-					},
+		sub := &runtime_pubsub.Subscription{
+			PubsubName: "failPubsub",
+			Topic:      "failingSubTopic",
+			Metadata: map[string]string{
+				"rawPayload": "true",
+			},
+			Rules: []*runtime_pubsub.Rule{
+				{
+					Path: "failingPubsub",
 				},
 			},
 		}
@@ -3303,26 +3319,24 @@ func TestPubsubWithResiliency(t *testing.T) {
 			},
 		}
 
-		r.topicCtxCancels = map[string]context.CancelFunc{}
-		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
-		defer r.pubsubCancel()
-		err := r.beginPubSub("failPubsub")
+		r.startSubscriptions()
 
-		assert.NoError(t, err)
+		_, err := r.Subscribe(sub)
+		require.NoError(t, err)
+
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["failingSubTopic"])
 	})
 
 	t.Run("pubsub times out sending event to app with resiliency", func(t *testing.T) {
-		r.topicRoutes = make(map[string]TopicRoutes)
-		r.topicRoutes["failPubsub"] = TopicRoutes{
-			"timeoutSubTopic": {
-				metadata: map[string]string{
-					"rawPayload": "true",
-				},
-				rules: []*runtime_pubsub.Rule{
-					{
-						Path: "failingPubsub",
-					},
+		sub := &runtime_pubsub.Subscription{
+			PubsubName: "failPubsub",
+			Topic:      "timeoutSubTopic",
+			Metadata: map[string]string{
+				"rawPayload": "true",
+			},
+			Rules: []*runtime_pubsub.Rule{
+				{
+					Path: "failingPubsub",
 				},
 			},
 		}
@@ -3332,15 +3346,13 @@ func TestPubsubWithResiliency(t *testing.T) {
 			},
 		}
 
-		r.topicCtxCancels = map[string]context.CancelFunc{}
-		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
-		defer r.pubsubCancel()
+		r.startSubscriptions()
+
 		start := time.Now()
-		err := r.beginPubSub("failPubsub")
+		_, err := r.Subscribe(sub)
 		end := time.Now()
 
-		// This is eaten, technically.
-		assert.NoError(t, err)
+		assert.Error(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["timeoutSubTopic"])
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
@@ -3387,8 +3399,26 @@ func (m *mockSubscribePubSub) Features() []pubsub.Feature {
 	return nil
 }
 
+func mockAppChannelSubscriptions(rt *DaprRuntime, subs []runtime_pubsub.SubscriptionJSON) *channelt.MockAppChannel {
+	req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+	req.WithHTTPExtension(http.MethodGet, "")
+	req.WithRawData(nil, invokev1.JSONContentType)
+
+	sub, _ := json.Marshal(subs)
+	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+	fakeResp.WithRawData(sub, "application/json")
+
+	mockAppChannel := new(channelt.MockAppChannel)
+	rt.appChannel = mockAppChannel
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
+	// Mock send message to app returns error.
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("failed to send"))
+
+	return mockAppChannel
+}
+
 func TestPubSubDeadLetter(t *testing.T) {
-	testDeadLetterPubsub := "failPubsub"
+	const testDeadLetterPubsub = "failPubsub"
 	pubsubComponent := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: testDeadLetterPubsub,
@@ -3403,29 +3433,16 @@ func TestPubSubDeadLetter(t *testing.T) {
 	t.Run("succeeded to publish message to dead letter when send message to app returns error", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
+
 		rt.pubSubRegistry.Register(
 			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
 				return &mockSubscribePubSub{}
 			}),
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
-
-		subscriptionItems := []runtime_pubsub.SubscriptionJSON{
+		mockAppChannel := mockAppChannelSubscriptions(rt, []runtime_pubsub.SubscriptionJSON{
 			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
 			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
-		}
-		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		rt.appChannel = mockAppChannel
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
-		// Mock send message to app returns error.
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("failed to send"))
-
+		})
 		require.NoError(t, rt.initPubSub(pubsubComponent))
 		rt.startSubscriptions()
 
@@ -3446,29 +3463,16 @@ func TestPubSubDeadLetter(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.resiliency = resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency)
+
 		rt.pubSubRegistry.Register(
 			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
 				return &mockSubscribePubSub{}
 			}),
 		)
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(http.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
-
-		subscriptionItems := []runtime_pubsub.SubscriptionJSON{
+		mockAppChannel := mockAppChannelSubscriptions(rt, []runtime_pubsub.SubscriptionJSON{
 			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
 			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
-		}
-		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData(sub, "application/json")
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		rt.appChannel = mockAppChannel
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), req).Return(fakeResp, nil)
-		// Mock send message to app returns error.
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
-
+		})
 		require.NoError(t, rt.initPubSub(pubsubComponent))
 		rt.startSubscriptions()
 

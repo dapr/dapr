@@ -31,6 +31,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -55,6 +56,8 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -189,6 +192,7 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSubscriptionsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructActorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
 	api.endpoints = append(api.endpoints, metadataEndpoints...)
@@ -289,6 +293,29 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 			Route:   "publish/{pubsubname}/{topic:*}",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
+		},
+	}
+}
+
+func (a *api) constructSubscriptionsEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "subscriptions",
+			Version: apiVersionV1,
+			Handler: a.onListSubscriptions,
+		},
+		{
+			Methods: []string{fasthttp.MethodDelete},
+			Route:   "subscriptions",
+			Version: apiVersionV1,
+			Handler: a.onUnsubscribe,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
+			Route:   "subscriptions",
+			Version: apiVersionV1,
+			Handler: a.onSubscribe,
 		},
 	}
 }
@@ -2018,6 +2045,131 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
+func (a *api) onListSubscriptions(reqCtx *fasthttp.RequestCtx) {
+	if a.pubsubAdapter == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	list, err := a.pubsubAdapter.ListSubscriptions()
+	if err != nil {
+		// Errors here happen only during initialization
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	res := &runtimev1pb.ListActiveTopicSubscriptionsResponse{
+		Subscriptions: list,
+	}
+	respond(reqCtx, withProtoJSON(fasthttp.StatusOK, res))
+}
+
+func (a *api) onSubscribe(reqCtx *fasthttp.RequestCtx) {
+	if a.pubsubAdapter == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	body := reqCtx.PostBody()
+	in := commonv1pb.TopicSubscription{}
+	err := protojson.Unmarshal(body, &in)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	if in.PubsubName == "" {
+		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	if in.Topic == "" {
+		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, in.PubsubName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	subscription, err := runtime_pubsub.NewSubscriptionFromProto(&in, "")
+	if err != nil {
+		msg := NewErrorResponse("ERR_RULES_INVALID", fmt.Sprintf(messages.ErrPubsubRoutesInvalid, in.Topic, in.PubsubName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	list, err := a.pubsubAdapter.Subscribe(subscription)
+	if err != nil {
+		msg := NewErrorResponse("ERR_SUBSCRIBE_FAILED", fmt.Sprintf(messages.ErrPubsubSubscribeFailed, in.Topic, in.PubsubName, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	res := &runtimev1pb.SubscribeTopicResponse{
+		Subscriptions: list,
+	}
+	respond(reqCtx, withProtoJSON(fasthttp.StatusOK, res))
+	return
+}
+
+func (a *api) onUnsubscribe(reqCtx *fasthttp.RequestCtx) {
+	if a.pubsubAdapter == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	body := reqCtx.PostBody()
+	in := runtimev1pb.ActiveTopicSubscription{}
+	err := protojson.Unmarshal(body, &in)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	if in.PubsubName == "" {
+		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	if in.Topic == "" {
+		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, in.PubsubName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	list, err := a.pubsubAdapter.Unsubscribe(in.PubsubName, in.Topic)
+	if err != nil {
+		msg := NewErrorResponse("ERR_UNSUBSCRIBE_FAILED", fmt.Sprintf(messages.ErrPubsubUnsubscribeFailed, in.Topic, in.PubsubName, err))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	res := &runtimev1pb.UnsubscribeTopicResponse{
+		Subscriptions: list,
+	}
+	respond(reqCtx, withProtoJSON(fasthttp.StatusOK, res))
+	return
+}
+
 // GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.
 func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	code := metadata[http.HTTPStatusCode]
@@ -2036,9 +2188,9 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
-	} else {
-		respond(reqCtx, withEmpty())
+		return
 	}
+	respond(reqCtx, withEmpty())
 }
 
 func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
@@ -2046,9 +2198,9 @@ func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
-	} else {
-		respond(reqCtx, withEmpty())
+		return
 	}
+	respond(reqCtx, withEmpty())
 }
 
 func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {

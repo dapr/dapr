@@ -81,6 +81,9 @@ type API interface {
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
+	SubscribeTopic(ctx context.Context, in *commonv1pb.TopicSubscription) (*runtimev1pb.SubscribeTopicResponse, error)
+	ListActiveTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListActiveTopicSubscriptionsResponse, error)
+	UnsubscribeTopic(ctx context.Context, in *runtimev1pb.ActiveTopicSubscription) (*runtimev1pb.UnsubscribeTopicResponse, error)
 	GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
 	SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error
 	UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error)
@@ -380,23 +383,21 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, err
 	}
 
-	pubsubName := in.PubsubName
-	if pubsubName == "" {
+	if in.PubsubName == "" {
 		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
 
-	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	thepubsub := a.pubsubAdapter.GetPubSub(in.PubsubName)
 	if thepubsub == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
+		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, in.PubsubName)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
 
-	topic := in.Topic
-	if topic == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
+	if in.Topic == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, in.PubsubName)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
@@ -442,15 +443,15 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
-			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, in.Topic, in.PubsubName, err.Error())
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
 	}
 
 	req := pubsub.PublishRequest{
-		PubsubName: pubsubName,
-		Topic:      topic,
+		PubsubName: in.PubsubName,
+		Topic:      in.Topic,
 		Data:       data,
 		Metadata:   in.Metadata,
 	}
@@ -459,10 +460,10 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	err := a.pubsubAdapter.Publish(&req)
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
+	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), in.PubsubName, in.Topic, err == nil, elapsed)
 
 	if err != nil {
-		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, in.Topic, in.PubsubName, err.Error())
 		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
 			nerr = status.Errorf(codes.PermissionDenied, err.Error())
 		}
@@ -1067,6 +1068,107 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		}
 	}
 	return response, nil
+}
+
+func (a *api) SubscribeTopic(ctx context.Context, in *commonv1pb.TopicSubscription) (res *runtimev1pb.SubscribeTopicResponse, err error) {
+	res = &runtimev1pb.SubscribeTopicResponse{}
+
+	if a.pubsubAdapter == nil {
+		err = status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	if in == nil {
+		// Do nothing
+		return res, nil
+	}
+
+	if in.PubsubName == "" {
+		err = status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	if in.Topic == "" {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, in.PubsubName)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	subscription, err := runtime_pubsub.NewSubscriptionFromProto(in, "")
+	if err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubRoutesInvalid, in.Topic, in.PubsubName)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	res.Subscriptions, err = a.pubsubAdapter.Subscribe(subscription)
+	if err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubSubscribeFailed, in.Topic, in.PubsubName, err)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	return res, nil
+}
+
+func (a *api) ListActiveTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (res *runtimev1pb.ListActiveTopicSubscriptionsResponse, err error) {
+	res = &runtimev1pb.ListActiveTopicSubscriptionsResponse{}
+
+	if a.pubsubAdapter == nil {
+		err = status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	list, err := a.pubsubAdapter.ListSubscriptions()
+	if err != nil {
+		// Errors here happen during initialization only
+		err = status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	res.Subscriptions = list
+
+	return res, nil
+}
+
+func (a *api) UnsubscribeTopic(ctx context.Context, in *runtimev1pb.ActiveTopicSubscription) (res *runtimev1pb.UnsubscribeTopicResponse, err error) {
+	res = &runtimev1pb.UnsubscribeTopicResponse{}
+
+	if a.pubsubAdapter == nil {
+		err = status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	if in == nil {
+		// Do nothing
+		return res, nil
+	}
+
+	if in.PubsubName == "" {
+		err = status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	if in.Topic == "" {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, in.PubsubName)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	res.Subscriptions, err = a.pubsubAdapter.Unsubscribe(in.PubsubName, in.Topic)
+	if err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubUnsubscribeFailed, in.Topic, in.PubsubName, err)
+		apiServerLogger.Debug(err)
+		return res, err
+	}
+
+	return res, nil
 }
 
 func extractEtag(req *commonv1pb.StateItem) (bool, string) {

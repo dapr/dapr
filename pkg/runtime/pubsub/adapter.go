@@ -15,10 +15,14 @@ package pubsub
 
 import (
 	contrib_pubsub "github.com/dapr/components-contrib/pubsub"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 // Adapter is the interface for message buses.
 type Adapter interface {
 	GetPubSub(pubsubName string) contrib_pubsub.PubSub
 	Publish(req *contrib_pubsub.PublishRequest) error
+	Subscribe(subscription *Subscription) ([]*commonv1pb.TopicSubscription, error)
+	Unsubscribe(name string, topic string) ([]*commonv1pb.TopicSubscription, error)
+	ListSubscriptions() ([]*commonv1pb.TopicSubscription, error)
 }

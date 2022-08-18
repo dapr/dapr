@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 
 	"github.com/valyala/fasthttp"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const (
@@ -76,6 +78,14 @@ func withJSON(code int, obj []byte) option {
 		ctx.Response.SetBody(obj)
 		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
 	}
+}
+
+// withProtoJSON extends withJSON but uses the jsonp marshaler which is optimized for protobuf messages.
+func withProtoJSON(code int, obj protoreflect.ProtoMessage) option {
+	data, _ := protojson.MarshalOptions{
+		EmitUnpopulated: false,
+	}.Marshal(obj)
+	return withJSON(fasthttp.StatusOK, data)
 }
 
 // withError sets error code and jsonized error message.

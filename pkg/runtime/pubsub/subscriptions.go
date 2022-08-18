@@ -1,25 +1,24 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/dapr/dapr/utils"
-
 	"github.com/cenkalti/backoff/v4"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/dapr/kit/retry"
 
 	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -30,7 +29,9 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/retry"
 )
 
 const (
@@ -50,17 +51,7 @@ type (
 		DeadLetterTopic string            `json:"deadLetterTopic"`
 		Metadata        map[string]string `json:"metadata,omitempty"`
 		Route           string            `json:"route"`  // Single route from v1alpha1
-		Routes          RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
-	}
-
-	RoutesJSON struct {
-		Rules   []*RuleJSON `json:"rules,omitempty"`
-		Default string      `json:"default,omitempty"`
-	}
-
-	RuleJSON struct {
-		Match string `json:"match"`
-		Path  string `json:"path"`
+		Routes          json.RawMessage   `json:"routes"` // Multiple routes from v2alpha1
 	}
 )
 
@@ -106,39 +97,25 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	switch resp.Status().Code {
 	case http.StatusOK:
 		_, body := resp.RawData()
-		if err := json.Unmarshal(body, &subscriptionItems); err != nil {
+		err = json.Unmarshal(body, &subscriptionItems)
+		if err != nil {
 			log.Errorf(deserializeTopicsError, err)
 			return nil, errors.Errorf(deserializeTopicsError, err)
 		}
 		subscriptions = make([]Subscription, len(subscriptionItems))
 		for i, si := range subscriptionItems {
-			// Look for single route field and append it as a route struct.
-			// This preserves backward compatibility.
-
-			rules := make([]*Rule, len(si.Routes.Rules)+1)
-			n := 0
-			for _, r := range si.Routes.Rules {
-				rule, err := createRoutingRule(r.Match, r.Path)
+			routes := &commonv1pb.TopicRoutes{}
+			if len(si.Routes) > 0 && !bytes.Equal(si.Routes, []byte("null")) {
+				err = protojson.Unmarshal(si.Routes, routes)
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("failed to unmarshal routes JSON '%v': %w", string(si.Routes), err)
 				}
-				rules[n] = rule
-				n++
 			}
-
-			// If a default path is set, add a rule with a nil `Match`,
-			// which is treated as `true` and always selected if
-			// no previous rules match.
-			if si.Routes.Default != "" {
-				rules[n] = &Rule{
-					Path: si.Routes.Default,
-				}
-				n++
-			} else if si.Route != "" {
-				rules[n] = &Rule{
-					Path: si.Route,
-				}
-				n++
+			// Look for single route field and use it as fallback route.
+			// This preserves backward compatibility.
+			rules, err := ParseRoutingRule(routes, si.Route)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse routing rule '%v': %w", si.Route, err)
 			}
 
 			subscriptions[i] = Subscription{
@@ -146,7 +123,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 				Topic:           si.Topic,
 				Metadata:        si.Metadata,
 				DeadLetterTopic: si.DeadLetterTopic,
-				Rules:           rules[:n],
+				Rules:           rules,
 			}
 		}
 
@@ -233,14 +210,14 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 		log.Debug(noSubscriptionsError)
 	} else {
 		for _, s := range resp.Subscriptions {
-			rules, err := parseRoutingRulesGRPC(s.Routes)
+			rules, err := ParseRoutingRule(s.Routes, "")
 			if err != nil {
 				return nil, err
 			}
 			subscriptions = append(subscriptions, Subscription{
 				PubsubName:      s.PubsubName,
-				Topic:           s.GetTopic(),
-				Metadata:        s.GetMetadata(),
+				Topic:           s.Topic,
+				Metadata:        s.Metadata,
 				DeadLetterTopic: s.DeadLetterTopic,
 				Rules:           rules,
 			})
@@ -374,43 +351,61 @@ func parseRoutingRulesYAML(routes subscriptionsapi_v2alpha1.Routes) ([]*Rule, er
 		n++
 	}
 
+	if n == 0 {
+		return []*Rule{}, nil
+	}
+
 	return r[:n], nil
 }
 
-func parseRoutingRulesGRPC(routes *commonv1pb.TopicRoutes) ([]*Rule, error) {
+// ParseRoutingRule parses a routing rule.
+// fallbackRoute should be set for HTTP only. gRPC automatically specifies a default route if none are returned.
+func ParseRoutingRule(routes *commonv1pb.TopicRoutes, fallbackRoute string) ([]*Rule, error) {
 	if routes == nil {
 		return []*Rule{{
 			Path: "",
 		}}, nil
 	}
-	r := make([]*Rule, 0, len(routes.Rules)+1)
+
+	r := make([]*Rule, len(routes.Rules)+1)
+	n := 0
 
 	for _, rule := range routes.Rules {
 		rr, err := createRoutingRule(rule.Match, rule.Path)
 		if err != nil {
 			return nil, err
 		}
-		r = append(r, rr)
+		r[n] = rr
+		n++
 	}
 
 	// If a default path is set, add a rule with a nil `Match`,
 	// which is treated as `true` and always selected if
 	// no previous rules match.
 	if routes.Default != "" {
-		r = append(r, &Rule{
+		r[n] = &Rule{
 			Path: routes.Default,
-		})
+		}
+		n++
+	} else if fallbackRoute != "" {
+		r[n] = &Rule{
+			Path: fallbackRoute,
+		}
+		n++
 	}
 
-	// gRPC automatically specifies a default route
-	// if none are returned.
 	if len(r) == 0 {
-		r = append(r, &Rule{
-			Path: "",
-		})
+		if fallbackRoute == "" {
+			r[n] = &Rule{
+				Path: "",
+			}
+			n++
+		} else {
+			return []*Rule{}, nil
+		}
 	}
 
-	return r, nil
+	return r[:n], nil
 }
 
 func createRoutingRule(match, path string) (*Rule, error) {
@@ -430,9 +425,9 @@ func createRoutingRule(match, path string) (*Rule, error) {
 }
 
 // DeclarativeKubernetes loads subscriptions from the operator when running in Kubernetes.
-func DeclarativeKubernetes(client operatorv1pb.OperatorClient, podName string, namespace string, log logger.Logger) []Subscription {
+func DeclarativeKubernetes(ctx context.Context, client operatorv1pb.OperatorClient, podName string, namespace string, log logger.Logger) []Subscription {
 	var subs []Subscription
-	resp, err := client.ListSubscriptionsV2(context.TODO(), &operatorv1pb.ListSubscriptionsRequest{
+	resp, err := client.ListSubscriptionsV2(ctx, &operatorv1pb.ListSubscriptionsRequest{
 		PodName:   podName,
 		Namespace: namespace,
 	})

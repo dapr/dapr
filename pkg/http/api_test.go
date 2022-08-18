@@ -44,6 +44,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/utils"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -290,6 +291,192 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
 			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
 		}
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestSubscriptionsEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	mockAdapter := daprt.NewMockPubSubAdapter()
+	mockAdapter.SubscribeFn = func(subscription *runtime_pubsub.Subscription) error {
+		if subscription.PubsubName == "errnotfound" {
+			return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+		}
+		return nil
+	}
+	mockAdapter.UnsubscribeFn = func(name, topic string) error {
+		if name == "errnotfound" {
+			return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+		}
+		if topic == "errnotfound" {
+			return errors.New("subscription not found")
+		}
+		return nil
+	}
+	mockAdapter.PublishFn = func(req *pubsub.PublishRequest) error {
+		if req.PubsubName == "errorpubsub" {
+			return fmt.Errorf("Error from pubsub %s", req.PubsubName)
+		}
+
+		if req.PubsubName == "errnotfound" {
+			return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+		}
+
+		if req.PubsubName == "errnotallowed" {
+			return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+		}
+
+		return nil
+	}
+	mockAdapter.GetPubSubFn = func(pubsubName string) pubsub.PubSub {
+		return &daprt.MockPubSub{}
+	}
+	testAPI := &api{
+		pubsubAdapter: mockAdapter,
+	}
+	fakeServer.StartServer(testAPI.constructSubscriptionsEndpoints())
+
+	var currentList string
+	t.Run("Subscribe successfully - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		testMethods := []string{"POST", "PUT", "POST"}
+		testPayloads := [][]byte{
+			[]byte(`{"pubsubname":"myps","topic":"topic1","routes":{"rules":[{"match":"event.type == \"widget\"","path":"/widgets"},{"match":"event.type == \"gadget\"","path":"/gadgets"}],"default":"/products"}}`),
+			[]byte(`{"pubsubname":"myps2","topic":"topic2","routes":{"default":"/topic2"}}`),
+			[]byte(`{"pubsubname":"myps","topic":"topic3","routes":{"default":"/topic3"}}`),
+		}
+		expectResponses := []string{
+			`{"subscriptions":[{"pubsubname":"myps","topic":"topic1","routes":{"rules":[{"match":"event.type == \"widget\"","path":"/widgets"},{"match":"event.type == \"gadget\"","path":"/gadgets"},{"path":"/products"}]}}]}`,
+			`{"subscriptions":[{"pubsubname":"myps","topic":"topic1","routes":{"rules":[{"match":"event.type == \"widget\"","path":"/widgets"},{"match":"event.type == \"gadget\"","path":"/gadgets"},{"path":"/products"}]}},{"pubsubname":"myps2","topic":"topic2","routes":{"rules":[{"path":"/topic2"}]}}]}`,
+			`{"subscriptions":[{"pubsubname":"myps","topic":"topic1","routes":{"rules":[{"match":"event.type == \"widget\"","path":"/widgets"},{"match":"event.type == \"gadget\"","path":"/gadgets"},{"path":"/products"}]}},{"pubsubname":"myps2","topic":"topic2","routes":{"rules":[{"path":"/topic2"}]}},{"pubsubname":"myps","topic":"topic3","routes":{"rules":[{"path":"/topic3"}]}}]}`,
+		}
+		for i := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(testMethods[i], apiPath, testPayloads[i], nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "expected 200 as response code")
+			assert.Equal(t, utils.CompactJSON(expectResponses[i]), utils.CompactJSON(resp.RawBody))
+			currentList = expectResponses[i]
+		}
+	})
+
+	t.Run("Subscribe with empty pubsub or topic - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		testPayloads := [][]byte{
+			[]byte(`{"topic":"topic1"}`),
+			[]byte(`{"pubsubname":"myps"}`),
+		}
+		expectErrs := []string{"ERR_PUBSUB_EMPTY", "ERR_TOPIC_EMPTY"}
+		for i := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(testMethods[i], apiPath, testPayloads[i], nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "expected bad request error as response")
+			assert.Equal(t, expectErrs[i], resp.ErrorBody["errorCode"])
+		}
+	})
+
+	t.Run("Subscribe with invalid routes - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		testPayload := []byte(`{"pubsubname":"foo","topic":"topic1","routes":{"rules":[{"match":"event.type == \"widget\"","path":"/widgets"},{"match":"event.type == ","path":"/gadgets"}],"default":"/products"}}`)
+		for i := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(testMethods[i], apiPath, testPayload, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "expected bad request error as response")
+			assert.Equal(t, "ERR_RULES_INVALID", resp.ErrorBody["errorCode"])
+		}
+	})
+
+	t.Run("Subscribe to topic already subscribed - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte(`{"pubsubname":"myps","topic":"topic1"}`), nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_SUBSCRIBE_FAILED", resp.ErrorBody["errorCode"])
+		}
+	})
+
+	t.Run("Subscribe to pubsub that doesn't exist - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		testPayload := []byte(`{"pubsubname":"errnotfound","topic":"foo"}`)
+		for i := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(testMethods[i], apiPath, testPayload, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_SUBSCRIBE_FAILED", resp.ErrorBody["errorCode"])
+		}
+	})
+
+	t.Run("List active topic subscriptions - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "expected 200 as response code")
+		assert.Equal(t, utils.CompactJSON(currentList), utils.CompactJSON(resp.RawBody))
+	})
+
+	t.Run("Unsubscribe successfully - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		testPayloads := [][]byte{
+			[]byte(`{"pubsubname":"myps","topic":"topic1"}`),
+			[]byte(`{"pubsubname":"myps2","topic":"topic2"}`),
+		}
+		expectResponses := []string{
+			`{"subscriptions":[{"pubsubname":"myps2","topic":"topic2","routes":{"rules":[{"path":"/topic2"}]}},{"pubsubname":"myps","topic":"topic3","routes":{"rules":[{"path":"/topic3"}]}}]}`,
+			`{"subscriptions":[{"pubsubname":"myps","topic":"topic3","routes":{"rules":[{"path":"/topic3"}]}}]}`,
+		}
+		for i := range testPayloads {
+			// act
+			resp := fakeServer.DoRequest("DELETE", apiPath, testPayloads[i], nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "expected 200 as response code")
+			assert.Equal(t, utils.CompactJSON(expectResponses[i]), utils.CompactJSON(resp.RawBody))
+			currentList = expectResponses[i]
+		}
+	})
+
+	t.Run("List updated active topic subscriptions - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "expected 200 as response code")
+		assert.Equal(t, utils.CompactJSON(currentList), utils.CompactJSON(resp.RawBody))
+	})
+
+	t.Run("Unsubscribe with empty pubsub or topic - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		testPayloads := [][]byte{
+			[]byte(`{"topic":"topic1"}`),
+			[]byte(`{"pubsubname":"myps"}`),
+		}
+		expectErrs := []string{"ERR_PUBSUB_EMPTY", "ERR_TOPIC_EMPTY"}
+		for i := range testPayloads {
+			// act
+			resp := fakeServer.DoRequest("DELETE", apiPath, testPayloads[i], nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "expected bad request error as response")
+			assert.Equal(t, expectErrs[i], resp.ErrorBody["errorCode"])
+		}
+	})
+
+	t.Run("Unsuubscribe from topic not subscribed to - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/subscriptions", apiVersionV1)
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, []byte(`{"pubsubname":"not-subscribed","topic":"not-subscribed"}`), nil)
+		// assert
+		assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+		assert.Equal(t, "ERR_UNSUBSCRIBE_FAILED", resp.ErrorBody["errorCode"])
 	})
 
 	fakeServer.Shutdown()
@@ -623,13 +810,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 400, resp.StatusCode)
-
-		// protojson produces different indentation space based on OS
-		// For linux
-		comp1 := string(resp.RawBody) == "{\"code\":3,\"message\":\"InvalidArgument\",\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"reason\":\"fakeReason\"}]}"
-		// For mac and windows
-		comp2 := string(resp.RawBody) == "{\"code\":3, \"message\":\"InvalidArgument\", \"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\", \"reason\":\"fakeReason\"}]}"
-		assert.True(t, comp1 || comp2)
+		assert.Equal(t, utils.CompactJSON(`{"code":3,"message":"InvalidArgument","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"fakeReason"}]}`), utils.CompactJSON(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with malformed status response", func(t *testing.T) {

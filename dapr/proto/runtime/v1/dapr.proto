@@ -53,6 +53,15 @@ service Dapr {
   // Publishes events to the specific topic.
   rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
 
+  // Subscribes to the specific topic.
+  rpc SubscribeTopic(common.v1.TopicSubscription) returns (SubscribeTopicResponse) {}
+
+  // ListActiveTopicSubscriptions returns the list of currently-active topic subscriptions.
+  rpc ListActiveTopicSubscriptions(google.protobuf.Empty) returns (ListActiveTopicSubscriptionsResponse) {}
+
+  // Unsubscribes from the specific topic.
+  rpc UnsubscribeTopic(ActiveTopicSubscription) returns (UnsubscribeTopicResponse) {}
+
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
 
@@ -285,6 +294,33 @@ message PublishEventRequest {
   // metadata property:
   // - key : the key of the message.
   map<string, string> metadata = 5;
+}
+
+// SubscribeTopicResponse is the response from SubscribeTopic.
+message SubscribeTopicResponse {
+  // The list of topics.
+  repeated common.v1.TopicSubscription subscriptions = 1;
+}
+
+// ListActiveTopicSubscriptionsResponse is the message containing the list of active topic subscriptions.
+message ListActiveTopicSubscriptionsResponse {
+  // The list of topics.
+  repeated common.v1.TopicSubscription subscriptions = 1;
+}
+
+// UnsubscribeTopicResponse is the response from UnsubscribeTopic.
+message UnsubscribeTopicResponse {
+  // The list of topics.
+  repeated common.v1.TopicSubscription subscriptions = 1;
+}
+
+// ActiveTopicSubscription identifies an active subscription to a topic.
+message ActiveTopicSubscription {
+  // Required. The name of the pubsub containing the topic below.
+  string pubsub_name = 1 [json_name="pubsubname"];
+
+  // Required. The name of topic of the subscription.
+  string topic = 2;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings

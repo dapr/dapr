@@ -42,6 +42,12 @@ type DaprClient interface {
 	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Subscribes to the specific topic.
+	SubscribeTopic(ctx context.Context, in *v1.TopicSubscription, opts ...grpc.CallOption) (*SubscribeTopicResponse, error)
+	// ListActiveTopicSubscriptions returns the list of currently-active topic subscriptions.
+	ListActiveTopicSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListActiveTopicSubscriptionsResponse, error)
+	// Unsubscribes from the specific topic.
+	UnsubscribeTopic(ctx context.Context, in *ActiveTopicSubscription, opts ...grpc.CallOption) (*UnsubscribeTopicResponse, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -165,6 +171,33 @@ func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteSta
 func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PublishEvent", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SubscribeTopic(ctx context.Context, in *v1.TopicSubscription, opts ...grpc.CallOption) (*SubscribeTopicResponse, error) {
+	out := new(SubscribeTopicResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SubscribeTopic", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ListActiveTopicSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListActiveTopicSubscriptionsResponse, error) {
+	out := new(ListActiveTopicSubscriptionsResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ListActiveTopicSubscriptions", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) UnsubscribeTopic(ctx context.Context, in *ActiveTopicSubscription, opts ...grpc.CallOption) (*UnsubscribeTopicResponse, error) {
+	out := new(UnsubscribeTopicResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnsubscribeTopic", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -387,6 +420,12 @@ type DaprServer interface {
 	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
+	// Subscribes to the specific topic.
+	SubscribeTopic(context.Context, *v1.TopicSubscription) (*SubscribeTopicResponse, error)
+	// ListActiveTopicSubscriptions returns the list of currently-active topic subscriptions.
+	ListActiveTopicSubscriptions(context.Context, *emptypb.Empty) (*ListActiveTopicSubscriptionsResponse, error)
+	// Unsubscribes from the specific topic.
+	UnsubscribeTopic(context.Context, *ActiveTopicSubscription) (*UnsubscribeTopicResponse, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -457,6 +496,15 @@ func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *Execute
 }
 func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
+}
+func (UnimplementedDaprServer) SubscribeTopic(context.Context, *v1.TopicSubscription) (*SubscribeTopicResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubscribeTopic not implemented")
+}
+func (UnimplementedDaprServer) ListActiveTopicSubscriptions(context.Context, *emptypb.Empty) (*ListActiveTopicSubscriptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListActiveTopicSubscriptions not implemented")
+}
+func (UnimplementedDaprServer) UnsubscribeTopic(context.Context, *ActiveTopicSubscription) (*UnsubscribeTopicResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeTopic not implemented")
 }
 func (UnimplementedDaprServer) InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeBinding not implemented")
@@ -685,6 +733,60 @@ func _Dapr_PublishEvent_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).PublishEvent(ctx, req.(*PublishEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubscribeTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(v1.TopicSubscription)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).SubscribeTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/SubscribeTopic",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).SubscribeTopic(ctx, req.(*v1.TopicSubscription))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ListActiveTopicSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ListActiveTopicSubscriptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/ListActiveTopicSubscriptions",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ListActiveTopicSubscriptions(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_UnsubscribeTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ActiveTopicSubscription)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).UnsubscribeTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnsubscribeTopic",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).UnsubscribeTopic(ctx, req.(*ActiveTopicSubscription))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1076,6 +1178,18 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PublishEvent",
 			Handler:    _Dapr_PublishEvent_Handler,
+		},
+		{
+			MethodName: "SubscribeTopic",
+			Handler:    _Dapr_SubscribeTopic_Handler,
+		},
+		{
+			MethodName: "ListActiveTopicSubscriptions",
+			Handler:    _Dapr_ListActiveTopicSubscriptions_Handler,
+		},
+		{
+			MethodName: "UnsubscribeTopic",
+			Handler:    _Dapr_UnsubscribeTopic_Handler,
 		},
 		{
 			MethodName: "InvokeBinding",

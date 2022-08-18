@@ -83,6 +83,7 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -135,14 +136,6 @@ var log = logger.NewLogger("dapr.runtime")
 // was encountered when processing a cloud event's data property.
 var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
 
-type TopicRoutes map[string]TopicRouteElem
-
-type TopicRouteElem struct {
-	metadata        map[string]string
-	rules           []*runtime_pubsub.Rule
-	deadLetterTopic string
-}
-
 // Type of function that determines if a component is authorized.
 // The function receives the component and must return true if the component is authorized.
 type ComponentAuthorizer func(component components_v1alpha1.Component) bool
@@ -187,8 +180,8 @@ type DaprRuntime struct {
 	pubsubCtx              context.Context
 	pubsubCancel           context.CancelFunc
 	topicsLock             *sync.Mutex
-	topicRoutes            map[string]TopicRoutes        // Key is "componentName"
-	topicCtxCancels        map[string]context.CancelFunc // Key is "componentName||topicName"
+	topicRoutes            map[string]runtime_pubsub.Subscription // Key is "componentName||topicName"
+	topicCtxCancels        map[string]context.CancelFunc          // Key is "componentName||topicName"
 	inputBindingRoutes     map[string]string
 	shutdownC              chan error
 	apiClosers             []io.Closer
@@ -629,40 +622,42 @@ func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, dead
 	return nil
 }
 
-func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, topic string, route TopicRouteElem) error {
-	subKey := pubsubTopicKey(name, topic)
+func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, subscription *runtime_pubsub.Subscription) error {
+	subKey := pubsubTopicKey(subscription.PubsubName, subscription.Topic)
 
-	allowed := a.isPubSubOperationAllowed(name, topic, a.pubSubs[name].scopedSubscriptions)
+	allowed := a.isPubSubOperationAllowed(subscription.PubsubName, subscription.Topic, a.pubSubs[subscription.PubsubName].scopedSubscriptions)
 	if !allowed {
-		return fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", topic, name)
+		return fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", subscription.Topic, subscription.PubsubName)
 	}
 
-	a.topicsLock.Lock()
-	defer a.topicsLock.Unlock()
+	if a.topicRoutes == nil {
+		// Topics have not been initialized yet
+		return errors.New("topic routes have not been initialized yet")
+	}
 
-	log.Debugf("subscribing to topic='%s' on pubsub='%s'", topic, name)
+	log.Debugf("subscribing to topic='%s' on pubsub='%s'", subscription.Topic, subscription.PubsubName)
 
 	if _, ok := a.topicCtxCancels[subKey]; ok {
-		return fmt.Errorf("cannot subscribe to topic '%s' on pubsub '%s': the subscription already exists", topic, name)
+		return fmt.Errorf("cannot subscribe to topic '%s' on pubsub '%s': the subscription already exists", subscription.Topic, subscription.PubsubName)
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	policy := a.resiliency.ComponentInboundPolicy(ctx, name)
-	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
-		Topic:    topic,
-		Metadata: route.metadata,
+	policy := a.resiliency.ComponentInboundPolicy(ctx, subscription.PubsubName)
+	err := a.pubSubs[subscription.PubsubName].component.Subscribe(ctx, pubsub.SubscribeRequest{
+		Topic:    subscription.Topic,
+		Metadata: subscription.Metadata,
 	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
 		}
 
-		msg.Metadata[pubsubName] = name
+		msg.Metadata[pubsubName] = subscription.PubsubName
 
-		rawPayload, err := contrib_metadata.IsRawPayload(route.metadata)
+		rawPayload, err := contrib_metadata.IsRawPayload(subscription.Metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
-			if route.deadLetterTopic != "" {
-				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+			if subscription.DeadLetterTopic != "" {
+				if dlqErr := a.sendToDeadLetter(subscription.PubsubName, msg, subscription.DeadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 					return nil
@@ -675,12 +670,12 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		var cloudEvent map[string]interface{}
 		data := msg.Data
 		if rawPayload {
-			cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, name)
+			cloudEvent = pubsub.FromRawPayload(msg.Data, msg.Topic, subscription.PubsubName)
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
-				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-				if route.deadLetterTopic != "" {
-					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", subscription.PubsubName, msg.Topic, err)
+				if subscription.DeadLetterTopic != "" {
+					if dlqErr := a.sendToDeadLetter(subscription.PubsubName, msg, subscription.DeadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 						return nil
@@ -692,9 +687,9 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		} else {
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
-				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-				if route.deadLetterTopic != "" {
-					if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", subscription.PubsubName, msg.Topic, err)
+				if subscription.DeadLetterTopic != "" {
+					if dlqErr := a.sendToDeadLetter(subscription.PubsubName, msg, subscription.DeadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 						return nil
@@ -709,17 +704,17 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 
-			if route.deadLetterTopic != "" {
-				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
+			if subscription.DeadLetterTopic != "" {
+				_ = a.sendToDeadLetter(subscription.PubsubName, msg, subscription.DeadLetterTopic)
 			}
 			return nil
 		}
 
-		routePath, shouldProcess, err := findMatchingRoute(route.rules, cloudEvent)
+		routePath, shouldProcess, err := findMatchingRoute(subscription.Rules, cloudEvent)
 		if err != nil {
-			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msg.Topic, err)
-			if route.deadLetterTopic != "" {
-				if dlqErr := a.sendToDeadLetter(name, msg, route.deadLetterTopic); dlqErr == nil {
+			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], subscription.PubsubName, msg.Topic, err)
+			if subscription.DeadLetterTopic != "" {
+				if dlqErr := a.sendToDeadLetter(subscription.PubsubName, msg, subscription.DeadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 					return nil
@@ -730,10 +725,10 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		}
 		if !shouldProcess {
 			// The event does not match any route specified so ignore it.
-			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msg.Topic)
+			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], subscription.PubsubName, msg.Topic)
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-			if route.deadLetterTopic != "" {
-				_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
+			if subscription.DeadLetterTopic != "" {
+				_ = a.sendToDeadLetter(subscription.PubsubName, msg, subscription.DeadLetterTopic)
 			}
 			return nil
 		}
@@ -745,7 +740,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 				topic:      msg.Topic,
 				metadata:   msg.Metadata,
 				path:       routePath,
-				pubsub:     name,
+				pubsub:     subscription.PubsubName,
 			}
 			switch a.runtimeConfig.ApplicationProtocol {
 			case HTTPProtocol:
@@ -759,30 +754,38 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
-			if route.deadLetterTopic == "" {
+			if subscription.DeadLetterTopic == "" {
 				return err
 			}
-			_ = a.sendToDeadLetter(name, msg, route.deadLetterTopic)
+			_ = a.sendToDeadLetter(subscription.PubsubName, msg, subscription.DeadLetterTopic)
 			return nil
 		}
 		return err
 	})
 	if err != nil {
 		cancel()
-		return fmt.Errorf("failed to subscribe to topic %s: %w", topic, err)
+		return fmt.Errorf("failed to subscribe to topic %s: %w", subscription.Topic, err)
 	}
+
 	a.topicCtxCancels[subKey] = cancel
+	a.topicRoutes[subKey] = *subscription
+
 	return nil
 }
 
-func (a *DaprRuntime) unsubscribeTopic(name string, topic string) error {
+func (a *DaprRuntime) Unsubscribe(name string, topic string) ([]*commonv1pb.TopicSubscription, error) {
 	a.topicsLock.Lock()
 	defer a.topicsLock.Unlock()
+
+	if a.topicRoutes == nil {
+		// Topics have not been initialized yet
+		return nil, errors.New("topic routes have not been initialized yet")
+	}
 
 	subKey := pubsubTopicKey(name, topic)
 	cancel, ok := a.topicCtxCancels[subKey]
 	if !ok {
-		return fmt.Errorf("cannot unsubscribe from topic '%s' on pubsub '%s': the subscription does not exist", topic, name)
+		return nil, fmt.Errorf("cannot unsubscribe from topic '%s' on pubsub '%s': the subscription does not exist", topic, name)
 	}
 
 	if cancel != nil {
@@ -790,30 +793,49 @@ func (a *DaprRuntime) unsubscribeTopic(name string, topic string) error {
 	}
 
 	delete(a.topicCtxCancels, subKey)
+	delete(a.topicRoutes, subKey)
 
-	return nil
+	return a.doListSubscriptions(), nil
 }
 
-func (a *DaprRuntime) beginPubSub(name string) error {
-	topicRoutes, err := a.getTopicRoutes()
+func (a *DaprRuntime) ListSubscriptions() ([]*commonv1pb.TopicSubscription, error) {
+	a.topicsLock.Lock()
+	defer a.topicsLock.Unlock()
+
+	if a.topicRoutes == nil {
+		// Topics have not been initialized yet
+		return nil, errors.New("topic routes have not been initialized yet")
+	}
+
+	return a.doListSubscriptions(), nil
+}
+
+func (a *DaprRuntime) doListSubscriptions() []*commonv1pb.TopicSubscription {
+	res := make([]*commonv1pb.TopicSubscription, len(a.topicRoutes))
+	var i int
+	for _, sub := range a.topicRoutes {
+		res[i] = sub.ToProto()
+		i++
+	}
+	return res
+}
+
+func (a *DaprRuntime) beginPubSub() {
+	topicRoutes, err := a.getSubscriptions()
 	if err != nil {
-		return err
+		// Log the error only
+		log.Errorf("error occurred while getting pubsub subscriptions: %s", err)
+		return
 	}
 
-	v, ok := topicRoutes[name]
-	if !ok {
-		return nil
-	}
-
-	for topic, route := range v {
-		err = a.subscribeTopic(a.pubsubCtx, name, topic, route)
+	for k := range topicRoutes {
+		sub := topicRoutes[k]
+		_, err = a.doSubscribe(&sub)
 		if err != nil {
 			// Log the error only
-			log.Errorf("error occurred while beginning pubsub for component %s: %s", err)
+			log.Errorf("error occurred while beginning pubsub for topic '%s' in component '%s': %s", sub.Topic, sub.PubsubName, err)
 		}
 	}
-
-	return nil
 }
 
 // findMatchingRoute selects the path based on routing rules. If there are
@@ -1544,7 +1566,9 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		subs = runtime_pubsub.DeclarativeKubernetes(a.operatorClient, a.podName, a.namespace, log)
+		ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
+		subs = runtime_pubsub.DeclarativeKubernetes(ctx, a.operatorClient, a.podName, a.namespace, log)
+		cancel()
 	case modes.StandaloneMode:
 		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
 	}
@@ -1572,30 +1596,25 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 	return subs[:i]
 }
 
-func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
-	if a.topicRoutes != nil {
-		return a.topicRoutes, nil
-	}
-
-	topicRoutes := make(map[string]TopicRoutes)
-
+func (a *DaprRuntime) getSubscriptions() (map[string]runtime_pubsub.Subscription, error) {
+	subs := map[string]runtime_pubsub.Subscription{}
 	if a.appChannel == nil {
 		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
-		return topicRoutes, nil
+		return subs, nil
 	}
 
 	var (
-		subscriptions []runtime_pubsub.Subscription
-		err           error
+		list []runtime_pubsub.Subscription
+		err  error
 	)
 
 	// handle app subscriptions
 	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
+		list, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
+		list, err = runtime_pubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
 	}
 	if err != nil {
 		return nil, err
@@ -1607,7 +1626,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 		skip := false
 
 		// don't register duplicate subscriptions
-		for _, sub := range subscriptions {
+		for _, sub := range list {
 			if sub.PubsubName == s.PubsubName && sub.Topic == s.Topic {
 				log.Warnf("two identical subscriptions found (sources: declarative, app endpoint). pubsubname: %s, topic: %s",
 					s.PubsubName, s.Topic)
@@ -1617,37 +1636,27 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 		}
 
 		if !skip {
-			subscriptions = append(subscriptions, s)
+			list = append(list, s)
 		}
 	}
 
-	for _, s := range subscriptions {
-		if topicRoutes[s.PubsubName] == nil {
-			topicRoutes[s.PubsubName] = TopicRoutes{}
-		}
-
-		topicRoutes[s.PubsubName][s.Topic] = TopicRouteElem{
-			metadata:        s.Metadata,
-			rules:           s.Rules,
-			deadLetterTopic: s.DeadLetterTopic,
+	topicsPerComponent := map[string][]string{}
+	for _, s := range list {
+		subs[pubsubTopicKey(s.PubsubName, s.Topic)] = s
+		if topicsPerComponent[s.PubsubName] == nil {
+			topicsPerComponent[s.PubsubName] = []string{s.Topic}
+		} else {
+			topicsPerComponent[s.PubsubName] = append(topicsPerComponent[s.PubsubName], s.Topic)
 		}
 	}
 
-	if len(topicRoutes) > 0 {
-		for pubsubName, v := range topicRoutes {
-			var topics string
-			for topic := range v {
-				if topics == "" {
-					topics += topic
-				} else {
-					topics += " " + topic
-				}
-			}
-			log.Infof("app is subscribed to the following topics: [%s] through pubsub=%s", topics, pubsubName)
+	if len(topicsPerComponent) > 0 {
+		for pubsubName, v := range topicsPerComponent {
+			log.Infof("app is subscribing to the following topics: [%s] through pubsub=%s", strings.Join(v, " "), pubsubName)
 		}
 	}
-	a.topicRoutes = topicRoutes
-	return topicRoutes, nil
+
+	return subs, nil
 }
 
 func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
@@ -1674,9 +1683,7 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 		return err
 	}
 
-	pubsubName := c.ObjectMeta.Name
-
-	a.pubSubs[pubsubName] = pubsubItem{
+	a.pubSubs[c.ObjectMeta.Name] = pubsubItem{
 		component:           pubSub,
 		scopedSubscriptions: scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties),
 		scopedPublishings:   scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties),
@@ -1706,21 +1713,25 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	})
 }
 
-// Subscribe is used by APIs to start a subscription to a topic.
-func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]TopicRouteElem) (err error) {
-	_, ok := a.pubSubs[name]
+func (a *DaprRuntime) Subscribe(subscription *runtime_pubsub.Subscription) ([]*commonv1pb.TopicSubscription, error) {
+	a.topicsLock.Lock()
+	defer a.topicsLock.Unlock()
+
+	return a.doSubscribe(subscription)
+}
+
+func (a *DaprRuntime) doSubscribe(subscription *runtime_pubsub.Subscription) ([]*commonv1pb.TopicSubscription, error) {
+	_, ok := a.pubSubs[subscription.PubsubName]
 	if !ok {
-		return fmt.Errorf("pubsub component %s does not exist", name)
+		return nil, runtime_pubsub.NotFoundError{PubsubName: subscription.PubsubName}
 	}
 
-	for topic, route := range routes {
-		err = a.subscribeTopic(ctx, name, topic, route)
-		if err != nil {
-			return err
-		}
+	err := a.subscribeTopic(a.pubsubCtx, subscription)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	return a.doListSubscriptions(), nil
 }
 
 // GetPubSub is an adapter method to find a pubsub by name.
@@ -2669,6 +2680,9 @@ func componentDependency(compCategory ComponentCategory, name string) string {
 }
 
 func (a *DaprRuntime) startSubscriptions() {
+	a.topicsLock.Lock()
+	defer a.topicsLock.Unlock()
+
 	// Clean any previous state
 	if a.pubsubCancel != nil {
 		a.pubsubCancel()
@@ -2677,11 +2691,9 @@ func (a *DaprRuntime) startSubscriptions() {
 	// PubSub subscribers are stopped via cancellation of the main runtime's context
 	a.pubsubCtx, a.pubsubCancel = context.WithCancel(a.ctx)
 	a.topicCtxCancels = map[string]context.CancelFunc{}
-	for pubsubName := range a.pubSubs {
-		if err := a.beginPubSub(pubsubName); err != nil {
-			log.Errorf("error occurred while beginning pubsub %s: %s", pubsubName, err)
-		}
-	}
+	a.topicRoutes = map[string]runtime_pubsub.Subscription{}
+
+	a.beginPubSub()
 }
 
 // Stop subscriptions to all topics and cleans the cached topics

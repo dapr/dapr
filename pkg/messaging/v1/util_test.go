@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/utils"
 )
 
 func TestInternalMetadataToHTTPHeader(t *testing.T) {
@@ -349,13 +350,7 @@ func TestProtobufToJSON(t *testing.T) {
 	jsonBody, err := ProtobufToJSON(tpb)
 	assert.NoError(t, err)
 	t.Log(string(jsonBody))
-
-	// protojson produces different indentation space based on OS
-	// For linux
-	comp1 := string(jsonBody) == "{\"stackEntries\":[\"first stack\",\"second stack\"]}"
-	// For mac and windows
-	comp2 := string(jsonBody) == "{\"stackEntries\":[\"first stack\", \"second stack\"]}"
-	assert.True(t, comp1 || comp2)
+	assert.Equal(t, utils.CompactJSON(`{"stackEntries":["first stack","second stack"]}`), utils.CompactJSON(jsonBody))
 }
 
 func TestWithCustomGrpcMetadata(t *testing.T) {

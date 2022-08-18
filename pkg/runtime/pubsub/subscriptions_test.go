@@ -288,19 +288,7 @@ func (m *mockUnstableHTTPSubscriptions) InvokeMethod(ctx context.Context, req *i
 			Metadata: map[string]string{
 				"testName": "testValue",
 			},
-			Routes: RoutesJSON{
-				Rules: []*RuleJSON{
-					{
-						Match: `event.type == "myevent.v3"`,
-						Path:  "myroute.v3",
-					},
-					{
-						Match: `event.type == "myevent.v2"`,
-						Path:  "myroute.v2",
-					},
-				},
-				Default: "myroute",
-			},
+			Routes: json.RawMessage(`{"rules": [ {"match": "event.type == \"myevent.v3\"", "path": "myroute.v3"}, {"match": "event.type == \"myevent.v2\"", "path": "myroute.v2"} ], "default": "myroute"}`),
 		},
 	}
 
@@ -323,19 +311,7 @@ func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.
 			Metadata: map[string]string{
 				"testName": "testValue",
 			},
-			Routes: RoutesJSON{
-				Rules: []*RuleJSON{
-					{
-						Match: `event.type == "myevent.v3"`,
-						Path:  "myroute.v3",
-					},
-					{
-						Match: `event.type == "myevent.v2"`,
-						Path:  "myroute.v2",
-					},
-				},
-				Default: "myroute",
-			},
+			Routes: json.RawMessage(`{"rules": [ {"match": "event.type == \"myevent.v3\"", "path": "myroute.v3"}, {"match": "event.type == \"myevent.v2\"", "path": "myroute.v2"} ], "default": "myroute"}`),
 		},
 	}
 
@@ -594,7 +570,7 @@ func (m *mockK8sSubscriptions) ListSubscriptionsV2(ctx context.Context, in *oper
 
 func TestK8sSubscriptions(t *testing.T) {
 	m := mockK8sSubscriptions{}
-	subs := DeclarativeKubernetes(&m, "testPodName", "testNamespace", log)
+	subs := DeclarativeKubernetes(context.Background(), &m, "testPodName", "testNamespace", log)
 	if assert.Len(t, subs, 1) {
 		assert.Equal(t, "topic1", subs[0].Topic)
 		if assert.Len(t, subs[0].Rules, 3) {

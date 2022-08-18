@@ -14,6 +14,8 @@ limitations under the License.
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -161,4 +163,11 @@ func IsYaml(fileName string) bool {
 		return true
 	}
 	return false
+}
+
+// CompactJSON compacts a JSON (either a byte slice or string) removing all unnecessary whitespaces
+func CompactJSON[T []byte | string](src T) string {
+	buf := &bytes.Buffer{}
+	_ = json.Compact(buf, []byte(src))
+	return buf.String()
 }
