@@ -15,12 +15,8 @@ type Lock struct {
 }
 
 func New(name string, f func() lock.Store, aliases ...string) Lock {
-	names := []string{name}
-	if len(aliases) > 0 {
-		names = append(names, aliases...)
-	}
 	return Lock{
-		Names:         names,
+		Names:         append(aliases, name),
 		FactoryMethod: f,
 	}
 }
