@@ -229,7 +229,7 @@ func startControlServer() {
 		}).Methods("POST", "PUT")
 
 		return r
-	}, false)
+	}, false, false)
 }
 
 func startPublishing(ctx context.Context) {
@@ -260,7 +260,7 @@ func publishMessage(count int) {
 func startHTTP() {
 	port, _ := strconv.Atoi(appPort)
 	log.Printf("Health App HTTP server listening on http://:%d", port)
-	utils.StartServer(port, httpRouter, true)
+	utils.StartServer(port, httpRouter, true, false)
 }
 
 func httpRouter() *mux.Router {
