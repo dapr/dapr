@@ -117,6 +117,8 @@ linters-settings:
     min-len: 3
     # minimal occurrences count to trigger, 3 by default
     min-occurrences: 5
+    # ignore test files, false by default
+    ignore-tests: true
   depguard:
     list-type: blacklist
     include-go-root: false
