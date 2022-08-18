@@ -15,7 +15,6 @@ package state
 
 import (
 	st "github.com/dapr/components-contrib/state"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 )
@@ -25,7 +24,7 @@ type statestore struct {
 }
 
 // NewFromPluggable creates a new StateStore from a given pluggable component.
-func NewFromPluggable(pc components_v1alpha1.PluggableComponent) State {
+func NewFromPluggable(pc pluggable.Component) State {
 	return State{
 		Names: []string{pc.Name},
 		FactoryMethod: func() st.Store {

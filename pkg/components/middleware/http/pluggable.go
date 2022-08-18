@@ -15,7 +15,6 @@ package http
 
 import (
 	m "github.com/dapr/components-contrib/middleware"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/middleware/http"
@@ -23,7 +22,7 @@ import (
 )
 
 // NewMiddlewareFromPluggable creates a new httpMiddleware from a given pluggable component.
-func NewMiddlewareFromPluggable(pc components_v1alpha1.PluggableComponent) Middleware {
+func NewMiddlewareFromPluggable(pc pluggable.Component) Middleware {
 	return Middleware{
 		Names: []string{pc.Name},
 		FactoryMethod: func(metadata m.Metadata) (http.Middleware, error) {

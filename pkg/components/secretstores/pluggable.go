@@ -15,7 +15,6 @@ package secretstores
 
 import (
 	ss "github.com/dapr/components-contrib/secretstores"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 )
@@ -25,7 +24,7 @@ type sStore struct {
 }
 
 // NewFromPluggable creates a new SecretStore from a given pluggable component.
-func NewFromPluggable(pc components_v1alpha1.PluggableComponent) SecretStore {
+func NewFromPluggable(pc pluggable.Component) SecretStore {
 	return SecretStore{
 		Names: []string{pc.Name},
 		FactoryMethod: func() ss.SecretStore {

@@ -15,7 +15,6 @@ package bindings
 
 import (
 	b "github.com/dapr/components-contrib/bindings"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 )
@@ -25,7 +24,7 @@ type inputBinding struct {
 }
 
 // NewInputFromPluggable creates a new InputBinding from a given pluggable component.
-func NewInputFromPluggable(pc components_v1alpha1.PluggableComponent) InputBinding {
+func NewInputFromPluggable(pc pluggable.Component) InputBinding {
 	return InputBinding{
 		Names: []string{pc.Name},
 		FactoryMethod: func() b.InputBinding {
@@ -39,7 +38,7 @@ type outputBinding struct {
 }
 
 // NewOutputFromPluggable creates a new OutputBinding from a given pluggable component.
-func NewOutputFromPluggable(pc components_v1alpha1.PluggableComponent) OutputBinding {
+func NewOutputFromPluggable(pc pluggable.Component) OutputBinding {
 	return OutputBinding{
 		Names: []string{pc.Name},
 		FactoryMethod: func() b.OutputBinding {

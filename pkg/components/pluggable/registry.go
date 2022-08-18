@@ -14,39 +14,45 @@ limitations under the License.
 package pluggable
 
 import (
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/kit/logger"
 )
+
+// Component represents a pluggable component specification.
+type Component struct {
+	Name       string
+	SocketPath string
+	Type       string
+}
 
 var (
 	log = logger.NewLogger("pluggable-components")
 
 	// registry maintains a map on how to construct a component given a pluggable component
-	registry = make(map[components.Type]func(components_v1alpha1.PluggableComponent) any)
+	registry = make(map[components.Type]func(Component) any)
 )
 
-// Register register a new pluggable component into the map
+// Register registers a new pluggable component into the map
 func Register[T any](
 	compType components.Type,
-	new func(components_v1alpha1.PluggableComponent) T,
+	new func(Component) T,
 ) {
-	registry[compType] = func(pc components_v1alpha1.PluggableComponent) any {
+	registry[compType] = func(pc Component) any {
 		return new(pc)
 	}
 }
 
 // MustLoad loads a pluggable component that was registered before
-func MustLoad[T any](pc components_v1alpha1.PluggableComponent) T {
-	loader, ok := registry[components.Type(pc.Spec.Type)]
+func MustLoad[T any](pc Component) T {
+	loader, ok := registry[components.Type(pc.Type)]
 	if !ok {
-		log.Fatalf("%s not registered as a pluggable component", pc.Spec.Type)
+		log.Fatalf("%s not registered as a pluggable component", pc.Type)
 	}
 	anyInstance := loader(pc)
 
 	instance, ok := anyInstance.(T)
 	if !ok {
-		log.Fatalf("%s has tried to load as #v but type does not match", pc.Spec.Type, anyInstance)
+		log.Fatalf("%s has tried to load as #v but type does not match", pc.Type, anyInstance)
 	}
 
 	return instance

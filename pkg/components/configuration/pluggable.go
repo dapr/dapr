@@ -16,7 +16,6 @@ package configuration
 import (
 	c "github.com/dapr/components-contrib/configuration"
 
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 )
@@ -26,7 +25,7 @@ type configurationStore struct {
 }
 
 // NewFromPluggable creates a new ConfigurationStore from a given pluggable component.
-func NewFromPluggable(pc components_v1alpha1.PluggableComponent) Configuration {
+func NewFromPluggable(pc pluggable.Component) Configuration {
 	return Configuration{
 		Names: []string{pc.Name},
 		FactoryMethod: func() c.Store {

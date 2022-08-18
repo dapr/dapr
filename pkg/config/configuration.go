@@ -216,6 +216,14 @@ type FeatureSpec struct {
 type ComponentsSpec struct {
 	// Denylist of component types that cannot be instantiated
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
+	// +optional
+	Pluggable map[string]PluggableSpec `json:"pluggable" yaml:"pluggable"`
+}
+
+// PluggableSpec describes the configuration for Dapr Pluggable Components
+type PluggableSpec struct {
+	// +optional
+	SocketPath string `json:"socket,omitempty" yaml:"socket,omitempty"`
 }
 
 // LoadDefaultConfiguration returns the default config.

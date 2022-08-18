@@ -37,23 +37,6 @@ type Component struct {
 	Scopes []string `json:"scopes,omitempty"`
 }
 
-type PluggableComponent struct {
-	metav1.TypeMeta `json:",inline"`
-	// +optional
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
-	Scopes []string `json:"scopes,omitempty"`
-	// +optional
-	Spec PluggableComponentSpec `json:"spec,omitempty"`
-}
-
-type PluggableComponentSpec struct {
-	Type    string `json:"type"`
-	Version string `json:"version"`
-	// +optional
-	SocketPath string `json:"socket,omitempty"`
-}
-
 // ComponentSpec is the spec for a component.
 type ComponentSpec struct {
 	Type    string `json:"type"`
