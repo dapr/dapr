@@ -781,6 +781,11 @@ type subscribeConfigurationResponse struct {
 	ID string `json:"id"`
 }
 
+type UnsubscribeConfigurationResponse struct {
+	Ok      bool   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+}
+
 type configurationEventHandler struct {
 	api        *api
 	storeName  string
@@ -1002,12 +1007,18 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_CONFIGURATION_UNSUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, err.Error()))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		errRespBytes, _ := json.Marshal(&UnsubscribeConfigurationResponse{
+			Ok:      false,
+			Message: msg.Message,
+		})
+		respond(reqCtx, withJSON(fasthttp.StatusInternalServerError, errRespBytes))
 		log.Debug(msg)
 		return
 	}
-
-	respond(reqCtx, withEmpty())
+	respBytes, _ := json.Marshal(&UnsubscribeConfigurationResponse{
+		Ok: true,
+	})
+	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
 }
 
 func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {

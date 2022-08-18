@@ -2285,8 +2285,30 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"].(string))
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 200, resp2.StatusCode, "unsubscribe configuration store,should return 200")
+		assert.NotNil(t, resp2.JSONBody, "Unsubscribe configuration should return a non nil response body")
+	})
 
-		assert.Equal(t, 204, resp2.StatusCode, "unsubscribe configuration store,should return 204")
+	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+
+		rspMap1 := resp1.JSONBody
+		assert.NotNil(t, rspMap1)
+
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", rspMap1.(map[string]interface{})["id"].(string))
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+
+		assert.Equal(t, 400, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
+	})
+
+	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, "subscribe_id_err")
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 500, resp2.StatusCode, "Expected error during unsubscribe api")
+		assert.NotNil(t, resp2.ErrorBody, "Unsubscribe configuration should return a non nil response body")
 	})
 }
 
@@ -3803,6 +3825,9 @@ func (c *fakeConfigurationStore) Subscribe(ctx context.Context, req *configurati
 }
 
 func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
+	if req.ID == "subscribe_id_err" {
+		return errors.New("Error occurred during unsubscribe op")
+	}
 	return nil
 }
 
