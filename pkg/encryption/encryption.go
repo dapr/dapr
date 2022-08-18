@@ -128,7 +128,7 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item v1alpha1.Metadat
 		return Key{}, errors.Errorf("%s: secretKeyRef cannot be empty", errPrefix)
 	}
 
-	r, err := secretStore.GetSecret(context.Background(), secretstores.GetSecretRequest{
+	r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
 		Name: item.SecretKeyRef.Name,
 		Metadata: map[string]string{
 			"namespace": namespace,
