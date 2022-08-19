@@ -1470,33 +1470,45 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 }
 
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
-	temp := make(map[string]string)
+	extendedMetadata := make(map[string]string)
 
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = value.(string)
+		extendedMetadata[key.(string)] = value.(string)
 		return true
 	})
-	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
+	extendedMetadata[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
-	componentsCapabilties := a.getComponentsCapabilitesFn()
+	componentsCapabilities := a.getComponentsCapabilitesFn()
+	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
+	if a.actor != nil {
+		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {
+			activeActorsCount = append(activeActorsCount, &runtimev1pb.ActiveActorsCount{
+				Type:  actorTypeCount.Type,
+				Count: int32(actorTypeCount.Count),
+			})
+		}
+	}
+
 	for _, comp := range a.components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
 			Type:         comp.Spec.Type,
-			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
+			Capabilities: getOrDefaultCapabilities(componentsCapabilities, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 	response := &runtimev1pb.GetMetadataResponse{
-		ExtendedMetadata:     temp,
+		Id:                   a.id,
+		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
+		ActiveActorsCount:    activeActorsCount,
 	}
 	return response, nil
 }
 
-func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 	if val, ok := dict[key]; ok {
 		return val
 	}
