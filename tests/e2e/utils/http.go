@@ -143,7 +143,7 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 
 // HTTPPatch is a helper to make PATCH request call to url.
 func HTTPPatch(url string, data []byte) ([]byte, error) {
-	req, err := http.NewRequest("PATCH", SanitizeHTTPURL(url), bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPatch, SanitizeHTTPURL(url), bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
 
 // HTTPDelete calls a given URL with the HTTP DELETE method.
 func HTTPDelete(url string) ([]byte, error) {
-	req, err := http.NewRequest("DELETE", SanitizeHTTPURL(url), nil)
+	req, err := http.NewRequest(http.MethodDelete, SanitizeHTTPURL(url), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func HTTPDelete(url string) ([]byte, error) {
 
 // HTTPDeleteWithBodyAndStatus calls a given URL with the HTTP DELETE method.
 func HTTPDeleteWithBodyAndStatus(url string, data []byte) ([]byte, int, error) {
-	req, err := http.NewRequest("DELETE", SanitizeHTTPURL(url), bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodDelete, SanitizeHTTPURL(url), bytes.NewReader(data))
 	if err != nil {
 		return nil, 0, err
 	}

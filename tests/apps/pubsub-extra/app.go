@@ -111,7 +111,7 @@ func startGRPC() {
 
 	// Stop the gRPC server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh
@@ -416,8 +416,14 @@ func startControlServer() {
 func publishMessageHTTP(pubsub string, topic string, data []byte) error {
 	u := fmt.Sprintf(publishURL, daprHTTPPort, pubsub, topic)
 	log.Println("Invoking URL POST", u)
-	_, err := httpClient.Post(u, "application/json", bytes.NewReader(data))
-	return err
+	res, err := httpClient.Post(u, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	// Drain before closing
+	_, _ = io.Copy(io.Discard, res.Body)
+	res.Body.Close()
+	return nil
 }
 
 func httpRouter() *mux.Router {

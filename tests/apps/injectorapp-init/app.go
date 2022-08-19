@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 
+//nolint:gosec
 func writeSecrets() {
 	data := []byte(`{"secret-key": "secret-value"}`)
 	err := os.WriteFile("/tmp/testdata/secrets.json", data, fs.ModePerm)

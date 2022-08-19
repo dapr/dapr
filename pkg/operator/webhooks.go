@@ -16,8 +16,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
-	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 )
 
 const webhookCAName = "dapr-webhook-ca"
@@ -45,12 +45,12 @@ func RunWebhooks(ctx context.Context, enableLeaderElection bool) {
 	*/
 	if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
 		if err = ctrl.NewWebhookManagedBy(mgr).
-			For(&subscriptionsapi_v1alpha1.Subscription{}).
+			For(&subscriptionsapiV1alpha1.Subscription{}).
 			Complete(); err != nil {
 			log.Fatalf("unable to create webhook Subscriptions v1alpha1: %v", err)
 		}
 		if err = ctrl.NewWebhookManagedBy(mgr).
-			For(&subscriptionsapi_v2alpha1.Subscription{}).
+			For(&subscriptionsapiV2alpha1.Subscription{}).
 			Complete(); err != nil {
 			log.Fatalf("unable to create webhook Subscriptions v2alpha1: %v", err)
 		}

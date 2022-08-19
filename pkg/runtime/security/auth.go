@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
@@ -82,15 +82,15 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	}
 	certPem := pem.EncodeToMemory(&pem.Block{Type: certType, Bytes: csrb})
 
-	config, err := dapr_credentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
+	config, err := daprCredentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create tls config from cert and key")
 	}
 
-	unaryClientInterceptor := grpc_retry.UnaryClientInterceptor()
+	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
-		unaryClientInterceptor = grpc_middleware.ChainUnaryClient(
+		unaryClientInterceptor = grpcMiddleware.ChainUnaryClient(
 			unaryClientInterceptor,
 			diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
 		)
@@ -115,7 +115,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 			Token:                     getToken(),
 			TrustDomain:               trustDomain,
 			Namespace:                 namespace,
-		}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
+		}, grpcRetry.WithMax(sentryMaxRetries), grpcRetry.WithPerRetryTimeout(sentrySignTimeout))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, errors.Wrap(err, "error from sentry SignCertificate")

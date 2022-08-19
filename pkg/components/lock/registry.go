@@ -10,13 +10,13 @@ import (
 )
 
 type Lock struct {
-	Name          string
+	Names         []string
 	FactoryMethod func() lock.Store
 }
 
-func New(name string, f func() lock.Store) Lock {
+func New(name string, f func() lock.Store, aliases ...string) Lock {
 	return Lock{
-		Name:          name,
+		Names:         append(aliases, name),
 		FactoryMethod: f,
 	}
 }
@@ -40,7 +40,9 @@ func NewRegistry() Registry {
 // The key is the name of the state store, eg. redis.
 func (r *lockRegistry) Register(fs ...Lock) {
 	for _, f := range fs {
-		r.stores[createFullName(f.Name)] = f.FactoryMethod
+		for _, name := range f.Names {
+			r.stores[createFullName(name)] = f.FactoryMethod
+		}
 	}
 }
 

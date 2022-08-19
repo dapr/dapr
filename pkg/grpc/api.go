@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/lock"
-	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/version"
 
 	"github.com/dapr/components-contrib/configuration"
@@ -37,19 +37,19 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
-	contrib_metadata "github.com/dapr/components-contrib/metadata"
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
-	state_loader "github.com/dapr/dapr/pkg/components/state"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -59,7 +59,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 const (
@@ -68,6 +68,8 @@ const (
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
+//
+//nolint:nosnakecase
 type API interface {
 	// DaprInternal Service methods
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -126,14 +128,14 @@ type api struct {
 	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
 	configurationSubscribeLock sync.Mutex
 	lockStores                 map[string]lock.Store
-	pubsubAdapter              runtime_pubsub.Adapter
+	pubsubAdapter              runtimePubsub.Adapter
 	id                         string
 	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec                config.TracingSpec
 	accessControlList          *config.AccessControlList
 	appProtocol                string
 	extendedMetadata           sync.Map
-	components                 []components_v1alpha.Component
+	components                 []componentsV1alpha.Component
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
@@ -167,7 +169,7 @@ func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest
 	compReq := TryLockRequestToComponentRequest(req)
 	// modify key
 	var err error
-	compReq.ResourceID, err = lock_loader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
+	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
@@ -207,7 +209,7 @@ func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) 
 	compReq := UnlockGrpcToComponentRequest(req)
 	// modify key
 	var err error
-	compReq.ResourceID, err = lock_loader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
+	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
@@ -225,7 +227,7 @@ func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) 
 
 func newInternalErrorUnlockResponse() *runtimev1pb.UnlockResponse {
 	return &runtimev1pb.UnlockResponse{
-		Status: runtimev1pb.UnlockResponse_INTERNAL_ERROR,
+		Status: runtimev1pb.UnlockResponse_INTERNAL_ERROR, //nolint:nosnakecase
 	}
 }
 
@@ -264,7 +266,7 @@ func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.Un
 	if compResp == nil {
 		return result
 	}
-	result.Status = runtimev1pb.UnlockResponse_Status(compResp.Status)
+	result.Status = runtimev1pb.UnlockResponse_Status(compResp.Status) //nolint:nosnakecase
 	return result
 }
 
@@ -277,14 +279,14 @@ func NewAPI(
 	secretsConfiguration map[string]config.SecretsScope,
 	configurationStores map[string]configuration.Store,
 	lockStores map[string]lock.Store,
-	pubsubAdapter runtime_pubsub.Adapter,
+	pubsubAdapter runtimePubsub.Adapter,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
 	accessControlList *config.AccessControlList,
 	appProtocol string,
-	getComponentsFn func() []components_v1alpha.Component,
+	getComponentsFn func() []componentsV1alpha.Component,
 	shutdown func(),
 	getComponentsCapabilitiesFn func() map[string][]string,
 ) API {
@@ -332,7 +334,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if a.accessControlList != nil {
 		// An access control policy has been specified for the app. Apply the policies.
 		operation := req.Message().Method
-		var httpVerb commonv1pb.HTTPExtension_Verb
+		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the http verb in case the application protocol is http
 		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
@@ -402,14 +404,14 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, err
 	}
 
-	rawPayload, metaErr := contrib_metadata.IsRawPayload(in.Metadata)
+	rawPayload, metaErr := contribMetadata.IsRawPayload(in.Metadata)
 	if metaErr != nil {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
 
-	span := diag_utils.SpanFromContext(ctx)
+	span := diagUtils.SpanFromContext(ctx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 	// Populate W3C tracestate to cloudevent envelope
@@ -423,7 +425,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 
 	if !rawPayload {
-		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			ID:              a.id,
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
@@ -464,11 +466,11 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, in.Topic, in.PubsubName, err.Error())
-		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
+		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
 			nerr = status.Errorf(codes.PermissionDenied, err.Error())
 		}
 
-		if errors.As(err, &runtime_pubsub.NotFoundError{}) {
+		if errors.As(err, &runtimePubsub.NotFoundError{}) {
 			nerr = status.Errorf(codes.NotFound, err.Error())
 		}
 		apiServerLogger.Debug(nerr)
@@ -576,7 +578,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
-		key, err1 := state_loader.GetModifiedStateKey(k, in.StoreName, a.id)
+		key, err1 := stateLoader.GetModifiedStateKey(k, in.StoreName, a.id)
 		if err1 != nil {
 			return &runtimev1pb.GetBulkStateResponse{}, err1
 		}
@@ -606,7 +608,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		}
 		for i := 0; i < len(responses); i++ {
 			item := &runtimev1pb.BulkStateItem{
-				Key:      state_loader.GetOriginalStateKey(responses[i].Key),
+				Key:      stateLoader.GetOriginalStateKey(responses[i].Key),
 				Data:     responses[i].Data,
 				Etag:     stringValueOrEmpty(responses[i].ETag),
 				Metadata: responses[i].Metadata,
@@ -631,7 +633,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			})
 
 			item := &runtimev1pb.BulkStateItem{
-				Key: state_loader.GetOriginalStateKey(req.Key),
+				Key: stateLoader.GetOriginalStateKey(req.Key),
 			}
 			if err != nil {
 				item.Error = err.Error()
@@ -684,7 +686,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
-	key, err := state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
 	if err != nil {
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -742,7 +744,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	reqs := []state.SetRequest{}
 	for _, s := range in.States {
-		key, err1 := state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
+		key, err1 := stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
 		if err1 != nil {
 			return &emptypb.Empty{}, err1
 		}
@@ -751,7 +753,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			Metadata: s.Metadata,
 		}
 
-		if contentType, ok := req.Metadata[contrib_metadata.ContentType]; ok && contentType == contenttype.JSONContentType {
+		if contentType, ok := req.Metadata[contribMetadata.ContentType]; ok && contentType == contenttype.JSONContentType {
 			if err1 = json.Unmarshal(s.Value, &req.Value); err1 != nil {
 				return &emptypb.Empty{}, err1
 			}
@@ -854,7 +856,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 
 	for i := range resp.Results {
 		ret.Results[i] = &runtimev1pb.QueryStateItem{
-			Key:  state_loader.GetOriginalStateKey(resp.Results[i].Key),
+			Key:  stateLoader.GetOriginalStateKey(resp.Results[i].Key),
 			Data: resp.Results[i].Data,
 		}
 	}
@@ -885,7 +887,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		return &emptypb.Empty{}, err
 	}
 
-	key, err := state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
 	if err != nil {
 		return &emptypb.Empty{}, err
 	}
@@ -929,7 +931,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
-		key, err1 := state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
+		key, err1 := stateLoader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
 		if err1 != nil {
 			return &emptypb.Empty{}, err1
 		}
@@ -1096,7 +1098,7 @@ func (a *api) SubscribeTopic(ctx context.Context, in *commonv1pb.TopicSubscripti
 		return res, err
 	}
 
-	subscription, err := runtime_pubsub.NewSubscriptionFromProto(in, "")
+	subscription, err := runtimePubsub.NewSubscriptionFromProto(in, "")
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubRoutesInvalid, in.Topic, in.PubsubName)
 		apiServerLogger.Debug(err)
@@ -1206,7 +1208,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		req := inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
-		key, err := state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
+		key, err := stateLoader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
 		if err != nil {
 			return &emptypb.Empty{}, err
 		}
@@ -1572,16 +1574,16 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 }
 
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
-	temp := make(map[string]string)
+	extendedMetadata := make(map[string]string)
 
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = value.(string)
+		extendedMetadata[key.(string)] = value.(string)
 		return true
 	})
-	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
+	extendedMetadata[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
-	componentsCapabilties := a.getComponentsCapabilitesFn()
+	componentsCapabilities := a.getComponentsCapabilitesFn()
 	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
 	if a.actor != nil {
 		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {
@@ -1597,19 +1599,20 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
 			Type:         comp.Spec.Type,
-			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
+			Capabilities: getOrDefaultCapabilities(componentsCapabilities, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
 	response := &runtimev1pb.GetMetadataResponse{
-		ExtendedMetadata:     temp,
+		Id:                   a.id,
+		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
 	}
 	return response, nil
 }
 
-func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 	if val, ok := dict[key]; ok {
 		return val
 	}
@@ -1699,7 +1702,7 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 type configurationEventHandler struct {
 	api          *api
 	storeName    string
-	serverStream runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server
+	serverStream runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server //nolint:nosnakecase
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
@@ -1722,7 +1725,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 	return nil
 }
 
-func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error {
+func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
 	store, err := a.getConfigurationStore(request.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)

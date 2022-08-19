@@ -89,7 +89,7 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 		}
 	}
 
-	c.breaker = gobreaker.NewCircuitBreaker(gobreaker.Settings{ // nolint:exhaustivestruct
+	c.breaker = gobreaker.NewCircuitBreaker(gobreaker.Settings{ //nolint:exhaustivestruct
 		Name:        c.Name,
 		MaxRequests: c.MaxRequests,
 		Interval:    c.Interval,
