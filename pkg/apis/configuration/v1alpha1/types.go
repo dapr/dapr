@@ -195,6 +195,31 @@ type ComponentsSpec struct {
 	// Denylist of component types that cannot be instantiated
 	// +optional
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
+	// +optional
+	Registries []ComponentRemoteRegistry `json:"registries,omitempty" yaml:"registries,omitempty"`
+	// +optional
+	Inline []InlineComponent `json:"inline,omitempty" yaml:"inline,omitempty"`
+}
+
+// ComponentRemoteRegistry is a remote component registry that provides pluggable components manifests.
+type ComponentRemoteRegistry struct {
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	URL  string `json:"url,omitempty" yaml:"url,omitempty"`
+}
+
+// InlineComponent describes how to define a inline component.
+type InlineComponent struct {
+	Name       string   `json:"name,omitempty" yaml:"name,omitempty"`
+	Implements []string `json:"implements,omitempty" yaml:"implements,omitempty"`
+	// +optional
+	Container ContainerSpec `json:"container" yaml:"container"`
+}
+
+// ContainerSpec describes a pluggable component as a container.
+type ContainerSpec struct {
+	Image string `json:"image,omitempty" yaml:"image,omitempty"`
+	// +optional
+	Env map[string]string `json:"env"`
 }
 
 // +kubebuilder:object:root=true
