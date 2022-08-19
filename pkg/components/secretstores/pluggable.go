@@ -34,5 +34,5 @@ func NewFromPluggable(pc pluggable.Component) SecretStore {
 }
 
 func init() {
-	pluggable.Register(components.Secret, NewFromPluggable)
+	pluggable.MustRegister(components.Secret, NewFromPluggable)
 }

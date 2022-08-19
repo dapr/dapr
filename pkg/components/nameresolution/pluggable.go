@@ -35,5 +35,5 @@ func NewFromPluggable(pc pluggable.Component) NameResolution {
 }
 
 func init() {
-	pluggable.Register(components.NameResolution, NewFromPluggable)
+	pluggable.MustRegister(components.NameResolution, NewFromPluggable)
 }

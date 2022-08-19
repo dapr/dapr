@@ -34,5 +34,5 @@ func NewFromPluggable(pc pluggable.Component) PubSub {
 }
 
 func init() {
-	pluggable.Register(components.PubSub, NewFromPluggable)
+	pluggable.MustRegister(components.PubSub, NewFromPluggable)
 }

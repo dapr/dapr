@@ -20,9 +20,12 @@ import (
 
 // Component represents a pluggable component specification.
 type Component struct {
-	Name       string
+	// Name is the pluggable component name
+	Name string
+	// SocketPath is the component socket path
 	SocketPath string
-	Type       string
+	// Type is the component type.
+	Type string
 }
 
 var (
@@ -32,11 +35,14 @@ var (
 	registry = make(map[components.Type]func(Component) any)
 )
 
-// Register registers a new pluggable component into the map
-func Register[T any](
+// MustRegister registers a new pluggable component into the map and panics if a component for the same type was already registered
+func MustRegister[T any](
 	compType components.Type,
 	new func(Component) T,
 ) {
+	if _, ok := registry[compType]; ok {
+		log.Fatalf("a pluggable component for the type (%s) has already been registered", compType)
+	}
 	registry[compType] = func(pc Component) any {
 		return new(pc)
 	}

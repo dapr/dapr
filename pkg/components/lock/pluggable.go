@@ -26,7 +26,7 @@ type mLock struct {
 // NewFromPluggable creates a new Lock from a given pluggable component.
 func NewFromPluggable(pc pluggable.Component) Lock {
 	return Lock{
-		Name: pc.Name,
+		Names: []string{pc.Name},
 		FactoryMethod: func() l.Store {
 			return &mLock{}
 		},
@@ -34,5 +34,5 @@ func NewFromPluggable(pc pluggable.Component) Lock {
 }
 
 func init() {
-	pluggable.Register(components.Lock, NewFromPluggable)
+	pluggable.MustRegister(components.Lock, NewFromPluggable)
 }

@@ -48,6 +48,6 @@ func NewOutputFromPluggable(pc pluggable.Component) OutputBinding {
 }
 
 func init() {
-	pluggable.Register(components.InputBinding, NewInputFromPluggable)
-	pluggable.Register(components.OutputBinding, NewOutputFromPluggable)
+	pluggable.MustRegister(components.InputBinding, NewInputFromPluggable)
+	pluggable.MustRegister(components.OutputBinding, NewOutputFromPluggable)
 }

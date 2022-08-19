@@ -35,5 +35,5 @@ func NewFromPluggable(pc pluggable.Component) Configuration {
 }
 
 func init() {
-	pluggable.Register(components.Configuration, NewFromPluggable)
+	pluggable.MustRegister(components.Configuration, NewFromPluggable)
 }

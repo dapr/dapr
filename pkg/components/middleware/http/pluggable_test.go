@@ -14,27 +14,17 @@ limitations under the License.
 package http
 
 import (
-	m "github.com/dapr/components-contrib/middleware"
+	"testing"
 
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
-	"github.com/dapr/dapr/pkg/middleware/http"
 
-	"github.com/valyala/fasthttp"
+	"github.com/stretchr/testify/assert"
 )
 
-// NewMiddlewareFromPluggable creates a new httpMiddleware from a given pluggable component.
-func NewMiddlewareFromPluggable(pc pluggable.Component) Middleware {
-	return Middleware{
-		Names: []string{pc.Name},
-		FactoryMethod: func(metadata m.Metadata) (http.Middleware, error) {
-			return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-				return func(ctx *fasthttp.RequestCtx) {}
-			}, nil
-		},
-	}
-}
-
-func init() {
-	pluggable.MustRegister(components.HTTPMiddleware, NewMiddlewareFromPluggable)
+func TestMustLoadHttpMiddleware(t *testing.T) {
+	l := pluggable.MustLoad[Middleware](pluggable.Component{
+		Type: string(components.HTTPMiddleware),
+	})
+	assert.NotNil(t, l)
 }
