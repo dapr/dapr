@@ -324,7 +324,7 @@ func main() {
 	initGRPCClient()
 
 	log.Printf("Resiliency App - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }
 
 // Test Functions.
