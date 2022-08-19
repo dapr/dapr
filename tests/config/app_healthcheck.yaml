@@ -11,13 +11,12 @@
 # limitations under the License.
 #
 
+# TODO: Remove once AppHealthCheck feature is finalized
 apiVersion: dapr.io/v1alpha1
-kind: Component
+kind: Configuration
 metadata:
-  name: schedule
+  name: healthcheckconfig
 spec:
-  type: bindings.cron
-  version: v1
-  metadata:
-  - name: schedule
-    value: "@every 1s"
+  features:
+    - name: AppHealthCheck
+      enabled: true

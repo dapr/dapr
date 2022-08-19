@@ -44,6 +44,7 @@ const (
 	GRPCProtocol                 = "grpc"
 	Resiliency           Feature = "Resiliency"
 	NoDefaultContentType Feature = "ServiceInvocation.NoDefaultContentType"
+	AppHealthCheck       Feature = "AppHealthCheck"
 )
 
 type Feature string

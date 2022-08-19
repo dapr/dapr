@@ -349,9 +349,13 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
-	features := globalConfig.Spec.Features
-	resiliencyEnabled := global_config.IsFeatureEnabled(features, global_config.Resiliency)
+	// TODO: Remove once AppHealthCheck feature is finalized
+	if !global_config.IsFeatureEnabled(globalConfig.Spec.Features, global_config.AppHealthCheck) && *enableAppHealthCheck {
+		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", global_config.AppHealthCheck)
+		runtimeConfig.AppHealthCheck = nil
+	}
 
+	resiliencyEnabled := global_config.IsFeatureEnabled(globalConfig.Spec.Features, global_config.Resiliency)
 	var resiliencyProvider resiliency_config.Provider
 
 	if resiliencyEnabled {
