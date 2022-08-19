@@ -195,7 +195,7 @@ func (s *serviceMetrics) ComponentInitFailed(component string, reason string, na
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diag_Utils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason, componentNameKey, name),
+			diagUtils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason, componentNameKey, name),
 			s.componentInitFailed.M(1))
 	}
 }
