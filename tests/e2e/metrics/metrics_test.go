@@ -35,6 +35,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type testCommandRequest struct {
