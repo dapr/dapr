@@ -333,27 +333,90 @@ func TestBuiltInPoliciesAreCreated(t *testing.T) {
 func TestResiliencyHasTargetDefined(t *testing.T) {
 	r := &resiliency_v1alpha.Resiliency{
 		Spec: resiliency_v1alpha.ResiliencySpec{
+			Policies: resiliency_v1alpha.Policies{
+				Timeouts: map[string]string{
+					"myTimeout": "2s",
+				},
+				CircuitBreakers: map[string]resiliency_v1alpha.CircuitBreaker{
+					"myCB1": {
+						Interval:    "1s",
+						Timeout:     "5s",
+						Trip:        "consecutiveFailures > 1",
+						MaxRequests: 1,
+					},
+					"myCB2": {
+						Interval:    "2s",
+						Timeout:     "10s",
+						Trip:        "consecutiveFailures > 2",
+						MaxRequests: 2,
+					},
+				},
+				Retries: map[string]resiliency_v1alpha.Retry{
+					"myRetry": {
+						Policy:     "constant",
+						Duration:   "5s",
+						MaxRetries: 3,
+					},
+				},
+			},
 			Targets: resiliency_v1alpha.Targets{
 				Apps: map[string]resiliency_v1alpha.EndpointPolicyNames{
-					"definedApp": {},
+					"definedApp": {
+						Timeout:        "myTimeout",
+						CircuitBreaker: "myCB1",
+					},
 				},
 				Actors: map[string]resiliency_v1alpha.ActorPolicyNames{
-					"definedActor": {},
+					"definedActor": {
+						Timeout: "myTimeout",
+					},
 				},
 				Components: map[string]resiliency_v1alpha.ComponentPolicyNames{
-					"definedComponent": {},
+					"definedComponent": {
+						Inbound: resiliency_v1alpha.PolicyNames{
+							Timeout:        "myTimeout",
+							CircuitBreaker: "myCB1",
+						},
+						Outbound: resiliency_v1alpha.PolicyNames{
+							Timeout:        "myTimeout",
+							CircuitBreaker: "myCB2",
+							Retry:          "myRetry",
+						},
+					},
 				},
 			},
 		},
 	}
 	config := FromConfigurations(log, r)
 
-	assert.False(t, config.PolicyDefined("badApp", Endpoint))
-	assert.False(t, config.PolicyDefined("badActor", Actor))
-	assert.False(t, config.PolicyDefined("badComponent", Component))
-	assert.True(t, config.PolicyDefined("definedApp", Endpoint))
-	assert.True(t, config.PolicyDefined("definedActor", Actor))
-	assert.True(t, config.PolicyDefined("definedComponent", Component))
+	assert.Nil(t, config.PolicyDefined("badApp", Endpoint))
+	assert.Nil(t, config.PolicyDefined("badActor", Actor))
+	assert.Nil(t, config.PolicyDefined("badComponent", ComponentOutbound))
+	assert.Nil(t, config.PolicyDefined("badComponent", ComponentInbound))
+
+	endpointPolicy := config.PolicyDefined("definedApp", Endpoint)
+	assert.NotNil(t, endpointPolicy)
+	assert.Equal(t, endpointPolicy.TimeoutPolicy, 2*time.Second)
+	assert.Equal(t, endpointPolicy.CircuitBreaker.MaxRequests, uint32(1))
+	assert.Nil(t, endpointPolicy.RetryPolicy)
+
+	actorPolicy := config.PolicyDefined("definedActor", Actor)
+	assert.NotNil(t, actorPolicy)
+	assert.Equal(t, actorPolicy.TimeoutPolicy, 2*time.Second)
+	assert.Nil(t, actorPolicy.CircuitBreaker)
+	assert.Nil(t, actorPolicy.RetryPolicy)
+
+	componentOutboundPolicy := config.PolicyDefined("definedComponent", ComponentOutbound)
+	assert.NotNil(t, componentOutboundPolicy)
+	assert.Equal(t, componentOutboundPolicy.TimeoutPolicy, 2*time.Second)
+	assert.Equal(t, componentOutboundPolicy.CircuitBreaker.MaxRequests, uint32(2))
+	assert.Equal(t, componentOutboundPolicy.RetryPolicy.MaxRetries, int64(3))
+
+	componentInboundPolicy := config.PolicyDefined("definedComponent", ComponentInbound)
+	assert.NotNil(t, componentInboundPolicy)
+	assert.Equal(t, componentInboundPolicy.TimeoutPolicy, 2*time.Second)
+	assert.Equal(t, componentInboundPolicy.CircuitBreaker.MaxRequests, uint32(1))
+	assert.Nil(t, componentInboundPolicy.RetryPolicy)
 }
 
 func TestResiliencyHasBuiltInPolicy(t *testing.T) {
