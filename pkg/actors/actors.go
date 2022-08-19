@@ -1725,7 +1725,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if a.resiliency.PolicyDefined(a.storeName, resiliency.Component) == nil {
+		if a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutbound) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {
@@ -1886,7 +1886,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if a.resiliency.PolicyDefined(a.storeName, resiliency.Component) == nil {
+		if a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutbound) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {
