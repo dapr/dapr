@@ -537,7 +537,7 @@ func TestHeaders(t *testing.T) {
 
 		assert.NotNil(t, responseHeaders["dapr-content-length"][0])
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
-		assert.Equal(t, "application/json; utf-8", responseHeaders["dapr-content-type"][0])
+		assert.True(t, strings.HasPrefix(responseHeaders["dapr-content-type"][0], "application/json"))
 		assert.NotNil(t, responseHeaders["dapr-date"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
@@ -600,7 +600,7 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
 
 		assert.NotNil(t, responseHeaders["Content-Length"][0])
-		assert.Equal(t, "application/json", responseHeaders["Content-Type"][0])
+		assert.True(t, strings.HasPrefix(responseHeaders["Content-Type"][0], "application/json"))
 		assert.NotNil(t, responseHeaders["Date"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
@@ -842,7 +842,7 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 	require.NoError(t, err)
 	assert.NotNil(t, requestHeaders["Accept-Encoding"][0])
 	assert.NotNil(t, requestHeaders["Content-Length"][0])
-	assert.Equal(t, "application/json", requestHeaders["Content-Type"][0])
+	assert.True(t, strings.HasPrefix(requestHeaders["Content-Type"][0], "application/json"))
 	assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
 	assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
 	assert.NotNil(t, requestHeaders["Traceparent"][0])
@@ -852,7 +852,7 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 	assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
 
 	assert.NotNil(t, responseHeaders["Content-Length"][0])
-	assert.Equal(t, "application/json; utf-8", responseHeaders["Content-Type"][0])
+	assert.True(t, strings.HasPrefix(responseHeaders["Content-Type"][0], "application/json"))
 	assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
 	assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
 	assert.NotNil(t, responseHeaders["Traceparent"][0])

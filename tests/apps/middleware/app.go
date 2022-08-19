@@ -20,16 +20,29 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 
 	"github.com/gorilla/mux"
 
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 
-const (
-	appPort     = 3000
-	daprBaseURL = "http://localhost:3500/v1.0"
+var (
+	appPort  = 3000
+	daprPort = 3500
 )
+
+func init() {
+	p := os.Getenv("DAPR_HTTP_PORT")
+	if p != "" && p != "0" {
+		daprPort, _ = strconv.Atoi(p)
+	}
+	p = os.Getenv("PORT")
+	if p != "" && p != "0" {
+		appPort, _ = strconv.Atoi(p)
+	}
+}
 
 type testResponse struct {
 	Input  string `json:"input"`
@@ -54,7 +67,7 @@ func testLogCall(w http.ResponseWriter, r *http.Request) {
 	service := mux.Vars(r)["service"]
 
 	input := "hello"
-	url := fmt.Sprintf("%s/invoke/%s/method/logCall", daprBaseURL, service)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/logCall", daprPort, service)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer([]byte(input))) // nolint:gosec
 	if err != nil {
 		log.Printf("Could not call service")
@@ -69,9 +82,8 @@ func testLogCall(w http.ResponseWriter, r *http.Request) {
 		input, string(body),
 	}
 
-	outputBytes, _ := json.Marshal(results)
-	w.Write(outputBytes)
 	w.WriteHeader(resp.StatusCode)
+	_ = json.NewEncoder(w).Encode(results)
 }
 
 func logCall(w http.ResponseWriter, r *http.Request) {
