@@ -20,9 +20,9 @@ import (
 type InitErrorKind string
 
 const (
-	InitFailure            InitErrorKind = "InitFailure"
-	InitComponentFailure   InitErrorKind = "InitComponentFailure"
-	CreateComponentFailure InitErrorKind = "CreateComponentFailure"
+	InitFailure            InitErrorKind = "INIT_FAILURE"
+	InitComponentFailure   InitErrorKind = "INIT_COMPONENT_FAILURE"
+	CreateComponentFailure InitErrorKind = "CREATE_COMPONENT_FAILURE"
 )
 
 type InitError struct {
