@@ -81,5 +81,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Hello Dapr - listening on http://localhost:%d", 3000)
-	utils.StartServer(3000, appRouter, true)
+	utils.StartServer(3000, appRouter, true, false)
 }
