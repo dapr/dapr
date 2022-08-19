@@ -55,6 +55,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(indexHandlerResponse{Message: "OK"})
 }
 
+//nolint:gosec
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Entered testHandler")
 	var requestBody testCommandRequest
@@ -104,6 +105,7 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, message := range requestBody.Messages {
+		//nolint:gosec
 		body, _ := json.Marshal(&message)
 
 		log.Printf("Sending message: %s", body)
@@ -132,7 +134,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 			Method: "GetReceivedTopics",
 			Data:   &anypb.Any{},
 			HttpExtension: &commonv1pb.HTTPExtension{
-				Verb: commonv1pb.HTTPExtension_POST,
+				Verb: commonv1pb.HTTPExtension_POST, //nolint:nosnakecase
 			},
 		},
 	}

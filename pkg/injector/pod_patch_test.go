@@ -498,6 +498,7 @@ func TestGetSideCarContainer(t *testing.T) {
 	})
 }
 
+//nolint:forbidigo
 func TestImagePullPolicy(t *testing.T) {
 	testCases := []struct {
 		testName       string
@@ -535,6 +536,7 @@ func TestImagePullPolicy(t *testing.T) {
 	}
 }
 
+//nolint:forbidigo
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	testCases := []struct {
 		testName      string

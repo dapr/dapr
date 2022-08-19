@@ -34,7 +34,7 @@ func LoggerMiddleware(next http.Handler) http.Handler {
 			reqID = "m-" + uuid.New().String()
 		}
 
-		ctx := context.WithValue(r.Context(), "reqid", reqID) //nolint:revive
+		ctx := context.WithValue(r.Context(), "reqid", reqID) //nolint:staticcheck
 
 		log.Printf("Received request %s %s (source=%s, reqID=%s)", r.Method, r.URL.Path, r.RemoteAddr, reqID)
 

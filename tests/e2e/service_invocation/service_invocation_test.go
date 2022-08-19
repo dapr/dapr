@@ -24,7 +24,7 @@ import (
 	"strings"
 	"testing"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -684,7 +684,7 @@ func TestHeaders(t *testing.T) {
 				t.Logf("received response grpc header..%s\n", traceContext)
 				assert.Equal(t, expectedEncodedTraceID, traceContext)
 				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-				gotSc, ok := diag_utils.SpanContextFromBinary(decoded)
+				gotSc, ok := diagUtils.SpanContextFromBinary(decoded)
 
 				assert.True(t, ok)
 				assert.NotNil(t, gotSc)
@@ -771,7 +771,7 @@ func TestHeaders(t *testing.T) {
 				t.Logf("received response grpc header..%s\n", traceContext)
 				assert.Equal(t, expectedEncodedTraceID, traceContext)
 				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-				gotSc, ok := diag_utils.SpanContextFromBinary(decoded)
+				gotSc, ok := diagUtils.SpanContextFromBinary(decoded)
 
 				assert.True(t, ok)
 				assert.NotNil(t, gotSc)

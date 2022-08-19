@@ -20,7 +20,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 const (
@@ -47,25 +47,25 @@ var (
 
 // RecordServiceCreatedCount records the number of dapr service created.
 func RecordServiceCreatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceCreatedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(appIDKey, appID), serviceCreatedTotal.M(1))
 }
 
 // RecordServiceDeletedCount records the number of dapr service deleted.
 func RecordServiceDeletedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceDeletedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(appIDKey, appID), serviceDeletedTotal.M(1))
 }
 
 // RecordServiceUpdatedCount records the number of dapr service updated.
 func RecordServiceUpdatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceUpdatedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(appIDKey, appID), serviceUpdatedTotal.M(1))
 }
 
 // InitMetrics initialize the operator service metrics.
 func InitMetrics() error {
 	err := view.Register(
-		diag_utils.NewMeasureView(serviceCreatedTotal, []tag.Key{appIDKey}, view.Count()),
-		diag_utils.NewMeasureView(serviceDeletedTotal, []tag.Key{appIDKey}, view.Count()),
-		diag_utils.NewMeasureView(serviceUpdatedTotal, []tag.Key{appIDKey}, view.Count()),
+		diagUtils.NewMeasureView(serviceCreatedTotal, []tag.Key{appIDKey}, view.Count()),
+		diagUtils.NewMeasureView(serviceDeletedTotal, []tag.Key{appIDKey}, view.Count()),
+		diagUtils.NewMeasureView(serviceUpdatedTotal, []tag.Key{appIDKey}, view.Count()),
 	)
 
 	return err

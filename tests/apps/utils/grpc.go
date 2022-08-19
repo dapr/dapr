@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -39,7 +40,10 @@ func GetGRPCClient(daprPort int) runtimev1pb.DaprClient {
 	start := time.Now()
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure(), grpc.WithBlock())
+		grpcConn, err = grpc.Dial(url,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
 		if err == nil {
 			break
 		}

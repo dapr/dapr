@@ -285,7 +285,7 @@ func delete(key, statestore string, meta map[string]string) error {
 		return err
 	}
 
-	req, err := http.NewRequest("DELETE", url, nil)
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		return fmt.Errorf("could not create delete request for key %s in Dapr: %s", key, err.Error())
 	}
@@ -358,7 +358,7 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 		queryURL += "?" + metadata2RawQuery(meta)
 	}
 	log.Printf("Posting %d bytes of state to %s", len(query), queryURL)
-	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query))
+	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query)) //nolint:bodyclose
 	if err != nil {
 		return nil, err
 	}
@@ -621,7 +621,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		statusCode = http.StatusInternalServerError
 		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd)
-		log.Printf(unsupportedCommandMessage)
+		log.Print(unsupportedCommandMessage)
 		res.Message = unsupportedCommandMessage
 	}
 
