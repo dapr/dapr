@@ -25,7 +25,7 @@ import (
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
+//nolint:gosec
 const (
 	sidecarContainerName              = "daprd"
 	daprEnabledKey                    = "dapr.io/enabled"
@@ -320,7 +321,7 @@ func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts 
 }
 
 func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, meta_v1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, metaV1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}
@@ -331,7 +332,7 @@ func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace stri
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
-	resp, err := daprClient.ConfigurationV1alpha1().Configurations(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled
