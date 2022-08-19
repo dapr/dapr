@@ -2128,6 +2128,7 @@ func TestGetMetadata(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 	response, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, response.Id, "fakeAPI")
 	assert.Len(t, response.RegisteredComponents, 2, "Two component should be returned")
 	assert.Equal(t, response.RegisteredComponents[0].Name, "MockComponent1Name")
 	assert.Equal(t, response.RegisteredComponents[1].Name, "MockComponent2Name")
