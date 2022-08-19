@@ -157,6 +157,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) {
 
 		// Pod doesn't have a sidecar, so we need to kill it so it can be restarted and have the sidecar injected
 		log.Warnf("Pod %s does not have the Dapr sidecar and will be deleted", logName)
+		//nolint:gosec
 		err = dw.client.Delete(ctx, &v)
 		if err != nil {
 			log.Errorf("Failed to delete pod %s. Error: %v", logName, err)

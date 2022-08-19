@@ -20,7 +20,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 var (
@@ -49,8 +49,8 @@ func RecordActorRuntimesCount(count int) {
 // InitMetrics initialize the placement service metrics.
 func InitMetrics() error {
 	err := view.Register(
-		diag_utils.NewMeasureView(runtimesTotal, noKeys, view.LastValue()),
-		diag_utils.NewMeasureView(actorRuntimesTotal, noKeys, view.LastValue()),
+		diagUtils.NewMeasureView(runtimesTotal, noKeys, view.LastValue()),
+		diagUtils.NewMeasureView(actorRuntimesTotal, noKeys, view.LastValue()),
 	)
 
 	return err

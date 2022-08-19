@@ -3,6 +3,7 @@
 
 package codec
 
+//nolint:staticcheck
 import (
 	"fmt"
 
