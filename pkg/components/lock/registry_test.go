@@ -40,3 +40,13 @@ func TestNewFactory(t *testing.T) {
 	f := New("", nil)
 	assert.NotNil(t, f)
 }
+
+func TestAliasing(t *testing.T) {
+	const alias = "my-alias"
+	r := NewRegistry()
+	r.Register(New("", func() lock.Store {
+		return nil
+	}, alias))
+	_, err := r.Create("lock."+alias, "")
+	assert.Nil(t, err)
+}
