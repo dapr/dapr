@@ -25,7 +25,7 @@ import (
 	h "github.com/dapr/components-contrib/middleware"
 
 	"github.com/dapr/dapr/pkg/components/middleware/http"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 )
 
 func TestRegistry(t *testing.T) {
@@ -39,19 +39,19 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// Initiate mock object
-		mock := http_middleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+		mock := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 			return nil
 		})
-		mockV2 := http_middleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+		mockV2 := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 			return nil
 		})
 		metadata := h.Metadata{}
 
 		// act
-		testRegistry.Register(http.New(middlewareName, func(h.Metadata) (http_middleware.Middleware, error) {
+		testRegistry.Register(http.New(middlewareName, func(h.Metadata) (httpMiddleware.Middleware, error) {
 			return mock, nil
 		}))
-		testRegistry.Register(http.New(middlewareNameV2, func(h.Metadata) (http_middleware.Middleware, error) {
+		testRegistry.Register(http.New(middlewareNameV2, func(h.Metadata) (httpMiddleware.Middleware, error) {
 			return mockV2, nil
 		}))
 

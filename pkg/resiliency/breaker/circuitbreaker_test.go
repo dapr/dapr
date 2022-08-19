@@ -32,7 +32,7 @@ func TestCircuitBreaker(t *testing.T) {
 	var trip expr.Expr
 	err := trip.DecodeString("consecutiveFailures > 2")
 	require.NoError(t, err)
-	cb := breaker.CircuitBreaker{ // nolint:exhaustivestruct
+	cb := breaker.CircuitBreaker{ //nolint:exhaustivestruct
 		Name:    "test",
 		Trip:    &trip,
 		Timeout: 100 * time.Millisecond,

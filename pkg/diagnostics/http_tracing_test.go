@@ -31,7 +31,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 func TestSpanContextFromRequest(t *testing.T) {
@@ -347,7 +347,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			map[string]string{},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
@@ -364,7 +364,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			map[string]string{},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
@@ -381,7 +381,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			map[string]string{},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
 		assert.Equal(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
@@ -398,7 +398,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
 		assert.NotEqual(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
@@ -416,7 +416,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler(testRequestCtx)
 
 		// assert
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
 		spanString := fmt.Sprintf("%v", span)
 		assert.True(t, strings.Contains(spanString, "CallLocal/callee/method1"))
@@ -472,7 +472,7 @@ func newTraceFastHTTPRequestCtx(expectedBody, expectedRequestURI string, expecte
 	req.Header.SetHost(expectedHost)
 	req.Header.Add(fasthttp.HeaderTransferEncoding, expectedTransferEncoding)
 	req.Header.SetContentLength(len([]byte(expectedBody)))
-	req.BodyWriter().Write([]byte(expectedBody)) // nolint:errcheck
+	req.BodyWriter().Write([]byte(expectedBody)) //nolint:errcheck
 
 	for k, v := range expectedRequestHeader {
 		req.Header.Set(k, v)
