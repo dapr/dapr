@@ -50,42 +50,42 @@ import (
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/lock"
-	contrib_metadata "github.com/dapr/components-contrib/metadata"
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/middleware"
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	configuration_loader "github.com/dapr/dapr/pkg/components/configuration"
-	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
-	http_channel "github.com/dapr/dapr/pkg/channel/http"
+	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
-	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
-	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
-	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
-	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
-	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
-	state_loader "github.com/dapr/dapr/pkg/components/state"
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
+	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
+	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
@@ -141,13 +141,13 @@ type TopicRoutes map[string]TopicRouteElem
 
 type TopicRouteElem struct {
 	metadata        map[string]string
-	rules           []*runtime_pubsub.Rule
+	rules           []*runtimePubsub.Rule
 	deadLetterTopic string
 }
 
 // Type of function that determines if a component is authorized.
 // The function receives the component and must return true if the component is authorized.
-type ComponentAuthorizer func(component components_v1alpha1.Component) bool
+type ComponentAuthorizer func(component componentsV1alpha1.Component) bool
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
@@ -157,27 +157,27 @@ type DaprRuntime struct {
 	globalConfig           *config.Configuration
 	accessControlList      *config.AccessControlList
 	componentsLock         *sync.RWMutex
-	components             []components_v1alpha1.Component
+	components             []componentsV1alpha1.Component
 	grpc                   *grpc.Manager
 	appChannel             channel.AppChannel
 	appConfig              config.ApplicationConfig
 	directMessaging        messaging.DirectMessaging
-	stateStoreRegistry     state_loader.Registry
-	secretStoresRegistry   secretstores_loader.Registry
-	nameResolutionRegistry nr_loader.Registry
+	stateStoreRegistry     stateLoader.Registry
+	secretStoresRegistry   secretstoresLoader.Registry
+	nameResolutionRegistry nrLoader.Registry
 	stateStores            map[string]state.Store
 	actor                  actors.Actors
-	bindingsRegistry       bindings_loader.Registry
+	bindingsRegistry       bindingsLoader.Registry
 	subscribeBindingList   []string
 	inputBindings          map[string]bindings.InputBinding
 	outputBindings         map[string]bindings.OutputBinding
 	inputBindingsCtx       context.Context
 	inputBindingsCancel    context.CancelFunc
 	secretStores           map[string]secretstores.SecretStore
-	pubSubRegistry         pubsub_loader.Registry
+	pubSubRegistry         pubsubLoader.Registry
 	pubSubs                map[string]pubsubItem // Key is "componentName"
 	nameResolver           nr.Resolver
-	httpMiddlewareRegistry http_middleware_loader.Registry
+	httpMiddlewareRegistry httpMiddlewareLoader.Registry
 	hostAddress            string
 	actorStateStoreName    string
 	actorStateStoreLock    *sync.RWMutex
@@ -198,14 +198,14 @@ type DaprRuntime struct {
 
 	secretsConfiguration map[string]config.SecretsScope
 
-	configurationStoreRegistry configuration_loader.Registry
+	configurationStoreRegistry configurationLoader.Registry
 	configurationStores        map[string]configuration.Store
 
-	lockStoreRegistry lock_loader.Registry
+	lockStoreRegistry lockLoader.Registry
 	lockStores        map[string]lock.Store
 
-	pendingComponents          chan components_v1alpha1.Component
-	pendingComponentDependents map[string][]components_v1alpha1.Component
+	pendingComponents          chan componentsV1alpha1.Component
+	pendingComponentDependents map[string][]componentsV1alpha1.Component
 
 	proxy messaging.Proxy
 
@@ -256,7 +256,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		globalConfig:           globalConfig,
 		accessControlList:      accessControlList,
 		componentsLock:         &sync.RWMutex{},
-		components:             make([]components_v1alpha1.Component, 0),
+		components:             make([]componentsV1alpha1.Component, 0),
 		actorStateStoreLock:    &sync.RWMutex{},
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
 		inputBindings:          map[string]bindings.InputBinding{},
@@ -264,24 +264,24 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretStores:           map[string]secretstores.SecretStore{},
 		stateStores:            map[string]state.Store{},
 		pubSubs:                map[string]pubsubItem{},
-		stateStoreRegistry:     state_loader.NewRegistry(),
-		bindingsRegistry:       bindings_loader.NewRegistry(),
-		pubSubRegistry:         pubsub_loader.NewRegistry(),
-		secretStoresRegistry:   secretstores_loader.NewRegistry(),
-		nameResolutionRegistry: nr_loader.NewRegistry(),
-		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
+		stateStoreRegistry:     stateLoader.NewRegistry(),
+		bindingsRegistry:       bindingsLoader.NewRegistry(),
+		pubSubRegistry:         pubsubLoader.NewRegistry(),
+		secretStoresRegistry:   secretstoresLoader.NewRegistry(),
+		nameResolutionRegistry: nrLoader.NewRegistry(),
+		httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
 
 		topicsLock:                 &sync.Mutex{},
 		inputBindingRoutes:         map[string]string{},
 		secretsConfiguration:       map[string]config.SecretsScope{},
-		configurationStoreRegistry: configuration_loader.NewRegistry(),
+		configurationStoreRegistry: configurationLoader.NewRegistry(),
 		configurationStores:        map[string]configuration.Store{},
 
-		lockStoreRegistry: lock_loader.NewRegistry(),
+		lockStoreRegistry: lockLoader.NewRegistry(),
 		lockStores:        map[string]lock.Store{},
 
-		pendingComponents:          make(chan components_v1alpha1.Component),
-		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
+		pendingComponents:          make(chan componentsV1alpha1.Component),
+		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
 
 		tracerProvider: nil,
@@ -349,7 +349,7 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderStore) error {
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
 	if a.globalConfig.Spec.TracingSpec.Stdout {
-		tpStore.RegisterExporter(diag_utils.NewStdOutExporter())
+		tpStore.RegisterExporter(diagUtils.NewStdOutExporter())
 	}
 
 	// Register zipkin trace exporter if ZipkinSpec is specified
@@ -400,7 +400,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	tpStore.RegisterResource(r)
 
 	// Register a trace sampler based on Sampling settings
-	tpStore.RegisterSampler(diag_utils.TraceSampler(a.globalConfig.Spec.TracingSpec.SamplingRate))
+	tpStore.RegisterSampler(diagUtils.TraceSampler(a.globalConfig.Spec.TracingSpec.SamplingRate))
 
 	tpStore.RegisterTracerProvider()
 
@@ -572,15 +572,15 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
-	var handlers []http_middleware.Middleware
+func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	var handlers []httpMiddleware.Middleware
 
 	if a.globalConfig != nil {
 		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
 			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
-				return http_middleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
+				return httpMiddleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
 					middlewareSpec.Name,
 					middlewareSpec.Type,
 					middlewareSpec.Version)
@@ -588,16 +588,16 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version,
 				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
 			if err != nil {
-				return http_middleware.Pipeline{}, err
+				return httpMiddleware.Pipeline{}, err
 			}
 			log.Infof("enabled %s/%s http middleware", middlewareSpec.Type, middlewareSpec.Version)
 			handlers = append(handlers, handler)
 		}
 	}
-	return http_middleware.Pipeline{Handlers: handlers}, nil
+	return httpMiddleware.Pipeline{Handlers: handlers}, nil
 }
 
-func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
 	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initOutputBinding(c); err != nil {
 			return err
@@ -658,7 +658,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 
 		msg.Metadata[pubsubName] = name
 
-		rawPayload, err := contrib_metadata.IsRawPayload(route.metadata)
+		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
 			if route.deadLetterTopic != "" {
@@ -818,7 +818,7 @@ func (a *DaprRuntime) beginPubSub(name string) error {
 
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
-func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
+func findMatchingRoute(rules []*runtimePubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
 	hasRules := len(rules) > 0
 	if hasRules {
 		data := map[string]interface{}{
@@ -836,7 +836,7 @@ func findMatchingRoute(rules []*runtime_pubsub.Rule, cloudEvent interface{}) (pa
 	return "", false, nil
 }
 
-func matchRoutingRule(rules []*runtime_pubsub.Rule, data map[string]interface{}) (*runtime_pubsub.Rule, error) {
+func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) (*runtimePubsub.Rule, error) {
 	for _, rule := range rules {
 		if rule.Match == nil {
 			return rule, nil
@@ -892,7 +892,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 
 	go func() {
 		parseAndUpdate := func(compRaw []byte) {
-			var component components_v1alpha1.Component
+			var component componentsV1alpha1.Component
 			if err := json.Unmarshal(compRaw, &component); err != nil {
 				log.Warnf("error deserializing component: %s", err)
 				return
@@ -912,7 +912,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 
 		needList := false
 		for {
-			var stream operatorv1pb.Operator_ComponentUpdateClient
+			var stream operatorv1pb.Operator_ComponentUpdateClient //nolint:nosnakecase
 
 			// Retry on stream error.
 			backoff.Retry(func() error {
@@ -967,7 +967,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 	return nil
 }
 
-func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component) bool {
+func (a *DaprRuntime) onComponentUpdated(component componentsV1alpha1.Component) bool {
 	oldComp, exists := a.getComponent(component.Spec.Type, component.Name)
 	newComp, _ := a.processComponentSecrets(component)
 
@@ -1115,7 +1115,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return nil, errors.Wrap(err, fmt.Sprintf("error invoking app, body: %s", string(body)))
 		}
 		if resp != nil {
-			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
+			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
 				response.Concurrency = bindingsConcurrencyParallel
 			} else {
 				response.Concurrency = bindingsConcurrencySequential
@@ -1212,7 +1212,7 @@ func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, bind
 	})
 }
 
-func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) error {
+func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID,
 		a.appChannel,
 		a.directMessaging,
@@ -1311,7 +1311,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	)
 }
 
-func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
+func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
 	if len(a.pubSubs) == 0 {
 		return nil
 	}
@@ -1361,7 +1361,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 	return false
 }
 
-func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
@@ -1390,7 +1390,7 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
@@ -1415,7 +1415,7 @@ func (a *DaprRuntime) initOutputBinding(c components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
+func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
 	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
@@ -1440,7 +1440,7 @@ func (a *DaprRuntime) initConfiguration(s components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
+func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 	// create the component
 	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
@@ -1463,7 +1463,7 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 	}
 	// save lock related configuration
 	a.lockStores[s.ObjectMeta.Name] = store
-	err = lock_loader.SaveLockConfiguration(s.ObjectMeta.Name, props)
+	err = lockLoader.SaveLockConfiguration(s.ObjectMeta.Name, props)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
@@ -1476,7 +1476,7 @@ func (a *DaprRuntime) initLock(s components_v1alpha1.Component) error {
 }
 
 // Refer for state store api decision  https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
-func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
+func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
@@ -1512,7 +1512,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		}
 
 		a.stateStores[s.ObjectMeta.Name] = store
-		err = state_loader.SaveStateConfiguration(s.ObjectMeta.Name, props)
+		err = stateLoader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
@@ -1541,14 +1541,14 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscription {
-	var subs []runtime_pubsub.Subscription
+func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription {
+	var subs []runtimePubsub.Subscription
 
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		subs = runtime_pubsub.DeclarativeKubernetes(a.operatorClient, a.podName, a.namespace, log)
+		subs = runtimePubsub.DeclarativeKubernetes(a.operatorClient, a.podName, a.namespace, log)
 	case modes.StandaloneMode:
-		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
+		subs = runtimePubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
 	}
 
 	// only return valid subscriptions for this app id
@@ -1587,17 +1587,17 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 	}
 
 	var (
-		subscriptions []runtime_pubsub.Subscription
+		subscriptions []runtimePubsub.Subscription
 		err           error
 	)
 
 	// handle app subscriptions
 	resiliencyEnabled := config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency)
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		subscriptions, err = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
+		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-		subscriptions, err = runtime_pubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
+		subscriptions, err = runtimePubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
 	}
 	if err != nil {
 		return nil, err
@@ -1652,7 +1652,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 	return topicRoutes, nil
 }
 
-func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
@@ -1695,11 +1695,11 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	ps, ok := a.pubSubs[req.PubsubName]
 	if !ok {
-		return runtime_pubsub.NotFoundError{PubsubName: req.PubsubName}
+		return runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
 	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
-		return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
+		return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
 	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName)
@@ -1864,7 +1864,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
-			return nil
+			return nil //nolint:nilerr
 		}
 
 		switch appResponse.Status {
@@ -1997,15 +1997,15 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 	}
 
 	switch res.GetStatus() {
-	case runtimev1pb.TopicEventResponse_SUCCESS:
+	case runtimev1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 		// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 		// success from protobuf definition
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
 		return nil
-	case runtimev1pb.TopicEventResponse_RETRY:
+	case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 		return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-	case runtimev1pb.TopicEventResponse_DROP:
+	case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
 
@@ -2055,8 +2055,8 @@ func (a *DaprRuntime) initActors() error {
 	return NewInitError(InitFailure, "actors", err)
 }
 
-func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {
-	authorized := make([]components_v1alpha1.Component, len(components))
+func (a *DaprRuntime) getAuthorizedComponents(components []componentsV1alpha1.Component) []componentsV1alpha1.Component {
+	authorized := make([]componentsV1alpha1.Component, len(components))
 
 	i := 0
 	for _, c := range components {
@@ -2068,7 +2068,7 @@ func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.C
 	return authorized[0:i]
 }
 
-func (a *DaprRuntime) isComponentAuthorized(component components_v1alpha1.Component) bool {
+func (a *DaprRuntime) isComponentAuthorized(component componentsV1alpha1.Component) bool {
 	for _, auth := range a.componentAuthorizers {
 		if !auth(component) {
 			return false
@@ -2077,7 +2077,7 @@ func (a *DaprRuntime) isComponentAuthorized(component components_v1alpha1.Compon
 	return true
 }
 
-func (a *DaprRuntime) namespaceComponentAuthorizer(component components_v1alpha1.Component) bool {
+func (a *DaprRuntime) namespaceComponentAuthorizer(component componentsV1alpha1.Component) bool {
 	if a.namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
 		if len(component.Scopes) == 0 {
 			return true
@@ -2128,7 +2128,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	return nil
 }
 
-func (a *DaprRuntime) appendOrReplaceComponents(component components_v1alpha1.Component) {
+func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Component) {
 	a.componentsLock.Lock()
 	defer a.componentsLock.Unlock()
 
@@ -2146,7 +2146,7 @@ func (a *DaprRuntime) appendOrReplaceComponents(component components_v1alpha1.Co
 	}
 }
 
-func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Component) ComponentCategory {
+func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) ComponentCategory {
 	for _, category := range componentCategoriesNeedProcess {
 		if strings.HasPrefix(component.Spec.Type, fmt.Sprintf("%s.", category)) {
 			return category
@@ -2178,11 +2178,11 @@ func (a *DaprRuntime) flushOutstandingComponents() {
 	log.Info("waiting for all outstanding components to be processed")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.pendingComponents <- components_v1alpha1.Component{}
+	a.pendingComponents <- componentsV1alpha1.Component{}
 	log.Info("all outstanding components processed")
 }
 
-func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Component) error {
+func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Component) error {
 	log.Debugf("loading component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
 	res := a.preprocessOneComponent(&comp)
 	if res.unreadyDependency != "" {
@@ -2236,7 +2236,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 	return nil
 }
 
-func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp components_v1alpha1.Component) error {
+func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp componentsV1alpha1.Component) error {
 	switch category {
 	case bindingsComponent:
 		return a.initBinding(comp)
@@ -2254,7 +2254,7 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 	return nil
 }
 
-func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component) componentPreprocessRes {
+func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component) componentPreprocessRes {
 	var unreadySecretsStore string
 	*comp, unreadySecretsStore = a.processComponentSecrets(*comp)
 	if unreadySecretsStore != "" {
@@ -2374,7 +2374,7 @@ func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
 
-func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {
+func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Component) (componentsV1alpha1.Component, string) {
 	cache := map[string]secretstores.GetSecretResponse{}
 
 	for i, m := range component.Spec.Metadata {
@@ -2391,7 +2391,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 
 		// If running in Kubernetes, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
-		if a.runtimeConfig.Mode == modes.KubernetesMode && secretStoreName == secretstores_loader.BuiltinKubernetesSecretStore {
+		if a.runtimeConfig.Mode == modes.KubernetesMode && secretStoreName == secretstoresLoader.BuiltinKubernetesSecretStore {
 			var jsonVal string
 			err := json.Unmarshal(m.Value.Raw, &jsonVal)
 			if err != nil {
@@ -2405,7 +2405,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 				continue
 			}
 
-			m.Value = components_v1alpha1.DynamicValue{
+			m.Value = componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: dec,
 				},
@@ -2438,7 +2438,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 
 		val, ok := resp.Data[secretKeyName]
 		if ok {
-			component.Spec.Metadata[i].Value = components_v1alpha1.DynamicValue{
+			component.Spec.Metadata[i].Value = componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(val),
 				},
@@ -2450,7 +2450,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 	return component, ""
 }
 
-func (a *DaprRuntime) authSecretStoreOrDefault(comp components_v1alpha1.Component) string {
+func (a *DaprRuntime) authSecretStoreOrDefault(comp componentsV1alpha1.Component) string {
 	if comp.SecretStore == "" {
 		switch a.runtimeConfig.Mode {
 		case modes.KubernetesMode:
@@ -2511,7 +2511,7 @@ func (a *DaprRuntime) createAppChannel() error {
 		case GRPCProtocol:
 			channelCreatorFn = a.grpc.CreateLocalChannel
 		case HTTPProtocol:
-			channelCreatorFn = http_channel.CreateLocalChannel
+			channelCreatorFn = httpChannel.CreateLocalChannel
 		default:
 			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
@@ -2541,11 +2541,11 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		// Preload Kubernetes secretstore
-		a.pendingComponents <- components_v1alpha1.Component{
+		a.pendingComponents <- componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: secretstores_loader.BuiltinKubernetesSecretStore,
+				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
 				Version: components.FirstStableVersion,
 			},
@@ -2553,7 +2553,7 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 	}
 }
 
-func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
+func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
@@ -2575,7 +2575,7 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
+func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha1.MetadataItem) map[string]string {
 	properties := map[string]string{}
 	for _, c := range items {
 		val := c.Value.String()
@@ -2593,7 +2593,7 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 	return properties
 }
 
-func (a *DaprRuntime) getComponent(componentType string, name string) (components_v1alpha1.Component, bool) {
+func (a *DaprRuntime) getComponent(componentType string, name string) (componentsV1alpha1.Component, bool) {
 	a.componentsLock.RLock()
 	defer a.componentsLock.RUnlock()
 
@@ -2602,14 +2602,14 @@ func (a *DaprRuntime) getComponent(componentType string, name string) (component
 			return a.components[i], true
 		}
 	}
-	return components_v1alpha1.Component{}, false
+	return componentsV1alpha1.Component{}, false
 }
 
-func (a *DaprRuntime) getComponents() []components_v1alpha1.Component {
+func (a *DaprRuntime) getComponents() []componentsV1alpha1.Component {
 	a.componentsLock.RLock()
 	defer a.componentsLock.RUnlock()
 
-	comps := make([]components_v1alpha1.Component, len(a.components))
+	comps := make([]componentsV1alpha1.Component, len(a.components))
 	copy(comps, a.components)
 	return comps
 }

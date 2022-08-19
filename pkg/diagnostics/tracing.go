@@ -24,7 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 
 	// We currently don't depend on the Otel SDK since it has not GAed.
 	// This package, however, only contains the conventions from the Otel Spec,
@@ -215,7 +215,7 @@ func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 
 // StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
 func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, trace.Span) {
-	traceEnabled := diag_utils.IsTracingEnabled(spec.SamplingRate)
+	traceEnabled := diagUtils.IsTracingEnabled(spec.SamplingRate)
 	if !traceEnabled {
 		return ctx, nil
 	}

@@ -275,7 +275,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		fmt.Printf("Error: %v", err.Error())
+		fmt.Printf("Error: %v", err.Error()) //nolint:forbidigo
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -319,7 +319,6 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // calls Dapr's Actor method/timer/reminder: simulating actor client call.
-// nolint:gosec
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
 
@@ -607,11 +606,11 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 		var errBody []byte
 		errBody, err = io.ReadAll(res.Body)
 		if err == nil {
-			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody))
+			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody)) //nolint:stylecheck
 			return nil, t
 		}
 
-		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode)
+		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode) //nolint:stylecheck
 		return nil, t
 	}
 

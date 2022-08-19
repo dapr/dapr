@@ -139,6 +139,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+//nolint:forbidigo
 func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
 
@@ -174,7 +175,8 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // calls Dapr's Actor method: simulating actor client call.
-// nolint:gosec
+//
+//nolint:gosec
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
 
