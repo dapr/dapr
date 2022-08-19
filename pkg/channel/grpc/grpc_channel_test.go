@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -66,11 +67,12 @@ func TestMain(m *testing.M) {
 }
 
 func createConnection(t *testing.T) *grpc.ClientConn {
-	conn, err := grpc.Dial("localhost:9998",
-		grpc.WithInsecure(),
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	conn, err := grpc.DialContext(ctx, "localhost:9998",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
-		grpc.WithTimeout(2*time.Second),
 	)
+	cancel()
 	require.NoError(t, err, "failed to connect to gRPC server")
 	return conn
 }

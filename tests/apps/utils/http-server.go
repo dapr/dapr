@@ -44,6 +44,7 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 		// Create a server capable of supporting HTTP2 Cleartext connections
 		// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
 		h2s := &http2.Server{}
+		//nolint:gosec
 		server = &http.Server{
 			Addr:    addr,
 			Handler: h2c.NewHandler(appRouter(), h2s),
@@ -54,6 +55,7 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 			},
 		}
 	} else {
+		//nolint:gosec
 		server = &http.Server{
 			Addr:    addr,
 			Handler: appRouter(),
@@ -75,7 +77,7 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 
 	// Stop the server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT) //nolint:staticcheck
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh

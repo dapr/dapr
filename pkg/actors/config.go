@@ -16,7 +16,7 @@ package actors
 import (
 	"time"
 
-	app_config "github.com/dapr/dapr/pkg/config"
+	daprAppConfig "github.com/dapr/dapr/pkg/config"
 )
 
 // Config is the actor runtime configuration.
@@ -32,7 +32,7 @@ type Config struct {
 	DrainOngoingCallTimeout       time.Duration
 	DrainRebalancedActors         bool
 	Namespace                     string
-	Reentrancy                    app_config.ReentrancyConfig
+	Reentrancy                    daprAppConfig.ReentrancyConfig
 	RemindersStoragePartitions    int
 	EntityConfigs                 map[string]EntityConfig
 }
@@ -43,7 +43,7 @@ type EntityConfig struct {
 	ActorIdleTimeout           time.Duration
 	DrainOngoingCallTimeout    time.Duration
 	DrainRebalancedActors      bool
-	ReentrancyConfig           app_config.ReentrancyConfig
+	ReentrancyConfig           daprAppConfig.ReentrancyConfig
 	RemindersStoragePartitions int
 }
 
@@ -56,7 +56,7 @@ const (
 )
 
 // NewConfig returns the actor runtime configuration.
-func NewConfig(hostAddress, appID string, placementAddresses []string, port int, namespace string, appConfig app_config.ApplicationConfig) Config {
+func NewConfig(hostAddress, appID string, placementAddresses []string, port int, namespace string, appConfig daprAppConfig.ApplicationConfig) Config {
 	c := Config{
 		HostAddress:                   hostAddress,
 		AppID:                         appID,
@@ -135,7 +135,7 @@ func (c *Config) GetDrainRebalancedActorsForType(actorType string) bool {
 	return c.DrainRebalancedActors
 }
 
-func (c *Config) GetReentrancyForType(actorType string) app_config.ReentrancyConfig {
+func (c *Config) GetReentrancyForType(actorType string) daprAppConfig.ReentrancyConfig {
 	if val, ok := c.EntityConfigs[actorType]; ok {
 		return val.ReentrancyConfig
 	}
@@ -149,7 +149,7 @@ func (c *Config) GetRemindersPartitionCountForType(actorType string) int {
 	return c.RemindersStoragePartitions
 }
 
-func translateEntityConfig(appConfig app_config.EntityConfig) EntityConfig {
+func translateEntityConfig(appConfig daprAppConfig.EntityConfig) EntityConfig {
 	domainConfig := EntityConfig{
 		Entities:                   appConfig.Entities,
 		ActorIdleTimeout:           defaultActorIdleTimeout,

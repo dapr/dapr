@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -275,7 +275,7 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 		Name:      config,
 		Namespace: namespace,
 		PodName:   podName,
-	}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
+	}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
 		return nil, err
 	}

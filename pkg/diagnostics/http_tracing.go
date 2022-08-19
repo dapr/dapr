@@ -26,7 +26,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
@@ -65,7 +65,7 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 
 		// Check if response has traceparent header and add if absent
 		if ctx.Response.Header.Peek(traceparentHeader) == nil {
-			span = diag_utils.SpanFromContext(ctx)
+			span = diagUtils.SpanFromContext(ctx)
 			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
 		}
 
@@ -94,7 +94,7 @@ func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName st
 	netCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
 	_, span := tracer.Start(netCtx, spanName, kindOption)
-	diag_utils.SpanToFastHTTPContext(ctx, span)
+	diagUtils.SpanToFastHTTPContext(ctx, span)
 	return ctx, span
 }
 

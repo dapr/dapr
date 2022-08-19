@@ -27,6 +27,8 @@ import (
 
 // MockServer implementation of fake user app server.
 // It implements both AppCallback and AppCallbackHealthCheck.
+//
+//nolint:nosnakecase
 type MockServer struct {
 	Error                    error
 	Subscriptions            []*commonv1pb.TopicSubscription

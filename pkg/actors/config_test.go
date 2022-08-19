@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	app_config "github.com/dapr/dapr/pkg/config"
+	appConfig "github.com/dapr/dapr/pkg/config"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -31,7 +31,7 @@ const (
 )
 
 func TestDefaultConfigValuesSet(t *testing.T) {
-	appConfig := app_config.ApplicationConfig{Entities: []string{"actor1"}}
+	appConfig := appConfig.ApplicationConfig{Entities: []string{"actor1"}}
 	config := NewConfig(HostAddress, AppID, []string{PlacementAddress}, Port, Namespace, appConfig)
 
 	assert.Equal(t, HostAddress, config.HostAddress)
@@ -46,14 +46,14 @@ func TestDefaultConfigValuesSet(t *testing.T) {
 }
 
 func TestPerActorTypeConfigurationValues(t *testing.T) {
-	appConfig := app_config.ApplicationConfig{
+	appConfig := appConfig.ApplicationConfig{
 		Entities:                   []string{"actor1", "actor2", "actor3", "actor4"},
 		ActorIdleTimeout:           "1s",
 		ActorScanInterval:          "2s",
 		DrainOngoingCallTimeout:    "5s",
 		DrainRebalancedActors:      true,
 		RemindersStoragePartitions: 1,
-		EntityConfigs: []app_config.EntityConfig{
+		EntityConfigs: []appConfig.EntityConfig{
 			{
 				Entities:                []string{"actor1", "actor2"},
 				ActorIdleTimeout:        "60s",
@@ -65,7 +65,7 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 				ActorIdleTimeout:        "5s",
 				DrainOngoingCallTimeout: "1s",
 				DrainRebalancedActors:   true,
-				Reentrancy: app_config.ReentrancyConfig{
+				Reentrancy: appConfig.ReentrancyConfig{
 					Enabled: true,
 				},
 				RemindersStoragePartitions: 10,
@@ -111,14 +111,14 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 }
 
 func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
-	appConfig := app_config.ApplicationConfig{
+	appConfig := appConfig.ApplicationConfig{
 		Entities:                   []string{"actor1", "actor2"},
 		ActorIdleTimeout:           "1s",
 		ActorScanInterval:          "2s",
 		DrainOngoingCallTimeout:    "5s",
 		DrainRebalancedActors:      true,
 		RemindersStoragePartitions: 1,
-		EntityConfigs: []app_config.EntityConfig{
+		EntityConfigs: []appConfig.EntityConfig{
 			{
 				Entities:                []string{"actor1", "actor2"},
 				ActorIdleTimeout:        "60s",
@@ -130,7 +130,7 @@ func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
 				ActorIdleTimeout:        "5s",
 				DrainOngoingCallTimeout: "1s",
 				DrainRebalancedActors:   true,
-				Reentrancy: app_config.ReentrancyConfig{
+				Reentrancy: appConfig.ReentrancyConfig{
 					Enabled: true,
 				},
 				RemindersStoragePartitions: 10,

@@ -107,6 +107,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 		deserializer: serializer.NewCodecFactory(
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
+		//nolint:gosec
 		server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,

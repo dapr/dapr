@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // This implementation is inspired by
@@ -113,16 +113,16 @@ func (g *grpcMetrics) Init(appID string) error {
 	g.enabled = true
 
 	return view.Register(
-		diag_utils.NewMeasureView(g.serverReceivedBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
-		diag_utils.NewMeasureView(g.serverSentBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
-		diag_utils.NewMeasureView(g.serverLatency, []tag.Key{appIDKey, KeyServerMethod}, defaultLatencyDistribution),
-		diag_utils.NewMeasureView(g.serverCompletedRpcs, []tag.Key{appIDKey, KeyServerMethod, KeyServerStatus}, view.Count()),
-		diag_utils.NewMeasureView(g.clientSentBytes, []tag.Key{appIDKey, KeyClientMethod}, defaultSizeDistribution),
-		diag_utils.NewMeasureView(g.clientReceivedBytes, []tag.Key{appIDKey, KeyClientMethod}, defaultSizeDistribution),
-		diag_utils.NewMeasureView(g.clientRoundtripLatency, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, defaultLatencyDistribution),
-		diag_utils.NewMeasureView(g.clientCompletedRpcs, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, view.Count()),
-		diag_utils.NewMeasureView(g.healthProbeRoundripLatency, []tag.Key{appIDKey, KeyClientStatus}, defaultLatencyDistribution),
-		diag_utils.NewMeasureView(g.healthProbeCompletedCount, []tag.Key{appIDKey, KeyClientStatus}, view.Count()),
+		diagUtils.NewMeasureView(g.serverReceivedBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
+		diagUtils.NewMeasureView(g.serverSentBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
+		diagUtils.NewMeasureView(g.serverLatency, []tag.Key{appIDKey, KeyServerMethod}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(g.serverCompletedRpcs, []tag.Key{appIDKey, KeyServerMethod, KeyServerStatus}, view.Count()),
+		diagUtils.NewMeasureView(g.clientSentBytes, []tag.Key{appIDKey, KeyClientMethod}, defaultSizeDistribution),
+		diagUtils.NewMeasureView(g.clientReceivedBytes, []tag.Key{appIDKey, KeyClientMethod}, defaultSizeDistribution),
+		diagUtils.NewMeasureView(g.clientRoundtripLatency, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(g.clientCompletedRpcs, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, view.Count()),
+		diagUtils.NewMeasureView(g.healthProbeRoundripLatency, []tag.Key{appIDKey, KeyClientStatus}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(g.healthProbeCompletedCount, []tag.Key{appIDKey, KeyClientStatus}, view.Count()),
 	)
 }
 
@@ -134,7 +134,7 @@ func (g *grpcMetrics) ServerRequestReceived(ctx context.Context, method string, 
 	if g.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method),
+			diagUtils.WithTags(appIDKey, g.appID, KeyServerMethod, method),
 			g.serverReceivedBytes.M(contentSize))
 	}
 
@@ -146,15 +146,15 @@ func (g *grpcMetrics) ServerRequestSent(ctx context.Context, method, status stri
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
+			diagUtils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
 			g.serverCompletedRpcs.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method),
+			diagUtils.WithTags(appIDKey, g.appID, KeyServerMethod, method),
 			g.serverSentBytes.M(contentSize))
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
+			diagUtils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
 			g.serverLatency.M(elapsed))
 	}
 }
@@ -163,7 +163,7 @@ func (g *grpcMetrics) ClientRequestSent(ctx context.Context, method string, cont
 	if g.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method),
+			diagUtils.WithTags(appIDKey, g.appID, KeyClientMethod, method),
 			g.clientSentBytes.M(contentSize))
 	}
 
@@ -175,22 +175,22 @@ func (g *grpcMetrics) ClientRequestReceived(ctx context.Context, method, status 
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
+			diagUtils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
 			g.clientCompletedRpcs.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
+			diagUtils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
 			g.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method),
+			diagUtils.WithTags(appIDKey, g.appID, KeyClientMethod, method),
 			g.clientReceivedBytes.M(contentSize))
 	}
 }
 
 func (g *grpcMetrics) AppHealthProbeStarted(ctx context.Context) time.Time {
 	if g.enabled {
-		stats.RecordWithTags(ctx, diag_utils.WithTags(appIDKey, g.appID))
+		stats.RecordWithTags(ctx, diagUtils.WithTags(appIDKey, g.appID))
 	}
 
 	return time.Now()
@@ -201,11 +201,11 @@ func (g *grpcMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyClientStatus, status),
+			diagUtils.WithTags(appIDKey, g.appID, KeyClientStatus, status),
 			g.healthProbeCompletedCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyClientStatus, status),
+			diagUtils.WithTags(appIDKey, g.appID, KeyClientStatus, status),
 			g.healthProbeRoundripLatency.M(elapsed))
 	}
 }

@@ -56,6 +56,7 @@ func (s *server) Run(ctx context.Context, port int) error {
 	router := http.NewServeMux()
 	router.Handle("/healthz", s.healthz())
 
+	//nolint:gosec
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: router,

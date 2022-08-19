@@ -111,7 +111,7 @@ func startGRPC() {
 
 	// Stop the gRPC server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, syscall.SIGTERM, os.Interrupt)
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh
@@ -263,11 +263,14 @@ func publishMessage(count int) {
 	u := fmt.Sprintf(publishURL, daprPort)
 	log.Println("Invoking URL", u)
 	body := fmt.Sprintf(`{"orderId": "%d"}`, count)
-	_, err := httpClient.Post(u, "application/json", strings.NewReader(body))
+	res, err := httpClient.Post(u, "application/json", strings.NewReader(body))
 	if err != nil {
 		log.Printf("Failed to publish message. Error: %v", err)
 		return
 	}
+	// Drain before closing
+	_, _ = io.Copy(io.Discard, res.Body)
+	res.Body.Close()
 }
 
 func startHTTP() {
