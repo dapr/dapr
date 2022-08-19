@@ -33,10 +33,10 @@ type InitError struct {
 
 func (e *InitError) Error() string {
 	if e.entity == "" {
-		return fmt.Sprintf("(%s): %s", e.kind, e.err)
+		return fmt.Sprintf("[%s]: %s", e.kind, e.err)
 	}
 
-	return fmt.Sprintf("(%s): initialization error occurred for %s: %s", e.kind, e.entity, e.err)
+	return fmt.Sprintf("[%s]: initialization error occurred for %s: %s", e.kind, e.entity, e.err)
 }
 
 // NewInitError returns an InitError wrapping an existing context error.
