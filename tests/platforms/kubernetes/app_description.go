@@ -16,8 +16,8 @@ package kubernetes
 import (
 	"encoding/json"
 	"os"
-	"strings"
 
+	"github.com/dapr/dapr/utils"
 	apiv1 "k8s.io/api/core/v1"
 )
 
@@ -71,7 +71,7 @@ func (a AppDescription) String() string {
 
 // ShouldBeExposed returns if the app should be exposed as a loadbalancer/nodeport service.
 func (a AppDescription) ShouldBeExposed() bool {
-	return a.IngressEnabled && !strings.EqualFold(os.Getenv(useServiceInternalIP), "true")
+	return a.IngressEnabled && utils.IsTruthy(os.Getenv(useServiceInternalIP))
 }
 
 func (a AppDescription) MarshalJSON() ([]byte, error) {

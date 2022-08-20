@@ -197,6 +197,67 @@ If you want to run the tests in a similar environment, you can deploy the test i
 
 > Before you run the commands below, ensure that you have an Azure subscription, have the Azure CLI installed, and are logged into Azure (`az login`)
 
+## Run E2E tests using a Wireguard Tunnel with tailscale
+
+[Tailscale](https://tailscale.com/) is a zero-config VPN that provides NAT traversal out-of-the-box allowing our services and pods to be called directly - using its ClusterIP - without needed to be exposed using a loadbalancer.
+
+This provides a few advantages including the decrease of the total test duration.
+
+if you want to run the tests using tailscale as your network, few things are necessary:
+
+1. [Create a tailscale account](https://login.tailscale.com/), this will be necessary since we're going to use personal keys.
+2. [Download and install](https://tailscale.com/download/) the tailscale client for your OS.
+3. When you're logged in, navigate to the menu `Access Controls` and two things are necessary, edit the ACL definition with:
+   1. Create a new tag that will be used later to assign permissions to keys.
+    ```json
+    {...
+      "tagOwners": {
+        "tag:dapr-tests": ["your_email_comes_here@your_domain.com"],
+      }
+    }
+    ```
+   2. Assign permissions to the created tag. Since we are going to use the [tailscale subnet router](https://tailscale.com/kb/1185/kubernetes/), it is much convenient that the subnet router should auto approve the registered routes, for that, use the following acl.
+   ```json
+     {...
+       "autoApprovers": {
+         "routes": {
+           "0.0.0.0/0": ["tag:dapr-tests"],
+         },
+       }
+     }
+   ```
+4. Now, go to the Settings > Personal Settings > Keys.
+5. Once in the keys section, generate a new ephemeral key by clicking in `Generate auth key`.
+6. Mark as `reusable`, `ephemeral` and add the created tag `dapr-tests` and do not forget to copy out the value.
+
+Now, we're almost set.
+
+The next step will be install the tailscale subnet router in your kubernetes cluster, for that, run
+
+```sh
+TAILSCALE_AUTH_KEY=your_key_goes_here make setup-tailscale
+```
+
+If you prefer you can also export the key
+```sh
+export TAILSCALE_AUTH_KEY=your_key_goes_here
+```
+This command assumes that the namespace specified at `DAPR_TEST_NAMESPACE` had been already created.
+
+Now, you have to login on tailscale client using your personal account, to verify if the subnet router deployment works, browse to the `Machines` on the tailscale portal, the subnet router should show up there.
+
+One more config is necessary, `E2E_USE_INTERNAL_IP=true`, you can use it as a variable when running tests as the following:
+
+```sh
+E2E_USE_INTERNAL_IP=true make test-e2e-all
+```
+
+Or exported as the previous ones,
+
+```sh
+export E2E_USE_INTERNAL_IP=true
+```
+
 ### Deploy AKS only
 
 If you want to deploy AKS and the Azure Container Registry only (without Azure Cosmos DB and Azure Service Bus), you can use this script:

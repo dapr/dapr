@@ -374,18 +374,12 @@ SERVICE_CIDR=$(shell kubectl cluster-info dump | grep -m 1 cluster-cidr |grep -E
 POD_CIDR=$(shell kubectl cluster-info dump | grep -m 1 service-cluster-ip-range |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}" | tr -d '\n')
 
 # setup tailscale
+.PHONY: setup-tailscale
 setup-tailscale:
 ifeq ($(TAILSCALE_AUTH_KEY),)
 	$(error TAILSCALE_AUTH_KEY environment variable must be set)
 else
-	$(KUBECTL) apply -f ./tests/config/tailscale_role.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/tailscale_rolebinding.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/tailscale_sa.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	@sed -e "s;{{TS_AUTH_KEY}};$(TAILSCALE_AUTH_KEY);g" ./tests/config/tailscale_key.yaml | $(KUBECTL) apply --namespace $(DAPR_TEST_NAMESPACE) -f -
-
-	# Set service CIDR and pod CIDR for the tailscale subrouter
-
-	@sed -e "s;{{TS_ROUTES}};$(SERVICE_CIDR),$(POD_CIDR);g" ./tests/config/tailscale_subnet_router.yaml | $(KUBECTL) apply --namespace $(DAPR_TEST_NAMESPACE) -f -
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) TAILSCALE_AUTH_KEY=$(TAILSCALE_AUTH_KEY) ./tests/setup_tailscale.sh
 endif
 
 # install redis to the cluster without password
