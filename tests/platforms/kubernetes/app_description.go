@@ -17,8 +17,9 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/dapr/dapr/utils"
 	apiv1 "k8s.io/api/core/v1"
+
+	"github.com/dapr/dapr/utils"
 )
 
 const (
