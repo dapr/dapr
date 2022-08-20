@@ -23,7 +23,7 @@ var (
 	stateForRollbackFailure = 3
 	// requestStatusOK                   = 1
 	bunchTransactionServiceInvokeType = "service-invoke"
-	bunchTransactionActorType         = "actore"
+	bunchTransactionActorType         = "actor"
 	transactionConfirm                = "Confirm"
 	transactionRollback               = "Rollback"
 	log                               = logger.NewLogger("dapr.components.transaction")
@@ -238,6 +238,14 @@ func RequestActor(actor actors.Actors, bunchTransactionReqsParam *transactionCom
 	req.WithActor(bunchTransactionReqsParam.ActorType, bunchTransactionReqsParam.ActorID)
 	req.WithHTTPExtension(bunchTransactionReqsParam.Verb, bunchTransactionReqsParam.QueryArgs)
 	req.WithRawData(bunchTransactionReqsParam.Data, bunchTransactionReqsParam.ContentType)
+
+	// Save headers to metadata.
+	metadata := map[string][]string{}
+	header := bunchTransactionReqsParam.Header
+	header.VisitAll(func(key []byte, value []byte) {
+		metadata[string(key)] = []string{string(value)}
+	})
+	req.WithMetadata(metadata)
 
 	ctx := context.Background()
 	i := 1
