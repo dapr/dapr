@@ -221,11 +221,12 @@ if you want to run the tests using tailscale as your network, few things are nec
      {...
        "autoApprovers": {
          "routes": {
-           "0.0.0.0/0": ["tag:dapr-tests"],
+           "10.0.0.0/8": ["tag:dapr-tests"],
          },
        }
      }
    ```
+   > Warning: as we are using `10.0.0.0/8` we must guarantee that our CIDR block used in the kubernetes cluster must be a subset of it
 4. Now, go to the Settings > Personal Settings > Keys.
 5. Once in the keys section, generate a new ephemeral key by clicking in `Generate auth key`.
 6. Mark as `reusable`, `ephemeral` and add the created tag `dapr-tests` and do not forget to copy out the value.
@@ -238,24 +239,14 @@ The next step will be install the tailscale subnet router in your kubernetes clu
 TAILSCALE_AUTH_KEY=your_key_goes_here make setup-tailscale
 ```
 
-If you prefer you can also export the key
-```sh
-export TAILSCALE_AUTH_KEY=your_key_goes_here
-```
-This command assumes that the namespace specified at `DAPR_TEST_NAMESPACE` had been already created.
+> TIP: for security reasons you could run `unset HISTFILE` before the tailscale command so that will discard your history file
 
 Now, you have to login on tailscale client using your personal account, to verify if the subnet router deployment works, browse to the `Machines` on the tailscale portal, the subnet router should show up there.
 
-One more config is necessary, `E2E_USE_INTERNAL_IP=true`, you can use it as a variable when running tests as the following:
+One more config is necessary, `TEST_E2E_USE_INTERNAL_IP=true`, you can use it as a variable when running tests as the following:
 
 ```sh
-E2E_USE_INTERNAL_IP=true make test-e2e-all
-```
-
-Or exported as the previous ones,
-
-```sh
-export E2E_USE_INTERNAL_IP=true
+TEST_E2E_USE_INTERNAL_IP=true make test-e2e-all
 ```
 
 ### Deploy AKS only

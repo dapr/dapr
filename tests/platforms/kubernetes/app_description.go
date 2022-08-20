@@ -71,7 +71,7 @@ func (a AppDescription) String() string {
 
 // ShouldBeExposed returns if the app should be exposed as a loadbalancer/nodeport service.
 func (a AppDescription) ShouldBeExposed() bool {
-	return a.IngressEnabled && utils.IsTruthy(os.Getenv(useServiceInternalIP))
+	return a.IngressEnabled && !utils.IsTruthy(os.Getenv(useServiceInternalIP))
 }
 
 func (a AppDescription) MarshalJSON() ([]byte, error) {

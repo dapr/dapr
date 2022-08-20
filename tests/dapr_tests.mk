@@ -369,10 +369,6 @@ setup-helm-init:
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
 	$(HELM) repo update
 
-# Pod and service cidr used by tailscale subnet router
-SERVICE_CIDR=$(shell kubectl cluster-info dump | grep -m 1 cluster-cidr |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}" | tr -d '\n')
-POD_CIDR=$(shell kubectl cluster-info dump | grep -m 1 service-cluster-ip-range |grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}/[0-9]{1,3}" | tr -d '\n')
-
 # setup tailscale
 .PHONY: setup-tailscale
 setup-tailscale:
