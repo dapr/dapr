@@ -353,6 +353,9 @@ func containsKey(s []string, key string) bool {
 }
 
 func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
+	if target == Resiliency {
+		return true
+	}
 	for _, feature := range features {
 		if feature.Name == target {
 			return feature.Enabled
