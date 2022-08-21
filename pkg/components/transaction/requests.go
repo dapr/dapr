@@ -7,17 +7,17 @@ import (
 )
 
 type TransactionScheduleRequest struct {
-	TransactionId string `json:"transactionId"`
+	TransactionID string `json:"transactionID"`
 }
 
 type TransactionRequestHeader struct {
-	TransactionId        string `json:"transactionId"`
-	BunchTransactionId   string `json:"bunchTransactionId"`
+	TransactionID        string `json:"transactionID"`
+	BunchTransactionID   string `json:"bunchTransactionID"`
 	TransactionStoreName string `json:"transactionStoreName"`
 }
 
 type ScheduleTransactionRequest struct {
-	TransactionId       string                           `json:"transactionId"`
+	TransactionID       string                           `json:"transactionID"`
 	TransactionInstance transactionComponent.Transaction `json:"transactionInstance"`
 	DirectMessaging     messaging.DirectMessaging        `json:"directMessaging"`
 	Actor               actors.Actors                    `json:"actor"`

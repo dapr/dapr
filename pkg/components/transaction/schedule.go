@@ -33,7 +33,7 @@ func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) e
 	transactionInstance := scheduleTransactionRequest.TransactionInstance
 	reqs, err := transactionInstance.GetBunchTransactions(
 		transactionComponent.GetBunchTransactionsRequest{
-			TransactionId: scheduleTransactionRequest.TransactionId,
+			TransactionID: scheduleTransactionRequest.TransactionID,
 		},
 	)
 	if err != nil {
@@ -48,7 +48,7 @@ func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) e
 
 	allBunchTransactionConfirmSuccess := true
 
-	for bunchTransactionId, bunchTransaction := range bunchTransactions {
+	for bunchTransactionID, bunchTransaction := range bunchTransactions {
 		state := bunchTransaction.StatusCode
 		// data of the origin request param
 		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
@@ -62,8 +62,8 @@ func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) e
 			}
 
 			transactionInstance.Confirm(transactionComponent.BunchTransactionConfirmRequest{
-				TransactionId:      scheduleTransactionRequest.TransactionId,
-				BunchTransactionId: bunchTransactionId,
+				TransactionID:      scheduleTransactionRequest.TransactionID,
+				BunchTransactionID: bunchTransactionID,
 				StatusCode:         stateForConfirmSuccess,
 			})
 		}
@@ -72,7 +72,7 @@ func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) e
 	// all bunch transaction confirm success, release state resource
 	if allBunchTransactionConfirmSuccess {
 		transactionInstance.ReleaseTransactionResource(transactionComponent.ReleaseTransactionRequest{
-			TransactionId: scheduleTransactionRequest.TransactionId,
+			TransactionID: scheduleTransactionRequest.TransactionID,
 		})
 	} else {
 		return fmt.Errorf("fail to confirm distribute transaction")
@@ -86,7 +86,7 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 	transactionInstance := scheduleTransactionRequest.TransactionInstance
 	reqs, err := transactionInstance.GetBunchTransactions(
 		transactionComponent.GetBunchTransactionsRequest{
-			TransactionId: scheduleTransactionRequest.TransactionId,
+			TransactionID: scheduleTransactionRequest.TransactionID,
 		},
 	)
 	if err != nil {
@@ -101,7 +101,7 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 
 	allBunchTransactionRollbackSuccess := true
 
-	for bunchTransactionId, bunchTransaction := range bunchTransactions {
+	for bunchTransactionID, bunchTransaction := range bunchTransactions {
 		state := bunchTransaction.StatusCode
 		// data of the origin request param
 		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
@@ -112,14 +112,14 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 			if responseStatusCode != fasthttp.StatusOK {
 				allBunchTransactionRollbackSuccess = false
 				transactionInstance.Rollback(transactionComponent.BunchTransactionRollbackRequest{
-					TransactionId:      scheduleTransactionRequest.TransactionId,
-					BunchTransactionId: bunchTransactionId,
+					TransactionID:      scheduleTransactionRequest.TransactionID,
+					BunchTransactionID: bunchTransactionID,
 					StatusCode:         stateForRollbackFailure,
 				})
 			} else {
 				transactionInstance.Rollback(transactionComponent.BunchTransactionRollbackRequest{
-					TransactionId:      scheduleTransactionRequest.TransactionId,
-					BunchTransactionId: bunchTransactionId,
+					TransactionID:      scheduleTransactionRequest.TransactionID,
+					BunchTransactionID: bunchTransactionID,
 					StatusCode:         stateForRollbackSuccess,
 				})
 			}
@@ -130,7 +130,7 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 	// all bunch transaction confirm success, release state resource
 	if allBunchTransactionRollbackSuccess {
 		transactionInstance.ReleaseTransactionResource(transactionComponent.ReleaseTransactionRequest{
-			TransactionId: scheduleTransactionRequest.TransactionId,
+			TransactionID: scheduleTransactionRequest.TransactionID,
 		})
 	} else {
 		return fmt.Errorf("fail to rollback all of bunch distribute transaction")
