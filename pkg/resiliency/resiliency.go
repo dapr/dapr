@@ -544,6 +544,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 					}
 				}
 			}
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
 		if defaultNames, ok := r.getDefaultPolicy(Endpoint); ok {
@@ -628,6 +629,7 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 					}
 				}
 			}
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
 		if defaultNames, ok := r.getDefaultPolicy(Actor); ok {
