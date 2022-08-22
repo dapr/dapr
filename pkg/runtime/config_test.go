@@ -22,14 +22,35 @@ import (
 
 func TestNewConfig(t *testing.T) {
 	publicPort := DefaultDaprPublicPort
-	c := NewRuntimeConfig("app1", []string{"localhost:5050"},
-		"localhost:5051", "*", "config",
-		"components", "http", "kubernetes",
-		3500, 50002, 50001,
-		[]string{"1.2.3.4"}, &publicPort, 8080, 7070,
-		true, 1, true,
-		"localhost:5052", true, 4,
-		"", 4, true, time.Second, true, true)
+	c := NewRuntimeConfig(NewRuntimeConfigOpts{
+		ID:                           "app1",
+		PlacementAddresses:           []string{"localhost:5050"},
+		controlPlaneAddress:          "localhost:5051",
+		AllowedOrigins:               "*",
+		GlobalConfig:                 "config",
+		ComponentsPath:               "components",
+		AppProtocol:                  "http",
+		Mode:                         "kubernetes",
+		HTTPPort:                     3500,
+		InternalGRPCPort:             50002,
+		APIGRPCPort:                  50001,
+		APIListenAddresses:           []string{"1.2.3.4"},
+		PublicPort:                   &publicPort,
+		AppPort:                      8080,
+		ProfilePort:                  7070,
+		EnableProfiling:              true,
+		MaxConcurrency:               1,
+		MTLSEnabled:                  true,
+		SentryAddress:                "localhost:5052",
+		AppSSL:                       true,
+		MaxRequestBodySize:           4,
+		UnixDomainSocket:             "",
+		ReadBufferSize:               4,
+		StreamRequestBody:            true,
+		GracefulShutdownDuration:     time.Second,
+		EnableAPILogging:             true,
+		DisableBuiltinK8sSecretStore: true,
+	})
 
 	assert.Equal(t, "app1", c.ID)
 	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
