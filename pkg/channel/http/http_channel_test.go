@@ -19,35 +19,33 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
+	"go.uber.org/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
+// testConcurrencyHandler is used for testing max concurrency.
 type testConcurrencyHandler struct {
-	maxCalls     int
-	currentCalls int
+	maxCalls     int32
+	currentCalls *atomic.Int32
 	testFailed   bool
-	lock         sync.Mutex
 }
 
 func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	t.lock.Lock()
-	t.currentCalls++
-	t.lock.Unlock()
+	cur := t.currentCalls.Inc()
 
-	if t.currentCalls > t.maxCalls {
+	if cur > t.maxCalls {
 		t.testFailed = true
 	}
 
-	t.lock.Lock()
-	t.currentCalls--
-	t.lock.Unlock()
+	t.currentCalls.Dec()
 	io.WriteString(w, r.URL.RawQuery)
 }
 
@@ -78,6 +76,23 @@ type testHTTPHandler struct {
 func (th *testHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	assert.Equal(th.t, th.serverURL, r.Host)
 	io.WriteString(w, r.URL.RawQuery)
+}
+
+// testStatusCodeHandler is used to send responses with a given status code.
+type testStatusCodeHandler struct {
+	Code int
+}
+
+func (t *testStatusCodeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	code, err := strconv.Atoi(r.Header.Get("x-response-status"))
+	if err != nil || code == 0 {
+		code = t.Code
+		if code == 0 {
+			code = 200
+		}
+	}
+	w.WriteHeader(code)
+	w.Write([]byte(strconv.Itoa(code)))
 }
 
 func TestInvokeMethod(t *testing.T) {
@@ -134,8 +149,8 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 	ctx := context.Background()
 	t.Run("single concurrency", func(t *testing.T) {
 		handler := testConcurrencyHandler{
-			maxCalls: 1,
-			lock:     sync.Mutex{},
+			maxCalls:     1,
+			currentCalls: atomic.NewInt32(0),
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{
@@ -167,8 +182,8 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 
 	t.Run("10 concurrent calls", func(t *testing.T) {
 		handler := testConcurrencyHandler{
-			maxCalls: 10,
-			lock:     sync.Mutex{},
+			maxCalls:     10,
+			currentCalls: atomic.NewInt32(0),
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{
@@ -200,8 +215,8 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 
 	t.Run("introduce failures", func(t *testing.T) {
 		handler := testConcurrencyHandler{
-			maxCalls: 5,
-			lock:     sync.Mutex{},
+			maxCalls:     5,
+			currentCalls: atomic.NewInt32(0),
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{
@@ -416,4 +431,34 @@ func TestCreateChannel(t *testing.T) {
 		b := ch.GetBaseAddress()
 		assert.Equal(t, b, "http://127.0.0.1:3000")
 	})
+}
+
+func TestHealthProbe(t *testing.T) {
+	ctx := context.Background()
+	h := &testStatusCodeHandler{}
+	testServer := httptest.NewServer(h)
+	c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+
+	var (
+		success bool
+		err     error
+	)
+
+	// OK response
+	success, err = c.HealthProbe(ctx)
+	assert.NoError(t, err)
+	assert.True(t, success)
+
+	// Non-2xx status code
+	h.Code = 500
+	success, err = c.HealthProbe(ctx)
+	assert.NoError(t, err)
+	assert.False(t, success)
+
+	// Stopped server
+	// Should still return no error, but a failed probe
+	testServer.Close()
+	success, err = c.HealthProbe(ctx)
+	assert.NoError(t, err)
+	assert.False(t, success)
 }
