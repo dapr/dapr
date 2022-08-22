@@ -1388,7 +1388,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	hasDistributeTransaction := false
 	var transactionHeader transaction_loader.TransactionRequestHeader
-	var transactionTryRequestParam transaction.TransactionTryRequestParam
+	var transactionRequestParam transaction.TransactionRequestParam
 	if len(reqCtx.Request.Header.Peek("distribute-transaction-id")) > 0 &&
 		len(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id")) > 0 &&
 		len(reqCtx.Request.Header.Peek("distribute-transaction-store")) > 0 {
@@ -1399,7 +1399,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		transactionHeader.BunchTransactionID = string(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id"))
 		transactionHeader.TransactionStoreName = string(reqCtx.Request.Header.Peek("distribute-transaction-store"))
 
-		transactionTryRequestParam = transaction.TransactionTryRequestParam{
+		transactionRequestParam = transaction.TransactionRequestParam{
 			Type:             "service-invoke",
 			TargetID:         targetID,
 			InvokeMethodName: invokeMethodName,
@@ -1410,7 +1410,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 			Header:           &reqCtx.Request.Header,
 		}
 		log.Debug("transactionHeader : ", transactionHeader)
-		log.Debug("transactionTryRequestParam : ", transactionTryRequestParam)
+		log.Debug("transactionRequestParam : ", transactionRequestParam)
 	}
 
 	// Construct internal invoke method request
@@ -1468,8 +1468,8 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	})
 
 	if hasDistributeTransaction {
-		log.Debug("strat a try operation in service invoke")
-		a.distributeTransactionTry(transactionHeader, statusCode, transactionTryRequestParam)
+		log.Debug("store the state operation in service invoke")
+		a.saveDistributeTransaction(transactionHeader, statusCode, transactionRequestParam)
 	}
 
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
@@ -1769,7 +1769,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 
 	hasDistributeTransaction := false
 	var transactionHeader transaction_loader.TransactionRequestHeader
-	var transactionTryRequestParam transaction.TransactionTryRequestParam
+	var transactionRequestParam transaction.TransactionRequestParam
 	if len(reqCtx.Request.Header.Peek("distribute-transaction-id")) > 0 &&
 		len(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id")) > 0 &&
 		len(reqCtx.Request.Header.Peek("distribute-transaction-store")) > 0 {
@@ -1780,7 +1780,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		transactionHeader.BunchTransactionID = string(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id"))
 		transactionHeader.TransactionStoreName = string(reqCtx.Request.Header.Peek("distribute-transaction-store"))
 
-		transactionTryRequestParam = transaction.TransactionTryRequestParam{
+		transactionRequestParam = transaction.TransactionRequestParam{
 			Type:             "actor",
 			InvokeMethodName: method,
 			Verb:             verb,
@@ -1792,7 +1792,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 			ActorID:          actorID,
 		}
 		log.Debug("transactionHeader : ", transactionHeader)
-		log.Debug("transactionTryRequestParam : ", transactionTryRequestParam)
+		log.Debug("transactionRequestParam : ", transactionRequestParam)
 	}
 
 	req := invokev1.NewInvokeMethodRequest(method)
@@ -1835,8 +1835,8 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	statusCode := int(resp.Status().Code)
 
 	if hasDistributeTransaction {
-		log.Debug("strat a try operation in actor")
-		a.distributeTransactionTry(transactionHeader, statusCode, transactionTryRequestParam)
+		log.Debug("run a bunch transaction in actor")
+		a.saveDistributeTransaction(transactionHeader, statusCode, transactionRequestParam)
 	}
 
 	if !resp.IsHTTPResponse() {
@@ -2376,9 +2376,9 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
-			Route:   "transaction/{transactionStoreName}/confirm",
+			Route:   "transaction/{transactionStoreName}/commit",
 			Version: apiVersionV1,
-			Handler: a.onDistributeTransactionConfirm,
+			Handler: a.onDistributeTransactionCommit,
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
@@ -2450,10 +2450,10 @@ func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, withJSON(fasthttp.StatusOK, response))
 }
 
-// Confirm a distribute transaction
-func (a *api) onDistributeTransactionConfirm(reqCtx *fasthttp.RequestCtx) {
+// Commit a distribute transaction
+func (a *api) onDistributeTransactionCommit(reqCtx *fasthttp.RequestCtx) {
 	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
-	log.Debug("distribute transaction Confirm operation calling, transactionInstance is : ", transactionInstance)
+	log.Debug("distribute transaction Commit operation calling, transactionInstance is : ", transactionInstance)
 	if err != nil {
 		respond(reqCtx, withEmpty())
 		return
@@ -2465,8 +2465,8 @@ func (a *api) onDistributeTransactionConfirm(reqCtx *fasthttp.RequestCtx) {
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		return
 	}
-	//transaction_loader.ConfirmTransaction(transactionInstance, a.directMessaging, req)
-	err = transaction_loader.ConfirmTransaction(transaction_loader.ScheduleTransactionRequest{
+
+	err = transaction_loader.CommitAction(transaction_loader.ScheduleTransactionRequest{
 		TransactionID:       req.TransactionID,
 		TransactionInstance: transactionInstance,
 		DirectMessaging:     a.directMessaging,
@@ -2474,12 +2474,12 @@ func (a *api) onDistributeTransactionConfirm(reqCtx *fasthttp.RequestCtx) {
 	})
 
 	if err != nil {
-		msg := NewErrorResponse("ERR_TRANSACTION_CONFIRM", fmt.Sprintf(messages.ErrTransactionConfirm, req.TransactionID))
+		msg := NewErrorResponse("ERR_TRANSACTION_COMMIT", fmt.Sprintf(messages.ErrTransactionCommit, req.TransactionID))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
 	}
-	respond(reqCtx, with(fasthttp.StatusOK, []byte("success to confirm distribute transaction")))
+	respond(reqCtx, with(fasthttp.StatusOK, []byte("success to commit distribute transaction")))
 }
 
 // Rollback a distribute transaction
@@ -2514,10 +2514,10 @@ func (a *api) onDistributeTransactionRollback(reqCtx *fasthttp.RequestCtx) {
 }
 
 // record each bunch transaciton request state
-func (a *api) distributeTransactionTry(transactionHeader transaction_loader.TransactionRequestHeader, statusCode int, tryRequest transaction.TransactionTryRequestParam) error {
+func (a *api) saveDistributeTransaction(transactionHeader transaction_loader.TransactionRequestHeader, statusCode int, saveRequest transaction.TransactionRequestParam) error {
 
 	transactionInstance := a.transactions[transactionHeader.TransactionStoreName]
-	log.Debug("distribute transaction Try operation calling, transactionInstance is : ", transactionInstance)
+	log.Debug("distribute transaction save operation calling, transactionInstance is : ", transactionInstance)
 
 	if transactionInstance == nil {
 		log.Debug(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
@@ -2526,22 +2526,21 @@ func (a *api) distributeTransactionTry(transactionHeader transaction_loader.Tran
 
 	var requestStatusOK int
 	if statusCode == fasthttp.StatusOK {
-		// try ok
 		requestStatusOK = 1
 	} else {
 		requestStatusOK = 0
 	}
 
-	err := transactionInstance.Try(transaction.BunchTransactionTryRequest{
-		TransactionID:      transactionHeader.TransactionID,
-		BunchTransactionID: transactionHeader.BunchTransactionID,
-		StatusCode:         requestStatusOK,
-		TryRequestParam:    &tryRequest,
+	err := transactionInstance.SaveBunchTransactionState(transaction.SaveBunchTransactionRequest{
+		TransactionID:                transactionHeader.TransactionID,
+		BunchTransactionID:           transactionHeader.BunchTransactionID,
+		StatusCode:                   requestStatusOK,
+		BunchTransactionRequestParam: &saveRequest,
 	})
 
 	if err != nil {
 		log.Debug(fmt.Sprintf(messages.ErrTransactionRgist, err))
-		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_TRY", fmt.Sprintf(messages.ErrTransactionRgist, err))
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_STORE", fmt.Sprintf(messages.ErrTransactionStore, err))
 		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionFailed, msg))
 	}
 	return nil

@@ -15,21 +15,19 @@ import (
 
 var (
 	// defaultState                      = 0
-	stateForTrySuccess = 10
-	// stateForTryFailure                = 1
-	stateForConfirmSuccess = 20
-	// stateForConfirmFailure            = 2
+	stateForRequestSuccess = 10
+	// stateForRequestFailure            = 1
+	stateForCommitSuccess = 20
+	// stateForCommitFailure             = 2
 	stateForRollbackSuccess = 30
 	stateForRollbackFailure = 3
 	// requestStatusOK                   = 1
 	bunchTransactionServiceInvokeType = "service-invoke"
 	bunchTransactionActorType         = "actor"
-	transactionConfirm                = "Confirm"
-	transactionRollback               = "Rollback"
 	log                               = logger.NewLogger("dapr.components.transaction")
 )
 
-func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) error {
+func CommitAction(scheduleTransactionRequest ScheduleTransactionRequest) error {
 	transactionInstance := scheduleTransactionRequest.TransactionInstance
 	reqs, err := transactionInstance.GetBunchTransactions(
 		transactionComponent.GetBunchTransactionsRequest{
@@ -46,36 +44,38 @@ func ConfirmTransaction(scheduleTransactionRequest ScheduleTransactionRequest) e
 
 	log.Debugf("disrtibute transaction schema is %s :", schema)
 
-	allBunchTransactionConfirmSuccess := true
+	allBunchTransactionCommitSuccess := true
 
 	for bunchTransactionID, bunchTransaction := range bunchTransactions {
 		state := bunchTransaction.StatusCode
 		// data of the origin request param
-		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
-		if state == stateForTrySuccess {
-			// try to confirm a bunch transaction
-			responseStatusCode := Confirm(scheduleTransactionRequest, bunchTransactionReqsParam, schema, retryTimes)
+		bunchTransactionReqsParam := bunchTransaction.BunchTransactionRequestParam
+		if state == stateForRequestSuccess {
+			// try to commit a bunch transaction
+			responseStatusCode := Commit(scheduleTransactionRequest, bunchTransactionReqsParam, schema, retryTimes)
 
 			if responseStatusCode != fasthttp.StatusOK {
-				allBunchTransactionConfirmSuccess = false
+				allBunchTransactionCommitSuccess = false
 				break
 			}
 
-			transactionInstance.Confirm(transactionComponent.BunchTransactionConfirmRequest{
+			transactionInstance.Commit(transactionComponent.BunchTransactionCommitRequest{
 				TransactionID:      scheduleTransactionRequest.TransactionID,
 				BunchTransactionID: bunchTransactionID,
-				StatusCode:         stateForConfirmSuccess,
+				StatusCode:         stateForCommitSuccess,
 			})
+		} else if state != stateForCommitSuccess {
+			allBunchTransactionCommitSuccess = false
 		}
 	}
 
-	// all bunch transaction confirm success, release state resource
-	if allBunchTransactionConfirmSuccess {
+	// all bunch transaction commit success, release state resource
+	if allBunchTransactionCommitSuccess {
 		transactionInstance.ReleaseTransactionResource(transactionComponent.ReleaseTransactionRequest{
 			TransactionID: scheduleTransactionRequest.TransactionID,
 		})
 	} else {
-		return fmt.Errorf("fail to confirm distribute transaction")
+		return fmt.Errorf("fail to commit distribute transaction")
 	}
 
 	return nil
@@ -104,9 +104,9 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 	for bunchTransactionID, bunchTransaction := range bunchTransactions {
 		state := bunchTransaction.StatusCode
 		// data of the origin request param
-		bunchTransactionReqsParam := bunchTransaction.TryRequestParam
-		if state == stateForTrySuccess {
-			// try to confirm a bunch transaction
+		bunchTransactionReqsParam := bunchTransaction.BunchTransactionRequestParam
+		if state == stateForRequestSuccess {
+			// try to commit a bunch transaction
 			responseStatusCode := Rollback(scheduleTransactionRequest, bunchTransactionReqsParam, schema, retryTimes)
 
 			if responseStatusCode != fasthttp.StatusOK {
@@ -127,7 +127,7 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 		}
 	}
 
-	// all bunch transaction confirm success, release state resource
+	// all bunch transaction commit success, release state resource
 	if allBunchTransactionRollbackSuccess {
 		transactionInstance.ReleaseTransactionResource(transactionComponent.ReleaseTransactionRequest{
 			TransactionID: scheduleTransactionRequest.TransactionID,
@@ -139,66 +139,27 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 	return nil
 }
 
-func Confirm(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
-	log.Debug("switch to a Confrim action with : ", bunchTransactionReqsParam)
+func Commit(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionRequestParam, schema string, retryTimes int) int {
+	log.Debug("switch to a Commit action with : ", bunchTransactionReqsParam)
 	responseStatusCode := 0
 	switch schema {
 	case "tcc":
-		responseStatusCode = ConfirmTcc(scheduleTransactionRequest, bunchTransactionReqsParam, retryTimes)
+		responseStatusCode = ConfirmForTcc(scheduleTransactionRequest, bunchTransactionReqsParam, retryTimes)
 	}
 	return responseStatusCode
 }
 
-func Rollback(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, schema string, retryTimes int) int {
+func Rollback(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionRequestParam, schema string, retryTimes int) int {
 	log.Debug("switch to a Rollback action with : ", bunchTransactionReqsParam)
 	responseStatusCode := 0
 	switch schema {
 	case "tcc":
-		responseStatusCode = RollbackTcc(scheduleTransactionRequest, bunchTransactionReqsParam, retryTimes)
+		responseStatusCode = CancelForTcc(scheduleTransactionRequest, bunchTransactionReqsParam, retryTimes)
 	}
 	return responseStatusCode
 }
 
-func ConfirmTcc(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, retryTimes int) int {
-	responseStatusCode := 0
-	if bunchTransactionReqsParam.Type == bunchTransactionServiceInvokeType {
-		responseStatusCode, err := RequestServiceInovde(scheduleTransactionRequest.DirectMessaging, bunchTransactionReqsParam, transactionConfirm, retryTimes)
-
-		if err != nil {
-			log.Debug(err)
-		}
-		return responseStatusCode
-	} else if bunchTransactionReqsParam.Type == bunchTransactionActorType {
-		responseStatusCode, err := RequestActor(scheduleTransactionRequest.Actor, bunchTransactionReqsParam, transactionConfirm, retryTimes)
-		if err != nil {
-			log.Debug(err)
-		}
-		return responseStatusCode
-	}
-
-	return responseStatusCode
-}
-
-func RollbackTcc(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, retryTimes int) int {
-	responseStatusCode := 0
-	if bunchTransactionReqsParam.Type == bunchTransactionServiceInvokeType {
-		responseStatusCode, err := RequestServiceInovde(scheduleTransactionRequest.DirectMessaging, bunchTransactionReqsParam, transactionRollback, retryTimes)
-		if err != nil {
-			log.Debug(err)
-		}
-		return responseStatusCode
-	} else if bunchTransactionReqsParam.Type == bunchTransactionActorType {
-		responseStatusCode, err := RequestActor(scheduleTransactionRequest.Actor, bunchTransactionReqsParam, transactionRollback, retryTimes)
-		if err != nil {
-			log.Debug(err)
-		}
-		return responseStatusCode
-	}
-
-	return responseStatusCode
-}
-
-func RequestServiceInovde(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, action string, retryTimes int) (int, error) {
+func RequestServiceInvoke(directMessaging messaging.DirectMessaging, bunchTransactionReqsParam *transactionComponent.TransactionRequestParam, action string, retryTimes int) (int, error) {
 	req := invokev1.NewInvokeMethodRequest(bunchTransactionReqsParam.InvokeMethodName+action).WithHTTPExtension(bunchTransactionReqsParam.Verb, bunchTransactionReqsParam.QueryArgs)
 
 	req.WithRawData(bunchTransactionReqsParam.Data, bunchTransactionReqsParam.ContentType)
@@ -232,7 +193,7 @@ func RequestServiceInovde(directMessaging messaging.DirectMessaging, bunchTransa
 	return 0, nil
 }
 
-func RequestActor(actor actors.Actors, bunchTransactionReqsParam *transactionComponent.TransactionTryRequestParam, action string, retryTimes int) (int, error) {
+func RequestActor(actor actors.Actors, bunchTransactionReqsParam *transactionComponent.TransactionRequestParam, action string, retryTimes int) (int, error) {
 
 	req := invokev1.NewInvokeMethodRequest(bunchTransactionReqsParam.InvokeMethodName + action)
 	req.WithActor(bunchTransactionReqsParam.ActorType, bunchTransactionReqsParam.ActorID)
