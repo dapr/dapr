@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:forbidigo
 package runtime
 
 import (
@@ -26,16 +27,16 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/acl"
-	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	global_config "github.com/dapr/dapr/pkg/config"
+	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
-	operator_v1 "github.com/dapr/dapr/pkg/proto/operator/v1"
-	resiliency_config "github.com/dapr/dapr/pkg/resiliency"
+	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
+	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
@@ -241,7 +242,7 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	var globalConfig *global_config.Configuration
+	var globalConfig *daprGlobalConfig.Configuration
 	var configErr error
 
 	if *enableMTLS || *mode == string(modes.KubernetesMode) {
@@ -252,7 +253,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	// Config and resiliency need the operator client, only initiate once and only if we will actually use it.
-	var operatorClient operator_v1.OperatorClient
+	var operatorClient operatorV1.OperatorClient
 	if *mode == string(modes.KubernetesMode) && *config != "" {
 		log.Infof("Initializing the operator client (config: %s)", *config)
 		client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
@@ -263,7 +264,7 @@ func FromFlags() (*DaprRuntime, error) {
 		operatorClient = client
 	}
 
-	var accessControlList *global_config.AccessControlList
+	var accessControlList *daprGlobalConfig.AccessControlList
 	var namespace string
 	var podName string
 
@@ -272,9 +273,9 @@ func FromFlags() (*DaprRuntime, error) {
 		case modes.KubernetesMode:
 			namespace = os.Getenv("NAMESPACE")
 			podName = os.Getenv("POD_NAME")
-			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
+			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
-			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
+			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
 		}
 	}
 
@@ -283,29 +284,29 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 	if globalConfig == nil {
 		log.Info("loading default configuration")
-		globalConfig = global_config.LoadDefaultConfiguration()
+		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
 
 	features := globalConfig.Spec.Features
-	resiliencyEnabled := global_config.IsFeatureEnabled(features, global_config.Resiliency)
+	resiliencyEnabled := daprGlobalConfig.IsFeatureEnabled(features, daprGlobalConfig.Resiliency)
 
-	var resiliencyProvider resiliency_config.Provider
+	var resiliencyProvider resiliencyConfig.Provider
 
 	if resiliencyEnabled {
-		var resiliencyConfigs []*resiliency_v1alpha.Resiliency
+		var resiliencyConfigs []*resiliencyV1alpha.Resiliency
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
 			namespace = os.Getenv("NAMESPACE")
-			resiliencyConfigs = resiliency_config.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+			resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
 		case modes.StandaloneMode:
-			resiliencyConfigs = resiliency_config.LoadStandaloneResiliency(log, *appID, *componentsPath)
+			resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
 		}
 		log.Debugf("Found %d resiliency configurations.", len(resiliencyConfigs))
-		resiliencyProvider = resiliency_config.FromConfigurations(log, resiliencyConfigs...)
+		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
 		log.Info("Resiliency configuration loaded.")
 	} else {
 		log.Debug("Resiliency is not enabled.")
-		resiliencyProvider = &resiliency_config.NoOp{}
+		resiliencyProvider = &resiliencyConfig.NoOp{}
 	}
 
 	accessControlList, err = acl.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))

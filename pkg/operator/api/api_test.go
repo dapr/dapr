@@ -30,7 +30,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
@@ -322,23 +322,23 @@ func TestListsNamespaced(t *testing.T) {
 		err := scheme.AddToScheme(s)
 		assert.NoError(t, err)
 
-		err = subscriptionsapi_v2alpha1.AddToScheme(s)
+		err = subscriptionsapiV2alpha1.AddToScheme(s)
 		assert.NoError(t, err)
 
-		av, kind := subscriptionsapi_v2alpha1.SchemeGroupVersion.WithKind("Subscription").ToAPIVersionAndKind()
+		av, kind := subscriptionsapiV2alpha1.SchemeGroupVersion.WithKind("Subscription").ToAPIVersionAndKind()
 		typeMeta := metav1.TypeMeta{
 			Kind:       kind,
 			APIVersion: av,
 		}
 		client := fake.NewClientBuilder().
 			WithScheme(s).
-			WithObjects(&subscriptionsapi_v2alpha1.Subscription{
+			WithObjects(&subscriptionsapiV2alpha1.Subscription{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "sub1",
 					Namespace: "namespace-a",
 				},
-			}, &subscriptionsapi_v2alpha1.Subscription{
+			}, &subscriptionsapiV2alpha1.Subscription{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "sub2",
@@ -357,7 +357,7 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, 1, len(res.GetSubscriptions()))
 
-		var sub subscriptionsapi_v2alpha1.Subscription
+		var sub subscriptionsapiV2alpha1.Subscription
 		err = yaml.Unmarshal(res.GetSubscriptions()[0], &sub)
 		assert.Nil(t, err)
 

@@ -65,7 +65,6 @@ func publishMessagesToPubsub() error {
 		log.Printf("Error marshalling %s to JSON", message)
 	}
 	log.Printf("Publishing to %s", daprPubsubURL)
-	// nolint: gosec
 	r, err := httpClient.Post(daprPubsubURL, "application/json", bytes.NewBuffer(jsonValue))
 	if r != nil {
 		// Drain before closing
