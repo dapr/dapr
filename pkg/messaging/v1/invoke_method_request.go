@@ -27,7 +27,7 @@ import (
 
 const (
 	// DefaultAPIVersion is the default Dapr API version.
-	DefaultAPIVersion = internalv1pb.APIVersion_V1
+	DefaultAPIVersion = internalv1pb.APIVersion_V1 //nolint:nosnakecase
 )
 
 // InvokeMethodRequest holds InternalInvokeRequest protobuf message
@@ -102,6 +102,8 @@ func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *In
 }
 
 // WithHTTPExtension sets new HTTP extension with verb and querystring.
+//
+//nolint:nosnakecase
 func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring string) *InvokeMethodRequest {
 	httpMethod, ok := commonv1pb.HTTPExtension_Verb_value[strings.ToUpper(verb)]
 	if !ok {

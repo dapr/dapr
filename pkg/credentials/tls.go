@@ -12,7 +12,7 @@ func TLSConfigFromCertAndKey(certPem, keyPem []byte, serverName string, rootCA *
 		return nil, err
 	}
 
-	// nolint:gosec
+	//nolint:gosec
 	config := &tls.Config{
 		InsecureSkipVerify: false,
 		RootCAs:            rootCA,

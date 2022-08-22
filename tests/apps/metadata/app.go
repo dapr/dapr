@@ -143,6 +143,7 @@ func startServer() {
 	// Create a server capable of supporting HTTP2 Cleartext connections
 	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
 	h2s := &http2.Server{}
+	//nolint:gosec
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", appPort),
 		Handler: h2c.NewHandler(appRouter(), h2s),
@@ -150,7 +151,7 @@ func startServer() {
 
 	// Stop the server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT) //nolint:staticcheck
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh

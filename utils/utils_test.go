@@ -103,7 +103,7 @@ func TestParseEnvString(t *testing.T) {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			envVars := ParseEnvString(tc.envStr)
-			fmt.Println(tc.testName)
+			fmt.Println(tc.testName) //nolint:forbidigo
 			assert.Equal(t, tc.expEnvLen, len(envVars))
 			assert.Equal(t, tc.expEnv, envVars)
 		})
