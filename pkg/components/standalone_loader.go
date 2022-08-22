@@ -19,13 +19,12 @@ import (
 )
 
 const (
-	yamlSeparator = "\n---"
 	componentKind = "Component"
 )
 
 // StandaloneComponents loads components in a standalone mode environment.
 type StandaloneComponents struct {
-	componentsManifestLoader manifestLoader[componentsV1alpha1.Component]
+	componentsManifestLoader ManifestLoader[componentsV1alpha1.Component]
 }
 
 // newComponent creates a new component manifest.
@@ -38,11 +37,11 @@ func newComponent() componentsV1alpha1.Component {
 // NewStandaloneComponents returns a new standalone loader.
 func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneComponents {
 	return &StandaloneComponents{
-		componentsManifestLoader: newManifestLoader(configuration.ComponentsPath, componentKind, newComponent),
+		componentsManifestLoader: NewDiskManifestLoader(configuration.ComponentsPath, componentKind, newComponent),
 	}
 }
 
 // LoadComponents loads dapr components from a given directory.
 func (s *StandaloneComponents) LoadComponents() ([]componentsV1alpha1.Component, error) {
-	return s.componentsManifestLoader.load()
+	return s.componentsManifestLoader.Load()
 }

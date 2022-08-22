@@ -1,0 +1,116 @@
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+syntax = "proto3";
+
+package dapr.proto.components.v1;
+
+import "google/protobuf/empty.proto";
+import "dapr/proto/common/v1/common.proto";
+import "dapr/proto/components/v1/common.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
+
+// StateStore service provides a gRPC interface for state store components.
+service StateStore {
+  // Initializes the state store component with the given metadata.
+  rpc Init(MetadataRequest) returns (google.protobuf.Empty) {}
+
+  // Returns a list of implemented state store features.
+  rpc Features(google.protobuf.Empty) returns (FeaturesResponse) {}
+
+  // Deletes the specified key from the state store.
+  rpc Delete(DeleteRequest) returns (google.protobuf.Empty) {}
+
+  // Get data from the given key.
+  rpc Get(GetRequest) returns (GetResponse) {}
+
+  // Sets the value of the specified key.
+  rpc Set(SetRequest) returns (google.protobuf.Empty) {}
+
+  // Ping the state store. Used for liveness porpuses.
+  rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+
+  // Deletes many keys at once.
+  rpc BulkDelete(BulkDeleteRequest) returns (google.protobuf.Empty) {}
+
+  // Retrieves many keys at once.
+  rpc BulkGet(BulkGetRequest) returns (BulkGetResponse) {}
+
+  // Set the value of many keys at once.
+  rpc BulkSet(BulkSetRequest) returns (google.protobuf.Empty) {}
+}
+
+message GetRequest {
+  // The key that should be retrieved.
+  string key = 1;
+  // Request associated metadata.
+  map<string, string> metadata = 2;
+  // The get consistency level.
+  dapr.proto.common.v1.StateOptions.StateConsistency consistency = 3;
+}
+
+message GetResponse {
+  // The data of the GetRequest response.
+  bytes data = 1;
+  // The etag of the associated key.
+  dapr.proto.common.v1.Etag etag = 2;
+  // Metadata related to the response.
+  map<string, string> metadata = 3;
+}
+
+message DeleteRequest {
+  // The key that should be deleted.
+  string key = 1;
+  // The etag is used as a If-Match header, to allow certain levels of consistency.
+  dapr.proto.common.v1.Etag etag = 2;
+  // The request metadata.
+  map<string, string> metadata = 3;
+  dapr.proto.common.v1.StateOptions options = 4;
+}
+
+message SetRequest {
+  // The key that should be set.
+  string key = 1;
+  // Value is the desired content of the given key.
+  bytes value = 2;
+  // The etag is used as a If-Match header, to allow certain levels of consistency.
+  dapr.proto.common.v1.Etag etag = 3;
+  // The request metadata.
+  map<string, string> metadata = 4;
+  dapr.proto.common.v1.StateOptions options = 5;
+}
+
+message BulkDeleteRequest {
+  repeated DeleteRequest items = 1;
+}
+
+message BulkGetRequest {
+  repeated GetRequest items = 1;
+}
+
+message BulkStateItem {
+  string key = 1;
+  bytes data = 2;
+  dapr.proto.common.v1.Etag etag = 3;
+  string error = 4;
+  map<string, string> metadata = 5;
+}
+
+message BulkGetResponse {
+  repeated BulkStateItem items = 1;
+  bool got = 2;
+}
+
+message BulkSetRequest {
+  repeated SetRequest items = 1;
+}

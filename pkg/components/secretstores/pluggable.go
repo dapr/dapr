@@ -16,7 +16,6 @@ package secretstores
 import (
 	ss "github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 )
 
 type sStore struct {
@@ -24,15 +23,11 @@ type sStore struct {
 }
 
 // NewFromPluggable creates a new SecretStore from a given pluggable component.
-func NewFromPluggable(pc pluggable.Component) SecretStore {
+func NewFromPluggable(pc components.Pluggable) SecretStore {
 	return SecretStore{
 		Names: []string{pc.Name},
 		FactoryMethod: func() ss.SecretStore {
 			return sStore{}
 		},
 	}
-}
-
-func init() {
-	pluggable.MustRegister(components.Secret, NewFromPluggable)
 }

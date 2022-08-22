@@ -15,25 +15,19 @@ package nameresolution
 
 import (
 	"github.com/dapr/components-contrib/nameresolution"
-	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 )
 
 type resolver struct {
-	nr.Resolver
+	nameresolution.Resolver
 }
 
 // NewFromPluggable creates a new NameResolution from a given pluggable component.
-func NewFromPluggable(pc pluggable.Component) NameResolution {
+func NewFromPluggable(pc components.Pluggable) NameResolution {
 	return NameResolution{
 		Names: []string{pc.Name},
 		FactoryMethod: func() nameresolution.Resolver {
 			return &resolver{}
 		},
 	}
-}
-
-func init() {
-	pluggable.MustRegister(components.NameResolution, NewFromPluggable)
 }

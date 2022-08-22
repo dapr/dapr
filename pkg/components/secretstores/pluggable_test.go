@@ -17,14 +17,13 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMustLoadSecretStore(t *testing.T) {
-	l := pluggable.MustLoad[SecretStore](pluggable.Component{
-		Type: string(components.Secret),
+	l := NewFromPluggable(components.Pluggable{
+		Type: components.Secret,
 	})
 	assert.NotNil(t, l)
 }

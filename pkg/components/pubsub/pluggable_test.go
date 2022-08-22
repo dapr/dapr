@@ -17,14 +17,13 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMustLoadPubSub(t *testing.T) {
-	l := pluggable.MustLoad[PubSub](pluggable.Component{
-		Type: string(components.PubSub),
+	l := NewFromPluggable(components.Pluggable{
+		Type: components.PubSub,
 	})
 	assert.NotNil(t, l)
 }

@@ -18,48 +18,24 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-// Component represents a pluggable component specification.
-type Component struct {
-	// Name is the pluggable component name
-	Name string
-	// SocketPath is the component socket path
-	SocketPath string
-	// Type is the component type.
-	Type string
-}
+var log = logger.NewLogger("pluggable-components")
 
-var (
-	log = logger.NewLogger("pluggable-components")
+// MustRegisterFunc is used for registering pluggable components.
+type MustRegisterFunc func(pc ...components.Pluggable)
 
-	// registry maintains a map on how to construct a component given a pluggable component
-	registry = make(map[components.Type]func(Component) any)
-)
-
-// MustRegister registers a new pluggable component into the map and panics if a component for the same type was already registered
-func MustRegister[T any](
-	compType components.Type,
-	new func(Component) T,
-) {
-	if _, ok := registry[compType]; ok {
-		log.Fatalf("a pluggable component for the type (%s) has already been registered", compType)
+// NewRegisterFunc creates a new Pluggable Registry Func.
+func NewRegisterFunc(options ...Option) MustRegisterFunc {
+	var opts registryOpts
+	for _, opt := range options {
+		opt(&opts)
 	}
-	registry[compType] = func(pc Component) any {
-		return new(pc)
+	return func(pcs ...components.Pluggable) {
+		for _, pc := range pcs {
+			register, ok := opts.registries[pc.Type]
+			if !ok {
+				log.Fatalf("%s not registered as a pluggable component", pc.Type)
+			}
+			register(pc)
+		}
 	}
-}
-
-// MustLoad loads a pluggable component that was registered before
-func MustLoad[T any](pc Component) T {
-	loader, ok := registry[components.Type(pc.Type)]
-	if !ok {
-		log.Fatalf("%s not registered as a pluggable component", pc.Type)
-	}
-	anyInstance := loader(pc)
-
-	instance, ok := anyInstance.(T)
-	if !ok {
-		log.Fatalf("%s has tried to load as #v but type does not match", pc.Type, anyInstance)
-	}
-
-	return instance
 }

@@ -16,7 +16,6 @@ package lock
 import (
 	l "github.com/dapr/components-contrib/lock"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 )
 
 type mLock struct {
@@ -24,15 +23,11 @@ type mLock struct {
 }
 
 // NewFromPluggable creates a new Lock from a given pluggable component.
-func NewFromPluggable(pc pluggable.Component) Lock {
+func NewFromPluggable(pc components.Pluggable) Lock {
 	return Lock{
 		Names: []string{pc.Name},
 		FactoryMethod: func() l.Store {
 			return &mLock{}
 		},
 	}
-}
-
-func init() {
-	pluggable.MustRegister(components.Lock, NewFromPluggable)
 }

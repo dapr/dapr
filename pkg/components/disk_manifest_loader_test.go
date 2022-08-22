@@ -1,3 +1,16 @@
+/*
+Copyright 2021 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package components
 
 import (
@@ -6,8 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestManifestLoaderDecodeValidYaml(t *testing.T) {
-	request := newManifestLoader("test_component_path", componentKind, newComponent)
+func TestDiskManifestLoaderDecodeValidYaml(t *testing.T) {
+	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
 
 	yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -42,8 +55,8 @@ spec:
 	assert.Equal(t, "value1", components[0].Spec.Metadata[0].Value.String())
 }
 
-func TestManifestLoaderDecodeInvalidComponent(t *testing.T) {
-	request := newManifestLoader("test_component_path", componentKind, newComponent)
+func TestDiskManifestLoaderDecodeInvalidComponent(t *testing.T) {
+	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
 
 	yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -70,8 +83,8 @@ spec:
 	assert.Len(t, errs, 1)
 }
 
-func TestManifestLoaderDecodeUnsuspectingFile(t *testing.T) {
-	request := newManifestLoader("test_component_path", componentKind, newComponent)
+func TestDiskManifestLoaderDecodeUnsuspectingFile(t *testing.T) {
+	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
 
 	components, errs := request.decodeYaml([]byte("hey there"))
 	assert.Len(t, components, 0)
@@ -79,7 +92,7 @@ func TestManifestLoaderDecodeUnsuspectingFile(t *testing.T) {
 }
 
 func TestStandaloneDecodeInvalidYaml(t *testing.T) {
-	request := newManifestLoader("test_component_path", componentKind, newComponent)
+	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
 
 	yaml := `
 INVALID_YAML_HERE
@@ -92,8 +105,8 @@ name: statestore`
 	assert.Len(t, errs, 1)
 }
 
-func TestManifestLoaderDecodeValidMultiYaml(t *testing.T) {
-	request := newManifestLoader("test_component_path", componentKind, newComponent)
+func TestDiskManifestLoaderDecodeValidMultiYaml(t *testing.T) {
+	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
 
 	yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -136,8 +149,8 @@ spec:
 	assert.Equal(t, "value3", components[1].Spec.Metadata[0].Value.String())
 }
 
-func TestManifestLoaderDecodeInValidDocInMultiYaml(t *testing.T) {
-	request := newManifestLoader("test_component_path", componentKind, newComponent)
+func TestDiskManifestLoaderDecodeInValidDocInMultiYaml(t *testing.T) {
+	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
 
 	yaml := `
 apiVersion: dapr.io/v1alpha1

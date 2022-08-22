@@ -17,7 +17,6 @@ import (
 	c "github.com/dapr/components-contrib/configuration"
 
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 )
 
 type configurationStore struct {
@@ -25,15 +24,11 @@ type configurationStore struct {
 }
 
 // NewFromPluggable creates a new ConfigurationStore from a given pluggable component.
-func NewFromPluggable(pc pluggable.Component) Configuration {
+func NewFromPluggable(pc components.Pluggable) Configuration {
 	return Configuration{
 		Names: []string{pc.Name},
 		FactoryMethod: func() c.Store {
 			return &configurationStore{}
 		},
 	}
-}
-
-func init() {
-	pluggable.MustRegister(components.Configuration, NewFromPluggable)
 }

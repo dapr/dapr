@@ -11,19 +11,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+syntax = "proto3";
 
-import (
-	"testing"
+package dapr.proto.components.v1;
 
-	"github.com/dapr/dapr/pkg/components"
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "ComponentProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
 
-	"github.com/stretchr/testify/assert"
-)
+message MetadataRequest {
+  map<string, string> properties = 1;
+}
 
-func TestMustLoadHttpMiddleware(t *testing.T) {
-	l := NewFromPluggable(components.Pluggable{
-		Type: components.HTTPMiddleware,
-	})
-	assert.NotNil(t, l)
+message FeaturesResponse {
+  repeated string feature = 1;
 }

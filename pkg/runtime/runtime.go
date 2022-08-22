@@ -47,6 +47,7 @@ import (
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -296,13 +297,12 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
 	log.Infof("app id: %s", a.runtimeConfig.ID)
 
-	applyOpts := withOpts(opts...)
-
 	var o runtimeOpts
-	applyOpts(&o)
+	for _, opt := range opts {
+		opt(&o)
+	}
 
-	err := a.initRuntime(&o)
-	if err != nil {
+	if err := a.initRuntime(&o); err != nil {
 		return err
 	}
 
@@ -323,6 +323,13 @@ func (a *DaprRuntime) getNamespace() string {
 
 func (a *DaprRuntime) getPodName() string {
 	return os.Getenv("POD_NAME")
+}
+
+func (a *DaprRuntime) loadPluggableComponents() ([]components.Pluggable, error) {
+	if a.runtimeConfig.Mode == modes.StandaloneMode {
+		return pluggable.LoadFromDisk(a.runtimeConfig.Standalone.ComponentsPath)
+	}
+	return pluggable.LoadFromKubernetes()
 }
 
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
@@ -439,6 +446,16 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry = opts.bindingRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
+
+	pluggables, err := a.loadPluggableComponents()
+	if err != nil {
+		return err
+	}
+	log.Infof("found %d pluggable components", len(pluggables))
+
+	mustRegister := a.buildPluggableRegisterFunc()
+
+	mustRegister(pluggables...)
 
 	go a.processComponents()
 
@@ -615,6 +632,19 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 		}
 	}
 	return httpMiddleware.Pipeline{Handlers: handlers}, nil
+}
+
+// buildPluggableRegisterFunc returns a register function for pluggable components.
+func (a *DaprRuntime) buildPluggableRegisterFunc() pluggable.MustRegisterFunc {
+	return pluggable.NewRegisterFunc(
+		pluggable.WithBindingsRegistry(a.bindingsRegistry),
+		pluggable.WithConfigurationRegistry(a.configurationStoreRegistry),
+		pluggable.WithHTTPMiddlewareRegistry(a.httpMiddlewareRegistry),
+		pluggable.WithLockRegistry(a.lockStoreRegistry),
+		pluggable.WithNameResolutionRegistry(a.nameResolutionRegistry),
+		pluggable.WithPubSubRegistry(a.pubSubRegistry),
+		pluggable.WithSecretStoresRegistry(a.secretStoresRegistry),
+		pluggable.WithStateStoreRegistry(a.stateStoreRegistry))
 }
 
 func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
@@ -1245,7 +1275,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, binding bindings.InputBinding) error {
-	return binding.Read(readCtx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
+	return binding.Read(readCtx, func(_ context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		if resp == nil {
 			return nil, nil
 		}

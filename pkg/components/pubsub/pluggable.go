@@ -16,7 +16,6 @@ package pubsub
 import (
 	p "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 )
 
 type mpubsub struct {
@@ -24,15 +23,11 @@ type mpubsub struct {
 }
 
 // NewFromPluggable creates a new PubSub from a given pluggable component.
-func NewFromPluggable(pc pluggable.Component) PubSub {
+func NewFromPluggable(pc components.Pluggable) PubSub {
 	return PubSub{
 		Names: []string{pc.Name},
 		FactoryMethod: func() p.PubSub {
 			return &mpubsub{}
 		},
 	}
-}
-
-func init() {
-	pluggable.MustRegister(components.PubSub, NewFromPluggable)
 }
