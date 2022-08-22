@@ -60,8 +60,8 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	daprMetadata "github.com/dapr/dapr/pkg/metadata"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	dapr_metadata "github.com/dapr/dapr/pkg/metadata"
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -1782,7 +1782,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
-		extendedMetadata: &dapr_metadata.DefaultStore{},
+		extendedMetadata: &daprMetadata.DefaultStore{},
 		getComponentsCapabilitiesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
