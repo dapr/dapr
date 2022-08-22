@@ -191,7 +191,6 @@ outerLoop:
 	require.True(t, found, fmt.Sprintf("did not found tag (%s) in rows:", wantedTag), rows)
 }
 
-// nolint:exhaustruct
 func newTestResiliencyConfig(resiliencyName, resiliencyNamespace, appName, actorType, storeName string) *resiliencyV1alpha.Resiliency {
 	return &resiliencyV1alpha.Resiliency{
 		ObjectMeta: metav1.ObjectMeta{
