@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -52,7 +53,7 @@ func GrpcAccessNTimes(address string, f GrpcAccessFunction, n int) ([]byte, erro
 
 // GrpcAccess is a helper to make gRPC call to the method.
 func GrpcAccess(address string, f GrpcAccessFunction) ([]byte, error) {
-	cc, error := grpc.Dial(address, grpc.WithInsecure())
+	cc, error := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if error != nil {
 		return nil, error
 	}

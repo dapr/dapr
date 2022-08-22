@@ -73,7 +73,7 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	var err error
 
 	switch req.APIVersion() {
-	case internalv1pb.APIVersion_V1:
+	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
 		rsp, err = g.invokeMethodV1(ctx, req)
 
 	default:
