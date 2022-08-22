@@ -28,7 +28,7 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/agrea/ptr"
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -2076,7 +2076,7 @@ func TestGetMetadata(t *testing.T) {
 		getComponentsFn: func() []componentsV1alpha.Component {
 			return []componentsV1alpha.Component{
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "MockComponent1Name",
 					},
 					Spec: componentsV1alpha.ComponentSpec{
@@ -2093,7 +2093,7 @@ func TestGetMetadata(t *testing.T) {
 					},
 				},
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "MockComponent2Name",
 					},
 					Spec: componentsV1alpha.ComponentSpec{

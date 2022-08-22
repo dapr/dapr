@@ -135,7 +135,6 @@ type api struct {
 	getComponentsFn             func() []componentsV1alpha.Component
 	shutdown                    func()
 	getComponentsCapabilitiesFn func() map[string][]string
-	daprRunTimeVersion          string
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
