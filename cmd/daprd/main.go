@@ -225,7 +225,7 @@ func main() {
 			secretstoresLoader.New("huaweicloud.csms", func() secretstores.SecretStore {
 				return csms.NewHuaweiCsmsSecretStore(logContrib)
 			}),
-			secretstores_loader.New("tencentcloud.ssm", func() secretstores.SecretStore {
+			secretstoresLoader.New("tencentcloud.ssm", func() secretstores.SecretStore {
 				return ssm.NewSSM(logContrib)
 			}),
 		),
