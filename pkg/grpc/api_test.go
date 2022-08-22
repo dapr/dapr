@@ -31,7 +31,7 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/agrea/ptr"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -39,6 +39,7 @@ import (
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -52,22 +53,22 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
-	state_loader "github.com/dapr/dapr/pkg/components/state"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	dapr_metadata "github.com/dapr/dapr/pkg/metadata"
+	daprMetadata "github.com/dapr/dapr/pkg/metadata"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
@@ -204,7 +205,7 @@ func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Re
 }
 
 func ExtractSpanContext(ctx context.Context) []byte {
-	span := diag_utils.SpanFromContext(ctx)
+	span := diagUtils.SpanFromContext(ctx)
 	return []byte(SerializeSpanContext(span.SpanContext()))
 }
 
@@ -226,7 +227,7 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc.NewServer(
-		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
+		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
 	)
 
 	go func() {
@@ -301,7 +302,7 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithInsecure())
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		panic(err)
 	}
@@ -1808,11 +1809,11 @@ func TestPublishTopic(t *testing.T) {
 				}
 
 				if req.Topic == "err-not-found" {
-					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+					return runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				}
 
 				if req.Topic == "err-not-allowed" {
-					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+					return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				}
 
 				return nil
@@ -2060,7 +2061,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 
 func TestGetMetadata(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	fakeComponent := components_v1alpha.Component{}
+	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 
 	mockActors := new(actors.MockActors)
@@ -2072,19 +2073,19 @@ func TestGetMetadata(t *testing.T) {
 	fakeAPI := &api{
 		id:    "fakeAPI",
 		actor: mockActors,
-		getComponentsFn: func() []components_v1alpha.Component {
-			return []components_v1alpha.Component{
+		getComponentsFn: func() []componentsV1alpha.Component {
+			return []componentsV1alpha.Component{
 				{
 					ObjectMeta: meta_v1.ObjectMeta{
 						Name: "MockComponent1Name",
 					},
-					Spec: components_v1alpha.ComponentSpec{
+					Spec: componentsV1alpha.ComponentSpec{
 						Type:    "mock.component1Type",
 						Version: "v1.0",
-						Metadata: []components_v1alpha.MetadataItem{
+						Metadata: []componentsV1alpha.MetadataItem{
 							{
 								Name: "actorMockComponent1",
-								Value: components_v1alpha.DynamicValue{
+								Value: componentsV1alpha.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -2095,10 +2096,10 @@ func TestGetMetadata(t *testing.T) {
 					ObjectMeta: meta_v1.ObjectMeta{
 						Name: "MockComponent2Name",
 					},
-					Spec: components_v1alpha.ComponentSpec{
+					Spec: componentsV1alpha.ComponentSpec{
 						Type:    "mock.component2Type",
 						Version: "v1.0",
-						Metadata: []components_v1alpha.MetadataItem{
+						Metadata: []componentsV1alpha.MetadataItem{
 							{
 								Name: "actorMockComponent2",
 								Value: components_v1alpha.DynamicValue{
@@ -2116,7 +2117,7 @@ func TestGetMetadata(t *testing.T) {
 			capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
 			return capsMap
 		},
-		extendedMetadata: &dapr_metadata.DefaultStore{},
+		extendedMetadata: &daprMetadata.DefaultStore{},
 	}
 	_ = fakeAPI.extendedMetadata.MetadataSet("testKey", "testValue")
 	server := startDaprAPIServer(port, fakeAPI, "")
@@ -2144,7 +2145,7 @@ func TestGetMetadata(t *testing.T) {
 
 func TestSetMetadata(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	fakeComponent := components_v1alpha.Component{}
+	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 	fakeAPI := &api{
 		id:               "fakeAPI",
@@ -2245,6 +2246,7 @@ func TestExtractEtag(t *testing.T) {
 	})
 }
 
+//nolint:nosnakecase
 func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
 	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
 	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
@@ -2581,7 +2583,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		},
 	}
 
-	state_loader.SaveStateConfiguration("failStore", map[string]string{"keyPrefix": "none"})
+	stateLoader.SaveStateConfiguration("failStore", map[string]string{"keyPrefix": "none"})
 
 	fakeAPI := &api{
 		id:                       "fakeAPI",
@@ -3198,6 +3200,7 @@ func TestUnlockGrpcToComponentRequest(t *testing.T) {
 	assert.NotNil(t, req)
 }
 
+//nolint:nosnakecase
 func TestUnlockResponseToGrpcResponse(t *testing.T) {
 	resp := UnlockResponseToGrpcResponse(&lock.UnlockResponse{Status: lock.Success})
 	assert.True(t, resp.Status == runtimev1pb.UnlockResponse_SUCCESS)
@@ -3378,6 +3381,6 @@ func TestUnlock(t *testing.T) {
 		}
 		resp, err := api.UnlockAlpha1(context.Background(), req)
 		assert.Nil(t, err)
-		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status)
+		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status) //nolint:nosnakecase
 	})
 }

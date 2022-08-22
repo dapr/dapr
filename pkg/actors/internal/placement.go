@@ -27,7 +27,7 @@ import (
 
 	"github.com/dapr/kit/logger"
 
-	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -49,6 +49,8 @@ const (
 
 // ActorPlacement maintains membership of actor instances and consistent hash
 // tables to discover the actor while interacting with Placement service.
+//
+//nolint:nosnakecase
 type ActorPlacement struct {
 	actorTypes []string
 	appID      string
@@ -61,7 +63,7 @@ type ActorPlacement struct {
 	serverIndex atomic.Int32
 
 	// clientCert is the workload certificate to connect placement.
-	clientCert *dapr_credentials.CertChain
+	clientCert *daprCredentials.CertChain
 
 	// clientLock is the lock for client conn and stream.
 	clientLock *sync.RWMutex
@@ -115,7 +117,7 @@ func addDNSResolverPrefix(addr []string) []string {
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
 func NewActorPlacement(
-	serverAddr []string, clientCert *dapr_credentials.CertChain,
+	serverAddr []string, clientCert *daprCredentials.CertChain,
 	appID, runtimeHostName string, actorTypes []string,
 	appHealthFn func() bool,
 	afterTableUpdateFn func(),
@@ -323,6 +325,7 @@ func (p *ActorPlacement) closeStream() {
 	}()
 }
 
+//nolint:nosnakecase
 func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusClient, *grpc.ClientConn) {
 	for !p.shutdown.Load() {
 		serverAddr := p.serverAddr[p.serverIndex.Load()]
@@ -335,7 +338,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 
 		log.Debugf("try to connect to placement service: %s", serverAddr)
 
-		opts, err := dapr_credentials.GetClientOptions(p.clientCert, security.TLSServerName)
+		opts, err := daprCredentials.GetClientOptions(p.clientCert, security.TLSServerName)
 		if err != nil {
 			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
 			return nil, nil

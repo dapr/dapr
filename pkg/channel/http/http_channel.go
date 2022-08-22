@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -58,7 +58,8 @@ type Channel struct {
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
-// nolint:gosec
+//
+//nolint:gosec
 func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
 	scheme := httpScheme
 	if sslEnabled {
@@ -144,14 +145,14 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	if httpExt == nil {
 		return nil, status.Error(codes.InvalidArgument, "missing HTTP extension field")
 	}
-	if httpExt.GetVerb() == commonv1pb.HTTPExtension_NONE {
+	if httpExt.GetVerb() == commonv1pb.HTTPExtension_NONE { //nolint:nosnakecase
 		return nil, status.Error(codes.InvalidArgument, "invalid HTTP verb")
 	}
 
 	var rsp *invokev1.InvokeMethodResponse
 	var err error
 	switch req.APIVersion() {
-	case internalv1pb.APIVersion_V1:
+	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
 		rsp, err = h.invokeMethodV1(ctx, req)
 
 	default:
@@ -221,7 +222,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
-	span := diag_utils.SpanFromContext(ctx)
+	span := diagUtils.SpanFromContext(ctx)
 	tp := diag.SpanContextToW3CString(span.SpanContext())
 	ts := diag.TraceStateToW3CString(span.SpanContext())
 	channelReq.Header.Set("traceparent", tp)

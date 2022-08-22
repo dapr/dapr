@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/raft"
 )
 
+//nolint:gosec
 const (
 	defaultCredentialsPath   = "/var/run/dapr/credentials"
 	defaultHealthzPort       = 8080
