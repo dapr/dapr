@@ -12,14 +12,16 @@ import (
 
 // Tag keys.
 var (
-	componentKey     = tag.MustNewKey("component")
-	failReasonKey    = tag.MustNewKey("reason")
-	operationKey     = tag.MustNewKey("operation")
-	actorTypeKey     = tag.MustNewKey("actor_type")
-	trustDomainKey   = tag.MustNewKey("trustDomain")
-	namespaceKey     = tag.MustNewKey("namespace")
-	policyActionKey  = tag.MustNewKey("policyAction")
-	componentNameKey = tag.MustNewKey("componentName")
+	componentKey      = tag.MustNewKey("component")
+	failReasonKey     = tag.MustNewKey("reason")
+	operationKey      = tag.MustNewKey("operation")
+	actorTypeKey      = tag.MustNewKey("actor_type")
+	trustDomainKey    = tag.MustNewKey("trustDomain")
+	namespaceKey      = tag.MustNewKey("namespace")
+	policyActionKey   = tag.MustNewKey("policyAction")
+	resiliencyNameKey = tag.MustNewKey("name")
+	policyKey         = tag.MustNewKey("policy")
+	componentNameKey  = tag.MustNewKey("componentName")
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
