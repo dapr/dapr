@@ -41,6 +41,9 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 
 	logConnState := IsTruthy(os.Getenv("DAPR_TESTS_LOG_CONNSTATE"))
 
+	// logConnState := IsTruthy(os.Getenv("DAPR_TESTS_LOG_CONNSTATE"))
+	logConnState := false
+
 	// Create a listener
 	addr := fmt.Sprintf(":%d", port)
 	ln, err := net.Listen("tcp", addr)
