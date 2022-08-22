@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -30,13 +31,23 @@ type sslEnabledConnection struct {
 	sslEnabled bool
 }
 
-func (s *sslEnabledConnection) connectionSslFn(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
+func (s *sslEnabledConnection) connectionSslFn(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error) {
 	s.sslEnabled = enableSSL
-	return grpc.Dial(id, grpc.WithInsecure())
+	conn, err := grpc.Dial(id, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, func() {}, err
+	}
+	teardown := func() { conn.Close() }
+	return conn, teardown, err
 }
 
-func connectionFn(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	return grpc.Dial(id, grpc.WithInsecure())
+func connectionFn(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error) {
+	conn, err := grpc.Dial(id, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, func() {}, err
+	}
+	teardown := func() { conn.Close() }
+	return conn, teardown, err
 }
 
 func TestNewProxy(t *testing.T) {
@@ -101,7 +112,8 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewOutgoingContext(context.TODO(), metadata.MD{"a": []string{"b"}})
 		proxy := p.(*proxy)
-		_, conn, err := proxy.intercept(ctx, "/test")
+		_, conn, teardown, err := proxy.intercept(ctx, "/test")
+		defer teardown()
 
 		assert.Error(t, err)
 		assert.Nil(t, conn)
@@ -121,7 +133,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
-		_, _, err := proxy.intercept(ctx, "/test")
+		_, _, _, err := proxy.intercept(ctx, "/test")
 
 		assert.NoError(t, err)
 	})
@@ -140,7 +152,8 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
-		_, conn, err := proxy.intercept(ctx, "/test")
+		_, conn, teardown, err := proxy.intercept(ctx, "/test")
+		defer teardown()
 
 		assert.NoError(t, err)
 		assert.NotNil(t, conn)
@@ -162,7 +175,8 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
-		ctx, conn, err := proxy.intercept(ctx, "/test")
+		ctx, conn, teardown, err := proxy.intercept(ctx, "/test")
+		defer teardown()
 
 		assert.NoError(t, err)
 		assert.NotNil(t, conn)
@@ -193,7 +207,8 @@ func TestIntercept(t *testing.T) {
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 
-		_, conn, err := proxy.intercept(ctx, "/test")
+		_, conn, teardown, err := proxy.intercept(ctx, "/test")
+		defer teardown()
 
 		assert.Error(t, err)
 		assert.Nil(t, conn)
@@ -207,7 +222,8 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
-		_, conn, err := proxy.intercept(ctx, "/test")
+		_, conn, teardown, err := proxy.intercept(ctx, "/test")
+		defer teardown()
 
 		assert.Error(t, err)
 		assert.Nil(t, conn)

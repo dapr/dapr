@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	dapr_config "github.com/dapr/dapr/pkg/config"
+	daprDaprConfig "github.com/dapr/dapr/pkg/config"
 )
 
 func TestConfig(t *testing.T) {
@@ -24,9 +24,9 @@ func TestConfig(t *testing.T) {
 	})
 
 	t.Run("parse configuration", func(t *testing.T) {
-		daprConfig := dapr_config.Configuration{
-			Spec: dapr_config.ConfigurationSpec{
-				MTLSSpec: dapr_config.MTLSSpec{
+		daprConfig := daprDaprConfig.Configuration{
+			Spec: daprDaprConfig.ConfigurationSpec{
+				MTLSSpec: daprDaprConfig.MTLSSpec{
 					Enabled:          true,
 					WorkloadCertTTL:  "5s",
 					AllowedClockSkew: "1h",

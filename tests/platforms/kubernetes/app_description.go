@@ -15,33 +15,44 @@ package kubernetes
 
 import (
 	"encoding/json"
+
+	apiv1 "k8s.io/api/core/v1"
 )
 
 // AppDescription holds the deployment information of test app.
 type AppDescription struct {
-	AppName           string            `json:",omitempty"`
-	AppPort           int               `json:",omitempty"`
-	AppProtocol       string            `json:",omitempty"`
-	AppEnv            map[string]string `json:",omitempty"`
-	DaprEnabled       bool              `json:",omitempty"`
-	ImageName         string            `json:",omitempty"`
-	ImageSecret       string            `json:",omitempty"`
-	RegistryName      string            `json:",omitempty"`
-	Replicas          int32             `json:",omitempty"`
-	IngressEnabled    bool              `json:",omitempty"`
-	MetricsEnabled    bool              `json:",omitempty"` // This controls the setting for the dapr.io/enable-metrics annotation
-	MetricsPort       string            `json:",omitempty"`
-	Config            string            `json:",omitempty"`
-	AppCPULimit       string            `json:",omitempty"`
-	AppCPURequest     string            `json:",omitempty"`
-	AppMemoryLimit    string            `json:",omitempty"`
-	AppMemoryRequest  string            `json:",omitempty"`
-	DaprCPULimit      string            `json:",omitempty"`
-	DaprCPURequest    string            `json:",omitempty"`
-	DaprMemoryLimit   string            `json:",omitempty"`
-	DaprMemoryRequest string            `json:",omitempty"`
-	Namespace         *string           `json:",omitempty"`
-	IsJob             bool              `json:",omitempty"`
+	AppName            string              `json:",omitempty"`
+	AppPort            int                 `json:",omitempty"`
+	AppProtocol        string              `json:",omitempty"`
+	AppEnv             map[string]string   `json:",omitempty"`
+	AppVolumeMounts    []apiv1.VolumeMount `json:",omitempty"`
+	DaprEnabled        bool                `json:",omitempty"`
+	ImageName          string              `json:",omitempty"`
+	ImageSecret        string              `json:",omitempty"`
+	RegistryName       string              `json:",omitempty"`
+	Replicas           int32               `json:",omitempty"`
+	IngressEnabled     bool                `json:",omitempty"`
+	MetricsEnabled     bool                `json:",omitempty"` // This controls the setting for the dapr.io/enable-metrics annotation
+	MetricsPort        string              `json:",omitempty"`
+	Config             string              `json:",omitempty"`
+	AppCPULimit        string              `json:",omitempty"`
+	AppCPURequest      string              `json:",omitempty"`
+	AppMemoryLimit     string              `json:",omitempty"`
+	AppMemoryRequest   string              `json:",omitempty"`
+	DaprCPULimit       string              `json:",omitempty"`
+	DaprCPURequest     string              `json:",omitempty"`
+	DaprMemoryLimit    string              `json:",omitempty"`
+	DaprMemoryRequest  string              `json:",omitempty"`
+	DaprEnv            string              `json:",omitempty"`
+	Namespace          *string             `json:",omitempty"`
+	IsJob              bool                `json:",omitempty"`
+	SecretStoreDisable bool                `json:",omitempty"`
+	DaprVolumeMounts   string              `json:",omitempty"`
+	Labels             map[string]string   `json:",omitempty"` // Adds custom labels to pods
+	PodAffinityLabels  map[string]string   `json:",omitempty"` // If set, adds a podAffinity rule matching those labels
+	Volumes            []apiv1.Volume      `json:",omitempty"`
+	InitContainers     []apiv1.Container   `json:",omitempty"`
+	PlacementAddresses []string            `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {

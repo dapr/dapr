@@ -26,12 +26,18 @@ param linuxVMSize string = 'Standard_DS2_v2'
 @description('VM size to use for Windows nodes, if enabled')
 param windowsVMSize string = 'Standard_DS3_v2'
 
+@description('If set, sends certain diagnostic logs to Log Analytics')
+param diagLogAnalyticsWorkspaceResourceId string = ''
+
+@description('If set, sends certain diagnostic logs to Azure Storage')
+param diagStorageResourceId string = ''
+
 // Disk size (in GB) for each of the agent pool nodes
 // 0 applies the default
 var osDiskSizeGB = 0
 
 // Version of Kubernetes
-var kubernetesVersion = '1.22.6'
+var kubernetesVersion = '1.24.0'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2019-05-01' = {
   name: '${namePrefix}acr'
@@ -137,12 +143,20 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
       azureKeyvaultSecretsProvider: {
         enabled: false
       }
+      omsagent: diagLogAnalyticsWorkspaceResourceId == '' ? {
+        enabled: false
+      } : {
+        enabled: true
+        config: {
+          logAnalyticsWorkspaceResourceID: diagLogAnalyticsWorkspaceResourceId
+        }
+      }
     }
   }
   tags: {}
   sku: {
     name: 'Basic'
-    tier: 'Free'
+    tier: 'Paid'
   }
   identity: {
     type: 'SystemAssigned'
@@ -181,6 +195,50 @@ resource roleAssignVNet 'Microsoft.Authorization/roleAssignments@2020-04-01-prev
     principalId: aks.identity.principalId
   }
   scope: aksVNet::defaultSubnet
+}
+
+resource aksDiagnosticLogAnalytics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (diagLogAnalyticsWorkspaceResourceId != '') {
+  name: 'loganalytics'
+  scope: aks
+  properties: {
+    logs: [
+      {
+        category: 'kube-apiserver'
+        enabled: true
+      }
+      {
+        category: 'kube-controller-manager'
+        enabled: true
+      }
+    ]
+    workspaceId: diagLogAnalyticsWorkspaceResourceId
+  }
+}
+
+resource aksDiagnosticStorage 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (diagStorageResourceId != '') {
+  name: 'storage'
+  scope: aks
+  properties: {
+    logs: [
+      {
+        category: 'kube-apiserver'
+        enabled: true
+        retentionPolicy: {
+          days: 15
+          enabled: true
+        }
+      }
+      {
+        category: 'kube-audit'
+        enabled: true
+        retentionPolicy: {
+          days: 15
+          enabled: true
+        }
+      }
+    ]
+    storageAccountId: diagStorageResourceId
+  }
 }
 
 output controlPlaneFQDN string = aks.properties.fqdn

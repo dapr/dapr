@@ -26,9 +26,11 @@ import (
 )
 
 // MockServer implementation of fake user app server.
+//
+//nolint:nosnakecase
 type MockServer struct {
 	Error                    error
-	Subscriptions            []*runtimev1pb.TopicSubscription
+	Subscriptions            []*commonv1pb.TopicSubscription
 	Bindings                 []string
 	BindingEventResponse     runtimev1pb.BindingEventResponse
 	TopicEventResponseStatus runtimev1pb.TopicEventResponse_TopicEventResponseStatus

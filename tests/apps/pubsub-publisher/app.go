@@ -21,21 +21,18 @@ import (
 	"io"
 	"log"
 	"net/http"
-	net_url "net/url"
-	"os"
-	"os/signal"
+	netUrl "net/url"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
@@ -72,6 +69,8 @@ var (
 	grpcClient runtimev1pb.DaprClient
 )
 
+var httpClient = utils.NewHTTPClient()
+
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("indexHandler is called\n")
@@ -81,7 +80,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // when called by the test, this function publishes to dapr
-// nolint:gosec
 func performPublish(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	reqID := "s-" + uuid.New().String()
@@ -161,11 +159,10 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// nolint:gosec
 func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, pubsubName, topic)
 	if len(metadata) > 0 {
-		params := net_url.Values{}
+		params := netUrl.Values{}
 		for k, v := range metadata {
 			params.Set(fmt.Sprintf("metadata.%s", k), v)
 		}
@@ -176,12 +173,12 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonValue))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonValue))
 	if err != nil {
 		return 0, err
 	}
 	req.Header.Set("Content-Type", contentType)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		if resp != nil {
 			return resp.StatusCode, err
@@ -267,9 +264,9 @@ func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 	invokeReq := &commonv1pb.InvokeRequest{
 		Method: method,
 	}
-	qs := net_url.Values{"reqid": []string{reqID}}.Encode()
+	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
 	invokeReq.HttpExtension = &commonv1pb.HTTPExtension{
-		Verb:        commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value["POST"]),
+		Verb:        commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value["POST"]), //nolint:nosnakecase
 		Querystring: qs,
 	}
 	req := &runtimev1pb.InvokeServiceRequest{
@@ -288,16 +285,16 @@ func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 }
 
 func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
-	qs := net_url.Values{"reqid": []string{reqID}}.Encode()
+	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s?%s", daprPortHTTP, appName, method, qs)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer([]byte{})) //nolint: gosec
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer([]byte{}))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +310,7 @@ func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
 
 // epoch returns the unix epoch timestamp from a time
 func epoch(t *time.Time) int {
-	return (int)(t.UTC().UnixNano() / 1000000)
+	return int(t.UnixMilli())
 }
 
 // formatDuration formats the duration in ms
@@ -325,6 +322,9 @@ func formatDuration(d time.Duration) string {
 func appRouter() *mux.Router {
 	log.Printf("Enter appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/tests/publish", performPublish).Methods("POST")
@@ -342,7 +342,7 @@ func initGRPCClient() {
 	start := time.Now()
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		if grpcConn, err = grpc.Dial(url, grpc.WithInsecure(), grpc.WithBlock()); err == nil {
+		if grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock()); err == nil {
 			break
 		}
 
@@ -359,38 +359,9 @@ func initGRPCClient() {
 	grpcClient = runtimev1pb.NewDaprClient(grpcConn)
 }
 
-func startServer() {
-	// Create a server capable of supporting HTTP2 Cleartext connections
-	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
-	h2s := &http2.Server{}
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: h2c.NewHandler(appRouter(), h2s),
-	}
-
-	// Stop the server when we get a termination signal
-	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		// Wait for cancelation signal
-		<-stopCh
-		log.Println("Shutdown signal received")
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	// Blocking call
-	err := server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
-	}
-	log.Println("Server shut down")
-}
-
 func main() {
 	initGRPCClient()
 
 	log.Printf("PubSub Publisher - listening on http://localhost:%d", appPort)
-	startServer()
+	utils.StartServer(appPort, appRouter, true, false)
 }

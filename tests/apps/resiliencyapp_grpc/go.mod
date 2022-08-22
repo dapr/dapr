@@ -1,18 +1,20 @@
-module app
+module resiliencyapp_grpc
 
 go 1.18
 
 require (
-	github.com/dapr/dapr v1.6.0
-	github.com/golang/protobuf v1.5.2
-	google.golang.org/grpc v1.45.0
-	google.golang.org/grpc/examples v0.0.0-20220314230434-84793b56f63c
-	google.golang.org/protobuf v1.27.1
+	github.com/dapr/dapr v1.7.4
+	google.golang.org/grpc v1.47.0
+	google.golang.org/grpc/examples v0.0.0-20220818173707-97cb7b1653d7
+	google.golang.org/protobuf v1.28.0
 )
 
 require (
-	golang.org/x/net v0.0.0-20210825183410-e898025ed96a // indirect
-	golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
+	golang.org/x/net v0.0.0-20220630215102-69896b714898 // indirect
+	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	google.golang.org/genproto v0.0.0-20210831024726-fe130286e0e2 // indirect
+	google.golang.org/genproto v0.0.0-20220622171453-ea41d75dfa0f // indirect
 )
+
+replace github.com/dapr/dapr => ../../../

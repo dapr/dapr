@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:forbidigo
 package main
 
 import (
@@ -22,24 +23,21 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	guuid "github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/apps/utils"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -139,7 +137,7 @@ var testMethods = []httpTestMethods{
 	},
 }
 
-var httpClient = newHTTPClient()
+var httpClient = utils.NewHTTPClient()
 
 var (
 	grpcConn   *grpc.ClientConn
@@ -148,8 +146,8 @@ var (
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("indexHandler is called\n")
-	fmt.Print("indexHalder is called 2\n")
+	log.Print("indexHandler is called\n")
+	log.Print("indexHalder is called 2\n")
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
@@ -273,7 +271,7 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 	}
 
 	/* #nosec */
-	req, _ := http.NewRequest("POST", url, t)
+	req, _ := http.NewRequest(http.MethodPost, url, t)
 	for k, v := range headers {
 		req.Header.Add(k, v)
 	}
@@ -292,7 +290,7 @@ func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, hea
 	}
 
 	/* #nosec */
-	req, _ := http.NewRequest("POST", url, t)
+	req, _ := http.NewRequest(http.MethodPost, url, t)
 	req.Header.Add("dapr-app-id", remoteApp)
 	for k, v := range headers {
 		req.Header.Add(k, v)
@@ -308,7 +306,7 @@ func constructRequest(id, method, httpVerb string, body []byte) *runtimev1pb.Inv
 	msg.Data = &anypb.Any{Value: body}
 	if httpVerb != "" {
 		msg.HttpExtension = &commonv1pb.HTTPExtension{
-			Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]),
+			Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]), //nolint:nosnakecase
 		}
 	}
 
@@ -321,6 +319,9 @@ func constructRequest(id, method, httpVerb string, body []byte) *runtimev1pb.Inv
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/singlehop", singlehopHandler).Methods("POST")
@@ -560,7 +561,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 	daprAddress := fmt.Sprintf("localhost:%s", "50001")
 
 	fmt.Printf("dapr address is %s\n", daprAddress)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
+	conn, err := grpc.Dial(daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -681,7 +682,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 			Data:        &anypb.Any{Value: []byte("GRPCToHTTPTest")},
 			ContentType: "text/plain; utf-8",
 			HttpExtension: &commonv1pb.HTTPExtension{
-				Verb: commonv1pb.HTTPExtension_POST,
+				Verb: commonv1pb.HTTPExtension_POST, //nolint:nosnakecase
 			},
 		},
 	}
@@ -890,7 +891,6 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 
 // data should be serialized by caller
 func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error) {
-	client := newHTTPClient()
 	var body []byte
 
 	var requestBody io.Reader
@@ -903,7 +903,7 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 		return appResponse{}, err
 	}
 	var res *http.Response
-	res, err = client.Do(req)
+	res, err = httpClient.Do(req)
 	if err != nil {
 		return appResponse{}, err
 	}
@@ -921,7 +921,7 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 	actualVerb := res.Header.Get("x-dapr-tests-request-method")
 
 	if httpMethod != actualVerb {
-		return appResponse{}, fmt.Errorf("Expected HTTP verb: %s actual %s", httpMethod, actualVerb)
+		return appResponse{}, fmt.Errorf("Expected HTTP verb: %s actual %s", httpMethod, actualVerb) //nolint:stylecheck
 	}
 
 	var appResp appResponse
@@ -1204,8 +1204,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 		fmt.Printf("largeDataErrorServiceCall - Request size: %d\n", len(jsonBody))
 
 		if isHTTP {
-			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(jsonBody))
-
+			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(jsonBody)) //nolint:bodyclose
 			result.CallSuccessful = !((resp != nil && resp.StatusCode != 200) || err != nil)
 		} else {
 			req := constructRequest("serviceinvocation-callee-0", "posthandler", "POST", jsonBody)
@@ -1226,42 +1225,13 @@ func testPathHTTPCall(w http.ResponseWriter, r *http.Request) {
 	logAndSetResponse(w, http.StatusOK, r.RequestURI)
 }
 
-func startServer() {
-	// Create a server capable of supporting HTTP2 Cleartext connections
-	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
-	h2s := &http2.Server{}
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: h2c.NewHandler(appRouter(), h2s),
-	}
-
-	// Stop the server when we get a termination signal
-	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		// Wait for cancelation signal
-		<-stopCh
-		log.Println("Shutdown signal received")
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	// Blocking call
-	err := server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
-	}
-	log.Println("Server shut down")
-}
-
 func main() {
 	initGRPCClient()
 
 	httpMethods = []string{"POST", "GET", "PUT", "DELETE"}
 
 	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
-	startServer()
+	utils.StartServer(appPort, appRouter, true, false)
 }
 
 // Bad http request
@@ -1321,7 +1291,7 @@ func initGRPCClient() {
 	log.Printf("Connecting to dapr using url %s", url)
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}
@@ -1336,19 +1306,4 @@ func initGRPCClient() {
 	}
 
 	daprClient = runtimev1pb.NewDaprClient(grpcConn)
-}
-
-func newHTTPClient() *http.Client {
-	dialer := &net.Dialer{ //nolint:exhaustivestruct
-		Timeout: 5 * time.Second,
-	}
-	netTransport := &http.Transport{ //nolint:exhaustivestruct
-		DialContext:         dialer.DialContext,
-		TLSHandshakeTimeout: 5 * time.Second,
-	}
-
-	return &http.Client{ //nolint:exhaustivestruct
-		Timeout:   30 * time.Second,
-		Transport: netTransport,
-	}
 }

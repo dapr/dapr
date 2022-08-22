@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -25,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/utils"
 )
 
 const (
@@ -44,11 +46,14 @@ const (
 	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests.
 	DaprTestNamespaceEnvVar = "DAPR_TEST_NAMESPACE"
 
-	// Environment variable for setting Kubernetes node affinity OS.
+	// TargetOsEnvVar Environment variable for setting Kubernetes node affinity OS.
 	TargetOsEnvVar = "TARGET_OS"
 
-	// Environment variable for setting Kubernetes node affinity ARCH.
+	// TargetArchEnvVar Environment variable for setting Kubernetes node affinity ARCH.
 	TargetArchEnvVar = "TARGET_ARCH"
+
+	// Environmental variable to disable API logging
+	DisableAPILoggingEnvVar = "NO_API_LOGGING"
 )
 
 var (
@@ -60,6 +65,9 @@ var (
 
 	// TargetArch is the default architecture affinity for Kubernetes nodes.
 	TargetArch = "amd64"
+
+	// Controls whether API logging is enabled
+	EnableAPILogging = true
 )
 
 // buildDaprAnnotations creates the Kubernetes Annotations object for dapr test app.
@@ -77,7 +85,8 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
-			"dapr.io/enable-api-logging":                "true",
+			"dapr.io/enable-api-logging":                strconv.FormatBool(EnableAPILogging),
+			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
 		}
 		if !appDesc.IsJob {
 			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)
@@ -91,6 +100,16 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	}
 	if appDesc.Config != "" {
 		annotationObject["dapr.io/config"] = appDesc.Config
+	}
+	if appDesc.DaprVolumeMounts != "" {
+		annotationObject["dapr.io/volume-mounts"] = appDesc.DaprVolumeMounts
+	}
+	if appDesc.DaprEnv != "" {
+		annotationObject["dapr.io/env"] = appDesc.DaprEnv
+	}
+
+	if len(appDesc.PlacementAddresses) != 0 {
+		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}
 	return annotationObject
 }
@@ -107,14 +126,33 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		}
 	}
 
+	labels := appDesc.Labels
+	if len(labels) == 0 {
+		labels = make(map[string]string, 1)
+	}
+	labels[TestAppLabelKey] = appDesc.AppName
+
+	var podAffinity *apiv1.PodAffinity
+	if len(appDesc.PodAffinityLabels) > 0 {
+		podAffinity = &apiv1.PodAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []apiv1.PodAffinityTerm{
+				{
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: appDesc.PodAffinityLabels,
+					},
+					TopologyKey: "topology.kubernetes.io/zone",
+				},
+			},
+		}
+	}
+
 	return apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				TestAppLabelKey: appDesc.AppName,
-			},
+			Labels:      labels,
 			Annotations: buildDaprAnnotations(appDesc),
 		},
 		Spec: apiv1.PodSpec{
+			InitContainers: appDesc.InitContainers,
 			Containers: []apiv1.Container{
 				{
 					Name:            appDesc.AppName,
@@ -127,7 +165,8 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 							ContainerPort: DefaultContainerPort,
 						},
 					},
-					Env: appEnv,
+					Env:          appEnv,
+					VolumeMounts: appDesc.AppVolumeMounts,
 				},
 			},
 			Affinity: &apiv1.Affinity{
@@ -151,12 +190,14 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 						},
 					},
 				},
+				PodAffinity: podAffinity,
 			},
 			ImagePullSecrets: []apiv1.LocalObjectReference{
 				{
 					Name: appDesc.ImageSecret,
 				},
 			},
+			Volumes: appDesc.Volumes,
 		},
 	}
 }
@@ -273,5 +314,9 @@ func init() {
 	}
 	if arch, ok := os.LookupEnv(TargetArchEnvVar); ok {
 		TargetArch = arch
+	}
+	{
+		v, _ := os.LookupEnv(DisableAPILoggingEnvVar)
+		EnableAPILogging = !utils.IsTruthy(v)
 	}
 }

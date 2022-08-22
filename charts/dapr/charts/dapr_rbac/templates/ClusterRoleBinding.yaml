@@ -34,7 +34,7 @@ rules:
     verbs: ["get", "patch"]
   - apiGroups: [""]
     resources: ["serviceaccounts"]
-    verbs: ["get"]
+    verbs: ["get", "list"]
   - apiGroups: ["apps"]
     resources: ["deployments", "deployments/finalizers"]
     verbs: [ "get", "list", "watch", "update"]
@@ -42,7 +42,7 @@ rules:
     resources: ["statefulsets", "statefulsets/finalizers"]
     verbs: [ "get", "list", "watch", "update", "create"]
   - apiGroups: [""]
-    resources: ["services","services/finalizers"]
+    resources: ["pods", "services","services/finalizers"]
     verbs: [ "get", "list", "watch", "update", "create", "delete"]
   - apiGroups: [""]
     resources: ["configmaps"]
@@ -66,7 +66,7 @@ rules:
     resources: ["leases"]
     verbs: [ "get", "list", "watch", "update", "create", "delete"]
   - apiGroups: ["", "events.k8s.io"]
-    resources: ["leases"]
+    resources: ["events"]
     verbs: ["create"]
 {{- if .Values.secretReader.enabled }}
 ---

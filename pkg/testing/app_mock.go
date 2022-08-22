@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:forbidigo
 package testing
 
 import (
@@ -66,6 +67,7 @@ func (a *MockApp) Run(port int) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/httptest", a.handler)
 	mux.HandleFunc("/echo", a.echoHandler)
+	//nolint:gosec
 	server := http.Server{Addr: ":" + strconv.Itoa(port), Handler: mux}
 	go func() {
 		server.ListenAndServe()
@@ -80,7 +82,7 @@ func (a *MockApp) Run(port int) {
 }
 
 func (a *MockApp) echoHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	var buffer bytes.Buffer
 	for k, p := range r.URL.Query() {
 		buffer.WriteString(k + "=" + p[0] + ";")
@@ -90,7 +92,7 @@ func (a *MockApp) echoHandler(w http.ResponseWriter, r *http.Request) {
 
 func (a *MockApp) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		w.Write(nil)
 		return
 	}
@@ -106,7 +108,7 @@ func (a *MockApp) handler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(string(str) + "#" + time.Now().UTC().Format(time.RFC3339))
 	}
 
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	if a.returnBody {
 		w.Write(body)
 	} else {

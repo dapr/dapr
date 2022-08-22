@@ -15,6 +15,7 @@ package injector
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -229,7 +230,7 @@ func TestGetContainer(t *testing.T) {
 	annotations[daprConfigKey] = "config"
 	annotations[daprAppPortKey] = appPort
 
-	c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
+	c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
 
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
@@ -240,11 +241,11 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations := map[string]string{}
 		annotations[daprConfigKey] = "config1"
 		annotations[daprAppPortKey] = appPort
-		annotations[daprLogAsJSON] = "true"
+		annotations[daprLogAsJSON] = "true" //nolint:goconst
 		annotations[daprCPULimitKey] = "100m"
 		annotations[daprMemoryLimitKey] = "1Gi"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Limits.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Limits.Memory().String())
@@ -258,7 +259,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprCPURequestKey] = "100m"
 		annotations[daprMemoryRequestKey] = "1Gi"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Requests.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Requests.Memory().String())
@@ -270,7 +271,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprAppPortKey] = appPort
 		annotations[daprLogAsJSON] = "true"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Len(t, c.Resources.Limits, 0)
 	})
@@ -404,7 +405,7 @@ func TestAppSSL(t *testing.T) {
 		annotations := map[string]string{
 			daprAppSSLKey: "true",
 		}
-		c, _ := getSidecarContainer(annotations, "app", "image", "", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
 		found := false
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
@@ -419,7 +420,7 @@ func TestAppSSL(t *testing.T) {
 		annotations := map[string]string{
 			daprAppSSLKey: "false",
 		}
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
 				t.FailNow()
@@ -429,12 +430,50 @@ func TestAppSSL(t *testing.T) {
 
 	t.Run("get sidecar container not specified", func(t *testing.T) {
 		annotations := map[string]string{}
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, nil, "", "", "", "", false, "")
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
 				t.FailNow()
 			}
 		}
+	})
+}
+
+func TestSidecarContainerVolumeMounts(t *testing.T) {
+	t.Run("sidecar contains custom volume mounts", func(t *testing.T) {
+		annotations := map[string]string{}
+		volumeMounts := []corev1.VolumeMount{
+			{Name: "foo", MountPath: "/foo"},
+			{Name: "bar", MountPath: "/bar"},
+		}
+
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, nil, volumeMounts, "", "", "", "", false, "")
+		assert.Equal(t, 2, len(c.VolumeMounts))
+		assert.Equal(t, volumeMounts[0], c.VolumeMounts[0])
+		assert.Equal(t, volumeMounts[1], c.VolumeMounts[1])
+	})
+
+	t.Run("sidecar contains all volume mounts", func(t *testing.T) {
+		annotations := map[string]string{}
+		socketVolumeMount := corev1.VolumeMount{
+			Name:      "socket-mount",
+			MountPath: "/socket/mount",
+		}
+		tokenVolumeMount := corev1.VolumeMount{
+			Name:      "token-mount",
+			MountPath: "/token/mount",
+		}
+		volumeMounts := []corev1.VolumeMount{
+			{Name: "foo", MountPath: "/foo"},
+			{Name: "bar", MountPath: "/bar"},
+		}
+
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", &socketVolumeMount, &tokenVolumeMount, volumeMounts, "", "", "", "", false, "")
+		assert.Equal(t, 4, len(c.VolumeMounts))
+		assert.Equal(t, socketVolumeMount, c.VolumeMounts[0])
+		assert.Equal(t, tokenVolumeMount, c.VolumeMounts[1])
+		assert.Equal(t, volumeMounts[0], c.VolumeMounts[2])
+		assert.Equal(t, volumeMounts[1], c.VolumeMounts[3])
 	})
 }
 
@@ -634,4 +673,52 @@ func TestHandleRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAllowedControllersServiceAccountUID(t *testing.T) {
+	client := kubernetesfake.NewSimpleClientset()
+
+	testCases := []struct {
+		name      string
+		namespace string
+	}{
+		{"replicaset-controller", metav1.NamespaceSystem},
+		{"tekton-pipelines-controller", "tekton-pipelines"},
+		{"test", "test"},
+	}
+
+	for _, testCase := range testCases {
+		sa := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      testCase.name,
+				Namespace: testCase.namespace,
+			},
+		}
+		_, err := client.CoreV1().ServiceAccounts(testCase.namespace).Create(context.TODO(), sa, metav1.CreateOptions{})
+		assert.NoError(t, err)
+	}
+
+	t.Run("injector config has no allowed service account", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(uids))
+	})
+
+	t.Run("injector config has a valid allowed service account", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test"}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(uids))
+	})
+
+	t.Run("injector config has a invalid allowed service account", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "abc:abc"}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(uids))
+	})
+
+	t.Run("injector config has multiple allowed service accounts", func(t *testing.T) {
+		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(uids))
+	})
 }

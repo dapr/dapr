@@ -20,24 +20,21 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"os/signal"
 	"path"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	daprhttp "github.com/dapr/dapr/pkg/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
@@ -88,7 +85,7 @@ type requestResponse struct {
 	Message   string      `json:"message,omitempty"`
 }
 
-var httpClient = newHTTPClient()
+var httpClient = utils.NewHTTPClient()
 
 var (
 	grpcConn   *grpc.ClientConn
@@ -120,7 +117,7 @@ func load(data []byte, statestore string, meta map[string]string) (int, error) {
 		stateURL += "?" + metadata2RawQuery(meta)
 	}
 	log.Printf("Posting %d bytes of state to %s", len(data), stateURL)
-	res, err := http.Post(stateURL, "application/json", bytes.NewBuffer(data))
+	res, err := httpClient.Post(stateURL, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -143,7 +140,7 @@ func get(key, statestore string, meta map[string]string) (*appState, error) {
 	log.Printf("Fetching state from %s", url)
 	// url is created from user input, it is OK since this is a test app only and will not run in prod.
 	/* #nosec */
-	res, err := http.Get(url)
+	res, err := httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
 	}
@@ -229,7 +226,7 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 		return nil, err
 	}
 
-	res, err := http.Post(url, "application/json", bytes.NewBuffer(b))
+	res, err := httpClient.Post(url, "application/json", bytes.NewBuffer(b))
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +271,7 @@ func delete(key, statestore string, meta map[string]string) error {
 		return err
 	}
 
-	req, err := http.NewRequest("DELETE", url, nil)
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		return fmt.Errorf("could not create delete request for key %s in Dapr: %s", key, err.Error())
 	}
@@ -329,7 +326,7 @@ func executeTransaction(states []daprState, statestore string) error {
 	}
 
 	log.Printf("Posting state to %s with '%s'", stateTransactionURL, jsonValue)
-	res, err := http.Post(stateTransactionURL, "application/json", bytes.NewBuffer(jsonValue))
+	res, err := httpClient.Post(stateTransactionURL, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		return err
 	}
@@ -347,7 +344,7 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 		queryURL += "?" + metadata2RawQuery(meta)
 	}
 	log.Printf("Posting %d bytes of state to %s", len(query), queryURL)
-	resp, err := http.Post(queryURL, "application/json", bytes.NewBuffer(query))
+	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query)) //nolint:bodyclose
 	if err != nil {
 		return nil, err
 	}
@@ -610,7 +607,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		statusCode = http.StatusInternalServerError
 		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd)
-		log.Printf(unsupportedCommandMessage)
+		log.Print(unsupportedCommandMessage)
 		res.Message = unsupportedCommandMessage
 	}
 
@@ -778,6 +775,9 @@ func epoch() int {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test/http/{command}/{statestore}", httpHandler).Methods("POST")
 	router.HandleFunc("/test/grpc/{command}/{statestore}", grpcHandler).Methods("POST")
@@ -786,28 +786,13 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func newHTTPClient() http.Client {
-	dialer := &net.Dialer{ //nolint:exhaustivestruct
-		Timeout: 5 * time.Second,
-	}
-	netTransport := &http.Transport{ //nolint:exhaustivestruct
-		DialContext:         dialer.DialContext,
-		TLSHandshakeTimeout: 5 * time.Second,
-	}
-
-	return http.Client{ //nolint:exhaustivestruct
-		Timeout:   30 * time.Second,
-		Transport: netTransport,
-	}
-}
-
 func initGRPCClient() {
 	daprPort, _ := os.LookupEnv("DAPR_GRPC_PORT")
 	url := fmt.Sprintf("localhost:%s", daprPort)
 	log.Printf("Connecting to dapr using url %s", url)
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}
@@ -824,39 +809,10 @@ func initGRPCClient() {
 	daprClient = runtimev1pb.NewDaprClient(grpcConn)
 }
 
-func startServer() {
-	// Create a server capable of supporting HTTP2 Cleartext connections
-	// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
-	h2s := &http2.Server{}
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", appPort),
-		Handler: h2c.NewHandler(appRouter(), h2s),
-	}
-
-	// Stop the server when we get a termination signal
-	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		// Wait for cancelation signal
-		<-stopCh
-		log.Println("Shutdown signal received")
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	// Blocking call
-	err := server.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatalf("Failed to run server: %v", err)
-	}
-	log.Println("Server shut down")
-}
-
 func main() {
 	initGRPCClient()
 
 	log.Printf("State App - listening on http://localhost:%d", appPort)
 	log.Printf("State endpoint - to be saved at %s", fmt.Sprintf(stateURLTemplate, "statestore"))
-	startServer()
+	utils.StartServer(appPort, appRouter, true, false)
 }

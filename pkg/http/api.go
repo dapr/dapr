@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	nethttp "net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,31 +28,36 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/bindings"
-	contrib_metadata "github.com/dapr/components-contrib/metadata"
+	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
+	"github.com/dapr/dapr/pkg/version"
+
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
-	state_loader "github.com/dapr/dapr/pkg/components/state"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -66,31 +72,37 @@ type API interface {
 }
 
 type api struct {
-	endpoints                []Endpoint
-	publicEndpoints          []Endpoint
-	directMessaging          messaging.DirectMessaging
-	appChannel               channel.AppChannel
-	getComponentsFn          func() []components_v1alpha1.Component
-	resiliency               resiliency.Provider
-	stateStores              map[string]state.Store
-	transactionalStateStores map[string]state.TransactionalStore
-	secretStores             map[string]secretstores.SecretStore
-	secretsConfiguration     map[string]config.SecretsScope
-	actor                    actors.Actors
-	pubsubAdapter            runtime_pubsub.Adapter
-	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	id                       string
-	extendedMetadata         sync.Map
-	readyStatus              bool
-	outboundReadyStatus      bool
-	tracingSpec              config.TracingSpec
-	shutdown                 func()
+	endpoints                  []Endpoint
+	publicEndpoints            []Endpoint
+	directMessaging            messaging.DirectMessaging
+	appChannel                 channel.AppChannel
+	getComponentsFn            func() []componentsV1alpha1.Component
+	resiliency                 resiliency.Provider
+	stateStores                map[string]state.Store
+	lockStores                 map[string]lock.Store
+	configurationStores        map[string]configuration.Store
+	configurationSubscribe     map[string]chan struct{}
+	transactionalStateStores   map[string]state.TransactionalStore
+	secretStores               map[string]secretstores.SecretStore
+	secretsConfiguration       map[string]config.SecretsScope
+	actor                      actors.Actors
+	pubsubAdapter              runtimePubsub.Adapter
+	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	id                         string
+	extendedMetadata           sync.Map
+	readyStatus                bool
+	outboundReadyStatus        bool
+	tracingSpec                config.TracingSpec
+	shutdown                   func()
+	getComponentsCapabilitesFn func() map[string][]string
+	daprRunTimeVersion         string
 }
 
 type registeredComponent struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Version string `json:"version"`
+	Name         string   `json:"name"`
+	Type         string   `json:"type"`
+	Version      string   `json:"version"`
+	Capabilities []string `json:"capabilities"`
 }
 
 type metadata struct {
@@ -101,24 +113,27 @@ type metadata struct {
 }
 
 const (
-	apiVersionV1         = "v1.0"
-	apiVersionV1alpha1   = "v1.0-alpha1"
-	idParam              = "id"
-	methodParam          = "method"
-	topicParam           = "topic"
-	actorTypeParam       = "actorType"
-	actorIDParam         = "actorId"
-	storeNameParam       = "storeName"
-	stateKeyParam        = "key"
-	secretStoreNameParam = "secretStoreName"
-	secretNameParam      = "key"
-	nameParam            = "name"
-	consistencyParam     = "consistency"
-	concurrencyParam     = "concurrency"
-	pubsubnameparam      = "pubsubname"
-	traceparentHeader    = "traceparent"
-	tracestateHeader     = "tracestate"
-	daprAppID            = "dapr-app-id"
+	apiVersionV1             = "v1.0"
+	apiVersionV1alpha1       = "v1.0-alpha1"
+	idParam                  = "id"
+	methodParam              = "method"
+	topicParam               = "topic"
+	actorTypeParam           = "actorType"
+	actorIDParam             = "actorId"
+	storeNameParam           = "storeName"
+	stateKeyParam            = "key"
+	configurationKeyParam    = "key"
+	configurationSubscribeID = "configurationSubscribeID"
+	secretStoreNameParam     = "secretStoreName"
+	secretNameParam          = "key"
+	nameParam                = "name"
+	consistencyParam         = "consistency"
+	concurrencyParam         = "concurrency"
+	pubsubnameparam          = "pubsubname"
+	traceparentHeader        = "traceparent"
+	tracestateHeader         = "tracestate"
+	daprAppID                = "dapr-app-id"
+	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
 // NewAPI returns a new API.
@@ -126,16 +141,19 @@ func NewAPI(
 	appID string,
 	appChannel channel.AppChannel,
 	directMessaging messaging.DirectMessaging,
-	getComponentsFn func() []components_v1alpha1.Component,
+	getComponentsFn func() []componentsV1alpha1.Component,
 	resiliency resiliency.Provider,
 	stateStores map[string]state.Store,
+	lockStores map[string]lock.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
-	pubsubAdapter runtime_pubsub.Adapter,
+	configurationStores map[string]configuration.Store,
+	pubsubAdapter runtimePubsub.Adapter,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
 	shutdown func(),
+	getComponentsCapabilitiesFn func() map[string][]string,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -144,20 +162,25 @@ func NewAPI(
 		}
 	}
 	api := &api{
-		appChannel:               appChannel,
-		getComponentsFn:          getComponentsFn,
-		resiliency:               resiliency,
-		directMessaging:          directMessaging,
-		stateStores:              stateStores,
-		transactionalStateStores: transactionalStateStores,
-		secretStores:             secretStores,
-		secretsConfiguration:     secretsConfiguration,
-		actor:                    actor,
-		pubsubAdapter:            pubsubAdapter,
-		sendToOutputBindingFn:    sendToOutputBindingFn,
-		id:                       appID,
-		tracingSpec:              tracingSpec,
-		shutdown:                 shutdown,
+		appChannel:                 appChannel,
+		getComponentsFn:            getComponentsFn,
+		resiliency:                 resiliency,
+		directMessaging:            directMessaging,
+		stateStores:                stateStores,
+		lockStores:                 lockStores,
+		transactionalStateStores:   transactionalStateStores,
+		secretStores:               secretStores,
+		secretsConfiguration:       secretsConfiguration,
+		configurationStores:        configurationStores,
+		configurationSubscribe:     make(map[string]chan struct{}),
+		actor:                      actor,
+		pubsubAdapter:              pubsubAdapter,
+		sendToOutputBindingFn:      sendToOutputBindingFn,
+		id:                         appID,
+		tracingSpec:                tracingSpec,
+		shutdown:                   shutdown,
+		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
+		daprRunTimeVersion:         version.Version(),
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -171,7 +194,9 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, metadataEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
+	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
@@ -396,6 +421,46 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 	}
 }
 
+func (a *api) constructConfigurationEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onGetConfiguration,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}/subscribe",
+			Version: apiVersionV1alpha1,
+			Handler: a.onSubscribeConfiguration,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
+			Version: apiVersionV1alpha1,
+			Handler: a.onUnsubscribeConfiguration,
+		},
+	}
+}
+
+func (a *api) constructDistributedLockEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "lock/{storeName}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onLock,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "unlock/{storeName}",
+			Version: apiVersionV1alpha1,
+			Handler: a.onUnlock,
+		},
+	}
+}
+
 func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 	body := reqCtx.PostBody()
@@ -418,16 +483,16 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// pass the trace context to output binding in metadata
-	if span := diag_utils.SpanFromContext(reqCtx); span != nil {
+	if span := diagUtils.SpanFromContext(reqCtx); span != nil {
 		sc := span.SpanContext()
 		if req.Metadata == nil {
 			req.Metadata = map[string]string{}
 		}
 		// if sc is not empty context, set traceparent Header.
-		if sc != (trace.SpanContext{}) {
+		if !sc.Equal(trace.SpanContext{}) {
 			req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
 		}
-		if sc.Tracestate != nil {
+		if sc.TraceState().Len() == 0 {
 			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
 		}
 	}
@@ -492,7 +557,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(req.Keys))
 	for i, k := range req.Keys {
-		key, err1 := state_loader.GetModifiedStateKey(k, storeName, a.id)
+		key, err1 := stateLoader.GetModifiedStateKey(k, storeName, a.id)
 		if err1 != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err1))
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -528,7 +593,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		for i := 0; i < len(responses) && i < len(req.Keys); i++ {
-			bulkResp[i].Key = state_loader.GetOriginalStateKey(responses[i].Key)
+			bulkResp[i].Key = stateLoader.GetOriginalStateKey(responses[i].Key)
 			if responses[i].Error != "" {
 				log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
 				bulkResp[i].Error = responses[i].Error
@@ -547,7 +612,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 			fn := func(param interface{}) {
 				r := param.(*BulkGetResponse)
-				k, err := state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
+				k, err := stateLoader.GetModifiedStateKey(r.Key, storeName, a.id)
 				if err != nil {
 					log.Debug(err)
 					r.Error = err.Error()
@@ -597,7 +662,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
@@ -614,6 +679,25 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 	return a.stateStores[storeName], storeName, nil
 }
 
+func (a *api) getLockStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (lock.Store, string, error) {
+	if a.lockStores == nil || len(a.lockStores) == 0 {
+		msg := NewErrorResponse("ERR_LOCK_STORE_NOT_CONFIGURED", messages.ErrLockStoresNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+
+	storeName := a.getStateStoreName(reqCtx)
+
+	if a.lockStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_LOCK_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrLockStoreNotFound, storeName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+	return a.lockStores[storeName], storeName, nil
+}
+
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
@@ -625,7 +709,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
-	k, err := state_loader.GetModifiedStateKey(key, storeName, a.id)
+	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.id)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -677,6 +761,315 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, withJSON(fasthttp.StatusOK, resp.Data), withEtag(resp.ETag), withMetadata(resp.Metadata))
 }
 
+func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
+	if a.configurationStores == nil || len(a.configurationStores) == 0 {
+		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_CONFIGURED", messages.ErrConfigurationStoresNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+
+	storeName := a.getStateStoreName(reqCtx)
+
+	if a.configurationStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return nil, "", errors.New(msg.Message)
+	}
+	return a.configurationStores[storeName], storeName, nil
+}
+
+type subscribeConfigurationResponse struct {
+	ID string `json:"id"`
+}
+
+type UnsubscribeConfigurationResponse struct {
+	Ok      bool   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+}
+
+type configurationEventHandler struct {
+	api        *api
+	storeName  string
+	appChannel channel.AppChannel
+	res        resiliency.Provider
+}
+
+func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
+	for _, item := range e.Items {
+		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, item.Key))
+		req.WithHTTPExtension(nethttp.MethodPost, "")
+		eventBody, _ := json.Marshal(e)
+		req.WithRawData(eventBody, invokev1.JSONContentType)
+
+		policy := h.res.ComponentInboundPolicy(ctx, h.storeName)
+		err := policy(func(ctx context.Context) (err error) {
+			resp, err := h.appChannel.InvokeMethod(ctx, req)
+			if err != nil {
+				return err
+			}
+
+			if resp != nil && resp.Status().Code != nethttp.StatusOK {
+				return errors.Errorf("Error sending configuration item to application, status %d", resp.Status().Code)
+			}
+			return nil
+		})
+		if err != nil {
+			log.Error(errors.Wrap(err, "error sending configuration item to the app"))
+		}
+	}
+	return nil
+}
+
+func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getLockStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	req := lock.TryLockRequest{}
+	err = json.Unmarshal(reqCtx.PostBody(), &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+
+	var resp *lock.TryLockResponse
+	req.ResourceID, err = lockLoader.GetModifiedLockKey(req.ResourceID, storeName, a.id)
+	if err != nil {
+		msg := NewErrorResponse("ERR_TRY_LOCK", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = store.TryLock(&req)
+		return rErr
+	})
+	if err != nil {
+		msg := NewErrorResponse("ERR_TRY_LOCK", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	b, _ := json.Marshal(resp)
+	respond(reqCtx, withJSON(200, b))
+}
+
+func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getLockStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	req := lock.UnlockRequest{}
+	err = json.Unmarshal(reqCtx.PostBody(), &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+
+	var resp *lock.UnlockResponse
+	req.ResourceID, err = lockLoader.GetModifiedLockKey(req.ResourceID, storeName, a.id)
+	if err != nil {
+		msg := NewErrorResponse("ERR_UNLOCK", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	err = policy(func(ctx context.Context) (rErr error) {
+		resp, rErr = store.Unlock(&req)
+		return rErr
+	})
+	if err != nil {
+		msg := NewErrorResponse("ERR_UNLOCK", err.Error())
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+
+	b, _ := json.Marshal(resp)
+	respond(reqCtx, withJSON(200, b))
+}
+
+func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	metadata := getMetadataFromRequest(reqCtx)
+	subscribeKeys := make([]string, 0)
+
+	keys := make([]string, 0)
+	queryKeys := reqCtx.QueryArgs().PeekMulti(configurationKeyParam)
+	for _, queryKeyByte := range queryKeys {
+		keys = append(keys, string(queryKeyByte))
+	}
+
+	// empty list means subscribing to all configuration keys
+	if len(keys) == 0 {
+		getConfigurationReq := &configuration.GetRequest{
+			Keys:     []string{},
+			Metadata: metadata,
+		}
+
+		start := time.Now()
+		policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+		var getResponse *configuration.GetResponse
+		err = policy(func(ctx context.Context) (rErr error) {
+			getResponse, rErr = store.Get(ctx, getConfigurationReq)
+			return rErr
+		})
+		elapsed := diag.ElapsedSince(start)
+		diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+
+		if err != nil {
+			msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+		items := getResponse.Items
+		for _, item := range items {
+			subscribeKeys = append(subscribeKeys, item.Key)
+		}
+	} else {
+		subscribeKeys = append(subscribeKeys, keys...)
+	}
+
+	req := configuration.SubscribeRequest{
+		Keys:     subscribeKeys,
+		Metadata: metadata,
+	}
+
+	// create handler
+	handler := &configurationEventHandler{
+		api:        a,
+		storeName:  storeName,
+		appChannel: a.appChannel,
+		res:        a.resiliency,
+	}
+
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+	var subscribeID string
+	err = policy(func(ctx context.Context) (rErr error) {
+		subscribeID, rErr = store.Subscribe(ctx, &req, handler.updateEventHandler)
+		return rErr
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
+
+	if err != nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	respBytes, _ := json.Marshal(&subscribeConfigurationResponse{
+		ID: subscribeID,
+	})
+	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
+}
+
+func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+	subscribeID := reqCtx.UserValue(configurationSubscribeID).(string)
+
+	req := configuration.UnsubscribeRequest{
+		ID: subscribeID,
+	}
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+	err = policy(func(ctx context.Context) (rErr error) {
+		return store.Unsubscribe(ctx, &req)
+	})
+	elapsed := diag.ElapsedSince(start)
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
+
+	if err != nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_UNSUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, err.Error()))
+		errRespBytes, _ := json.Marshal(&UnsubscribeConfigurationResponse{
+			Ok:      false,
+			Message: msg.Message,
+		})
+		respond(reqCtx, withJSON(fasthttp.StatusInternalServerError, errRespBytes))
+		log.Debug(msg)
+		return
+	}
+	respBytes, _ := json.Marshal(&UnsubscribeConfigurationResponse{
+		Ok: true,
+	})
+	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
+}
+
+func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
+	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	metadata := getMetadataFromRequest(reqCtx)
+
+	keys := make([]string, 0)
+	queryKeys := reqCtx.QueryArgs().PeekMulti(configurationKeyParam)
+	for _, queryKeyByte := range queryKeys {
+		keys = append(keys, string(queryKeyByte))
+	}
+	req := configuration.GetRequest{
+		Keys:     keys,
+		Metadata: metadata,
+	}
+
+	start := time.Now()
+	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName)
+	var getResponse *configuration.GetResponse
+	err = policy(func(ctx context.Context) (rErr error) {
+		getResponse, rErr = store.Get(ctx, &req)
+		return rErr
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
+
+	if err != nil {
+		msg := NewErrorResponse("ERR_CONFIGURATION_GET", fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
+	if getResponse == nil || getResponse.Items == nil || len(getResponse.Items) == 0 {
+		respond(reqCtx, withEmpty())
+		return
+	}
+
+	respBytes, _ := json.Marshal(getResponse.Items)
+
+	respond(reqCtx, withJSON(fasthttp.StatusOK, respBytes))
+}
+
 func extractEtag(reqCtx *fasthttp.RequestCtx) (bool, string) {
 	var etag string
 	var hasEtag bool
@@ -704,7 +1097,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 
 	metadata := getMetadataFromRequest(reqCtx)
-	k, err := state_loader.GetModifiedStateKey(key, storeName, a.id)
+	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.id)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -894,7 +1287,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			}
 		}
 
-		reqs[i].Key, err = state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
+		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.id)
 		if err != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1003,7 +1396,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Save headers to internal metadata
 	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
 
-	policy := a.resiliency.EndpointPolicy(reqCtx, targetID, fmt.Sprintf("%s:%s", targetID, invokeMethodName), false)
+	policy := a.resiliency.EndpointPolicy(reqCtx, targetID, fmt.Sprintf("%s:%s", targetID, invokeMethodName))
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
 	var resp *invokev1.InvokeMethodResponse
 	var body []byte
@@ -1368,7 +1761,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		resp, rErr = a.actor.Call(ctx, req)
 		return rErr
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -1436,24 +1829,24 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		temp[key.(string)] = key.(string)
+		temp[key.(string)] = value.(string)
 
 		return true
 	})
-
+	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	activeActorsCount := []actors.ActiveActorsCount{}
 	if a.actor != nil {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
-
+	componentsCapabilties := a.getComponentsCapabilitesFn()
 	components := a.getComponentsFn()
 	registeredComponents := make([]registeredComponent, 0, len(components))
-
 	for _, comp := range components {
 		registeredComp := registeredComponent{
-			Name:    comp.Name,
-			Version: comp.Spec.Version,
-			Type:    comp.Spec.Type,
+			Name:         comp.Name,
+			Version:      comp.Spec.Version,
+			Type:         comp.Spec.Type,
+			Capabilities: getOrDefaultCapabilites(componentsCapabilties, comp.Name),
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
@@ -1473,6 +1866,13 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respond(reqCtx, withJSON(fasthttp.StatusOK, mtdBytes))
 	}
+}
+
+func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
+	if val, ok := dict[key]; ok {
+		return val
+	}
+	return make([]string, 0)
 }
 
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
@@ -1532,7 +1932,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
 	metadata := getMetadataFromRequest(reqCtx)
-	rawPayload, metaErr := contrib_metadata.IsRawPayload(metadata)
+	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_REQUEST_METADATA",
 			fmt.Sprintf(messages.ErrMetadataGet, metaErr.Error()))
@@ -1543,7 +1943,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// Extract trace context from context.
-	span := diag_utils.SpanFromContext(reqCtx)
+	span := diagUtils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 	// Populate W3C tracestate to cloudevent envelope
@@ -1552,7 +1952,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	data := body
 
 	if !rawPayload {
-		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			ID:              a.id,
 			Topic:           topic,
 			DataContentType: contentType,
@@ -1601,12 +2001,12 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",
 			fmt.Sprintf(messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error()))
 
-		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
+		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
 			msg = NewErrorResponse("ERR_PUBSUB_FORBIDDEN", err.Error())
 			status = fasthttp.StatusForbidden
 		}
 
-		if errors.As(err, &runtime_pubsub.NotFoundError{}) {
+		if errors.As(err, &runtimePubsub.NotFoundError{}) {
 			msg = NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
 			status = fasthttp.StatusBadRequest
 		}
@@ -1666,7 +2066,7 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -1725,7 +2125,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(msg)
 				return
 			}
-			upsertReq.Key, err = state_loader.GetModifiedStateKey(upsertReq.Key, storeName, a.id)
+			upsertReq.Key, err = stateLoader.GetModifiedStateKey(upsertReq.Key, storeName, a.id)
 			if err != nil {
 				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1746,7 +2146,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(msg)
 				return
 			}
-			delReq.Key, err = state_loader.GetModifiedStateKey(delReq.Key, storeName, a.id)
+			delReq.Key, err = stateLoader.GetModifiedStateKey(delReq.Key, storeName, a.id)
 			if err != nil {
 				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1868,7 +2268,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 		Metadata: resp.Metadata,
 	}
 	for i := range resp.Results {
-		qresp.Results[i].Key = state_loader.GetOriginalStateKey(resp.Results[i].Key)
+		qresp.Results[i].Key = stateLoader.GetOriginalStateKey(resp.Results[i].Key)
 		qresp.Results[i].ETag = resp.Results[i].ETag
 		qresp.Results[i].Error = resp.Results[i].Error
 		qresp.Results[i].Data = json.RawMessage(resp.Results[i].Data)

@@ -59,14 +59,47 @@ func TestGetGRPCConnection(t *testing.T) {
 		m := NewGRPCManager(modes.StandaloneMode)
 		assert.NotNil(t, m)
 		port := 55555
+		recreateIfExists := true
 		sslEnabled := false
-		ctx := context.TODO()
-		conn, err := m.GetGRPCConnection(ctx, fmt.Sprintf("127.0.0.1:%v", port), "", "", true, true, sslEnabled)
+
+		conn, teardown, err := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
 		assert.NoError(t, err)
-		conn2, err2 := m.GetGRPCConnection(ctx, fmt.Sprintf("127.0.0.1:%v", port), "", "", true, true, sslEnabled)
+
+		_, teardown2, err2 := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
 		assert.NoError(t, err2)
-		assert.Equal(t, connectivity.Shutdown, conn.GetState())
-		conn2.Close()
+		defer teardown2()
+
+		assert.NotEqual(t, connectivity.Shutdown, conn.GetState(), "old connection should not be closed by recreation")
+		teardown()
+		assert.Equal(t, connectivity.Shutdown, conn.GetState(), "old connection should be closed by teardown")
+	})
+
+	t.Run("Shared pool connection is not closed until all callers finish using it", func(t *testing.T) {
+		m := NewGRPCManager(modes.StandaloneMode)
+		assert.NotNil(t, m)
+		port := 55555
+		recreateIfExists := false
+		sslEnabled := false
+
+		conn, teardown, err := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
+		assert.NoError(t, err)
+
+		conn2, teardown2, err2 := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
+		assert.NoError(t, err2)
+		// conn2 is same as conn because it is stored in connection pool
+		assert.Equal(t, conn, conn2)
+
+		recreateIfExists = true
+		_, teardown3, err3 := m.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, recreateIfExists, sslEnabled)
+		assert.NoError(t, err3)
+		defer teardown3()
+
+		teardown()
+		// connection is still used by conn2
+		assert.NotEqual(t, connectivity.Shutdown, conn.GetState(), "connection must not be closed")
+		teardown2()
+		// connection is not used anymore
+		assert.Equal(t, connectivity.Shutdown, conn.GetState(), "connection must be closed")
 	})
 
 	t.Run("Connection with SSL is created successfully", func(t *testing.T) {
@@ -75,8 +108,9 @@ func TestGetGRPCConnection(t *testing.T) {
 		port := 55555
 		sslEnabled := true
 		ctx := context.TODO()
-		_, err := m.GetGRPCConnection(ctx, fmt.Sprintf("127.0.0.1:%v", port), "", "", true, true, sslEnabled)
+		_, teardown, err := m.GetGRPCConnection(ctx, fmt.Sprintf("127.0.0.1:%v", port), "", "", true, true, sslEnabled)
 		assert.NoError(t, err)
+		teardown()
 	})
 }
 

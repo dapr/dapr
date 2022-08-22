@@ -25,7 +25,7 @@ import (
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
+//nolint:gosec
 const (
 	sidecarContainerName              = "daprd"
 	daprEnabledKey                    = "dapr.io/enabled"
@@ -76,7 +77,11 @@ const (
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
 	daprEnableAPILogging              = "dapr.io/enable-api-logging"
 	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
+	daprVolumeMountsReadOnlyKey       = "dapr.io/volume-mounts"
+	daprVolumeMountsReadWriteKey      = "dapr.io/volume-mounts-rw"
+	daprDisableBuiltinK8sSecretStore  = "dapr.io/disable-builtin-k8s-secret-store"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
+	daprPlacementAddressesKey         = "dapr.io/placement-host-address"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -112,9 +117,9 @@ const (
 	defaultHealthzProbeThreshold      = 3
 	apiVersionV1                      = "v1.0"
 	defaultMtlsEnabled                = true
-	trueString                        = "true"
 	defaultDaprHTTPStreamRequestBody  = false
 	defaultAPILoggingEnabled          = false
+	defaultBuiltinSecretStoreDisabled = false
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -165,14 +170,15 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 	socketMount := appendUnixDomainSocketVolume(&pod)
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer, err := getSidecarContainer(pod.Annotations, id, image, imagePullPolicy, req.Namespace, apiSvcAddress, placementAddress, socketMount, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity)
+	volumeMounts := getVolumeMounts(pod)
+	sidecarContainer, err := getSidecarContainer(pod.Annotations, id, image, imagePullPolicy, req.Namespace, apiSvcAddress, placementAddress, socketMount, tokenMount, volumeMounts, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity)
 	if err != nil {
 		return nil, err
 	}
 
 	patchOps := []PatchOperation{}
 	envPatchOps := []PatchOperation{}
-	socketVolumentPatchOps := []PatchOperation{}
+	socketVolumePatchOps := []PatchOperation{}
 	var path string
 	var value interface{}
 	if len(pod.Spec.Containers) == 0 {
@@ -180,7 +186,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		value = []corev1.Container{*sidecarContainer}
 	} else {
 		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
-		socketVolumentPatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketMount)
+		socketVolumePatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketMount)
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
@@ -194,7 +200,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		},
 	)
 	patchOps = append(patchOps, envPatchOps...)
-	patchOps = append(patchOps, socketVolumentPatchOps...)
+	patchOps = append(patchOps, socketVolumePatchOps...)
 
 	return patchOps, nil
 }
@@ -276,8 +282,8 @@ func addVolumeToContainers(containers []corev1.Container, addMounts corev1.Volum
 }
 
 // It does not override existing values for those variables if they have been defined already.
-func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
-	if len(volumentMounts) == 0 {
+func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
+	if len(volumeMounts) == 0 {
 		// If there are no volume mount variables defined in the container, we initialize a slice of environment vars.
 		return []PatchOperation{
 			{
@@ -294,7 +300,7 @@ func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMount
 
 	for _, addMount := range addMounts {
 		isConflict := false
-		for _, mount := range volumentMounts {
+		for _, mount := range volumeMounts {
 			// conflict cases
 			if addMount.Name == mount.Name || addMount.MountPath == mount.MountPath {
 				isConflict = true
@@ -315,7 +321,7 @@ func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMount
 }
 
 func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, meta_v1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, metaV1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}
@@ -326,7 +332,7 @@ func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace stri
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
-	resp, err := daprClient.ConfigurationV1alpha1().Configurations(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled
@@ -385,6 +391,14 @@ func getMetricsPort(annotations map[string]string) int {
 	return int(getInt32AnnotationOrDefault(annotations, daprMetricsPortKey, defaultMetricsPort))
 }
 
+func getPlacementAddresses(annotations map[string]string) string {
+	return getStringAnnotation(annotations, daprPlacementAddressesKey)
+}
+
+func existPlacementAddressesAnnotation(annotations map[string]string) bool {
+	return existAnnotation(annotations, daprPlacementAddressesKey)
+}
+
 func getEnableDebug(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprEnableDebugKey, defaultSidecarDebug)
 }
@@ -441,8 +455,20 @@ func getUnixDomainSocketPath(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprUnixDomainSocketPath, "")
 }
 
+func getVolumeMountsReadOnly(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprVolumeMountsReadOnlyKey, "")
+}
+
+func getVolumeMountsReadWrite(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprVolumeMountsReadWriteKey, "")
+}
+
 func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprHTTPStreamRequestBody, defaultDaprHTTPStreamRequestBody)
+}
+
+func getDisableBuiltinK8sSecretStore(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprDisableBuiltinK8sSecretStore, defaultBuiltinSecretStoreDisabled)
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
@@ -450,9 +476,7 @@ func getBoolAnnotationOrDefault(annotations map[string]string, key string, defau
 	if !ok {
 		return defaultValue
 	}
-	s := strings.ToLower(enabled)
-	// trueString is used to silence a lint error.
-	return (s == "y") || (s == "yes") || (s == trueString) || (s == "on") || (s == "1")
+	return utils.IsTruthy(enabled)
 }
 
 func getStringAnnotationOrDefault(annotations map[string]string, key, defaultValue string) string {
@@ -464,6 +488,11 @@ func getStringAnnotationOrDefault(annotations map[string]string, key, defaultVal
 
 func getStringAnnotation(annotations map[string]string, key string) string {
 	return annotations[key]
+}
+
+func existAnnotation(annotations map[string]string, key string) bool {
+	_, exist := annotations[key]
+	return exist
 }
 
 func getInt32AnnotationOrDefault(annotations map[string]string, key string, defaultValue int) int32 {
@@ -585,7 +614,7 @@ func getPullPolicy(pullPolicy string) corev1.PullPolicy {
 	}
 }
 
-func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, imagePullPolicy, namespace, controlPlaneAddress, placementServiceAddress string, socketVolumeMount, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string) (*corev1.Container, error) {
+func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, imagePullPolicy, namespace, controlPlaneAddress, placementServiceAddress string, socketVolumeMount, tokenVolumeMount *corev1.VolumeMount, volumeMounts []corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string) (*corev1.Container, error) {
 	appPort, err := getAppPort(annotations)
 	if err != nil {
 		return nil, err
@@ -600,6 +629,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	metricsPort := getMetricsPort(annotations)
 	maxConcurrency, err := getMaxConcurrency(annotations)
 	sidecarListenAddresses := getListenAddresses(annotations)
+	builtinK8sSecretStoreDisabled := getDisableBuiltinK8sSecretStore(annotations)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -628,6 +658,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	}
 
 	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
+
+	if existPlacementAddressesAnnotation(annotations) {
+		placementServiceAddress = getPlacementAddresses(annotations)
+	}
 
 	ports := []corev1.ContainerPort{
 		{
@@ -672,6 +706,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
 		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
 		fmt.Sprintf("--enable-api-logging=%t", apiLoggingEnabled),
+		fmt.Sprintf("--disable-builtin-k8s-secret-store=%t", builtinK8sSecretStoreDisabled),
 	}
 
 	debugEnabled := getEnableDebug(annotations)
@@ -707,8 +742,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
 		},
-		Ports:   ports,
-		Command: cmd,
+		Ports: ports,
+		Args:  append(cmd, args...),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "NAMESPACE",
@@ -723,7 +758,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 				},
 			},
 		},
-		Args: args,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
@@ -742,12 +776,29 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
 
+	// This is a special case that requires administrator privileges in Windows containers
+	// to install the certificates to the root store. If this environment variable is set,
+	// the container security context should be set to run as administrator.
+	for _, env := range c.Env {
+		if env.Name == "SSL_CERT_DIR" {
+			userName := "ContainerAdministrator"
+			c.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
+				RunAsUserName: &userName,
+			}
+			break
+		}
+	}
+
 	if socketVolumeMount != nil {
 		c.VolumeMounts = []corev1.VolumeMount{*socketVolumeMount}
 	}
 
 	if tokenVolumeMount != nil {
 		c.VolumeMounts = append(c.VolumeMounts, *tokenVolumeMount)
+	}
+
+	if len(volumeMounts) != 0 {
+		c.VolumeMounts = append(c.VolumeMounts, volumeMounts...)
 	}
 
 	if logAsJSONEnabled(annotations) {
@@ -842,4 +893,31 @@ func appendUnixDomainSocketVolume(pod *corev1.Pod) *corev1.VolumeMount {
 	pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
 
 	return &corev1.VolumeMount{Name: unixDomainSocketVolume, MountPath: unixDomainSocket}
+}
+
+func podContainsVolume(pod corev1.Pod, name string) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
+	volumeMounts := []corev1.VolumeMount{}
+
+	vs := append(
+		utils.ParseVolumeMountsString(getVolumeMountsReadOnly(pod.Annotations), true),
+		utils.ParseVolumeMountsString(getVolumeMountsReadWrite(pod.Annotations), false)...)
+
+	for _, v := range vs {
+		if podContainsVolume(pod, v.Name) {
+			volumeMounts = append(volumeMounts, v)
+		} else {
+			log.Warnf("volume %s is not present in pod %s, skipping.", v.Name, pod.Name)
+		}
+	}
+
+	return volumeMounts
 }

@@ -5,13 +5,19 @@ import (
 	"testing"
 	"time"
 
+	hcraft "github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/logger"
 )
 
 func TestPlacementHA(t *testing.T) {
+	logger.ApplyOptionsToLoggers(&logger.Options{
+		OutputLevel: "debug",
+	})
+
 	// Get 3 ports
 	ports, err := daprtesting.GetFreePorts(3)
 	if err != nil {
@@ -162,20 +168,32 @@ func TestPlacementHA(t *testing.T) {
 
 func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) *raft.Server {
 	srv := raft.New(fmt.Sprintf("mynode-%d", nodeID), true, peers, "")
-	err := srv.StartRaft(nil)
+	err := srv.StartRaft(&hcraft.Config{
+		ProtocolVersion:    hcraft.ProtocolVersionMax,
+		HeartbeatTimeout:   250 * time.Millisecond,
+		ElectionTimeout:    250 * time.Millisecond,
+		CommitTimeout:      50 * time.Millisecond,
+		MaxAppendEntries:   64,
+		ShutdownOnRemove:   true,
+		TrailingLogs:       10240,
+		SnapshotInterval:   120 * time.Second,
+		SnapshotThreshold:  8192,
+		LeaderLeaseTimeout: 250 * time.Millisecond,
+	})
 	assert.NoError(t, err)
 	return srv
 }
 
 func findLeader(t *testing.T, raftServers []*raft.Server) int {
-	// Maximum 3 seconds
-	const maxAttempts = 30
+	// Maximum 5 seconds
+	const maxAttempts = 50
 
 	attempts := 0
 	for {
 		// Ensure that one node became leader
 		for i, srv := range raftServers {
 			if srv != nil && srv.IsLeader() {
+				t.Logf("leader elected in %d ms: server %d", attempts*100, i)
 				return i
 			}
 		}
@@ -190,7 +208,6 @@ func findLeader(t *testing.T, raftServers []*raft.Server) int {
 func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMember) {
 	state := srv.FSM().State()
 	assert.NotNil(t, state)
-	fmt.Println(state.Members())
 	actual, found := state.Members()[expect.Name]
 	if !assert.True(t, found) {
 		t.FailNow()
