@@ -18,6 +18,7 @@ sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 resources: {}
 kubeClusterDomain: cluster.local
+ignoreEntrypointTolerations: "[{\"effect\":\"NoSchedule\",\"key\":\"azure.com/aci\"}]"
 hostNetwork: false
 healthzPort: 8080
 

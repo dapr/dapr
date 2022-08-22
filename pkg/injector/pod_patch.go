@@ -123,23 +123,24 @@ const (
 )
 
 type sidecarContainerConfig struct {
-	appID                   string
-	annotations             map[string]string
-	certChain               string
-	certKey                 string
-	controlPlaneAddress     string
-	daprSidecarImage        string
-	identity                string
-	imagePullPolicy         string
-	mtlsEnabled             bool
-	namespace               string
-	placementServiceAddress string
-	sentryAddress           string
-	socketVolumeMount       *corev1.VolumeMount
-	tokenVolumeMount        *corev1.VolumeMount
-	tolerations             []corev1.Toleration
-	trustAnchors            string
-	volumeMounts            []corev1.VolumeMount
+	appID                       string
+	annotations                 map[string]string
+	certChain                   string
+	certKey                     string
+	controlPlaneAddress         string
+	daprSidecarImage            string
+	identity                    string
+	imagePullPolicy             string
+	mtlsEnabled                 bool
+	namespace                   string
+	placementServiceAddress     string
+	sentryAddress               string
+	socketVolumeMount           *corev1.VolumeMount
+	tokenVolumeMount            *corev1.VolumeMount
+	ignoreEntrypointTolerations string
+	tolerations                 []corev1.Toleration
+	trustAnchors                string
+	volumeMounts                []corev1.VolumeMount
 }
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -188,23 +189,24 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	socketVolumeMount := appendUnixDomainSocketVolume(&pod)
 
 	cfg := sidecarContainerConfig{
-		appID:                   id,
-		annotations:             pod.Annotations,
-		certChain:               certChain,
-		certKey:                 certKey,
-		controlPlaneAddress:     apiSvcAddress,
-		daprSidecarImage:        image,
-		identity:                fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName),
-		imagePullPolicy:         imagePullPolicy,
-		mtlsEnabled:             mTLSEnabled(daprClient),
-		namespace:               namespace,
-		placementServiceAddress: placementAddress,
-		sentryAddress:           sentryAddress,
-		socketVolumeMount:       socketVolumeMount,
-		tokenVolumeMount:        getTokenVolumeMount(pod),
-		trustAnchors:            trustAnchors,
-		tolerations:             pod.Spec.Tolerations,
-		volumeMounts:            getVolumeMounts(pod),
+		appID:                       id,
+		annotations:                 pod.Annotations,
+		certChain:                   certChain,
+		certKey:                     certKey,
+		controlPlaneAddress:         apiSvcAddress,
+		daprSidecarImage:            image,
+		identity:                    fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName),
+		imagePullPolicy:             imagePullPolicy,
+		mtlsEnabled:                 mTLSEnabled(daprClient),
+		namespace:                   namespace,
+		placementServiceAddress:     placementAddress,
+		sentryAddress:               sentryAddress,
+		socketVolumeMount:           socketVolumeMount,
+		tokenVolumeMount:            getTokenVolumeMount(pod),
+		trustAnchors:                trustAnchors,
+		ignoreEntrypointTolerations: i.config.IgnoreEntrypointTolerations,
+		tolerations:                 pod.Spec.Tolerations,
+		volumeMounts:                getVolumeMounts(pod),
 	}
 	sidecarContainer, err := getSidecarContainer(cfg)
 	if err != nil {
@@ -808,13 +810,11 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 		},
 	}
 
-	// This is a special case for virtual kubelets on Azure Container Instances (ACI).
-	// ACI does not support separate Command and Args,
-	// Ref. https://github.com/virtual-kubelet/azure-aci/issues/10.
-	// For other deployments, the Command is passed as a part of Args.
-	// This allows the Docker images to specify an ENTRYPOINT
+	// If the pod contains all the tolerations specified by the configuration,
+	// the Command and Args are passed as is. Otherwise, the Command is passed as a part of Args.
+	// This is to allow the Docker images to specify an ENTRYPOINT
 	// which is otherwise overridden by Command.
-	if isACIVirtualKubelet(cfg.tolerations) {
+	if podContainsTolerations(cfg.ignoreEntrypointTolerations, cfg.tolerations) {
 		c.Command = cmd
 		c.Args = args
 	} else {
@@ -970,14 +970,26 @@ func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
 	return volumeMounts
 }
 
-// isACIVirtualKubelet returns true if the pod is scheduled in ACI.
-// If it is an ACI deployment, the pods have a toleration "azure.com/aci".
-// See https://github.com/virtual-kubelet/azure-aci#schedule-a-pod-in-aci
-func isACIVirtualKubelet(ts []corev1.Toleration) bool {
+// podContainsTolerations returns true if the pod contains all the tolerations specified in tolerationsJSON.
+// If the JSON string is empty or contain an invalid JSON value, it returns false.
+func podContainsTolerations(tolerationsJSON string, podTolerations []corev1.Toleration) bool {
+	if tolerationsJSON == "" {
+		return false
+	}
+
+	// If the string contains an invalid value, return false.
+	ts := []corev1.Toleration{}
+	err := json.Unmarshal([]byte(tolerationsJSON), &ts)
+	if err != nil {
+		log.Warnf("couldn't unmarshal tolerationsJSON: %s", err)
+		return false
+	}
+
+	// If the pod contains all the tolerations specified, return true.
 	for _, t := range ts {
-		if t.Key == "azure.com/aci" {
-			return true
+		if !utils.Contains(podTolerations, t) {
+			return false
 		}
 	}
-	return false
+	return true
 }
