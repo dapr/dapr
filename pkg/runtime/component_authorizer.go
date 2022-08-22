@@ -16,7 +16,7 @@ package runtime
 import (
 	"strings"
 
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
 type componentDenyList struct {
@@ -49,7 +49,7 @@ func newComponentDenyList(raw []string) componentDenyList {
 	return componentDenyList{list}
 }
 
-func (dl componentDenyList) IsAllowed(component components_v1alpha1.Component) bool {
+func (dl componentDenyList) IsAllowed(component componentsV1alpha1.Component) bool {
 	if component.Spec.Type == "" || component.Spec.Version == "" {
 		return false
 	}

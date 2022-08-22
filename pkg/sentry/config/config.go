@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/kit/logger"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	dapr_config "github.com/dapr/dapr/pkg/config"
+	daprDaprConfig "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -98,7 +98,7 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 		return defaultConfig, err
 	}
 
-	list, err := daprClient.ConfigurationV1alpha1().Configurations(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+	list, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
 	if err != nil {
 		return defaultConfig, err
 	}
@@ -111,10 +111,10 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 		if i.GetName() == configName {
 			spec, _ := json.Marshal(i.Spec)
 
-			var configSpec dapr_config.ConfigurationSpec
+			var configSpec daprDaprConfig.ConfigurationSpec
 			json.Unmarshal(spec, &configSpec)
 
-			conf := dapr_config.Configuration{
+			conf := daprDaprConfig.Configuration{
 				Spec: configSpec,
 			}
 			return parseConfiguration(defaultConfig, &conf)
@@ -125,7 +125,7 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 
 func getSelfhostedConfig(configName string) (SentryConfig, error) {
 	defaultConfig := getDefaultConfig()
-	daprConfig, _, err := dapr_config.LoadStandaloneConfiguration(configName)
+	daprConfig, _, err := daprDaprConfig.LoadStandaloneConfiguration(configName)
 	if err != nil {
 		return defaultConfig, err
 	}
@@ -136,7 +136,7 @@ func getSelfhostedConfig(configName string) (SentryConfig, error) {
 	return defaultConfig, nil
 }
 
-func parseConfiguration(conf SentryConfig, daprConfig *dapr_config.Configuration) (SentryConfig, error) {
+func parseConfiguration(conf SentryConfig, daprConfig *daprDaprConfig.Configuration) (SentryConfig, error) {
 	if daprConfig.Spec.MTLSSpec.WorkloadCertTTL != "" {
 		d, err := time.ParseDuration(daprConfig.Spec.MTLSSpec.WorkloadCertTTL)
 		if err != nil {

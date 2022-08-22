@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/pkg/errors"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -86,7 +86,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 
 		// Add grpc-trace-bin header for all non-invocation api's
 		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
-			traceContextBinary := diag_utils.BinaryFromSpanContext(span.SpanContext())
+			traceContextBinary := diagUtils.BinaryFromSpanContext(span.SpanContext())
 			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
 		}
 
@@ -116,7 +116,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		}
 
 		targetID := vals[0]
-		wrapped := grpc_middleware.WrapServerStream(ss)
+		wrapped := grpcMiddleware.WrapServerStream(ss)
 		sc, _ := SpanContextFromIncomingGRPCMetadata(ctx)
 
 		var spanKind trace.SpanStartOption
@@ -213,7 +213,7 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 	}
 	traceContext := md[grpcTraceContextKey]
 	if len(traceContext) > 0 {
-		sc, ok = diag_utils.SpanContextFromBinary([]byte(traceContext[0]))
+		sc, ok = diagUtils.SpanContextFromBinary([]byte(traceContext[0]))
 	} else {
 		// add workaround to fallback on checking traceparent header
 		// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
@@ -233,7 +233,7 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 
 // SpanContextToGRPCMetadata appends binary serialized SpanContext to the outgoing GRPC context.
 func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContext) context.Context {
-	traceContextBinary := diag_utils.BinaryFromSpanContext(spanContext)
+	traceContextBinary := diagUtils.BinaryFromSpanContext(spanContext)
 	if len(traceContextBinary) == 0 {
 		return ctx
 	}

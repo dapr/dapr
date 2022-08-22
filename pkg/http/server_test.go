@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:forbidigo
 package http
 
 import (
@@ -28,7 +29,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -662,7 +663,7 @@ func TestClose(t *testing.T) {
 		require.NoError(t, err)
 		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, true)
 		a := &api{}
-		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
+		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, httpMiddleware.Pipeline{}, config.APISpec{})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
@@ -673,7 +674,7 @@ func TestClose(t *testing.T) {
 		require.NoError(t, err)
 		serverConfig := NewServerConfig("test", "127.0.0.1", port, []string{"127.0.0.1"}, nil, 0, "", false, 4, "", 4, false, false)
 		a := &api{}
-		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, http_middleware.Pipeline{}, config.APISpec{})
+		server := NewServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, httpMiddleware.Pipeline{}, config.APISpec{})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())

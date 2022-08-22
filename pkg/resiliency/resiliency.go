@@ -26,10 +26,12 @@ import (
 	"github.com/dapr/dapr/utils"
 
 	"github.com/ghodss/yaml"
-	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru"
 
-	resiliency_v1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+
+	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -98,7 +100,9 @@ type (
 	// It maps services, actors, components, and routes to each of these configurations.
 	// Lastly, it maintains circuit breaker state across invocations.
 	Resiliency struct {
-		log logger.Logger
+		name      string
+		namespace string
+		log       logger.Logger
 
 		timeouts        map[string]time.Duration
 		retries         map[string]*retry.Config
@@ -161,7 +165,7 @@ type (
 var _ = (Provider)((*Resiliency)(nil))
 
 // LoadStandaloneResiliency loads resiliency configurations from a file path.
-func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resiliency_v1alpha.Resiliency {
+func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resiliencyV1alpha.Resiliency {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
 	}
@@ -172,7 +176,7 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 		return nil
 	}
 
-	configs := make([]*resiliency_v1alpha.Resiliency, 0, len(files))
+	configs := make([]*resiliencyV1alpha.Resiliency, 0, len(files))
 
 	type typeInfo struct {
 		metav1.TypeMeta `json:",inline"`
@@ -200,7 +204,7 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 			continue
 		}
 
-		var resiliency resiliency_v1alpha.Resiliency
+		var resiliency resiliencyV1alpha.Resiliency
 		if err = yaml.Unmarshal(b, &resiliency); err != nil {
 			log.Errorf("Could not parse resiliency file %s: %w", file.Name(), err)
 			continue
@@ -212,10 +216,10 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 }
 
 // LoadKubernetesResiliency loads resiliency configurations from the Kubernetes operator.
-func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, operatorClient operatorv1pb.OperatorClient) []*resiliency_v1alpha.Resiliency {
+func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, operatorClient operatorv1pb.OperatorClient) []*resiliencyV1alpha.Resiliency {
 	resp, err := operatorClient.ListResiliency(context.Background(), &operatorv1pb.ListResiliencyRequest{
 		Namespace: namespace,
-	}, grpc_retry.WithMax(operatorRetryCount), grpc_retry.WithPerRetryTimeout(operatorTimePerRetry))
+	}, grpcRetry.WithMax(operatorRetryCount), grpcRetry.WithPerRetryTimeout(operatorTimePerRetry))
 	if err != nil {
 		log.Errorf("Error listing resiliences: %s", err.Error())
 		return nil
@@ -226,10 +230,10 @@ func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, op
 		return nil
 	}
 
-	configs := make([]*resiliency_v1alpha.Resiliency, 0, len(resp.GetResiliencies()))
+	configs := make([]*resiliencyV1alpha.Resiliency, 0, len(resp.GetResiliencies()))
 
 	for _, b := range resp.GetResiliencies() {
-		var resiliency resiliency_v1alpha.Resiliency
+		var resiliency resiliencyV1alpha.Resiliency
 		if err = yaml.Unmarshal(b, &resiliency); err != nil {
 			log.Errorf("Could not parse resiliency: %w", err)
 			continue
@@ -242,7 +246,7 @@ func LoadKubernetesResiliency(log logger.Logger, runtimeID, namespace string, op
 }
 
 // FromConfigurations creates a resiliency provider and decodes the configurations from `c`.
-func FromConfigurations(log logger.Logger, c ...*resiliency_v1alpha.Resiliency) *Resiliency {
+func FromConfigurations(log logger.Logger, c ...*resiliencyV1alpha.Resiliency) *Resiliency {
 	r := New(log)
 
 	// Add the default policies into the overall resiliency first. This allows customers to overwrite them if desired.
@@ -255,6 +259,7 @@ func FromConfigurations(log logger.Logger, c ...*resiliency_v1alpha.Resiliency) 
 			log.Errorf("Could not read resiliency %s: %w", &config.ObjectMeta.Name, err)
 			continue
 		}
+		diag.DefaultResiliencyMonitoring.PolicyLoaded(config.Name, config.Namespace)
 	}
 	return r
 }
@@ -278,10 +283,12 @@ func New(log logger.Logger) *Resiliency {
 }
 
 // DecodeConfiguration reads in a single resiliency configuration.
-func (r *Resiliency) DecodeConfiguration(c *resiliency_v1alpha.Resiliency) error {
+func (r *Resiliency) DecodeConfiguration(c *resiliencyV1alpha.Resiliency) error {
 	if c == nil {
 		return nil
 	}
+	r.name = c.Name
+	r.namespace = c.Namespace
 
 	if err := r.decodePolicies(c); err != nil {
 		return err
@@ -344,7 +351,7 @@ func (r *Resiliency) addBuiltInPolicies() {
 	}
 }
 
-func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error) {
+func (r *Resiliency) decodePolicies(c *resiliencyV1alpha.Resiliency) (err error) {
 	policies := c.Spec.Policies
 
 	for name, t := range policies.Timeouts {
@@ -392,7 +399,7 @@ func (r *Resiliency) decodePolicies(c *resiliency_v1alpha.Resiliency) (err error
 	return nil
 }
 
-func (r *Resiliency) decodeTargets(c *resiliency_v1alpha.Resiliency) (err error) {
+func (r *Resiliency) decodeTargets(c *resiliencyV1alpha.Resiliency) (err error) {
 	targets := c.Spec.Targets
 
 	for name, t := range targets.Apps {
@@ -510,9 +517,11 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 		r.log.Debugf("Found Endpoint Policy for %s: %+v", app, policyNames)
 		if policyNames.Timeout != "" {
 			t = r.timeouts[policyNames.Timeout]
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
 		}
 		if policyNames.Retry != "" {
 			rc = r.retries[policyNames.Retry]
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
 		}
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
@@ -535,6 +544,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 					}
 				}
 			}
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
 		if defaultNames, ok := r.getDefaultPolicy(Endpoint); ok {
@@ -566,6 +576,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 							cache.Add(endpoint, cb)
 						}
 					}
+					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 				}
 			}
 		}
@@ -588,6 +599,7 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Retry != "" {
 			rc = r.retries[policyNames.Retry]
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
 		}
 		if policyNames.CircuitBreaker != "" {
 			template, ok := r.circuitBreakers[policyNames.CircuitBreaker]
@@ -617,6 +629,7 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 					}
 				}
 			}
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
 		if defaultNames, ok := r.getDefaultPolicy(Actor); ok {
@@ -652,6 +665,7 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 							cache.Add(key, cb)
 						}
 					}
+					diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 				}
 			}
 		}
@@ -674,6 +688,7 @@ func (r *Resiliency) ActorPostLockPolicy(ctx context.Context, actorType string, 
 		r.log.Debugf("Found Actor Policy for type %s: %+v", actorType, policyNames)
 		if policyNames.Timeout != "" {
 			t = r.timeouts[policyNames.Timeout]
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
 		}
 	} else {
 		if defaultPolicies, ok := r.getDefaultPolicy(Actor); ok {
@@ -701,13 +716,16 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) R
 		r.log.Debugf("Found Component Outbound Policy for component %s: %+v", name, componentPolicies)
 		if componentPolicies.Outbound.Timeout != "" {
 			t = r.timeouts[componentPolicies.Outbound.Timeout]
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
 		}
 		if componentPolicies.Outbound.Retry != "" {
 			rc = r.retries[componentPolicies.Outbound.Retry]
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
 		}
 		if componentPolicies.Outbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Outbound.CircuitBreaker]
 			cb = r.componentCBs.Get(r.log, name, template)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	}
 
@@ -728,13 +746,16 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 		r.log.Debugf("Found Component Inbound Policy for component %s: %+v", name, componentPolicies)
 		if componentPolicies.Inbound.Timeout != "" {
 			t = r.timeouts[componentPolicies.Inbound.Timeout]
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
 		}
 		if componentPolicies.Inbound.Retry != "" {
 			rc = r.retries[componentPolicies.Inbound.Retry]
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.RetryPolicy)
 		}
 		if componentPolicies.Inbound.CircuitBreaker != "" {
 			template := r.circuitBreakers[componentPolicies.Inbound.CircuitBreaker]
 			cb = r.componentCBs.Get(r.log, name, template)
+			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	}
 
@@ -871,8 +892,8 @@ func ParseActorCircuitBreakerScope(val string) (ActorCircuitBreakerScope, error)
 	return ActorCircuitBreakerScope(0), fmt.Errorf("unknown circuit breaker scope %q", val)
 }
 
-func filterResiliencyConfigs(resiliences []*resiliency_v1alpha.Resiliency, runtimeID string) []*resiliency_v1alpha.Resiliency {
-	filteredResiliencies := make([]*resiliency_v1alpha.Resiliency, 0)
+func filterResiliencyConfigs(resiliences []*resiliencyV1alpha.Resiliency, runtimeID string) []*resiliencyV1alpha.Resiliency {
+	filteredResiliencies := make([]*resiliencyV1alpha.Resiliency, 0)
 
 	for _, resiliency := range resiliences {
 		if len(resiliency.Scopes) == 0 {
