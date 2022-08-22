@@ -29,6 +29,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	daprhttp "github.com/dapr/dapr/pkg/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -270,7 +271,7 @@ func delete(key, statestore string, meta map[string]string) error {
 		return err
 	}
 
-	req, err := http.NewRequest("DELETE", url, nil)
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		return fmt.Errorf("could not create delete request for key %s in Dapr: %s", key, err.Error())
 	}
@@ -343,7 +344,7 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 		queryURL += "?" + metadata2RawQuery(meta)
 	}
 	log.Printf("Posting %d bytes of state to %s", len(query), queryURL)
-	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query))
+	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query)) //nolint:bodyclose
 	if err != nil {
 		return nil, err
 	}
@@ -606,7 +607,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		statusCode = http.StatusInternalServerError
 		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd)
-		log.Printf(unsupportedCommandMessage)
+		log.Print(unsupportedCommandMessage)
 		res.Message = unsupportedCommandMessage
 	}
 
@@ -791,7 +792,7 @@ func initGRPCClient() {
 	log.Printf("Connecting to dapr using url %s", url)
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}
@@ -813,5 +814,5 @@ func main() {
 
 	log.Printf("State App - listening on http://localhost:%d", appPort)
 	log.Printf("State endpoint - to be saved at %s", fmt.Sprintf(stateURLTemplate, "statestore"))
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

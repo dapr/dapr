@@ -25,7 +25,7 @@ import (
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
+//nolint:gosec
 const (
 	sidecarContainerName              = "daprd"
 	daprEnabledKey                    = "dapr.io/enabled"
@@ -177,7 +178,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 
 	patchOps := []PatchOperation{}
 	envPatchOps := []PatchOperation{}
-	socketVolumentPatchOps := []PatchOperation{}
+	socketVolumePatchOps := []PatchOperation{}
 	var path string
 	var value interface{}
 	if len(pod.Spec.Containers) == 0 {
@@ -185,7 +186,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		value = []corev1.Container{*sidecarContainer}
 	} else {
 		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
-		socketVolumentPatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketMount)
+		socketVolumePatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketMount)
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
@@ -199,7 +200,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		},
 	)
 	patchOps = append(patchOps, envPatchOps...)
-	patchOps = append(patchOps, socketVolumentPatchOps...)
+	patchOps = append(patchOps, socketVolumePatchOps...)
 
 	return patchOps, nil
 }
@@ -281,8 +282,8 @@ func addVolumeToContainers(containers []corev1.Container, addMounts corev1.Volum
 }
 
 // It does not override existing values for those variables if they have been defined already.
-func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
-	if len(volumentMounts) == 0 {
+func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
+	if len(volumeMounts) == 0 {
 		// If there are no volume mount variables defined in the container, we initialize a slice of environment vars.
 		return []PatchOperation{
 			{
@@ -299,7 +300,7 @@ func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMount
 
 	for _, addMount := range addMounts {
 		isConflict := false
-		for _, mount := range volumentMounts {
+		for _, mount := range volumeMounts {
 			// conflict cases
 			if addMount.Name == mount.Name || addMount.MountPath == mount.MountPath {
 				isConflict = true
@@ -320,7 +321,7 @@ func getVolumeMountPatchOperations(volumentMounts []corev1.VolumeMount, addMount
 }
 
 func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, meta_v1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, metaV1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}
@@ -331,7 +332,7 @@ func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace stri
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
-	resp, err := daprClient.ConfigurationV1alpha1().Configurations(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled

@@ -101,7 +101,7 @@ func callActorMethod(w http.ResponseWriter, r *http.Request) {
 	invokeURL := fmt.Sprintf(daprActorMethodURL, request.ActorType, request.ActorID, request.Method)
 	log.Printf("Calling actor with: %s\n", invokeURL)
 
-	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer(body)) // nolint:gosec
+	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer(body)) //nolint:gosec
 	if resp != nil {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
@@ -140,7 +140,7 @@ func callDifferentActor(w http.ResponseWriter, r *http.Request) {
 	invokeURL := fmt.Sprintf(daprActorMethodURL, request.RemoteActorType, request.RemoteActorID, "logCall")
 	log.Printf("Calling remote actor with: %s\n", invokeURL)
 
-	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer([]byte{})) // nolint:gosec
+	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer([]byte{})) //nolint:gosec
 	if resp != nil {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
@@ -184,5 +184,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Actor Invocation App - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

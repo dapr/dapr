@@ -46,7 +46,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// nolint:gosec
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
 
@@ -102,7 +101,7 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 	defer res.Body.Close()
 
 	if res.StatusCode != expectedHTTPStatusCode {
-		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode)
+		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode) //nolint:stylecheck
 		return nil, t
 	}
 
@@ -130,5 +129,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Actor Client - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

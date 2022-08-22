@@ -21,7 +21,7 @@ import (
 	middleware "github.com/dapr/components-contrib/middleware"
 
 	"github.com/dapr/dapr/pkg/components"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 )
 
 type (
@@ -34,7 +34,7 @@ type (
 	// Registry is the interface for callers to get registered HTTP middleware.
 	Registry interface {
 		Register(components ...Middleware)
-		Create(name, version string, metadata middleware.Metadata) (http_middleware.Middleware, error)
+		Create(name, version string, metadata middleware.Metadata) (httpMiddleware.Middleware, error)
 	}
 
 	httpMiddlewareRegistry struct {
@@ -42,7 +42,7 @@ type (
 	}
 
 	// FactoryMethod is the method creating middleware from metadata.
-	FactoryMethod func(metadata middleware.Metadata) (http_middleware.Middleware, error)
+	FactoryMethod func(metadata middleware.Metadata) (httpMiddleware.Middleware, error)
 )
 
 // New creates a Middleware.
@@ -74,7 +74,7 @@ func (p *httpMiddlewareRegistry) Register(components ...Middleware) {
 }
 
 // Create instantiates a HTTP middleware based on `name`.
-func (p *httpMiddlewareRegistry) Create(name, version string, metadata middleware.Metadata) (http_middleware.Middleware, error) {
+func (p *httpMiddlewareRegistry) Create(name, version string, metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
 	if method, ok := p.getMiddleware(name, version); ok {
 		mid, err := method(metadata)
 		if err != nil {

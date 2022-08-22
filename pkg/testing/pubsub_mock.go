@@ -2,6 +2,7 @@ package testing
 
 import (
 	"context"
+	"sync"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -31,6 +32,7 @@ func (m *MockPubSub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, h
 	return args.Error(0)
 }
 
+// Close is a mock close method.
 func (m *MockPubSub) Close() error {
 	return nil
 }
@@ -39,6 +41,7 @@ func (m *MockPubSub) Features() []pubsub.Feature {
 	return nil
 }
 
+// FailingPubsub is a mock pubsub component object that simulates failures.
 type FailingPubsub struct {
 	Failure Failure
 }
@@ -73,4 +76,121 @@ func (f *FailingPubsub) Close() error {
 
 func (f *FailingPubsub) Features() []pubsub.Feature {
 	return nil
+}
+
+// InMemoryPubsub is a mock pub-sub component object that works with in-memory handlers
+type InMemoryPubsub struct {
+	mock.Mock
+
+	subscribedTopics map[string]subscription
+	topicsCb         func([]string)
+	handler          func(topic string, msg *pubsub.NewMessage)
+	lock             *sync.Mutex
+}
+
+type subscription struct {
+	cancel context.CancelFunc
+	send   chan *pubsub.NewMessage
+}
+
+// Init is a mock initialization method.
+func (m *InMemoryPubsub) Init(metadata pubsub.Metadata) error {
+	m.lock = &sync.Mutex{}
+	args := m.Called(metadata)
+	return args.Error(0)
+}
+
+// Publish is a mock publish method.
+func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
+	var send chan *pubsub.NewMessage
+	m.lock.Lock()
+	t, ok := m.subscribedTopics[req.Topic]
+	if ok && t.send != nil {
+		send = t.send
+	}
+	m.lock.Unlock()
+
+	if send != nil {
+		send <- &pubsub.NewMessage{
+			Data:        req.Data,
+			Topic:       req.Topic,
+			Metadata:    req.Metadata,
+			ContentType: req.ContentType,
+		}
+	}
+
+	return nil
+}
+
+// Subscribe is a mock subscribe method.
+func (m *InMemoryPubsub) Subscribe(parentCtx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
+	ctx, cancel := context.WithCancel(parentCtx)
+
+	ch := make(chan *pubsub.NewMessage, 10)
+	m.lock.Lock()
+	if m.subscribedTopics == nil {
+		m.subscribedTopics = map[string]subscription{}
+	}
+	m.subscribedTopics[req.Topic] = subscription{
+		cancel: cancel,
+		send:   ch,
+	}
+	m.onSubscribedTopicsChanged()
+	m.lock.Unlock()
+
+	go func() {
+		for {
+			select {
+			case msg := <-ch:
+				if m.handler != nil && msg != nil {
+					go m.handler(req.Topic, msg)
+				}
+			case <-ctx.Done():
+				close(ch)
+				m.lock.Lock()
+				delete(m.subscribedTopics, req.Topic)
+				m.onSubscribedTopicsChanged()
+				m.lock.Unlock()
+				m.MethodCalled("unsubscribed", req.Topic)
+				return
+			}
+		}
+	}()
+
+	args := m.Called(req, handler)
+	return args.Error(0)
+}
+
+// Close is a mock close method.
+func (m *InMemoryPubsub) Close() error {
+	if len(m.subscribedTopics) > 0 {
+		for _, f := range m.subscribedTopics {
+			f.cancel()
+		}
+	}
+	return nil
+}
+
+func (m *InMemoryPubsub) Features() []pubsub.Feature {
+	return nil
+}
+
+func (m *InMemoryPubsub) SetHandler(h func(topic string, msg *pubsub.NewMessage)) {
+	m.handler = h
+}
+
+func (m *InMemoryPubsub) SetOnSubscribedTopicsChanged(f func([]string)) {
+	m.topicsCb = f
+}
+
+func (m *InMemoryPubsub) onSubscribedTopicsChanged() {
+	if m.topicsCb != nil {
+		topics := make([]string, len(m.subscribedTopics))
+		i := 0
+		for k := range m.subscribedTopics {
+			topics[i] = k
+			i++
+		}
+		m.topicsCb(topics)
+	}
 }

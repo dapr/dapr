@@ -47,6 +47,8 @@ spec:
                 type: string
               topic:
                 type: string
+              deadLetterTopic:
+                type: string
               metadata:
                 additionalProperties:
                   type: string
@@ -121,6 +123,9 @@ spec:
                 type: object
               topic:
                 description: The topic name to subscribe to.
+                type: string
+              deadLetterTopic:
+                description: The optional dead letter queue for this topic to send events to.
                 type: string
             required:
             - pubsubname

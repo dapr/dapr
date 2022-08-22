@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:forbidigo
 package main
 
 import (
@@ -20,16 +21,16 @@ import (
 	"log"
 	"net"
 
-	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 // server is our user app
@@ -89,12 +90,13 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 		"DaprTest-Response-2", "DaprTest-Response-Value-2")
 
 	// following traceid byte is of expectedTraceID "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-	sc := trace.SpanContext{
-		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-		SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-		TraceOptions: trace.TraceOptions(1),
+	scConfig := trace.SpanContextConfig{
+		TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+		SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+		TraceFlags: trace.TraceFlags(1),
 	}
-	header.Set("grpc-trace-bin", string(propagation.Binary(sc)))
+	sc := trace.NewSpanContext(scConfig)
+	header.Set("grpc-trace-bin", string(diagUtils.BinaryFromSpanContext(sc)))
 
 	grpc.SendHeader(ctx, header)
 	trailer := metadata.Pairs(
@@ -136,7 +138,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 // To subscribe to a topic named TopicA
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	return &pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*pb.TopicSubscription{
+		Subscriptions: []*commonv1pb.TopicSubscription{
 			{
 				Topic: "TopicA",
 			},

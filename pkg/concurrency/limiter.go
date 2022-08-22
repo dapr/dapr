@@ -73,7 +73,8 @@ func (c *Limiter) Execute(job func(param interface{}), param interface{}) int {
 // Wait will block all the previously Executed jobs completed running.
 //
 // IMPORTANT: calling the Wait function while keep calling Execute leads to
-//            un-desired race conditions
+//
+//	un-desired race conditions
 func (c *Limiter) Wait() {
 	for i := 0; i < c.limit; i++ {
 		<-c.tickets

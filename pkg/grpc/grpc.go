@@ -24,9 +24,10 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/pkg/channel"
-	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
+	grpcChannel "github.com/dapr/dapr/pkg/channel/grpc"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -77,7 +78,7 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 	}
 
 	g.AppClient = conn
-	ch := grpc_channel.CreateLocalChannel(port, maxConcurrency, conn, spec, maxRequestBodySize, readBufferSize)
+	ch := grpcChannel.CreateLocalChannel(port, maxConcurrency, conn, spec, maxRequestBodySize, readBufferSize)
 	return ch, nil
 }
 
@@ -132,7 +133,7 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 			serverName = fmt.Sprintf("%s.%s.svc.cluster.local", id, namespace)
 		}
 
-		// nolint:gosec
+		//nolint:gosec
 		ta := credentials.NewTLS(&tls.Config{
 			ServerName:   serverName,
 			Certificates: []tls.Certificate{cert},
@@ -147,7 +148,7 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
 	if sslEnabled {
-		// nolint:gosec
+		//nolint:gosec
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			InsecureSkipVerify: true,
 		})))
@@ -155,7 +156,7 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 	}
 
 	if !transportCredentialsAdded {
-		opts = append(opts, grpc.WithInsecure())
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
 	opts = append(opts, customOpts...)

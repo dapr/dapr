@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
@@ -52,8 +53,8 @@ func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) 
 	return serverAddress, testServer, cleanUpFn
 }
 
-func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient, error) {
-	conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient, error) { //nolint:nosnakecase
+	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, nil, err
 	}

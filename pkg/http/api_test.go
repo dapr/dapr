@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
@@ -43,7 +43,7 @@ import (
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -56,14 +56,14 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
-	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
+	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 )
@@ -144,11 +144,11 @@ func TestPubSubEndpoints(t *testing.T) {
 				}
 
 				if req.PubsubName == "errnotfound" {
-					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+					return runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				}
 
 				if req.PubsubName == "errnotallowed" {
-					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+					return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				}
 
 				return nil
@@ -1744,19 +1744,19 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		getComponentsFn: func() []components_v1alpha1.Component {
-			return []components_v1alpha1.Component{
+		getComponentsFn: func() []componentsV1alpha1.Component {
+			return []componentsV1alpha1.Component{
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "MockComponent1Name",
 					},
-					Spec: components_v1alpha1.ComponentSpec{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    "mock.component1Type",
 						Version: "v1.0",
-						Metadata: []components_v1alpha1.MetadataItem{
+						Metadata: []componentsV1alpha1.MetadataItem{
 							{
 								Name: "actorMockComponent1",
-								Value: components_v1alpha1.DynamicValue{
+								Value: componentsV1alpha1.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -1764,16 +1764,16 @@ func TestV1MetadataEndpoint(t *testing.T) {
 					},
 				},
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "MockComponent2Name",
 					},
-					Spec: components_v1alpha1.ComponentSpec{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    "mock.component2Type",
 						Version: "v1.0",
-						Metadata: []components_v1alpha1.MetadataItem{
+						Metadata: []componentsV1alpha1.MetadataItem{
 							{
 								Name: "actorMockComponent2",
-								Value: components_v1alpha1.DynamicValue{
+								Value: componentsV1alpha1.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -2115,7 +2115,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1.0"}
-	pipe := http_middleware.Pipeline{}
+	pipe := httpMiddleware.Pipeline{}
 
 	createExporters(&buffer)
 
@@ -2257,6 +2257,60 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
 		assert.Equal(t, "error configuration stores nonExistStore not found", resp.ErrorBody["message"])
+	})
+}
+
+func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	var fakeConfigurationStore configuration.Store = &fakeConfigurationStore{}
+
+	storeName := "store1"
+
+	fakeConfigurationStores := map[string]configuration.Store{
+		storeName: fakeConfigurationStore,
+	}
+	testAPI := &api{
+		resiliency:          resiliency.New(nil),
+		configurationStores: fakeConfigurationStores,
+	}
+	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
+
+	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+
+		rspMap1 := resp1.JSONBody
+		assert.NotNil(t, rspMap1)
+
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"].(string))
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 200, resp2.StatusCode, "unsubscribe configuration store,should return 200")
+		assert.NotNil(t, resp2.JSONBody, "Unsubscribe configuration should return a non nil response body")
+	})
+
+	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+
+		rspMap1 := resp1.JSONBody
+		assert.NotNil(t, rspMap1)
+
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", rspMap1.(map[string]interface{})["id"].(string))
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+
+		assert.Equal(t, 400, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
+	})
+
+	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, "subscribe_id_err")
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 500, resp2.StatusCode, "Expected error during unsubscribe api")
+		assert.NotNil(t, resp2.ErrorBody, "Unsubscribe configuration should return a non nil response body")
 	})
 }
 
@@ -2428,9 +2482,9 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 }
 
-func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
-	registry := http_middleware_loader.NewRegistry()
-	registry.Register(http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
+func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
+	registry := httpMiddlewareLoader.NewRegistry()
+	registry.Register(httpMiddlewareLoader.New("uppercase", func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
 		return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 			return func(ctx *fasthttp.RequestCtx) {
 				body := string(ctx.PostBody())
@@ -2439,15 +2493,15 @@ func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
 			}
 		}, nil
 	}))
-	var handlers []http_middleware.Middleware
+	var handlers []httpMiddleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
 		handler, err := registry.Create(spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{})
 		if err != nil {
-			return http_middleware.Pipeline{}
+			return httpMiddleware.Pipeline{}
 		}
 		handlers = append(handlers, handler)
 	}
-	return http_middleware.Pipeline{Handlers: handlers}
+	return httpMiddleware.Pipeline{Handlers: handlers}
 }
 
 func TestSinglePipelineWithTracer(t *testing.T) {
@@ -2658,7 +2712,7 @@ func (f *fakeHTTPServer) StartServerWithAPIToken(endpoints []Endpoint) {
 	}
 }
 
-func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline http_middleware.Pipeline, endpoints []Endpoint) {
+func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline httpMiddleware.Pipeline, endpoints []Endpoint) {
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
@@ -3448,7 +3502,7 @@ func (c fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetRe
 }
 
 func (c fakeStateStore) Init(metadata state.Metadata) error {
-	c.counter = 0
+	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 
@@ -3764,7 +3818,7 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 }
 
 func (c fakeConfigurationStore) Init(metadata configuration.Metadata) error {
-	c.counter = 0
+	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 
@@ -3773,6 +3827,9 @@ func (c *fakeConfigurationStore) Subscribe(ctx context.Context, req *configurati
 }
 
 func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
+	if req.ID == "subscribe_id_err" {
+		return errors.New("Error occurred during unsubscribe op")
+	}
 	return nil
 }
 

@@ -1,10 +1,10 @@
 # Setup Dapr development environment using Visual Studio Code
 
-This document helps you get started developing Dapr using VSCode. If you find any problems while following this guide, please create a Pull Request to update this document.
+This document helps you get started developing Dapr using VS Code. If you find any problems while following this guide, please create a Pull Request to update this document.
 
-## Using a development container in Visual Studio Code (VSCode)
+## Using a development container in Visual Studio Code (VS Code)
 
-[VSCode](https://code.visualstudio.com/) supports development in a containerized environment through its [Remote - Container extension](https://code.visualstudio.com/docs/remote/containers), so you don't need to manually install all of the tools and frameworks needed to [setup a dapr development environment](./setup-dapr-development-env.md) yourself.
+[VS Code](https://code.visualstudio.com/) supports development in a containerized environment through its [Remote - Container extension](https://code.visualstudio.com/docs/remote/containers), so you don't need to manually install all of the tools and frameworks needed to [setup a Dapr development environment](./setup-dapr-development-env.md) yourself.
 
 ### Prerequisites
 
@@ -15,7 +15,7 @@ This document helps you get started developing Dapr using VSCode. If you find an
 
 ### Using the Dapr development container
 
-1. After you have cloned the dapr repo locally, open the dapr folder in VSCode. For example:
+1. After you have cloned the Dapr repo locally, open the dapr folder in VSCode. For example:
 
    ```bash
    git clone https://github.com/dapr/dapr.git
@@ -23,13 +23,13 @@ This document helps you get started developing Dapr using VSCode. If you find an
    code .
    ```
 
-   VSCode will detect the presence of a dev container definition in the repo and will prompt you to reopen the project in a container:
+   VS Code will detect the presence of a dev container definition in the repo and will prompt you to reopen the project in a container:
 
    ![Reopen in container prompt](./img/vscode_reopen_in_container.png)
 
    Alternatively, you can open the command palette and use the `Remote-Containers: Reopen in Container` command.
 
-2. Once the container is loaded, open an [integrated terminal](https://code.visualstudio.com/docs/editor/integrated-terminal) in VSCode and you're ready to start [Developing Dapr](./developing-dapr.md)!
+2. Once the container is loaded, open an [integrated terminal](https://code.visualstudio.com/docs/editor/integrated-terminal) in VS Code and you're ready to start [Developing Dapr](./developing-dapr.md)!
 
 ## Customizing your dev container
 
@@ -37,10 +37,11 @@ The Dapr dev container is configured by default to support [GitHub Codespaces](h
 
 ### Personalizing user settings in a dev container
 
-VSCode supports applying your user settings, such as your `.gitconfig`, to a dev container through the use of [dotfiles repositories](https://code.visualstudio.com/docs/remote/containers#_personalizing-with-dotfile-repositories). This can be done through your own VSCode `settings.json` file without changing the dev container image or configuration.
+VS Code supports applying your user settings, such as your `.gitconfig`, to a dev container through the use of [dotfiles repositories](https://code.visualstudio.com/docs/remote/containers#_personalizing-with-dotfile-repositories). This can be done through your own VS Code `settings.json` file without changing the dev container image or configuration.
+
 ### Using a custom dev container image
 
-The Dapr [devcontainer.json](../../.devcontainer/devcontainer.json) uses the latest image from the [daprio dockerhub](https://hub.docker.com/r/daprio/dapr-dev), but you may need to modify the image destination to suit your host environment. For example, if you are using the devcontainer on a Linux host with a user whose UID is not 1000, you many need to remap the UID of the `dapr` user in the dev container to match your UID on the host.
+The Dapr [devcontainer.json](../../.devcontainer/devcontainer.json) uses the latest image from the [daprio Docker Hub](https://hub.docker.com/r/daprio/dapr-dev), but you may need to modify the image destination to suit your host environment. For example, if you are using the devcontainer on a Linux host with a user whose UID is not 1000, you many need to remap the UID of the `dapr` user in the dev container to match your UID on the host.
 
 1. Edit the [docker/Dockerfile-dev](../../docker/Dockerfile-dev) container image definition.
 2. Replace the `"image"` property with the commented-out `"dockerFile"` property in [devcontainer.json](../../.devcontainer/devcontainer.json) to build and use the updated `Dockerfile-dev` file.
@@ -49,7 +50,7 @@ The Dapr [devcontainer.json](../../.devcontainer/devcontainer.json) uses the lat
    {
      "name": "Dapr Dev Environment",
      // Update container version when you update dev-container
-     // "image": "docker.io/daprio/dapr-dev:0.1.3",
+     // "image": "docker.io/daprio/dapr-dev:0.1.7",
      // Replace with uncommented line below to build your own local copy of the image
      "dockerFile": "../docker/Dockerfile-dev",
      "runArgs": [
@@ -72,7 +73,7 @@ The Dapr [devcontainer.json](../../.devcontainer/devcontainer.json) uses the lat
    {
      "name": "Dapr Dev Environment",
      // Update container version when you update dev-container
-     "image": "docker.io/myregistry/dapr-dev:0.1.3",
+     "image": "docker.io/myregistry/dapr-dev:0.1.7",
      // Replace with uncommented line below to build your own local copy of the image
      // "dockerFile": "../docker/Dockerfile-dev",
      "runArgs": [
@@ -125,6 +126,7 @@ If you don't want to use the Docker-in-docker configuration at all, you can chos
 ```
 
 This approach has the added benefit that it will use socat to proxy `/var/run/docker-host.sock` if it is owned by root on localhost, to avoid modifying localhost permissions on Linux hosts.
+
 ### Cloning your Kubernetes configuration into the dev container
 
 Since it is likely that contributors and maintainers will want to test Dapr changes against a Kubernetes environment, the Dapr dev container comes pre-installed with Kubernetes, Helm and Minikube for testing within the dev container environment.

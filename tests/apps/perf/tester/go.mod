@@ -1,3 +1,3 @@
-module app
+module perf/tester
 
-go 1.17
+go 1.18
