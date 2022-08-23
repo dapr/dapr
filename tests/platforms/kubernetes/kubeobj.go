@@ -107,7 +107,21 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.DaprEnv != "" {
 		annotationObject["dapr.io/env"] = appDesc.DaprEnv
 	}
-
+	if appDesc.EnableAppHealthCheck {
+		annotationObject["dapr.io/enable-app-health-check"] = "true"
+	}
+	if appDesc.AppHealthCheckPath != "" {
+		annotationObject["dapr.io/app-health-check-path"] = appDesc.AppHealthCheckPath
+	}
+	if appDesc.AppHealthProbeInterval != 0 {
+		annotationObject["dapr.io/app-health-probe-interval"] = strconv.Itoa(appDesc.AppHealthProbeInterval)
+	}
+	if appDesc.AppHealthProbeTimeout != 0 {
+		annotationObject["dapr.io/app-health-probe-timeout"] = strconv.Itoa(appDesc.AppHealthProbeTimeout)
+	}
+	if appDesc.AppHealthThreshold != 0 {
+		annotationObject["dapr.io/app-health-threshold"] = strconv.Itoa(appDesc.AppHealthThreshold)
+	}
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}

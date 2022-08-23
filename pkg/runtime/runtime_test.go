@@ -2988,6 +2988,7 @@ func TestPubsubLifecycle(t *testing.T) {
 	require.Equal(t, 3, done)
 
 	subscriptions := make(map[string][]string)
+	var subscriptionsMux sync.Mutex
 	messages := make(map[string][]*pubsub.NewMessage)
 	var (
 		subscriptionsCh chan struct{}
@@ -2996,7 +2997,9 @@ func TestPubsubLifecycle(t *testing.T) {
 	forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
 		comp.SetOnSubscribedTopicsChanged(func(topics []string) {
 			sort.Strings(topics)
+			subscriptionsMux.Lock()
 			subscriptions[name] = topics
+			subscriptionsMux.Unlock()
 			if subscriptionsCh != nil {
 				subscriptionsCh <- struct{}{}
 			}
@@ -3614,39 +3617,38 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(mode, protocol, appPort)
-
 	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 }
 
 func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *Config {
-	return NewRuntimeConfig(
-		TestRuntimeConfigID,
-		[]string{"10.10.10.12"},
-		"10.10.10.11",
-		cors.DefaultAllowedOrigins,
-		"globalConfig",
-		"",
-		protocol,
-		string(mode),
-		DefaultDaprHTTPPort,
-		0,
-		DefaultDaprAPIGRPCPort,
-		[]string{DefaultAPIListenAddress},
-		nil,
-		appPort,
-		DefaultProfilePort,
-		false,
-		-1,
-		false,
-		"",
-		false,
-		4,
-		"",
-		4,
-		false,
-		time.Second,
-		true,
-		false)
+	return NewRuntimeConfig(NewRuntimeConfigOpts{
+		ID:                           TestRuntimeConfigID,
+		PlacementAddresses:           []string{"10.10.10.12"},
+		controlPlaneAddress:          "10.10.10.11",
+		AllowedOrigins:               cors.DefaultAllowedOrigins,
+		GlobalConfig:                 "globalConfig",
+		ComponentsPath:               "",
+		AppProtocol:                  protocol,
+		Mode:                         string(mode),
+		HTTPPort:                     DefaultDaprHTTPPort,
+		InternalGRPCPort:             0,
+		APIGRPCPort:                  DefaultDaprAPIGRPCPort,
+		APIListenAddresses:           []string{DefaultAPIListenAddress},
+		PublicPort:                   nil,
+		AppPort:                      appPort,
+		ProfilePort:                  DefaultProfilePort,
+		EnableProfiling:              false,
+		MaxConcurrency:               -1,
+		MTLSEnabled:                  false,
+		SentryAddress:                "",
+		AppSSL:                       false,
+		MaxRequestBodySize:           4,
+		UnixDomainSocket:             "",
+		ReadBufferSize:               4,
+		GracefulShutdownDuration:     time.Second,
+		EnableAPILogging:             true,
+		DisableBuiltinK8sSecretStore: false,
+	})
 }
 
 func TestGracefulShutdown(t *testing.T) {
