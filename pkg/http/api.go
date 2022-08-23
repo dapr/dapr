@@ -1823,7 +1823,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
-	temp, _ := a.extendedMetadata.MetadataGet()
+	extendedMetadata, _ := a.extendedMetadata.MetadataGet()
 	activeActorsCount := []actors.ActiveActorsCount{}
 	if a.actor != nil {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
@@ -1844,7 +1844,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	mtd := metadata{
 		ID:                   a.id,
 		ActiveActorsCount:    activeActorsCount,
-		Extended:             temp,
+		Extended:             extendedMetadata,
 		RegisteredComponents: registeredComponents,
 	}
 
