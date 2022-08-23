@@ -61,10 +61,12 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
+	mdata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+
 	"github.com/dapr/kit/logger"
 
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -425,7 +427,7 @@ func TestDoProcessComponent(t *testing.T) {
 			}),
 		)
 		expectedMetadata := pubsub.Metadata{
-			Properties: getFakeProperties(),
+			Base: mdata.Base{Properties: getFakeProperties()},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
@@ -719,12 +721,12 @@ func TestInitState(t *testing.T) {
 			}),
 		)
 
-		expectedMetadata := state.Metadata{
+		expectedMetadata := state.Metadata{Base: mdata.Base{
 			Properties: map[string]string{
 				actorStateStore:        "true",
 				"primaryEncryptionKey": primaryKey,
 			},
-		}
+		}}
 
 		mockStateStore.On("Init", expectedMetadata).Return(e)
 
@@ -792,7 +794,7 @@ func TestInitNameResolution(t *testing.T) {
 			}),
 		)
 
-		expectedMetadata := nameresolution.Metadata{
+		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
 			Properties: map[string]string{
 				nameresolution.DaprHTTPPort:        strconv.Itoa(rt.runtimeConfig.HTTPPort),
 				nameresolution.DaprPort:            strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
@@ -803,7 +805,7 @@ func TestInitNameResolution(t *testing.T) {
 				nameresolution.MDNSInstanceAddress: rt.hostAddress,
 				nameresolution.MDNSInstancePort:    strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
 			},
-		}
+		}}
 
 		mockResolver.On("Init", expectedMetadata).Return(e)
 
@@ -1277,7 +1279,7 @@ func TestInitPubSub(t *testing.T) {
 		)
 
 		expectedMetadata := pubsub.Metadata{
-			Properties: getFakeProperties(),
+			Base: mdata.Base{Properties: getFakeProperties()},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(nil)
