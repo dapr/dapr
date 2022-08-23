@@ -159,7 +159,7 @@ func (d *directMessaging) invokeWithRetry(
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
-		if d.resiliency.PolicyDefined(app.id, resiliency.Endpoint) == nil {
+		if d.resiliency.GetPolicy(app.id, resiliency.Endpoint) == nil {
 			retriesExhaustedPath := false // Used to track final error state.
 			nullifyResponsePath := false  // Used to track final response state.
 			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
