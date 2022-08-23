@@ -56,17 +56,15 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -85,10 +83,12 @@ import (
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -110,15 +110,15 @@ const (
 type ComponentCategory string
 
 const (
-	bindingsComponent               ComponentCategory = "bindings"
-	pubsubComponent                 ComponentCategory = "pubsub"
-	secretStoreComponent            ComponentCategory = "secretstores"
-	stateComponent                  ComponentCategory = "state"
-	middlewareComponent             ComponentCategory = "middleware"
-	configurationComponent          ComponentCategory = "configuration"
-	lockComponent                   ComponentCategory = "lock"
-	defaultComponentInitTimeout                       = time.Second * 5
-	defaultGracefulShutdownDuration                   = time.Second * 5
+	bindingsComponent      ComponentCategory = "bindings"
+	pubsubComponent        ComponentCategory = "pubsub"
+	secretStoreComponent   ComponentCategory = "secretstores"
+	stateComponent         ComponentCategory = "state"
+	middlewareComponent    ComponentCategory = "middleware"
+	configurationComponent ComponentCategory = "configuration"
+	lockComponent          ComponentCategory = "lock"
+
+	defaultComponentInitTimeout = time.Second * 5
 )
 
 var componentCategoriesNeedProcess = []ComponentCategory{
@@ -195,6 +195,7 @@ type DaprRuntime struct {
 	shutdownC              chan error
 	apiClosers             []io.Closer
 	componentAuthorizers   []ComponentAuthorizer
+	appHealth              *apphealth.AppHealth
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -557,12 +558,41 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		}
 	}
 
-	a.startSubscriptions()
-	err = a.startReadingFromBindings()
-	if err != nil {
-		log.Warnf("failed to read from bindings: %s ", err)
+	if a.runtimeConfig.AppHealthCheck != nil && a.appChannel != nil {
+		a.appHealth = apphealth.NewAppHealth(a.runtimeConfig.AppHealthCheck, a.appChannel.HealthProbe)
+		a.appHealth.OnHealthChange(a.appHealthChanged)
+		a.appHealth.StartProbes(a.ctx)
+
+		// Set the appHealth object in the channel so it's aware of the app's health status
+		a.appChannel.SetAppHealth(a.appHealth)
+
+		// Enqueue a probe right away
+		// This will also start the input components once the app is healthy
+		a.appHealth.Enqueue()
+	} else {
+		// If there's no health check, mark the app as healthy right away so subscriptions can start
+		a.appHealthChanged(apphealth.AppStatusHealthy)
 	}
+
 	return nil
+}
+
+// Sets the status of the app to healthy or un-healthy
+// Callback for apphealth when the detected status changed
+func (a *DaprRuntime) appHealthChanged(status uint8) {
+	switch status {
+	case apphealth.AppStatusHealthy:
+		// Start subscribing to topics and reading from input bindings
+		a.startSubscriptions()
+		err := a.startReadingFromBindings()
+		if err != nil {
+			log.Warnf("failed to read from bindings: %s ", err)
+		}
+	case apphealth.AppStatusUnhealthy:
+		// Stop topic subscriptions and input bindings
+		a.stopSubscriptions()
+		a.stopReadingFromBindings()
+	}
 }
 
 func (a *DaprRuntime) populateSecretsConfiguration() {
@@ -2348,9 +2378,9 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 
-	log.Infof("dapr shutting down.")
+	log.Info("dapr shutting down.")
 
-	log.Infof("Stopping PubSub subscribers and input bindings")
+	log.Info("Stopping PubSub subscribers and input bindings")
 	a.stopSubscriptions()
 	a.stopReadingFromBindings()
 	a.cancel()
@@ -2503,32 +2533,39 @@ func (a *DaprRuntime) loadAppConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) createAppChannel() error {
-	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error)
-
-		switch a.runtimeConfig.ApplicationProtocol {
-		case GRPCProtocol:
-			channelCreatorFn = a.grpc.CreateLocalChannel
-		case HTTPProtocol:
-			channelCreatorFn = httpChannel.CreateLocalChannel
-		default:
-			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
-		}
-
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
-		if err != nil {
-			log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
-		}
-
-		// TODO: Remove once feature is finalized
-		if a.runtimeConfig.ApplicationProtocol == HTTPProtocol && !config.GetNoDefaultContentType() {
-			log.Warn("[DEPRECATION NOTICE] Adding a default content type to incoming service invocation requests is deprecated and will be removed in the future. See https://docs.dapr.io/operations/support/support-preview-features/ for more details. You can opt into the new behavior today by setting the configuration option `ServiceInvocation.NoDefaultContentType` to true.")
-		}
-		a.appChannel = ch
-	} else {
-		log.Warn("app channel is not initialized. did you make sure to configure an app-port?")
+func (a *DaprRuntime) createAppChannel() (err error) {
+	if a.runtimeConfig.ApplicationPort == 0 {
+		log.Warn("App channel is not initialized. Did you configure an app-port?")
+		return nil
 	}
+
+	var ch channel.AppChannel
+	switch a.runtimeConfig.ApplicationProtocol {
+	case GRPCProtocol:
+		ch, err = a.grpc.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		if err != nil {
+			return err
+		}
+	case HTTPProtocol:
+		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		if err != nil {
+			return err
+		}
+		ch.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
+	default:
+		return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
+	}
+
+	if a.runtimeConfig.MaxConcurrency > 0 {
+		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+	}
+
+	// TODO: Remove once feature is finalized
+	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol && !config.GetNoDefaultContentType() {
+		log.Warn("[DEPRECATION NOTICE] Adding a default content type to incoming service invocation requests is deprecated and will be removed in the future. See https://docs.dapr.io/operations/support/support-preview-features/ for more details. You can opt into the new behavior today by setting the configuration option `ServiceInvocation.NoDefaultContentType` to true.")
+	}
+
+	a.appChannel = ch
 
 	return nil
 }
