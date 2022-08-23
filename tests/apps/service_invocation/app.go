@@ -1211,7 +1211,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 		if isHTTP {
 			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewReader(jsonBody))
 			result.CallSuccessful = !((resp != nil && resp.StatusCode != 200) || err != nil)
-			if err != nil {
+			if resp != nil {
 				// Drain before closing
 				_, _ = io.Copy(io.Discard, resp.Body)
 				resp.Body.Close()
