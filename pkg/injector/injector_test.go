@@ -35,10 +35,6 @@ import (
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
 )
 
-const (
-	appPort = "5000"
-)
-
 func TestConfigCorrectValues(t *testing.T) {
 	i := NewInjector(nil, Config{
 		TLSCertFile:            "a",
