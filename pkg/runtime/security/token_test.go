@@ -43,9 +43,9 @@ func TestAPIToken(t *testing.T) {
 
 	t.Run("delays after failed auth", func(t *testing.T) {
 		token := "123456"
-		delay := 500
+		delay := 500 * time.Millisecond
 		apitoken := &APIToken{
-			DelayOnFailed: time.Duration(delay) * time.Millisecond,
+			DelayOnFailed: delay,
 		}
 		apitoken.InitWithToken(token)
 
@@ -72,9 +72,9 @@ func TestAPIToken(t *testing.T) {
 			elapsed := time.Since(start).Milliseconds()
 			assert.Equal(t, test.shouldOk, res)
 			if test.shouldDelay {
-				assert.GreaterOrEqual(t, elapsed, int64(delay))
+				assert.GreaterOrEqual(t, elapsed, delay.Milliseconds())
 			} else {
-				assert.Less(t, elapsed, int64(delay-100))
+				assert.Less(t, elapsed, int64(delay.Milliseconds()-100))
 			}
 		}
 	})

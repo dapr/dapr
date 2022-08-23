@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,8 +19,8 @@ const (
 
 var excludedRoutes = []string{"/healthz"}
 
-// Default delay on requests after a failed auth, in ms.
-const DefaultDelayOnFailed = 2000
+// Default delay on requests after a failed auth.
+const DefaultDelayOnFailed = 800 * time.Millisecond
 
 // APIToken manages authentication via a shared API token from an environment variable.
 type APIToken struct {
@@ -28,15 +28,15 @@ type APIToken struct {
 	DelayOnFailed time.Duration
 
 	token             []byte
-	lastAttemptFailed bool
-	mu                sync.Mutex
+	lastAttemptFailed *atomic.Bool
 }
 
 // Init the object, reading from the environment.
 func (a *APIToken) Init() {
 	a.token = []byte(os.Getenv(APITokenEnvVar))
+	a.lastAttemptFailed = &atomic.Bool{}
 	if a.DelayOnFailed == 0 {
-		a.DelayOnFailed = time.Duration(DefaultDelayOnFailed) * time.Millisecond
+		a.DelayOnFailed = DefaultDelayOnFailed
 	}
 }
 
@@ -44,8 +44,9 @@ func (a *APIToken) Init() {
 // This is mostly used for testing.
 func (a *APIToken) InitWithToken(val string) {
 	a.token = []byte(val)
+	a.lastAttemptFailed = &atomic.Bool{}
 	if a.DelayOnFailed == 0 {
-		a.DelayOnFailed = time.Duration(DefaultDelayOnFailed) * time.Millisecond
+		a.DelayOnFailed = DefaultDelayOnFailed
 	}
 }
 
@@ -57,15 +58,12 @@ func (a *APIToken) HasAPIToken() bool {
 // CheckAPIToken returns true if the passed API token matches the one configured for Dapr through an environment variable.
 // Note that if the previous auth attempt failed (from anyone), this adds a delay before responding, to slow down attackers.
 func (a *APIToken) CheckAPIToken(token []byte) bool {
-	a.mu.Lock()
-	if a.lastAttemptFailed {
-		// Slow down attackers if the previous attempt failed
+	ok := bytes.Compare(a.token, token) == 0
+	// Slow down attackers if the previous attempt failed
+	if a.lastAttemptFailed.Swap(!ok) {
 		time.Sleep(a.DelayOnFailed)
 	}
-	res := bytes.Compare(a.token, token) == 0
-	a.lastAttemptFailed = !res
-	a.mu.Unlock()
-	return res
+	return ok
 }
 
 // GetAppToken returns the value of the app api token from an environment variable.
