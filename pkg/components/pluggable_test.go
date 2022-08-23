@@ -16,6 +16,7 @@ package components
 import (
 	"context"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -37,35 +38,45 @@ func TestPluggableConnect(t *testing.T) {
 		Type:    fakeType,
 		Version: fakeVersion,
 	}
-	t.Run("grpc connection should be idle when process is listening to the socket", func(t *testing.T) {
+	t.Run("grpc connection should be idle when the process is listening to the socket", func(t *testing.T) {
 		conn, err := fakePluggable.Connect(fakeComponentName)
 		assert.Nil(t, err)
 		assert.Equal(t, connectivity.Idle, conn.GetState())
 		conn.Close()
 	})
 
-	t.Run("grpc connection should be ready when socket is being listen", func(t *testing.T) {
-		var waitForConnection, waitForListener sync.WaitGroup
-		waitForConnection.Add(1)
-		waitForListener.Add(1)
+	t.Run("grpc connection should be ready when socket is listening", func(t *testing.T) {
+		defer os.Clearenv()
+		os.Setenv(daprSocketFolderEnvVar, "/tmp")
+
+		var grpcConnectionGroup, netUnixSocketListenGroup sync.WaitGroup
+		grpcConnectionGroup.Add(1)
+		netUnixSocketListenGroup.Add(1)
 		go func() {
 			socket := fakePluggable.socketPathFor(fakeComponentName)
 			listener, err := net.Listen("unix", socket)
 			assert.Nil(t, err)
-			waitForConnection.Wait()
+			grpcConnectionGroup.Wait()
 			if listener != nil {
 				listener.Close()
 			}
-			waitForListener.Done()
+			netUnixSocketListenGroup.Done()
 		}()
 		conn, err := fakePluggable.Connect(fakeComponentName)
 		assert.Nil(t, err)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		assert.True(t, conn.WaitForStateChange(ctx, connectivity.Idle))
-		assert.Equal(t, connectivity.Ready, conn.GetState())
-		waitForConnection.Done()
-		waitForListener.Wait()
+		notAcceptedStatus := []connectivity.State{
+			connectivity.TransientFailure,
+			connectivity.Idle,
+			connectivity.Shutdown,
+		}
+
+		assert.NotContains(t, notAcceptedStatus, conn.GetState())
+
+		grpcConnectionGroup.Done()
+		netUnixSocketListenGroup.Wait()
 		conn.Close()
 	})
 }

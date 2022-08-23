@@ -27,3 +27,16 @@ const (
 	Lock           Type = "lock"
 	NameResolution Type = "nameresolution"
 )
+
+// WellKnownTypes is used as a handy way to iterate over all possible component type.
+var WellKnownTypes = [9]Type{
+	State,
+	PubSub,
+	InputBinding,
+	OutputBinding,
+	HTTPMiddleware,
+	Configuration,
+	Secret,
+	Lock,
+	NameResolution,
+}
