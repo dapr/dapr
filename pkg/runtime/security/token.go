@@ -1,7 +1,7 @@
 package security
 
 import (
-	"crypto/subtle"
+	"bytes"
 	"os"
 	"strings"
 	"sync"
@@ -62,7 +62,7 @@ func (a *APIToken) CheckAPIToken(token []byte) bool {
 		// Slow down attackers if the previous attempt failed
 		time.Sleep(a.DelayOnFailed)
 	}
-	res := subtle.ConstantTimeCompare(a.token, token) == 1
+	res := bytes.Compare(a.token, token) == 0
 	a.lastAttemptFailed = !res
 	a.mu.Unlock()
 	return res
