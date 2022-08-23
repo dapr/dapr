@@ -369,7 +369,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if a.isResiliencyEnabled {
-		if a.resiliency.PolicyDefined(req.Actor().ActorType, resiliency.Actor) == nil {
+		if a.resiliency.GetPolicy(req.Actor().ActorType, resiliency.Actor) == nil {
 			retriesExhaustedPath := false // Used to track final error state.
 			nullifyResponsePath := false  // Used to track final response state.
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
@@ -1374,7 +1374,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutbound) == nil {
+		if a.resiliency.GetPolicy(a.storeName, resiliency.ComponentOutbound) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(context.Background(), resiliency.BuiltInActorReminderRetries)
 		} else {
@@ -1725,7 +1725,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutbound) == nil {
+		if a.resiliency.GetPolicy(a.storeName, resiliency.ComponentOutbound) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {
@@ -1890,7 +1890,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutbound) == nil {
+		if a.resiliency.GetPolicy(a.storeName, resiliency.ComponentOutbound) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {
