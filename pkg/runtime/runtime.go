@@ -889,22 +889,20 @@ func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) 
 }
 
 func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
-	a.directMessaging = messaging.NewDirectMessaging(
-		a.runtimeConfig.ID,
-		a.namespace,
-		a.runtimeConfig.InternalGRPCPort,
-		a.runtimeConfig.Mode,
-		a.appChannel,
-		a.grpc.GetGRPCConnection,
-		resolver,
-		a.globalConfig.Spec.TracingSpec,
-		a.runtimeConfig.MaxRequestBodySize,
-		a.proxy,
-		a.runtimeConfig.ReadBufferSize,
-		a.runtimeConfig.StreamRequestBody,
-		a.resiliency,
-		config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency),
-	)
+	a.directMessaging = messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
+		AppID:               a.runtimeConfig.ID,
+		Namespace:           a.namespace,
+		Port:                a.runtimeConfig.InternalGRPCPort,
+		Mode:                a.runtimeConfig.Mode,
+		AppChannel:          a.appChannel,
+		ClientConnFn:        a.grpc.GetGRPCConnection,
+		Resolver:            resolver,
+		MaxRequestBodySize:  a.runtimeConfig.MaxRequestBodySize,
+		Proxy:               a.proxy,
+		ReadBufferSize:      a.runtimeConfig.ReadBufferSize,
+		Resiliency:          a.resiliency,
+		IsResiliencyEnabled: config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency),
+	})
 }
 
 func (a *DaprRuntime) initProxy() {
@@ -1260,24 +1258,30 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.ShutdownWithWait,
 		a.getComponentsCapabilitesMap,
 	)
-	serverConf := http.NewServerConfig(
-		a.runtimeConfig.ID,
-		a.hostAddress,
-		port,
-		a.runtimeConfig.APIListenAddresses,
-		publicPort,
-		profilePort,
-		allowedOrigins,
-		a.runtimeConfig.EnableProfiling,
-		a.runtimeConfig.MaxRequestBodySize,
-		a.runtimeConfig.UnixDomainSocket,
-		a.runtimeConfig.ReadBufferSize,
-		a.runtimeConfig.StreamRequestBody,
-		a.runtimeConfig.EnableAPILogging,
-	)
 
-	server := http.NewServer(a.daprHTTPAPI,
-		serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
+	serverConf := http.ServerConfig{
+		AppID:              a.runtimeConfig.ID,
+		HostAddress:        a.hostAddress,
+		Port:               port,
+		APIListenAddresses: a.runtimeConfig.APIListenAddresses,
+		PublicPort:         publicPort,
+		ProfilePort:        profilePort,
+		AllowedOrigins:     allowedOrigins,
+		EnableProfiling:    a.runtimeConfig.EnableProfiling,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
+	}
+
+	server := http.NewServer(http.NewServerOpts{
+		API:         a.daprHTTPAPI,
+		Config:      serverConf,
+		TracingSpec: a.globalConfig.Spec.TracingSpec,
+		MetricSpec:  a.globalConfig.Spec.MetricSpec,
+		Pipeline:    pipeline,
+		APISpec:     a.globalConfig.Spec.APISpec,
+	})
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}

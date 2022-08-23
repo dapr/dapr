@@ -78,7 +78,6 @@ type Config struct {
 	MaxRequestBodySize           int
 	UnixDomainSocket             string
 	ReadBufferSize               int
-	StreamRequestBody            bool
 	GracefulShutdownDuration     time.Duration
 	EnableAPILogging             bool
 	DisableBuiltinK8sSecretStore bool
@@ -111,7 +110,6 @@ type NewRuntimeConfigOpts struct {
 	MaxRequestBodySize           int
 	UnixDomainSocket             string
 	ReadBufferSize               int
-	StreamRequestBody            bool
 	GracefulShutdownDuration     time.Duration
 	EnableAPILogging             bool
 	DisableBuiltinK8sSecretStore bool
@@ -162,7 +160,6 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		MaxRequestBodySize:           opts.MaxRequestBodySize,
 		UnixDomainSocket:             opts.UnixDomainSocket,
 		ReadBufferSize:               opts.ReadBufferSize,
-		StreamRequestBody:            opts.StreamRequestBody,
 		GracefulShutdownDuration:     opts.GracefulShutdownDuration,
 		EnableAPILogging:             opts.EnableAPILogging,
 		DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
