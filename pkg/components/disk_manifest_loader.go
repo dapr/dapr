@@ -28,17 +28,17 @@ import (
 const yamlSeparator = "\n---"
 
 // manifestLoader loads a specific manifest kind from a folder.
-type DiskManifestLoader[T any] struct {
+type DiskManifestLoader[T kubernetesManifest] struct {
 	zv   func() T
 	kind string
 	path string
 }
 
 // NewDiskManifestLoader creates a new manifest loader for the given path and kind.
-func NewDiskManifestLoader[T any](path, kind string, zeroValue func() T) DiskManifestLoader[T] {
+func NewDiskManifestLoader[T kubernetesManifest](path string, zeroValue func() T) DiskManifestLoader[T] {
 	return DiskManifestLoader[T]{
 		path: path,
-		kind: kind,
+		kind: zeroValue().Kind(),
 		zv:   zeroValue,
 	}
 }

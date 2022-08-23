@@ -20,7 +20,7 @@ import (
 )
 
 func TestDiskManifestLoaderDecodeValidYaml(t *testing.T) {
-	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
+	request := NewDiskManifestLoader("test_component_path", newComponent)
 
 	yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -56,7 +56,7 @@ spec:
 }
 
 func TestDiskManifestLoaderDecodeInvalidComponent(t *testing.T) {
-	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
+	request := NewDiskManifestLoader("test_component_path", newComponent)
 
 	yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -84,7 +84,7 @@ spec:
 }
 
 func TestDiskManifestLoaderDecodeUnsuspectingFile(t *testing.T) {
-	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
+	request := NewDiskManifestLoader("test_component_path", newComponent)
 
 	components, errs := request.decodeYaml([]byte("hey there"))
 	assert.Len(t, components, 0)
@@ -92,7 +92,7 @@ func TestDiskManifestLoaderDecodeUnsuspectingFile(t *testing.T) {
 }
 
 func TestStandaloneDecodeInvalidYaml(t *testing.T) {
-	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
+	request := NewDiskManifestLoader("test_component_path", newComponent)
 
 	yaml := `
 INVALID_YAML_HERE
@@ -106,7 +106,7 @@ name: statestore`
 }
 
 func TestDiskManifestLoaderDecodeValidMultiYaml(t *testing.T) {
-	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
+	request := NewDiskManifestLoader("test_component_path", newComponent)
 
 	yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -150,7 +150,7 @@ spec:
 }
 
 func TestDiskManifestLoaderDecodeInValidDocInMultiYaml(t *testing.T) {
-	request := NewDiskManifestLoader("test_component_path", componentKind, newComponent)
+	request := NewDiskManifestLoader("test_component_path", newComponent)
 
 	yaml := `
 apiVersion: dapr.io/v1alpha1

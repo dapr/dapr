@@ -23,7 +23,7 @@ import (
 
 // Pluggable represents a pluggable component specification.
 type Pluggable struct {
-	// Name is the pluggable component name
+	// Name is the pluggable component name.
 	Name string
 	// Type is the component type.
 	Type Type

@@ -13,8 +13,12 @@ limitations under the License.
 
 package components
 
-// ManifestLoader loads kubernetes manifests.
-type ManifestLoader[T any] interface {
+type kubernetesManifest interface {
+	Kind() string
+}
+
+// ManifestLoader loads manifest-like files.
+type ManifestLoader[T kubernetesManifest] interface {
 	// Load loads all manifests.
 	Load() ([]T, error)
 }

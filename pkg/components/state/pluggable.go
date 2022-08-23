@@ -24,6 +24,7 @@ import (
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -31,6 +32,7 @@ import (
 type grpcStateStore struct {
 	st.Store
 	components.Pluggable
+	conn     *grpc.ClientConn
 	client   proto.StateStoreClient
 	features []st.Feature
 	context  context.Context
@@ -38,10 +40,11 @@ type grpcStateStore struct {
 
 func (ss *grpcStateStore) Init(metadata st.Metadata) error {
 	// TODO Receive the component name from metadata.
-	grpcConn, err := ss.Connect("")
+	grpcConn, err := ss.Connect("place-holder")
 	if err != nil {
 		return err
 	}
+	ss.conn = grpcConn
 
 	ss.client = proto.NewStateStoreClient(grpcConn)
 
@@ -122,7 +125,7 @@ func (ss *grpcStateStore) Ping() error {
 }
 
 func (ss *grpcStateStore) Close() error {
-	return nil
+	return ss.conn.Close()
 }
 
 func (ss *grpcStateStore) BulkDelete(_ []st.DeleteRequest) error {

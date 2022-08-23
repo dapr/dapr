@@ -18,9 +18,6 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 )
 
-// ManifestKind is the kind of PluggableComponent manifest.
-const ManifestKind = "PluggableComponent"
-
 // mapComponents maps from pluggablecomponent manifest to pluggable component obj.
 func mapComponents(comps []componentsV1alpha1.PluggableComponent) []components.Pluggable {
 	pluggableComponents := make([]components.Pluggable, len(comps))
@@ -36,7 +33,7 @@ func mapComponents(comps []componentsV1alpha1.PluggableComponent) []components.P
 
 // newFromPath creates a disk manifest loader from the given path.
 func newFromPath(pluggableComponentsPath string) components.ManifestLoader[componentsV1alpha1.PluggableComponent] {
-	return components.NewDiskManifestLoader(pluggableComponentsPath, ManifestKind, func() componentsV1alpha1.PluggableComponent {
+	return components.NewDiskManifestLoader(pluggableComponentsPath, func() componentsV1alpha1.PluggableComponent {
 		var comp componentsV1alpha1.PluggableComponent
 		comp.Spec = componentsV1alpha1.PluggableComponentSpec{}
 		return comp

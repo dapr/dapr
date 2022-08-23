@@ -18,10 +18,6 @@ import (
 	config "github.com/dapr/dapr/pkg/config/modes"
 )
 
-const (
-	componentKind = "Component"
-)
-
 // StandaloneComponents loads components in a standalone mode environment.
 type StandaloneComponents struct {
 	componentsManifestLoader ManifestLoader[componentsV1alpha1.Component]
@@ -37,7 +33,7 @@ func newComponent() componentsV1alpha1.Component {
 // NewStandaloneComponents returns a new standalone loader.
 func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneComponents {
 	return &StandaloneComponents{
-		componentsManifestLoader: NewDiskManifestLoader(configuration.ComponentsPath, componentKind, newComponent),
+		componentsManifestLoader: NewDiskManifestLoader(configuration.ComponentsPath, newComponent),
 	}
 }
 

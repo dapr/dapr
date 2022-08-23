@@ -37,6 +37,11 @@ type Component struct {
 	Scopes []string `json:"scopes,omitempty"`
 }
 
+// Kind returns the component kind.
+func (c Component) Kind() string {
+	return "Component"
+}
+
 // +genclient
 // +genclient:noStatus
 // +kubebuilder:object:root=true
@@ -49,6 +54,11 @@ type PluggableComponent struct {
 	// +optional
 	Scopes []string               `json:"scopes,omitempty"`
 	Spec   PluggableComponentSpec `json:"spec,omitempty"`
+}
+
+// Kind returns the component kind.
+func (c PluggableComponent) Kind() string {
+	return "PluggableComponent"
 }
 
 // PluggableComponentSpec is the spec for a pluggable component.
