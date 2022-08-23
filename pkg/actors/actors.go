@@ -369,7 +369,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if a.isResiliencyEnabled {
-		if !a.resiliency.PolicyDefined(req.Actor().ActorType, resiliency.Actor) {
+		if a.resiliency.PolicyDefined(req.Actor().ActorType, resiliency.Actor) == nil {
 			retriesExhaustedPath := false // Used to track final error state.
 			nullifyResponsePath := false  // Used to track final response state.
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
@@ -1374,7 +1374,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if !a.resiliency.PolicyDefined(a.storeName, resiliency.Component) {
+		if a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutbound) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(context.Background(), resiliency.BuiltInActorReminderRetries)
 		} else {
@@ -1725,7 +1725,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if !a.resiliency.PolicyDefined(a.storeName, resiliency.Component) {
+		if a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutbound) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {
@@ -1822,7 +1822,11 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	})
 }
 
+// Deprecated: Currently RenameReminder renames by deleting-then-inserting-again.
+// This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder
 func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
+	log.Warn("[DEPRECATION NOTICE] Currently RenameReminder renames by deleting-then-inserting-again. This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder")
+
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -1886,7 +1890,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if !a.resiliency.PolicyDefined(a.storeName, resiliency.Component) {
+		if a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutbound) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {
