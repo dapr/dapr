@@ -133,22 +133,24 @@ const (
 
 // sidecarContainerConfig contains the configuration for the sidecar container.
 type sidecarContainerConfig struct {
-	appID                   string
-	annotations             map[string]string
-	certChain               string
-	certKey                 string
-	controlPlaneAddress     string
-	daprSidecarImage        string
-	identity                string
-	imagePullPolicy         string
-	mtlsEnabled             bool
-	namespace               string
-	placementServiceAddress string
-	sentryAddress           string
-	socketVolumeMount       *corev1.VolumeMount
-	tokenVolumeMount        *corev1.VolumeMount
-	trustAnchors            string
-	volumeMounts            []corev1.VolumeMount
+	appID                       string
+	annotations                 map[string]string
+	certChain                   string
+	certKey                     string
+	controlPlaneAddress         string
+	daprSidecarImage            string
+	identity                    string
+	ignoreEntrypointTolerations string
+	imagePullPolicy             string
+	mtlsEnabled                 bool
+	namespace                   string
+	placementServiceAddress     string
+	sentryAddress               string
+	socketVolumeMount           *corev1.VolumeMount
+	tokenVolumeMount            *corev1.VolumeMount
+	tolerations                 []corev1.Toleration
+	trustAnchors                string
+	volumeMounts                []corev1.VolumeMount
 }
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -196,22 +198,24 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	socketVolumeMount := appendUnixDomainSocketVolume(&pod)
 
 	cfg := sidecarContainerConfig{
-		appID:                   appID,
-		annotations:             pod.Annotations,
-		certChain:               certChain,
-		certKey:                 certKey,
-		controlPlaneAddress:     apiSvcAddress,
-		daprSidecarImage:        image,
-		identity:                fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName),
-		imagePullPolicy:         imagePullPolicy,
-		mtlsEnabled:             mTLSEnabled(daprClient),
-		namespace:               req.Namespace,
-		placementServiceAddress: placementAddress,
-		sentryAddress:           sentryAddress,
-		socketVolumeMount:       socketVolumeMount,
-		tokenVolumeMount:        getTokenVolumeMount(pod),
-		trustAnchors:            trustAnchors,
-		volumeMounts:            getVolumeMounts(pod),
+		appID:                       appID,
+		annotations:                 pod.Annotations,
+		certChain:                   certChain,
+		certKey:                     certKey,
+		controlPlaneAddress:         apiSvcAddress,
+		daprSidecarImage:            image,
+		identity:                    fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName),
+		ignoreEntrypointTolerations: i.config.IgnoreEntrypointTolerations,
+		imagePullPolicy:             imagePullPolicy,
+		mtlsEnabled:                 mTLSEnabled(daprClient),
+		namespace:                   req.Namespace,
+		placementServiceAddress:     placementAddress,
+		sentryAddress:               sentryAddress,
+		socketVolumeMount:           socketVolumeMount,
+		tokenVolumeMount:            getTokenVolumeMount(pod),
+		tolerations:                 pod.Spec.Tolerations,
+		trustAnchors:                trustAnchors,
+		volumeMounts:                getVolumeMounts(pod),
 	}
 	sidecarContainer, err := getSidecarContainer(cfg)
 	if err != nil {
@@ -844,6 +848,18 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 		},
 	}
 
+	// If the pod contains all the tolerations specified by the configuration,
+	// the Command and Args are passed as is. Otherwise, the Command is passed as a part of Args.
+	// This is to allow the Docker images to specify an ENTRYPOINT
+	// which is otherwise overridden by Command.
+	if podContainsTolerations(cfg.ignoreEntrypointTolerations, cfg.tolerations) {
+		c.Command = cmd
+		c.Args = args
+	} else {
+		c.Args = cmd
+		c.Args = append(c.Args, args...)
+	}
+
 	c.Env = append(c.Env, utils.ParseEnvString(cfg.annotations[daprEnvKey])...)
 
 	// This is a special case that requires administrator privileges in Windows containers
@@ -990,4 +1006,28 @@ func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
 	}
 
 	return volumeMounts
+}
+
+// podContainsTolerations returns true if the pod contains all the tolerations specified in tolerationsJSON.
+// If the JSON string is empty or contain an invalid JSON value, it returns false.
+func podContainsTolerations(tolerationsJSON string, podTolerations []corev1.Toleration) bool {
+	if tolerationsJSON == "" {
+		return false
+	}
+
+	// If the string contains an invalid value, return false.
+	ts := []corev1.Toleration{}
+	err := json.Unmarshal([]byte(tolerationsJSON), &ts)
+	if err != nil {
+		log.Warnf("couldn't unmarshal tolerationsJSON: %s", err)
+		return false
+	}
+
+	// If the pod contains all the tolerations specified, return true.
+	for _, t := range ts {
+		if !utils.Contains(podTolerations, t) {
+			return false
+		}
+	}
+	return true
 }

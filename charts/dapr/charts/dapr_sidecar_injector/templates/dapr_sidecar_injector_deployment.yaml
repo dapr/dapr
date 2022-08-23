@@ -129,6 +129,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+{{- if .Values.ignoreEntrypointTolerations }}
+        - name: IGNORE_ENTRYPOINT_TOLERATIONS
+          value: "{{ .Values.ignoreEntrypointTolerations }}"
+{{- end }}
         ports:
         - name: https
           containerPort: 4000

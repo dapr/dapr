@@ -574,6 +574,90 @@ func TestGetSideCarContainer(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("sidecar container should specify commands only when ignoreEntrypointTolerations match with the pod", func(t *testing.T) {
+		testCases := []struct {
+			name                        string
+			tolerations                 []corev1.Toleration
+			ignoreEntrypointTolerations string
+			explicitCommandSpecified    bool
+		}{
+			{
+				"no tolerations",
+				[]corev1.Toleration{},
+				"",
+				false,
+			},
+			{
+				"pod contains tolerations from ignoreEntrypointTolerations (single)",
+				[]corev1.Toleration{
+					{
+						Key:    "foo.com/bar",
+						Effect: "NoSchedule",
+					},
+				},
+				"[{\"key\":\"foo.com/bar\",\"Effect\":\"NoSchedule\"}]",
+				true,
+			},
+			{
+				"pod contains tolerations from ignoreEntrypointTolerations (multiple)",
+				[]corev1.Toleration{
+					{
+						Key:    "foo.com/bar",
+						Effect: "NoSchedule",
+					},
+					{
+						Key:    "foo.com/baz",
+						Effect: "NoSchedule",
+					},
+					{
+						Key:    "foo.com/qux",
+						Effect: "NoSchedule",
+					},
+				},
+				"[{\"key\":\"foo.com/bar\",\"Effect\":\"NoSchedule\"},{\"key\":\"foo.com/baz\",\"Effect\":\"NoSchedule\"}]",
+				true,
+			},
+			{
+				"pod only contains partial tolerations from ignoreEntrypointTolerations",
+				[]corev1.Toleration{
+					{
+						Key:    "foo.com/bar",
+						Effect: "NoSchedule",
+					},
+					{
+						Key:    "foo.com/qux",
+						Effect: "NoSchedule",
+					},
+				},
+				"[{\"key\":\"foo.com/bar\",\"Effect\":\"NoSchedule\"},{\"key\":\"foo.com/baz\",\"Effect\":\"NoSchedule\"}]",
+				false,
+			},
+			{
+				"pod contains no tolerations from ignoreEntrypointTolerations",
+				[]corev1.Toleration{},
+				"[{\"key\":\"foo.com/bar\",\"Effect\":\"NoSchedule\"}]",
+				false,
+			},
+		}
+		for _, tc := range testCases {
+			cfg := sidecarContainerConfig{
+				tolerations:                 tc.tolerations,
+				ignoreEntrypointTolerations: tc.ignoreEntrypointTolerations,
+			}
+			container, _ := getSidecarContainer(cfg)
+
+			t.Run(tc.name, func(t *testing.T) {
+				if tc.explicitCommandSpecified {
+					assert.True(t, len(container.Command) > 0, "Must contain a command")
+					assert.True(t, len(container.Args) > 0, "Must contain arguments")
+				} else {
+					assert.Len(t, container.Command, 0, "Must not contain a command")
+					assert.True(t, len(container.Args) > 0, "Must contain arguments")
+				}
+			})
+		}
+	})
 }
 
 //nolint:forbidigo
