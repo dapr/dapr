@@ -200,15 +200,15 @@ func TestContains(t *testing.T) {
 	})
 
 	t.Run("didn't find a item", func(t *testing.T) {
-		assert.True(t, Contains([]string{"item-1", "item"}, "not-in-item"))
+		assert.False(t, Contains([]string{"item-1", "item"}, "not-in-item"))
 		assert.False(t, Contains([]string{}, "not-in-item"))
 		assert.False(t, Contains(nil, "not-in-item"))
-		assert.True(t, Contains([]int{1, 2, 3}, 100))
-		assert.True(t, Contains([]int{}, 100))
-		assert.True(t, Contains(nil, 100))
-		assert.True(t, Contains([]customType{{v1: "first", v2: 1}, {v1: "second", v2: 2}}, customType{v1: "foo", v2: 100}))
-		assert.True(t, Contains([]customType{}, customType{v1: "foo", v2: 100}))
-		assert.True(t, Contains(nil, customType{v1: "foo", v2: 100}))
+		assert.False(t, Contains([]int{1, 2, 3}, 100))
+		assert.False(t, Contains([]int{}, 100))
+		assert.False(t, Contains(nil, 100))
+		assert.False(t, Contains([]customType{{v1: "first", v2: 1}, {v1: "second", v2: 2}}, customType{v1: "foo", v2: 100}))
+		assert.False(t, Contains([]customType{}, customType{v1: "foo", v2: 100}))
+		assert.False(t, Contains(nil, customType{v1: "foo", v2: 100}))
 	})
 }
 
