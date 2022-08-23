@@ -3755,16 +3755,15 @@ func (c fakeConfigurationStore) Ping() error {
 func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
 	if len(req.Keys) == 0 {
 		return &configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:     "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value:   "good-value1",
 					Version: "version1",
 					Metadata: map[string]string{
 						"metadata-key1": "metadata-value1",
 					},
-				}, {
-					Key:     "good-key2",
+				},
+				"good-key2": {
 					Value:   "good-value2",
 					Version: "version2",
 					Metadata: map[string]string{
@@ -3777,29 +3776,28 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 
 	if len(req.Keys) == 1 && req.Keys[0] == "good-key1" {
 		return &configuration.GetResponse{
-			Items: []*configuration.Item{{
-				Key:     "good-key1",
-				Value:   "good-value1",
-				Version: "version1",
-				Metadata: map[string]string{
-					"metadata-key1": "metadata-value1",
-				},
-			}},
-		}, nil
-	}
-
-	if len(req.Keys) == 2 && req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" {
-		return &configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:     "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value:   "good-value1",
 					Version: "version1",
 					Metadata: map[string]string{
 						"metadata-key1": "metadata-value1",
 					},
-				}, {
-					Key:     "good-key2",
+				},
+			},
+		}, nil
+	}
+
+	if len(req.Keys) == 2 && req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" {
+		return &configuration.GetResponse{
+			Items: map[string]*configuration.Item{
+				"good-key1": {
+					Value:   "good-value1",
+					Version: "version1",
+					Metadata: map[string]string{
+						"metadata-key1": "metadata-value1",
+					},
+				}, "good-key2": {
 					Value:   "good-value2",
 					Version: "version2",
 					Metadata: map[string]string{
