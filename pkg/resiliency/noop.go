@@ -71,6 +71,6 @@ func (*NoOp) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner {
 	}
 }
 
-func (*NoOp) PolicyDefined(target string, policyType PolicyType) bool {
-	return true
+func (*NoOp) PolicyDefined(target string, policyType PolicyType) *PolicyDescription {
+	return &PolicyDescription{}
 }

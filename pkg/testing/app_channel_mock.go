@@ -18,6 +18,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
@@ -42,4 +43,12 @@ func (f *FailingAppChannel) InvokeMethod(ctx context.Context, req *invokev1.Invo
 	}
 
 	return invokev1.NewInvokeMethodResponse(200, "Success", []*anypb.Any{}), nil
+}
+
+func (f *FailingAppChannel) HealthProbe(ctx context.Context) (bool, error) {
+	return true, nil
+}
+
+func (f *FailingAppChannel) SetAppHealth(ah *apphealth.AppHealth) {
+	// Do nothing
 }
