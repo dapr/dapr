@@ -74,7 +74,7 @@ func TestAPIToken(t *testing.T) {
 			if test.shouldDelay {
 				assert.GreaterOrEqual(t, elapsed, delay.Milliseconds())
 			} else {
-				assert.Less(t, elapsed, int64(delay.Milliseconds()-100))
+				assert.Less(t, elapsed, delay.Milliseconds()-100)
 			}
 		}
 	})
