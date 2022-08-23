@@ -109,6 +109,9 @@ service Dapr {
 
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
+
+  // Begin a distribute transaction
+  rpc DistributeTransactionBegin(BeginTransactionRequest) returns (BeginResponse) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -595,4 +598,13 @@ message UnlockResponse {
   }
 
   Status status = 1;
+}
+
+message BeginTransactionRequest {
+  int32 bunchTransactionNum = 1;
+}
+
+message BeginResponse {
+	string transactionID = 1;
+	repeated string bunchTransactionIDs = 2;
 }
