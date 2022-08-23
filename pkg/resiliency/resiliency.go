@@ -94,8 +94,8 @@ type (
 		ComponentInboundPolicy(ctx context.Context, name string) Runner
 		// BuiltInPolicy are used to replace existing retries in Dapr which may not bind specifically to one of the above categories.
 		BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner
-		// PolicyDefined returns a boolean stating if the given target has a policy.
-		PolicyDefined(target string, policyType PolicyType) *PolicyDescription
+		// GetPolicy returns the policy that applies to the target, or nil if there is none.
+		GetPolicy(target string, policyType PolicyType) *PolicyDescription
 	}
 
 	// Resiliency encapsulates configuration for timeouts, retries, and circuit breakers.
@@ -780,8 +780,8 @@ func (r *Resiliency) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) 
 	return Policy(ctx, r.log, stringName, t, r.retries[stringName], cb)
 }
 
-// Returns true if a target has a defined policy.
-func (r *Resiliency) PolicyDefined(target string, policyType PolicyType) *PolicyDescription {
+// GetPolicy returns the policy that applies to the target, or nil if there is none.
+func (r *Resiliency) GetPolicy(target string, policyType PolicyType) *PolicyDescription {
 	var (
 		policyName PolicyNames
 		exists     bool

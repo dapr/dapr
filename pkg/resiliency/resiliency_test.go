@@ -390,30 +390,30 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 	}
 	config := FromConfigurations(log, r)
 
-	assert.Nil(t, config.PolicyDefined("badApp", Endpoint))
-	assert.Nil(t, config.PolicyDefined("badActor", Actor))
-	assert.Nil(t, config.PolicyDefined("badComponent", ComponentOutbound))
-	assert.Nil(t, config.PolicyDefined("badComponent", ComponentInbound))
+	assert.Nil(t, config.GetPolicy("badApp", Endpoint))
+	assert.Nil(t, config.GetPolicy("badActor", Actor))
+	assert.Nil(t, config.GetPolicy("badComponent", ComponentOutbound))
+	assert.Nil(t, config.GetPolicy("badComponent", ComponentInbound))
 
-	endpointPolicy := config.PolicyDefined("definedApp", Endpoint)
+	endpointPolicy := config.GetPolicy("definedApp", Endpoint)
 	assert.NotNil(t, endpointPolicy)
 	assert.Equal(t, endpointPolicy.TimeoutPolicy, 2*time.Second)
 	assert.Equal(t, endpointPolicy.CircuitBreaker.MaxRequests, uint32(1))
 	assert.Nil(t, endpointPolicy.RetryPolicy)
 
-	actorPolicy := config.PolicyDefined("definedActor", Actor)
+	actorPolicy := config.GetPolicy("definedActor", Actor)
 	assert.NotNil(t, actorPolicy)
 	assert.Equal(t, actorPolicy.TimeoutPolicy, 2*time.Second)
 	assert.Nil(t, actorPolicy.CircuitBreaker)
 	assert.Nil(t, actorPolicy.RetryPolicy)
 
-	componentOutboundPolicy := config.PolicyDefined("definedComponent", ComponentOutbound)
+	componentOutboundPolicy := config.GetPolicy("definedComponent", ComponentOutbound)
 	assert.NotNil(t, componentOutboundPolicy)
 	assert.Equal(t, componentOutboundPolicy.TimeoutPolicy, 2*time.Second)
 	assert.Equal(t, componentOutboundPolicy.CircuitBreaker.MaxRequests, uint32(2))
 	assert.Equal(t, componentOutboundPolicy.RetryPolicy.MaxRetries, int64(3))
 
-	componentInboundPolicy := config.PolicyDefined("definedComponent", ComponentInbound)
+	componentInboundPolicy := config.GetPolicy("definedComponent", ComponentInbound)
 	assert.NotNil(t, componentInboundPolicy)
 	assert.Equal(t, componentInboundPolicy.TimeoutPolicy, 2*time.Second)
 	assert.Equal(t, componentInboundPolicy.CircuitBreaker.MaxRequests, uint32(1))
