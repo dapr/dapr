@@ -91,7 +91,7 @@ func TestDiskManifestLoaderDecodeUnsuspectingFile(t *testing.T) {
 	assert.Len(t, errs, 1)
 }
 
-func TestStandaloneDecodeInvalidYaml(t *testing.T) {
+func TesSDiskManifesLoadertDecodeInvalidYaml(t *testing.T) {
 	request := NewDiskManifestLoader("test_component_path", newComponent)
 
 	yaml := `

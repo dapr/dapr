@@ -211,18 +211,6 @@ func mapSetRequest(req *st.SetRequest) (*proto.SetRequest, error) {
 	}, nil
 }
 
-func mapGetRequest(req *st.GetRequest) *proto.GetRequest {
-	consistency, ok := v1.StateOptions_StateConsistency_value[req.Key]
-	if !ok {
-		consistency = int32(v1.StateOptions_CONSISTENCY_UNSPECIFIED)
-	}
-	return &proto.GetRequest{
-		Key:         req.Key,
-		Metadata:    req.Metadata,
-		Consistency: v1.StateOptions_StateConsistency(consistency),
-	}
-}
-
 func mapGetResponse(resp *proto.GetResponse) *st.GetResponse {
 	var etag *string
 	if resp.Etag != nil {
@@ -235,6 +223,20 @@ func mapGetResponse(resp *proto.GetResponse) *st.GetResponse {
 	}
 }
 
+//nolint:nosnakecase
+func mapGetRequest(req *st.GetRequest) *proto.GetRequest {
+	consistency, ok := v1.StateOptions_StateConsistency_value[req.Key]
+	if !ok {
+		consistency = int32(v1.StateOptions_CONSISTENCY_UNSPECIFIED)
+	}
+	return &proto.GetRequest{
+		Key:         req.Key,
+		Metadata:    req.Metadata,
+		Consistency: v1.StateOptions_StateConsistency(consistency),
+	}
+}
+
+//nolint:nosnakecase
 func getConsistency(value string) v1.StateOptions_StateConsistency {
 	consistency, ok := v1.StateOptions_StateConsistency_value[value]
 	if !ok {
@@ -243,6 +245,7 @@ func getConsistency(value string) v1.StateOptions_StateConsistency {
 	return v1.StateOptions_StateConsistency(consistency)
 }
 
+//nolint:nosnakecase
 func getConcurrency(value string) v1.StateOptions_StateConcurrency {
 	concurrency, ok := v1.StateOptions_StateConcurrency_value[value]
 	if !ok {

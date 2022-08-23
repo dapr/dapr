@@ -31,13 +31,20 @@ type Pluggable struct {
 	Version string
 }
 
-const defaultSocketFolder = "/var/run/dapr"
+const defaultSocketFolder = "/var/run"
+
+// socketPathFor returns a unique socket for the given component.
+// the socket path will be composed by the pluggable component, name, version and type plus the component name.
+func (p Pluggable) socketPathFor(componentName string) string {
+	return fmt.Sprintf("%s/dapr-%s.%s-%s-%s.sock", defaultSocketFolder, p.Type, p.Name, p.Version, componentName)
+}
 
 // Connect returns a grpc connection for the pluggable component.
-func (p Pluggable) Connect(componentName string) (*grpc.ClientConn, error) {
-	socket := fmt.Sprintf("unix://%s/%s.%s-%s-%s", defaultSocketFolder, p.Type, p.Name, p.Version, componentName)
-	if c, err := grpc.Dial(socket, grpc.WithTransportCredentials(insecure.NewCredentials())); err != nil {
-		return nil, errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", socket)
+func (p Pluggable) Connect(componentName string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	udsSocket := fmt.Sprintf("unix://%s", p.socketPathFor(componentName))
+	opts := append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if c, err := grpc.Dial(udsSocket, opts...); err != nil {
+		return nil, errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", udsSocket)
 	} else {
 		return c, nil
 	}
