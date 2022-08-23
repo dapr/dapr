@@ -1822,7 +1822,11 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	})
 }
 
+// Deprecated: Currently RenameReminder renames by deleting-then-inserting-again.
+// This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder
 func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
+	log.Warn("[DEPRECATION NOTICE] Currently RenameReminder renames by deleting-then-inserting-again. This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder")
+
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
