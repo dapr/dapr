@@ -16,7 +16,7 @@ package state
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 
 	st "github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/utils"
@@ -28,16 +28,28 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+var (
+	ErrNilSetValue = errors.New("an attempt to set a nil value was received, try to use Delete instead")
+	ErrRespNil     = errors.New("the response for GetRequest is nil")
+)
+
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
 type grpcStateStore struct {
-	st.Store
 	components.Pluggable
-	conn     *grpc.ClientConn
-	client   proto.StateStoreClient
+	// conn the gRPC connection
+	conn *grpc.ClientConn
+	// client the proto client to call the statestore.
+	client proto.StateStoreClient
+	// features the list of state store implemented features features.
 	features []st.Feature
-	context  context.Context
+	// context will be used to make blocking async calls.
+	context context.Context
+	// cancel the cancellation function for the inflight calls.
+	cancel context.CancelFunc
 }
 
+// Init initializes the grpc state passing out the metadata to the grpc component.
+// It also fetches and set the current components features.
 func (ss *grpcStateStore) Init(metadata st.Metadata) error {
 	// TODO Receive the component name from metadata.
 	grpcConn, err := ss.Connect("place-holder")
@@ -49,73 +61,59 @@ func (ss *grpcStateStore) Init(metadata st.Metadata) error {
 	ss.client = proto.NewStateStoreClient(grpcConn)
 
 	protoMetadata := &proto.MetadataRequest{
-		Properties: map[string]string{},
-	}
-	for k, v := range metadata.Properties {
-		protoMetadata.Properties[k] = v
+		Properties: metadata.Properties,
 	}
 
+	ss.context, ss.cancel = context.WithCancel(context.Background())
+
+	// TODO Static data could be retrieved in another way, a necessary discussion should start soon.
 	// we need to call the method here because features could return an error and the features interface doesn't support errors
-	featureResponse, err := ss.client.Features(context.TODO(), &emptypb.Empty{})
+	featureResponse, err := ss.client.Features(ss.context, &emptypb.Empty{})
 	if err != nil {
 		return err
 	}
 
-	ss.features = []st.Feature{}
-	for _, f := range featureResponse.Feature {
-		feature := st.Feature(f)
-		ss.features = append(ss.features, feature)
+	ss.features = make([]st.Feature, 0)
+	for idx, f := range featureResponse.Feature {
+		ss.features[idx] = st.Feature(f)
 	}
 
-	_, err = ss.client.Init(context.TODO(), protoMetadata)
+	_, err = ss.client.Init(ss.context, protoMetadata)
 	return err
 }
 
+// Features list all implemented features.
 func (ss *grpcStateStore) Features() []st.Feature {
 	return ss.features
 }
 
+// Delete performs a delete operation.
 func (ss *grpcStateStore) Delete(req *st.DeleteRequest) error {
-	_, err := ss.client.Delete(ss.context, &proto.DeleteRequest{
-		Key: req.Key,
-		Etag: &v1.Etag{
-			Value: *req.ETag,
-		},
-		Metadata: req.Metadata,
-		Options: &v1.StateOptions{
-			Concurrency: getConcurrency(req.Options.Concurrency),
-			Consistency: getConsistency(req.Options.Consistency),
-		},
-	})
+	_, err := ss.client.Delete(ss.context, toDeleteRequest(req))
 
 	return err
 }
 
+// Get performs a get on the state store.
 func (ss *grpcStateStore) Get(req *st.GetRequest) (*st.GetResponse, error) {
-	etag := ""
-	emptyResponse := &st.GetResponse{
-		ETag:     &etag,
-		Metadata: map[string]string{},
-		Data:     []byte{},
-	}
-
-	response, err := ss.client.Get(context.TODO(), mapGetRequest(req))
+	response, err := ss.client.Get(ss.context, toGetRequest(req))
 	if err != nil {
-		return emptyResponse, err
-	}
-	if response == nil {
-		return emptyResponse, fmt.Errorf("response is nil")
+		return nil, err
 	}
 
-	return mapGetResponse(response), nil
+	if response == nil {
+		return nil, ErrRespNil
+	}
+
+	return fromGetResponse(response), nil
 }
 
 func (ss *grpcStateStore) Set(req *st.SetRequest) error {
-	protoRequest, err := mapSetRequest(req)
+	protoRequest, err := toSetRequest(req)
 	if err != nil {
 		return err
 	}
-	_, err = ss.client.Set(context.TODO(), protoRequest)
+	_, err = ss.client.Set(ss.context, protoRequest)
 	return err
 }
 
@@ -125,38 +123,50 @@ func (ss *grpcStateStore) Ping() error {
 }
 
 func (ss *grpcStateStore) Close() error {
+	ss.cancel()
+
 	return ss.conn.Close()
 }
 
-func (ss *grpcStateStore) BulkDelete(_ []st.DeleteRequest) error {
-	return nil
+func (ss *grpcStateStore) BulkDelete(reqs []st.DeleteRequest) error {
+	protoRequests := make([]*proto.DeleteRequest, len(reqs))
+
+	for idx := range reqs {
+		protoRequests[idx] = toDeleteRequest(&reqs[idx])
+	}
+
+	bulkDeleteRequest := &proto.BulkDeleteRequest{
+		Items: protoRequests,
+	}
+
+	_, err := ss.client.BulkDelete(ss.context, bulkDeleteRequest)
+	return err
 }
 
 func (ss *grpcStateStore) BulkGet(req []st.GetRequest) (bool, []st.BulkGetResponse, error) {
 	protoRequests := make([]*proto.GetRequest, len(req))
 	for idx := range req {
-		protoRequests[idx] = mapGetRequest(&req[idx])
+		protoRequests[idx] = toGetRequest(&req[idx])
 	}
 
 	bulkGetRequest := &proto.BulkGetRequest{
 		Items: protoRequests,
 	}
 
-	bulkGetResponse, err := ss.client.BulkGet(context.TODO(), bulkGetRequest)
+	bulkGetResponse, err := ss.client.BulkGet(ss.context, bulkGetRequest)
 	if err != nil {
 		return false, nil, err
 	}
 
 	items := make([]st.BulkGetResponse, len(bulkGetResponse.Items))
 	for idx, resp := range bulkGetResponse.Items {
-		bulkGet := st.BulkGetResponse{
+		items[idx] = st.BulkGetResponse{
 			Key:      resp.GetKey(),
 			Data:     resp.GetData(),
-			ETag:     &resp.GetEtag().Value,
+			ETag:     fromETagResponse(resp.GetEtag()),
 			Metadata: resp.GetMetadata(),
 			Error:    resp.Error,
 		}
-		items[idx] = bulkGet
 	}
 	return bulkGetResponse.Got, items, nil
 }
@@ -164,20 +174,24 @@ func (ss *grpcStateStore) BulkGet(req []st.GetRequest) (bool, []st.BulkGetRespon
 func (ss *grpcStateStore) BulkSet(req []st.SetRequest) error {
 	requests := []*proto.SetRequest{}
 	for idx := range req {
-		protoRequest, err := mapSetRequest(&req[idx])
+		protoRequest, err := toSetRequest(&req[idx])
 		if err != nil {
 			return err
 		}
 		requests = append(requests, protoRequest)
 	}
 	var err error
-	_, err = ss.client.BulkSet(context.TODO(), &proto.BulkSetRequest{
+	_, err = ss.client.BulkSet(ss.context, &proto.BulkSetRequest{
 		Items: requests,
 	})
 	return err
 }
 
-func mapSetRequest(req *st.SetRequest) (*proto.SetRequest, error) {
+// mappers and helpers.
+func toSetRequest(req *st.SetRequest) (*proto.SetRequest, error) {
+	if req == nil {
+		return nil, nil
+	}
 	var dataBytes []byte
 	switch reqValue := req.Value.(type) {
 	case string:
@@ -186,58 +200,82 @@ func mapSetRequest(req *st.SetRequest) (*proto.SetRequest, error) {
 		dataBytes = reqValue
 	default:
 		if reqValue == nil {
-			return nil, fmt.Errorf("set nil value")
+			return nil, ErrNilSetValue
 		}
+		// TODO only json content type is supported.
 		var err error
 		if dataBytes, err = utils.Marshal(reqValue, json.Marshal); err != nil {
 			return nil, err
 		}
 	}
-	var etag *v1.Etag
-	if req.ETag != nil {
-		etag = &v1.Etag{
-			Value: *req.ETag,
-		}
-	}
+
 	return &proto.SetRequest{
 		Key:      req.GetKey(),
 		Value:    dataBytes,
-		Etag:     etag,
+		Etag:     toETagRequest(req.ETag),
 		Metadata: req.GetMetadata(),
 		Options: &v1.StateOptions{
-			Concurrency: getConcurrency(req.Options.Concurrency),
-			Consistency: getConsistency(req.Options.Consistency),
+			Concurrency: concurrencyOf(req.Options.Concurrency),
+			Consistency: consistencyOf(req.Options.Consistency),
 		},
 	}, nil
 }
 
-func mapGetResponse(resp *proto.GetResponse) *st.GetResponse {
-	var etag *string
-	if resp.Etag != nil {
-		etag = &resp.Etag.Value
+func fromGetResponse(resp *proto.GetResponse) *st.GetResponse {
+	if resp == nil {
+		return nil
 	}
 	return &st.GetResponse{
 		Data:     resp.GetData(),
-		ETag:     etag,
+		ETag:     fromETagResponse(resp.GetEtag()),
 		Metadata: resp.GetMetadata(),
 	}
 }
 
-//nolint:nosnakecase
-func mapGetRequest(req *st.GetRequest) *proto.GetRequest {
-	consistency, ok := v1.StateOptions_StateConsistency_value[req.Key]
-	if !ok {
-		consistency = int32(v1.StateOptions_CONSISTENCY_UNSPECIFIED)
+func toDeleteRequest(req *st.DeleteRequest) *proto.DeleteRequest {
+	if req == nil {
+		return nil
+	}
+	return &proto.DeleteRequest{
+		Key:      req.Key,
+		Etag:     toETagRequest(req.ETag),
+		Metadata: req.Metadata,
+		Options: &v1.StateOptions{
+			Concurrency: concurrencyOf(req.Options.Concurrency),
+			Consistency: consistencyOf(req.Options.Consistency),
+		},
+	}
+}
+
+func fromETagResponse(etag *v1.Etag) *string {
+	if etag == nil {
+		return nil
+	}
+	return &etag.Value
+}
+
+func toETagRequest(etag *string) *v1.Etag {
+	if etag == nil {
+		return nil
+	}
+	return &v1.Etag{
+		Value: *etag,
+	}
+}
+
+func toGetRequest(req *st.GetRequest) *proto.GetRequest {
+	if req == nil {
+		return nil
 	}
 	return &proto.GetRequest{
 		Key:         req.Key,
 		Metadata:    req.Metadata,
-		Consistency: v1.StateOptions_StateConsistency(consistency),
+		Consistency: consistencyOf(req.Options.Consistency),
 	}
 }
 
 //nolint:nosnakecase
-func getConsistency(value string) v1.StateOptions_StateConsistency {
+func consistencyOf(value string) v1.StateOptions_StateConsistency {
 	consistency, ok := v1.StateOptions_StateConsistency_value[value]
 	if !ok {
 		return v1.StateOptions_CONSISTENCY_UNSPECIFIED
@@ -246,7 +284,7 @@ func getConsistency(value string) v1.StateOptions_StateConsistency {
 }
 
 //nolint:nosnakecase
-func getConcurrency(value string) v1.StateOptions_StateConcurrency {
+func concurrencyOf(value string) v1.StateOptions_StateConcurrency {
 	concurrency, ok := v1.StateOptions_StateConcurrency_value[value]
 	if !ok {
 		return v1.StateOptions_CONCURRENCY_UNSPECIFIED
@@ -261,7 +299,6 @@ func NewFromPluggable(pc components.Pluggable) State {
 		FactoryMethod: func() st.Store {
 			return &grpcStateStore{
 				features:  make([]st.Feature, 0),
-				context:   context.TODO(),
 				Pluggable: pc,
 			}
 		},
