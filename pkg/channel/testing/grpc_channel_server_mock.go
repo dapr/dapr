@@ -26,6 +26,7 @@ import (
 )
 
 // MockServer implementation of fake user app server.
+// It implements both AppCallback and AppCallbackHealthCheck.
 //
 //nolint:nosnakecase
 type MockServer struct {
@@ -73,4 +74,8 @@ func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 	return &runtimev1pb.TopicEventResponse{
 		Status: m.TopicEventResponseStatus,
 	}, m.Error
+}
+
+func (m *MockServer) HealthCheck(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.HealthCheckResponse, error) {
+	return &runtimev1pb.HealthCheckResponse{}, m.Error
 }

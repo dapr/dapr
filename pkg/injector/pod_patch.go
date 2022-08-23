@@ -80,6 +80,11 @@ const (
 	daprVolumeMountsReadOnlyKey       = "dapr.io/volume-mounts"
 	daprVolumeMountsReadWriteKey      = "dapr.io/volume-mounts-rw"
 	daprDisableBuiltinK8sSecretStore  = "dapr.io/disable-builtin-k8s-secret-store"
+	daprEnableAppHealthCheck          = "dapr.io/enable-app-health-check"
+	daprAppHealthCheckPath            = "dapr.io/app-health-check-path"
+	daprAppHealthProbeInterval        = "dapr.io/app-health-probe-interval"
+	daprAppHealthProbeTimeout         = "dapr.io/app-health-probe-timeout"
+	daprAppHealthThreshold            = "dapr.io/app-health-threshold"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
 	daprPlacementAddressesKey         = "dapr.io/placement-host-address"
 	containersPath                    = "/spec/containers"
@@ -120,6 +125,10 @@ const (
 	defaultDaprHTTPStreamRequestBody  = false
 	defaultAPILoggingEnabled          = false
 	defaultBuiltinSecretStoreDisabled = false
+	defaultAppCheckPath               = "/health"
+	defaultAppHealthProbeInterval     = 5   // in seconds
+	defaultAppHealthProbeTimeout      = 500 // in ms
+	defaultAppHealthThreshold         = 3
 )
 
 type sidecarContainerConfig struct {
@@ -508,6 +517,26 @@ func getDisableBuiltinK8sSecretStore(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprDisableBuiltinK8sSecretStore, defaultBuiltinSecretStoreDisabled)
 }
 
+func getEnableAppHealthCheck(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprEnableAppHealthCheck, defaultBuiltinSecretStoreDisabled)
+}
+
+func getAppHealthCheckPath(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprAppHealthCheckPath, defaultAppCheckPath)
+}
+
+func getAppHealthProbeInterval(annotations map[string]string) int32 {
+	return getInt32AnnotationOrDefault(annotations, daprAppHealthProbeInterval, defaultAppHealthProbeInterval)
+}
+
+func getAppHealthProbeTimeout(annotations map[string]string) int32 {
+	return getInt32AnnotationOrDefault(annotations, daprAppHealthProbeTimeout, defaultAppHealthProbeTimeout)
+}
+
+func getAppHealthThreshold(annotations map[string]string) int32 {
+	return getInt32AnnotationOrDefault(annotations, daprAppHealthThreshold, defaultAppHealthThreshold)
+}
+
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
 	enabled, ok := annotations[key]
 	if !ok {
@@ -664,14 +693,11 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 	metricsEnabled := getEnableMetrics(cfg.annotations)
 	apiLoggingEnabled := getEnableAPILogging(cfg.annotations)
 	metricsPort := getMetricsPort(cfg.annotations)
-	maxConcurrency, err := getMaxConcurrency(cfg.annotations)
 	sidecarListenAddresses := getListenAddresses(cfg.annotations)
-	builtinK8sSecretStoreDisabled := getDisableBuiltinK8sSecretStore(cfg.annotations)
+	maxConcurrency, err := getMaxConcurrency(cfg.annotations)
 	if err != nil {
 		log.Warn(err)
 	}
-
-	sslEnabled := appSSLEnabled(cfg.annotations)
 
 	pullPolicy := getPullPolicy(cfg.imagePullPolicy)
 
@@ -723,11 +749,11 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 
 	args := []string{
 		"--mode", "kubernetes",
-		"--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort),
-		"--dapr-grpc-port", fmt.Sprintf("%v", sidecarAPIGRPCPort),
-		"--dapr-internal-grpc-port", fmt.Sprintf("%v", sidecarInternalGRPCPort),
+		"--dapr-http-port", strconv.Itoa(sidecarHTTPPort),
+		"--dapr-grpc-port", strconv.Itoa(sidecarAPIGRPCPort),
+		"--dapr-internal-grpc-port", strconv.Itoa(sidecarInternalGRPCPort),
 		"--dapr-listen-addresses", sidecarListenAddresses,
-		"--dapr-public-port", fmt.Sprintf("%v", sidecarPublicPort),
+		"--dapr-public-port", strconv.Itoa(sidecarPublicPort),
 		"--app-port", appPortStr,
 		"--app-id", cfg.appID,
 		"--control-plane-address", cfg.controlPlaneAddress,
@@ -735,15 +761,24 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 		"--placement-host-address", cfg.placementServiceAddress,
 		"--config", getConfig(cfg.annotations),
 		"--log-level", getLogLevel(cfg.annotations),
-		"--app-max-concurrency", fmt.Sprintf("%v", maxConcurrency),
+		"--app-max-concurrency", strconv.Itoa(int(maxConcurrency)),
 		"--sentry-address", cfg.sentryAddress,
-		fmt.Sprintf("--enable-metrics=%t", metricsEnabled),
-		"--metrics-port", fmt.Sprintf("%v", metricsPort),
-		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
-		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
-		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
-		fmt.Sprintf("--enable-api-logging=%t", apiLoggingEnabled),
-		fmt.Sprintf("--disable-builtin-k8s-secret-store=%t", builtinK8sSecretStoreDisabled),
+		"--enable-metrics=" + strconv.FormatBool(metricsEnabled),
+		"--metrics-port", strconv.Itoa(metricsPort),
+		"--dapr-http-max-request-size", strconv.Itoa(int(requestBodySize)),
+		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
+		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
+		"--enable-api-logging=" + strconv.FormatBool(apiLoggingEnabled),
+		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(getDisableBuiltinK8sSecretStore(cfg.annotations)),
+	}
+	if getEnableAppHealthCheck(cfg.annotations) {
+		args = append(args,
+			"--enable-app-health-check=true",
+			"--app-health-check-path", getAppHealthCheckPath(cfg.annotations),
+			"--app-health-probe-interval", strconv.Itoa(int(getAppHealthProbeInterval(cfg.annotations))),
+			"--app-health-probe-timeout", strconv.Itoa(int(getAppHealthProbeTimeout(cfg.annotations))),
+			"--app-health-threshold", strconv.Itoa(int(getAppHealthThreshold(cfg.annotations))),
+		)
 	}
 
 	debugEnabled := getEnableDebug(cfg.annotations)
@@ -878,7 +913,7 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 		c.Args = append(c.Args, "--enable-mtls")
 	}
 
-	if sslEnabled {
+	if appSSLEnabled(cfg.annotations) {
 		c.Args = append(c.Args, "--app-ssl")
 	}
 
