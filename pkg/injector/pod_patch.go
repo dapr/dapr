@@ -840,7 +840,7 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 		},
 	}
 
-	// If the pod contains all the tolerations specified by the configuration,
+	// If the pod contains any of the tolerations specified by the configuration,
 	// the Command and Args are passed as is. Otherwise, the Command is passed as a part of Args.
 	// This is to allow the Docker images to specify an ENTRYPOINT
 	// which is otherwise overridden by Command.
@@ -996,7 +996,7 @@ func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
 	return volumeMounts
 }
 
-// podContainsTolerations returns true if the pod contains all the tolerations specified in tolerationsJSON.
+// podContainsTolerations returns true if the pod contains any of the tolerations specified in tolerationsJSON.
 // If the JSON string is empty or contain an invalid JSON value, it returns false.
 func podContainsTolerations(tolerationsJSON string, podTolerations []corev1.Toleration) bool {
 	if tolerationsJSON == "" {
@@ -1011,11 +1011,11 @@ func podContainsTolerations(tolerationsJSON string, podTolerations []corev1.Tole
 		return false
 	}
 
-	// If the pod contains all the tolerations specified, return true.
+	// If the pod contains any of the tolerations specified, return true.
 	for _, t := range ts {
-		if !utils.Contains(podTolerations, t) {
-			return false
+		if utils.Contains(podTolerations, t) {
+			return true
 		}
 	}
-	return true
+	return false
 }

@@ -619,7 +619,7 @@ func TestGetSideCarContainer(t *testing.T) {
 				true,
 			},
 			{
-				"pod only contains partial tolerations from ignoreEntrypointTolerations",
+				"pod contains partial tolerations from ignoreEntrypointTolerations",
 				[]corev1.Toleration{
 					{
 						Key:    "foo.com/bar",
@@ -631,7 +631,7 @@ func TestGetSideCarContainer(t *testing.T) {
 					},
 				},
 				"[{\"key\":\"foo.com/bar\",\"Effect\":\"NoSchedule\"},{\"key\":\"foo.com/baz\",\"Effect\":\"NoSchedule\"}]",
-				false,
+				true,
 			},
 			{
 				"pod contains no tolerations from ignoreEntrypointTolerations",
