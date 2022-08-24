@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	grpc_proxy "github.com/dapr/dapr/pkg/grpc/proxy"
+	grpcProxy "github.com/dapr/dapr/pkg/grpc/proxy"
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/resiliency"
 
@@ -66,7 +66,7 @@ func NewProxy(connectionFactory messageClientConnection, appID string, localAppA
 
 // Handler returns a Stream Handler for handling requests that arrive for services that are not recognized by the server.
 func (p *proxy) Handler() grpc.StreamHandler {
-	return grpc_proxy.TransparentHandler(p.intercept, p.resiliency, p.IsLocal)
+	return grpcProxy.TransparentHandler(p.intercept, p.resiliency, p.IsLocal)
 }
 
 func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, func(), error) {
@@ -92,7 +92,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	if isLocal {
 		// proxy locally to the app
 		if p.acl != nil {
-			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl)
+			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl) //nolint:nosnakecase
 			if !ok {
 				return ctx, nil, func() {}, status.Errorf(codes.PermissionDenied, authError)
 			}

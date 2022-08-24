@@ -29,6 +29,9 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 		allowHTTP2, _ = strconv.ParseBool(os.Getenv("DAPR_TESTS_HTTP2"))
 	}
 
+	// logConnState := IsTruthy(os.Getenv("DAPR_TESTS_LOG_CONNSTATE"))
+	logConnState := false
+
 	// Create a listener
 	addr := fmt.Sprintf(":%d", port)
 	ln, err := net.Listen("tcp", addr)
@@ -41,21 +44,25 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 		// Create a server capable of supporting HTTP2 Cleartext connections
 		// Also supports HTTP1.1 and upgrades from HTTP1.1 to HTTP2
 		h2s := &http2.Server{}
+		//nolint:gosec
 		server = &http.Server{
 			Addr:    addr,
 			Handler: h2c.NewHandler(appRouter(), h2s),
 			ConnState: func(c net.Conn, cs http.ConnState) {
-				// TODO: MAKE OPTIONAL
-				log.Printf("ConnState changed: %s -> %s state: %s", c.RemoteAddr(), c.LocalAddr(), cs)
+				if logConnState {
+					log.Printf("ConnState changed: %s -> %s state: %s (HTTP2)", c.RemoteAddr(), c.LocalAddr(), cs)
+				}
 			},
 		}
 	} else {
+		//nolint:gosec
 		server = &http.Server{
 			Addr:    addr,
 			Handler: appRouter(),
 			ConnState: func(c net.Conn, cs http.ConnState) {
-				// TODO: MAKE OPTIONAL
-				log.Printf("ConnState changed: %s -> %s state: %s", c.RemoteAddr(), c.LocalAddr(), cs)
+				if logConnState {
+					log.Printf("ConnState changed: %s -> %s state: %s", c.RemoteAddr(), c.LocalAddr(), cs)
+				}
 			},
 		}
 	}
@@ -70,7 +77,7 @@ func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enable
 
 	// Stop the server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT) //nolint:staticcheck
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh

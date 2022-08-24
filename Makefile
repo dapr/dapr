@@ -281,8 +281,8 @@ test: test-deps
 # Target: lint                                                                 #
 ################################################################################
 # Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
-# Please use golangci-lint version v1.45.2 , otherwise you might encounter errors.
-# You can download version v1.45.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.45.2
+# Please use golangci-lint version v1.48.0 , otherwise you might encounter errors.
+# You can download version v1.48.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.48.0
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
@@ -295,7 +295,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); go mod tidy -compat=1.18; cd -
+	cd $(shell dirname $(1)); go mod tidy -compat=1.19; cd -
 endef
 
 # Generate modtidy target action for each go.mod file

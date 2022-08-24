@@ -24,6 +24,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
@@ -60,6 +61,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(indexHandlerResponse{Message: "OK"})
 }
 
+//nolint:gosec
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Entered testHandler")
 	var requestBody testCommandRequest
@@ -109,6 +111,7 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, message := range requestBody.Messages {
+		//nolint:gosec
 		body, _ := json.Marshal(&message)
 
 		log.Printf("Sending message: %s", body)
@@ -137,7 +140,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 			Method: "GetReceivedTopics",
 			Data:   &anypb.Any{},
 			HttpExtension: &commonv1pb.HTTPExtension{
-				Verb: commonv1pb.HTTPExtension_POST,
+				Verb: commonv1pb.HTTPExtension_POST, //nolint:nosnakecase
 			},
 		},
 	}
@@ -173,7 +176,7 @@ func initGRPCClient() {
 	log.Printf("Connecting to dapr using url %s", url)
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}

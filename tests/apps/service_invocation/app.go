@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:forbidigo
 package main
 
 import (
@@ -36,6 +37,7 @@ import (
 	"github.com/dapr/dapr/tests/apps/utils"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -144,8 +146,8 @@ var (
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("indexHandler is called\n")
-	fmt.Print("indexHalder is called 2\n")
+	log.Print("indexHandler is called\n")
+	log.Print("indexHalder is called 2\n")
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
@@ -269,7 +271,7 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 	}
 
 	/* #nosec */
-	req, _ := http.NewRequest("POST", url, t)
+	req, _ := http.NewRequest(http.MethodPost, url, t)
 	for k, v := range headers {
 		req.Header.Add(k, v)
 	}
@@ -288,7 +290,7 @@ func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, hea
 	}
 
 	/* #nosec */
-	req, _ := http.NewRequest("POST", url, t)
+	req, _ := http.NewRequest(http.MethodPost, url, t)
 	req.Header.Add("dapr-app-id", remoteApp)
 	for k, v := range headers {
 		req.Header.Add(k, v)
@@ -304,7 +306,7 @@ func constructRequest(id, method, httpVerb string, body []byte) *runtimev1pb.Inv
 	msg.Data = &anypb.Any{Value: body}
 	if httpVerb != "" {
 		msg.HttpExtension = &commonv1pb.HTTPExtension{
-			Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]),
+			Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]), //nolint:nosnakecase
 		}
 	}
 
@@ -559,7 +561,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 	daprAddress := fmt.Sprintf("localhost:%s", "50001")
 
 	fmt.Printf("dapr address is %s\n", daprAddress)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
+	conn, err := grpc.Dial(daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -680,7 +682,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 			Data:        &anypb.Any{Value: []byte("GRPCToHTTPTest")},
 			ContentType: "text/plain; utf-8",
 			HttpExtension: &commonv1pb.HTTPExtension{
-				Verb: commonv1pb.HTTPExtension_POST,
+				Verb: commonv1pb.HTTPExtension_POST, //nolint:nosnakecase
 			},
 		},
 	}
@@ -919,7 +921,7 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 	actualVerb := res.Header.Get("x-dapr-tests-request-method")
 
 	if httpMethod != actualVerb {
-		return appResponse{}, fmt.Errorf("Expected HTTP verb: %s actual %s", httpMethod, actualVerb)
+		return appResponse{}, fmt.Errorf("Expected HTTP verb: %s actual %s", httpMethod, actualVerb) //nolint:stylecheck
 	}
 
 	var appResp appResponse
@@ -1202,8 +1204,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 		fmt.Printf("largeDataErrorServiceCall - Request size: %d\n", len(jsonBody))
 
 		if isHTTP {
-			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(jsonBody))
-
+			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(jsonBody)) //nolint:bodyclose
 			result.CallSuccessful = !((resp != nil && resp.StatusCode != 200) || err != nil)
 		} else {
 			req := constructRequest("serviceinvocation-callee-0", "posthandler", "POST", jsonBody)
@@ -1290,7 +1291,7 @@ func initGRPCClient() {
 	log.Printf("Connecting to dapr using url %s", url)
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}

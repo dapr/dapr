@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:forbidigo
 package main
 
 import (
@@ -30,7 +31,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // server is our user app
@@ -96,7 +97,7 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 		TraceFlags: trace.TraceFlags(1),
 	}
 	sc := trace.NewSpanContext(scConfig)
-	header.Set("grpc-trace-bin", string(diag_utils.BinaryFromSpanContext(sc)))
+	header.Set("grpc-trace-bin", string(diagUtils.BinaryFromSpanContext(sc)))
 
 	grpc.SendHeader(ctx, header)
 	trailer := metadata.Pairs(

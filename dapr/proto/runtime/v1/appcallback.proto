@@ -46,6 +46,13 @@ service AppCallback {
   rpc OnBindingEvent(BindingEventRequest) returns (BindingEventResponse) {}
 }
 
+// AppCallbackHealthCheck V1 is an optional extension to AppCallback V1 to implement
+// the HealthCheck method.
+service AppCallbackHealthCheck {
+  // Health check.
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse) {}
+}
+
 // TopicEventRequest message is compatible with CloudEvent spec v1.0
 // https://github.com/cloudevents/spec/blob/v1.0/spec.md
 message TopicEventRequest {
@@ -151,3 +158,7 @@ message ListInputBindingsResponse {
   // The list of input bindings.
   repeated string bindings = 1;
 }
+
+// HealthCheckResponse is the message with the response to the health check.
+// This message is currently empty as used as placeholder.
+message HealthCheckResponse {}

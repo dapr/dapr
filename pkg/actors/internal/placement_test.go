@@ -323,7 +323,7 @@ type testServer struct {
 	isGracefulShutdown atomic.Bool
 }
 
-func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
+func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
 	for {
 		if !s.isLeader.Load() {
 			return status.Error(codes.FailedPrecondition, "only leader can serve the request")

@@ -24,7 +24,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // To track the metrics for fasthttp using opencensus, this implementation is inspired by
@@ -54,6 +54,9 @@ type httpMetrics struct {
 	clientReceivedBytes    *stats.Int64Measure
 	clientRoundtripLatency *stats.Float64Measure
 	clientCompletedCount   *stats.Int64Measure
+
+	healthProbeCompletedCount  *stats.Int64Measure
+	healthProbeRoundripLatency *stats.Float64Measure
 
 	appID   string
 	enabled bool
@@ -97,6 +100,14 @@ func newHTTPMetrics() *httpMetrics {
 			"http/client/completed_count",
 			"Count of completed requests",
 			stats.UnitDimensionless),
+		healthProbeCompletedCount: stats.Int64(
+			"http/healthprobes/completed_count",
+			"Count of completed health probes",
+			stats.UnitDimensionless),
+		healthProbeRoundripLatency: stats.Float64(
+			"http/healthprobes/roundtrip_latency",
+			"Time between first byte of health probes headers sent to last byte of response received, or terminal error",
+			stats.UnitMilliseconds),
 
 		enabled: false,
 	}
@@ -110,10 +121,10 @@ func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path st
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
+			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
 			h.serverRequestCount.M(1))
 		stats.RecordWithTags(
-			ctx, diag_utils.WithTags(appIDKey, h.appID),
+			ctx, diagUtils.WithTags(appIDKey, h.appID),
 			h.serverRequestBytes.M(contentSize))
 	}
 }
@@ -122,14 +133,14 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 			h.serverResponseCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 			h.serverLatency.M(elapsed))
 		stats.RecordWithTags(
-			ctx, diag_utils.WithTags(appIDKey, h.appID),
+			ctx, diagUtils.WithTags(appIDKey, h.appID),
 			h.serverResponseBytes.M(contentSize))
 	}
 }
@@ -138,7 +149,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
+			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
 			h.clientSentBytes.M(contentSize))
 	}
 }
@@ -147,15 +158,34 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientCompletedCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
-			ctx, diag_utils.WithTags(appIDKey, h.appID),
+			ctx, diagUtils.WithTags(appIDKey, h.appID),
 			h.clientReceivedBytes.M(contentSize))
+	}
+}
+
+func (h *httpMetrics) AppHealthProbeStarted(ctx context.Context) {
+	if h.enabled {
+		stats.RecordWithTags(ctx, diagUtils.WithTags(appIDKey, h.appID))
+	}
+}
+
+func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string, elapsed float64) {
+	if h.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, h.appID, httpStatusCodeKey, status),
+			h.healthProbeCompletedCount.M(1))
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, h.appID, httpStatusCodeKey, status),
+			h.healthProbeRoundripLatency.M(elapsed))
 	}
 }
 
@@ -165,15 +195,17 @@ func (h *httpMetrics) Init(appID string) error {
 
 	tags := []tag.Key{appIDKey}
 	return view.Register(
-		diag_utils.NewMeasureView(h.serverRequestCount, []tag.Key{appIDKey, httpPathKey, httpMethodKey}, view.Count()),
-		diag_utils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
-		diag_utils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
-		diag_utils.NewMeasureView(h.serverLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultLatencyDistribution),
-		diag_utils.NewMeasureView(h.serverResponseCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
-		diag_utils.NewMeasureView(h.clientSentBytes, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultSizeDistribution),
-		diag_utils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
-		diag_utils.NewMeasureView(h.clientRoundtripLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultLatencyDistribution),
-		diag_utils.NewMeasureView(h.clientCompletedCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
+		diagUtils.NewMeasureView(h.serverRequestCount, []tag.Key{appIDKey, httpPathKey, httpMethodKey}, view.Count()),
+		diagUtils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
+		diagUtils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
+		diagUtils.NewMeasureView(h.serverLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.serverResponseCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
+		diagUtils.NewMeasureView(h.clientSentBytes, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultSizeDistribution),
+		diagUtils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
+		diagUtils.NewMeasureView(h.clientRoundtripLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.clientCompletedCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
+		diagUtils.NewMeasureView(h.healthProbeRoundripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.healthProbeCompletedCount, []tag.Key{appIDKey, httpStatusCodeKey}, view.Count()),
 	)
 }
 

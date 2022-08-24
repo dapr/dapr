@@ -92,7 +92,7 @@ func main() {
 
 	// Stop the gRPC server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT) //nolint:staticcheck
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh
@@ -212,7 +212,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 		log.Printf("(%s) Responding with DROP. in.Path not found", reqID)
 		// Return success with DROP status to drop message.
 		return &pb.TopicEventResponse{
-			Status: pb.TopicEventResponse_DROP,
+			Status: pb.TopicEventResponse_DROP, //nolint:nosnakecase
 		}, nil
 	}
 
@@ -222,7 +222,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 
 	log.Printf("(%s) Responding with SUCCESS", reqID)
 	return &pb.TopicEventResponse{
-		Status: pb.TopicEventResponse_SUCCESS,
+		Status: pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 	}, nil
 }
 

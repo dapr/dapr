@@ -25,7 +25,7 @@ import (
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
+//nolint:gosec
 const (
 	sidecarContainerName              = "daprd"
 	daprEnabledKey                    = "dapr.io/enabled"
@@ -72,13 +73,17 @@ const (
 	daprAppSSLKey                     = "dapr.io/app-ssl"
 	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
-	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
 	daprEnableAPILogging              = "dapr.io/enable-api-logging"
 	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
 	daprVolumeMountsReadOnlyKey       = "dapr.io/volume-mounts"
 	daprVolumeMountsReadWriteKey      = "dapr.io/volume-mounts-rw"
 	daprDisableBuiltinK8sSecretStore  = "dapr.io/disable-builtin-k8s-secret-store"
+	daprEnableAppHealthCheck          = "dapr.io/enable-app-health-check"
+	daprAppHealthCheckPath            = "dapr.io/app-health-check-path"
+	daprAppHealthProbeInterval        = "dapr.io/app-health-probe-interval"
+	daprAppHealthProbeTimeout         = "dapr.io/app-health-probe-timeout"
+	daprAppHealthThreshold            = "dapr.io/app-health-threshold"
 	unixDomainSocketVolume            = "dapr-unix-domain-socket"
 	daprPlacementAddressesKey         = "dapr.io/placement-host-address"
 	containersPath                    = "/spec/containers"
@@ -116,9 +121,12 @@ const (
 	defaultHealthzProbeThreshold      = 3
 	apiVersionV1                      = "v1.0"
 	defaultMtlsEnabled                = true
-	defaultDaprHTTPStreamRequestBody  = false
 	defaultAPILoggingEnabled          = false
 	defaultBuiltinSecretStoreDisabled = false
+	defaultAppCheckPath               = "/health"
+	defaultAppHealthProbeInterval     = 5   // in seconds
+	defaultAppHealthProbeTimeout      = 500 // in ms
+	defaultAppHealthThreshold         = 3
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -320,7 +328,7 @@ func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts 
 }
 
 func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, meta_v1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, metaV1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}
@@ -331,7 +339,7 @@ func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace stri
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
-	resp, err := daprClient.ConfigurationV1alpha1().Configurations(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled
@@ -462,12 +470,28 @@ func getVolumeMountsReadWrite(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprVolumeMountsReadWriteKey, "")
 }
 
-func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprHTTPStreamRequestBody, defaultDaprHTTPStreamRequestBody)
-}
-
 func getDisableBuiltinK8sSecretStore(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprDisableBuiltinK8sSecretStore, defaultBuiltinSecretStoreDisabled)
+}
+
+func getEnableAppHealthCheck(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprEnableAppHealthCheck, defaultBuiltinSecretStoreDisabled)
+}
+
+func getAppHealthCheckPath(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprAppHealthCheckPath, defaultAppCheckPath)
+}
+
+func getAppHealthProbeInterval(annotations map[string]string) int32 {
+	return getInt32AnnotationOrDefault(annotations, daprAppHealthProbeInterval, defaultAppHealthProbeInterval)
+}
+
+func getAppHealthProbeTimeout(annotations map[string]string) int32 {
+	return getInt32AnnotationOrDefault(annotations, daprAppHealthProbeTimeout, defaultAppHealthProbeTimeout)
+}
+
+func getAppHealthThreshold(annotations map[string]string) int32 {
+	return getInt32AnnotationOrDefault(annotations, daprAppHealthThreshold, defaultAppHealthThreshold)
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
@@ -626,14 +650,11 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	metricsEnabled := getEnableMetrics(annotations)
 	apiLoggingEnabled := getEnableAPILogging(annotations)
 	metricsPort := getMetricsPort(annotations)
-	maxConcurrency, err := getMaxConcurrency(annotations)
 	sidecarListenAddresses := getListenAddresses(annotations)
-	builtinK8sSecretStoreDisabled := getDisableBuiltinK8sSecretStore(annotations)
+	maxConcurrency, err := getMaxConcurrency(annotations)
 	if err != nil {
 		log.Warn(err)
 	}
-
-	sslEnabled := appSSLEnabled(annotations)
 
 	pullPolicy := getPullPolicy(imagePullPolicy)
 
@@ -655,8 +676,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 	if err != nil {
 		log.Warn(err)
 	}
-
-	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(annotations)
 
 	if existPlacementAddressesAnnotation(annotations) {
 		placementServiceAddress = getPlacementAddresses(annotations)
@@ -685,11 +704,11 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	args := []string{
 		"--mode", "kubernetes",
-		"--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort),
-		"--dapr-grpc-port", fmt.Sprintf("%v", sidecarAPIGRPCPort),
-		"--dapr-internal-grpc-port", fmt.Sprintf("%v", sidecarInternalGRPCPort),
+		"--dapr-http-port", strconv.Itoa(sidecarHTTPPort),
+		"--dapr-grpc-port", strconv.Itoa(sidecarAPIGRPCPort),
+		"--dapr-internal-grpc-port", strconv.Itoa(sidecarInternalGRPCPort),
 		"--dapr-listen-addresses", sidecarListenAddresses,
-		"--dapr-public-port", fmt.Sprintf("%v", sidecarPublicPort),
+		"--dapr-public-port", strconv.Itoa(sidecarPublicPort),
 		"--app-port", appPortStr,
 		"--app-id", id,
 		"--control-plane-address", controlPlaneAddress,
@@ -697,15 +716,25 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		"--placement-host-address", placementServiceAddress,
 		"--config", getConfig(annotations),
 		"--log-level", getLogLevel(annotations),
-		"--app-max-concurrency", fmt.Sprintf("%v", maxConcurrency),
+		"--app-max-concurrency", strconv.Itoa(int(maxConcurrency)),
 		"--sentry-address", sentryAddress,
-		fmt.Sprintf("--enable-metrics=%t", metricsEnabled),
-		"--metrics-port", fmt.Sprintf("%v", metricsPort),
-		"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
-		"--dapr-http-read-buffer-size", fmt.Sprintf("%v", readBufferSize),
-		"--dapr-graceful-shutdown-seconds", fmt.Sprintf("%v", gracefulShutdownSeconds),
-		fmt.Sprintf("--enable-api-logging=%t", apiLoggingEnabled),
-		fmt.Sprintf("--disable-builtin-k8s-secret-store=%t", builtinK8sSecretStoreDisabled),
+		"--enable-metrics=" + strconv.FormatBool(metricsEnabled),
+		"--metrics-port", strconv.Itoa(metricsPort),
+		"--dapr-http-max-request-size", strconv.Itoa(int(requestBodySize)),
+		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
+		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
+		"--enable-api-logging=" + strconv.FormatBool(apiLoggingEnabled),
+		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(getDisableBuiltinK8sSecretStore(annotations)),
+	}
+
+	if getEnableAppHealthCheck(annotations) {
+		args = append(args,
+			"--enable-app-health-check=true",
+			"--app-health-check-path", getAppHealthCheckPath(annotations),
+			"--app-health-probe-interval", strconv.Itoa(int(getAppHealthProbeInterval(annotations))),
+			"--app-health-probe-timeout", strconv.Itoa(int(getAppHealthProbeTimeout(annotations))),
+			"--app-health-threshold", strconv.Itoa(int(getAppHealthThreshold(annotations))),
+		)
 	}
 
 	debugEnabled := getEnableDebug(annotations)
@@ -829,12 +858,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		c.Args = append(c.Args, "--enable-mtls")
 	}
 
-	if sslEnabled {
+	if appSSLEnabled(annotations) {
 		c.Args = append(c.Args, "--app-ssl")
-	}
-
-	if HTTPStreamRequestBodyEnabled {
-		c.Args = append(c.Args, "--http-stream-request-body")
 	}
 
 	secret := getAPITokenSecret(annotations)
