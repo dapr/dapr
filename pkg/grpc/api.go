@@ -591,7 +591,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	start := time.Now()
 	var bulkGet bool
 	var responses []state.BulkGetResponse
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) (rErr error) {
 		bulkGet, responses, rErr = store.BulkGet(reqs)
 		return rErr
@@ -698,7 +698,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	var getResponse *state.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = store.Get(&req)
@@ -783,7 +783,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
 		return store.BulkSet(reqs)
 	})
@@ -830,7 +830,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	req.Metadata = in.GetMetadata()
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	var resp *state.QueryResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = querier.Query(&req)
@@ -905,7 +905,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
 		return store.Delete(&req)
 	})
@@ -951,7 +951,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
 		return store.BulkDelete(reqs)
 	})
@@ -993,7 +993,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.GetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(ctx, req)
@@ -1036,7 +1036,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.BulkGetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
@@ -1185,7 +1185,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err := policy(func(ctx context.Context) error {
 		return transactionalStore.Multi(&state.TransactionalStateRequest{
 			Operations: operations,
@@ -1564,7 +1564,7 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Configuration)
 	var getResponse *configuration.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = store.Get(ctx, &req)
@@ -1674,7 +1674,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(newCtx, request.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(newCtx, request.StoreName, resiliency.Configuration)
 	var id string
 	err = policy(func(ctx context.Context) (rErr error) {
 		id, rErr = store.Subscribe(ctx, req, handler.updateEventHandler)
@@ -1721,7 +1721,7 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	delete(a.configurationSubscribe, subscribeID)
 	close(stop)
 
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, request.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, request.StoreName, resiliency.Configuration)
 
 	start := time.Now()
 	err = policy(func(ctx context.Context) error {
