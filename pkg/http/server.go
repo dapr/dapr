@@ -62,16 +62,26 @@ type server struct {
 	profilingListeners []net.Listener
 }
 
+// NewServerOpts are the options for NewServer.
+type NewServerOpts struct {
+	API         API
+	Config      ServerConfig
+	TracingSpec config.TracingSpec
+	MetricSpec  config.MetricSpec
+	Pipeline    httpMiddleware.Pipeline
+	APISpec     config.APISpec
+}
+
 // NewServer returns a new HTTP server.
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline httpMiddleware.Pipeline, apiSpec config.APISpec) Server {
+func NewServer(opts NewServerOpts) Server {
 	infoLog.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
-		api:         api,
-		config:      config,
-		tracingSpec: tracingSpec,
-		metricSpec:  metricSpec,
-		pipeline:    pipeline,
-		apiSpec:     apiSpec,
+		api:         opts.API,
+		config:      opts.Config,
+		tracingSpec: opts.TracingSpec,
+		metricSpec:  opts.MetricSpec,
+		pipeline:    opts.Pipeline,
+		apiSpec:     opts.APISpec,
 	}
 }
 
@@ -120,7 +130,6 @@ func (s *server) StartNonBlocking() error {
 			Handler:            handler,
 			MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
 			ReadBufferSize:     s.config.ReadBufferSize * 1024,
-			StreamRequestBody:  s.config.StreamRequestBody,
 		}
 		s.servers = append(s.servers, customServer)
 
