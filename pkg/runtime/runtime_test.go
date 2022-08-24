@@ -1296,6 +1296,46 @@ func TestConsumerID(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestPluggableComponents(t *testing.T) {
+	t.Run("load pluggable components", func(t *testing.T) {
+		dir := "./components"
+
+		rts := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rts)
+
+		require.NoError(t, os.Mkdir(dir, 0o777))
+		defer os.RemoveAll(dir)
+
+		const fakeType, fakeVersion, fakeName = "state", "v1", "mypluggable"
+		s := componentsV1alpha1.PluggableComponent{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: fakeName,
+			},
+			TypeMeta: metaV1.TypeMeta{
+				Kind: "PluggableComponent",
+			},
+			Spec: componentsV1alpha1.PluggableComponentSpec{
+				Type:    fakeType,
+				Version: fakeVersion,
+			},
+		}
+
+		filePath := "./components/pluggable.yaml"
+		b, err := yaml.Marshal(s)
+		assert.Nil(t, err)
+		os.WriteFile(filePath, b, 0o600)
+
+		rts.runtimeConfig.Standalone.ComponentsPath = dir
+		pluggableComponents, err := rts.loadPluggableComponents()
+		assert.Nil(t, err)
+		if assert.Len(t, pluggableComponents, 1) {
+			assert.Equal(t, fakeName, pluggableComponents[0].Name)
+			assert.Equal(t, fakeType, string(pluggableComponents[0].Type))
+			assert.Equal(t, fakeVersion, pluggableComponents[0].Version)
+		}
+	})
+}
+
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)

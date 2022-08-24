@@ -32,7 +32,7 @@ import (
 func TestOptions(t *testing.T) {
 	t.Run("all components should have its own registry when set", func(t *testing.T) {
 		opts := registryOpts{
-			registries: make(map[components.Type]func(components.Pluggable)),
+			registries: make(map[components.PluggableType]func(components.Pluggable)),
 		}
 		allOpts := []Option{
 			WithBindingsRegistry(bindings.NewRegistry()),

@@ -110,3 +110,20 @@ func TestIsYaml(t *testing.T) {
 		assert.Equal(t, IsYaml(tc.input), tc.expected)
 	}
 }
+
+func TestEnvOrElse(t *testing.T) {
+	t.Run("envOrElse should return else value when env var is not present", func(t *testing.T) {
+		const elseValue, fakeEnVar = "fakeValue", "envVarThatDoesntExists"
+		assert.Nil(t, os.Unsetenv(fakeEnVar))
+
+		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), elseValue)
+	})
+
+	t.Run("envOrElse should return env var value value when env var is present", func(t *testing.T) {
+		const elseValue, fakeEnVar, fakeEnvVarValue = "fakeValue", "envVarThatExists", "envVarValue"
+		defer os.Unsetenv(fakeEnVar)
+
+		assert.Nil(t, os.Setenv(fakeEnVar, fakeEnvVarValue))
+		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), fakeEnvVarValue)
+	})
+}

@@ -26,13 +26,13 @@ import (
 )
 
 type registryOpts struct {
-	registries map[components.Type]func(components.Pluggable)
+	registries map[components.PluggableType]func(components.Pluggable)
 }
 
 type Option = func(*registryOpts)
 
 // withRegistry adds a new register function for the puggable registry.
-func withRegistry[T any](cmpType components.Type, regFunc func(...T), factory func(components.Pluggable) T) Option {
+func withRegistry[T any](cmpType components.PluggableType, regFunc func(...T), factory func(components.Pluggable) T) Option {
 	return func(ro *registryOpts) {
 		ro.registries[cmpType] = func(pc components.Pluggable) {
 			regFunc(factory(pc))

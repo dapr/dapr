@@ -99,10 +99,15 @@ message BulkGetRequest {
 }
 
 message BulkStateItem {
+  // The key of the fetched item.
   string key = 1;
+  // The associated data of the fetched item.
   bytes data = 2;
+  // The item ETag
   dapr.proto.common.v1.Etag etag = 3;
+  // A fetch error if there's some.
   string error = 4;
+  // The State Item metadata.
   map<string, string> metadata = 5;
 }
 

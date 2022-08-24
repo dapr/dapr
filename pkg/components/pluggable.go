@@ -23,12 +23,40 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// PluggableType is the component type.
+type PluggableType string
+
+const (
+	State          PluggableType = "state"
+	PubSub         PluggableType = "pubsub"
+	InputBinding   PluggableType = "inputbinding"
+	OutputBinding  PluggableType = "outputbinding"
+	HTTPMiddleware PluggableType = "middleware.http"
+	Configuration  PluggableType = "configuration"
+	Secret         PluggableType = "secret"
+	Lock           PluggableType = "lock"
+	NameResolution PluggableType = "nameresolution"
+)
+
+// WellKnownTypes is used as a handy way to iterate over all possible component type.
+var WellKnownTypes = [9]PluggableType{
+	State,
+	PubSub,
+	InputBinding,
+	OutputBinding,
+	HTTPMiddleware,
+	Configuration,
+	Secret,
+	Lock,
+	NameResolution,
+}
+
 // Pluggable represents a pluggable component specification.
 type Pluggable struct {
 	// Name is the pluggable component name.
 	Name string
 	// Type is the component type.
-	Type Type
+	Type PluggableType
 	// Version is the pluggable component version.
 	Version string
 }
@@ -47,9 +75,9 @@ func (p Pluggable) socketPathFor(componentName string) string {
 // Connect returns a grpc connection for the pluggable component.
 func (p Pluggable) Connect(componentName string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	udsSocket := fmt.Sprintf("unix://%s", p.socketPathFor(componentName))
-	opts := append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-	c, err := grpc.Dial(udsSocket, opts...)
+	c, err := grpc.Dial(udsSocket, additionalOpts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", udsSocket)
 	}

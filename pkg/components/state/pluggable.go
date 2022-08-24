@@ -64,8 +64,6 @@ func (ss *grpcStateStore) Init(metadata st.Metadata) error {
 		Properties: metadata.Properties,
 	}
 
-	ss.context, ss.cancel = context.WithCancel(context.Background())
-
 	// TODO Static data could be retrieved in another way, a necessary discussion should start soon.
 	// we need to call the method here because features could return an error and the features interface doesn't support errors
 	featureResponse, err := ss.client.Features(ss.context, &emptypb.Empty{})
@@ -108,6 +106,7 @@ func (ss *grpcStateStore) Get(req *st.GetRequest) (*st.GetResponse, error) {
 	return fromGetResponse(response), nil
 }
 
+// Set performs a set operation on the state store.
 func (ss *grpcStateStore) Set(req *st.SetRequest) error {
 	protoRequest, err := toSetRequest(req)
 	if err != nil {
@@ -117,11 +116,13 @@ func (ss *grpcStateStore) Set(req *st.SetRequest) error {
 	return err
 }
 
+// Ping the component.
 func (ss *grpcStateStore) Ping() error {
 	_, err := ss.client.Ping(ss.context, &emptypb.Empty{})
 	return err
 }
 
+// Close gRPC connection and all inflight requests will be called.
 func (ss *grpcStateStore) Close() error {
 	ss.cancel()
 
@@ -180,8 +181,7 @@ func (ss *grpcStateStore) BulkSet(req []st.SetRequest) error {
 		}
 		requests = append(requests, protoRequest)
 	}
-	var err error
-	_, err = ss.client.BulkSet(ss.context, &proto.BulkSetRequest{
+	_, err := ss.client.BulkSet(ss.context, &proto.BulkSetRequest{
 		Items: requests,
 	})
 	return err
@@ -222,9 +222,6 @@ func toSetRequest(req *st.SetRequest) (*proto.SetRequest, error) {
 }
 
 func fromGetResponse(resp *proto.GetResponse) *st.GetResponse {
-	if resp == nil {
-		return nil
-	}
 	return &st.GetResponse{
 		Data:     resp.GetData(),
 		ETag:     fromETagResponse(resp.GetEtag()),
@@ -292,15 +289,24 @@ func concurrencyOf(value string) v1.StateOptions_StateConcurrency {
 	return v1.StateOptions_StateConcurrency(concurrency)
 }
 
+// newGRPCStateStore creates a new state store for the given pluggable component.
+func newGRPCStateStore(pc components.Pluggable) *grpcStateStore {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	return &grpcStateStore{
+		features:  make([]st.Feature, 0),
+		Pluggable: pc,
+		context:   ctx,
+		cancel:    cancel,
+	}
+}
+
 // NewFromPluggable creates a new StateStore from a given pluggable component.
 func NewFromPluggable(pc components.Pluggable) State {
 	return State{
 		Names: []string{pc.Name},
 		FactoryMethod: func() st.Store {
-			return &grpcStateStore{
-				features:  make([]st.Feature, 0),
-				Pluggable: pc,
-			}
+			return newGRPCStateStore(pc)
 		},
 	}
 }

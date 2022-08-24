@@ -26,7 +26,7 @@ type MustRegisterFunc func(pc ...components.Pluggable)
 // NewRegisterFunc creates a new Pluggable Registry Func.
 func NewRegisterFunc(options ...Option) MustRegisterFunc {
 	opts := registryOpts{
-		registries: make(map[components.Type]func(components.Pluggable)),
+		registries: make(map[components.PluggableType]func(components.Pluggable)),
 	}
 	for _, opt := range options {
 		opt(&opts)

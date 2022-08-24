@@ -38,7 +38,7 @@ type Component struct {
 }
 
 // Kind returns the component kind.
-func (c Component) Kind() string {
+func (Component) Kind() string {
 	return "Component"
 }
 
@@ -57,7 +57,7 @@ type PluggableComponent struct {
 }
 
 // Kind returns the component kind.
-func (c PluggableComponent) Kind() string {
+func (PluggableComponent) Kind() string {
 	return "PluggableComponent"
 }
 

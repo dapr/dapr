@@ -14,6 +14,8 @@ limitations under the License.
 package pluggable
 
 import (
+	"os"
+
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 )
@@ -24,7 +26,7 @@ func mapComponents(comps []componentsV1alpha1.PluggableComponent) []components.P
 	for idx, component := range comps {
 		pluggableComponents[idx] = components.Pluggable{
 			Name:    component.GetObjectMeta().GetName(),
-			Type:    components.Type(component.Spec.Type),
+			Type:    components.PluggableType(component.Spec.Type),
 			Version: component.Spec.Version,
 		}
 	}
@@ -43,6 +45,9 @@ func newFromPath(pluggableComponentsPath string) components.ManifestLoader[compo
 // LoadFromDisk loads PluggableComponents from the given path.
 func LoadFromDisk(pluggableComponentsPath string) ([]components.Pluggable, error) {
 	comp, err := newFromPath(pluggableComponentsPath).Load()
+	if os.IsNotExist(err) {
+		return make([]components.Pluggable, 0), nil
+	}
 	return mapComponents(comp), err
 }
 
