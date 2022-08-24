@@ -697,6 +697,7 @@ func TestActorFeatures(t *testing.T) {
 		logTwo := findNthActorAction(res, actorID, "concurrency", 2)
 		require.NotNil(t, logOne)
 		require.NotNil(t, logTwo)
+		t.Log("logOne.StartTimestamp", logOne.StartTimestamp, "logOne.EndTimestamp", logOne.EndTimestamp, "logTwo.StartTimestamp", logTwo.StartTimestamp, "logTwo.EndTimestamp", logTwo.EndTimestamp, "logTwo.StartTimestamp")
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logOne.StartTimestamp >= logTwo.EndTimestamp) || (logTwo.StartTimestamp >= logOne.EndTimestamp))
@@ -734,6 +735,7 @@ func TestActorFeatures(t *testing.T) {
 		logTwo := findActorAction(res, actorIDTwo, "concurrency")
 		require.NotNil(t, logOne, "logOne is nil")
 		require.NotNil(t, logTwo, "logTwo is nil")
+		t.Log("logOne.StartTimestamp", logOne.StartTimestamp, "logOne.EndTimestamp", logOne.EndTimestamp, "logTwo.StartTimestamp", logTwo.StartTimestamp, "logTwo.EndTimestamp", logTwo.EndTimestamp, "logTwo.StartTimestamp")
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
 		// Both methods run in parallel, with the sleep time both should start before the other ends.
