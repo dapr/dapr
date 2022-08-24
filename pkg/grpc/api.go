@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/transaction"
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -108,6 +109,9 @@ type API interface {
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
+
+	// Begin a distribute transaction
+	DistributeTransactionBegin(ctx context.Context, in *runtimev1pb.BeginTransactionRequest) (*runtimev1pb.BeginResponse, error)
 }
 
 type api struct {
@@ -134,6 +138,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
+	transactions               map[string]transaction.Transaction
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
@@ -284,6 +289,7 @@ func NewAPI(
 	getComponentsFn func() []components_v1alpha.Component,
 	shutdown func(),
 	getComponentsCapabilitiesFn func() map[string][]string,
+	transactions map[string]transaction.Transaction,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -312,6 +318,7 @@ func NewAPI(
 		shutdown:                   shutdown,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
+		transactions:               transactions,
 	}
 }
 
@@ -1727,5 +1734,38 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	}
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
+	}, nil
+}
+
+func (a *api) getTransactionStore(name string) (transaction.Transaction, error) {
+	if a.transactions == nil || len(a.transactions) == 0 {
+		return nil, status.Error(codes.FailedPrecondition, messages.ErrTransactionsNotConfigured)
+	}
+
+	if a.transactions[name] == nil {
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrTransactionsNotConfigured, name)
+	}
+	return a.transactions[name], nil
+}
+
+func (a *api) DistributeTransactionBegin(ctx context.Context, request *runtimev1pb.BeginTransactionRequest) (*runtimev1pb.BeginResponse, error) {
+	transactionInstance, err := a.getTransactionStore(request.GetStoreName())
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.BeginResponse{}, err
+	}
+	// Regist distribute transaction ID and bunch transactionID
+
+	reqs, err := transactionInstance.Begin(transaction.BeginTransactionRequest{
+		BunchTransactionNum: int(request.BunchTransactionNum),
+	})
+
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.BeginResponse{}, err
+	}
+	return &runtimev1pb.BeginResponse{
+		TransactionID:       reqs.TransactionID,
+		BunchTransactionIDs: reqs.BunchTransactionIDs,
 	}, nil
 }

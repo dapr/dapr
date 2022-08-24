@@ -601,7 +601,8 @@ message UnlockResponse {
 }
 
 message BeginTransactionRequest {
-  int32 bunchTransactionNum = 1;
+  string storeName = 1;
+  int32 bunchTransactionNum = 2;
 }
 
 message BeginResponse {

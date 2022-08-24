@@ -438,7 +438,6 @@ type DaprServer interface {
 	Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// Begin a distribute transaction
 	DistributeTransactionBegin(context.Context, *BeginTransactionRequest) (*BeginResponse, error)
-	mustEmbedUnimplementedDaprServer()
 }
 
 // UnimplementedDaprServer must be embedded to have forward compatible implementations.
@@ -532,14 +531,9 @@ func (UnimplementedDaprServer) Shutdown(context.Context, *emptypb.Empty) (*empty
 func (UnimplementedDaprServer) DistributeTransactionBegin(context.Context, *BeginTransactionRequest) (*BeginResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DistributeTransactionBegin not implemented")
 }
-func (UnimplementedDaprServer) mustEmbedUnimplementedDaprServer() {}
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to DaprServer will
-// result in compilation errors.
-type UnsafeDaprServer interface {
-	mustEmbedUnimplementedDaprServer()
-}
 
 func RegisterDaprServer(s grpc.ServiceRegistrar, srv DaprServer) {
 	s.RegisterService(&Dapr_ServiceDesc, srv)
