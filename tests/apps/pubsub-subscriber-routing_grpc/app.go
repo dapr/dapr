@@ -164,12 +164,12 @@ func (s *server) getMessages(reqID string) []byte {
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*pb.TopicSubscription{
+		Subscriptions: []*commonv1pb.TopicSubscription{
 			{
 				PubsubName: pubsubName,
 				Topic:      pubsubTopic,
-				Routes: &pb.TopicRoutes{
-					Rules: []*pb.TopicRule{
+				Routes: &commonv1pb.TopicRoutes{
+					Rules: []*commonv1pb.TopicRule{
 						{
 							Match: `event.type == "myevent.C"`,
 							Path:  pathC,

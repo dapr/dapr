@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,7 +39,6 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	lock_loader "github.com/dapr/dapr/pkg/components/lock"
 
-	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
@@ -47,7 +47,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/zipkin"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -881,20 +883,19 @@ func TestSetupTracing(t *testing.T) {
 		name              string
 		tracingConfig     config.TracingSpec
 		hostAddress       string
-		expectedExporters []trace.Exporter
+		expectedExporters []sdktrace.SpanExporter
 		expectedErr       string
 	}{{
 		name:          "no trace exporter",
 		tracingConfig: config.TracingSpec{},
 	}, {
-		name:        "bad host address, failing zipkin",
-		hostAddress: "bad:host:address",
+		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
 			Zipkin: config.ZipkinSpec{
-				EndpointAddress: "http://foo.bar",
+				EndpointAddress: "localhost",
 			},
 		},
-		expectedErr: "too many colons",
+		expectedErr: "invalid collector URL \"localhost\": no scheme or host",
 	}, {
 		name: "zipkin trace exporter",
 		tracingConfig: config.TracingSpec{
@@ -902,22 +903,47 @@ func TestSetupTracing(t *testing.T) {
 				EndpointAddress: "http://foo.bar",
 			},
 		},
-		expectedExporters: []trace.Exporter{&zipkin.Exporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&zipkin.Exporter{}},
+	}, {
+		name: "otel trace http exporter",
+		tracingConfig: config.TracingSpec{
+			Otel: config.OtelSpec{
+				EndpointAddress: "foo.bar",
+				IsSecure:        false,
+				Protocol:        "http",
+			},
+		},
+		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},
+	}, {
+		name: "invalid otel trace exporter protocol",
+		tracingConfig: config.TracingSpec{
+			Otel: config.OtelSpec{
+				EndpointAddress: "foo.bar",
+				IsSecure:        false,
+				Protocol:        "tcp",
+			},
+		},
+		expectedErr: "invalid protocol tcp provided for Otel endpoint",
 	}, {
 		name: "stdout trace exporter",
 		tracingConfig: config.TracingSpec{
 			Stdout: true,
 		},
-		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&diag_utils.StdoutExporter{}},
 	}, {
 		name: "all trace exporters",
 		tracingConfig: config.TracingSpec{
+			Otel: config.OtelSpec{
+				EndpointAddress: "http://foo.bar",
+				IsSecure:        false,
+				Protocol:        "http",
+			},
 			Zipkin: config.ZipkinSpec{
 				EndpointAddress: "http://foo.bar",
 			},
 			Stdout: true,
 		},
-		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}, &otlptrace.Exporter{}},
 	}}
 
 	for _, tc := range testcases {
@@ -928,23 +954,25 @@ func TestSetupTracing(t *testing.T) {
 			if tc.hostAddress != "" {
 				rt.hostAddress = tc.hostAddress
 			}
-			// Setup tracing with the fake trace exporter store to confirm
+			// Setup tracing with the fake tracer provider  store to confirm
 			// the right exporter was registered.
-			exporterStore := &fakeTraceExporterStore{}
-			if err := rt.setupTracing(rt.hostAddress, exporterStore); tc.expectedErr != "" {
+			tpStore := newFakeTracerProviderStore()
+			if err := rt.setupTracing(rt.hostAddress, tpStore); tc.expectedErr != "" {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				assert.Nil(t, err)
 			}
-			for i, exporter := range exporterStore.exporters {
+			for i, exporter := range tpStore.exporters {
 				// Exporter types don't expose internals, so we can only validate that
 				// the right type of  exporter was registered.
 				assert.Equal(t, reflect.TypeOf(tc.expectedExporters[i]), reflect.TypeOf(exporter))
 			}
-			// Setup tracing with the OpenCensus global exporter store.
+			// Setup tracing with the OpenTelemetry trace provider store.
 			// We have no way to validate the result, but we can at least
 			// confirm that nothing blows up.
-			rt.setupTracing(rt.hostAddress, openCensusExporterStore{})
+			if tc.expectedErr == "" {
+				rt.setupTracing(rt.hostAddress, newOpentelemetryTracerProviderStore())
+			}
 		})
 	}
 }
@@ -1266,7 +1294,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		rt.topicRoutes = nil
-		rt.pubSubs = make(map[string]pubsub.PubSub)
+		rt.pubSubs = make(map[string]pubsubItem)
 
 		return mockPubSub, mockPubSub2
 	}
@@ -1296,7 +1324,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1330,7 +1358,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1358,7 +1386,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1377,7 +1405,10 @@ func TestInitPubSub(t *testing.T) {
 	t.Run("publish adapter not nil, with pub sub component", func(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
-		rts.pubSubs[TestPubsubName], _ = initMockPubSubForRuntime(rts)
+		ps, _ := initMockPubSubForRuntime(rts)
+		rts.pubSubs[TestPubsubName] = pubsubItem{
+			component: ps,
+		}
 		a := rts.getPublishAdapter()
 		assert.NotNil(t, a)
 	})
@@ -1484,7 +1515,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1516,7 +1547,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1580,7 +1611,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1612,7 +1643,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
 		err := rt.Publish(&pubsub.PublishRequest{
@@ -1623,7 +1654,7 @@ func TestInitPubSub(t *testing.T) {
 
 		assert.Nil(t, err)
 
-		rt.pubSubs[TestSecondPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
 		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
@@ -1651,17 +1682,23 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			require.Nil(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
 		})
 		assert.NotNil(t, err)
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
 		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
@@ -1670,46 +1707,66 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("test allowed topics, no scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {allowedTopics: []string{"topic1"}},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("test allowed topics, no scopes, operation not allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {allowedTopics: []string{"topic1"}},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.False(t, a)
 	})
 
 	t.Run("test allowed topics, with scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		rt.scopedPublishings = map[string][]string{TestPubsubName: {"topic1"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"topic1"},
+				scopedPublishings: []string{"topic1"},
+			},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in existing publishing scopes, operation not allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		rt.scopedPublishings = map[string][]string{TestPubsubName: {"topic2"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"topic1"},
+				scopedPublishings: []string{"topic2"},
+			},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.False(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		rt.scopedPublishings = map[string][]string{}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"topic1"},
+				scopedPublishings: []string{},
+			},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("topics A and B in allowed topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"A", "B"}}
-		rt.scopedPublishings = map[string][]string{TestPubsubName: {"A"}}
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"A", "B"},
+				scopedPublishings: []string{"A"},
+			},
+		}
 
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", rt.scopedPublishings[TestPubsubName])
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 
-		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.scopedPublishings[TestPubsubName])
+		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.False(t, b)
 	})
 }
@@ -1913,7 +1970,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		},
 		Auth: components_v1alpha1.Auth{
-			SecretStore: "kubernetes",
+			SecretStore: secretstores_loader.BuiltinKubernetesSecretStore,
 		},
 	}
 
@@ -1930,7 +1987,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
 		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
 				return m
 			}),
 		)
@@ -1938,7 +1995,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		// add Kubernetes component manually
 		rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
-				Name: "kubernetes",
+				Name: secretstores_loader.BuiltinKubernetesSecretStore,
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
@@ -1964,16 +2021,13 @@ func TestProcessComponentSecrets(t *testing.T) {
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
 		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
 				return m
 			}),
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		for _, comp := range rt.builtinSecretStore() {
-			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
-		}
+		assertBuiltInSecretStore(t, rt)
 
 		mod, unready := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "", mod.Spec.Metadata[0].Value.String())
@@ -2187,19 +2241,75 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 // Test InitSecretStore if secretstore.* refers to Kubernetes secret store.
 func TestInitSecretStoresInKubernetesMode(t *testing.T) {
-	rt := NewTestDaprRuntime(modes.KubernetesMode)
-	defer stopRuntime(t, rt)
+	t.Run("built-in secret store is added", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
 
-	m := NewMockKubernetesStore()
-	rt.secretStoresRegistry.Register(
-		secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
-			return m
-		}),
-	)
-	for _, comp := range rt.builtinSecretStore() {
-		err := rt.processComponentAndDependents(comp)
-		assert.Nil(t, err)
-	}
+		m := NewMockKubernetesStore()
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+				return m
+			}),
+		)
+
+		assertBuiltInSecretStore(t, rt)
+	})
+
+	t.Run("disable built-in secret store flag", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
+		rt.runtimeConfig.DisableBuiltinK8sSecretStore = true
+
+		testOk := make(chan struct{})
+		defer close(testOk)
+		go func() {
+			// If the test fails, this call blocks forever, eventually causing a timeout
+			rt.appendBuiltinSecretStore()
+			testOk <- struct{}{}
+		}()
+		select {
+		case <-testOk:
+			return
+		case <-time.After(5 * time.Second):
+			t.Fatalf("test failed")
+		}
+	})
+
+	t.Run("built-in secret store bypasses authorizers", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		defer stopRuntime(t, rt)
+		rt.componentAuthorizers = []ComponentAuthorizer{
+			func(component components_v1alpha1.Component) bool {
+				return false
+			},
+		}
+
+		m := NewMockKubernetesStore()
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+				return m
+			}),
+		)
+
+		assertBuiltInSecretStore(t, rt)
+	})
+}
+
+func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
+	wg := sync.WaitGroup{}
+	go func() {
+		for comp := range rt.pendingComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+			if comp.Name == secretstores_loader.BuiltinKubernetesSecretStore {
+				wg.Done()
+			}
+		}
+	}()
+	wg.Add(1)
+	rt.appendBuiltinSecretStore()
+	wg.Wait()
+	close(rt.pendingComponents)
 }
 
 func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
@@ -2794,6 +2904,305 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	}
 }
 
+func TestPubsubLifecycle(t *testing.T) {
+	rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	defer func() {
+		if rt != nil {
+			stopRuntime(t, rt)
+		}
+	}()
+
+	comp1 := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockPubSub1",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSubAlpha",
+			Version:  "v1",
+			Metadata: []components_v1alpha1.MetadataItem{},
+		},
+	}
+	comp2 := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockPubSub2",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSubBeta",
+			Version:  "v1",
+			Metadata: []components_v1alpha1.MetadataItem{},
+		},
+	}
+	comp3 := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockPubSub3",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSubBeta",
+			Version:  "v1",
+			Metadata: []components_v1alpha1.MetadataItem{},
+		},
+	}
+
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSubAlpha", func() pubsub.PubSub {
+			c := new(daprt.InMemoryPubsub)
+			c.On("Init", mock.AnythingOfType("pubsub.Metadata")).Return(nil)
+			return c
+		}),
+		pubsub_loader.New("mockPubSubBeta", func() pubsub.PubSub {
+			c := new(daprt.InMemoryPubsub)
+			c.On("Init", mock.AnythingOfType("pubsub.Metadata")).Return(nil)
+			return c
+		}),
+	)
+
+	err := rt.processComponentAndDependents(comp1)
+	assert.Nil(t, err)
+	err = rt.processComponentAndDependents(comp2)
+	assert.Nil(t, err)
+	err = rt.processComponentAndDependents(comp3)
+	assert.Nil(t, err)
+
+	forEachPubSub := func(f func(name string, comp *daprt.InMemoryPubsub)) int {
+		i := 0
+		for name, ps := range rt.pubSubs {
+			f(name, ps.component.(*daprt.InMemoryPubsub))
+			i++
+		}
+		return i
+	}
+	getPubSub := func(name string) *daprt.InMemoryPubsub {
+		return rt.pubSubs[name].component.(*daprt.InMemoryPubsub)
+	}
+
+	done := forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+		comp.AssertNumberOfCalls(t, "Init", 1)
+	})
+	require.Equal(t, 3, done)
+
+	subscriptions := make(map[string][]string)
+	messages := make(map[string][]*pubsub.NewMessage)
+	var (
+		subscriptionsCh chan struct{}
+		messagesCh      chan struct{}
+	)
+	forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+		comp.SetOnSubscribedTopicsChanged(func(topics []string) {
+			sort.Strings(topics)
+			subscriptions[name] = topics
+			if subscriptionsCh != nil {
+				subscriptionsCh <- struct{}{}
+			}
+		})
+		comp.SetHandler(func(topic string, msg *pubsub.NewMessage) {
+			if messages[name+"|"+topic] == nil {
+				messages[name+"|"+topic] = []*pubsub.NewMessage{msg}
+			} else {
+				messages[name+"|"+topic] = append(messages[name+"|"+topic], msg)
+			}
+			if messagesCh != nil {
+				messagesCh <- struct{}{}
+			}
+		})
+	})
+
+	setTopicRoutes := func() {
+		rt.topicRoutes = map[string]TopicRoute{
+			"mockPubSub1": {
+				routes: map[string]Route{
+					"topic1": {
+						metadata: map[string]string{"rawPayload": "true"},
+						rules:    []*runtime_pubsub.Rule{{Path: "topic1"}},
+					},
+				},
+			},
+			"mockPubSub2": {
+				routes: map[string]Route{
+					"topic2": {
+						metadata: map[string]string{"rawPayload": "true"},
+						rules:    []*runtime_pubsub.Rule{{Path: "topic2"}},
+					},
+					"topic3": {
+						metadata: map[string]string{"rawPayload": "true"},
+						rules:    []*runtime_pubsub.Rule{{Path: "topic3"}},
+					},
+				},
+			},
+		}
+
+		forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+			comp.Calls = nil
+			comp.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
+		})
+	}
+
+	resetState := func() {
+		messages = make(map[string][]*pubsub.NewMessage)
+		forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+			comp.Calls = nil
+		})
+	}
+
+	subscribePredefined := func(t *testing.T) {
+		setTopicRoutes()
+
+		subscriptionsCh = make(chan struct{}, 5)
+		rt.startSubscriptions()
+
+		done := forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+			switch name {
+			case "mockPubSub1":
+				comp.AssertNumberOfCalls(t, "Subscribe", 1)
+			case "mockPubSub2":
+				comp.AssertNumberOfCalls(t, "Subscribe", 2)
+			case "mockPubSub3":
+				comp.AssertNumberOfCalls(t, "Subscribe", 0)
+			}
+		})
+		require.Equal(t, 3, done)
+
+		for i := 0; i < 3; i++ {
+			<-subscriptionsCh
+		}
+		close(subscriptionsCh)
+		subscriptionsCh = nil
+
+		assert.True(t, reflect.DeepEqual(subscriptions["mockPubSub1"], []string{"topic1"}),
+			"expected %v to equal %v", subscriptions["mockPubSub1"], []string{"topic1"})
+		assert.True(t, reflect.DeepEqual(subscriptions["mockPubSub2"], []string{"topic2", "topic3"}),
+			"expected %v to equal %v", subscriptions["mockPubSub2"], []string{"topic2", "topic3"})
+		assert.Len(t, subscriptions["mockPubSub3"], 0)
+	}
+
+	t.Run("subscribe to 3 topics on 2 components", subscribePredefined)
+
+	ciao := []byte("ciao")
+	sendMessages := func(t *testing.T, expect int) {
+		send := []pubsub.PublishRequest{
+			{Data: ciao, PubsubName: "mockPubSub1", Topic: "topic1"},
+			{Data: ciao, PubsubName: "mockPubSub2", Topic: "topic2"},
+			{Data: ciao, PubsubName: "mockPubSub2", Topic: "topic3"},
+			{Data: ciao, PubsubName: "mockPubSub3", Topic: "topic4"},
+			{Data: ciao, PubsubName: "mockPubSub3", Topic: "not-subscribed"},
+		}
+
+		messagesCh = make(chan struct{}, expect+2)
+
+		for _, m := range send {
+			err = rt.Publish(&m)
+			assert.NoError(t, err)
+		}
+
+		for i := 0; i < expect; i++ {
+			<-messagesCh
+		}
+
+		// Sleep to ensure no new messages have come in
+		time.Sleep(10 * time.Millisecond)
+		assert.Len(t, messagesCh, 0)
+
+		close(messagesCh)
+		messagesCh = nil
+	}
+
+	t.Run("messages are delivered to 3 topics", func(t *testing.T) {
+		resetState()
+		sendMessages(t, 3)
+
+		require.Len(t, messages, 3)
+		_ = assert.Len(t, messages["mockPubSub1|topic1"], 1) &&
+			assert.Equal(t, messages["mockPubSub1|topic1"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub2|topic2"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic2"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+	})
+
+	t.Run("unsubscribe from mockPubSub2/topic2", func(t *testing.T) {
+		resetState()
+		comp := getPubSub("mockPubSub2")
+		comp.On("unsubscribed", "topic2").Return(nil).Once()
+
+		err = rt.unsubscribeTopic("mockPubSub2", "topic2")
+		require.NoError(t, err)
+
+		sendMessages(t, 2)
+
+		require.Len(t, messages, 2)
+		_ = assert.Len(t, messages["mockPubSub1|topic1"], 1) &&
+			assert.Equal(t, messages["mockPubSub1|topic1"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+		comp.AssertCalled(t, "unsubscribed", "topic2")
+	})
+
+	t.Run("unsubscribe from mockPubSub1/topic1", func(t *testing.T) {
+		resetState()
+		comp := getPubSub("mockPubSub1")
+		comp.On("unsubscribed", "topic1").Return(nil).Once()
+
+		err = rt.unsubscribeTopic("mockPubSub1", "topic1")
+		require.NoError(t, err)
+
+		sendMessages(t, 1)
+
+		require.Len(t, messages, 1)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+		comp.AssertCalled(t, "unsubscribed", "topic1")
+	})
+
+	t.Run("subscribe to mockPubSub3/topic4", func(t *testing.T) {
+		resetState()
+
+		err = rt.subscribeTopic(rt.pubsubCtx, "mockPubSub3", "topic4", Route{})
+		require.NoError(t, err)
+
+		sendMessages(t, 2)
+
+		require.Len(t, messages, 2)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub3|topic4"], 1) &&
+			assert.Equal(t, messages["mockPubSub3|topic4"][0].Data, ciao)
+	})
+
+	t.Run("stopSubscriptions", func(t *testing.T) {
+		resetState()
+		comp2 := getPubSub("mockPubSub2")
+		comp2.On("unsubscribed", "topic3").Return(nil).Once()
+		comp3 := getPubSub("mockPubSub3")
+		comp3.On("unsubscribed", "topic4").Return(nil).Once()
+
+		rt.stopSubscriptions()
+
+		sendMessages(t, 0)
+
+		require.Len(t, messages, 0)
+		comp2.AssertCalled(t, "unsubscribed", "topic3")
+		comp3.AssertCalled(t, "unsubscribed", "topic4")
+	})
+
+	t.Run("restart subscriptions with pre-defined ones", subscribePredefined)
+
+	t.Run("shutdown", func(t *testing.T) {
+		resetState()
+
+		comp1 := getPubSub("mockPubSub1")
+		comp1.On("unsubscribed", "topic1").Return(nil).Once()
+		comp2 := getPubSub("mockPubSub2")
+		comp2.On("unsubscribed", "topic2").Return(nil).Once()
+		comp2.On("unsubscribed", "topic3").Return(nil).Once()
+
+		stopRuntime(t, rt)
+		rt = nil
+
+		comp1.AssertCalled(t, "unsubscribed", "topic1")
+		comp2.AssertCalled(t, "unsubscribed", "topic2")
+		comp2.AssertCalled(t, "unsubscribed", "topic3")
+	})
+}
+
 func TestPubsubWithResiliency(t *testing.T) {
 	r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
 	defer stopRuntime(t, r)
@@ -2883,8 +3292,16 @@ func TestPubsubWithResiliency(t *testing.T) {
 				},
 			},
 		}}
+		r.pubSubs = map[string]pubsubItem{
+			"failPubsub": {
+				component: &failingPubsub,
+			},
+		}
 
-		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
+		r.topicCtxCancels = map[string]context.CancelFunc{}
+		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
+		defer r.pubsubCancel()
+		err := r.beginPubSub("failPubsub")
 
 		assert.NoError(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["failingSubTopic"])
@@ -2904,9 +3321,17 @@ func TestPubsubWithResiliency(t *testing.T) {
 				},
 			},
 		}}
+		r.pubSubs = map[string]pubsubItem{
+			"failPubsub": {
+				component: &failingPubsub,
+			},
+		}
 
+		r.topicCtxCancels = map[string]context.CancelFunc{}
+		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
+		defer r.pubsubCancel()
 		start := time.Now()
-		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
+		err := r.beginPubSub("failPubsub")
 		end := time.Now()
 
 		// This is eaten, technically.
@@ -2992,12 +3417,12 @@ func TestPubSubDeadLetter(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), req).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
 		// Mock send message to app returns error.
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("failed to send"))
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
@@ -3005,7 +3430,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Data:       []byte(`{"id":"1"}`),
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.pubCount["topic0"])
 		// Ensure the message is sent to dead letter topic.
 		assert.Equal(t, 1, pubsubIns.pubCount["topic1"])
@@ -3040,7 +3465,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
@@ -3048,7 +3473,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Data:       []byte(`{"id":"1"}`),
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
 		// Consider of resiliency, publish message may retry in some cases, make sure the pub count is greater than 1.
 		assert.True(t, pubsubIns.pubCount["topic0"] >= 1)
 		// Make sure every message that is sent to topic0 is sent to its dead letter topic1.
@@ -3177,7 +3602,13 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 }
 
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
-	testRuntimeConfig := NewRuntimeConfig(
+	testRuntimeConfig := NewTestDaprRuntimeConfig(mode, protocol, appPort)
+
+	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+}
+
+func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *Config {
+	return NewRuntimeConfig(
 		TestRuntimeConfigID,
 		[]string{"10.10.10.12"},
 		"10.10.10.11",
@@ -3204,9 +3635,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		false,
 		time.Second,
 		true,
-		true)
-
-	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		false)
 }
 
 func TestGracefulShutdown(t *testing.T) {
@@ -3443,6 +3872,31 @@ func TestReadInputBindings(t *testing.T) {
 
 		assert.Equal(t, string(testInputBindingData), b.data)
 	})
+
+	t.Run("start and stop reading", func(t *testing.T) {
+		rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, rt)
+
+		closeCh := make(chan struct{})
+		defer close(closeCh)
+
+		b := &daprt.MockBinding{}
+		b.SetOnReadCloseCh(closeCh)
+		b.On("Read", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil).Once()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		rt.readFromBinding(ctx, testInputBindingName, b)
+		time.Sleep(80 * time.Millisecond)
+		cancel()
+		select {
+		case <-closeCh:
+			// All good
+		case <-time.After(time.Second):
+			t.Fatal("timeout while waiting for binding to stop reading")
+		}
+
+		b.AssertNumberOfCalls(t, "Read", 1)
+	})
 }
 
 func TestNamespace(t *testing.T) {
@@ -3576,6 +4030,53 @@ func TestAuthorizedComponents(t *testing.T) {
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{"other"}
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+
+	t.Run("no authorizers", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.componentAuthorizers = []ComponentAuthorizer{}
+		// Namespace mismatch, should be accepted anyways
+		rt.namespace = "a"
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = testCompName
+		component.ObjectMeta.Namespace = "b"
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 1)
+		assert.Equal(t, testCompName, comps[0].Name)
+	})
+
+	t.Run("only deny all", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.componentAuthorizers = []ComponentAuthorizer{
+			func(component components_v1alpha1.Component) bool {
+				return false
+			},
+		}
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = testCompName
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+
+	t.Run("additional authorizer denies all", func(t *testing.T) {
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPProtocol), 1024)
+		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component components_v1alpha1.Component) bool {
+			return false
+		})
+		defer stopRuntime(t, rt)
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = testCompName
 
 		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)
@@ -4316,4 +4817,9 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 		counter++
 	}
 	return nil
+}
+
+func matchContextInterface(v any) bool {
+	_, ok := v.(context.Context)
+	return ok
 }

@@ -1480,6 +1480,16 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
 	componentsCapabilties := a.getComponentsCapabilitesFn()
+	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
+	if a.actor != nil {
+		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {
+			activeActorsCount = append(activeActorsCount, &runtimev1pb.ActiveActorsCount{
+				Type:  actorTypeCount.Type,
+				Count: int32(actorTypeCount.Count),
+			})
+		}
+	}
+
 	for _, comp := range a.components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
@@ -1492,6 +1502,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 	response := &runtimev1pb.GetMetadataResponse{
 		ExtendedMetadata:     temp,
 		RegisteredComponents: registeredComponents,
+		ActiveActorsCount:    activeActorsCount,
 	}
 	return response, nil
 }

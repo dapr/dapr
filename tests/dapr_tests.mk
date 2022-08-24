@@ -432,6 +432,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_query.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badhost.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_vault_secretstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_reentrant_actor.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -485,15 +486,15 @@ else
 endif
 
 setup-minikube-darwin:
-	minikube start --memory=4g --cpus=4 --driver=hyperkit --kubernetes-version=v1.18.8
+	minikube start --memory=4g --cpus=4 --driver=hyperkit
 	minikube addons enable metrics-server
 
 setup-minikube-windows:
-	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.8
+	minikube start --memory=4g --cpus=4
 	minikube addons enable metrics-server
 
 setup-minikube-linux:
-	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.8
+	minikube start --memory=4g --cpus=4
 	minikube addons enable metrics-server
 
 setup-minikube: setup-minikube-$(detected_OS)

@@ -206,5 +206,5 @@ func appRouter() *mux.Router {
 func main() {
 	log.Printf("Secret App - listening on http://localhost:%d", appPort)
 	log.Printf("Secret endpoint - to be saved at %s", secretURL)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

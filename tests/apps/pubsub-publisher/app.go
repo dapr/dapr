@@ -364,5 +364,5 @@ func main() {
 	initGRPCClient()
 
 	log.Printf("PubSub Publisher - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

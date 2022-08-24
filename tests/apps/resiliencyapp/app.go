@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
@@ -160,7 +159,7 @@ func resiliencyPubsubHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(PubsubResponse{
@@ -325,7 +324,7 @@ func main() {
 	initGRPCClient()
 
 	log.Printf("Resiliency App - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }
 
 // Test Functions.

@@ -296,6 +296,8 @@ func (s *server) startWorkloadCertRotation() {
 			err := s.generateWorkloadCert()
 			if err != nil {
 				s.logger.Errorf("error starting server: %s", err)
+				s.renewMutex.Unlock()
+				continue
 			}
 			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
 		}
