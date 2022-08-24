@@ -181,7 +181,7 @@ func TestPoliciesForTargets(t *testing.T) {
 		{
 			name: "component",
 			create: func(r *Resiliency) Runner {
-				return r.ComponentOutboundPolicy(ctx, "statestore1")
+				return r.ComponentOutboundPolicy(ctx, "statestore1", "Statestore")
 			},
 		},
 		{
@@ -390,30 +390,30 @@ func TestResiliencyHasTargetDefined(t *testing.T) {
 	}
 	config := FromConfigurations(log, r)
 
-	assert.Nil(t, config.GetPolicy("badApp", Endpoint))
-	assert.Nil(t, config.GetPolicy("badActor", Actor))
-	assert.Nil(t, config.GetPolicy("badComponent", ComponentOutbound))
-	assert.Nil(t, config.GetPolicy("badComponent", ComponentInbound))
+	assert.Nil(t, config.GetPolicy("badApp", &EndpointPolicy{}))
+	assert.Nil(t, config.GetPolicy("badActor", &ActorPolicy{}))
+	assert.Nil(t, config.GetPolicy("badComponent", &ComponentInboundPolicy))
+	assert.Nil(t, config.GetPolicy("badComponent", &ComponentOutboundPolicy))
 
-	endpointPolicy := config.GetPolicy("definedApp", Endpoint)
+	endpointPolicy := config.GetPolicy("definedApp", &EndpointPolicy{})
 	assert.NotNil(t, endpointPolicy)
 	assert.Equal(t, endpointPolicy.TimeoutPolicy, 2*time.Second)
 	assert.Equal(t, endpointPolicy.CircuitBreaker.MaxRequests, uint32(1))
 	assert.Nil(t, endpointPolicy.RetryPolicy)
 
-	actorPolicy := config.GetPolicy("definedActor", Actor)
+	actorPolicy := config.GetPolicy("definedActor", &ActorPolicy{})
 	assert.NotNil(t, actorPolicy)
 	assert.Equal(t, actorPolicy.TimeoutPolicy, 2*time.Second)
 	assert.Nil(t, actorPolicy.CircuitBreaker)
 	assert.Nil(t, actorPolicy.RetryPolicy)
 
-	componentOutboundPolicy := config.GetPolicy("definedComponent", ComponentOutbound)
+	componentOutboundPolicy := config.GetPolicy("definedComponent", &ComponentOutboundPolicy)
 	assert.NotNil(t, componentOutboundPolicy)
 	assert.Equal(t, componentOutboundPolicy.TimeoutPolicy, 2*time.Second)
 	assert.Equal(t, componentOutboundPolicy.CircuitBreaker.MaxRequests, uint32(2))
 	assert.Equal(t, componentOutboundPolicy.RetryPolicy.MaxRetries, int64(3))
 
-	componentInboundPolicy := config.GetPolicy("definedComponent", ComponentInbound)
+	componentInboundPolicy := config.GetPolicy("definedComponent", &ComponentInboundPolicy)
 	assert.NotNil(t, componentInboundPolicy)
 	assert.Equal(t, componentInboundPolicy.TimeoutPolicy, 2*time.Second)
 	assert.Equal(t, componentInboundPolicy.CircuitBreaker.MaxRequests, uint32(1))
@@ -489,18 +489,24 @@ func TestDefaultPolicyInterpolation(t *testing.T) {
 	r := FromConfigurations(log)
 
 	// Retry
-	typePolicy, topPolicy := r.expandPolicyTemplate(Endpoint, DefaultRetryTemplate)
-	assert.Equal(t, "DefaultAppRetryPolicy", typePolicy)
+	typePolicies, topPolicy := r.expandPolicyTemplate(&EndpointPolicy{}, DefaultRetryTemplate)
+	assert.Len(t, typePolicies, 1)
+	assert.Equal(t, "DefaultAppRetryPolicy", typePolicies[0])
 	assert.Equal(t, "DefaultRetryPolicy", topPolicy)
 
 	// Timeout
-	typePolicy, topPolicy = r.expandPolicyTemplate(Actor, DefaultTimeoutTemplate)
-	assert.Equal(t, "DefaultActorTimeoutPolicy", typePolicy)
+	typePolicies, topPolicy = r.expandPolicyTemplate(&ActorPolicy{}, DefaultTimeoutTemplate)
+	assert.Len(t, typePolicies, 1)
+	assert.Equal(t, "DefaultActorTimeoutPolicy", typePolicies[0])
 	assert.Equal(t, "DefaultTimeoutPolicy", topPolicy)
 
-	// Circuit Breaker
-	typePolicy, topPolicy = r.expandPolicyTemplate(Component, DefaultCircuitBreakerTemplate)
-	assert.Equal(t, "DefaultComponentCircuitBreakerPolicy", typePolicy)
+	// Circuit Breaker (also testing component policy type)
+	typePolicies, topPolicy = r.expandPolicyTemplate(&ComponentPolicy{componentType: "Statestore", componentDirection: "Outbound"},
+		DefaultCircuitBreakerTemplate)
+	assert.Len(t, typePolicies, 3)
+	assert.Equal(t, "DefaultStatestoreComponentOutboundCircuitBreakerPolicy", typePolicies[0])
+	assert.Equal(t, "DefaultComponentOutboundCircuitBreakerPolicy", typePolicies[1])
+	assert.Equal(t, "DefaultComponentCircuitBreakerPolicy", typePolicies[2])
 	assert.Equal(t, "DefaultCircuitBreakerPolicy", topPolicy)
 }
 
@@ -545,19 +551,19 @@ func TestGetDefaultPolicy(t *testing.T) {
 
 	r := FromConfigurations(log, config)
 
-	retryName := r.getDefaultRetryPolicy(Endpoint)
+	retryName := r.getDefaultRetryPolicy(&EndpointPolicy{})
 	assert.Equal(t, "DefaultAppRetryPolicy", retryName)
-	retryName = r.getDefaultRetryPolicy(Actor)
+	retryName = r.getDefaultRetryPolicy(&ActorPolicy{})
 	assert.Equal(t, "DefaultRetryPolicy", retryName)
 
-	timeoutName := r.getDefaultTimeoutPolicy(Actor)
+	timeoutName := r.getDefaultTimeoutPolicy(&ActorPolicy{})
 	assert.Equal(t, "DefaultActorTimeoutPolicy", timeoutName)
-	timeoutName = r.getDefaultTimeoutPolicy(Component)
+	timeoutName = r.getDefaultTimeoutPolicy(&ComponentPolicy{})
 	assert.Equal(t, "DefaultTimeoutPolicy", timeoutName)
 
-	cbName := r.getDefaultCircuitBreakerPolicy(Component)
+	cbName := r.getDefaultCircuitBreakerPolicy(&ComponentPolicy{})
 	assert.Equal(t, "DefaultComponentCircuitBreakerPolicy", cbName)
-	cbName = r.getDefaultCircuitBreakerPolicy(Endpoint)
+	cbName = r.getDefaultCircuitBreakerPolicy(&EndpointPolicy{})
 	assert.Equal(t, "DefaultCircuitBreakerPolicy", cbName)
 
 	// Delete the top-level defaults and make sure we return an empty string if nothing is defined.
@@ -565,11 +571,11 @@ func TestGetDefaultPolicy(t *testing.T) {
 	delete(r.timeouts, "DefaultTimeoutPolicy")
 	delete(r.circuitBreakers, "DefaultCircuitBreakerPolicy")
 
-	retryName = r.getDefaultRetryPolicy(Actor)
+	retryName = r.getDefaultRetryPolicy(&ActorPolicy{})
 	assert.Equal(t, "", retryName)
-	timeoutName = r.getDefaultTimeoutPolicy(Component)
+	timeoutName = r.getDefaultTimeoutPolicy(&ComponentPolicy{})
 	assert.Equal(t, "", timeoutName)
-	cbName = r.getDefaultCircuitBreakerPolicy(Endpoint)
+	cbName = r.getDefaultCircuitBreakerPolicy(&EndpointPolicy{})
 	assert.Equal(t, "", cbName)
 }
 
