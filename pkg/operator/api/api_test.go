@@ -251,6 +251,50 @@ func TestComponentUpdate(t *testing.T) {
 
 		assert.Equal(t, 1, mockSidecar.Calls)
 	})
+
+	t.Run("sidecar is updated multiple times without data race", func(t *testing.T) {
+		c := componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns1",
+			},
+			Spec: componentsapi.ComponentSpec{},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		assert.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).Build()
+
+		mockSidecar := &mockComponentUpdateServer{}
+		api := NewAPIServer(client).(*apiServer)
+		updateIterations := 100
+		go func() {
+			// Send a component update, give sidecar time to register
+			time.Sleep(time.Millisecond * 500)
+
+			for _, connUpdateChan := range api.allConnUpdateChan {
+				for i := 0; i < updateIterations; i++ {
+					connUpdateChan <- &c
+				}
+
+				// Give sidecar time to register update
+				time.Sleep(time.Millisecond * 500)
+				close(connUpdateChan)
+			}
+		}()
+
+		// Start sidecar update loop
+		api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
+			Namespace: "ns1",
+		}, mockSidecar)
+
+		assert.Equal(t, updateIterations, mockSidecar.Calls)
+	})
 }
 
 func TestListsNamespaced(t *testing.T) {
