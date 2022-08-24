@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"go.uber.org/atomic"
 
 	"github.com/dapr/components-contrib/lock"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
@@ -103,6 +104,7 @@ const (
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
 	TestLockName         = "testlock"
+	componentsDir        = "./components"
 	maxGRPCServerUptime  = 200 * time.Millisecond
 )
 
@@ -219,6 +221,18 @@ func TestNewRuntime(t *testing.T) {
 	assert.NotNil(t, r, "runtime must be initiated")
 }
 
+// writeComponentToDisk the given content into a file inside components directory.
+func writeComponentToDisk(content any, fileName string) (cleanup func(), error error) {
+	filePath := fmt.Sprintf("%s/%s", componentsDir, fileName)
+	b, err := yaml.Marshal(content)
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		os.Remove(filePath)
+	}, os.WriteFile(filePath, b, 0o600)
+}
+
 // helper to populate subscription array for 2 pubsubs.
 // 'topics' are the topics for the first pubsub.
 // 'topics2' are the topics for the second pubsub.
@@ -274,11 +288,6 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 			Pubsubname: "pubsub",
 		},
 	}
-}
-
-func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
-	b, _ := yaml.Marshal(subscription)
-	os.WriteFile(filePath, b, 0o600)
 }
 
 func TestProcessComponentsAndDependents(t *testing.T) {
@@ -1296,15 +1305,26 @@ func TestConsumerID(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+type fakeStateStoreRegistry struct {
+	stateLoader.Registry
+	registerCalled   atomic.Int64
+	onRegisterCalled func(...stateLoader.State)
+}
+
+func (f *fakeStateStoreRegistry) Register(components ...stateLoader.State) {
+	f.registerCalled.Add(1)
+	if f.onRegisterCalled != nil {
+		f.onRegisterCalled(components...)
+	}
+}
+
 func TestPluggableComponents(t *testing.T) {
 	t.Run("load pluggable components", func(t *testing.T) {
-		dir := "./components"
-
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
-		defer os.RemoveAll(dir)
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
 
 		const fakeType, fakeVersion, fakeName = "state", "v1", "mypluggable"
 		s := componentsV1alpha1.PluggableComponent{
@@ -1320,19 +1340,55 @@ func TestPluggableComponents(t *testing.T) {
 			},
 		}
 
-		filePath := "./components/pluggable.yaml"
-		b, err := yaml.Marshal(s)
-		assert.Nil(t, err)
-		os.WriteFile(filePath, b, 0o600)
+		cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
+		require.NoError(t, err)
+		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = dir
+		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
 		pluggableComponents, err := rts.loadPluggableComponents()
-		assert.Nil(t, err)
-		if assert.Len(t, pluggableComponents, 1) {
-			assert.Equal(t, fakeName, pluggableComponents[0].Name)
-			assert.Equal(t, fakeType, string(pluggableComponents[0].Type))
-			assert.Equal(t, fakeVersion, pluggableComponents[0].Version)
+
+		require.NoError(t, err)
+		assert.Len(t, pluggableComponents, 1)
+		assert.Equal(t, fakeName, pluggableComponents[0].Name)
+		assert.Equal(t, fakeType, string(pluggableComponents[0].Type))
+		assert.Equal(t, fakeVersion, pluggableComponents[0].Version)
+	})
+
+	t.Run("register pluggable components should call register", func(t *testing.T) {
+		rts := NewTestDaprRuntime(modes.StandaloneMode)
+		registry := &fakeStateStoreRegistry{
+			onRegisterCalled: func(components ...stateLoader.State) {
+				assert.Len(t, components, 1)
+			},
 		}
+		rts.stateStoreRegistry = registry
+		defer stopRuntime(t, rts)
+
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
+
+		const fakeType, fakeVersion, fakeName = "state", "v1", "mypluggable"
+		s := componentsV1alpha1.PluggableComponent{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: fakeName,
+			},
+			TypeMeta: metaV1.TypeMeta{
+				Kind: "PluggableComponent",
+			},
+			Spec: componentsV1alpha1.PluggableComponentSpec{
+				Type:    fakeType,
+				Version: fakeVersion,
+			},
+		}
+
+		cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
+		require.NoError(t, err)
+		defer cleanup()
+
+		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
+		err = rts.registerPluggableComponents()
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), registry.registerCalled.Load())
 	})
 }
 
@@ -1521,20 +1577,19 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
-		dir := "./components"
-
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
-		defer os.RemoveAll(dir)
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
 
 		s := testDeclarativeSubscription()
 
-		filePath := "./components/sub.yaml"
-		writeSubscriptionToDisk(s, filePath)
+		cleanup, err := writeComponentToDisk(s, "sub.yaml")
+		assert.Nil(t, err)
+		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = dir
+		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1546,21 +1601,20 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("load declarative subscription, in scopes", func(t *testing.T) {
-		dir := "./components"
-
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
-		defer os.RemoveAll(dir)
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{TestRuntimeConfigID}
 
-		filePath := "./components/sub.yaml"
-		writeSubscriptionToDisk(s, filePath)
+		cleanup, err := writeComponentToDisk(s, "sub.yaml")
+		assert.Nil(t, err)
+		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = dir
+		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1573,21 +1627,20 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("load declarative subscription, not in scopes", func(t *testing.T) {
-		dir := "./components"
-
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
-		defer os.RemoveAll(dir)
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{"scope1"}
 
-		filePath := "./components/sub.yaml"
-		writeSubscriptionToDisk(s, filePath)
+		cleanup, err := writeComponentToDisk(s, "sub.yaml")
+		assert.Nil(t, err)
+		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = dir
+		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
 		subs := rts.getDeclarativeSubscriptions()
 		assert.Len(t, subs, 0)
 	})

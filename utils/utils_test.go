@@ -14,11 +14,13 @@ limitations under the License.
 package utils
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestToISO8601DateTimeString(t *testing.T) {
@@ -114,7 +116,7 @@ func TestIsYaml(t *testing.T) {
 func TestEnvOrElse(t *testing.T) {
 	t.Run("envOrElse should return else value when env var is not present", func(t *testing.T) {
 		const elseValue, fakeEnVar = "fakeValue", "envVarThatDoesntExists"
-		assert.Nil(t, os.Unsetenv(fakeEnVar))
+		require.NoError(t, os.Unsetenv(fakeEnVar))
 
 		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), elseValue)
 	})
@@ -123,7 +125,7 @@ func TestEnvOrElse(t *testing.T) {
 		const elseValue, fakeEnVar, fakeEnvVarValue = "fakeValue", "envVarThatExists", "envVarValue"
 		defer os.Unsetenv(fakeEnVar)
 
-		assert.Nil(t, os.Setenv(fakeEnVar, fakeEnvVarValue))
+		require.NoError(t, os.Setenv(fakeEnVar, fakeEnvVarValue))
 		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), fakeEnvVarValue)
 	})
 }

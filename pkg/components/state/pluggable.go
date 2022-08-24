@@ -71,7 +71,7 @@ func (ss *grpcStateStore) Init(metadata st.Metadata) error {
 		return err
 	}
 
-	ss.features = make([]st.Feature, 0)
+	ss.features = make([]st.Feature, len(featureResponse.Feature))
 	for idx, f := range featureResponse.Feature {
 		ss.features[idx] = st.Feature(f)
 	}
@@ -122,7 +122,7 @@ func (ss *grpcStateStore) Ping() error {
 	return err
 }
 
-// Close gRPC connection and all inflight requests will be called.
+// Close gRPC connection and all inflight requests will be cancelled.
 func (ss *grpcStateStore) Close() error {
 	ss.cancel()
 

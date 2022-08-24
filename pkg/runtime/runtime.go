@@ -447,15 +447,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
 
-	pluggables, err := a.loadPluggableComponents()
-	if err != nil {
-		return err
+	if err = a.registerPluggableComponents(); err != nil {
+		log.Warnf("failed to register pluggable components: %s", err)
 	}
-	log.Infof("found %d pluggable components", len(pluggables))
-
-	mustRegister := a.buildPluggableRegisterFunc()
-
-	mustRegister(pluggables...)
 
 	go a.processComponents()
 
@@ -632,6 +626,21 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 		}
 	}
 	return httpMiddleware.Pipeline{Handlers: handlers}, nil
+}
+
+// registerPluggableComponents loads and register the loaded pluggable components.
+func (a *DaprRuntime) registerPluggableComponents() error {
+	pluggables, err := a.loadPluggableComponents()
+	if err != nil {
+		return err
+	}
+	log.Infof("found %d pluggable components", len(pluggables))
+
+	mustRegister := a.buildPluggableRegisterFunc()
+
+	mustRegister(pluggables...)
+
+	return nil
 }
 
 // buildPluggableRegisterFunc returns a register function for pluggable components.

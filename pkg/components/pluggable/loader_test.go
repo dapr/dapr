@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const configPrefix = "."
@@ -45,10 +46,10 @@ spec:
   version: v1
 `
 		remove, err := writeTempConfig(filename, yaml)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer remove()
 		components, err := LoadFromDisk(configPrefix)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Len(t, components, 1)
 	})
 
@@ -61,10 +62,10 @@ kind: PluggableComponent
 metadata:
 name: statestore`
 		remove, err := writeTempConfig(filename, yaml)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer remove()
 		components, err := LoadFromDisk(configPrefix)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Len(t, components, 0)
 	})
 

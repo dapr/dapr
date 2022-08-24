@@ -32,6 +32,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMustLoadStateStore(t *testing.T) {
@@ -154,7 +155,7 @@ func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err er
 func TestComponentCalls(t *testing.T) {
 	t.Run("features should returns the component features'", func(t *testing.T) {
 		stStore, cleanup, err := getStateStore(&server{})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 		assert.Empty(t, stStore.Features())
 		stStore.features = []state.Feature{state.FeatureETag}
@@ -171,13 +172,13 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 		err = stStore.Delete(&state.DeleteRequest{
 			Key: fakeKey,
 		})
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.deleteCalled.Load())
 	})
 
@@ -192,7 +193,7 @@ func TestComponentCalls(t *testing.T) {
 			deleteErr: fakeErr,
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 		err = stStore.Delete(&state.DeleteRequest{
 			Key: fakeKey,
@@ -212,7 +213,7 @@ func TestComponentCalls(t *testing.T) {
 			getErr: errors.New("my-fake-err"),
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		resp, err := stStore.Get(&state.GetRequest{
@@ -233,7 +234,7 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		resp, err := stStore.Get(&state.GetRequest{
@@ -258,14 +259,14 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		resp, err := stStore.Get(&state.GetRequest{
 			Key: fakeKey,
 		})
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.getCalled.Load())
 		assert.Equal(t, resp.Data, fakeData)
 	})
@@ -281,7 +282,7 @@ func TestComponentCalls(t *testing.T) {
 			setErr: errors.New("fake-set-err"),
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		err = stStore.Set(&state.SetRequest{
@@ -303,7 +304,7 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		err = stStore.Set(&state.SetRequest{
@@ -311,19 +312,19 @@ func TestComponentCalls(t *testing.T) {
 			Value: fakeData,
 		})
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.setCalled.Load())
 	})
 
 	t.Run("ping should not return an err when grpc not returns an error", func(t *testing.T) {
 		svc := &server{}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		err = stStore.Ping()
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.pingCalled.Load())
 	})
 
@@ -332,7 +333,7 @@ func TestComponentCalls(t *testing.T) {
 			pingErr: errors.New("fake-err"),
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		err = stStore.Ping()
@@ -346,7 +347,7 @@ func TestComponentCalls(t *testing.T) {
 			bulkSetErr: errors.New("fake-bulk-err"),
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		err = stStore.BulkSet([]state.SetRequest{})
@@ -367,7 +368,7 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		err = stStore.BulkSet(requests)
@@ -394,12 +395,12 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		err = stStore.BulkSet(requests)
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.bulkSetCalled.Load())
 	})
 
@@ -419,12 +420,12 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		err = stStore.BulkDelete(requests)
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.bulkDeleteCalled.Load())
 	})
 
@@ -441,7 +442,7 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		err = stStore.BulkDelete(requests)
@@ -460,7 +461,7 @@ func TestComponentCalls(t *testing.T) {
 			bulkGetErr: errors.New("fake-bulk-get-err"),
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		got, resp, err := stStore.BulkGet(requests)
@@ -496,12 +497,12 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer cleanup()
 
 		got, resp, err := stStore.BulkGet(requests)
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, got, gotValue)
 		assert.NotNil(t, resp)
 		assert.Len(t, resp, len(requests))
@@ -589,7 +590,7 @@ func TestMappers(t *testing.T) {
 
 	t.Run("toSetRequest should return nil when receiving a nil set request", func(t *testing.T) {
 		req, err := toSetRequest(nil)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, req)
 	})
 	t.Run("toSetRequest accept and parse values as []byte", func(t *testing.T) {
@@ -608,7 +609,7 @@ func TestMappers(t *testing.T) {
 					Consistency: "CONSISTENCY_EVENTUAL",
 				},
 			})
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, req)
 			assert.Equal(t, req.Key, fakeKey)
 			assert.NotNil(t, req.Value)
