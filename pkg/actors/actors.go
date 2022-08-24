@@ -369,7 +369,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if a.isResiliencyEnabled {
-		if a.resiliency.GetPolicy(req.Actor().ActorType, resiliency.Actor) == nil {
+		if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
 			retriesExhaustedPath := false // Used to track final error state.
 			nullifyResponsePath := false  // Used to track final response state.
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
@@ -553,7 +553,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	var resp *state.GetResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.store.Get(&state.GetRequest{
@@ -616,7 +616,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		}
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.transactionalStore.Multi(&state.TransactionalStateRequest{
 			Operations: operations,
@@ -796,7 +796,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName, resiliency.Statestore)
 	var resp *state.GetResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.store.Get(&state.GetRequest{
@@ -826,7 +826,7 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 		RepetitionLeft: repetition,
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Set(&state.SetRequest{
 			Key:   constructCompositeKey(actorKey, name),
@@ -1364,7 +1364,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 
 func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *ActorMetadata) error {
 	metadataKey := constructCompositeKey("actors", actorType, "metadata")
-	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Set(&state.SetRequest{
 			Key:   metadataKey,
@@ -1395,7 +1395,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if a.resiliency.GetPolicy(a.storeName, resiliency.ComponentOutbound) == nil {
+		if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(context.Background(), resiliency.BuiltInActorReminderRetries)
 		} else {
@@ -1554,7 +1554,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		return nil, nil, fmt.Errorf("could not read actor type metadata: %w", merr)
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName, resiliency.Statestore)
 
 	log.Debugf(
 		"starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
@@ -1704,7 +1704,7 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
 	log.Debugf("saving %d reminders in %s ...", len(reminders), stateKey)
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Set(&state.SetRequest{
 			Key:      stateKey,
@@ -1746,7 +1746,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if a.resiliency.GetPolicy(a.storeName, resiliency.ComponentOutbound) == nil {
+		if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {
@@ -1835,7 +1835,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		return err
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Delete(&state.DeleteRequest{
 			Key: reminderKey,
@@ -1911,7 +1911,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if a.resiliency.GetPolicy(a.storeName, resiliency.ComponentOutbound) == nil {
+		if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {
