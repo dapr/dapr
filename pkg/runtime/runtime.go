@@ -677,7 +677,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	policy := a.resiliency.ComponentInboundPolicy(ctx, name)
+	policy := a.resiliency.ComponentInboundPolicy(ctx, name, resiliency.Pubsub)
 	err := a.pubSubs[name].component.Subscribe(ctx, pubsub.SubscribeRequest{
 		Topic:    topic,
 		Metadata: route.metadata,
@@ -889,22 +889,20 @@ func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) 
 }
 
 func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
-	a.directMessaging = messaging.NewDirectMessaging(
-		a.runtimeConfig.ID,
-		a.namespace,
-		a.runtimeConfig.InternalGRPCPort,
-		a.runtimeConfig.Mode,
-		a.appChannel,
-		a.grpc.GetGRPCConnection,
-		resolver,
-		a.globalConfig.Spec.TracingSpec,
-		a.runtimeConfig.MaxRequestBodySize,
-		a.proxy,
-		a.runtimeConfig.ReadBufferSize,
-		a.runtimeConfig.StreamRequestBody,
-		a.resiliency,
-		config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency),
-	)
+	a.directMessaging = messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
+		AppID:               a.runtimeConfig.ID,
+		Namespace:           a.namespace,
+		Port:                a.runtimeConfig.InternalGRPCPort,
+		Mode:                a.runtimeConfig.Mode,
+		AppChannel:          a.appChannel,
+		ClientConnFn:        a.grpc.GetGRPCConnection,
+		Resolver:            resolver,
+		MaxRequestBodySize:  a.runtimeConfig.MaxRequestBodySize,
+		Proxy:               a.proxy,
+		ReadBufferSize:      a.runtimeConfig.ReadBufferSize,
+		Resiliency:          a.resiliency,
+		IsResiliencyEnabled: config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.Resiliency),
+	})
 }
 
 func (a *DaprRuntime) initProxy() {
@@ -1046,7 +1044,7 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		for _, o := range ops {
 			if o == req.Operation {
 				var resp *bindings.InvokeResponse
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name)
+				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, name, resiliency.Binding)
 				err := policy(func(ctx context.Context) (err error) {
 					resp, err = binding.Invoke(ctx, req)
 					return err
@@ -1067,7 +1065,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
-				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName)
+				policy := a.resiliency.ComponentOutboundPolicy(a.ctx, response.StoreName, resiliency.Statestore)
 				err := policy(func(ctx context.Context) (err error) {
 					return a.stateStores[response.StoreName].BulkSet(reqs)
 				})
@@ -1116,7 +1114,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		start := time.Now()
 
 		var resp *runtimev1pb.BindingEventResponse
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName)
+		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
 		err := policy(func(ctx context.Context) (err error) {
 			resp, err = client.OnBindingEvent(ctx, req)
 			return err
@@ -1176,7 +1174,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		var resp *invokev1.InvokeMethodResponse
 		respErr := false
-		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName)
+		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
 		err := policy(func(ctx context.Context) (err error) {
 			respErr = false
 			resp, err = a.appChannel.InvokeMethod(ctx, req)
@@ -1260,24 +1258,30 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.ShutdownWithWait,
 		a.getComponentsCapabilitesMap,
 	)
-	serverConf := http.NewServerConfig(
-		a.runtimeConfig.ID,
-		a.hostAddress,
-		port,
-		a.runtimeConfig.APIListenAddresses,
-		publicPort,
-		profilePort,
-		allowedOrigins,
-		a.runtimeConfig.EnableProfiling,
-		a.runtimeConfig.MaxRequestBodySize,
-		a.runtimeConfig.UnixDomainSocket,
-		a.runtimeConfig.ReadBufferSize,
-		a.runtimeConfig.StreamRequestBody,
-		a.runtimeConfig.EnableAPILogging,
-	)
 
-	server := http.NewServer(a.daprHTTPAPI,
-		serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline, a.globalConfig.Spec.APISpec)
+	serverConf := http.ServerConfig{
+		AppID:              a.runtimeConfig.ID,
+		HostAddress:        a.hostAddress,
+		Port:               port,
+		APIListenAddresses: a.runtimeConfig.APIListenAddresses,
+		PublicPort:         publicPort,
+		ProfilePort:        profilePort,
+		AllowedOrigins:     allowedOrigins,
+		EnableProfiling:    a.runtimeConfig.EnableProfiling,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
+	}
+
+	server := http.NewServer(http.NewServerOpts{
+		API:         a.daprHTTPAPI,
+		Config:      serverConf,
+		TracingSpec: a.globalConfig.Spec.TracingSpec,
+		MetricSpec:  a.globalConfig.Spec.MetricSpec,
+		Pipeline:    pipeline,
+		APISpec:     a.globalConfig.Spec.APISpec,
+	})
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1730,7 +1734,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName)
+	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName, resiliency.Pubsub)
 	return policy(func(ctx context.Context) (err error) {
 		return ps.component.Publish(req)
 	})

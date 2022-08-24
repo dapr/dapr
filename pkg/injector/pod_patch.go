@@ -73,7 +73,6 @@ const (
 	daprAppSSLKey                     = "dapr.io/app-ssl"
 	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
 	daprReadBufferSize                = "dapr.io/http-read-buffer-size"
-	daprHTTPStreamRequestBody         = "dapr.io/http-stream-request-body"
 	daprGracefulShutdownSeconds       = "dapr.io/graceful-shutdown-seconds"
 	daprEnableAPILogging              = "dapr.io/enable-api-logging"
 	daprUnixDomainSocketPath          = "dapr.io/unix-domain-socket-path"
@@ -122,7 +121,6 @@ const (
 	defaultHealthzProbeThreshold      = 3
 	apiVersionV1                      = "v1.0"
 	defaultMtlsEnabled                = true
-	defaultDaprHTTPStreamRequestBody  = false
 	defaultAPILoggingEnabled          = false
 	defaultBuiltinSecretStoreDisabled = false
 	defaultAppCheckPath               = "/health"
@@ -509,10 +507,6 @@ func getVolumeMountsReadWrite(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprVolumeMountsReadWriteKey, "")
 }
 
-func HTTPStreamRequestBodyEnabled(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprHTTPStreamRequestBody, defaultDaprHTTPStreamRequestBody)
-}
-
 func getDisableBuiltinK8sSecretStore(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprDisableBuiltinK8sSecretStore, defaultBuiltinSecretStoreDisabled)
 }
@@ -721,8 +715,6 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 		log.Warn(err)
 	}
 
-	HTTPStreamRequestBodyEnabled := HTTPStreamRequestBodyEnabled(cfg.annotations)
-
 	if existPlacementAddressesAnnotation(cfg.annotations) {
 		cfg.placementServiceAddress = getPlacementAddresses(cfg.annotations)
 	}
@@ -918,10 +910,6 @@ func getSidecarContainer(cfg sidecarContainerConfig) (*corev1.Container, error) 
 
 	if appSSLEnabled(cfg.annotations) {
 		c.Args = append(c.Args, "--app-ssl")
-	}
-
-	if HTTPStreamRequestBodyEnabled {
-		c.Args = append(c.Args, "--http-stream-request-body")
 	}
 
 	secret := getAPITokenSecret(cfg.annotations)

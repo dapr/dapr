@@ -485,7 +485,7 @@ func TestStoreIsNotInited(t *testing.T) {
 	})
 
 	t.Run("updateReminderTrack", func(t *testing.T) {
-		e := testActorsRuntime.updateReminderTrack("foo", "bar", 1, time.Now())
+		e := testActorsRuntime.updateReminderTrack("foo", "bar", 1, time.Now(), nil)
 		assert.NotNil(t, e)
 	})
 
@@ -566,7 +566,7 @@ func TestSetReminderTrack(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	noRepetition := -1
-	err := testActorsRuntime.updateReminderTrack(actorType, actorID, noRepetition, time.Now())
+	err := testActorsRuntime.updateReminderTrack(actorType, actorID, noRepetition, time.Now(), nil)
 	assert.Nil(t, err)
 }
 
@@ -583,7 +583,7 @@ func TestGetReminderTrack(t *testing.T) {
 		actorType, actorID := getTestActorTypeAndID()
 		repetition := 10
 		now := time.Now()
-		testActorsRuntime.updateReminderTrack(actorType, actorID, repetition, now)
+		testActorsRuntime.updateReminderTrack(actorType, actorID, repetition, now, nil)
 		r, _ := testActorsRuntime.getReminderTrack(actorType, actorID)
 		assert.NotEmpty(t, r.LastFiredTime)
 		assert.Equal(t, repetition, r.RepetitionLeft)
