@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	subscriptionsapi_v1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
