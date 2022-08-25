@@ -112,6 +112,9 @@ service Dapr {
 
   // Begin a distribute transaction
   rpc DistributeTransactionBegin(BeginTransactionRequest) returns (BeginResponse) {}
+
+  // Get distribute transaction state
+	rpc GetDistributeTransactionState(GetDistributeTransactionStateRequest) returns (GetDistributeTransactionStateResponse){}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -608,4 +611,14 @@ message BeginTransactionRequest {
 message BeginResponse {
 	string transactionID = 1;
 	repeated string bunchTransactionIDs = 2;
+}
+
+message GetDistributeTransactionStateRequest {
+  string storeName = 1;
+  string transactionID = 2;
+}
+
+message GetDistributeTransactionStateResponse {
+  string TransactionID = 1;
+  map<string, int32> BunchTransactionStates = 2;
 }

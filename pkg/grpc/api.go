@@ -112,6 +112,8 @@ type API interface {
 
 	// Begin a distribute transaction
 	DistributeTransactionBegin(ctx context.Context, in *runtimev1pb.BeginTransactionRequest) (*runtimev1pb.BeginResponse, error)
+	// Get distribute transaction state
+	GetDistributeTransactionState(ctx context.Context, in *runtimev1pb.GetDistributeTransactionStateRequest) (*runtimev1pb.GetDistributeTransactionStateResponse, error)
 }
 
 type api struct {
@@ -1767,5 +1769,31 @@ func (a *api) DistributeTransactionBegin(ctx context.Context, request *runtimev1
 	return &runtimev1pb.BeginResponse{
 		TransactionID:       reqs.TransactionID,
 		BunchTransactionIDs: reqs.BunchTransactionIDs,
+	}, nil
+}
+
+func (a *api) GetDistributeTransactionState(ctx context.Context, request *runtimev1pb.GetDistributeTransactionStateRequest) (*runtimev1pb.GetDistributeTransactionStateResponse, error) {
+	transactionInstance, err := a.getTransactionStore(request.GetStoreName())
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetDistributeTransactionStateResponse{}, err
+	}
+	reqs, err := transactionInstance.GetBunchTransactionState(
+		transaction.GetBunchTransactionsRequest{
+			TransactionID: request.TransactionID,
+		},
+	)
+
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetDistributeTransactionStateResponse{}, err
+	}
+	var bunchTransactionStates map[string]int32
+	states, _ := json.Marshal(reqs.BunchTransactionStates)
+	json.Unmarshal(states, &bunchTransactionStates)
+
+	return &runtimev1pb.GetDistributeTransactionStateResponse{
+		TransactionID:          request.TransactionID,
+		BunchTransactionStates: bunchTransactionStates,
 	}, nil
 }
