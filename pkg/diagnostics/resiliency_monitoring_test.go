@@ -88,7 +88,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, testStateStoreName)
-				_ = r.ComponentOutboundPolicy(context.TODO(), testStateStoreName)
+				_ = r.ComponentOutboundPolicy(context.TODO(), testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
@@ -105,7 +105,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 			appID: testAppID,
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, testStateStoreName)
-				_ = r.ComponentInboundPolicy(context.TODO(), testStateStoreName)
+				_ = r.ComponentInboundPolicy(context.TODO(), testStateStoreName, resiliency.Statestore)
 			},
 			wantTags: []tag.Tag{
 				newTag("app_id", testAppID),
