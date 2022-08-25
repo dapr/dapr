@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/sidecarcontainer"
+	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/stretchr/testify/assert"
 
 	corev1 "k8s.io/api/core/v1"
@@ -169,7 +169,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				Name: "MockContainer",
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      sidecarcontainer.UnixDomainSocketVolume,
+				Name:      sidecar.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
@@ -178,7 +178,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts",
 					Value: []corev1.VolumeMount{{
-						Name:      sidecarcontainer.UnixDomainSocketVolume,
+						Name:      sidecar.UnixDomainSocketVolume,
 						MountPath: "/tmp",
 					}},
 				},
@@ -193,7 +193,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				},
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      sidecarcontainer.UnixDomainSocketVolume,
+				Name:      sidecar.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
@@ -202,7 +202,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
 					Value: corev1.VolumeMount{
-						Name:      sidecarcontainer.UnixDomainSocketVolume,
+						Name:      sidecar.UnixDomainSocketVolume,
 						MountPath: "/tmp",
 					},
 				},
@@ -218,7 +218,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				},
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      sidecarcontainer.UnixDomainSocketVolume,
+				Name:      sidecar.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
@@ -227,7 +227,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
 					Value: corev1.VolumeMount{
-						Name:      sidecarcontainer.UnixDomainSocketVolume,
+						Name:      sidecar.UnixDomainSocketVolume,
 						MountPath: "/tmp",
 					},
 				},
@@ -238,11 +238,11 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 			mockContainer: corev1.Container{
 				Name: "MockContainer",
 				VolumeMounts: []corev1.VolumeMount{
-					{Name: sidecarcontainer.UnixDomainSocketVolume},
+					{Name: sidecar.UnixDomainSocketVolume},
 				},
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      sidecarcontainer.UnixDomainSocketVolume,
+				Name:      sidecar.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
@@ -257,7 +257,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				},
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      sidecarcontainer.UnixDomainSocketVolume,
+				Name:      sidecar.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
@@ -294,9 +294,9 @@ func TestAppendUnixDomainSocketVolume(t *testing.T) {
 			map[string]string{annotations.KeyUnixDomainSocketPath: "/tmp"},
 			nil,
 			[]corev1.Volume{{
-				Name: sidecarcontainer.UnixDomainSocketVolume,
+				Name: sidecar.UnixDomainSocketVolume,
 			}},
-			&corev1.VolumeMount{Name: sidecarcontainer.UnixDomainSocketVolume, MountPath: "/tmp"},
+			&corev1.VolumeMount{Name: sidecar.UnixDomainSocketVolume, MountPath: "/tmp"},
 		},
 		{
 			"append on existed volumes",
@@ -305,11 +305,11 @@ func TestAppendUnixDomainSocketVolume(t *testing.T) {
 				{Name: "mock"},
 			},
 			[]corev1.Volume{{
-				Name: sidecarcontainer.UnixDomainSocketVolume,
+				Name: sidecar.UnixDomainSocketVolume,
 			}, {
 				Name: "mock",
 			}},
-			&corev1.VolumeMount{Name: sidecarcontainer.UnixDomainSocketVolume, MountPath: "/tmp"},
+			&corev1.VolumeMount{Name: sidecar.UnixDomainSocketVolume, MountPath: "/tmp"},
 		},
 	}
 

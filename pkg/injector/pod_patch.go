@@ -28,7 +28,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/sidecarcontainer"
+	"github.com/dapr/dapr/pkg/injector/sidecar"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/dapr/pkg/validation"
 )
@@ -76,7 +76,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		req.UserInfo,
 	)
 
-	an := sidecarcontainer.Annotations(pod.Annotations)
+	an := sidecar.Annotations(pod.Annotations)
 	if !an.GetBoolOrDefault(annotations.KeyEnabled, false) || podContainsSidecarContainer(&pod) {
 		return nil, nil
 	}
@@ -86,7 +86,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		return nil, err
 	}
 
-	// Keep DNS resolution outside of getSidecarContainer for unit testing.
+	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
 	placementAddress := getServiceAddress(placementService, namespace, i.config.KubeClusterDomain, placementServicePort)
 	sentryAddress := getServiceAddress(sentryService, namespace, i.config.KubeClusterDomain, sentryServicePort)
 	apiSvcAddress := getServiceAddress(apiAddress, namespace, i.config.KubeClusterDomain, apiPort)
@@ -94,7 +94,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	trustAnchors, certChain, certKey := getTrustAnchorsAndCertChain(kubeClient, namespace)
 	socketVolumeMount := appendUnixDomainSocketVolume(&pod)
 
-	sidecarContainer, err := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{
+	sidecarContainer, err := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 		AppID:                       appID,
 		Annotations:                 an,
 		CertChain:                   certChain,
@@ -302,7 +302,7 @@ func getTokenVolumeMount(pod corev1.Pod) *corev1.VolumeMount {
 
 func podContainsSidecarContainer(pod *corev1.Pod) bool {
 	for _, c := range pod.Spec.Containers {
-		if c.Name == sidecarcontainer.SidecarContainerName {
+		if c.Name == sidecar.SidecarContainerName {
 			return true
 		}
 	}
@@ -314,19 +314,19 @@ func getServiceAddress(name, namespace, clusterDomain string, port int) string {
 }
 
 func appendUnixDomainSocketVolume(pod *corev1.Pod) *corev1.VolumeMount {
-	unixDomainSocket := sidecarcontainer.Annotations(pod.Annotations).GetString(annotations.KeyUnixDomainSocketPath)
+	unixDomainSocket := sidecar.Annotations(pod.Annotations).GetString(annotations.KeyUnixDomainSocketPath)
 	if unixDomainSocket == "" {
 		return nil
 	}
 
 	// socketVolume is an EmptyDir
 	socketVolume := &corev1.Volume{
-		Name: sidecarcontainer.UnixDomainSocketVolume,
+		Name: sidecar.UnixDomainSocketVolume,
 	}
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
 
-	return &corev1.VolumeMount{Name: sidecarcontainer.UnixDomainSocketVolume, MountPath: unixDomainSocket}
+	return &corev1.VolumeMount{Name: sidecar.UnixDomainSocketVolume, MountPath: unixDomainSocket}
 }
 
 func podContainsVolume(pod corev1.Pod, name string) bool {
@@ -341,10 +341,10 @@ func podContainsVolume(pod corev1.Pod, name string) bool {
 func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{}
 
-	an := sidecarcontainer.Annotations(pod.Annotations)
+	an := sidecar.Annotations(pod.Annotations)
 	vs := append(
-		sidecarcontainer.ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadOnly), true),
-		sidecarcontainer.ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadWrite), false)...,
+		sidecar.ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadOnly), true),
+		sidecar.ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadWrite), false)...,
 	)
 
 	for _, v := range vs {
@@ -359,5 +359,5 @@ func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
 }
 
 func getAppID(pod corev1.Pod) string {
-	return sidecarcontainer.Annotations(pod.Annotations).GetStringOrDefault(annotations.KeyAppID, pod.GetName())
+	return sidecar.Annotations(pod.Annotations).GetStringOrDefault(annotations.KeyAppID, pod.GetName())
 }

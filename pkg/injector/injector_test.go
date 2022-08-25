@@ -34,7 +34,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/sidecarcontainer"
+	"github.com/dapr/dapr/pkg/injector/sidecar"
 )
 
 func TestConfigCorrectValues(t *testing.T) {
@@ -86,28 +86,28 @@ func TestGetServiceAddress(t *testing.T) {
 func TestAnnotations(t *testing.T) {
 	t.Run("Config", func(t *testing.T) {
 		m := map[string]string{annotations.KeyConfig: "config1"}
-		an := sidecarcontainer.Annotations(m)
+		an := sidecar.Annotations(m)
 		assert.Equal(t, "config1", an.GetString(annotations.KeyConfig))
 	})
 
 	t.Run("Profiling", func(t *testing.T) {
 		t.Run("missing annotation", func(t *testing.T) {
 			m := map[string]string{}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			e := an.GetBoolOrDefault(annotations.KeyEnableProfiling, annotations.DefaultEnableProfiling)
 			assert.Equal(t, e, false)
 		})
 
 		t.Run("enabled", func(t *testing.T) {
 			m := map[string]string{annotations.KeyEnableProfiling: "yes"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			e := an.GetBoolOrDefault(annotations.KeyEnableProfiling, annotations.DefaultEnableProfiling)
 			assert.Equal(t, e, true)
 		})
 
 		t.Run("disabled", func(t *testing.T) {
 			m := map[string]string{annotations.KeyEnableProfiling: "false"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			e := an.GetBoolOrDefault(annotations.KeyEnableProfiling, annotations.DefaultEnableProfiling)
 			assert.Equal(t, e, false)
 		})
@@ -116,7 +116,7 @@ func TestAnnotations(t *testing.T) {
 	t.Run("AppPort", func(t *testing.T) {
 		t.Run("valid port", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppPort: "3000"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			p, err := an.GetInt32(annotations.KeyAppPort)
 			assert.Nil(t, err)
 			assert.Equal(t, int32(3000), p)
@@ -124,7 +124,7 @@ func TestAnnotations(t *testing.T) {
 
 		t.Run("invalid port", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppPort: "a"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			p, err := an.GetInt32(annotations.KeyAppPort)
 			assert.NotNil(t, err)
 			assert.Equal(t, int32(-1), p)
@@ -134,21 +134,21 @@ func TestAnnotations(t *testing.T) {
 	t.Run("Protocol", func(t *testing.T) {
 		t.Run("valid grpc protocol", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppProtocol: "grpc"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			p := an.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol)
 			assert.Equal(t, "grpc", p)
 		})
 
 		t.Run("valid http protocol", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppProtocol: "http"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			p := an.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol)
 			assert.Equal(t, "http", p)
 		})
 
 		t.Run("get default http protocol", func(t *testing.T) {
 			m := map[string]string{}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			p := an.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol)
 			assert.Equal(t, "http", p)
 		})
@@ -174,14 +174,14 @@ func TestAnnotations(t *testing.T) {
 	t.Run("LogLevel", func(t *testing.T) {
 		t.Run("empty log level - get default", func(t *testing.T) {
 			m := map[string]string{}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			logLevel := an.GetStringOrDefault(annotations.KeyLogLevel, annotations.DefaultLogLevel)
 			assert.Equal(t, "info", logLevel)
 		})
 
 		t.Run("error log level", func(t *testing.T) {
 			m := map[string]string{annotations.KeyLogLevel: "error"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			logLevel := an.GetStringOrDefault(annotations.KeyLogLevel, annotations.DefaultLogLevel)
 			assert.Equal(t, "error", logLevel)
 		})
@@ -190,7 +190,7 @@ func TestAnnotations(t *testing.T) {
 	t.Run("MaxConcurrency", func(t *testing.T) {
 		t.Run("empty max concurrency - should be -1", func(t *testing.T) {
 			m := map[string]string{}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			maxConcurrency, err := an.GetInt32(annotations.KeyAppMaxConcurrency)
 			assert.Nil(t, err)
 			assert.Equal(t, int32(-1), maxConcurrency)
@@ -198,14 +198,14 @@ func TestAnnotations(t *testing.T) {
 
 		t.Run("invalid max concurrency - should be -1", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppMaxConcurrency: "invalid"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			_, err := an.GetInt32(annotations.KeyAppMaxConcurrency)
 			assert.NotNil(t, err)
 		})
 
 		t.Run("valid max concurrency - should be 10", func(t *testing.T) {
 			m := map[string]string{annotations.KeyAppMaxConcurrency: "10"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			maxConcurrency, err := an.GetInt32(annotations.KeyAppMaxConcurrency)
 			assert.Nil(t, err)
 			assert.Equal(t, int32(10), maxConcurrency)
@@ -215,7 +215,7 @@ func TestAnnotations(t *testing.T) {
 	t.Run("GetMetricsPort", func(t *testing.T) {
 		t.Run("metrics port override", func(t *testing.T) {
 			m := map[string]string{annotations.KeyMetricsPort: "5050"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			pod := corev1.Pod{}
 			pod.Annotations = m
 			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
@@ -223,7 +223,7 @@ func TestAnnotations(t *testing.T) {
 		})
 		t.Run("invalid metrics port override", func(t *testing.T) {
 			m := map[string]string{annotations.KeyMetricsPort: "abc"}
-			an := sidecarcontainer.Annotations(m)
+			an := sidecar.Annotations(m)
 			pod := corev1.Pod{}
 			pod.Annotations = m
 			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
@@ -231,14 +231,14 @@ func TestAnnotations(t *testing.T) {
 		})
 		t.Run("no metrics port defined", func(t *testing.T) {
 			pod := corev1.Pod{}
-			an := sidecarcontainer.Annotations(pod.Annotations)
+			an := sidecar.Annotations(pod.Annotations)
 			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
 			assert.Equal(t, int32(annotations.DefaultMetricsPort), p)
 		})
 	})
 
 	t.Run("GetSidecarContainer", func(t *testing.T) {
-		c, _ := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{
+		c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 			DaprSidecarImage: "image",
 		})
 
@@ -252,7 +252,7 @@ func TestAnnotations(t *testing.T) {
 				annotations.KeyCPULimit:    "100m",
 				annotations.KeyMemoryLimit: "1Gi",
 			}
-			c, _ := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{
+			c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 				Annotations: an,
 			})
 			assert.NotNil(t, c)
@@ -266,7 +266,7 @@ func TestAnnotations(t *testing.T) {
 				annotations.KeyCPURequest:    "100m",
 				annotations.KeyMemoryRequest: "1Gi",
 			}
-			c, _ := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{
+			c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 				Annotations: an,
 			})
 			assert.NotNil(t, c)
@@ -276,7 +276,7 @@ func TestAnnotations(t *testing.T) {
 		})
 
 		t.Run("no limits", func(t *testing.T) {
-			c, _ := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{})
+			c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{})
 			assert.NotNil(t, c)
 			assert.Len(t, c.Resources.Limits, 0)
 		})
@@ -284,7 +284,7 @@ func TestAnnotations(t *testing.T) {
 
 	t.Run("AppSSL", func(t *testing.T) {
 		t.Run("ssl enabled", func(t *testing.T) {
-			an := sidecarcontainer.Annotations(map[string]string{
+			an := sidecar.Annotations(map[string]string{
 				annotations.KeyAppSSL: "true",
 			})
 			s := an.GetBoolOrDefault(annotations.KeyAppSSL, annotations.DefaultAppSSL)
@@ -292,7 +292,7 @@ func TestAnnotations(t *testing.T) {
 		})
 
 		t.Run("ssl disabled", func(t *testing.T) {
-			an := sidecarcontainer.Annotations(map[string]string{
+			an := sidecar.Annotations(map[string]string{
 				annotations.KeyAppSSL: "false",
 			})
 			s := an.GetBoolOrDefault(annotations.KeyAppSSL, annotations.DefaultAppSSL)
@@ -300,7 +300,7 @@ func TestAnnotations(t *testing.T) {
 		})
 
 		t.Run("ssl not specified", func(t *testing.T) {
-			an := sidecarcontainer.Annotations(map[string]string{})
+			an := sidecar.Annotations(map[string]string{})
 			s := an.GetBoolOrDefault(annotations.KeyAppSSL, annotations.DefaultAppSSL)
 			assert.False(t, s)
 		})
@@ -309,7 +309,7 @@ func TestAnnotations(t *testing.T) {
 			an := map[string]string{
 				annotations.KeyAppSSL: "true",
 			}
-			c, _ := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{
+			c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 				Annotations: an,
 			})
 			found := false
@@ -326,7 +326,7 @@ func TestAnnotations(t *testing.T) {
 			an := map[string]string{
 				annotations.KeyAppSSL: "false",
 			}
-			c, _ := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{
+			c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 				Annotations: an,
 			})
 			for _, a := range c.Args {
@@ -337,7 +337,7 @@ func TestAnnotations(t *testing.T) {
 		})
 
 		t.Run("get sidecar container not specified", func(t *testing.T) {
-			c, _ := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{})
+			c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{})
 			for _, a := range c.Args {
 				if a == "--app-ssl" {
 					t.FailNow()
@@ -354,7 +354,7 @@ func TestSidecarContainerVolumeMounts(t *testing.T) {
 			{Name: "bar", MountPath: "/bar"},
 		}
 
-		c, _ := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{
+		c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 			VolumeMounts: volumeMounts,
 		})
 		assert.Equal(t, 2, len(c.VolumeMounts))
@@ -376,7 +376,7 @@ func TestSidecarContainerVolumeMounts(t *testing.T) {
 			{Name: "bar", MountPath: "/bar"},
 		}
 
-		c, _ := sidecarcontainer.GetSidecarContainer(sidecarcontainer.ContainerConfig{
+		c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 			SocketVolumeMount: socketVolumeMount,
 			TokenVolumeMount:  tokenVolumeMount,
 			VolumeMounts:      volumeMounts,

@@ -11,8 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package sidecarcontainer contains helpers to build the Container object for Kubernetes to deploy the Dapr sidecar container.
-package sidecarcontainer
+// package sidecar contains helpers to build the Container object for Kubernetes to deploy the Dapr sidecar container.
+package sidecar
 
 import (
 	"fmt"

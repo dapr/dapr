@@ -1,4 +1,4 @@
-package sidecarcontainer
+package sidecar
 
 import (
 	"testing"
