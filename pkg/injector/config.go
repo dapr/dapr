@@ -83,11 +83,11 @@ func (c Config) GetPullPolicy() corev1.PullPolicy {
 	}
 }
 
-func (c Config) GetIgnoreEntrypointTolerations() []corev1.Toleration {
+func (c *Config) GetIgnoreEntrypointTolerations() []corev1.Toleration {
 	return c.parsedEntrypointTolerations
 }
 
-func (c Config) parseTolerationsJSON() {
+func (c *Config) parseTolerationsJSON() {
 	if c.IgnoreEntrypointTolerations == "" {
 		return
 	}

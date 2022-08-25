@@ -91,7 +91,7 @@ func TestTolerationsParsing(t *testing.T) {
 	}{
 		{
 			"empty tolerations",
-			[]corev1.Toleration{},
+			nil,
 			"",
 		},
 		{
@@ -122,18 +122,18 @@ func TestTolerationsParsing(t *testing.T) {
 		},
 		{
 			"invalid JSON",
-			[]corev1.Toleration{},
+			nil,
 			`hi`,
 		},
 		{
 			"invalid JSON structure",
-			[]corev1.Toleration{},
+			nil,
 			`{}`,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			c := Config{
+			c := &Config{
 				IgnoreEntrypointTolerations: tc.input,
 			}
 			c.parseTolerationsJSON()

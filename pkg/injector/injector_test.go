@@ -219,7 +219,7 @@ func TestAnnotations(t *testing.T) {
 			pod := corev1.Pod{}
 			pod.Annotations = m
 			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
-			assert.Equal(t, 5050, p)
+			assert.Equal(t, int32(5050), p)
 		})
 		t.Run("invalid metrics port override", func(t *testing.T) {
 			m := map[string]string{annotations.KeyMetricsPort: "abc"}
@@ -227,13 +227,13 @@ func TestAnnotations(t *testing.T) {
 			pod := corev1.Pod{}
 			pod.Annotations = m
 			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
-			assert.Equal(t, annotations.DefaultMetricsPort, p)
+			assert.Equal(t, int32(annotations.DefaultMetricsPort), p)
 		})
 		t.Run("no metrics port defined", func(t *testing.T) {
 			pod := corev1.Pod{}
 			an := sidecarcontainer.Annotations(pod.Annotations)
 			p := an.GetInt32OrDefault(annotations.KeyMetricsPort, annotations.DefaultMetricsPort)
-			assert.Equal(t, annotations.DefaultMetricsPort, p)
+			assert.Equal(t, int32(annotations.DefaultMetricsPort), p)
 		})
 	})
 
@@ -382,8 +382,8 @@ func TestSidecarContainerVolumeMounts(t *testing.T) {
 			VolumeMounts:      volumeMounts,
 		})
 		assert.Equal(t, 4, len(c.VolumeMounts))
-		assert.Equal(t, socketVolumeMount, c.VolumeMounts[0])
-		assert.Equal(t, tokenVolumeMount, c.VolumeMounts[1])
+		assert.Equal(t, *socketVolumeMount, c.VolumeMounts[0])
+		assert.Equal(t, *tokenVolumeMount, c.VolumeMounts[1])
 		assert.Equal(t, volumeMounts[0], c.VolumeMounts[2])
 		assert.Equal(t, volumeMounts[1], c.VolumeMounts[3])
 	})
