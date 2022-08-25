@@ -46,12 +46,12 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					Path: "/spec/containers/0/env",
 					Value: []corev1.EnvVar{
 						{
-							Name:  userContainerDaprHTTPPortName,
-							Value: strconv.Itoa(sidecarHTTPPort),
+							Name:  sidecar.UserContainerDaprHTTPPortName,
+							Value: strconv.Itoa(sidecar.SidecarHTTPPort),
 						},
 						{
-							Name:  userContainerDaprGRPCPortName,
-							Value: strconv.Itoa(sidecarAPIGRPCPort),
+							Name:  sidecar.UserContainerDaprGRPCPortName,
+							Value: strconv.Itoa(sidecar.SidecarAPIGRPCPort),
 						},
 					},
 				},
@@ -74,16 +74,16 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
 					Value: corev1.EnvVar{
-						Name:  userContainerDaprHTTPPortName,
-						Value: strconv.Itoa(sidecarHTTPPort),
+						Name:  sidecar.UserContainerDaprHTTPPortName,
+						Value: strconv.Itoa(sidecar.SidecarHTTPPort),
 					},
 				},
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
 					Value: corev1.EnvVar{
-						Name:  userContainerDaprGRPCPortName,
-						Value: strconv.Itoa(sidecarAPIGRPCPort),
+						Name:  sidecar.UserContainerDaprGRPCPortName,
+						Value: strconv.Itoa(sidecar.SidecarAPIGRPCPort),
 					},
 				},
 			},
@@ -98,7 +98,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 						Value: "Existing value",
 					},
 					{
-						Name:  userContainerDaprGRPCPortName,
+						Name:  sidecar.UserContainerDaprGRPCPortName,
 						Value: "550000",
 					},
 				},
@@ -109,8 +109,8 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
 					Value: corev1.EnvVar{
-						Name:  userContainerDaprHTTPPortName,
-						Value: strconv.Itoa(sidecarHTTPPort),
+						Name:  sidecar.UserContainerDaprHTTPPortName,
+						Value: strconv.Itoa(sidecar.SidecarHTTPPort),
 					},
 				},
 			},
@@ -121,11 +121,11 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				Name: "Mock Container",
 				Env: []corev1.EnvVar{
 					{
-						Name:  userContainerDaprHTTPPortName,
+						Name:  sidecar.UserContainerDaprHTTPPortName,
 						Value: "3510",
 					},
 					{
-						Name:  userContainerDaprGRPCPortName,
+						Name:  sidecar.UserContainerDaprGRPCPortName,
 						Value: "550000",
 					},
 				},

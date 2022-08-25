@@ -34,19 +34,21 @@ import (
 )
 
 const (
-	SidecarContainerName        = "daprd"
-	SidecarHTTPPort             = 3500
-	SidecarAPIGRPCPort          = 50001
-	SidecarInternalGRPCPort     = 50002
-	SidecarPublicPort           = 3501
-	SidecarHTTPPortName         = "dapr-http"
-	SidecarGRPCPortName         = "dapr-grpc"
-	SidecarInternalGRPCPortName = "dapr-internal"
-	SidecarMetricsPortName      = "dapr-metrics"
-	SidecarDebugPortName        = "dapr-debug"
-	SidecarHealthzPath          = "healthz"
-	ApiVersionV1                = "v1.0"
-	UnixDomainSocketVolume      = "dapr-unix-domain-socket"
+	SidecarContainerName          = "daprd"
+	SidecarHTTPPort               = 3500
+	SidecarAPIGRPCPort            = 50001
+	SidecarInternalGRPCPort       = 50002
+	SidecarPublicPort             = 3501
+	SidecarHTTPPortName           = "dapr-http"
+	SidecarGRPCPortName           = "dapr-grpc"
+	SidecarInternalGRPCPortName   = "dapr-internal"
+	SidecarMetricsPortName        = "dapr-metrics"
+	SidecarDebugPortName          = "dapr-debug"
+	SidecarHealthzPath            = "healthz"
+	ApiVersionV1                  = "v1.0"
+	UnixDomainSocketVolume        = "dapr-unix-domain-socket"
+	UserContainerDaprHTTPPortName = "DAPR_HTTP_PORT"
+	UserContainerDaprGRPCPortName = "DAPR_GRPC_PORT"
 )
 
 // ContainerConfig contains the configuration for the sidecar container.

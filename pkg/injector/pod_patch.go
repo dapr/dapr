@@ -36,17 +36,11 @@ import (
 //nolint:gosec
 const (
 	containersPath                = "/spec/containers"
-	sidecarHTTPPort               = 3500
-	sidecarAPIGRPCPort            = 50001
-	sidecarInternalGRPCPort       = 50002
-	sidecarPublicPort             = 3501
-	userContainerDaprHTTPPortName = "DAPR_HTTP_PORT"
-	userContainerDaprGRPCPortName = "DAPR_GRPC_PORT"
-	apiAddress                    = "dapr-api"
+	apiService                    = "dapr-api"
+	apiServicePort                = 80
 	placementService              = "dapr-placement-server"
-	sentryService                 = "dapr-sentry"
-	apiPort                       = 80
 	placementServicePort          = 50005
+	sentryService                 = "dapr-sentry"
 	sentryServicePort             = 80
 	kubernetesMountPath           = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig                 = "daprsystem"
@@ -89,7 +83,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
 	placementAddress := getServiceAddress(placementService, namespace, i.config.KubeClusterDomain, placementServicePort)
 	sentryAddress := getServiceAddress(sentryService, namespace, i.config.KubeClusterDomain, sentryServicePort)
-	apiSvcAddress := getServiceAddress(apiAddress, namespace, i.config.KubeClusterDomain, apiPort)
+	apiSvcAddress := getServiceAddress(apiService, namespace, i.config.KubeClusterDomain, apiServicePort)
 
 	trustAnchors, certChain, certKey := getTrustAnchorsAndCertChain(kubeClient, namespace)
 	socketVolumeMount := appendUnixDomainSocketVolume(&pod)
@@ -152,12 +146,12 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
 	portEnv := []corev1.EnvVar{
 		{
-			Name:  userContainerDaprHTTPPortName,
-			Value: strconv.Itoa(sidecarHTTPPort),
+			Name:  sidecar.UserContainerDaprHTTPPortName,
+			Value: strconv.Itoa(sidecar.SidecarHTTPPort),
 		},
 		{
-			Name:  userContainerDaprGRPCPortName,
-			Value: strconv.Itoa(sidecarAPIGRPCPort),
+			Name:  sidecar.UserContainerDaprGRPCPortName,
+			Value: strconv.Itoa(sidecar.SidecarAPIGRPCPort),
 		},
 	}
 	envPatchOps := make([]PatchOperation, 0, len(containers))
@@ -267,6 +261,7 @@ func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace stri
 	if err != nil {
 		return "", "", ""
 	}
+
 	rootCert := secret.Data[credentials.RootCertFilename]
 	certChain := secret.Data[credentials.IssuerCertFilename]
 	certKey := secret.Data[credentials.IssuerKeyFilename]
