@@ -646,13 +646,6 @@ func (a *DaprRuntime) registerPluggableComponents() error {
 // buildPluggableRegisterFunc returns a register function for pluggable components.
 func (a *DaprRuntime) buildPluggableRegisterFunc() pluggable.MustRegisterFunc {
 	return pluggable.NewRegisterFunc(
-		pluggable.WithBindingsRegistry(a.bindingsRegistry),
-		pluggable.WithConfigurationRegistry(a.configurationStoreRegistry),
-		pluggable.WithHTTPMiddlewareRegistry(a.httpMiddlewareRegistry),
-		pluggable.WithLockRegistry(a.lockStoreRegistry),
-		pluggable.WithNameResolutionRegistry(a.nameResolutionRegistry),
-		pluggable.WithPubSubRegistry(a.pubSubRegistry),
-		pluggable.WithSecretStoresRegistry(a.secretStoresRegistry),
 		pluggable.WithStateStoreRegistry(a.stateStoreRegistry))
 }
 

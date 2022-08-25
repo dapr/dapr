@@ -17,13 +17,6 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/dapr/pkg/components/configuration"
-	"github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/components/middleware/http"
-	"github.com/dapr/dapr/pkg/components/nameresolution"
-	"github.com/dapr/dapr/pkg/components/pubsub"
-	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
 
 	"github.com/stretchr/testify/assert"
@@ -35,13 +28,6 @@ func TestOptions(t *testing.T) {
 			registries: make(map[components.PluggableType]func(components.Pluggable)),
 		}
 		allOpts := []Option{
-			WithBindingsRegistry(bindings.NewRegistry()),
-			WithConfigurationRegistry(configuration.NewRegistry()),
-			WithHTTPMiddlewareRegistry(http.NewRegistry()),
-			WithLockRegistry(lock.NewRegistry()),
-			WithNameResolutionRegistry(nameresolution.NewRegistry()),
-			WithPubSubRegistry(pubsub.NewRegistry()),
-			WithSecretStoresRegistry(secretstores.NewRegistry()),
 			WithStateStoreRegistry(state.NewRegistry()),
 		}
 		for _, opt := range allOpts {
