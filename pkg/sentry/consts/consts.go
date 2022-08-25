@@ -1,4 +1,4 @@
-package certs
+package consts
 
 const (
 	// KubeScrtName is the name of the kubernetes secret that holds the trust bundle.

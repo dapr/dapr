@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func TestGetInjectorConfig(t *testing.T) {
@@ -44,4 +45,99 @@ func TestGetInjectorConfig(t *testing.T) {
 		assert.Equal(t, "test-namespace", cfg.Namespace)
 		assert.NotEqual(t, "", cfg.KubeClusterDomain)
 	})
+}
+
+func TestImagePullPolicy(t *testing.T) {
+	testCases := []struct {
+		testName       string
+		pullPolicy     string
+		expectedPolicy corev1.PullPolicy
+	}{
+		{
+			"TestDefaultPullPolicy",
+			"",
+			corev1.PullIfNotPresent,
+		},
+		{
+			"TestAlwaysPullPolicy",
+			"Always",
+			corev1.PullAlways,
+		},
+		{
+			"TestNeverPullPolicy",
+			"Never",
+			corev1.PullNever,
+		},
+		{
+			"TestIfNotPresentPullPolicy",
+			"IfNotPresent",
+			corev1.PullIfNotPresent,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			c := NewConfigWithDefaults()
+			c.SidecarImagePullPolicy = tc.pullPolicy
+			assert.Equal(t, tc.expectedPolicy, c.GetPullPolicy())
+		})
+	}
+}
+
+func TestTolerationsParsing(t *testing.T) {
+	testCases := []struct {
+		name   string
+		expect []corev1.Toleration
+		input  string
+	}{
+		{
+			"empty tolerations",
+			[]corev1.Toleration{},
+			"",
+		},
+		{
+			"single toleration",
+			[]corev1.Toleration{
+				{
+					Key:    "foo.com/bar",
+					Effect: "NoSchedule",
+				},
+			},
+			`[{"key":"foo.com/bar","Effect":"NoSchedule"}]`,
+		},
+		{
+			"multiple tolerations",
+			[]corev1.Toleration{
+				{
+					Key:    "foo.com/bar",
+					Effect: "NoSchedule",
+				},
+				{
+					Key:      "foo.com/baz",
+					Operator: "Equal",
+					Value:    "foobar",
+					Effect:   "NoSchedule",
+				},
+			},
+			`[{"key":"foo.com/bar","Effect":"NoSchedule"},{"key":"foo.com/baz","Operator":"Equal","Value":"foobar","Effect":"NoSchedule"}]`,
+		},
+		{
+			"invalid JSON",
+			[]corev1.Toleration{},
+			`hi`,
+		},
+		{
+			"invalid JSON structure",
+			[]corev1.Toleration{},
+			`{}`,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Config{
+				IgnoreEntrypointTolerations: tc.input,
+			}
+			c.parseTolerationsJSON()
+			assert.EqualValues(t, tc.expect, c.GetIgnoreEntrypointTolerations())
+		})
+	}
 }
