@@ -19,7 +19,26 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/dapr/dapr/pkg/injector/annotations"
 )
+
+func TestGetAppID(t *testing.T) {
+	t.Run("get app id", func(t *testing.T) {
+		m := map[string]string{annotations.KeyAppID: "app"}
+		pod := corev1.Pod{}
+		pod.Annotations = m
+		id := GetAppID(pod)
+		assert.Equal(t, "app", id)
+	})
+
+	t.Run("get pod id", func(t *testing.T) {
+		pod := corev1.Pod{}
+		pod.ObjectMeta.Name = "pod"
+		id := GetAppID(pod)
+		assert.Equal(t, "pod", id)
+	})
+}
 
 func TestParseEnvString(t *testing.T) {
 	testCases := []struct {

@@ -18,9 +18,16 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/dapr/dapr/pkg/injector/annotations"
 )
 
 var envRegexp = regexp.MustCompile(`(?m)(,)\s*[a-zA-Z\_][a-zA-Z0-9\_]*=`)
+
+// GetAppID returns the app ID from the pod's annotation, or uses the pod's name as fallback.
+func GetAppID(pod corev1.Pod) string {
+	return Annotations(pod.Annotations).GetStringOrDefault(annotations.KeyAppID, pod.GetName())
+}
 
 // add env-vars from annotations.
 func ParseEnvString(envStr string) []corev1.EnvVar {
@@ -67,4 +74,14 @@ func ParseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.Volu
 		})
 	}
 	return volumeMounts
+}
+
+// PodContainsSidecarContainer returns true if the pod contains a sidecar container (i.e. a container named "daprd").
+func PodContainsSidecarContainer(pod *corev1.Pod) bool {
+	for _, c := range pod.Spec.Containers {
+		if c.Name == SidecarContainerName {
+			return true
+		}
+	}
+	return false
 }

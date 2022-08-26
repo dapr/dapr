@@ -11,7 +11,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// package sidecar contains helpers to build the Container object for Kubernetes to deploy the Dapr sidecar container.
 package sidecar
 
 import (
@@ -20,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -30,25 +30,6 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
-	"github.com/pkg/errors"
-)
-
-const (
-	SidecarContainerName          = "daprd"
-	SidecarHTTPPort               = 3500
-	SidecarAPIGRPCPort            = 50001
-	SidecarInternalGRPCPort       = 50002
-	SidecarPublicPort             = 3501
-	SidecarHTTPPortName           = "dapr-http"
-	SidecarGRPCPortName           = "dapr-grpc"
-	SidecarInternalGRPCPortName   = "dapr-internal"
-	SidecarMetricsPortName        = "dapr-metrics"
-	SidecarDebugPortName          = "dapr-debug"
-	SidecarHealthzPath            = "healthz"
-	ApiVersionV1                  = "v1.0"
-	UnixDomainSocketVolume        = "dapr-unix-domain-socket"
-	UserContainerDaprHTTPPortName = "DAPR_HTTP_PORT"
-	UserContainerDaprGRPCPortName = "DAPR_GRPC_PORT"
 )
 
 // ContainerConfig contains the configuration for the sidecar container.
@@ -75,7 +56,7 @@ type ContainerConfig struct {
 
 var (
 	log              = logger.NewLogger("dapr.injector.container")
-	probeHTTPHandler = getProbeHTTPHandler(SidecarPublicPort, ApiVersionV1, SidecarHealthzPath)
+	probeHTTPHandler = getProbeHTTPHandler(SidecarPublicPort, APIVersionV1, SidecarHealthzPath)
 )
 
 // GetSidecarContainer returns the Container object for the sidecar.
@@ -183,7 +164,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		debugPort := cfg.Annotations.GetInt32OrDefault(annotations.KeyDebugPort, annotations.DefaultDebugPort)
 		ports = append(ports, corev1.ContainerPort{
 			Name:          SidecarDebugPortName,
-			ContainerPort: int32(debugPort),
+			ContainerPort: debugPort,
 		})
 
 		cmd = []string{"/dlv"}

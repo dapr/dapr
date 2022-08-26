@@ -16,8 +16,9 @@ package sidecar
 import (
 	"strconv"
 
-	"github.com/dapr/dapr/utils"
 	"github.com/pkg/errors"
+
+	"github.com/dapr/dapr/utils"
 )
 
 // Annotations contains the annotations for the container.

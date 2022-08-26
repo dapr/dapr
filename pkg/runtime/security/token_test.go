@@ -18,8 +18,9 @@ package security
 import (
 	"testing"
 
-	"github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 func TestAPIToken(t *testing.T) {

@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -151,23 +151,6 @@ func TestAnnotations(t *testing.T) {
 			an := sidecar.Annotations(m)
 			p := an.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol)
 			assert.Equal(t, "http", p)
-		})
-	})
-
-	t.Run("AppID", func(t *testing.T) {
-		t.Run("get app id", func(t *testing.T) {
-			m := map[string]string{annotations.KeyAppID: "app"}
-			pod := corev1.Pod{}
-			pod.Annotations = m
-			id := getAppID(pod)
-			assert.Equal(t, "app", id)
-		})
-
-		t.Run("get pod id", func(t *testing.T) {
-			pod := corev1.Pod{}
-			pod.ObjectMeta.Name = "pod"
-			id := getAppID(pod)
-			assert.Equal(t, "pod", id)
 		})
 	})
 

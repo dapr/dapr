@@ -1,3 +1,17 @@
+/*
+Copyright 2022 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+//nolint:goconst
 package sidecar
 
 import (
@@ -686,4 +700,63 @@ func TestGetSidecarContainer(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestAppendUnixDomainSocketVolume(t *testing.T) {
+	testCases := []struct {
+		testName        string
+		annotations     map[string]string
+		originalVolumes []corev1.Volume
+		expectVolumes   []corev1.Volume
+		exportMount     *corev1.VolumeMount
+	}{
+		{
+			"empty value",
+			map[string]string{annotations.KeyUnixDomainSocketPath: ""},
+			nil,
+			nil,
+			nil,
+		},
+		{
+			"append on empty volumes",
+			map[string]string{annotations.KeyUnixDomainSocketPath: "/tmp"},
+			nil,
+			[]corev1.Volume{{
+				Name: UnixDomainSocketVolume,
+			}},
+			&corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: "/tmp"},
+		},
+		{
+			"append on existed volumes",
+			map[string]string{annotations.KeyUnixDomainSocketPath: "/tmp"},
+			[]corev1.Volume{
+				{Name: "mock"},
+			},
+			[]corev1.Volume{{
+				Name: UnixDomainSocketVolume,
+			}, {
+				Name: "mock",
+			}},
+			&corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: "/tmp"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			pod := corev1.Pod{}
+			pod.Annotations = tc.annotations
+			pod.Spec.Volumes = tc.originalVolumes
+
+			socketMount := GetUnixDomainSocketVolume(&pod)
+
+			if tc.exportMount == nil {
+				assert.Equal(t, tc.exportMount, socketMount)
+			} else {
+				assert.Equal(t, tc.exportMount.Name, socketMount.Name)
+				assert.Equal(t, tc.exportMount.MountPath, socketMount.MountPath)
+			}
+
+			assert.Equal(t, len(tc.expectVolumes), len(pod.Spec.Volumes))
+		})
+	}
 }

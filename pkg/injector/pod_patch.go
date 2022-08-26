@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
@@ -33,24 +32,21 @@ import (
 	"github.com/dapr/dapr/pkg/validation"
 )
 
-//nolint:gosec
 const (
-	containersPath                = "/spec/containers"
-	apiService                    = "dapr-api"
-	apiServicePort                = 80
-	placementService              = "dapr-placement-server"
-	placementServicePort          = 50005
-	sentryService                 = "dapr-sentry"
-	sentryServicePort             = 80
-	kubernetesMountPath           = "/var/run/secrets/kubernetes.io/serviceaccount"
-	defaultConfig                 = "daprsystem"
-	defaultSidecarListenAddresses = "[::1],127.0.0.1"
-	defaultMtlsEnabled            = true
+	apiService           = "dapr-api"
+	apiServicePort       = 80
+	placementService     = "dapr-placement-server"
+	placementServicePort = 50005
+	sentryService        = "dapr-sentry"
+	sentryServicePort    = 80
+	kubernetesMountPath  = "/var/run/secrets/kubernetes.io/serviceaccount"
+	defaultConfig        = "daprsystem"
+	defaultMtlsEnabled   = true
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
-) ([]PatchOperation, error) {
+) ([]sidecar.PatchOperation, error) {
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
@@ -71,11 +67,11 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	)
 
 	an := sidecar.Annotations(pod.Annotations)
-	if !an.GetBoolOrDefault(annotations.KeyEnabled, false) || podContainsSidecarContainer(&pod) {
+	if !an.GetBoolOrDefault(annotations.KeyEnabled, false) || sidecar.PodContainsSidecarContainer(&pod) {
 		return nil, nil
 	}
 
-	appID := getAppID(pod)
+	appID := sidecar.GetAppID(pod)
 	if err := validation.ValidateKubernetesAppID(appID); err != nil {
 		return nil, err
 	}
@@ -86,7 +82,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	apiSvcAddress := getServiceAddress(apiService, namespace, i.config.KubeClusterDomain, apiServicePort)
 
 	trustAnchors, certChain, certKey := getTrustAnchorsAndCertChain(kubeClient, namespace)
-	socketVolumeMount := appendUnixDomainSocketVolume(&pod)
+	socketVolumeMount := sidecar.GetUnixDomainSocketVolume(&pod)
 
 	sidecarContainer, err := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 		AppID:                       appID,
@@ -115,20 +111,20 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	var (
 		path                 string
 		value                any
-		envPatchOps          []PatchOperation
-		socketVolumePatchOps []PatchOperation
+		envPatchOps          []sidecar.PatchOperation
+		socketVolumePatchOps []sidecar.PatchOperation
 	)
 	if len(pod.Spec.Containers) == 0 {
-		path = containersPath
+		path = sidecar.ContainersPath
 		value = []corev1.Container{*sidecarContainer}
 	} else {
-		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
-		socketVolumePatchOps = addSocketVolumeToContainers(pod.Spec.Containers, socketVolumeMount)
+		envPatchOps = sidecar.AddDaprEnvVarsToContainers(pod.Spec.Containers)
+		socketVolumePatchOps = sidecar.AddSocketVolumeToContainers(pod.Spec.Containers, socketVolumeMount)
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
 
-	patchOps := []PatchOperation{
+	patchOps := []sidecar.PatchOperation{
 		{
 			Op:    "add",
 			Path:  path,
@@ -139,121 +135,6 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	patchOps = append(patchOps, socketVolumePatchOps...)
 
 	return patchOps, nil
-}
-
-// This function add Dapr environment variables to all the containers in any Dapr enabled pod.
-// The containers can be injected or user defined.
-func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
-	portEnv := []corev1.EnvVar{
-		{
-			Name:  sidecar.UserContainerDaprHTTPPortName,
-			Value: strconv.Itoa(sidecar.SidecarHTTPPort),
-		},
-		{
-			Name:  sidecar.UserContainerDaprGRPCPortName,
-			Value: strconv.Itoa(sidecar.SidecarAPIGRPCPort),
-		},
-	}
-	envPatchOps := make([]PatchOperation, 0, len(containers))
-	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/env", containersPath, i)
-		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
-		envPatchOps = append(envPatchOps, patchOps...)
-	}
-	return envPatchOps
-}
-
-// This function only add new environment variables if they do not exist.
-// It does not override existing values for those variables if they have been defined already.
-func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path string) []PatchOperation {
-	if len(envs) == 0 {
-		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
-		return []PatchOperation{
-			{
-				Op:    "add",
-				Path:  path,
-				Value: addEnv,
-			},
-		}
-	}
-	// If there are existing env vars, then we are adding to an existing slice of env vars.
-	path += "/-"
-
-	var patchOps []PatchOperation
-LoopEnv:
-	for _, env := range addEnv {
-		for _, actual := range envs {
-			if actual.Name == env.Name {
-				// Add only env vars that do not conflict with existing user defined/injected env vars.
-				continue LoopEnv
-			}
-		}
-		patchOps = append(patchOps, PatchOperation{
-			Op:    "add",
-			Path:  path,
-			Value: env,
-		})
-	}
-	return patchOps
-}
-
-// This function add Dapr unix domain socket volume to all the containers in any Dapr enabled pod.
-func addSocketVolumeToContainers(containers []corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
-	if socketVolumeMount == nil {
-		return []PatchOperation{}
-	}
-
-	return addVolumeToContainers(containers, *socketVolumeMount)
-}
-
-func addVolumeToContainers(containers []corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
-	volumeMount := []corev1.VolumeMount{addMounts}
-	volumeMountPatchOps := make([]PatchOperation, 0, len(containers))
-	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/volumeMounts", containersPath, i)
-		patchOps := getVolumeMountPatchOperations(container.VolumeMounts, volumeMount, path)
-		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
-	}
-	return volumeMountPatchOps
-}
-
-// It does not override existing values for those variables if they have been defined already.
-func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
-	if len(volumeMounts) == 0 {
-		// If there are no volume mount variables defined in the container, we initialize a slice of environment vars.
-		return []PatchOperation{
-			{
-				Op:    "add",
-				Path:  path,
-				Value: addMounts,
-			},
-		}
-	}
-	// If there are existing volume mounts, then we are adding to an existing slice of volume mounts.
-	path += "/-"
-
-	var patchOps []PatchOperation
-
-	for _, addMount := range addMounts {
-		isConflict := false
-		for _, mount := range volumeMounts {
-			// conflict cases
-			if addMount.Name == mount.Name || addMount.MountPath == mount.MountPath {
-				isConflict = true
-				break
-			}
-		}
-
-		if !isConflict {
-			patchOps = append(patchOps, PatchOperation{
-				Op:    "add",
-				Path:  path,
-				Value: addMount,
-			})
-		}
-	}
-
-	return patchOps
 }
 
 func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace string) (string, string, string) {
@@ -295,33 +176,8 @@ func getTokenVolumeMount(pod corev1.Pod) *corev1.VolumeMount {
 	return nil
 }
 
-func podContainsSidecarContainer(pod *corev1.Pod) bool {
-	for _, c := range pod.Spec.Containers {
-		if c.Name == sidecar.SidecarContainerName {
-			return true
-		}
-	}
-	return false
-}
-
 func getServiceAddress(name, namespace, clusterDomain string, port int) string {
 	return fmt.Sprintf("%s.%s.svc.%s:%d", name, namespace, clusterDomain, port)
-}
-
-func appendUnixDomainSocketVolume(pod *corev1.Pod) *corev1.VolumeMount {
-	unixDomainSocket := sidecar.Annotations(pod.Annotations).GetString(annotations.KeyUnixDomainSocketPath)
-	if unixDomainSocket == "" {
-		return nil
-	}
-
-	// socketVolume is an EmptyDir
-	socketVolume := &corev1.Volume{
-		Name: sidecar.UnixDomainSocketVolume,
-	}
-
-	pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
-
-	return &corev1.VolumeMount{Name: sidecar.UnixDomainSocketVolume, MountPath: unixDomainSocket}
 }
 
 func podContainsVolume(pod corev1.Pod, name string) bool {
@@ -351,8 +207,4 @@ func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
 	}
 
 	return volumeMounts
-}
-
-func getAppID(pod corev1.Pod) string {
-	return sidecar.Annotations(pod.Annotations).GetStringOrDefault(annotations.KeyAppID, pod.GetName())
 }
