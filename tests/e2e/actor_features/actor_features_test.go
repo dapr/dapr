@@ -701,7 +701,7 @@ func TestActorFeatures(t *testing.T) {
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
 		startEndTimeCheck := (logOne.StartTimestamp <= logTwo.EndTimestamp) && (logTwo.StartTimestamp <= logOne.EndTimestamp)
 		if !startEndTimeCheck {
-			log.Printf("failed for start/end time check: logOne.StartTimestamp='%s' logOne.StartTimestamp='%s' logTwo.StartTimestamp='%s' logTwo.EndTimestamp='%s'",
+			log.Printf("failed for start/end time check: logOne.StartTimestamp='%s' logOne.EndTimestamp='%s' logTwo.StartTimestamp='%s' logTwo.EndTimestamp='%s'",
 				logOne.StartTimestamp, logOne.EndTimestamp, logTwo.StartTimestamp, logTwo.EndTimestamp)
 		}
 		require.True(t, startEndTimeCheck)
@@ -744,7 +744,7 @@ func TestActorFeatures(t *testing.T) {
 		// Both methods run in parallel, with the sleep time both should start before the other ends.
 		startEndTimeCheck := (logOne.StartTimestamp <= logTwo.EndTimestamp) && (logTwo.StartTimestamp <= logOne.EndTimestamp)
 		if !startEndTimeCheck {
-			log.Printf("failed for start/end time check: logOne.StartTimestamp='%s' logOne.StartTimestamp='%s' logTwo.StartTimestamp='%s' logTwo.EndTimestamp='%s'",
+			log.Printf("failed for start/end time check: logOne.StartTimestamp='%s' logOne.EndTimestamp='%s' logTwo.StartTimestamp='%s' logTwo.EndTimestamp='%s'",
 				logOne.StartTimestamp, logOne.EndTimestamp, logTwo.StartTimestamp, logTwo.EndTimestamp)
 		}
 		require.True(t, startEndTimeCheck)
