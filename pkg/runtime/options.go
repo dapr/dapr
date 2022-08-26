@@ -1,30 +1,28 @@
 package runtime
 
 import (
-	"github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/dapr/pkg/components/configuration"
-	"github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/components/middleware/http"
-	"github.com/dapr/dapr/pkg/components/nameresolution"
-	"github.com/dapr/dapr/pkg/components/pubsub"
-	"github.com/dapr/dapr/pkg/components/secretstores"
-	"github.com/dapr/dapr/pkg/components/state"
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
+	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
+	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
+	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 type (
 	// runtimeOpts encapsulates the components to include in the runtime.
 	runtimeOpts struct {
-		secretStores    []secretstores.SecretStore
-		states          []state.State
-		configurations  []configuration.Configuration
-		locks           []lock.Lock
-		pubsubs         []pubsub.PubSub
-		nameResolutions []nameresolution.NameResolution
-		inputBindings   []bindings.InputBinding
-		outputBindings  []bindings.OutputBinding
-		httpMiddleware  []http.Middleware
-
-		componentsCallback ComponentsCallback
+		secretStoreRegistry    *secretstoresLoader.Registry
+		stateRegistry          *stateLoader.Registry
+		configurationRegistry  *configurationLoader.Registry
+		lockRegistry           *lockLoader.Registry
+		pubsubRegistry         *pubsubLoader.Registry
+		nameResolutionRegistry *nrLoader.Registry
+		bindingRegistry        *bindingsLoader.Registry
+		httpMiddlewareRegistry *httpMiddlewareLoader.Registry
+		componentsCallback     ComponentsCallback
 	}
 
 	// Option is a function that customizes the runtime.
@@ -32,64 +30,57 @@ type (
 )
 
 // WithSecretStores adds secret store components to the runtime.
-func WithSecretStores(secretStores ...secretstores.SecretStore) Option {
+func WithSecretStores(registry *secretstoresLoader.Registry) Option {
 	return func(o *runtimeOpts) {
-		o.secretStores = append(o.secretStores, secretStores...)
+		o.secretStoreRegistry = registry
 	}
 }
 
 // WithStates adds state store components to the runtime.
-func WithStates(states ...state.State) Option {
+func WithStates(registry *stateLoader.Registry) Option {
 	return func(o *runtimeOpts) {
-		o.states = append(o.states, states...)
+		o.stateRegistry = registry
 	}
 }
 
 // WithConfigurations adds configuration store components to the runtime.
-func WithConfigurations(configurations ...configuration.Configuration) Option {
+func WithConfigurations(registry *configurationLoader.Registry) Option {
 	return func(o *runtimeOpts) {
-		o.configurations = append(o.configurations, configurations...)
+		o.configurationRegistry = registry
 	}
 }
 
-func WithLocks(locks ...lock.Lock) Option {
+func WithLocks(registry *lockLoader.Registry) Option {
 	return func(o *runtimeOpts) {
-		o.locks = append(o.locks, locks...)
+		o.lockRegistry = registry
 	}
 }
 
 // WithPubSubs adds pubsub store components to the runtime.
-func WithPubSubs(pubsubs ...pubsub.PubSub) Option {
+func WithPubSubs(registry *pubsubLoader.Registry) Option {
 	return func(o *runtimeOpts) {
-		o.pubsubs = append(o.pubsubs, pubsubs...)
+		o.pubsubRegistry = registry
 	}
 }
 
 // WithNameResolutions adds name resolution components to the runtime.
-func WithNameResolutions(nameResolutions ...nameresolution.NameResolution) Option {
+func WithNameResolutions(registry *nrLoader.Registry) Option {
 	return func(o *runtimeOpts) {
-		o.nameResolutions = append(o.nameResolutions, nameResolutions...)
+		o.nameResolutionRegistry = registry
 	}
 }
 
-// WithInputBindings adds input binding components to the runtime.
-func WithInputBindings(inputBindings ...bindings.InputBinding) Option {
+// WithBindings adds binding components to the runtime.
+func WithBindings(registry *bindingsLoader.Registry) Option {
 	return func(o *runtimeOpts) {
-		o.inputBindings = append(o.inputBindings, inputBindings...)
+		o.bindingRegistry = registry
 	}
 }
 
-// WithOutputBindings adds output binding components to the runtime.
-func WithOutputBindings(outputBindings ...bindings.OutputBinding) Option {
+// WithHTTPMiddlewares adds HTTP middleware components to the runtime.
+func WithHTTPMiddlewares(registry *httpMiddlewareLoader.Registry) Option {
 	return func(o *runtimeOpts) {
-		o.outputBindings = append(o.outputBindings, outputBindings...)
-	}
-}
-
-// WithHTTPMiddleware adds HTTP middleware components to the runtime.
-func WithHTTPMiddleware(httpMiddleware ...http.Middleware) Option {
-	return func(o *runtimeOpts) {
-		o.httpMiddleware = append(o.httpMiddleware, httpMiddleware...)
+		o.httpMiddlewareRegistry = registry
 	}
 }
 
