@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	s "github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/components/state"
 )
@@ -44,12 +45,12 @@ func TestRegistry(t *testing.T) {
 		mockV2 := &mockState{}
 
 		// act
-		testRegistry.Register(state.New(stateName, func() s.Store {
+		testRegistry.RegisterComponent(func(_ logger.Logger) s.Store {
 			return mock
-		}))
-		testRegistry.Register(state.New(stateNameV2, func() s.Store {
+		}, stateName)
+		testRegistry.RegisterComponent(func(_ logger.Logger) s.Store {
 			return mockV2
-		}))
+		}, stateNameV2)
 
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0")
