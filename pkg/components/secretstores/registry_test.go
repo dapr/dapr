@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	ss "github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/components/secretstores"
 )
@@ -44,12 +45,12 @@ func TestRegistry(t *testing.T) {
 		mockV2 := &mockSecretStore{}
 
 		// act
-		testRegistry.Register(secretstores.New(secretStoreName, func() ss.SecretStore {
+		testRegistry.RegisterComponent(func(_ logger.Logger) ss.SecretStore {
 			return mock
-		}))
-		testRegistry.Register(secretstores.New(secretStoreNameV2, func() ss.SecretStore {
+		}, secretStoreName)
+		testRegistry.RegisterComponent(func(_ logger.Logger) ss.SecretStore {
 			return mockV2
-		}))
+		}, secretStoreNameV2)
 
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0")

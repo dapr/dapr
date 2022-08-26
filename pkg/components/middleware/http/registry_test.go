@@ -23,6 +23,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	h "github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -48,12 +49,16 @@ func TestRegistry(t *testing.T) {
 		metadata := h.Metadata{}
 
 		// act
-		testRegistry.Register(http.New(middlewareName, func(h.Metadata) (httpMiddleware.Middleware, error) {
-			return mock, nil
-		}))
-		testRegistry.Register(http.New(middlewareNameV2, func(h.Metadata) (httpMiddleware.Middleware, error) {
-			return mockV2, nil
-		}))
+		testRegistry.RegisterComponent(func(_ logger.Logger) http.FactoryMethod {
+			return func(h.Metadata) (httpMiddleware.Middleware, error) {
+				return mock, nil
+			}
+		}, middlewareName)
+		testRegistry.RegisterComponent(func(_ logger.Logger) http.FactoryMethod {
+			return func(h.Metadata) (httpMiddleware.Middleware, error) {
+				return mockV2, nil
+			}
+		}, middlewareNameV2)
 
 		// Function values are not comparable.
 		// You can't take the address of a function, but if you print it with

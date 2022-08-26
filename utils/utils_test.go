@@ -187,14 +187,28 @@ func TestParseVolumeMountsString(t *testing.T) {
 	}
 }
 
-func TestStringSliceContains(t *testing.T) {
+func TestContains(t *testing.T) {
+	type customType struct {
+		v1 string
+		v2 int
+	}
+
 	t.Run("find a item", func(t *testing.T) {
-		assert.True(t, StringSliceContains("item", []string{"item-1", "item"}))
+		assert.True(t, Contains([]string{"item-1", "item"}, "item"))
+		assert.True(t, Contains([]int{1, 2, 3}, 1))
+		assert.True(t, Contains([]customType{{v1: "first", v2: 1}, {v1: "second", v2: 2}}, customType{v1: "second", v2: 2}))
 	})
 
 	t.Run("didn't find a item", func(t *testing.T) {
-		assert.False(t, StringSliceContains("not-in-item", []string{}))
-		assert.False(t, StringSliceContains("not-in-item", nil))
+		assert.False(t, Contains([]string{"item-1", "item"}, "not-in-item"))
+		assert.False(t, Contains([]string{}, "not-in-item"))
+		assert.False(t, Contains(nil, "not-in-item"))
+		assert.False(t, Contains([]int{1, 2, 3}, 100))
+		assert.False(t, Contains([]int{}, 100))
+		assert.False(t, Contains(nil, 100))
+		assert.False(t, Contains([]customType{{v1: "first", v2: 1}, {v1: "second", v2: 2}}, customType{v1: "foo", v2: 100}))
+		assert.False(t, Contains([]customType{}, customType{v1: "foo", v2: 100}))
+		assert.False(t, Contains(nil, customType{v1: "foo", v2: 100}))
 	})
 }
 
