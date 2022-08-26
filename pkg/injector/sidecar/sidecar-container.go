@@ -357,7 +357,7 @@ func formatProbePath(elements ...string) string {
 
 // podContainsTolerations returns true if the pod contains any of the tolerations specified in ts.
 func podContainsTolerations(ts []corev1.Toleration, podTolerations []corev1.Toleration) bool {
-	if len(ts) == 0 {
+	if len(ts) == 0 || len(podTolerations) == 0 {
 		return false
 	}
 

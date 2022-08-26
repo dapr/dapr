@@ -93,7 +93,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
 		log.Warnf("could not unmarshal raw object: %v", err)
 	} else {
-		appID = sidecar.GetAppID(pod)
+		appID = sidecar.GetAppID(pod.ObjectMeta)
 	}
 
 	return appID

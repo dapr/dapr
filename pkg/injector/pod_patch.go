@@ -71,7 +71,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		return nil, nil
 	}
 
-	appID := sidecar.GetAppID(pod)
+	appID := sidecar.GetAppID(pod.ObjectMeta)
 	if err := validation.ValidateKubernetesAppID(appID); err != nil {
 		return nil, err
 	}

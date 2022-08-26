@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
+	coreV1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 )
@@ -26,16 +26,16 @@ import (
 func TestGetAppID(t *testing.T) {
 	t.Run("get app id", func(t *testing.T) {
 		m := map[string]string{annotations.KeyAppID: "app"}
-		pod := corev1.Pod{}
+		pod := coreV1.Pod{}
 		pod.Annotations = m
-		id := GetAppID(pod)
+		id := GetAppID(pod.ObjectMeta)
 		assert.Equal(t, "app", id)
 	})
 
 	t.Run("get pod id", func(t *testing.T) {
-		pod := corev1.Pod{}
+		pod := coreV1.Pod{}
 		pod.ObjectMeta.Name = "pod"
-		id := GetAppID(pod)
+		id := GetAppID(pod.ObjectMeta)
 		assert.Equal(t, "pod", id)
 	})
 }
@@ -45,19 +45,19 @@ func TestParseEnvString(t *testing.T) {
 		testName  string
 		envStr    string
 		expEnvLen int
-		expEnv    []corev1.EnvVar
+		expEnv    []coreV1.EnvVar
 	}{
 		{
 			testName:  "empty environment string.",
 			envStr:    "",
 			expEnvLen: 0,
-			expEnv:    []corev1.EnvVar{},
+			expEnv:    []coreV1.EnvVar{},
 		},
 		{
 			testName:  "common valid environment string.",
 			envStr:    "ENV1=value1,ENV2=value2, ENV3=value3",
 			expEnvLen: 3,
-			expEnv: []corev1.EnvVar{
+			expEnv: []coreV1.EnvVar{
 				{
 					Name:  "ENV1",
 					Value: "value1",
@@ -76,7 +76,7 @@ func TestParseEnvString(t *testing.T) {
 			testName:  "special valid environment string.",
 			envStr:    `HTTP_PROXY=http://myproxy.com, NO_PROXY="localhost,127.0.0.1,.amazonaws.com"`,
 			expEnvLen: 2,
-			expEnv: []corev1.EnvVar{
+			expEnv: []coreV1.EnvVar{
 				{
 					Name:  "HTTP_PROXY",
 					Value: "http://myproxy.com",
@@ -106,21 +106,21 @@ func TestParseVolumeMountsString(t *testing.T) {
 		mountStr     string
 		readOnly     bool
 		expMountsLen int
-		expMounts    []corev1.VolumeMount
+		expMounts    []coreV1.VolumeMount
 	}{
 		{
 			testName:     "empty volume mount string.",
 			mountStr:     "",
 			readOnly:     false,
 			expMountsLen: 0,
-			expMounts:    []corev1.VolumeMount{},
+			expMounts:    []coreV1.VolumeMount{},
 		},
 		{
 			testName:     "valid volume mount string with readonly false.",
 			mountStr:     "my-mount:/tmp/mount1,another-mount:/home/user/mount2, mount3:/root/mount3",
 			readOnly:     false,
 			expMountsLen: 3,
-			expMounts: []corev1.VolumeMount{
+			expMounts: []coreV1.VolumeMount{
 				{
 					Name:      "my-mount",
 					MountPath: "/tmp/mount1",
@@ -140,7 +140,7 @@ func TestParseVolumeMountsString(t *testing.T) {
 			mountStr:     " my-mount:/tmp/mount1,mount2:/root/mount2 ",
 			readOnly:     true,
 			expMountsLen: 2,
-			expMounts: []corev1.VolumeMount{
+			expMounts: []coreV1.VolumeMount{
 				{
 					Name:      "my-mount",
 					MountPath: "/tmp/mount1",
@@ -158,7 +158,7 @@ func TestParseVolumeMountsString(t *testing.T) {
 			mountStr:     "my-mount:/tmp/mount1:rw,mount2:/root/mount2,mount3",
 			readOnly:     false,
 			expMountsLen: 1,
-			expMounts: []corev1.VolumeMount{
+			expMounts: []coreV1.VolumeMount{
 				{
 					Name:      "mount2",
 					MountPath: "/root/mount2",
