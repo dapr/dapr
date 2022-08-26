@@ -25,23 +25,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
-	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/dapr/pkg/validation"
 )
 
 const (
-	apiService           = "dapr-api"
-	apiServicePort       = 80
-	placementService     = "dapr-placement-server"
-	placementServicePort = 50005
-	sentryService        = "dapr-sentry"
-	sentryServicePort    = 80
-	kubernetesMountPath  = "/var/run/secrets/kubernetes.io/serviceaccount"
-	defaultConfig        = "daprsystem"
-	defaultMtlsEnabled   = true
+	defaultConfig      = "daprsystem"
+	defaultMtlsEnabled = true
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
@@ -77,11 +68,11 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	}
 
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
-	placementAddress := getServiceAddress(placementService, namespace, i.config.KubeClusterDomain, placementServicePort)
-	sentryAddress := getServiceAddress(sentryService, namespace, i.config.KubeClusterDomain, sentryServicePort)
-	apiSvcAddress := getServiceAddress(apiService, namespace, i.config.KubeClusterDomain, apiServicePort)
+	placementAddress := sidecar.ServiceAddress(sidecar.ServicePlacement, namespace, i.config.KubeClusterDomain)
+	sentryAddress := sidecar.ServiceAddress(sidecar.ServiceSentry, namespace, i.config.KubeClusterDomain)
+	apiSvcAddress := sidecar.ServiceAddress(sidecar.ServiceAPI, namespace, i.config.KubeClusterDomain)
 
-	trustAnchors, certChain, certKey := getTrustAnchorsAndCertChain(kubeClient, namespace)
+	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(context.TODO(), kubeClient, namespace)
 	socketVolumeMount := sidecar.GetUnixDomainSocketVolume(&pod)
 
 	sidecarContainer, err := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
@@ -99,10 +90,10 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		PlacementServiceAddress:     placementAddress,
 		SentryAddress:               sentryAddress,
 		SocketVolumeMount:           socketVolumeMount,
-		TokenVolumeMount:            getTokenVolumeMount(pod),
+		TokenVolumeMount:            sidecar.GetTokenVolumeMount(pod.Spec),
 		Tolerations:                 pod.Spec.Tolerations,
 		TrustAnchors:                trustAnchors,
-		VolumeMounts:                getVolumeMounts(pod),
+		VolumeMounts:                sidecar.GetVolumeMounts(pod),
 	})
 	if err != nil {
 		return nil, err
@@ -120,7 +111,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	} else {
 		envPatchOps = sidecar.AddDaprEnvVarsToContainers(pod.Spec.Containers)
 		socketVolumePatchOps = sidecar.AddSocketVolumeToContainers(pod.Spec.Containers, socketVolumeMount)
-		path = "/spec/containers/-"
+		path = sidecar.ContainersPath + "/-"
 		value = sidecarContainer
 	}
 
@@ -137,18 +128,6 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	return patchOps, nil
 }
 
-func getTrustAnchorsAndCertChain(kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), sentryConsts.KubeScrtName, metaV1.GetOptions{})
-	if err != nil {
-		return "", "", ""
-	}
-
-	rootCert := secret.Data[credentials.RootCertFilename]
-	certChain := secret.Data[credentials.IssuerCertFilename]
-	certKey := secret.Data[credentials.IssuerKeyFilename]
-	return string(rootCert), string(certChain), string(certKey)
-}
-
 func mTLSEnabled(daprClient scheme.Interface) bool {
 	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
 	if err != nil {
@@ -163,48 +142,4 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 	}
 	log.Infof("Dapr system configuration (%s) is not found, use default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
-}
-
-func getTokenVolumeMount(pod corev1.Pod) *corev1.VolumeMount {
-	for _, c := range pod.Spec.Containers {
-		for _, v := range c.VolumeMounts {
-			if v.MountPath == kubernetesMountPath {
-				return &v
-			}
-		}
-	}
-	return nil
-}
-
-func getServiceAddress(name, namespace, clusterDomain string, port int) string {
-	return fmt.Sprintf("%s.%s.svc.%s:%d", name, namespace, clusterDomain, port)
-}
-
-func podContainsVolume(pod corev1.Pod, name string) bool {
-	for _, volume := range pod.Spec.Volumes {
-		if volume.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func getVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
-	volumeMounts := []corev1.VolumeMount{}
-
-	an := sidecar.Annotations(pod.Annotations)
-	vs := append(
-		sidecar.ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadOnly), true),
-		sidecar.ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadWrite), false)...,
-	)
-
-	for _, v := range vs {
-		if podContainsVolume(pod, v.Name) {
-			volumeMounts = append(volumeMounts, v)
-		} else {
-			log.Warnf("volume %s is not present in pod %s, skipping.", v.Name, pod.Name)
-		}
-	}
-
-	return volumeMounts
 }

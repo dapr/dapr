@@ -18,19 +18,21 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
+	coreV1 "k8s.io/api/core/v1"
+
+	"github.com/dapr/dapr/pkg/injector/annotations"
 )
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	testCases := []struct {
 		testName      string
-		mockContainer corev1.Container
+		mockContainer coreV1.Container
 		expOpsLen     int
 		expOps        []PatchOperation
 	}{
 		{
 			testName: "empty environment vars",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "MockContainer",
 			},
 			expOpsLen: 1,
@@ -38,7 +40,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env",
-					Value: []corev1.EnvVar{
+					Value: []coreV1.EnvVar{
 						{
 							Name:  UserContainerDaprHTTPPortName,
 							Value: strconv.Itoa(SidecarHTTPPort),
@@ -53,9 +55,9 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 		},
 		{
 			testName: "existing env var",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "Mock Container",
-				Env: []corev1.EnvVar{
+				Env: []coreV1.EnvVar{
 					{
 						Name:  "TEST",
 						Value: "Existing value",
@@ -67,7 +69,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
-					Value: corev1.EnvVar{
+					Value: coreV1.EnvVar{
 						Name:  UserContainerDaprHTTPPortName,
 						Value: strconv.Itoa(SidecarHTTPPort),
 					},
@@ -75,7 +77,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
-					Value: corev1.EnvVar{
+					Value: coreV1.EnvVar{
 						Name:  UserContainerDaprGRPCPortName,
 						Value: strconv.Itoa(SidecarAPIGRPCPort),
 					},
@@ -84,9 +86,9 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 		},
 		{
 			testName: "existing conflicting env var",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "Mock Container",
-				Env: []corev1.EnvVar{
+				Env: []coreV1.EnvVar{
 					{
 						Name:  "TEST",
 						Value: "Existing value",
@@ -102,7 +104,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
-					Value: corev1.EnvVar{
+					Value: coreV1.EnvVar{
 						Name:  UserContainerDaprHTTPPortName,
 						Value: strconv.Itoa(SidecarHTTPPort),
 					},
@@ -111,9 +113,9 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 		},
 		{
 			testName: "multiple existing conflicting env vars",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "Mock Container",
-				Env: []corev1.EnvVar{
+				Env: []coreV1.EnvVar{
 					{
 						Name:  UserContainerDaprHTTPPortName,
 						Value: "3510",
@@ -132,7 +134,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := AddDaprEnvVarsToContainers([]corev1.Container{tc.mockContainer})
+			patchEnv := AddDaprEnvVarsToContainers([]coreV1.Container{tc.mockContainer})
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
 		})
@@ -142,14 +144,14 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 func TestAddSocketVolumeToContainers(t *testing.T) {
 	testCases := []struct {
 		testName      string
-		mockContainer corev1.Container
-		socketMount   *corev1.VolumeMount
+		mockContainer coreV1.Container
+		socketMount   *coreV1.VolumeMount
 		expOpsLen     int
 		expOps        []PatchOperation
 	}{
 		{
 			testName: "empty var, empty volume",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "MockContainer",
 			},
 			socketMount: nil,
@@ -158,10 +160,10 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 		},
 		{
 			testName: "existing var, empty volume",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "MockContainer",
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: &coreV1.VolumeMount{
 				Name:      UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -170,7 +172,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts",
-					Value: []corev1.VolumeMount{{
+					Value: []coreV1.VolumeMount{{
 						Name:      UnixDomainSocketVolume,
 						MountPath: "/tmp",
 					}},
@@ -179,13 +181,13 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 		},
 		{
 			testName: "existing var, existing volume",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "MockContainer",
-				VolumeMounts: []corev1.VolumeMount{
+				VolumeMounts: []coreV1.VolumeMount{
 					{Name: "mock1"},
 				},
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: &coreV1.VolumeMount{
 				Name:      UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -194,7 +196,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
-					Value: corev1.VolumeMount{
+					Value: coreV1.VolumeMount{
 						Name:      UnixDomainSocketVolume,
 						MountPath: "/tmp",
 					},
@@ -203,14 +205,14 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 		},
 		{
 			testName: "existing var, multiple existing volumes",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "MockContainer",
-				VolumeMounts: []corev1.VolumeMount{
+				VolumeMounts: []coreV1.VolumeMount{
 					{Name: "mock1"},
 					{Name: "mock2"},
 				},
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: &coreV1.VolumeMount{
 				Name:      UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -219,7 +221,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
-					Value: corev1.VolumeMount{
+					Value: coreV1.VolumeMount{
 						Name:      UnixDomainSocketVolume,
 						MountPath: "/tmp",
 					},
@@ -228,13 +230,13 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 		},
 		{
 			testName: "existing var, conflict volume name",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "MockContainer",
-				VolumeMounts: []corev1.VolumeMount{
+				VolumeMounts: []coreV1.VolumeMount{
 					{Name: UnixDomainSocketVolume},
 				},
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: &coreV1.VolumeMount{
 				Name:      UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -243,13 +245,13 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 		},
 		{
 			testName: "existing var, conflict volume mount path",
-			mockContainer: corev1.Container{
+			mockContainer: coreV1.Container{
 				Name: "MockContainer",
-				VolumeMounts: []corev1.VolumeMount{
+				VolumeMounts: []coreV1.VolumeMount{
 					{MountPath: "/tmp"},
 				},
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: &coreV1.VolumeMount{
 				Name:      UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -260,9 +262,111 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := AddSocketVolumeToContainers([]corev1.Container{tc.mockContainer}, tc.socketMount)
+			patchEnv := AddSocketVolumeToContainers([]coreV1.Container{tc.mockContainer}, tc.socketMount)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
+		})
+	}
+}
+
+func TestPodContainsVolume(t *testing.T) {
+	testCases := []struct {
+		testName   string
+		podVolumes []coreV1.Volume
+		volumeName string
+		expect     bool
+	}{
+		{
+			"pod with no volumes",
+			[]coreV1.Volume{},
+			"volume1",
+			false,
+		},
+		{
+			"pod does not contain volume",
+			[]coreV1.Volume{
+				{Name: "volume"},
+			},
+			"volume1",
+			false,
+		},
+		{
+			"pod contains volume",
+			[]coreV1.Volume{
+				{Name: "volume1"},
+				{Name: "volume2"},
+			},
+			"volume2",
+			true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			pod := coreV1.Pod{
+				Spec: coreV1.PodSpec{
+					Volumes: tc.podVolumes,
+				},
+			}
+			assert.Equal(t, tc.expect, podContainsVolume(pod, tc.volumeName))
+		})
+	}
+}
+
+func TestGetVolumeMounts(t *testing.T) {
+	testCases := []struct {
+		testName                  string
+		volumeReadOnlyAnnotation  string
+		volumeReadWriteAnnotation string
+		podVolumeMountNames       []string
+		expVolumeMounts           []coreV1.VolumeMount
+	}{
+		{
+			"no annotations",
+			"",
+			"",
+			[]string{"mount1", "mount2"},
+			[]coreV1.VolumeMount{},
+		},
+		{
+			"annotations with volumes present in pod",
+			"mount1:/tmp/mount1,mount2:/tmp/mount2",
+			"mount3:/tmp/mount3,mount4:/tmp/mount4",
+			[]string{"mount1", "mount2", "mount3", "mount4"},
+			[]coreV1.VolumeMount{
+				{Name: "mount1", MountPath: "/tmp/mount1", ReadOnly: true},
+				{Name: "mount2", MountPath: "/tmp/mount2", ReadOnly: true},
+				{Name: "mount3", MountPath: "/tmp/mount3", ReadOnly: false},
+				{Name: "mount4", MountPath: "/tmp/mount4", ReadOnly: false},
+			},
+		},
+		{
+			"annotations with volumes not present in pod",
+			"mount1:/tmp/mount1,mount2:/tmp/mount2",
+			"mount3:/tmp/mount3,mount4:/tmp/mount4",
+			[]string{"mount1", "mount2", "mount4"},
+			[]coreV1.VolumeMount{
+				{Name: "mount1", MountPath: "/tmp/mount1", ReadOnly: true},
+				{Name: "mount2", MountPath: "/tmp/mount2", ReadOnly: true},
+				{Name: "mount4", MountPath: "/tmp/mount4", ReadOnly: false},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			pod := coreV1.Pod{}
+			pod.Annotations = map[string]string{
+				annotations.KeyVolumeMountsReadOnly:  tc.volumeReadOnlyAnnotation,
+				annotations.KeyVolumeMountsReadWrite: tc.volumeReadWriteAnnotation,
+			}
+			pod.Spec.Volumes = []coreV1.Volume{}
+			for _, volumeName := range tc.podVolumeMountNames {
+				pod.Spec.Volumes = append(pod.Spec.Volumes, coreV1.Volume{Name: volumeName})
+			}
+
+			volumeMounts := GetVolumeMounts(pod)
+			assert.Equal(t, tc.expVolumeMounts, volumeMounts)
 		})
 	}
 }

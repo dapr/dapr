@@ -14,12 +14,17 @@ limitations under the License.
 package sidecar
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/api/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 )
 
 // PatchOperation represents a discreet change to be applied to a Kubernetes resource.
@@ -159,4 +164,59 @@ func GetUnixDomainSocketVolume(pod *corev1.Pod) *corev1.VolumeMount {
 	pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
 
 	return &corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: unixDomainSocket}
+}
+
+// GetTokenVolumeMount returns the VolumeMount for the Kubernetes service account.
+func GetTokenVolumeMount(podSpec corev1.PodSpec) *corev1.VolumeMount {
+	for _, c := range podSpec.Containers {
+		for _, v := range c.VolumeMounts {
+			if v.MountPath == KubernetesMountPath {
+				return &v
+			}
+		}
+	}
+	return nil
+}
+
+// GetTrustAnchorsAndCertChain returns the trust anchor and certs.
+func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Interface, namespace string) (string, string, string) {
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, sentryConsts.KubeScrtName, metav1.GetOptions{})
+	if err != nil {
+		return "", "", ""
+	}
+
+	rootCert := secret.Data[credentials.RootCertFilename]
+	certChain := secret.Data[credentials.IssuerCertFilename]
+	certKey := secret.Data[credentials.IssuerKeyFilename]
+	return string(rootCert), string(certChain), string(certKey)
+}
+
+// GetVolumeMounts returns the list of VolumeMount's for the sidecar container.
+func GetVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
+	volumeMounts := []corev1.VolumeMount{}
+
+	an := Annotations(pod.Annotations)
+	vs := append(
+		ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadOnly), true),
+		ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadWrite), false)...,
+	)
+
+	for _, v := range vs {
+		if podContainsVolume(pod, v.Name) {
+			volumeMounts = append(volumeMounts, v)
+		} else {
+			log.Warnf("volume %s is not present in pod %s, skipping.", v.Name, pod.Name)
+		}
+	}
+
+	return volumeMounts
+}
+
+func podContainsVolume(pod corev1.Pod, name string) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.Name == name {
+			return true
+		}
+	}
+	return false
 }

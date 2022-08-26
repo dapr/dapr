@@ -15,7 +15,7 @@ limitations under the License.
 package sidecar
 
 const (
-	SidecarContainerName          = "daprd"
+	SidecarContainerName          = "daprd" // Name of the Dapr sidecar container
 	SidecarHTTPPort               = 3500
 	SidecarAPIGRPCPort            = 50001
 	SidecarInternalGRPCPort       = 50002
@@ -27,8 +27,9 @@ const (
 	SidecarDebugPortName          = "dapr-debug"
 	SidecarHealthzPath            = "healthz"
 	APIVersionV1                  = "v1.0"
-	UnixDomainSocketVolume        = "dapr-unix-domain-socket"
-	UserContainerDaprHTTPPortName = "DAPR_HTTP_PORT"
-	UserContainerDaprGRPCPortName = "DAPR_GRPC_PORT"
+	UnixDomainSocketVolume        = "dapr-unix-domain-socket" // Name of the Unix domain socket volume.
+	UserContainerDaprHTTPPortName = "DAPR_HTTP_PORT"          // Name of the variable exposed to the app containing the Dapr HTTP port.
+	UserContainerDaprGRPCPortName = "DAPR_GRPC_PORT"          // Name of the variable exposed to the app containing the Dapr gRPC port.
 	ContainersPath                = "/spec/containers"
+	KubernetesMountPath           = "/var/run/secrets/kubernetes.io/serviceaccount" // Mount path for the Kubernetes service account volume.
 )
