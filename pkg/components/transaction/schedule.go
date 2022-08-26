@@ -164,8 +164,9 @@ func RequestServiceInvoke(directMessaging messaging.DirectMessaging, bunchTransa
 
 	req.WithRawData(bunchTransactionReqsParam.Data, bunchTransactionReqsParam.ContentType)
 	// Save headers to internal metadata
-	req.WithFastHTTPHeaders(bunchTransactionReqsParam.Header)
-
+	if bunchTransactionReqsParam.Header != nil {
+		req.WithFastHTTPHeaders(bunchTransactionReqsParam.Header)
+	}
 	ctx := context.Background()
 	i := 1
 	for i <= retryTimes {
@@ -202,11 +203,13 @@ func RequestActor(actor actors.Actors, bunchTransactionReqsParam *transactionCom
 
 	// Save headers to metadata.
 	metadata := map[string][]string{}
-	header := bunchTransactionReqsParam.Header
-	header.VisitAll(func(key []byte, value []byte) {
-		metadata[string(key)] = []string{string(value)}
-	})
-	req.WithMetadata(metadata)
+	if bunchTransactionReqsParam.Header != nil {
+		header := bunchTransactionReqsParam.Header
+		header.VisitAll(func(key []byte, value []byte) {
+			metadata[string(key)] = []string{string(value)}
+		})
+		req.WithMetadata(metadata)
+	}
 
 	ctx := context.Background()
 	i := 1

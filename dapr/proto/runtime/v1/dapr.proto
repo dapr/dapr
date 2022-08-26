@@ -115,6 +115,10 @@ service Dapr {
 
   // Get distribute transaction state
 	rpc GetDistributeTransactionState(GetDistributeTransactionStateRequest) returns (GetDistributeTransactionStateResponse){}
+
+  rpc DistributeTransactionCommit(DistributeTransactionScheduleRequest) returns (DistributeTransactionScheduleResponse){}
+
+  rpc DistributeTransactionRollback(DistributeTransactionScheduleRequest) returns (DistributeTransactionScheduleResponse){}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -604,21 +608,30 @@ message UnlockResponse {
 }
 
 message BeginTransactionRequest {
-  string storeName = 1;
-  int32 bunchTransactionNum = 2;
+  string StoreName = 1;
+  int32 BunchTransactionNum = 2;
 }
 
 message BeginResponse {
-	string transactionID = 1;
-	repeated string bunchTransactionIDs = 2;
+	string TransactionID = 1;
+	repeated string BunchTransactionIDs = 2;
 }
 
 message GetDistributeTransactionStateRequest {
-  string storeName = 1;
-  string transactionID = 2;
+  string StoreName = 1;
+  string TransactionID = 2;
 }
 
 message GetDistributeTransactionStateResponse {
   string TransactionID = 1;
   map<string, string> BunchTransactionStates = 2;
+}
+
+message DistributeTransactionScheduleRequest {
+  string StoreName = 1;
+  string TransactionID = 2;
+}
+
+message DistributeTransactionScheduleResponse {
+  string Message = 1;
 }

@@ -1469,7 +1469,11 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	if hasDistributeTransaction {
 		log.Debug("store the state operation in service invoke")
-		a.saveDistributeTransaction(transactionHeader, statusCode, transactionRequestParam)
+		requestState := 0
+		if statusCode == fasthttp.StatusOK {
+			requestState = 1
+		}
+		a.saveDistributeTransaction(transactionHeader, requestState, transactionRequestParam)
 	}
 
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
@@ -1836,7 +1840,11 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 
 	if hasDistributeTransaction {
 		log.Debug("run a bunch transaction in actor")
-		a.saveDistributeTransaction(transactionHeader, statusCode, transactionRequestParam)
+		requestState := 0
+		if statusCode == fasthttp.StatusOK {
+			requestState = 1
+		}
+		a.saveDistributeTransaction(transactionHeader, requestState, transactionRequestParam)
 	}
 
 	if !resp.IsHTTPResponse() {
@@ -2524,11 +2532,9 @@ func (a *api) saveDistributeTransaction(transactionHeader transaction_loader.Tra
 		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
 	}
 
-	var requestStatusOK int
-	if statusCode == fasthttp.StatusOK {
+	requestStatusOK := 0
+	if statusCode == 1 {
 		requestStatusOK = 1
-	} else {
-		requestStatusOK = 0
 	}
 
 	err := transactionInstance.SaveBunchTransactionState(transaction.SaveBunchTransactionRequest{
@@ -2541,7 +2547,7 @@ func (a *api) saveDistributeTransaction(transactionHeader transaction_loader.Tra
 	if err != nil {
 		log.Debug(fmt.Sprintf(messages.ErrTransactionRgist, err))
 		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_STORE", fmt.Sprintf(messages.ErrTransactionStore, err))
-		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionFailed, msg))
+		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionStore, msg))
 	}
 	return nil
 }

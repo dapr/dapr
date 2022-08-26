@@ -84,6 +84,8 @@ type DaprClient interface {
 	DistributeTransactionBegin(ctx context.Context, in *BeginTransactionRequest, opts ...grpc.CallOption) (*BeginResponse, error)
 	// Get distribute transaction state
 	GetDistributeTransactionState(ctx context.Context, in *GetDistributeTransactionStateRequest, opts ...grpc.CallOption) (*GetDistributeTransactionStateResponse, error)
+	DistributeTransactionCommit(ctx context.Context, in *DistributeTransactionScheduleRequest, opts ...grpc.CallOption) (*DistributeTransactionScheduleResponse, error)
+	DistributeTransactionRollback(ctx context.Context, in *DistributeTransactionScheduleRequest, opts ...grpc.CallOption) (*DistributeTransactionScheduleResponse, error)
 }
 
 type daprClient struct {
@@ -387,6 +389,24 @@ func (c *daprClient) GetDistributeTransactionState(ctx context.Context, in *GetD
 	return out, nil
 }
 
+func (c *daprClient) DistributeTransactionCommit(ctx context.Context, in *DistributeTransactionScheduleRequest, opts ...grpc.CallOption) (*DistributeTransactionScheduleResponse, error) {
+	out := new(DistributeTransactionScheduleResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/DistributeTransactionCommit", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DistributeTransactionRollback(ctx context.Context, in *DistributeTransactionScheduleRequest, opts ...grpc.CallOption) (*DistributeTransactionScheduleResponse, error) {
+	out := new(DistributeTransactionScheduleResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/DistributeTransactionRollback", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaprServer is the server API for Dapr service.
 // All implementations must embed UnimplementedDaprServer
 // for forward compatibility
@@ -451,6 +471,8 @@ type DaprServer interface {
 	DistributeTransactionBegin(context.Context, *BeginTransactionRequest) (*BeginResponse, error)
 	// Get distribute transaction state
 	GetDistributeTransactionState(context.Context, *GetDistributeTransactionStateRequest) (*GetDistributeTransactionStateResponse, error)
+	DistributeTransactionCommit(context.Context, *DistributeTransactionScheduleRequest) (*DistributeTransactionScheduleResponse, error)
+	DistributeTransactionRollback(context.Context, *DistributeTransactionScheduleRequest) (*DistributeTransactionScheduleResponse, error)
 }
 
 // UnimplementedDaprServer must be embedded to have forward compatible implementations.
@@ -546,6 +568,12 @@ func (UnimplementedDaprServer) DistributeTransactionBegin(context.Context, *Begi
 }
 func (UnimplementedDaprServer) GetDistributeTransactionState(context.Context, *GetDistributeTransactionStateRequest) (*GetDistributeTransactionStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDistributeTransactionState not implemented")
+}
+func (UnimplementedDaprServer) DistributeTransactionCommit(context.Context, *DistributeTransactionScheduleRequest) (*DistributeTransactionScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DistributeTransactionCommit not implemented")
+}
+func (UnimplementedDaprServer) DistributeTransactionRollback(context.Context, *DistributeTransactionScheduleRequest) (*DistributeTransactionScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DistributeTransactionRollback not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -1102,6 +1130,42 @@ func _Dapr_GetDistributeTransactionState_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_DistributeTransactionCommit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DistributeTransactionScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DistributeTransactionCommit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/DistributeTransactionCommit",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DistributeTransactionCommit(ctx, req.(*DistributeTransactionScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DistributeTransactionRollback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DistributeTransactionScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DistributeTransactionRollback(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/DistributeTransactionRollback",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DistributeTransactionRollback(ctx, req.(*DistributeTransactionScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1224,6 +1288,14 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDistributeTransactionState",
 			Handler:    _Dapr_GetDistributeTransactionState_Handler,
+		},
+		{
+			MethodName: "DistributeTransactionCommit",
+			Handler:    _Dapr_DistributeTransactionCommit_Handler,
+		},
+		{
+			MethodName: "DistributeTransactionRollback",
+			Handler:    _Dapr_DistributeTransactionRollback_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
