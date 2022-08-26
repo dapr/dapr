@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220818185053-8b48210e3eba
+	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220826012745-bcea284c7b0c
 	github.com/dapr/kit v0.0.2
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.4
@@ -555,6 +555,3 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-
-// TEMP ONLY
-replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.4.0-rc1.0.20220822232050-9ace33ef3b7f
