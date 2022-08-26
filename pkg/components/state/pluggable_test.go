@@ -146,7 +146,7 @@ func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err er
 }
 
 func TestComponentCalls(t *testing.T) {
-	t.Run("features should returns the component features'", func(t *testing.T) {
+	t.Run("features should return the component features'", func(t *testing.T) {
 		stStore, cleanup, err := getStateStore(&server{})
 		require.NoError(t, err)
 		defer cleanup()

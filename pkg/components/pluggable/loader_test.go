@@ -72,7 +72,7 @@ name: statestore`
 	t.Run("load pluggable components file not exist", func(t *testing.T) {
 		components, err := LoadFromDisk("path-not-exists")
 
-		assert.NotNil(t, err)
+		assert.Nil(t, err)
 		assert.Len(t, components, 0)
 	})
 }

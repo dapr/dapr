@@ -19,7 +19,6 @@ import (
 	"errors"
 
 	"github.com/dapr/components-contrib/state"
-	st "github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/utils"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -44,7 +43,7 @@ type grpcStateStore struct {
 	// client the proto client to call the statestore.
 	client proto.StateStoreClient
 	// features the list of state store implemented features features.
-	features []st.Feature
+	features []state.Feature
 	// context will be used to make blocking async calls.
 	context context.Context
 	// cancel the cancellation function for the inflight calls.
@@ -53,9 +52,9 @@ type grpcStateStore struct {
 
 // Init initializes the grpc state passing out the metadata to the grpc component.
 // It also fetches and set the current components features.
-func (ss *grpcStateStore) Init(metadata st.Metadata) error {
+func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 	// TODO Receive the component name from metadata.
-	grpcConn, err := ss.Connect("place-holder")
+	grpcConn, err := ss.Connect("default")
 	if err != nil {
 		return err
 	}
@@ -74,9 +73,9 @@ func (ss *grpcStateStore) Init(metadata st.Metadata) error {
 		return err
 	}
 
-	ss.features = make([]st.Feature, len(featureResponse.Feature))
+	ss.features = make([]state.Feature, len(featureResponse.Feature))
 	for idx, f := range featureResponse.Feature {
-		ss.features[idx] = st.Feature(f)
+		ss.features[idx] = state.Feature(f)
 	}
 
 	_, err = ss.client.Init(ss.context, protoMetadata)
@@ -84,19 +83,19 @@ func (ss *grpcStateStore) Init(metadata st.Metadata) error {
 }
 
 // Features list all implemented features.
-func (ss *grpcStateStore) Features() []st.Feature {
+func (ss *grpcStateStore) Features() []state.Feature {
 	return ss.features
 }
 
 // Delete performs a delete operation.
-func (ss *grpcStateStore) Delete(req *st.DeleteRequest) error {
+func (ss *grpcStateStore) Delete(req *state.DeleteRequest) error {
 	_, err := ss.client.Delete(ss.context, toDeleteRequest(req))
 
 	return err
 }
 
 // Get performs a get on the state store.
-func (ss *grpcStateStore) Get(req *st.GetRequest) (*st.GetResponse, error) {
+func (ss *grpcStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	response, err := ss.client.Get(ss.context, toGetRequest(req))
 	if err != nil {
 		return nil, err
@@ -110,7 +109,7 @@ func (ss *grpcStateStore) Get(req *st.GetRequest) (*st.GetResponse, error) {
 }
 
 // Set performs a set operation on the state store.
-func (ss *grpcStateStore) Set(req *st.SetRequest) error {
+func (ss *grpcStateStore) Set(req *state.SetRequest) error {
 	protoRequest, err := toSetRequest(req)
 	if err != nil {
 		return err
@@ -132,7 +131,7 @@ func (ss *grpcStateStore) Close() error {
 	return ss.conn.Close()
 }
 
-func (ss *grpcStateStore) BulkDelete(reqs []st.DeleteRequest) error {
+func (ss *grpcStateStore) BulkDelete(reqs []state.DeleteRequest) error {
 	protoRequests := make([]*proto.DeleteRequest, len(reqs))
 
 	for idx := range reqs {
@@ -147,7 +146,7 @@ func (ss *grpcStateStore) BulkDelete(reqs []st.DeleteRequest) error {
 	return err
 }
 
-func (ss *grpcStateStore) BulkGet(req []st.GetRequest) (bool, []st.BulkGetResponse, error) {
+func (ss *grpcStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	protoRequests := make([]*proto.GetRequest, len(req))
 	for idx := range req {
 		protoRequests[idx] = toGetRequest(&req[idx])
@@ -162,9 +161,9 @@ func (ss *grpcStateStore) BulkGet(req []st.GetRequest) (bool, []st.BulkGetRespon
 		return false, nil, err
 	}
 
-	items := make([]st.BulkGetResponse, len(bulkGetResponse.Items))
+	items := make([]state.BulkGetResponse, len(bulkGetResponse.Items))
 	for idx, resp := range bulkGetResponse.Items {
-		items[idx] = st.BulkGetResponse{
+		items[idx] = state.BulkGetResponse{
 			Key:      resp.GetKey(),
 			Data:     resp.GetData(),
 			ETag:     fromETagResponse(resp.GetEtag()),
@@ -175,7 +174,7 @@ func (ss *grpcStateStore) BulkGet(req []st.GetRequest) (bool, []st.BulkGetRespon
 	return bulkGetResponse.Got, items, nil
 }
 
-func (ss *grpcStateStore) BulkSet(req []st.SetRequest) error {
+func (ss *grpcStateStore) BulkSet(req []state.SetRequest) error {
 	requests := []*proto.SetRequest{}
 	for idx := range req {
 		protoRequest, err := toSetRequest(&req[idx])
@@ -191,7 +190,7 @@ func (ss *grpcStateStore) BulkSet(req []st.SetRequest) error {
 }
 
 // mappers and helpers.
-func toSetRequest(req *st.SetRequest) (*proto.SetRequest, error) {
+func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 	if req == nil {
 		return nil, nil
 	}
@@ -224,15 +223,15 @@ func toSetRequest(req *st.SetRequest) (*proto.SetRequest, error) {
 	}, nil
 }
 
-func fromGetResponse(resp *proto.GetResponse) *st.GetResponse {
-	return &st.GetResponse{
+func fromGetResponse(resp *proto.GetResponse) *state.GetResponse {
+	return &state.GetResponse{
 		Data:     resp.GetData(),
 		ETag:     fromETagResponse(resp.GetEtag()),
 		Metadata: resp.GetMetadata(),
 	}
 }
 
-func toDeleteRequest(req *st.DeleteRequest) *proto.DeleteRequest {
+func toDeleteRequest(req *state.DeleteRequest) *proto.DeleteRequest {
 	if req == nil {
 		return nil
 	}
@@ -263,7 +262,7 @@ func toETagRequest(etag *string) *v1.Etag {
 	}
 }
 
-func toGetRequest(req *st.GetRequest) *proto.GetRequest {
+func toGetRequest(req *state.GetRequest) *proto.GetRequest {
 	if req == nil {
 		return nil
 	}
@@ -297,7 +296,7 @@ func fromPluggable(_ logger.Logger, pc components.Pluggable) *grpcStateStore {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &grpcStateStore{
-		features:  make([]st.Feature, 0),
+		features:  make([]state.Feature, 0),
 		Pluggable: pc,
 		context:   ctx,
 		cancel:    cancel,

@@ -76,7 +76,7 @@ func TestRegisterFunc(t *testing.T) {
 		assert.NotPanics(t, func() { MustRegister(components.Pluggable{Type: components.State}) })
 
 		assert.Zero(t, fakeLog.fatalFCalled.Load())
-		assert.Equal(t, 1, mapCalled)
+		assert.Equal(t, 0, mapCalled)
 		assert.Equal(t, 1, registerCalled)
 	})
 }
