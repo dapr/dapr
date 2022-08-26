@@ -35,13 +35,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMustLoadStateStore(t *testing.T) {
-	l := NewFromPluggable(components.Pluggable{
-		Type: components.State,
-	})
-	assert.NotNil(t, l)
-}
-
 const bufSize = 1024 * 1024
 
 type server struct {
@@ -144,7 +137,7 @@ func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err er
 	}
 
 	client := proto.NewStateStoreClient(conn)
-	stStore = newGRPCStateStore(components.Pluggable{})
+	stStore = fromPluggable(testLogger, components.Pluggable{})
 	stStore.client = client
 	return stStore, func() {
 		lis.Close()

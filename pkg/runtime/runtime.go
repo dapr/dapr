@@ -636,17 +636,9 @@ func (a *DaprRuntime) registerPluggableComponents() error {
 	}
 	log.Infof("found %d pluggable components", len(pluggables))
 
-	mustRegister := a.buildPluggableRegisterFunc()
-
-	mustRegister(pluggables...)
+	pluggable.MustRegister(pluggables...)
 
 	return nil
-}
-
-// buildPluggableRegisterFunc returns a register function for pluggable components.
-func (a *DaprRuntime) buildPluggableRegisterFunc() pluggable.MustRegisterFunc {
-	return pluggable.NewRegisterFunc(
-		pluggable.WithStateStoreRegistry(a.stateStoreRegistry))
 }
 
 func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {

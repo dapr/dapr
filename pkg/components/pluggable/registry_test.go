@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/kit/logger"
 
 	"github.com/stretchr/testify/assert"
@@ -27,15 +27,6 @@ import (
 type fakeLogger struct {
 	logger.Logger
 	fatalFCalled atomic.Int32
-}
-
-type fakeRegistry struct {
-	state.Registry
-	called atomic.Int32
-}
-
-func (f *fakeRegistry) Register(components ...state.State) {
-	f.called.Add(1)
 }
 
 func (f *fakeLogger) Fatalf(format string, args ...interface{}) {
@@ -59,9 +50,9 @@ func TestRegisterFunc(t *testing.T) {
 		}
 		revert := setLogger(fakeLog)
 		defer revert()
+		registries = make(map[components.PluggableType]func(components.Pluggable))
 
-		registerF := NewRegisterFunc()
-		assert.Panics(t, func() { registerF(components.Pluggable{}) })
+		assert.Panics(t, func() { MustRegister(components.Pluggable{}) })
 
 		assert.Equal(t, int32(1), fakeLog.fatalFCalled.Load())
 	})
@@ -72,12 +63,20 @@ func TestRegisterFunc(t *testing.T) {
 		}
 		revert := setLogger(fakeLog)
 		defer revert()
+		registries = make(map[components.PluggableType]func(components.Pluggable))
 
-		fakeStateRegistry := &fakeRegistry{}
-		registerF := NewRegisterFunc(WithStateStoreRegistry(fakeStateRegistry))
-		assert.NotPanics(t, func() { registerF(components.Pluggable{Type: components.State}) })
+		mapCalled, registerCalled := 0, 0
+		AddRegistryFor(components.State, func(func(logger.Logger) state.Store, ...string) {
+			registerCalled++
+		}, func(logger.Logger, components.Pluggable) state.Store {
+			mapCalled++
+			var fake any
+			return fake.(state.Store)
+		})
+		assert.NotPanics(t, func() { MustRegister(components.Pluggable{Type: components.State}) })
 
 		assert.Zero(t, fakeLog.fatalFCalled.Load())
-		assert.Equal(t, int32(1), fakeStateRegistry.called.Load())
+		assert.Equal(t, 1, mapCalled)
+		assert.Equal(t, 1, registerCalled)
 	})
 }

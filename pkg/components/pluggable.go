@@ -38,7 +38,7 @@ const (
 	NameResolution PluggableType = "nameresolution"
 )
 
-// WellKnownTypes is used as a handy way to iterate over all possible component type.
+// WellKnownTypes is used as a handy way to iterate over all possibles component type.
 var WellKnownTypes = [9]PluggableType{
 	State,
 	PubSub,

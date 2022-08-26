@@ -18,26 +18,32 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("pluggable-components")
+var (
+	log = logger.NewLogger("pluggable-components")
+	// registries is a map from the given pluggable component type and its register.
+	registries map[components.PluggableType]func(components.Pluggable)
+)
 
-// MustRegisterFunc is used for registering pluggable components.
-type MustRegisterFunc func(pc ...components.Pluggable)
+// AddRegistryFor adds a new register function to the puggable registry.
+func AddRegistryFor[T any](cmpType components.PluggableType, regFunc func(componentFactory func(logger.Logger) T, names ...string), factory func(logger.Logger, components.Pluggable) T) {
+	registries[cmpType] = func(pc components.Pluggable) {
+		regFunc(func(l logger.Logger) T {
+			return factory(l, pc)
+		}, pc.Name)
+	}
+}
 
-// NewRegisterFunc creates a new Pluggable Registry Func.
-func NewRegisterFunc(options ...Option) MustRegisterFunc {
-	opts := registryOpts{
-		registries: make(map[components.PluggableType]func(components.Pluggable)),
-	}
-	for _, opt := range options {
-		opt(&opts)
-	}
-	return func(pcs ...components.Pluggable) {
-		for _, pc := range pcs {
-			register, ok := opts.registries[pc.Type]
-			if !ok {
-				log.Fatalf("%s not registered as a pluggable component", pc.Type)
-			}
-			register(pc)
+// MustRegister register all plugable components.
+func MustRegister(pcs ...components.Pluggable) {
+	for _, pc := range pcs {
+		register, ok := registries[pc.Type]
+		if !ok {
+			log.Fatalf("%s not registered as a pluggable component", pc.Type)
 		}
+		register(pc)
 	}
+}
+
+func init() {
+	registries = make(map[components.PluggableType]func(components.Pluggable))
 }

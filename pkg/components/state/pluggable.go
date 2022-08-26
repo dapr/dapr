@@ -18,11 +18,14 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/dapr/components-contrib/state"
 	st "github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/utils"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
+	"github.com/dapr/kit/logger"
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -289,8 +292,8 @@ func concurrencyOf(value string) v1.StateOptions_StateConcurrency {
 	return v1.StateOptions_StateConcurrency(concurrency)
 }
 
-// newGRPCStateStore creates a new state store for the given pluggable component.
-func newGRPCStateStore(pc components.Pluggable) *grpcStateStore {
+// fromPluggable creates a new state store for the given pluggable component.
+func fromPluggable(_ logger.Logger, pc components.Pluggable) *grpcStateStore {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &grpcStateStore{
@@ -301,12 +304,11 @@ func newGRPCStateStore(pc components.Pluggable) *grpcStateStore {
 	}
 }
 
-// NewFromPluggable creates a new StateStore from a given pluggable component.
-func NewFromPluggable(pc components.Pluggable) State {
-	return State{
-		Names: []string{pc.Name},
-		FactoryMethod: func() st.Store {
-			return newGRPCStateStore(pc)
-		},
-	}
+// newGRPCStateStore creates a new state store for the given pluggable component.
+func newGRPCStateStore(l logger.Logger, pc components.Pluggable) state.Store {
+	return fromPluggable(l, pc)
+}
+
+func init() {
+	pluggable.AddRegistryFor(components.State, DefaultRegistry.RegisterComponent, newGRPCStateStore)
 }
