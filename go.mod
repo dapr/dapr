@@ -60,7 +60,6 @@ require (
 )
 
 require (
-	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/dapr/dapr/dapr v0.0.0-00010101000000-000000000000
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
