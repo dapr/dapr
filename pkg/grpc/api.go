@@ -1788,7 +1788,7 @@ func (a *api) GetDistributeTransactionState(ctx context.Context, request *runtim
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetDistributeTransactionStateResponse{}, err
 	}
-	var bunchTransactionStates map[string]int32
+	var bunchTransactionStates map[string]string
 	states, _ := json.Marshal(reqs.BunchTransactionStates)
 	json.Unmarshal(states, &bunchTransactionStates)
 

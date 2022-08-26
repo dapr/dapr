@@ -547,6 +547,7 @@ func (UnimplementedDaprServer) DistributeTransactionBegin(context.Context, *Begi
 func (UnimplementedDaprServer) GetDistributeTransactionState(context.Context, *GetDistributeTransactionStateRequest) (*GetDistributeTransactionStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDistributeTransactionState not implemented")
 }
+
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to DaprServer will
 // result in compilation errors.

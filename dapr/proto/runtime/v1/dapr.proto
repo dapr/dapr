@@ -620,5 +620,5 @@ message GetDistributeTransactionStateRequest {
 
 message GetDistributeTransactionStateResponse {
   string TransactionID = 1;
-  map<string, int32> BunchTransactionStates = 2;
+  map<string, string> BunchTransactionStates = 2;
 }
