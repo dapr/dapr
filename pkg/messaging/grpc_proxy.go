@@ -26,10 +26,10 @@ import (
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/resiliency"
 
+	"github.com/dapr/dapr/dapr/proto/common/v1"
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 // Proxy is the interface for a gRPC transparent proxy.

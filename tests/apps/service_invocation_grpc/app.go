@@ -25,12 +25,13 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
+	pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 // server is our user app

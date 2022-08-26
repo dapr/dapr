@@ -29,10 +29,9 @@ import (
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	lru "github.com/hashicorp/golang-lru"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 

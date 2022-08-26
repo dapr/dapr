@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
 )
 
 func TestInternalMetadataToHTTPHeader(t *testing.T) {

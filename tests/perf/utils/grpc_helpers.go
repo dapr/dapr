@@ -24,8 +24,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	v1 "github.com/dapr/dapr/dapr/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 )
 
 type GrpcAccessFunction = func(cc *grpc.ClientConn) ([]byte, error)

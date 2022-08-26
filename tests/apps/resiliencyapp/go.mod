@@ -3,9 +3,10 @@ module resiliencyapp
 go 1.18
 
 require (
-	github.com/dapr/dapr v1.7.4
+	github.com/dapr/dapr v0.0.0-00010101000000-000000000000
+	github.com/dapr/dapr/dapr v0.0.0-00010101000000-000000000000
 	github.com/gorilla/mux v1.8.0
-	google.golang.org/grpc v1.47.0
+	google.golang.org/grpc v1.48.0
 	google.golang.org/grpc/examples v0.0.0-20220818173707-97cb7b1653d7
 	google.golang.org/protobuf v1.28.0
 )
@@ -20,3 +21,5 @@ require (
 )
 
 replace github.com/dapr/dapr => ../../../
+
+replace github.com/dapr/dapr/dapr => ../../../dapr

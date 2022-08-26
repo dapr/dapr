@@ -32,7 +32,7 @@ define genProtoForTarget
 .PHONY: $(1)
 protoc-gen-$(1)-v1:
 	protoc -I . ./dapr/proto/$(1)/v1/*.proto --go_out=plugins=grpc:.
-	cp -R ./github.com/dapr/dapr/pkg/proto/$(1)/v1/*.go ./pkg/proto/$(1)/v1
+	cp -R ./github.com/dapr/dapr/dapr/proto/$(1)/v1/*.go ./dapr/proto/$(1)/v1
 	rm -rf ./github.com
 endef
 

@@ -17,7 +17,7 @@ package dapr.proto.operator.v1;
 
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/dapr/dapr/pkg/proto/operator/v1;operator";
+option go_package = "github.com/dapr/dapr/dapr/proto/operator/v1;operator";
 
 service Operator {
   // Sends events to Dapr sidecars upon component changes.

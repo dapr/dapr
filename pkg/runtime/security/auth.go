@@ -14,9 +14,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	sentryv1pb "github.com/dapr/dapr/dapr/proto/sentry/v1"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
 const (

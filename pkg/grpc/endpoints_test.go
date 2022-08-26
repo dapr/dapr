@@ -22,8 +22,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/config"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func TestEndpointCompleteness(t *testing.T) {

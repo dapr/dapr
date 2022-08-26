@@ -27,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 )
 
 const (

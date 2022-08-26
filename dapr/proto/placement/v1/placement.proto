@@ -15,7 +15,7 @@ syntax = "proto3";
 
 package dapr.proto.placement.v1;
 
-option go_package = "github.com/dapr/dapr/pkg/proto/placement/v1;placement";
+option go_package = "github.com/dapr/dapr/dapr/proto/placement/v1;placement";
 
 // Placement service is used to report Dapr runtime host status.
 service Placement {

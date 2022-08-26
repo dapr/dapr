@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subscriptions "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
 type mockOperator struct {

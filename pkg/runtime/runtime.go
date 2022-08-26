@@ -70,8 +70,8 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"

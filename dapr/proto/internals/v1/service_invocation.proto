@@ -19,7 +19,7 @@ import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/internals/v1/apiversion.proto";
 import "dapr/proto/internals/v1/status.proto";
 
-option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
+option go_package = "github.com/dapr/dapr/dapr/proto/internals/v1;internals";
 
 // ServiceInvocation service is used to exchange the data between 
 // caller dapr runtime and callee dapr runtime.
