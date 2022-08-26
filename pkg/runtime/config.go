@@ -16,6 +16,7 @@ package runtime
 import (
 	"time"
 
+	"github.com/dapr/dapr/pkg/apphealth"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/modes"
@@ -45,6 +46,10 @@ const (
 	DefaultAPIListenAddress = ""
 	// DefaultReadBufferSize is the default option for the maximum header size in KB for Dapr HTTP servers.
 	DefaultReadBufferSize = 4
+	// DefaultGracefulShutdownDuration is the default option for the duration of the graceful shutdown.
+	DefaultGracefulShutdownDuration = time.Second * 5
+	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
+	DefaultAppHealthCheckPath = "/health"
 )
 
 // Config holds the Dapr Runtime configuration.
@@ -73,50 +78,92 @@ type Config struct {
 	MaxRequestBodySize           int
 	UnixDomainSocket             string
 	ReadBufferSize               int
-	StreamRequestBody            bool
 	GracefulShutdownDuration     time.Duration
 	EnableAPILogging             bool
 	DisableBuiltinK8sSecretStore bool
+	AppHealthCheck               *apphealth.Config
+	AppHealthCheckHTTPPath       string
+}
+
+// NewRuntimeConfigOpts contains options for NewRuntimeConfig.
+type NewRuntimeConfigOpts struct {
+	ID                           string
+	PlacementAddresses           []string
+	controlPlaneAddress          string
+	AllowedOrigins               string
+	GlobalConfig                 string
+	ComponentsPath               string
+	AppProtocol                  string
+	Mode                         string
+	HTTPPort                     int
+	InternalGRPCPort             int
+	APIGRPCPort                  int
+	APIListenAddresses           []string
+	PublicPort                   *int
+	AppPort                      int
+	ProfilePort                  int
+	EnableProfiling              bool
+	MaxConcurrency               int
+	MTLSEnabled                  bool
+	SentryAddress                string
+	AppSSL                       bool
+	MaxRequestBodySize           int
+	UnixDomainSocket             string
+	ReadBufferSize               int
+	GracefulShutdownDuration     time.Duration
+	EnableAPILogging             bool
+	DisableBuiltinK8sSecretStore bool
+	EnableAppHealthCheck         bool
+	AppHealthCheckPath           string
+	AppHealthProbeInterval       time.Duration
+	AppHealthProbeTimeout        time.Duration
+	AppHealthThreshold           int32
 }
 
 // NewRuntimeConfig returns a new runtime config.
-func NewRuntimeConfig(
-	id string, placementAddresses []string, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath,
-	appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort int, apiListenAddresses []string, publicPort *int,
-	appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool,
-	maxRequestBodySize int, unixDomainSocket string, readBufferSize int, streamRequestBody bool, gracefulShutdownDuration time.Duration, enableAPILogging bool, disableBuiltinK8sSecretStore bool,
-) *Config {
+func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
+	var appHealthCheck *apphealth.Config
+	if opts.EnableAppHealthCheck {
+		appHealthCheck = &apphealth.Config{
+			ProbeInterval: opts.AppHealthProbeInterval,
+			ProbeTimeout:  opts.AppHealthProbeTimeout,
+			ProbeOnly:     true,
+			Threshold:     opts.AppHealthThreshold,
+		}
+	}
+
 	return &Config{
-		ID:                  id,
-		HTTPPort:            httpPort,
-		PublicPort:          publicPort,
-		InternalGRPCPort:    internalGRPCPort,
-		APIGRPCPort:         apiGRPCPort,
-		ApplicationPort:     appPort,
-		ProfilePort:         profilePort,
-		APIListenAddresses:  apiListenAddresses,
-		ApplicationProtocol: Protocol(appProtocol),
-		Mode:                modes.DaprMode(mode),
-		PlacementAddresses:  placementAddresses,
-		GlobalConfig:        globalConfig,
-		AllowedOrigins:      allowedOrigins,
+		ID:                  opts.ID,
+		HTTPPort:            opts.HTTPPort,
+		PublicPort:          opts.PublicPort,
+		InternalGRPCPort:    opts.InternalGRPCPort,
+		APIGRPCPort:         opts.APIGRPCPort,
+		ApplicationPort:     opts.AppPort,
+		ProfilePort:         opts.ProfilePort,
+		APIListenAddresses:  opts.APIListenAddresses,
+		ApplicationProtocol: Protocol(opts.AppProtocol),
+		Mode:                modes.DaprMode(opts.Mode),
+		PlacementAddresses:  opts.PlacementAddresses,
+		GlobalConfig:        opts.GlobalConfig,
+		AllowedOrigins:      opts.AllowedOrigins,
 		Standalone: config.StandaloneConfig{
-			ComponentsPath: componentsPath,
+			ComponentsPath: opts.ComponentsPath,
 		},
 		Kubernetes: config.KubernetesConfig{
-			ControlPlaneAddress: controlPlaneAddress,
+			ControlPlaneAddress: opts.controlPlaneAddress,
 		},
-		EnableProfiling:              enableProfiling,
-		MaxConcurrency:               maxConcurrency,
-		mtlsEnabled:                  mtlsEnabled,
-		SentryServiceAddress:         sentryAddress,
-		AppSSL:                       appSSL,
-		MaxRequestBodySize:           maxRequestBodySize,
-		UnixDomainSocket:             unixDomainSocket,
-		ReadBufferSize:               readBufferSize,
-		StreamRequestBody:            streamRequestBody,
-		GracefulShutdownDuration:     gracefulShutdownDuration,
-		EnableAPILogging:             enableAPILogging,
-		DisableBuiltinK8sSecretStore: disableBuiltinK8sSecretStore,
+		EnableProfiling:              opts.EnableProfiling,
+		MaxConcurrency:               opts.MaxConcurrency,
+		mtlsEnabled:                  opts.MTLSEnabled,
+		SentryServiceAddress:         opts.SentryAddress,
+		AppSSL:                       opts.AppSSL,
+		MaxRequestBodySize:           opts.MaxRequestBodySize,
+		UnixDomainSocket:             opts.UnixDomainSocket,
+		ReadBufferSize:               opts.ReadBufferSize,
+		GracefulShutdownDuration:     opts.GracefulShutdownDuration,
+		EnableAPILogging:             opts.EnableAPILogging,
+		DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
+		AppHealthCheck:               appHealthCheck,
+		AppHealthCheckHTTPPath:       opts.AppHealthCheckPath,
 	}
 }

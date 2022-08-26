@@ -17,6 +17,7 @@ E2E_TEST_APPS=actorjava \
 actordotnet \
 actorpython \
 actorphp \
+healthapp \
 hellodapr \
 stateapp \
 secretapp \
@@ -369,6 +370,15 @@ setup-helm-init:
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
 	$(HELM) repo update
 
+# setup tailscale
+.PHONY: setup-tailscale
+setup-tailscale:
+ifeq ($(TAILSCALE_AUTH_KEY),)
+	$(error TAILSCALE_AUTH_KEY environment variable must be set)
+else
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) TAILSCALE_AUTH_KEY=$(TAILSCALE_AUTH_KEY) ./tests/setup_tailscale.sh
+endif
+
 # install redis to the cluster without password
 setup-test-env-redis:
 	$(HELM) install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
@@ -446,6 +456,9 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/resiliency_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	# TODO: Remove once AppHealthCheck feature is finalized
+	$(KUBECTL) apply -f ./tests/config/app_healthcheck.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)

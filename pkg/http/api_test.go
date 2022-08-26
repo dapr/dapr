@@ -29,7 +29,6 @@ import (
 
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -42,18 +41,15 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
-	"github.com/dapr/dapr/pkg/actors"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/kit/logger"
-
-	"github.com/dapr/components-contrib/lock"
+	"github.com/dapr/dapr/pkg/actors"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -66,6 +62,8 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var invalidJSON = []byte{0x7b, 0x7b}
@@ -2484,15 +2482,17 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
 	registry := httpMiddlewareLoader.NewRegistry()
-	registry.Register(httpMiddlewareLoader.New("uppercase", func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-		return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-			return func(ctx *fasthttp.RequestCtx) {
-				body := string(ctx.PostBody())
-				ctx.Request.SetBody([]byte(strings.ToUpper(body)))
-				h(ctx)
-			}
-		}, nil
-	}))
+	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
+		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+			return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+				return func(ctx *fasthttp.RequestCtx) {
+					body := string(ctx.PostBody())
+					ctx.Request.SetBody([]byte(strings.ToUpper(body)))
+					h(ctx)
+				}
+			}, nil
+		}
+	}, "uppercase")
 	var handlers []httpMiddleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
 		handler, err := registry.Create(spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{})
@@ -3080,7 +3080,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3113,7 +3113,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3487,7 +3487,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
 			Data: []byte("\"bGlmZSBpcyBnb29k\""),
-			ETag: ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+			ETag: ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 		}, nil
 	}
 	if req.Key == "error-key" {
