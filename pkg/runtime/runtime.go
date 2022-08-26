@@ -635,8 +635,7 @@ func (a *DaprRuntime) registerPluggableComponents() error {
 		return err
 	}
 	log.Infof("found %d pluggable components", len(pluggables))
-
-	pluggable.MustRegister(pluggables...)
+	log.Infof("%d pluggable components were registered", pluggable.Register(pluggables...))
 
 	return nil
 }

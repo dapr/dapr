@@ -75,6 +75,7 @@ func (p Pluggable) socketPathFor(componentName string) string {
 // Connect returns a grpc connection for the pluggable component.
 func (p Pluggable) Connect(componentName string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	udsSocket := fmt.Sprintf("unix://%s", p.socketPathFor(componentName))
+	// TODO Add Observability middlewares monitoring/tracing
 	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	c, err := grpc.Dial(udsSocket, additionalOpts...)

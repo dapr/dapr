@@ -29,9 +29,8 @@ type fakeLogger struct {
 	fatalFCalled atomic.Int32
 }
 
-func (f *fakeLogger) Fatalf(format string, args ...interface{}) {
+func (f *fakeLogger) Warnf(format string, args ...interface{}) {
 	f.fatalFCalled.Add(1)
-	panic("")
 }
 
 // setLogger sets the current package logger.
@@ -44,7 +43,7 @@ func setLogger(logger logger.Logger) (revert func()) {
 }
 
 func TestRegisterFunc(t *testing.T) {
-	t.Run("register func should fatalf when no registry exists for the given pluggable component", func(t *testing.T) {
+	t.Run("register func should warnf when no registry exists for the given pluggable component", func(t *testing.T) {
 		fakeLog := &fakeLogger{
 			fatalFCalled: atomic.Int32{},
 		}
@@ -52,7 +51,7 @@ func TestRegisterFunc(t *testing.T) {
 		defer revert()
 		registries = make(map[components.PluggableType]func(components.Pluggable))
 
-		assert.Panics(t, func() { MustRegister(components.Pluggable{}) })
+		assert.Equal(t, 0, Register(components.Pluggable{}))
 
 		assert.Equal(t, int32(1), fakeLog.fatalFCalled.Load())
 	})
@@ -73,7 +72,7 @@ func TestRegisterFunc(t *testing.T) {
 			var fake any
 			return fake.(state.Store)
 		})
-		assert.NotPanics(t, func() { MustRegister(components.Pluggable{Type: components.State}) })
+		assert.Equal(t, 1, Register(components.Pluggable{Type: components.State}))
 
 		assert.Zero(t, fakeLog.fatalFCalled.Load())
 		assert.Equal(t, 0, mapCalled)

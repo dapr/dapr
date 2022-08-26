@@ -33,15 +33,19 @@ func AddRegistryFor[T any](cmpType components.PluggableType, regFunc func(compon
 	}
 }
 
-// MustRegister register all plugable components.
-func MustRegister(pcs ...components.Pluggable) {
+// Register register all plugable components and returns the total number of registered components.
+func Register(pcs ...components.Pluggable) int {
+	registeredComponents := 0
 	for _, pc := range pcs {
 		register, ok := registries[pc.Type]
 		if !ok {
-			log.Fatalf("%s not registered as a pluggable component", pc.Type)
+			log.Warnf("%s is not registered as a pluggable component", pc.Type)
+			continue
 		}
 		register(pc)
+		registeredComponents++
 	}
+	return registeredComponents
 }
 
 func init() {
