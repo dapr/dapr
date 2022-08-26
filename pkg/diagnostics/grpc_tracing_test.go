@@ -26,12 +26,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
-	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+
+	commonv1pb "github.com/dapr/dapr/dapr/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/dapr/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
