@@ -46,32 +46,12 @@ import (
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/configuration"
-	"github.com/dapr/components-contrib/contenttype"
-	"github.com/dapr/components-contrib/lock"
-	contribMetadata "github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/components-contrib/middleware"
-	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/components-contrib/state"
-	operatorv1pb "github.com/dapr/dapr/dapr/proto/operator/v1"
-	runtimev1pb "github.com/dapr/dapr/dapr/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
-	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
-	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
-	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
-	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
-	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
-	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
-	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -89,6 +69,29 @@ import (
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
+
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
+	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
+	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
+	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
+
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/contenttype"
+	"github.com/dapr/components-contrib/lock"
+	contribMetadata "github.com/dapr/components-contrib/metadata"
+	"github.com/dapr/components-contrib/middleware"
+	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/state"
 )
 
 const (
@@ -160,22 +163,22 @@ type DaprRuntime struct {
 	appChannel             channel.AppChannel
 	appConfig              config.ApplicationConfig
 	directMessaging        messaging.DirectMessaging
-	stateStoreRegistry     stateLoader.Registry
-	secretStoresRegistry   secretstoresLoader.Registry
-	nameResolutionRegistry nrLoader.Registry
+	stateStoreRegistry     *stateLoader.Registry
+	secretStoresRegistry   *secretstoresLoader.Registry
+	nameResolutionRegistry *nrLoader.Registry
 	stateStores            map[string]state.Store
 	actor                  actors.Actors
-	bindingsRegistry       bindingsLoader.Registry
+	bindingsRegistry       *bindingsLoader.Registry
 	subscribeBindingList   []string
 	inputBindings          map[string]bindings.InputBinding
 	outputBindings         map[string]bindings.OutputBinding
 	inputBindingsCtx       context.Context
 	inputBindingsCancel    context.CancelFunc
 	secretStores           map[string]secretstores.SecretStore
-	pubSubRegistry         pubsubLoader.Registry
+	pubSubRegistry         *pubsubLoader.Registry
 	pubSubs                map[string]pubsubItem // Key is "componentName"
 	nameResolver           nr.Resolver
-	httpMiddlewareRegistry httpMiddlewareLoader.Registry
+	httpMiddlewareRegistry *httpMiddlewareLoader.Registry
 	hostAddress            string
 	actorStateStoreName    string
 	actorStateStoreLock    *sync.RWMutex
@@ -197,10 +200,10 @@ type DaprRuntime struct {
 
 	secretsConfiguration map[string]config.SecretsScope
 
-	configurationStoreRegistry configurationLoader.Registry
+	configurationStoreRegistry *configurationLoader.Registry
 	configurationStores        map[string]configuration.Store
 
-	lockStoreRegistry lockLoader.Registry
+	lockStoreRegistry *lockLoader.Registry
 	lockStores        map[string]lock.Store
 
 	pendingComponents          chan componentsV1alpha1.Component
@@ -249,43 +252,30 @@ type pubsubItem struct {
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
 	rt := &DaprRuntime{
-		ctx:                    ctx,
-		cancel:                 cancel,
-		runtimeConfig:          runtimeConfig,
-		globalConfig:           globalConfig,
-		accessControlList:      accessControlList,
-		componentsLock:         &sync.RWMutex{},
-		components:             make([]componentsV1alpha1.Component, 0),
-		actorStateStoreLock:    &sync.RWMutex{},
-		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
-		inputBindings:          map[string]bindings.InputBinding{},
-		outputBindings:         map[string]bindings.OutputBinding{},
-		secretStores:           map[string]secretstores.SecretStore{},
-		stateStores:            map[string]state.Store{},
-		pubSubs:                map[string]pubsubItem{},
-		stateStoreRegistry:     stateLoader.NewRegistry(),
-		bindingsRegistry:       bindingsLoader.NewRegistry(),
-		pubSubRegistry:         pubsubLoader.NewRegistry(),
-		secretStoresRegistry:   secretstoresLoader.NewRegistry(),
-		nameResolutionRegistry: nrLoader.NewRegistry(),
-		httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
-
+		ctx:                        ctx,
+		cancel:                     cancel,
+		runtimeConfig:              runtimeConfig,
+		globalConfig:               globalConfig,
+		accessControlList:          accessControlList,
+		componentsLock:             &sync.RWMutex{},
+		components:                 make([]componentsV1alpha1.Component, 0),
+		actorStateStoreLock:        &sync.RWMutex{},
+		grpc:                       grpc.NewGRPCManager(runtimeConfig.Mode),
+		inputBindings:              map[string]bindings.InputBinding{},
+		outputBindings:             map[string]bindings.OutputBinding{},
+		secretStores:               map[string]secretstores.SecretStore{},
+		stateStores:                map[string]state.Store{},
+		pubSubs:                    map[string]pubsubItem{},
 		topicsLock:                 &sync.Mutex{},
 		inputBindingRoutes:         map[string]string{},
 		secretsConfiguration:       map[string]config.SecretsScope{},
-		configurationStoreRegistry: configurationLoader.NewRegistry(),
 		configurationStores:        map[string]configuration.Store{},
-
-		lockStoreRegistry: lockLoader.NewRegistry(),
-		lockStores:        map[string]lock.Store{},
-
+		lockStores:                 map[string]lock.Store{},
 		pendingComponents:          make(chan componentsV1alpha1.Component),
 		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
 		shutdownC:                  make(chan error, 1),
-
-		tracerProvider: nil,
-
-		resiliency: resiliencyProvider,
+		tracerProvider:             nil,
+		resiliency:                 resiliencyProvider,
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -433,20 +423,19 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return errors.Wrap(err, "failed to setup tracing")
 	}
 	// Register and initialize name resolution for service discovery.
-	a.nameResolutionRegistry.Register(opts.nameResolutions...)
+	a.nameResolutionRegistry = opts.nameResolutionRegistry
 	err = a.initNameResolution()
 	if err != nil {
 		log.Warnf("failed to init name resolution: %s", err)
 	}
 
-	a.pubSubRegistry.Register(opts.pubsubs...)
-	a.secretStoresRegistry.Register(opts.secretStores...)
-	a.stateStoreRegistry.Register(opts.states...)
-	a.configurationStoreRegistry.Register(opts.configurations...)
-	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
-	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
-	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
-	a.lockStoreRegistry.Register(opts.locks...)
+	a.pubSubRegistry = opts.pubsubRegistry
+	a.secretStoresRegistry = opts.secretStoreRegistry
+	a.stateStoreRegistry = opts.stateRegistry
+	a.configurationStoreRegistry = opts.configurationRegistry
+	a.bindingsRegistry = opts.bindingRegistry
+	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
+	a.lockStoreRegistry = opts.lockRegistry
 
 	go a.processComponents()
 

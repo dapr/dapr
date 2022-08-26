@@ -14,6 +14,7 @@ limitations under the License.
 package kubernetes
 
 import (
+	"os"
 	"reflect"
 	"testing"
 )
@@ -47,6 +48,24 @@ func TestAppDescription_MarshalJSON(t *testing.T) {
 		}
 		if !reflect.DeepEqual(string(res), want) {
 			t.Errorf("AppDescription.MarshalJSON() = %v, want %v", string(res), want)
+		}
+	})
+
+	t.Run("use service internal ip", func(t *testing.T) {
+		defer os.Clearenv()
+		app := AppDescription{
+			IngressEnabled: true,
+		}
+		os.Setenv(useServiceInternalIP, "false")
+
+		if !app.ShouldBeExposed() {
+			t.Error("AppDescription.ShouldBeExposed() should evaluate to true when ingress is enabled and internal ip should not be used")
+		}
+
+		os.Setenv(useServiceInternalIP, "true")
+
+		if app.ShouldBeExposed() {
+			t.Error("AppDescription.ShouldBeExposed() should evaluate to false when internal ip should be used")
 		}
 	})
 }
