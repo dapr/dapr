@@ -699,7 +699,7 @@ func TestActorFeatures(t *testing.T) {
 		require.NotNil(t, logTwo)
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
-		startEndTimeCheck := (logOne.StartTimestamp >= logTwo.EndTimestamp) || (logTwo.StartTimestamp >= logOne.EndTimestamp))
+		startEndTimeCheck := (logOne.StartTimestamp >= logTwo.EndTimestamp) || (logTwo.StartTimestamp >= logOne.EndTimestamp)
 		if !startEndTimeCheck {
 			log.Printf("failed for start/end time check: logOne.StartTimestamp='%d' logOne.EndTimestamp='%d' logTwo.StartTimestamp='%d' logTwo.EndTimestamp='%d'",
 				logOne.StartTimestamp, logOne.EndTimestamp, logTwo.StartTimestamp, logTwo.EndTimestamp)
