@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/components/nameresolution"
 )
@@ -43,12 +44,12 @@ func TestRegistry(t *testing.T) {
 		mockV2 := &mockResolver{}
 
 		// act
-		testRegistry.Register(nameresolution.New(resolverName, func() nr.Resolver {
+		testRegistry.RegisterComponent(func(_ logger.Logger) nr.Resolver {
 			return mock
-		}))
-		testRegistry.Register(nameresolution.New(resolverNameV2, func() nr.Resolver {
+		}, resolverName)
+		testRegistry.RegisterComponent(func(_ logger.Logger) nr.Resolver {
 			return mockV2
-		}))
+		}, resolverNameV2)
 
 		// assert v0 and v1
 		p, e := testRegistry.Create(resolverName, "v0")

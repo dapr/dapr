@@ -57,11 +57,15 @@ const (
 	DefaultRetryTemplate          DefaultPolicyTemplate = "Default%sRetryPolicy"
 	DefaultTimeoutTemplate        DefaultPolicyTemplate = "Default%sTimeoutPolicy"
 	DefaultCircuitBreakerTemplate DefaultPolicyTemplate = "Default%sCircuitBreakerPolicy"
-	Endpoint                      PolicyType            = "App"
-	Component                     PolicyType            = "Component"
-	ComponentInbound              PolicyType            = "Component.inbound"
-	ComponentOutbound             PolicyType            = "Component.outbound"
-	Actor                         PolicyType            = "Actor"
+	Endpoint                      PolicyTypeName        = "App"
+	Component                     PolicyTypeName        = "Component"
+	Actor                         PolicyTypeName        = "Actor"
+	Binding                       ComponentType         = "Binding"
+	Configuration                 ComponentType         = "Configuration"
+	Lock                          ComponentType         = "Lock"
+	Pubsub                        ComponentType         = "Pubsub"
+	Secretstore                   ComponentType         = "Secretstore"
+	Statestore                    ComponentType         = "Statestore"
 )
 
 // ActorCircuitBreakerScope indicates the scope of the circuit breaker for an actor.
@@ -89,13 +93,13 @@ type (
 		// ActorPolicy returns the policy for an actor instance to be used after the lock is acquired.
 		ActorPostLockPolicy(ctx context.Context, actorType string, id string) Runner
 		// ComponentOutboundPolicy returns the outbound policy for a component.
-		ComponentOutboundPolicy(ctx context.Context, name string) Runner
+		ComponentOutboundPolicy(ctx context.Context, name string, componentType ComponentType) Runner
 		// ComponentInboundPolicy returns the inbound policy for a component.
-		ComponentInboundPolicy(ctx context.Context, name string) Runner
+		ComponentInboundPolicy(ctx context.Context, name string, componentType ComponentType) Runner
 		// BuiltInPolicy are used to replace existing retries in Dapr which may not bind specifically to one of the above categories.
 		BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) Runner
-		// PolicyDefined returns a boolean stating if the given target has a policy.
-		PolicyDefined(target string, policyType PolicyType) *PolicyDescription
+		// GetPolicy returns the policy that applies to the target, or nil if there is none.
+		GetPolicy(target string, policyType PolicyType) *PolicyDescription
 	}
 
 	// Resiliency encapsulates configuration for timeouts, retries, and circuit breakers.
@@ -167,7 +171,21 @@ type (
 
 	DefaultPolicyTemplate string
 	BuiltInPolicyName     string
-	PolicyType            string
+	PolicyTypeName        string
+
+	// PolicyTypes have to return an array of their possible levels.
+	// Ex. [App], [Actor], [Component, Inbound|Outbound, ComponentType]
+	PolicyType interface {
+		getPolicyLevels() []string
+		getPolicyTypeName() PolicyTypeName
+	}
+	EndpointPolicy  struct{}
+	ActorPolicy     struct{}
+	ComponentType   string
+	ComponentPolicy struct {
+		componentType      ComponentType
+		componentDirection string
+	}
 )
 
 // Ensure `*Resiliency` satisfies the `Provider` interface.
@@ -557,7 +575,7 @@ func (r *Resiliency) EndpointPolicy(ctx context.Context, app string, endpoint st
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
-		if defaultNames, ok := r.getDefaultPolicy(Endpoint); ok {
+		if defaultNames, ok := r.getDefaultPolicy(&EndpointPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Endpoint %s: %+v", app, defaultNames)
 			if defaultNames.Retry != "" {
 				rc = r.retries[defaultNames.Retry]
@@ -642,7 +660,7 @@ func (r *Resiliency) ActorPreLockPolicy(ctx context.Context, actorType string, i
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
 	} else {
-		if defaultNames, ok := r.getDefaultPolicy(Actor); ok {
+		if defaultNames, ok := r.getDefaultPolicy(&ActorPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultNames)
 			if defaultNames.Retry != "" {
 				rc = r.retries[defaultNames.Retry]
@@ -701,7 +719,7 @@ func (r *Resiliency) ActorPostLockPolicy(ctx context.Context, actorType string, 
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.TimeoutPolicy)
 		}
 	} else {
-		if defaultPolicies, ok := r.getDefaultPolicy(Actor); ok {
+		if defaultPolicies, ok := r.getDefaultPolicy(&ActorPolicy{}); ok {
 			r.log.Debugf("Found Default Policy for Actor type %s: %+v", actorType, defaultPolicies)
 			if defaultPolicies.Timeout != "" {
 				t = r.timeouts[defaultPolicies.Timeout]
@@ -713,7 +731,7 @@ func (r *Resiliency) ActorPostLockPolicy(ctx context.Context, actorType string, 
 }
 
 // ComponentOutboundPolicy returns the outbound policy for a component.
-func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) Runner {
+func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string, componentType ComponentType) Runner {
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
@@ -737,13 +755,27 @@ func (r *Resiliency) ComponentOutboundPolicy(ctx context.Context, name string) R
 			cb = r.componentCBs.Get(r.log, name, template)
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
+	} else {
+		if defaultPolicies, ok := r.getDefaultPolicy(&ComponentPolicy{componentType: componentType, componentDirection: "Outbound"}); ok {
+			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
+			if defaultPolicies.Timeout != "" {
+				t = r.timeouts[defaultPolicies.Timeout]
+			}
+			if defaultPolicies.Retry != "" {
+				rc = r.retries[defaultPolicies.Retry]
+			}
+			if defaultPolicies.CircuitBreaker != "" {
+				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]
+				cb = r.componentCBs.Get(r.log, name, template)
+			}
+		}
 	}
 
 	return Policy(ctx, r.log, operationName, t, rc, cb)
 }
 
 // ComponentInboundPolicy returns the inbound policy for a component.
-func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Runner {
+func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string, componentType ComponentType) Runner {
 	var t time.Duration
 	var rc *retry.Config
 	var cb *breaker.CircuitBreaker
@@ -767,6 +799,20 @@ func (r *Resiliency) ComponentInboundPolicy(ctx context.Context, name string) Ru
 			cb = r.componentCBs.Get(r.log, name, template)
 			diag.DefaultResiliencyMonitoring.PolicyExecuted(r.name, r.namespace, diag.CircuitBreakerPolicy)
 		}
+	} else {
+		if defaultPolicies, ok := r.getDefaultPolicy(&ComponentPolicy{componentType: componentType, componentDirection: "Inbound"}); ok {
+			r.log.Debugf("Found Default Policy for Component: %s: %+v", name, defaultPolicies)
+			if defaultPolicies.Timeout != "" {
+				t = r.timeouts[defaultPolicies.Timeout]
+			}
+			if defaultPolicies.Retry != "" {
+				rc = r.retries[defaultPolicies.Retry]
+			}
+			if defaultPolicies.CircuitBreaker != "" {
+				template := r.circuitBreakers[defaultPolicies.CircuitBreaker]
+				cb = r.componentCBs.Get(r.log, name, template)
+			}
+		}
 	}
 
 	return Policy(ctx, r.log, operationName, t, rc, cb)
@@ -780,33 +826,32 @@ func (r *Resiliency) BuiltInPolicy(ctx context.Context, name BuiltInPolicyName) 
 	return Policy(ctx, r.log, stringName, t, r.retries[stringName], cb)
 }
 
-// Returns true if a target has a defined policy.
-func (r *Resiliency) PolicyDefined(target string, policyType PolicyType) *PolicyDescription {
+// GetPolicy returns the policy that applies to the target, or nil if there is none.
+func (r *Resiliency) GetPolicy(target string, policyType PolicyType) *PolicyDescription {
 	var (
 		policyName PolicyNames
 		exists     bool
 	)
-	switch policyType {
+	switch policyType.getPolicyTypeName() {
 	case Endpoint:
 		policyName, exists = r.apps[target]
-	case ComponentInbound:
+	case Component:
 		var componentPolicy ComponentPolicyNames
 		componentPolicy, exists = r.components[target]
 		if exists {
-			policyName = PolicyNames{
-				Retry:          componentPolicy.Inbound.Retry,
-				CircuitBreaker: componentPolicy.Inbound.CircuitBreaker,
-				Timeout:        componentPolicy.Inbound.Timeout,
-			}
-		}
-	case ComponentOutbound:
-		var componentPolicy ComponentPolicyNames
-		componentPolicy, exists = r.components[target]
-		if exists {
-			policyName = PolicyNames{
-				Retry:          componentPolicy.Outbound.Retry,
-				CircuitBreaker: componentPolicy.Outbound.CircuitBreaker,
-				Timeout:        componentPolicy.Outbound.Timeout,
+			policy, _ := policyType.(*ComponentPolicy)
+			if policy.componentDirection == "Inbound" {
+				policyName = PolicyNames{
+					Retry:          componentPolicy.Inbound.Retry,
+					CircuitBreaker: componentPolicy.Inbound.CircuitBreaker,
+					Timeout:        componentPolicy.Inbound.Timeout,
+				}
+			} else {
+				policyName = PolicyNames{
+					Retry:          componentPolicy.Outbound.Retry,
+					CircuitBreaker: componentPolicy.Outbound.CircuitBreaker,
+					Timeout:        componentPolicy.Outbound.Timeout,
+				}
 			}
 		}
 	case Actor:
@@ -852,37 +897,54 @@ func (r *Resiliency) getDefaultPolicy(policyType PolicyType) (PolicyNames, bool)
 }
 
 func (r *Resiliency) getDefaultRetryPolicy(policyType PolicyType) string {
-	typeTemplate, topLevelTemplate := r.expandPolicyTemplate(policyType, DefaultRetryTemplate)
-	if _, ok := r.retries[typeTemplate]; ok {
-		return typeTemplate
-	} else if _, ok := r.retries[topLevelTemplate]; ok {
+	typeTemplates, topLevelTemplate := r.expandPolicyTemplate(policyType, DefaultRetryTemplate)
+	for _, typeTemplate := range typeTemplates {
+		if _, ok := r.retries[typeTemplate]; ok {
+			return typeTemplate
+		}
+	}
+
+	if _, ok := r.retries[topLevelTemplate]; ok {
 		return topLevelTemplate
 	}
 	return ""
 }
 
 func (r *Resiliency) getDefaultTimeoutPolicy(policyType PolicyType) string {
-	typeTemplate, topLevelTemplate := r.expandPolicyTemplate(policyType, DefaultTimeoutTemplate)
-	if _, ok := r.timeouts[typeTemplate]; ok {
-		return typeTemplate
-	} else if _, ok := r.timeouts[topLevelTemplate]; ok {
+	typeTemplates, topLevelTemplate := r.expandPolicyTemplate(policyType, DefaultTimeoutTemplate)
+	for _, typeTemplate := range typeTemplates {
+		if _, ok := r.timeouts[typeTemplate]; ok {
+			return typeTemplate
+		}
+	}
+
+	if _, ok := r.timeouts[topLevelTemplate]; ok {
 		return topLevelTemplate
 	}
 	return ""
 }
 
 func (r *Resiliency) getDefaultCircuitBreakerPolicy(policyType PolicyType) string {
-	typeTemplate, topLevelTemplate := r.expandPolicyTemplate(policyType, DefaultCircuitBreakerTemplate)
-	if _, ok := r.circuitBreakers[typeTemplate]; ok {
-		return typeTemplate
-	} else if _, ok := r.circuitBreakers[topLevelTemplate]; ok {
+	typeTemplates, topLevelTemplate := r.expandPolicyTemplate(policyType, DefaultCircuitBreakerTemplate)
+	for _, typeTemplate := range typeTemplates {
+		if _, ok := r.circuitBreakers[typeTemplate]; ok {
+			return typeTemplate
+		}
+	}
+
+	if _, ok := r.circuitBreakers[topLevelTemplate]; ok {
 		return topLevelTemplate
 	}
 	return ""
 }
 
-func (r *Resiliency) expandPolicyTemplate(policyType PolicyType, template DefaultPolicyTemplate) (string, string) {
-	return fmt.Sprintf(string(template), policyType), fmt.Sprintf(string(template), "")
+func (r *Resiliency) expandPolicyTemplate(policyType PolicyType, template DefaultPolicyTemplate) ([]string, string) {
+	policyLevels := policyType.getPolicyLevels()
+	typeTemplates := make([]string, len(policyLevels))
+	for i, level := range policyLevels {
+		typeTemplates[i] = fmt.Sprintf(string(template), level)
+	}
+	return typeTemplates, fmt.Sprintf(string(template), "")
 }
 
 // Get returns a cached circuit breaker if one exists.
@@ -972,4 +1034,40 @@ func filterResiliencyConfigs(resiliences []*resiliencyV1alpha.Resiliency, runtim
 	}
 
 	return filteredResiliencies
+}
+
+func (*EndpointPolicy) getPolicyLevels() []string {
+	return []string{"App"}
+}
+
+func (*EndpointPolicy) getPolicyTypeName() PolicyTypeName {
+	return Endpoint
+}
+
+func (*ActorPolicy) getPolicyLevels() []string {
+	return []string{"Actor"}
+}
+
+func (*ActorPolicy) getPolicyTypeName() PolicyTypeName {
+	return Actor
+}
+
+func (p *ComponentPolicy) getPolicyLevels() []string {
+	return []string{
+		fmt.Sprintf("%sComponent%s", p.componentType, p.componentDirection),
+		fmt.Sprintf("Component%s", p.componentDirection),
+		"Component",
+	}
+}
+
+func (*ComponentPolicy) getPolicyTypeName() PolicyTypeName {
+	return Component
+}
+
+var ComponentInboundPolicy = ComponentPolicy{
+	componentDirection: "Inbound",
+}
+
+var ComponentOutboundPolicy = ComponentPolicy{
+	componentDirection: "Outbound",
 }
