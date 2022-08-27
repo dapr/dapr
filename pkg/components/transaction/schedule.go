@@ -167,6 +167,9 @@ func RequestServiceInvoke(directMessaging messaging.DirectMessaging, bunchTransa
 	if bunchTransactionReqsParam.Header != nil {
 		req.WithFastHTTPHeaders(bunchTransactionReqsParam.Header)
 	}
+
+	log.Debug(bunchTransactionReqsParam.TargetID)
+	log.Debug(req)
 	ctx := context.Background()
 	i := 1
 	for i <= retryTimes {
@@ -174,6 +177,7 @@ func RequestServiceInvoke(directMessaging messaging.DirectMessaging, bunchTransa
 		resp, err := directMessaging.Invoke(ctx, bunchTransactionReqsParam.TargetID, req)
 
 		if err != nil {
+			log.Debug(err)
 			return 0, err
 		}
 		// Construct response
