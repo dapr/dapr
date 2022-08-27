@@ -138,7 +138,7 @@ func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err er
 
 	client := proto.NewStateStoreClient(conn)
 	stStore = fromPluggable(testLogger, components.Pluggable{})
-	stStore.client = client
+	stStore.Client = client
 	return stStore, func() {
 		lis.Close()
 		conn.Close()

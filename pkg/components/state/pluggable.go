@@ -14,7 +14,6 @@ limitations under the License.
 package state
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 
@@ -26,7 +25,6 @@ import (
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/kit/logger"
 
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -37,29 +35,17 @@ var (
 
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
 type grpcStateStore struct {
-	components.Pluggable
-	// conn the gRPC connection
-	conn *grpc.ClientConn
-	// client the proto client to call the statestore.
-	client proto.StateStoreClient
+	*pluggable.GRPCConnector[proto.StateStoreClient]
 	// features the list of state store implemented features features.
 	features []state.Feature
-	// context will be used to make blocking async calls.
-	context context.Context
-	// cancel the cancellation function for the inflight calls.
-	cancel context.CancelFunc
 }
 
 // Init initializes the grpc state passing out the metadata to the grpc component.
 // It also fetches and set the current components features.
 func (ss *grpcStateStore) Init(metadata state.Metadata) error {
-	grpcConn, err := ss.Connect(metadata.Name)
-	if err != nil {
+	if err := ss.Dial(metadata.Name); err != nil {
 		return err
 	}
-	ss.conn = grpcConn
-
-	ss.client = proto.NewStateStoreClient(grpcConn)
 
 	protoMetadata := &proto.MetadataRequest{
 		Properties: metadata.Properties,
@@ -67,7 +53,7 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 
 	// TODO Static data could be retrieved in another way, a necessary discussion should start soon.
 	// we need to call the method here because features could return an error and the features interface doesn't support errors
-	featureResponse, err := ss.client.Features(ss.context, &emptypb.Empty{})
+	featureResponse, err := ss.Client.Features(ss.Context, &emptypb.Empty{})
 	if err != nil {
 		return err
 	}
@@ -77,7 +63,7 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 		ss.features[idx] = state.Feature(f)
 	}
 
-	_, err = ss.client.Init(ss.context, protoMetadata)
+	_, err = ss.Client.Init(ss.Context, protoMetadata)
 	return err
 }
 
@@ -88,14 +74,14 @@ func (ss *grpcStateStore) Features() []state.Feature {
 
 // Delete performs a delete operation.
 func (ss *grpcStateStore) Delete(req *state.DeleteRequest) error {
-	_, err := ss.client.Delete(ss.context, toDeleteRequest(req))
+	_, err := ss.Client.Delete(ss.Context, toDeleteRequest(req))
 
 	return err
 }
 
 // Get performs a get on the state store.
 func (ss *grpcStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
-	response, err := ss.client.Get(ss.context, toGetRequest(req))
+	response, err := ss.Client.Get(ss.Context, toGetRequest(req))
 	if err != nil {
 		return nil, err
 	}
@@ -113,23 +99,11 @@ func (ss *grpcStateStore) Set(req *state.SetRequest) error {
 	if err != nil {
 		return err
 	}
-	_, err = ss.client.Set(ss.context, protoRequest)
+	_, err = ss.Client.Set(ss.Context, protoRequest)
 	return err
 }
 
-// Ping the component.
-func (ss *grpcStateStore) Ping() error {
-	_, err := ss.client.Ping(ss.context, &emptypb.Empty{})
-	return err
-}
-
-// Close gRPC connection and all inflight requests will be cancelled.
-func (ss *grpcStateStore) Close() error {
-	ss.cancel()
-
-	return ss.conn.Close()
-}
-
+// BulkDelete performs a delete operation for many keys at once.
 func (ss *grpcStateStore) BulkDelete(reqs []state.DeleteRequest) error {
 	protoRequests := make([]*proto.DeleteRequest, len(reqs))
 
@@ -141,10 +115,11 @@ func (ss *grpcStateStore) BulkDelete(reqs []state.DeleteRequest) error {
 		Items: protoRequests,
 	}
 
-	_, err := ss.client.BulkDelete(ss.context, bulkDeleteRequest)
+	_, err := ss.Client.BulkDelete(ss.Context, bulkDeleteRequest)
 	return err
 }
 
+// BulkGet performs a get operation for many keys at once.
 func (ss *grpcStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
 	protoRequests := make([]*proto.GetRequest, len(req))
 	for idx := range req {
@@ -155,7 +130,7 @@ func (ss *grpcStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGet
 		Items: protoRequests,
 	}
 
-	bulkGetResponse, err := ss.client.BulkGet(ss.context, bulkGetRequest)
+	bulkGetResponse, err := ss.Client.BulkGet(ss.Context, bulkGetRequest)
 	if err != nil {
 		return false, nil, err
 	}
@@ -173,6 +148,7 @@ func (ss *grpcStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGet
 	return bulkGetResponse.Got, items, nil
 }
 
+// BulkSet performs a set operation for many keys at once.
 func (ss *grpcStateStore) BulkSet(req []state.SetRequest) error {
 	requests := []*proto.SetRequest{}
 	for idx := range req {
@@ -182,7 +158,7 @@ func (ss *grpcStateStore) BulkSet(req []state.SetRequest) error {
 		}
 		requests = append(requests, protoRequest)
 	}
-	_, err := ss.client.BulkSet(ss.context, &proto.BulkSetRequest{
+	_, err := ss.Client.BulkSet(ss.Context, &proto.BulkSetRequest{
 		Items: requests,
 	})
 	return err
@@ -292,13 +268,9 @@ func concurrencyOf(value string) v1.StateOptions_StateConcurrency {
 
 // fromPluggable creates a new state store for the given pluggable component.
 func fromPluggable(_ logger.Logger, pc components.Pluggable) *grpcStateStore {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &grpcStateStore{
-		features:  make([]state.Feature, 0),
-		Pluggable: pc,
-		context:   ctx,
-		cancel:    cancel,
+		features:      make([]state.Feature, 0),
+		GRPCConnector: pluggable.NewGRPCConnector(pc, proto.NewStateStoreClient),
 	}
 }
 

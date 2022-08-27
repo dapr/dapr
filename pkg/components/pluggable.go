@@ -13,16 +13,6 @@ limitations under the License.
 
 package components
 
-import (
-	"fmt"
-
-	"github.com/dapr/dapr/utils"
-
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-)
-
 // PluggableType is the component type.
 type PluggableType string
 
@@ -59,28 +49,4 @@ type Pluggable struct {
 	Type PluggableType
 	// Version is the pluggable component version.
 	Version string
-}
-
-const (
-	daprSocketFolderEnvVar = "DAPR_PLUGGABLE_COMPONENTS_SOCKETS_FOLDER"
-	defaultSocketFolder    = "/var/run"
-)
-
-// socketPathFor returns a unique socket for the given component.
-// the socket path will be composed by the pluggable component, name, version and type plus the component name.
-func (p Pluggable) socketPathFor(componentName string) string {
-	return fmt.Sprintf("%s/dapr-%s.%s-%s-%s.sock", utils.GetEnvOrElse(daprSocketFolderEnvVar, defaultSocketFolder), p.Type, p.Name, p.Version, componentName)
-}
-
-// Connect returns a grpc connection for the pluggable component.
-func (p Pluggable) Connect(componentName string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	udsSocket := fmt.Sprintf("unix://%s", p.socketPathFor(componentName))
-	// TODO Add Observability middlewares monitoring/tracing
-	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-	c, err := grpc.Dial(udsSocket, additionalOpts...)
-	if err != nil {
-		return nil, errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", udsSocket)
-	}
-	return c, nil
 }

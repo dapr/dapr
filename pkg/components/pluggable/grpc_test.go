@@ -11,21 +11,37 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package pluggable
 
 import (
 	"context"
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/components"
+
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-func TestPluggableConnect(t *testing.T) {
+type fakeClient struct {
+	pingCalled atomic.Int64
+}
+
+func (f *fakeClient) Ping(context.Context, *emptypb.Empty, ...grpc.CallOption) (*emptypb.Empty, error) {
+	f.pingCalled.Add(1)
+	return &emptypb.Empty{}, nil
+}
+
+func TestGRPCConnector(t *testing.T) {
 	const (
 		fakeName          = "name"
 		fakeType          = "type"
@@ -33,19 +49,36 @@ func TestPluggableConnect(t *testing.T) {
 		fakeComponentName = "component"
 	)
 
-	fakePluggable := Pluggable{
+	fakePluggable := components.Pluggable{
 		Name:    fakeName,
 		Type:    fakeType,
 		Version: fakeVersion,
 	}
+
 	t.Run("grpc connection should be idle when the process is listening to the socket", func(t *testing.T) {
-		conn, err := fakePluggable.Connect(fakeComponentName)
-		assert.Nil(t, err)
-		assert.Equal(t, connectivity.Idle, conn.GetState())
-		conn.Close()
+		fakeFactoryCalled := 0
+		clientFake := &fakeClient{}
+		fakeFactory := func(grpc.ClientConnInterface) *fakeClient {
+			fakeFactoryCalled++
+			return clientFake
+		}
+		connector := NewGRPCConnector(fakePluggable, fakeFactory)
+		require.NoError(t, connector.Dial(fakeComponentName))
+		assert.Equal(t, connectivity.Idle, connector.conn.GetState())
+		assert.Equal(t, 1, fakeFactoryCalled)
+		assert.Equal(t, int64(1), clientFake.pingCalled.Load())
+		connector.Close()
 	})
 
 	t.Run("grpc connection should be ready when socket is listening", func(t *testing.T) {
+		fakeFactoryCalled := 0
+		clientFake := &fakeClient{}
+		fakeFactory := func(grpc.ClientConnInterface) *fakeClient {
+			fakeFactoryCalled++
+			return clientFake
+		}
+		connector := NewGRPCConnector(fakePluggable, fakeFactory)
+
 		defer os.Clearenv()
 		os.Setenv(daprSocketFolderEnvVar, "/tmp")
 
@@ -53,7 +86,7 @@ func TestPluggableConnect(t *testing.T) {
 		grpcConnectionGroup.Add(1)
 		netUnixSocketListenGroup.Add(1)
 		go func() {
-			socket := fakePluggable.socketPathFor(fakeComponentName)
+			socket := connector.socketPathFor(fakeComponentName)
 			listener, err := net.Listen("unix", socket)
 			assert.Nil(t, err)
 			grpcConnectionGroup.Wait()
@@ -62,21 +95,20 @@ func TestPluggableConnect(t *testing.T) {
 			}
 			netUnixSocketListenGroup.Done()
 		}()
-		conn, err := fakePluggable.Connect(fakeComponentName)
-		assert.Nil(t, err)
+		require.NoError(t, connector.Dial(fakeComponentName))
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		assert.True(t, conn.WaitForStateChange(ctx, connectivity.Idle))
+		assert.True(t, connector.conn.WaitForStateChange(ctx, connectivity.Idle))
 		notAcceptedStatus := []connectivity.State{
 			connectivity.TransientFailure,
 			connectivity.Idle,
 			connectivity.Shutdown,
 		}
 
-		assert.NotContains(t, notAcceptedStatus, conn.GetState())
+		assert.NotContains(t, notAcceptedStatus, connector.conn.GetState())
 
 		grpcConnectionGroup.Done()
 		netUnixSocketListenGroup.Wait()
-		conn.Close()
+		connector.Close()
 	})
 }
