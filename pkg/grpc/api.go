@@ -505,33 +505,34 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	hasDistributeTransaction := false
 	var transactionHeader transaction_loader.TransactionRequestHeader
 	var transactionRequestParam transaction.TransactionRequestParam
-	dMap := make(map[string]interface{})
-	daMe, _ := json.Marshal(req.Message().Data)
-	dByte := []byte(daMe)
-	err := json.Unmarshal(dByte, &dMap)
+
+	dMetaMap := make(map[string]interface{})
+	err := json.Unmarshal(in.Message.Data.GetValue(), &dMetaMap)
+
+	apiServerLogger.Debug("Data : ", in.Message.Data.String())
+	apiServerLogger.Debug("dMetaMap : ", dMetaMap)
 	if err == nil &&
-		dMap["distribute-transaction-id"] != nil &&
-		dMap["distribute-bunch-transaction-id"] != nil &&
-		dMap["distribute-bunch-transaction-id"] != nil {
+		dMetaMap["distribute-transaction-id"] != nil &&
+		dMetaMap["distribute-bunch-transaction-id"] != nil &&
+		dMetaMap["distribute-transaction-store"] != nil {
 		// service invoke with distribute transaction
 		hasDistributeTransaction = true
 
-		transactionHeader.TransactionID = dMap["distribute-transaction-id"].(string)
-		transactionHeader.BunchTransactionID = dMap["distribute-bunch-transaction-id"].(string)
-		transactionHeader.TransactionStoreName = dMap["distribute-bunch-transaction-id"].(string)
+		transactionHeader.TransactionID = dMetaMap["distribute-transaction-id"].(string)
+		transactionHeader.BunchTransactionID = dMetaMap["distribute-bunch-transaction-id"].(string)
+		transactionHeader.TransactionStoreName = dMetaMap["distribute-transaction-store"].(string)
 		transactionRequestParam = transaction.TransactionRequestParam{
 			Type:             "service-invoke",
 			TargetID:         in.Id,
 			InvokeMethodName: req.Message().Method,
 			Verb:             string(req.Message().GetHttpExtension().GetVerb()),
 			QueryArgs:        req.Message().HttpExtension.Querystring,
-			Data:             dByte,
+			Data:             []byte(in.Message.Data.String()),
 			ContentType:      req.Message().ContentType,
 		}
 		apiServerLogger.Debug("transactionHeader : ", transactionHeader)
 		apiServerLogger.Debug("transactionRequestParam : ", transactionRequestParam)
 	}
-
 	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
 	var resp *invokev1.InvokeMethodResponse
 	var requestErr bool
@@ -1480,18 +1481,22 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	hasDistributeTransaction := false
 	var transactionHeader transaction_loader.TransactionRequestHeader
 	var transactionRequestParam transaction.TransactionRequestParam
-	dMap := make(map[string]interface{})
-	err := json.Unmarshal(in.Data, &dMap)
+
+	dMetaMap := make(map[string]interface{})
+	err := json.Unmarshal(in.Data, &dMetaMap)
+	apiServerLogger.Debug("Data : ", in.Data)
+	apiServerLogger.Debug("dMetaMap : ", dMetaMap)
+
 	if err == nil &&
-		dMap["distribute-transaction-id"] != nil &&
-		dMap["distribute-bunch-transaction-id"] != nil &&
-		dMap["distribute-bunch-transaction-id"] != nil {
+		dMetaMap["distribute-transaction-id"] != nil &&
+		dMetaMap["distribute-bunch-transaction-id"] != nil &&
+		dMetaMap["distribute-transaction-store"] != nil {
 		// actor invoke with distribute transaction
 		hasDistributeTransaction = true
 
-		transactionHeader.TransactionID = dMap["distribute-transaction-id"].(string)
-		transactionHeader.BunchTransactionID = dMap["distribute-bunch-transaction-id"].(string)
-		transactionHeader.TransactionStoreName = dMap["distribute-bunch-transaction-id"].(string)
+		transactionHeader.TransactionID = dMetaMap["distribute-transaction-id"].(string)
+		transactionHeader.BunchTransactionID = dMetaMap["distribute-bunch-transaction-id"].(string)
+		transactionHeader.TransactionStoreName = dMetaMap["distribute-transaction-store"].(string)
 		transactionRequestParam = transaction.TransactionRequestParam{
 			Type:             "actor",
 			ActorID:          in.ActorId,
@@ -1945,7 +1950,7 @@ func (a *api) saveDistributeTransaction(transactionHeader transaction_loader.Tra
 
 	if transactionInstance == nil {
 		apiServerLogger.Debug(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
-		return status.Errorf(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
+		return status.Errorf(codes.FailedPrecondition, fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
 	}
 
 	requestStatusOK := 0
@@ -1962,7 +1967,7 @@ func (a *api) saveDistributeTransaction(transactionHeader transaction_loader.Tra
 
 	if err != nil {
 		apiServerLogger.Debug(fmt.Sprintf(messages.ErrTransactionStore, err))
-		return status.Errorf(fmt.Sprintf(messages.ErrTransactionStore, err))
+		return status.Errorf(codes.FailedPrecondition, fmt.Sprintf(messages.ErrTransactionStore, err))
 	}
 	return nil
 }
