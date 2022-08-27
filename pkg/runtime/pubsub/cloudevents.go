@@ -31,6 +31,21 @@ type CloudEvent struct {
 	TraceState      string
 }
 
+type BatchSubscribeCloudEvent struct {
+	ID              string
+	Data            []contribPubsub.NewBatchChildMessage
+	Topic           string
+	Pubsub          string
+	DataContentType string
+	TraceID         string
+	TraceState      string
+}
+
+func NewBatchSubscribeCloudEvent(req *BatchSubscribeCloudEvent) (map[string]interface{}, error) {
+	return contribPubsub.NewBatchCloudEventsEnvelope(uuid.New().String(), req.ID, contribPubsub.DefaultCloudEventType,
+		"", req.Topic, req.Pubsub, req.DataContentType, req.Data, req.TraceID, req.TraceState), nil
+}
+
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
 func NewCloudEvent(req *CloudEvent) (map[string]interface{}, error) {
 	if contribContenttype.IsCloudEventContentType(req.DataContentType) {
