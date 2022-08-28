@@ -60,6 +60,7 @@ func (g *GRPCConnector[TClient]) socketPathFor(componentName string) string {
 // Dial opens a grpcConnection and creates a new client instance.
 func (g *GRPCConnector[TClient]) Dial(componentName string, additionalOpts ...grpc.DialOption) error {
 	udsSocket := fmt.Sprintf("unix://%s", g.socketPathFor(componentName))
+	log.Debugf("using socket defined at '%s' for the component '%s'", udsSocket, componentName)
 	// TODO Add Observability middlewares monitoring/tracing
 	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
