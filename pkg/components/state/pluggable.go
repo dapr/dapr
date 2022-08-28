@@ -164,6 +164,12 @@ func (ss *grpcStateStore) BulkSet(req []state.SetRequest) error {
 	return err
 }
 
+// Multi executes operation in a transactional environment
+// TODO Implement transactional state store
+func (ss *grpcStateStore) Multi(request *state.TransactionalStateRequest) error {
+	return nil
+}
+
 // mappers and helpers.
 func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 	if req == nil {
