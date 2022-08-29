@@ -132,8 +132,8 @@ type api struct {
 	accessControlList          *config.AccessControlList
 	appProtocol                string
 	extendedMetadata           sync.Map
-	components                 []componentsV1alpha.Component
 	shutdown                   func()
+	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
 }
@@ -312,6 +312,7 @@ func NewAPI(
 		accessControlList:          accessControlList,
 		appProtocol:                appProtocol,
 		shutdown:                   shutdown,
+		getComponentsFn:            getComponentsFn,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
 	}
@@ -1473,15 +1474,13 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
 	extendedMetadata := make(map[string]string)
-
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
 		extendedMetadata[key.(string)] = value.(string)
 		return true
 	})
 	extendedMetadata[daprRuntimeVersionKey] = a.daprRunTimeVersion
-	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
-	componentsCapabilities := a.getComponentsCapabilitesFn()
+
 	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
 	if a.actor != nil {
 		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {
@@ -1492,7 +1491,10 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		}
 	}
 
-	for _, comp := range a.components {
+	components := a.getComponentsFn()
+	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(components))
+	componentsCapabilities := a.getComponentsCapabilitesFn()
+	for _, comp := range components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
@@ -1501,12 +1503,14 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
+
 	response := &runtimev1pb.GetMetadataResponse{
 		Id:                   a.id,
 		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
 	}
+
 	return response, nil
 }
 
