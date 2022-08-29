@@ -15,7 +15,7 @@ package consts
 
 const (
 	// TrustBundleK8sSecretName is the name of the kubernetes secret that holds the trust bundle.
-	TrustBundleK8sSecretName = "dapr-trust-bundle"
+	TrustBundleK8sSecretName = "dapr-trust-bundle" /* #nosec */
 	// TrustAnchorsEnvVar is the environment variable name for the trust anchors in the sidecar.
 	TrustAnchorsEnvVar = "DAPR_TRUST_ANCHORS"
 	CertChainEnvVar    = "DAPR_CERT_CHAIN"
