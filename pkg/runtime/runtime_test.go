@@ -442,7 +442,10 @@ func TestDoProcessComponent(t *testing.T) {
 			"mockPubSub",
 		)
 		expectedMetadata := pubsub.Metadata{
-			Base: mdata.Base{Properties: getFakeProperties()},
+			Base: mdata.Base{
+				Name:       TestPubsubName,
+				Properties: getFakeProperties(),
+			},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
@@ -738,6 +741,7 @@ func TestInitState(t *testing.T) {
 		)
 
 		expectedMetadata := state.Metadata{Base: mdata.Base{
+			Name: TestPubsubName,
 			Properties: map[string]string{
 				actorStateStore:        "true",
 				"primaryEncryptionKey": primaryKey,
@@ -812,6 +816,7 @@ func TestInitNameResolution(t *testing.T) {
 		)
 
 		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
+			Name: resolverName,
 			Properties: map[string]string{
 				nameresolution.DaprHTTPPort:        strconv.Itoa(rt.runtimeConfig.HTTPPort),
 				nameresolution.DaprPort:            strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
@@ -1410,7 +1415,10 @@ func TestInitPubSub(t *testing.T) {
 		}, "mockPubSub2")
 
 		expectedMetadata := pubsub.Metadata{
-			Base: mdata.Base{Properties: getFakeProperties()},
+			Base: mdata.Base{
+				Name:       TestPubsubName,
+				Properties: getFakeProperties(),
+			},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(nil)
@@ -1419,7 +1427,13 @@ func TestInitPubSub(t *testing.T) {
 			mock.AnythingOfType("pubsub.SubscribeRequest"),
 			mock.AnythingOfType("pubsub.Handler")).Return(nil)
 
-		mockPubSub2.On("Init", expectedMetadata).Return(nil)
+		expectedSecondPubsubMetadata := pubsub.Metadata{
+			Base: mdata.Base{
+				Name:       TestSecondPubsubName,
+				Properties: getFakeProperties(),
+			},
+		}
+		mockPubSub2.On("Init", expectedSecondPubsubMetadata).Return(nil)
 		mockPubSub2.On(
 			"Subscribe",
 			mock.AnythingOfType("pubsub.SubscribeRequest"),

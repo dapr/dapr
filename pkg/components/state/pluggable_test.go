@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/state/query"
 	"github.com/dapr/dapr/pkg/components"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
@@ -67,6 +68,18 @@ type server struct {
 	multiCalled        atomic.Int64
 	onMultiCalled      func(*proto.TransactionalStateRequest)
 	multiErr           error
+	queryCalled        atomic.Int64
+	onQueryCalled      func(*proto.QueryRequest)
+	queryResp          *proto.QueryResponse
+	queryErr           error
+}
+
+func (s *server) Query(_ context.Context, req *proto.QueryRequest) (*proto.QueryResponse, error) {
+	s.queryCalled.Add(1)
+	if s.onQueryCalled != nil {
+		s.onQueryCalled(req)
+	}
+	return s.queryResp, s.queryErr
 }
 
 func (s *server) Multi(_ context.Context, req *proto.TransactionalStateRequest) (*emptypb.Empty, error) {
@@ -142,6 +155,7 @@ func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err er
 	s := grpc.NewServer()
 	proto.RegisterStateStoreServer(s, srv)
 	proto.RegisterTransactionalStateStoreServer(s, srv)
+	proto.RegisterQueriableStateStoreServer(s, srv)
 	go func() {
 		if serveErr := s.Serve(lis); serveErr != nil {
 			testLogger.Debugf("Server exited with error: %v", serveErr)
@@ -572,6 +586,60 @@ func TestComponentCalls(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.multiCalled.Load())
+	})
+
+	t.Run("query should return an error when grpc query returns an error", func(t *testing.T) {
+		svc := &server{
+			queryErr: errors.New("fake-query-err"),
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		resp, err := stStore.Query(&state.QueryRequest{})
+
+		assert.NotNil(t, err)
+		assert.Nil(t, resp)
+		assert.Equal(t, int64(1), svc.queryCalled.Load())
+	})
+
+	t.Run("query should send a QueryRequest containing all filters", func(t *testing.T) {
+		filters := map[string]interface{}{
+			"a": []string{"a"},
+		}
+		request := &state.QueryRequest{
+			Query: query.Query{
+				Filters: filters,
+			},
+			Metadata: map[string]string{},
+		}
+		results := []*proto.QueryItem{
+			{
+				Key:         "",
+				Data:        []byte{},
+				Etag:        &v1.Etag{},
+				Error:       "",
+				ContentType: "",
+			},
+		}
+		svc := &server{
+			onQueryCalled: func(bsr *proto.QueryRequest) {
+				assert.Len(t, bsr.Query.Filter, len(filters))
+			},
+			queryResp: &proto.QueryResponse{
+				Items: results,
+			},
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		resp, err := stStore.Query(request)
+
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Len(t, resp.Results, len(results))
+		assert.Equal(t, int64(1), svc.queryCalled.Load())
 	})
 }
 

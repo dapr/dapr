@@ -88,7 +88,7 @@ func TestGRPCConnector(t *testing.T) {
 		go func() {
 			socket := connector.socketPathFor(fakeComponentName)
 			listener, err := net.Listen("unix", socket)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			grpcConnectionGroup.Wait()
 			if listener != nil {
 				listener.Close()
@@ -96,9 +96,13 @@ func TestGRPCConnector(t *testing.T) {
 			netUnixSocketListenGroup.Done()
 		}()
 		require.NoError(t, connector.Dial(fakeComponentName))
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		assert.True(t, connector.conn.WaitForStateChange(ctx, connectivity.Idle))
+		// could be in a transient failure for short time window.
+		if connector.conn.GetState() == connectivity.TransientFailure {
+			assert.True(t, connector.conn.WaitForStateChange(ctx, connectivity.TransientFailure))
+		}
 		notAcceptedStatus := []connectivity.State{
 			connectivity.TransientFailure,
 			connectivity.Idle,
