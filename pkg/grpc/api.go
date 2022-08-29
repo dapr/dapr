@@ -1586,14 +1586,13 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 		return &runtimev1pb.GetConfigurationResponse{}, err
 	}
 
-	cachedItems := make([]*commonv1pb.ConfigurationItem, 0)
-	for _, v := range getResponse.Items {
-		cachedItems = append(cachedItems, &commonv1pb.ConfigurationItem{
-			Key:      v.Key,
+	cachedItems := make(map[string]*commonv1pb.ConfigurationItem, len(getResponse.Items))
+	for k, v := range getResponse.Items {
+		cachedItems[k] = &commonv1pb.ConfigurationItem{
 			Metadata: v.Metadata,
 			Value:    v.Value,
 			Version:  v.Version,
-		})
+		}
 	}
 
 	response := &runtimev1pb.GetConfigurationResponse{
@@ -1610,14 +1609,13 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
-	items := make([]*commonv1pb.ConfigurationItem, 0)
-	for _, v := range e.Items {
-		items = append(items, &commonv1pb.ConfigurationItem{
-			Key:      v.Key,
+	items := make(map[string]*commonv1pb.ConfigurationItem, len(e.Items))
+	for k, v := range e.Items {
+		items[k] = &commonv1pb.ConfigurationItem{
 			Value:    v.Value,
 			Version:  v.Version,
 			Metadata: v.Metadata,
-		})
+		}
 	}
 
 	if err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
@@ -1660,8 +1658,10 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		}
 
 		items := resp.GetItems()
-		for _, item := range items {
-			subscribeKeys = append(subscribeKeys, item.Key)
+		for key := range items {
+			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, key)]; !ok {
+				subscribeKeys = append(subscribeKeys, key)
+			}
 		}
 	} else {
 		subscribeKeys = append(subscribeKeys, request.Keys...)

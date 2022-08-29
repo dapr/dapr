@@ -2176,13 +2176,14 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 1, len(resp.JSONBody.([]interface{})))
-		rspMap := resp.JSONBody.([]interface{})[0]
+		assert.Equal(t, 1, len(resp.JSONBody.(map[string]interface{})))
+		rspMap := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap)
-		assert.Equal(t, "good-key1", rspMap.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value1", rspMap.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version1", rspMap.(map[string]interface{})["version"].(string))
-		metadata := rspMap.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Contains(t, rspMap, "good-key1")
+		goodkeyVal := rspMap["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal["version"].(string))
+		metadata := goodkeyVal["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
 	})
 	t.Run("Get Configurations with good keys", func(t *testing.T) {
@@ -2191,21 +2192,23 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good keys should return 200")
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.([]interface{})))
-		rspMap1 := resp.JSONBody.([]interface{})[0]
+		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
-		assert.Equal(t, "good-key1", rspMap1.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value1", rspMap1.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version1", rspMap1.(map[string]interface{})["version"].(string))
-		metadata := rspMap1.(map[string]interface{})["metadata"].(map[string]interface{})
-		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+		assert.Contains(t, rspMap1, "good-key1")
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
+		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.([]interface{})[1]
+		rspMap2 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap2)
-		assert.Equal(t, "good-key2", rspMap2.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value2", rspMap2.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version2", rspMap2.(map[string]interface{})["version"].(string))
-		metadata2 := rspMap2.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Contains(t, rspMap2, "good-key2")
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
+		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
+		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -2217,21 +2220,23 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.([]interface{})))
-		rspMap1 := resp.JSONBody.([]interface{})[0]
+		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
-		assert.Equal(t, "good-key1", rspMap1.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value1", rspMap1.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version1", rspMap1.(map[string]interface{})["version"].(string))
-		metadata := rspMap1.(map[string]interface{})["metadata"].(map[string]interface{})
-		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+		assert.Contains(t, rspMap1, "good-key1")
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
+		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.([]interface{})[1]
+		rspMap2 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap2)
-		assert.Equal(t, "good-key2", rspMap2.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value2", rspMap2.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version2", rspMap2.(map[string]interface{})["version"].(string))
-		metadata2 := rspMap2.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Contains(t, rspMap2, "good-key2")
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
+		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
+		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -3753,16 +3758,15 @@ func (c fakeConfigurationStore) Ping() error {
 func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
 	if len(req.Keys) == 0 {
 		return &configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:     "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value:   "good-value1",
 					Version: "version1",
 					Metadata: map[string]string{
 						"metadata-key1": "metadata-value1",
 					},
-				}, {
-					Key:     "good-key2",
+				},
+				"good-key2": {
 					Value:   "good-value2",
 					Version: "version2",
 					Metadata: map[string]string{
@@ -3775,29 +3779,28 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 
 	if len(req.Keys) == 1 && req.Keys[0] == "good-key1" {
 		return &configuration.GetResponse{
-			Items: []*configuration.Item{{
-				Key:     "good-key1",
-				Value:   "good-value1",
-				Version: "version1",
-				Metadata: map[string]string{
-					"metadata-key1": "metadata-value1",
-				},
-			}},
-		}, nil
-	}
-
-	if len(req.Keys) == 2 && req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" {
-		return &configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:     "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value:   "good-value1",
 					Version: "version1",
 					Metadata: map[string]string{
 						"metadata-key1": "metadata-value1",
 					},
-				}, {
-					Key:     "good-key2",
+				},
+			},
+		}, nil
+	}
+
+	if len(req.Keys) == 2 && req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" {
+		return &configuration.GetResponse{
+			Items: map[string]*configuration.Item{
+				"good-key1": {
+					Value:   "good-value1",
+					Version: "version1",
+					Metadata: map[string]string{
+						"metadata-key1": "metadata-value1",
+					},
+				}, "good-key2": {
 					Value:   "good-value2",
 					Version: "version2",
 					Metadata: map[string]string{
