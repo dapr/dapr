@@ -603,7 +603,7 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 					middlewareSpec.Version)
 			}
 			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version,
-				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
+				middleware.Metadata{Base: contribMetadata.Base{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)}})
 			if err != nil {
 				return httpMiddleware.Pipeline{}, err
 			}
@@ -1391,10 +1391,10 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 		return err
 	}
-	err = binding.Init(bindings.Metadata{
+	err = binding.Init(bindings.Metadata{Base: contribMetadata.Base{
 		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 		Name:       c.ObjectMeta.Name,
-	})
+	}})
 	if err != nil {
 		log.Errorf("failed to init input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
@@ -1422,10 +1422,10 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	}
 
 	if binding != nil {
-		err := binding.Init(bindings.Metadata{
+		err := binding.Init(bindings.Metadata{Base: contribMetadata.Base{
 			Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 			Name:       c.ObjectMeta.Name,
-		})
+		}})
 		if err != nil {
 			log.Errorf("failed to init output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
@@ -1447,9 +1447,9 @@ func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
 	}
 	if store != nil {
 		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-		err := store.Init(configuration.Metadata{
+		err := store.Init(configuration.Metadata{Base: contribMetadata.Base{
 			Properties: props,
-		})
+		}})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
 			log.Warnf("error initializing configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
@@ -1476,9 +1476,9 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 	}
 	// initialization
 	props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-	err = store.InitLockStore(lock.Metadata{
+	err = store.InitLockStore(lock.Metadata{Base: contribMetadata.Base{
 		Properties: props,
-	})
+	}})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
 		log.Warnf("error initializing lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
@@ -1524,9 +1524,9 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 		}
 
 		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-		err = store.Init(state.Metadata{
+		err = store.Init(state.Metadata{Base: contribMetadata.Base{
 			Properties: props,
-		})
+		}})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
 			log.Warnf("error initializing state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
@@ -1688,9 +1688,9 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	}
 	properties["consumerID"] = consumerID
 
-	err = pubSub.Init(pubsub.Metadata{
+	err = pubSub.Init(pubsub.Metadata{Base: contribMetadata.Base{
 		Properties: properties,
-	})
+	}})
 	if err != nil {
 		log.Warnf("error initializing pub sub %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
@@ -2583,9 +2583,9 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 		return err
 	}
 
-	err = secretStore.Init(secretstores.Metadata{
+	err = secretStore.Init(secretstores.Metadata{Base: contribMetadata.Base{
 		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-	})
+	}})
 	if err != nil {
 		log.Warnf("failed to init secret store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")

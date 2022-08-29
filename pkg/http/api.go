@@ -797,8 +797,8 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
-	for _, item := range e.Items {
-		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, item.Key))
+	for key := range e.Items {
+		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, key))
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		eventBody, _ := json.Marshal(e)
 		req.WithRawData(eventBody, invokev1.JSONContentType)
@@ -946,8 +946,10 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 			return
 		}
 		items := getResponse.Items
-		for _, item := range items {
-			subscribeKeys = append(subscribeKeys, item.Key)
+		for key := range items {
+			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", storeName, key)]; !ok {
+				subscribeKeys = append(subscribeKeys, key)
+			}
 		}
 	} else {
 		subscribeKeys = append(subscribeKeys, keys...)
