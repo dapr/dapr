@@ -2482,15 +2482,17 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
 	registry := httpMiddlewareLoader.NewRegistry()
-	registry.Register(httpMiddlewareLoader.New("uppercase", func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-		return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-			return func(ctx *fasthttp.RequestCtx) {
-				body := string(ctx.PostBody())
-				ctx.Request.SetBody([]byte(strings.ToUpper(body)))
-				h(ctx)
-			}
-		}, nil
-	}))
+	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
+		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+			return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+				return func(ctx *fasthttp.RequestCtx) {
+					body := string(ctx.PostBody())
+					ctx.Request.SetBody([]byte(strings.ToUpper(body)))
+					h(ctx)
+				}
+			}, nil
+		}
+	}, "uppercase")
 	var handlers []httpMiddleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
 		handler, err := registry.Create(spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{})
