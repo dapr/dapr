@@ -34,7 +34,7 @@ type PatchOperation struct {
 	Value interface{} `json:"value,omitempty"`
 }
 
-// Contains the env vars that are set in containers to pass the ports used by Dapr.
+// DaprPortEnv contains the env vars that are set in containers to pass the ports used by Dapr.
 var DaprPortEnv = []corev1.EnvVar{
 	{
 		Name:  UserContainerDaprHTTPPortName,
