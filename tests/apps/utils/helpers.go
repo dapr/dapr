@@ -14,23 +14,16 @@ limitations under the License.
 package utils
 
 import (
-	"net"
-	"net/http"
-	"time"
+	"strings"
 )
 
-// NewHTTPClient returns a HTTP client configured
-func NewHTTPClient() *http.Client {
-	dialer := &net.Dialer{ //nolint:exhaustivestruct
-		Timeout: 5 * time.Second,
-	}
-	netTransport := &http.Transport{ //nolint:exhaustivestruct
-		DialContext:         dialer.DialContext,
-		TLSHandshakeTimeout: 5 * time.Second,
-	}
-
-	return &http.Client{ //nolint:exhaustivestruct
-		Timeout:   30 * time.Second,
-		Transport: netTransport,
+// IsTruthy returns true if a string is a truthy value.
+// Truthy values are "y", "yes", "true", "t", "on", "1" (case-insensitive); everything else is false.
+func IsTruthy(val string) bool {
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "y", "yes", "true", "t", "on", "1":
+		return true
+	default:
+		return false
 	}
 }

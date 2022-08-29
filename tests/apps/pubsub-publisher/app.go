@@ -27,8 +27,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -65,11 +63,9 @@ type callSubscriberMethodRequest struct {
 }
 
 var (
-	grpcConn   *grpc.ClientConn
 	grpcClient runtimev1pb.DaprClient
+	httpClient = utils.NewHTTPClient()
 )
-
-var httpClient = utils.NewHTTPClient()
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -335,32 +331,8 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func initGRPCClient() {
-	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
-	log.Printf("Connecting to dapr using url %s", url)
-
-	start := time.Now()
-	for retries := 10; retries > 0; retries-- {
-		var err error
-		if grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock()); err == nil {
-			break
-		}
-
-		if retries == 0 {
-			log.Printf("Could not connect to dapr: %v", err)
-			log.Panic(err)
-		}
-
-		log.Printf("Could not connect to dapr: %v, retrying...", err)
-		time.Sleep(5 * time.Second)
-	}
-	elapsed := time.Since(start)
-	log.Printf("gRPC connect elapsed: %v", elapsed)
-	grpcClient = runtimev1pb.NewDaprClient(grpcConn)
-}
-
 func main() {
-	initGRPCClient()
+	grpcClient = utils.GetGRPCClient(daprPortGRPC)
 
 	log.Printf("PubSub Publisher - listening on http://localhost:%d", appPort)
 	utils.StartServer(appPort, appRouter, true, false)

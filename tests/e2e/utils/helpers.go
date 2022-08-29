@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	guuid "github.com/google/uuid"
@@ -86,4 +87,15 @@ func TestTargetOS() string {
 // FormatDuration formats the duration in ms
 func FormatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dms", d.Truncate(100*time.Microsecond).Milliseconds())
+}
+
+// IsTruthy returns true if a string is a truthy value.
+// Truthy values are "y", "yes", "true", "t", "on", "1" (case-insensitive); everything else is false.
+func IsTruthy(val string) bool {
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "y", "yes", "true", "t", "on", "1":
+		return true
+	default:
+		return false
+	}
 }
