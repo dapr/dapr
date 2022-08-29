@@ -504,7 +504,7 @@ message GetConfigurationRequest {
 // GetConfigurationResponse is the response conveying the list of configuration values.
 // It should be the FULL configuration of specified application which contains all of its configuration items.
 message GetConfigurationResponse {
-  repeated common.v1.ConfigurationItem items = 1;
+  map<string, common.v1.ConfigurationItem> items = 1;
 }
 
 // SubscribeConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
@@ -535,7 +535,7 @@ message SubscribeConfigurationResponse {
   string id = 1;
 
   // The list of items containing configuration values
-  repeated common.v1.ConfigurationItem items = 2;
+  map<string, common.v1.ConfigurationItem> items = 2;
 }
 
 message UnsubscribeConfigurationResponse {
