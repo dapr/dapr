@@ -180,7 +180,7 @@ func GetTokenVolumeMount(podSpec corev1.PodSpec) *corev1.VolumeMount {
 
 // GetTrustAnchorsAndCertChain returns the trust anchor and certs.
 func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, sentryConsts.KubeScrtName, metav1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, sentryConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}
