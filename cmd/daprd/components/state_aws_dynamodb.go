@@ -19,5 +19,5 @@ import (
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(dynamodb.NewDynamoDBStateStore, "aws.dynaodb")
+	stateLoader.DefaultRegistry.RegisterComponent(dynamodb.NewDynamoDBStateStore, "aws.dynamodb")
 }
