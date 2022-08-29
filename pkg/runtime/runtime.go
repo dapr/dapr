@@ -689,7 +689,7 @@ func (a *DaprRuntime) treatIndividualBatchMessage(
 	route TopicRouteElem,
 	name string,
 	topic string,
-	err error) (string, error) {
+	err error) ([]map[string]interface{}, []pubsub.NewBatchChildMessage, string, error) {
 	cloudEvents = append(cloudEvents, cloudEvent)
 	if pubsub.HasExpired(cloudEvent) {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
@@ -703,7 +703,7 @@ func (a *DaprRuntime) treatIndividualBatchMessage(
 				ContentType: message.ContentType,
 			}, route.deadLetterTopic)
 		}
-		return "", nil
+		return cloudEvents, newBatchChildEvents, "", nil
 	}
 	routePath, shouldProcess, err := findMatchingRoute(route.rules, cloudEvent)
 	if err != nil {
@@ -717,11 +717,11 @@ func (a *DaprRuntime) treatIndividualBatchMessage(
 			}, route.deadLetterTopic); dlqErr == nil {
 				// dlq has been configured and message is successfully sent to dlq.
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), topic, 0)
-				return "", nil
+				return cloudEvents, newBatchChildEvents, "", nil
 			}
 		}
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), topic, 0)
-		return "", err
+		return cloudEvents, newBatchChildEvents, "", err
 	}
 	if !shouldProcess {
 		// The event does not match any route specified so ignore it.
@@ -735,7 +735,7 @@ func (a *DaprRuntime) treatIndividualBatchMessage(
 				ContentType: message.ContentType,
 			}, route.deadLetterTopic)
 		}
-		return "", nil
+		return cloudEvents, newBatchChildEvents, "", nil
 	}
 	childMessage := pubsub.NewBatchChildMessage{
 		Data:        cloudEvent,
@@ -754,13 +754,13 @@ func (a *DaprRuntime) treatIndividualBatchMessage(
 			}, route.deadLetterTopic); dlqErr == nil {
 				// dlq has been configured and message is successfully sent to dlq.
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), topic, 0)
-				return "", nil
+				return cloudEvents, newBatchChildEvents, "", nil
 			}
 		}
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), topic, 0)
-		return "", err
+		return cloudEvents, newBatchChildEvents, "", err
 	}
-	return routePath, nil
+	return cloudEvents, newBatchChildEvents, routePath, nil
 }
 
 func (a *DaprRuntime) batchSubscribeTopic(ctx context.Context, policy resiliency.Runner, name string, topic string, route TopicRouteElem) error {
@@ -796,7 +796,7 @@ func (a *DaprRuntime) batchSubscribeTopic(ctx context.Context, policy resiliency
 			for _, message := range msg.Messages {
 				var cloudEvent map[string]interface{}
 				cloudEvent = pubsub.FromRawPayload(message.Data, msg.Topic, name)
-				routePath, err = a.treatIndividualBatchMessage(ctx, cloudEvents, cloudEvent, newBatchChildEvents, message, route, name, topic, nil)
+				cloudEvents, newBatchChildEvents, routePath, err = a.treatIndividualBatchMessage(ctx, cloudEvents, cloudEvent, newBatchChildEvents, message, route, name, topic, nil)
 				if err != nil {
 					return err
 				}
@@ -805,7 +805,7 @@ func (a *DaprRuntime) batchSubscribeTopic(ctx context.Context, policy resiliency
 			for _, message := range msg.Messages {
 				var cloudEvent map[string]interface{}
 				err = json.Unmarshal(message.Data, &cloudEvent)
-				routePath, err = a.treatIndividualBatchMessage(ctx, cloudEvents, cloudEvent, newBatchChildEvents, message, route, name, topic, err)
+				cloudEvents, newBatchChildEvents, routePath, err = a.treatIndividualBatchMessage(ctx, cloudEvents, cloudEvent, newBatchChildEvents, message, route, name, topic, err)
 				if err != nil {
 					return err
 				}
