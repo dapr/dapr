@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	appPort                 = 3000
+	appPort                 = 3000 // Dapr app port
 	daprV1URL               = "http://localhost:3500/v1.0"
 	actorMethodURLFormat    = daprV1URL + "/actors/%s/%s/method/%s"
 	actorIdleTimeout        = "5s" // Short idle timeout.
@@ -51,8 +51,8 @@ const (
 	defaultTopicNamegRPC    = "mytopic-grpc"
 	defaultMethod           = "actormethod"
 	defaultActorType        = "myActorType"
-	firstSubActorType       = "actorType1"
-	SecondSubActorType      = "actorType2"
+	firstSubActorType       = "actorType1" // Actor Type with first subscription registered. Used in NoActoType test
+	SecondSubActorType      = "actorType2" // Actor Type with second subscription registered. Used in NoActoType test
 )
 
 type publishCommand struct {
@@ -136,9 +136,6 @@ var (
 	actors         sync.Map
 	httpClient     = utils.NewHTTPClient()
 )
-
-// var actors sync.Map
-// var httpClient = utils.NewHTTPClient()
 
 // when called by the test, this function publishes to dapr
 // nolint:gosec
@@ -320,7 +317,6 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing dapr request for %s", r.URL.RequestURI())
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(daprConfigResponse)

@@ -49,7 +49,7 @@ injectorapp-init \
 metadata \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actorpubsub
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -61,6 +61,7 @@ PERF_TESTAPP_DIR=./tests/apps/perf
 PERF_TESTS=actor_timer \
 actor_reminder \
 actor_activation \
+actor_pubsub \
 service_invocation_http \
 service_invocation_grpc \
 state_get_grpc \
