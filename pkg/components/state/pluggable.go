@@ -18,6 +18,7 @@ import (
 	"errors"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/state/query"
 	"github.com/dapr/components-contrib/state/utils"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -26,6 +27,7 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -166,6 +168,23 @@ func (ss *grpcStateStore) BulkSet(req []state.SetRequest) error {
 	return err
 }
 
+// Query performsn a query in the state store
+func (ss *grpcStateStore) Query(req *state.QueryRequest) (*state.QueryResponse, error) {
+	q, err := toQuery(req.Query)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := ss.Client.Query(ss.Context, &proto.QueryRequest{
+		Query:    q,
+		Metadata: req.Metadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return fromQueryResponse(resp), nil
+}
+
 // Multi executes operation in a transactional environment
 func (ss *grpcStateStore) Multi(request *state.TransactionalStateRequest) error {
 	operations := make([]*proto.TransactionalStateOperation, len(request.Operations))
@@ -184,6 +203,76 @@ func (ss *grpcStateStore) Multi(request *state.TransactionalStateRequest) error 
 }
 
 // mappers and helpers.
+//
+//nolint:nosnakecase
+func toSortOrder(order string) proto.Sorting_Order {
+	ord, ok := proto.Sorting_Order_value[order]
+	if !ok {
+		return proto.Sorting_ASC
+	}
+	return proto.Sorting_Order(ord)
+}
+
+func toSorting(sorting []query.Sorting) []*proto.Sorting {
+	sortingList := make([]*proto.Sorting, len(sorting))
+	for idx, sortParam := range sorting {
+		sortingList[idx] = &proto.Sorting{
+			Key:   sortParam.Key,
+			Order: toSortOrder(sortParam.Order),
+		}
+	}
+	return sortingList
+}
+
+func toPagination(pagination query.Pagination) *proto.Pagination {
+	return &proto.Pagination{
+		Limit: int64(pagination.Limit),
+		Token: pagination.Token,
+	}
+}
+
+func toQuery(req query.Query) (*proto.Query, error) {
+	filters := make(map[string]*anypb.Any)
+	for key, value := range req.Filters {
+		data, err := utils.Marshal(value, json.Marshal)
+		if err != nil {
+			return nil, err
+		}
+
+		filters[key] = &anypb.Any{
+			Value: data,
+		}
+	}
+	return &proto.Query{
+		Filter:     filters,
+		Sort:       toSorting(req.Sort),
+		Pagination: toPagination(req.Page),
+	}, nil
+}
+
+func fromQueryResponse(resp *proto.QueryResponse) *state.QueryResponse {
+	results := make([]state.QueryItem, len(resp.Items))
+
+	for idx, item := range resp.Items {
+		itemIdx := state.QueryItem{
+			Key:   item.Key,
+			Data:  item.Data,
+			ETag:  fromETagResponse(item.Etag),
+			Error: item.Error,
+		}
+		if item.ContentType != "" {
+			itemIdx.ContentType = &item.ContentType
+		}
+
+		results[idx] = itemIdx
+	}
+	return &state.QueryResponse{
+		Results:  results,
+		Token:    resp.Token,
+		Metadata: resp.Metadata,
+	}
+}
+
 func toMultiOperation(req state.TransactionalStateOperation) (*proto.TransactionalStateOperation, error) {
 	switch request := req.Request.(type) {
 	case state.SetRequest:
@@ -307,6 +396,7 @@ func concurrencyOf(value string) v1.StateOptions_StateConcurrency {
 type stateStoreClient struct {
 	proto.StateStoreClient
 	proto.TransactionalStateStoreClient
+	proto.QueriableStateStoreClient
 }
 
 // newStateStoreClient creates a new stateStore client instance.
@@ -314,6 +404,7 @@ func newStateStoreClient(cc grpc.ClientConnInterface) stateStoreClient {
 	return stateStoreClient{
 		StateStoreClient:              proto.NewStateStoreClient(cc),
 		TransactionalStateStoreClient: proto.NewTransactionalStateStoreClient(cc),
+		QueriableStateStoreClient:     proto.NewQueriableStateStoreClient(cc),
 	}
 }
 

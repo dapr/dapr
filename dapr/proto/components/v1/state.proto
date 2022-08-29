@@ -15,12 +15,79 @@ syntax = "proto3";
 package dapr.proto.components.v1;
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/any.proto";
 import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/components/v1/common.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
 
-// StateStore service provides a gRPC interface for transactional state store components.
+
+// QueriableStateStore service provides a gRPC interface for querier state store components.
+service QueriableStateStore {
+  // Query performs a query request on the statestore.
+  rpc Query(QueryRequest) returns (QueryResponse) {}
+}
+
+message Sorting {
+  // The key that should be used for sorting.
+  string key = 1;
+  enum Order {
+    ASC = 0;
+    DESC = 1;
+  }
+  // The order that should be used.
+  Order order = 2;
+}
+
+message Pagination {
+  // Maximum of results that should be returned.
+  int64 limit = 1;
+  // The pagination token.
+  string token = 2;
+}
+
+message Query {
+  // Filters that should be applied.
+  map<string, google.protobuf.Any> filter = 1;
+  // The sort order.
+  repeated Sorting sort = 2;
+  // The query pagination params.
+  Pagination pagination = 3;
+}
+
+// QueryRequest is for querying state store.
+message QueryRequest {
+  // The query to be performed.
+  Query query = 1;
+  // Request associated metadata.
+  map<string, string> metadata = 2;
+}
+
+// QueryItem is an object representing a single entry in query results.
+message QueryItem {
+  // The returned item Key.
+  string key = 1;
+  // The returned item Data.
+  bytes data = 2;
+  // The returned item ETag
+  dapr.proto.common.v1.Etag etag = 3;
+  // The returned error string.
+  string error = 4;
+  // The returned contenttype
+  string content_type = 5;
+}
+
+// QueryResponse is the query response.
+message QueryResponse {
+  // The query response items.
+  repeated QueryItem items = 1;
+  // The response token.
+  string token = 2;
+  // Response associated metadata.
+  map<string, string> metadata = 3;
+}
+
+// TransactionalStateStore service provides a gRPC interface for transactional state store components.
 service TransactionalStateStore {
     // Multi executes multiples operation in a transactional environment.
     rpc Multi(TransactionalStateRequest) returns (google.protobuf.Empty) {}

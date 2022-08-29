@@ -19,6 +19,92 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
+// QueriableStateStoreClient is the client API for QueriableStateStore service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type QueriableStateStoreClient interface {
+	// Query performs a query request on the statestore.
+	Query(ctx context.Context, in *QueryRequest, opts ...grpc.CallOption) (*QueryResponse, error)
+}
+
+type queriableStateStoreClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewQueriableStateStoreClient(cc grpc.ClientConnInterface) QueriableStateStoreClient {
+	return &queriableStateStoreClient{cc}
+}
+
+func (c *queriableStateStoreClient) Query(ctx context.Context, in *QueryRequest, opts ...grpc.CallOption) (*QueryResponse, error) {
+	out := new(QueryResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.QueriableStateStore/Query", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// QueriableStateStoreServer is the server API for QueriableStateStore service.
+// All implementations should embed UnimplementedQueriableStateStoreServer
+// for forward compatibility
+type QueriableStateStoreServer interface {
+	// Query performs a query request on the statestore.
+	Query(context.Context, *QueryRequest) (*QueryResponse, error)
+}
+
+// UnimplementedQueriableStateStoreServer should be embedded to have forward compatible implementations.
+type UnimplementedQueriableStateStoreServer struct {
+}
+
+func (UnimplementedQueriableStateStoreServer) Query(context.Context, *QueryRequest) (*QueryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Query not implemented")
+}
+
+// UnsafeQueriableStateStoreServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to QueriableStateStoreServer will
+// result in compilation errors.
+type UnsafeQueriableStateStoreServer interface {
+	mustEmbedUnimplementedQueriableStateStoreServer()
+}
+
+func RegisterQueriableStateStoreServer(s grpc.ServiceRegistrar, srv QueriableStateStoreServer) {
+	s.RegisterService(&QueriableStateStore_ServiceDesc, srv)
+}
+
+func _QueriableStateStore_Query_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueriableStateStoreServer).Query(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.components.v1.QueriableStateStore/Query",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueriableStateStoreServer).Query(ctx, req.(*QueryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// QueriableStateStore_ServiceDesc is the grpc.ServiceDesc for QueriableStateStore service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var QueriableStateStore_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "dapr.proto.components.v1.QueriableStateStore",
+	HandlerType: (*QueriableStateStoreServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Query",
+			Handler:    _QueriableStateStore_Query_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "dapr/proto/components/v1/state.proto",
+}
+
 // TransactionalStateStoreClient is the client API for TransactionalStateStore service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
