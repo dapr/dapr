@@ -19,6 +19,130 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
+// TransactionalStateStoreClient is the client API for TransactionalStateStore service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type TransactionalStateStoreClient interface {
+	// Initializes the state store component with the given metadata.
+	Init(ctx context.Context, in *MetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Multi executes multiples operation in a transactional environment.
+	Multi(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+}
+
+type transactionalStateStoreClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewTransactionalStateStoreClient(cc grpc.ClientConnInterface) TransactionalStateStoreClient {
+	return &transactionalStateStoreClient{cc}
+}
+
+func (c *transactionalStateStoreClient) Init(ctx context.Context, in *MetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.TransactionalStateStore/Init", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *transactionalStateStoreClient) Multi(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.TransactionalStateStore/Multi", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// TransactionalStateStoreServer is the server API for TransactionalStateStore service.
+// All implementations should embed UnimplementedTransactionalStateStoreServer
+// for forward compatibility
+type TransactionalStateStoreServer interface {
+	// Initializes the state store component with the given metadata.
+	Init(context.Context, *MetadataRequest) (*emptypb.Empty, error)
+	// Multi executes multiples operation in a transactional environment.
+	Multi(context.Context, *TransactionalStateRequest) (*emptypb.Empty, error)
+}
+
+// UnimplementedTransactionalStateStoreServer should be embedded to have forward compatible implementations.
+type UnimplementedTransactionalStateStoreServer struct {
+}
+
+func (UnimplementedTransactionalStateStoreServer) Init(context.Context, *MetadataRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Init not implemented")
+}
+func (UnimplementedTransactionalStateStoreServer) Multi(context.Context, *TransactionalStateRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Multi not implemented")
+}
+
+// UnsafeTransactionalStateStoreServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to TransactionalStateStoreServer will
+// result in compilation errors.
+type UnsafeTransactionalStateStoreServer interface {
+	mustEmbedUnimplementedTransactionalStateStoreServer()
+}
+
+func RegisterTransactionalStateStoreServer(s grpc.ServiceRegistrar, srv TransactionalStateStoreServer) {
+	s.RegisterService(&TransactionalStateStore_ServiceDesc, srv)
+}
+
+func _TransactionalStateStore_Init_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TransactionalStateStoreServer).Init(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.components.v1.TransactionalStateStore/Init",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TransactionalStateStoreServer).Init(ctx, req.(*MetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TransactionalStateStore_Multi_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TransactionalStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TransactionalStateStoreServer).Multi(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.components.v1.TransactionalStateStore/Multi",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TransactionalStateStoreServer).Multi(ctx, req.(*TransactionalStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// TransactionalStateStore_ServiceDesc is the grpc.ServiceDesc for TransactionalStateStore service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var TransactionalStateStore_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "dapr.proto.components.v1.TransactionalStateStore",
+	HandlerType: (*TransactionalStateStoreServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Init",
+			Handler:    _TransactionalStateStore_Init_Handler,
+		},
+		{
+			MethodName: "Multi",
+			Handler:    _TransactionalStateStore_Multi_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "dapr/proto/components/v1/state.proto",
+}
+
 // StateStoreClient is the client API for StateStore service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.

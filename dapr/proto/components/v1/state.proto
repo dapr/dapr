@@ -20,6 +20,32 @@ import "dapr/proto/components/v1/common.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
 
+// StateStore service provides a gRPC interface for transactional state store components.
+service TransactionalStateStore {
+    // Initializes the state store component with the given metadata.
+    rpc Init(MetadataRequest) returns (google.protobuf.Empty) {}
+    // Multi executes multiples operation in a transactional environment.
+    rpc Multi(TransactionalStateRequest) returns (google.protobuf.Empty) {}
+}
+
+// TransactionalStateOperation describes operation type, key, and value for transactional operation.
+message TransactionalStateOperation {
+  // request is either delete or set.
+  oneof request {
+    DeleteRequest delete = 1;
+    SetRequest set = 2;
+  }
+}
+
+// TransactionalStateRequest describes a transactional operation against a state store that comprises multiple types of operations
+// The Request field is either a DeleteRequest or SetRequest.
+message TransactionalStateRequest {
+  // Operations that should be performed.
+  repeated TransactionalStateOperation operations = 1;
+  // Request associated metadata.
+  map<string, string> metadata = 2;
+}
+
 // StateStore service provides a gRPC interface for state store components.
 service StateStore {
   // Initializes the state store component with the given metadata.

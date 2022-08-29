@@ -27,7 +27,9 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -39,6 +41,7 @@ const bufSize = 1024 * 1024
 
 type server struct {
 	proto.UnimplementedStateStoreServer
+	proto.UnimplementedTransactionalStateStoreServer
 	deleteCalled       atomic.Int64
 	onDeleteCalled     func(*proto.DeleteRequest)
 	deleteErr          error
@@ -61,6 +64,17 @@ type server struct {
 	bulkSetCalled      atomic.Int64
 	onBulkSetCalled    func(*proto.BulkSetRequest)
 	bulkSetErr         error
+	multiCalled        atomic.Int64
+	onMultiCalled      func(*proto.TransactionalStateRequest)
+	multiErr           error
+}
+
+func (s *server) Multi(_ context.Context, req *proto.TransactionalStateRequest) (*emptypb.Empty, error) {
+	s.multiCalled.Add(1)
+	if s.onMultiCalled != nil {
+		s.onMultiCalled(req)
+	}
+	return &emptypb.Empty{}, s.multiErr
 }
 
 func (s *server) Delete(ctx context.Context, req *proto.DeleteRequest) (*emptypb.Empty, error) {
@@ -116,6 +130,10 @@ func (s *server) BulkSet(ctx context.Context, req *proto.BulkSetRequest) (*empty
 	return &emptypb.Empty{}, s.bulkSetErr
 }
 
+func (s *server) Init(context.Context, *proto.MetadataRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Init not implemented")
+}
+
 var testLogger = logger.NewLogger("state-pluggable-logger")
 
 // getStateStore returns a state store connected to the given server
@@ -123,6 +141,7 @@ func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err er
 	lis := bufconn.Listen(bufSize)
 	s := grpc.NewServer()
 	proto.RegisterStateStoreServer(s, srv)
+	proto.RegisterTransactionalStateStoreServer(s, srv)
 	go func() {
 		if serveErr := s.Serve(lis); serveErr != nil {
 			testLogger.Debugf("Server exited with error: %v", serveErr)
@@ -136,7 +155,7 @@ func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err er
 		return nil, nil, err
 	}
 
-	client := proto.NewStateStoreClient(conn)
+	client := newStateStoreClient(conn)
 	stStore = fromPluggable(testLogger, components.Pluggable{})
 	stStore.Client = client
 	return stStore, func() {
@@ -501,6 +520,59 @@ func TestComponentCalls(t *testing.T) {
 		assert.Len(t, resp, len(requests))
 		assert.Equal(t, int64(1), svc.bulkGetCalled.Load())
 	})
+
+	t.Run("multi should returns an error when grpc returns an error", func(t *testing.T) {
+		svc := &server{
+			multiErr: errors.New("multi-fake-err"),
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		err = stStore.Multi(&state.TransactionalStateRequest{
+			Operations: []state.TransactionalStateOperation{},
+			Metadata:   map[string]string{},
+		})
+
+		assert.NotNil(t, err)
+		assert.Equal(t, int64(1), svc.multiCalled.Load())
+	})
+
+	t.Run("multi should send a multi containing all operations", func(t *testing.T) {
+		const fakeKey, otherFakeKey, fakeData = "fakeKey", "otherFakeKey", "fakeData"
+		operations := []state.SetRequest{
+			{
+				Key:   fakeKey,
+				Value: fakeData,
+			},
+			{
+				Key:   otherFakeKey,
+				Value: fakeData,
+			},
+		}
+		svc := &server{
+			onMultiCalled: func(bsr *proto.TransactionalStateRequest) {
+				assert.Len(t, bsr.Operations, len(operations))
+			},
+		}
+		stStore, cleanup, err := getStateStore(svc)
+		require.NoError(t, err)
+		defer cleanup()
+
+		err = stStore.Multi(&state.TransactionalStateRequest{
+			Operations: []state.TransactionalStateOperation{
+				{
+					Request: operations[0],
+				},
+				{
+					Request: operations[1],
+				},
+			},
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), svc.multiCalled.Load())
+	})
 }
 
 //nolint:nosnakecase
@@ -586,6 +658,7 @@ func TestMappers(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, req)
 	})
+
 	t.Run("toSetRequest accept and parse values as []byte", func(t *testing.T) {
 		const fakeKey, fakePropValue = "fakeKey", "fakePropValue"
 		fakeEtag := "fakeEtag"
@@ -610,5 +683,37 @@ func TestMappers(t *testing.T) {
 			assert.Equal(t, req.Options.Concurrency, v1.StateOptions_CONCURRENCY_LAST_WRITE)
 			assert.Equal(t, req.Options.Consistency, v1.StateOptions_CONSISTENCY_EVENTUAL)
 		}
+
+		t.Run("toMulti should return err when type is unrecognized", func(t *testing.T) {
+			req, err := toMultiOperation(state.TransactionalStateOperation{
+				Request: make(map[struct{}]struct{}),
+			})
+			assert.Nil(t, req)
+			assert.ErrorIs(t, err, ErrMultiOperationNotSupported)
+		})
+
+		t.Run("toMulti should return set operation when type is SetOperation", func(t *testing.T) {
+			const fakeData = "fakeData"
+			req, err := toMultiOperation(state.TransactionalStateOperation{
+				Request: state.SetRequest{
+					Key:   fakeKey,
+					Value: fakeData,
+				},
+			})
+			require.NoError(t, err)
+			assert.NotNil(t, req)
+			assert.IsType(t, &proto.TransactionalStateOperation_Set{}, req.Request)
+		})
+
+		t.Run("toMulti should return delete operation when type is SetOperation", func(t *testing.T) {
+			req, err := toMultiOperation(state.TransactionalStateOperation{
+				Request: state.DeleteRequest{
+					Key: fakeKey,
+				},
+			})
+			require.NoError(t, err)
+			assert.NotNil(t, req)
+			assert.IsType(t, &proto.TransactionalStateOperation_Delete{}, req.Request)
+		})
 	})
 }

@@ -25,17 +25,19 @@ import (
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/kit/logger"
 
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
-	ErrNilSetValue = errors.New("an attempt to set a nil value was received, try to use Delete instead")
-	ErrRespNil     = errors.New("the response for GetRequest is nil")
+	ErrNilSetValue                = errors.New("an attempt to set a nil value was received, try to use Delete instead")
+	ErrRespNil                    = errors.New("the response for GetRequest is nil")
+	ErrMultiOperationNotSupported = errors.New("multi operation not supported")
 )
 
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
 type grpcStateStore struct {
-	*pluggable.GRPCConnector[proto.StateStoreClient]
+	*pluggable.GRPCConnector[stateStoreClient]
 	// features the list of state store implemented features features.
 	features []state.Feature
 }
@@ -63,7 +65,7 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 		ss.features[idx] = state.Feature(f)
 	}
 
-	_, err = ss.Client.Init(ss.Context, protoMetadata)
+	_, err = ss.Client.StateStoreClient.Init(ss.Context, protoMetadata)
 	return err
 }
 
@@ -165,12 +167,41 @@ func (ss *grpcStateStore) BulkSet(req []state.SetRequest) error {
 }
 
 // Multi executes operation in a transactional environment
-// TODO Implement transactional state store
 func (ss *grpcStateStore) Multi(request *state.TransactionalStateRequest) error {
-	return nil
+	operations := make([]*proto.TransactionalStateOperation, len(request.Operations))
+	for idx, op := range request.Operations {
+		multiOp, err := toMultiOperation(op)
+		if err != nil {
+			return err
+		}
+		operations[idx] = multiOp
+	}
+	_, err := ss.Client.Multi(ss.Context, &proto.TransactionalStateRequest{
+		Operations: operations,
+		Metadata:   request.Metadata,
+	})
+	return err
 }
 
 // mappers and helpers.
+func toMultiOperation(req state.TransactionalStateOperation) (*proto.TransactionalStateOperation, error) {
+	switch request := req.Request.(type) {
+	case state.SetRequest:
+		setReq, err := toSetRequest(&request)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.TransactionalStateOperation{
+			Request: &proto.TransactionalStateOperation_Set{Set: setReq}, //nolint:nosnakecase
+		}, nil
+	case state.DeleteRequest:
+		return &proto.TransactionalStateOperation{
+			Request: &proto.TransactionalStateOperation_Delete{Delete: toDeleteRequest(&request)}, //nolint:nosnakecase
+		}, nil
+	}
+	return nil, ErrMultiOperationNotSupported
+}
+
 func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 	if req == nil {
 		return nil, nil
@@ -272,11 +303,25 @@ func concurrencyOf(value string) v1.StateOptions_StateConcurrency {
 	return v1.StateOptions_StateConcurrency(concurrency)
 }
 
+// stateStoreClient wrapps the conventional stateStoreClient and the transactional stateStore client.
+type stateStoreClient struct {
+	proto.StateStoreClient
+	proto.TransactionalStateStoreClient
+}
+
+// newStateStoreClient creates a new stateStore client instance.
+func newStateStoreClient(cc grpc.ClientConnInterface) stateStoreClient {
+	return stateStoreClient{
+		StateStoreClient:              proto.NewStateStoreClient(cc),
+		TransactionalStateStoreClient: proto.NewTransactionalStateStoreClient(cc),
+	}
+}
+
 // fromPluggable creates a new state store for the given pluggable component.
 func fromPluggable(_ logger.Logger, pc components.Pluggable) *grpcStateStore {
 	return &grpcStateStore{
 		features:      make([]state.Feature, 0),
-		GRPCConnector: pluggable.NewGRPCConnector(pc, proto.NewStateStoreClient),
+		GRPCConnector: pluggable.NewGRPCConnector(pc, newStateStoreClient),
 	}
 }
 
