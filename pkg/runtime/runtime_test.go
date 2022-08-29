@@ -3021,11 +3021,12 @@ func TestPubsubLifecycle(t *testing.T) {
 	require.Equal(t, 3, done)
 
 	subscriptions := make(map[string][]string)
-	var subscriptionsMux sync.Mutex
 	messages := make(map[string][]*pubsub.NewMessage)
 	var (
-		subscriptionsCh chan struct{}
-		messagesCh      chan struct{}
+		subscriptionsCh  chan struct{}
+		messagesCh       chan struct{}
+		subscriptionsMux sync.Mutex
+		msgMux           sync.Mutex
 	)
 	forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
 		comp.SetOnSubscribedTopicsChanged(func(topics []string) {
@@ -3038,11 +3039,13 @@ func TestPubsubLifecycle(t *testing.T) {
 			}
 		})
 		comp.SetHandler(func(topic string, msg *pubsub.NewMessage) {
+			msgMux.Lock()
 			if messages[name+"|"+topic] == nil {
 				messages[name+"|"+topic] = []*pubsub.NewMessage{msg}
 			} else {
 				messages[name+"|"+topic] = append(messages[name+"|"+topic], msg)
 			}
+			msgMux.Unlock()
 			if messagesCh != nil {
 				messagesCh <- struct{}{}
 			}
