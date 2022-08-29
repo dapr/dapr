@@ -1473,7 +1473,10 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 }
 
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
-	extendedMetadata, _ := a.extendedMetadata.MetadataGet()
+	extendedMetadata, err := a.extendedMetadata.MetadataGet()
+	if err != nil {
+		return nil, err
+	}
 
 	components := a.getComponentsFn()
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(components))
