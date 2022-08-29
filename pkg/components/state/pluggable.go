@@ -65,7 +65,7 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 		ss.features[idx] = state.Feature(f)
 	}
 
-	_, err = ss.Client.StateStoreClient.Init(ss.Context, protoMetadata)
+	_, err = ss.Client.Init(ss.Context, protoMetadata)
 	return err
 }
 

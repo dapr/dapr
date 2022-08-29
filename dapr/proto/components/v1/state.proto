@@ -22,8 +22,6 @@ option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
 
 // StateStore service provides a gRPC interface for transactional state store components.
 service TransactionalStateStore {
-    // Initializes the state store component with the given metadata.
-    rpc Init(MetadataRequest) returns (google.protobuf.Empty) {}
     // Multi executes multiples operation in a transactional environment.
     rpc Multi(TransactionalStateRequest) returns (google.protobuf.Empty) {}
 }

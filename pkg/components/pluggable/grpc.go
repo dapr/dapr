@@ -51,10 +51,17 @@ const (
 	defaultSocketFolder    = "/var/run"
 )
 
+// socketsFolder is where the dapr sockets should be created.
+var socketsFolder string
+
+func init() {
+	socketsFolder = utils.GetEnvOrElse(daprSocketFolderEnvVar, defaultSocketFolder)
+}
+
 // socketPathFor returns a unique socket for the given component.
 // the socket path will be composed by the pluggable component, name, version and type plus the component name.
 func (g *GRPCConnector[TClient]) socketPathFor(componentName string) string {
-	return fmt.Sprintf("%s/dapr-%s.%s-%s-%s.sock", utils.GetEnvOrElse(daprSocketFolderEnvVar, defaultSocketFolder), g.pluggable.Type, g.pluggable.Name, g.pluggable.Version, componentName)
+	return fmt.Sprintf("%s/dapr-%s.%s-%s-%s.sock", socketsFolder, g.pluggable.Type, g.pluggable.Name, g.pluggable.Version, componentName)
 }
 
 // Dial opens a grpcConnection and creates a new client instance.
