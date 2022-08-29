@@ -34,23 +34,25 @@ type PatchOperation struct {
 	Value interface{} `json:"value,omitempty"`
 }
 
+// Contains the env vars that are set in containers to pass the ports used by Dapr.
+var DaprPortEnv = []corev1.EnvVar{
+	{
+		Name:  UserContainerDaprHTTPPortName,
+		Value: strconv.Itoa(SidecarHTTPPort),
+	},
+	{
+		Name:  UserContainerDaprGRPCPortName,
+		Value: strconv.Itoa(SidecarAPIGRPCPort),
+	},
+}
+
 // AddDaprEnvVarsToContainers adds Dapr environment variables to all the containers in any Dapr-enabled pod.
 // The containers can be injected or user-defined.
 func AddDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
-	portEnv := []corev1.EnvVar{
-		{
-			Name:  UserContainerDaprHTTPPortName,
-			Value: strconv.Itoa(SidecarHTTPPort),
-		},
-		{
-			Name:  UserContainerDaprGRPCPortName,
-			Value: strconv.Itoa(SidecarAPIGRPCPort),
-		},
-	}
 	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
 		path := fmt.Sprintf("%s/%d/env", ContainersPath, i)
-		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
+		patchOps := getEnvPatchOperations(container.Env, DaprPortEnv, path)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
 	return envPatchOps
