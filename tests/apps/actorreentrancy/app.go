@@ -168,7 +168,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nextCall, nextBody := advanceCallStackForNextRequest(reentrantReq)
-	req, _ := http.NewRequest("PUT", fmt.Sprintf(actorMethodURLFormat, nextCall.ActorType, nextCall.ActorID, nextCall.Method), bytes.NewReader(nextBody))
+	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(actorMethodURLFormat, nextCall.ActorType, nextCall.ActorID, nextCall.Method), bytes.NewReader(nextBody))
 
 	res, err := httpClient.Do(req)
 	if err != nil {
@@ -227,7 +227,7 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Next call: %s on %s.%s", nextCall.Method, nextCall.ActorType, nextCall.ActorID)
 
 	url := fmt.Sprintf(actorMethodURLFormat, nextCall.ActorType, nextCall.ActorID, nextCall.Method)
-	req, _ := http.NewRequest("PUT", url, bytes.NewReader(nextBody))
+	req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(nextBody))
 
 	reentrancyID := r.Header.Get("Dapr-Reentrancy-Id")
 	req.Header.Add("Dapr-Reentrancy-Id", reentrancyID)
@@ -283,5 +283,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Actor App - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

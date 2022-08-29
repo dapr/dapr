@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/components-contrib/lock"
 
 	"github.com/agrea/ptr"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -37,6 +37,7 @@ import (
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -48,13 +49,14 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/actors"
+	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
-	state_loader "github.com/dapr/dapr/pkg/components/state"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -62,7 +64,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
@@ -199,7 +201,7 @@ func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Re
 }
 
 func ExtractSpanContext(ctx context.Context) []byte {
-	span := diag_utils.SpanFromContext(ctx)
+	span := diagUtils.SpanFromContext(ctx)
 	return []byte(SerializeSpanContext(span.SpanContext()))
 }
 
@@ -221,7 +223,7 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc.NewServer(
-		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
+		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
 	)
 
 	go func() {
@@ -296,7 +298,7 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithInsecure())
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		panic(err)
 	}
@@ -1134,9 +1136,8 @@ func TestGetConfiguration(t *testing.T) {
 			return req.Keys[0] == goodKey
 		})).Return(
 		&configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:   goodKey,
+			Items: map[string]*configuration.Item{
+				goodKey: {
 					Value: "test-data",
 				},
 			},
@@ -1147,17 +1148,14 @@ func TestGetConfiguration(t *testing.T) {
 			return req.Keys[0] == "good-key1" && req.Keys[1] == goodKey2 && req.Keys[2] == "good-key3"
 		})).Return(
 		&configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:   "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value: "test-data",
 				},
-				{
-					Key:   goodKey2,
+				goodKey2: {
 					Value: "test-data",
 				},
-				{
-					Key:   "good-key3",
+				"good-key3": {
 					Value: "test-data",
 				},
 			},
@@ -1197,9 +1195,8 @@ func TestGetConfiguration(t *testing.T) {
 			keys:          []string{goodKey},
 			errorExcepted: false,
 			expectedResponse: &runtimev1pb.GetConfigurationResponse{
-				Items: []*commonv1pb.ConfigurationItem{
-					{
-						Key:   goodKey,
+				Items: map[string]*commonv1pb.ConfigurationItem{
+					goodKey: {
 						Value: "test-data",
 					},
 				},
@@ -1212,17 +1209,14 @@ func TestGetConfiguration(t *testing.T) {
 			keys:          []string{"good-key1", goodKey2, "good-key3"},
 			errorExcepted: false,
 			expectedResponse: &runtimev1pb.GetConfigurationResponse{
-				Items: []*commonv1pb.ConfigurationItem{
-					{
-						Key:   "good-key1",
+				Items: map[string]*commonv1pb.ConfigurationItem{
+					"good-key1": {
 						Value: "test-data",
 					},
-					{
-						Key:   goodKey2,
+					goodKey2: {
 						Value: "test-data",
 					},
-					{
-						Key:   "good-key3",
+					"good-key3": {
 						Value: "test-data",
 					},
 				},
@@ -1278,9 +1272,8 @@ func TestSubscribeConfiguration(t *testing.T) {
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
 			if len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey {
 				_ = f(context.Background(), &configuration.UpdateEvent{
-					Items: []*configuration.Item{
-						{
-							Key:   goodKey,
+					Items: map[string]*configuration.Item{
+						goodKey: {
 							Value: "test-data",
 						},
 					},
@@ -1297,13 +1290,11 @@ func TestSubscribeConfiguration(t *testing.T) {
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
 			if len(tempReq.Keys) == 2 && tempReq.Keys[0] == goodKey && tempReq.Keys[1] == goodKey2 {
 				_ = f(context.Background(), &configuration.UpdateEvent{
-					Items: []*configuration.Item{
-						{
-							Key:   goodKey,
+					Items: map[string]*configuration.Item{
+						goodKey: {
 							Value: "test-data",
 						},
-						{
-							Key:   goodKey2,
+						goodKey2: {
 							Value: "test-data2",
 						},
 					},
@@ -1338,7 +1329,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 		storeName        string
 		keys             []string
 		errorExcepted    bool
-		expectedResponse []*commonv1pb.ConfigurationItem
+		expectedResponse map[string]*commonv1pb.ConfigurationItem
 		expectedError    codes.Code
 	}{
 		{
@@ -1346,9 +1337,8 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:     "store1",
 			keys:          []string{goodKey},
 			errorExcepted: false,
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
 			},
@@ -1359,7 +1349,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:        "no-store",
 			keys:             []string{goodKey},
 			errorExcepted:    true,
-			expectedResponse: []*commonv1pb.ConfigurationItem{},
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -1367,7 +1357,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:        "store1",
 			keys:             []string{"error-key"},
 			errorExcepted:    true,
-			expectedResponse: []*commonv1pb.ConfigurationItem{},
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -1375,13 +1365,11 @@ func TestSubscribeConfiguration(t *testing.T) {
 			storeName:     "store1",
 			keys:          []string{goodKey, goodKey2},
 			errorExcepted: false,
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
-				{
-					Key:   goodKey2,
+				goodKey2: {
 					Value: "test-data2",
 				},
 			},
@@ -1451,9 +1439,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 					default:
 					}
 					if err := f(context.Background(), &configuration.UpdateEvent{
-						Items: []*configuration.Item{
-							{
-								Key:   goodKey,
+						Items: map[string]*configuration.Item{
+							goodKey: {
 								Value: "test-data",
 							},
 						},
@@ -1484,13 +1471,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 					default:
 					}
 					if err := f(context.Background(), &configuration.UpdateEvent{
-						Items: []*configuration.Item{
-							{
-								Key:   goodKey,
+						Items: map[string]*configuration.Item{
+							goodKey: {
 								Value: "test-data",
 							},
-							{
-								Key:   goodKey2,
+							goodKey2: {
 								Value: "test-data2",
 							},
 						},
@@ -1523,16 +1508,15 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 		testName         string
 		storeName        string
 		keys             []string
-		expectedResponse []*commonv1pb.ConfigurationItem
+		expectedResponse map[string]*commonv1pb.ConfigurationItem
 		expectedError    codes.Code
 	}{
 		{
 			testName:  "Test unsubscribe",
 			storeName: "store1",
 			keys:      []string{goodKey},
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
 			},
@@ -1542,13 +1526,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			testName:  "Test unsubscribe with multi keys",
 			storeName: "store1",
 			keys:      []string{goodKey, goodKey2},
-			expectedResponse: []*commonv1pb.ConfigurationItem{
-				{
-					Key:   goodKey,
+			expectedResponse: map[string]*commonv1pb.ConfigurationItem{
+				goodKey: {
 					Value: "test-data",
 				},
-				{
-					Key:   goodKey2,
+				goodKey2: {
 					Value: "test-data2",
 				},
 			},
@@ -1803,11 +1785,11 @@ func TestPublishTopic(t *testing.T) {
 				}
 
 				if req.Topic == "err-not-found" {
-					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+					return runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				}
 
 				if req.Topic == "err-not-allowed" {
-					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+					return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				}
 
 				return nil
@@ -2055,11 +2037,21 @@ func TestExecuteStateTransaction(t *testing.T) {
 
 func TestGetMetadata(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	fakeComponent := components_v1alpha.Component{}
+	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
+
+	mockActors := new(actors.MockActors)
+	mockActors.On("GetActiveActorsCount").Return(actors.ActiveActorsCount{
+		Count: 10,
+		Type:  "abcd",
+	})
+
 	fakeAPI := &api{
-		id:         "fakeAPI",
-		components: []components_v1alpha.Component{fakeComponent},
+		id:    "fakeAPI",
+		actor: mockActors,
+		getComponentsFn: func() []componentsV1alpha.Component {
+			return []componentsV1alpha.Component{fakeComponent}
+		},
 		getComponentsCapabilitesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
@@ -2076,17 +2068,20 @@ func TestGetMetadata(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 	response, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, response.Id, "fakeAPI")
 	assert.Len(t, response.RegisteredComponents, 1, "One component should be returned")
 	assert.Equal(t, response.RegisteredComponents[0].Name, "testComponent")
 	assert.Contains(t, response.ExtendedMetadata, "testKey")
 	assert.Equal(t, response.ExtendedMetadata["testKey"], "testValue")
 	assert.Len(t, response.RegisteredComponents[0].Capabilities, 1, "One capabilities should be returned")
 	assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.testComponent")
+	assert.Equal(t, response.GetActiveActorsCount()[0].Type, "abcd")
+	assert.Equal(t, response.GetActiveActorsCount()[0].Count, int32(10))
 }
 
 func TestSetMetadata(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	fakeComponent := components_v1alpha.Component{}
+	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 	fakeAPI := &api{
 		id: "fakeAPI",
@@ -2192,6 +2187,7 @@ func TestExtractEtag(t *testing.T) {
 	})
 }
 
+//nolint:nosnakecase
 func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
 	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
 	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
@@ -2394,8 +2390,7 @@ func TestGetConfigurationAlpha1(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, r.Items)
 		assert.Len(t, r.Items, 1)
-		assert.Equal(t, "key1", r.Items[0].Key)
-		assert.Equal(t, "val1", r.Items[0].Value)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
 }
 
@@ -2446,8 +2441,7 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 
 		assert.NotNil(t, r)
 		assert.Len(t, r.Items, 1)
-		assert.Equal(t, "key1", r.Items[0].Key)
-		assert.Equal(t, "val1", r.Items[0].Value)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
 	})
 
 	t.Run("get all configuration item for empty list", func(t *testing.T) {
@@ -2494,10 +2488,8 @@ func TestSubscribeConfigurationAlpha1(t *testing.T) {
 
 		assert.NotNil(t, r)
 		assert.Len(t, r.Items, 2)
-		assert.Equal(t, "key1", r.Items[0].Key)
-		assert.Equal(t, "val1", r.Items[0].Value)
-		assert.Equal(t, "key2", r.Items[1].Key)
-		assert.Equal(t, "val2", r.Items[1].Value)
+		assert.Equal(t, "val1", r.Items["key1"].Value)
+		assert.Equal(t, "val2", r.Items["key2"].Value)
 	})
 }
 
@@ -2528,7 +2520,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		},
 	}
 
-	state_loader.SaveStateConfiguration("failStore", map[string]string{"keyPrefix": "none"})
+	stateLoader.SaveStateConfiguration("failStore", map[string]string{"keyPrefix": "none"})
 
 	fakeAPI := &api{
 		id:                       "fakeAPI",
@@ -3045,26 +3037,19 @@ func (m *mockConfigStore) Init(metadata configuration.Metadata) error {
 }
 
 func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
-	items := []*configuration.Item{
-		{
-			Key:   "key1",
-			Value: "val1",
-		}, {
-			Key:   "key2",
-			Value: "val2",
-		},
+	items := map[string]*configuration.Item{
+		"key1": {Value: "val1"},
+		"key2": {Value: "val2"},
 	}
 
-	res := make([]*configuration.Item, 0, 16)
+	res := make(map[string]*configuration.Item)
 
 	if len(req.Keys) == 0 {
 		res = items
 	} else {
-		for _, item := range items {
-			for _, key := range req.Keys {
-				if item.Key == key {
-					res = append(res, item)
-				}
+		for _, key := range req.Keys {
+			if val, ok := items[key]; ok {
+				res[key] = val
 			}
 		}
 	}
@@ -3075,26 +3060,19 @@ func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest
 }
 
 func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
-	items := []*configuration.Item{
-		{
-			Key:   "key1",
-			Value: "val1",
-		}, {
-			Key:   "key2",
-			Value: "val2",
-		},
+	items := map[string]*configuration.Item{
+		"key1": {Value: "val1"},
+		"key2": {Value: "val2"},
 	}
 
-	res := make([]*configuration.Item, 0, 16)
+	res := make(map[string]*configuration.Item)
 
 	if len(req.Keys) == 0 {
 		res = items
 	} else {
-		for _, item := range items {
-			for _, key := range req.Keys {
-				if item.Key == key {
-					res = append(res, item)
-				}
+		for _, key := range req.Keys {
+			if val, ok := items[key]; ok {
+				res[key] = val
 			}
 		}
 	}
@@ -3145,6 +3123,7 @@ func TestUnlockGrpcToComponentRequest(t *testing.T) {
 	assert.NotNil(t, req)
 }
 
+//nolint:nosnakecase
 func TestUnlockResponseToGrpcResponse(t *testing.T) {
 	resp := UnlockResponseToGrpcResponse(&lock.UnlockResponse{Status: lock.Success})
 	assert.True(t, resp.Status == runtimev1pb.UnlockResponse_SUCCESS)
@@ -3325,6 +3304,6 @@ func TestUnlock(t *testing.T) {
 		}
 		resp, err := api.UnlockAlpha1(context.Background(), req)
 		assert.Nil(t, err)
-		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status)
+		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status) //nolint:nosnakecase
 	})
 }

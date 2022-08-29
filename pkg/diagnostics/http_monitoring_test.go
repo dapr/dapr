@@ -140,7 +140,7 @@ func fakeFastHTTPRequestCtx(expectedBody string) *fasthttp.RequestCtx {
 	req.Header.SetHost(expectedHost)
 	req.Header.Add(fasthttp.HeaderTransferEncoding, expectedTransferEncoding)
 	req.Header.SetContentLength(len([]byte(expectedBody)))
-	req.BodyWriter().Write([]byte(expectedBody)) // nolint:errcheck
+	req.BodyWriter().Write([]byte(expectedBody)) //nolint:errcheck
 
 	for k, v := range expectedHeader {
 		req.Header.Set(k, v)

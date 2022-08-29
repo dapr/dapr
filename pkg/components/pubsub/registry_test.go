@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/components-contrib/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/logger"
 )
 
 func TestCreateFullName(t *testing.T) {
@@ -57,12 +58,12 @@ func TestCreatePubSub(t *testing.T) {
 		mockPubSubV2 := new(daprt.MockPubSub)
 
 		// act
-		testRegistry.Register(New(pubSubName, func() pubsub.PubSub {
+		testRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
-		}))
-		testRegistry.Register(New(pubSubNameV2, func() pubsub.PubSub {
+		}, pubSubName)
+		testRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSubV2
-		}))
+		}, pubSubNameV2)
 
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0")

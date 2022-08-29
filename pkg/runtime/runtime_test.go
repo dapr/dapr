@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:nosnakecase
 package runtime
 
 import (
@@ -27,6 +28,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,7 +38,12 @@ import (
 	"github.com/golang/mock/gomock"
 
 	"github.com/dapr/components-contrib/lock"
-	lock_loader "github.com/dapr/dapr/pkg/components/lock"
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	lockLoader "github.com/dapr/dapr/pkg/components/lock"
+	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
+	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
@@ -55,28 +62,27 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
+	mdata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+
 	"github.com/dapr/kit/logger"
 
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
-	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
-	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
-	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
-	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
-	state_loader "github.com/dapr/dapr/pkg/components/state"
+	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
+	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
@@ -85,7 +91,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/pkg/sentry/certs"
@@ -217,22 +223,22 @@ func TestNewRuntime(t *testing.T) {
 // 'topics' are the topics for the first pubsub.
 // 'topics2' are the topics for the second pubsub.
 func getSubscriptionsJSONString(topics []string, topics2 []string) string {
-	s := []runtime_pubsub.SubscriptionJSON{}
+	s := []runtimePubsub.SubscriptionJSON{}
 	for _, t := range topics {
-		s = append(s, runtime_pubsub.SubscriptionJSON{
+		s = append(s, runtimePubsub.SubscriptionJSON{
 			PubsubName: TestPubsubName,
 			Topic:      t,
-			Routes: runtime_pubsub.RoutesJSON{
+			Routes: runtimePubsub.RoutesJSON{
 				Default: t,
 			},
 		})
 	}
 
 	for _, t := range topics2 {
-		s = append(s, runtime_pubsub.SubscriptionJSON{
+		s = append(s, runtimePubsub.SubscriptionJSON{
 			PubsubName: TestSecondPubsubName,
 			Topic:      t,
-			Routes: runtime_pubsub.RoutesJSON{
+			Routes: runtimePubsub.RoutesJSON{
 				Default: t,
 			},
 		})
@@ -243,11 +249,11 @@ func getSubscriptionsJSONString(topics []string, topics2 []string) string {
 }
 
 func getSubscriptionCustom(topic, path string) string {
-	s := []runtime_pubsub.SubscriptionJSON{
+	s := []runtimePubsub.SubscriptionJSON{
 		{
 			PubsubName: TestPubsubName,
 			Topic:      topic,
-			Routes: runtime_pubsub.RoutesJSON{
+			Routes: runtimePubsub.RoutesJSON{
 				Default: path,
 			},
 		},
@@ -258,7 +264,7 @@ func getSubscriptionCustom(topic, path string) string {
 
 func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
-		TypeMeta: meta_v1.TypeMeta{
+		TypeMeta: metaV1.TypeMeta{
 			Kind:       "Subscription",
 			APIVersion: "v1alpha1",
 		},
@@ -279,11 +285,11 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 
-	incorrectComponentType := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	incorrectComponentType := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsubs.mockPubSub",
 			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
@@ -301,22 +307,22 @@ func TestDoProcessComponent(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 
-	pubsubComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
 		},
 	}
 
-	lockComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	lockComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestLockName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "lock.mockLock",
 			Version: "v1",
 		},
@@ -328,10 +334,11 @@ func TestDoProcessComponent(t *testing.T) {
 		mockLockStore := daprt.NewMockStore(ctrl)
 		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(assert.AnError)
 
-		rt.lockStoreRegistry.Register(
-			lock_loader.New("mockLock", func() lock.Store {
+		rt.lockStoreRegistry.RegisterComponent(
+			func(_ logger.Logger) lock.Store {
 				return mockLockStore
-			}),
+			},
+			"mockLock",
 		)
 
 		// act
@@ -347,10 +354,11 @@ func TestDoProcessComponent(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockLockStore := daprt.NewMockStore(ctrl)
 
-		rt.lockStoreRegistry.Register(
-			lock_loader.New("mockLock", func() lock.Store {
+		rt.lockStoreRegistry.RegisterComponent(
+			func(_ logger.Logger) lock.Store {
 				return mockLockStore
-			}),
+			},
+			"mockLock",
 		)
 
 		lockComponentV3 := lockComponent
@@ -370,17 +378,18 @@ func TestDoProcessComponent(t *testing.T) {
 		mockLockStore := daprt.NewMockStore(ctrl)
 		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(nil)
 
-		rt.lockStoreRegistry.Register(
-			lock_loader.New("mockLock", func() lock.Store {
+		rt.lockStoreRegistry.RegisterComponent(
+			func(_ logger.Logger) lock.Store {
 				return mockLockStore
-			}),
+			},
+			"mockLock",
 		)
 
 		lockComponentWithWrongStrategy := lockComponent
-		lockComponentWithWrongStrategy.Spec.Metadata = []components_v1alpha1.MetadataItem{
+		lockComponentWithWrongStrategy.Spec.Metadata = []componentsV1alpha1.MetadataItem{
 			{
 				Name: "keyPrefix",
-				Value: components_v1alpha1.DynamicValue{
+				Value: componentsV1alpha1.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("||")},
 				},
 			},
@@ -397,10 +406,11 @@ func TestDoProcessComponent(t *testing.T) {
 		mockLockStore := daprt.NewMockStore(ctrl)
 		mockLockStore.EXPECT().InitLockStore(gomock.Any()).Return(nil)
 
-		rt.lockStoreRegistry.Register(
-			lock_loader.New("mockLock", func() lock.Store {
+		rt.lockStoreRegistry.RegisterComponent(
+			func(_ logger.Logger) lock.Store {
 				return mockLockStore
-			}),
+			},
+			"mockLock",
 		)
 
 		// act
@@ -408,7 +418,7 @@ func TestDoProcessComponent(t *testing.T) {
 		// assert
 		assert.Nil(t, err, "unexpected error")
 		// get modified key
-		key, err := lock_loader.GetModifiedLockKey("test", "mockLock", "appid-1")
+		key, err := lockLoader.GetModifiedLockKey("test", "mockLock", "appid-1")
 		assert.Nil(t, err, "unexpected error")
 		assert.Equal(t, key, "lock||appid-1||test")
 	})
@@ -417,13 +427,14 @@ func TestDoProcessComponent(t *testing.T) {
 		// setup
 		mockPubSub := new(daprt.MockPubSub)
 
-		rt.pubSubRegistry.Register(
-			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
 				return mockPubSub
-			}),
+			},
+			"mockPubSub",
 		)
 		expectedMetadata := pubsub.Metadata{
-			Properties: getFakeProperties(),
+			Base: mdata.Base{Properties: getFakeProperties()},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
@@ -451,7 +462,7 @@ type mockOperatorClient struct {
 	operatorv1pb.OperatorClient
 
 	lock                      sync.RWMutex
-	compsByName               map[string]*components_v1alpha1.Component
+	compsByName               map[string]*componentsV1alpha1.Component
 	clientStreams             []*mockOperatorComponentUpdateClientStream
 	clientStreamCreateWait    chan struct{}
 	clientStreamCreatedNotify chan struct{}
@@ -459,7 +470,7 @@ type mockOperatorClient struct {
 
 func newMockOperatorClient() *mockOperatorClient {
 	mockOpCli := &mockOperatorClient{
-		compsByName:               make(map[string]*components_v1alpha1.Component),
+		compsByName:               make(map[string]*componentsV1alpha1.Component),
 		clientStreams:             make([]*mockOperatorComponentUpdateClientStream, 0, 1),
 		clientStreamCreateWait:    make(chan struct{}, 1),
 		clientStreamCreatedNotify: make(chan struct{}, 1),
@@ -531,7 +542,7 @@ func (c *mockOperatorClient) CloseAllClientStreams() {
 	c.clientStreams = []*mockOperatorComponentUpdateClientStream{}
 }
 
-func (c *mockOperatorClient) UpdateComponent(comp *components_v1alpha1.Component) {
+func (c *mockOperatorClient) UpdateComponent(comp *componentsV1alpha1.Component) {
 	b, err := json.Marshal(comp)
 	if err != nil {
 		return
@@ -581,29 +592,29 @@ func TestComponentsUpdate(t *testing.T) {
 
 	go rt.beginComponentsUpdates()
 
-	comp1 := &components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	comp1 := &componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: "mockPubSub1",
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "pubsub.mockPubSub1",
 			Version: "v1",
 		},
 	}
-	comp2 := &components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	comp2 := &componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: "mockPubSub2",
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "pubsub.mockPubSub2",
 			Version: "v1",
 		},
 	}
-	comp3 := &components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	comp3 := &componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: "mockPubSub3",
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "pubsub.mockPubSub3",
 			Version: "v1",
 		},
@@ -681,29 +692,29 @@ func TestInitState(t *testing.T) {
 
 	primaryKey := hex.EncodeToString(bytes)
 
-	mockStateComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	mockStateComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "state.mockState",
 			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
+			Metadata: []componentsV1alpha1.MetadataItem{
 				{
 					Name: "actorStateStore",
-					Value: components_v1alpha1.DynamicValue{
+					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
 				{
 					Name: "primaryEncryptionKey",
-					Value: components_v1alpha1.DynamicValue{
+					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{Raw: []byte(primaryKey)},
 					},
 				},
 			},
 		},
-		Auth: components_v1alpha1.Auth{
+		Auth: componentsV1alpha1.Auth{
 			SecretStore: "mockSecretStore",
 		},
 	}
@@ -711,18 +722,19 @@ func TestInitState(t *testing.T) {
 	initMockStateStoreForRuntime := func(rt *DaprRuntime, e error) *daprt.MockStateStore {
 		mockStateStore := new(daprt.MockStateStore)
 
-		rt.stateStoreRegistry.Register(
-			state_loader.New("mockState", func() state.Store {
+		rt.stateStoreRegistry.RegisterComponent(
+			func(_ logger.Logger) state.Store {
 				return mockStateStore
-			}),
+			},
+			"mockState",
 		)
 
-		expectedMetadata := state.Metadata{
+		expectedMetadata := state.Metadata{Base: mdata.Base{
 			Properties: map[string]string{
 				actorStateStore:        "true",
 				"primaryEncryptionKey": primaryKey,
 			},
-		}
+		}}
 
 		mockStateStore.On("Init", expectedMetadata).Return(e)
 
@@ -784,13 +796,14 @@ func TestInitNameResolution(t *testing.T) {
 	initMockResolverForRuntime := func(rt *DaprRuntime, resolverName string, e error) *daprt.MockResolver {
 		mockResolver := new(daprt.MockResolver)
 
-		rt.nameResolutionRegistry.Register(
-			nr_loader.New(resolverName, func() nameresolution.Resolver {
+		rt.nameResolutionRegistry.RegisterComponent(
+			func(_ logger.Logger) nameresolution.Resolver {
 				return mockResolver
-			}),
+			},
+			resolverName,
 		)
 
-		expectedMetadata := nameresolution.Metadata{
+		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
 			Properties: map[string]string{
 				nameresolution.DaprHTTPPort:        strconv.Itoa(rt.runtimeConfig.HTTPPort),
 				nameresolution.DaprPort:            strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
@@ -801,7 +814,7 @@ func TestInitNameResolution(t *testing.T) {
 				nameresolution.MDNSInstanceAddress: rt.hostAddress,
 				nameresolution.MDNSInstancePort:    strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
 			},
-		}
+		}}
 
 		mockResolver.On("Init", expectedMetadata).Return(e)
 
@@ -928,7 +941,7 @@ func TestSetupTracing(t *testing.T) {
 		tracingConfig: config.TracingSpec{
 			Stdout: true,
 		},
-		expectedExporters: []sdktrace.SpanExporter{&diag_utils.StdoutExporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&diagUtils.StdoutExporter{}},
 	}, {
 		name: "all trace exporters",
 		tracingConfig: config.TracingSpec{
@@ -942,7 +955,7 @@ func TestSetupTracing(t *testing.T) {
 			},
 			Stdout: true,
 		},
-		expectedExporters: []sdktrace.SpanExporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}, &otlptrace.Exporter{}},
+		expectedExporters: []sdktrace.SpanExporter{&diagUtils.StdoutExporter{}, &zipkin.Exporter{}, &otlptrace.Exporter{}},
 	}}
 
 	for _, tc := range testcases {
@@ -977,11 +990,11 @@ func TestSetupTracing(t *testing.T) {
 }
 
 func TestMetadataUUID(t *testing.T) {
-	pubsubComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
@@ -990,16 +1003,16 @@ func TestMetadataUUID(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		components_v1alpha1.MetadataItem{
+		componentsV1alpha1.MetadataItem{
 			Name: "consumerID",
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{uuid}"),
 				},
 			},
-		}, components_v1alpha1.MetadataItem{
+		}, componentsV1alpha1.MetadataItem{
 			Name: "twoUUIDs",
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{uuid} {uuid}"),
 				},
@@ -1009,10 +1022,11 @@ func TestMetadataUUID(t *testing.T) {
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
-	rt.pubSubRegistry.Register(
-		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
-		}),
+		},
+		"mockPubSub",
 	)
 
 	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
@@ -1039,11 +1053,11 @@ func TestMetadataUUID(t *testing.T) {
 }
 
 func TestMetadataPodName(t *testing.T) {
-	pubsubComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
@@ -1052,9 +1066,9 @@ func TestMetadataPodName(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		components_v1alpha1.MetadataItem{
+		componentsV1alpha1.MetadataItem{
 			Name: "consumerID",
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{podName}"),
 				},
@@ -1064,10 +1078,11 @@ func TestMetadataPodName(t *testing.T) {
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
-	rt.pubSubRegistry.Register(
-		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
-		}),
+		},
+		"mockPubSub",
 	)
 
 	rt.podName = "testPodName"
@@ -1086,17 +1101,17 @@ func TestMetadataPodName(t *testing.T) {
 func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec changed, component is updated", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
-		rt.components = append(rt.components, components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		rt.components = append(rt.components, componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "test",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []components_v1alpha1.MetadataItem{
+				Metadata: []componentsV1alpha1.MetadataItem{
 					{
 						Name: "name1",
-						Value: components_v1alpha1.DynamicValue{
+						Value: componentsV1alpha1.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value1"),
 							},
@@ -1110,17 +1125,17 @@ func TestOnComponentUpdated(t *testing.T) {
 			<-rt.pendingComponents
 		}()
 
-		updated := rt.onComponentUpdated(components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		updated := rt.onComponentUpdated(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "test",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []components_v1alpha1.MetadataItem{
+				Metadata: []componentsV1alpha1.MetadataItem{
 					{
 						Name: "name1",
-						Value: components_v1alpha1.DynamicValue{
+						Value: componentsV1alpha1.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value2"),
 							},
@@ -1135,17 +1150,17 @@ func TestOnComponentUpdated(t *testing.T) {
 
 	t.Run("component spec unchanged, component is skipped", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
-		rt.components = append(rt.components, components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		rt.components = append(rt.components, componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "test",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []components_v1alpha1.MetadataItem{
+				Metadata: []componentsV1alpha1.MetadataItem{
 					{
 						Name: "name1",
-						Value: components_v1alpha1.DynamicValue{
+						Value: componentsV1alpha1.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value1"),
 							},
@@ -1159,17 +1174,17 @@ func TestOnComponentUpdated(t *testing.T) {
 			<-rt.pendingComponents
 		}()
 
-		updated := rt.onComponentUpdated(components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		updated := rt.onComponentUpdated(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "test",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []components_v1alpha1.MetadataItem{
+				Metadata: []componentsV1alpha1.MetadataItem{
 					{
 						Name: "name1",
-						Value: components_v1alpha1.DynamicValue{
+						Value: componentsV1alpha1.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value1"),
 							},
@@ -1184,10 +1199,10 @@ func TestOnComponentUpdated(t *testing.T) {
 }
 
 func TestConsumerID(t *testing.T) {
-	metadata := []components_v1alpha1.MetadataItem{
+	metadata := []componentsV1alpha1.MetadataItem{
 		{
 			Name: "host",
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("localhost"),
 				},
@@ -1195,18 +1210,18 @@ func TestConsumerID(t *testing.T) {
 		},
 		{
 			Name: "password",
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("fakePassword"),
 				},
 			},
 		},
 	}
-	pubsubComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
 			Metadata: metadata,
@@ -1217,10 +1232,11 @@ func TestConsumerID(t *testing.T) {
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
-	rt.pubSubRegistry.Register(
-		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
-		}),
+		},
+		"mockPubSub",
 	)
 
 	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
@@ -1237,21 +1253,21 @@ func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 
-	pubsubComponents := []components_v1alpha1.Component{
+	pubsubComponents := []componentsV1alpha1.Component{
 		{
-			ObjectMeta: meta_v1.ObjectMeta{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: TestPubsubName,
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:     "pubsub.mockPubSub",
 				Version:  "v1",
 				Metadata: getFakeMetadataItems(),
 			},
 		}, {
-			ObjectMeta: meta_v1.ObjectMeta{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: TestSecondPubsubName,
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:     "pubsub.mockPubSub2",
 				Version:  "v1",
 				Metadata: getFakeMetadataItems(),
@@ -1264,18 +1280,15 @@ func TestInitPubSub(t *testing.T) {
 
 		mockPubSub2 := new(daprt.MockPubSub)
 
-		rt.pubSubRegistry.Register(
-			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
-				return mockPubSub
-			}),
-
-			pubsub_loader.New("mockPubSub2", func() pubsub.PubSub {
-				return mockPubSub2
-			}),
-		)
+		rt.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
+			return mockPubSub
+		}, "mockPubSub")
+		rt.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
+			return mockPubSub2
+		}, "mockPubSub2")
 
 		expectedMetadata := pubsub.Metadata{
-			Properties: getFakeProperties(),
+			Base: mdata.Base{Properties: getFakeProperties()},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(nil)
@@ -1293,7 +1306,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		rt.topicRoutes = nil
-		rt.pubSubs = make(map[string]pubsub.PubSub)
+		rt.pubSubs = make(map[string]pubsubItem)
 
 		return mockPubSub, mockPubSub2
 	}
@@ -1323,7 +1336,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1357,7 +1370,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1385,7 +1398,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1404,7 +1417,10 @@ func TestInitPubSub(t *testing.T) {
 	t.Run("publish adapter not nil, with pub sub component", func(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
-		rts.pubSubs[TestPubsubName], _ = initMockPubSubForRuntime(rts)
+		ps, _ := initMockPubSubForRuntime(rts)
+		rts.pubSubs[TestPubsubName] = pubsubItem{
+			component: ps,
+		}
 		a := rts.getPublishAdapter()
 		assert.NotNil(t, a)
 	})
@@ -1511,7 +1527,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1543,7 +1559,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1607,7 +1623,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1639,7 +1655,7 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
 		err := rt.Publish(&pubsub.PublishRequest{
@@ -1650,7 +1666,7 @@ func TestInitPubSub(t *testing.T) {
 
 		assert.Nil(t, err)
 
-		rt.pubSubs[TestSecondPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
 		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
@@ -1678,17 +1694,23 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
-			assert.Nil(t, err)
+			require.Nil(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
 		})
 		assert.NotNil(t, err)
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
 		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
@@ -1697,46 +1719,66 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("test allowed topics, no scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {allowedTopics: []string{"topic1"}},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("test allowed topics, no scopes, operation not allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {allowedTopics: []string{"topic1"}},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.False(t, a)
 	})
 
 	t.Run("test allowed topics, with scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		rt.scopedPublishings = map[string][]string{TestPubsubName: {"topic1"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"topic1"},
+				scopedPublishings: []string{"topic1"},
+			},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in existing publishing scopes, operation not allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		rt.scopedPublishings = map[string][]string{TestPubsubName: {"topic2"}}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"topic1"},
+				scopedPublishings: []string{"topic2"},
+			},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.False(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
-		rt.scopedPublishings = map[string][]string{}
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"topic1"},
+				scopedPublishings: []string{},
+			},
+		}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("topics A and B in allowed topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
-		rt.allowedTopics = map[string][]string{TestPubsubName: {"A", "B"}}
-		rt.scopedPublishings = map[string][]string{TestPubsubName: {"A"}}
+		rt.pubSubs = map[string]pubsubItem{
+			TestPubsubName: {
+				allowedTopics:     []string{"A", "B"},
+				scopedPublishings: []string{"A"},
+			},
+		}
 
-		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", rt.scopedPublishings[TestPubsubName])
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.True(t, a)
 
-		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.scopedPublishings[TestPubsubName])
+		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.pubSubs[TestPubsubName].scopedPublishings)
 		assert.False(t, b)
 	})
 }
@@ -1746,16 +1788,18 @@ func TestInitSecretStores(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}))
+			},
+			"kubernetesMock",
+		)
 
-		err := rt.processComponentAndDependents(components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		err := rt.processComponentAndDependents(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
@@ -1767,16 +1811,18 @@ func TestInitSecretStores(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}))
+			},
+			"kubernetesMock",
+		)
 
-		err := rt.processComponentAndDependents(components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		err := rt.processComponentAndDependents(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
@@ -1789,17 +1835,18 @@ func TestInitSecretStores(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}),
+			},
+			"kubernetesMock",
 		)
 
-		rt.processComponentAndDependents(components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		rt.processComponentAndDependents(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
@@ -1814,10 +1861,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("string", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []components_v1alpha1.MetadataItem{
+		items := []componentsV1alpha1.MetadataItem{
 			{
 				Name: "a",
-				Value: components_v1alpha1.DynamicValue{
+				Value: componentsV1alpha1.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("b")},
 				},
 			},
@@ -1830,10 +1877,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("int", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []components_v1alpha1.MetadataItem{
+		items := []componentsV1alpha1.MetadataItem{
 			{
 				Name: "a",
-				Value: components_v1alpha1.DynamicValue{
+				Value: componentsV1alpha1.DynamicValue{
 					JSON: v1.JSON{Raw: []byte(strconv.Itoa(6))},
 				},
 			},
@@ -1846,10 +1893,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("bool", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []components_v1alpha1.MetadataItem{
+		items := []componentsV1alpha1.MetadataItem{
 			{
 				Name: "a",
-				Value: components_v1alpha1.DynamicValue{
+				Value: componentsV1alpha1.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("true")},
 				},
 			},
@@ -1862,10 +1909,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("float", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []components_v1alpha1.MetadataItem{
+		items := []componentsV1alpha1.MetadataItem{
 			{
 				Name: "a",
-				Value: components_v1alpha1.DynamicValue{
+				Value: componentsV1alpha1.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("5.5")},
 				},
 			},
@@ -1878,10 +1925,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("JSON string", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []components_v1alpha1.MetadataItem{
+		items := []componentsV1alpha1.MetadataItem{
 			{
 				Name: "a",
-				Value: components_v1alpha1.DynamicValue{
+				Value: componentsV1alpha1.DynamicValue{
 					JSON: v1.JSON{Raw: []byte(`"hello there"`)},
 				},
 			},
@@ -1916,39 +1963,39 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 }
 
 func TestProcessComponentSecrets(t *testing.T) {
-	mockBinding := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	mockBinding := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: "mockBinding",
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "bindings.mock",
 			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
+			Metadata: []componentsV1alpha1.MetadataItem{
 				{
 					Name: "a",
-					SecretKeyRef: components_v1alpha1.SecretKeyRef{
+					SecretKeyRef: componentsV1alpha1.SecretKeyRef{
 						Key:  "key1",
 						Name: "name1",
 					},
 				},
 				{
 					Name: "b",
-					Value: components_v1alpha1.DynamicValue{
+					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("value2")},
 					},
 				},
 			},
 		},
-		Auth: components_v1alpha1.Auth{
-			SecretStore: secretstores_loader.BuiltinKubernetesSecretStore,
+		Auth: componentsV1alpha1.Auth{
+			SecretStore: secretstoresLoader.BuiltinKubernetesSecretStore,
 		},
 	}
 
 	t.Run("Standalone Mode", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = components_v1alpha1.DynamicValue{
+		mockBinding.Spec.Metadata[0].Value = componentsV1alpha1.DynamicValue{
 			JSON: v1.JSON{Raw: []byte("")},
 		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
+		mockBinding.Spec.Metadata[0].SecretKeyRef = componentsV1alpha1.SecretKeyRef{
 			Key:  "key1",
 			Name: "name1",
 		}
@@ -1956,18 +2003,19 @@ func TestProcessComponentSecrets(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}),
+			},
+			secretstoresLoader.BuiltinKubernetesSecretStore,
 		)
 
 		// add Kubernetes component manually
-		rt.processComponentAndDependents(components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
-				Name: secretstores_loader.BuiltinKubernetesSecretStore,
+		rt.processComponentAndDependents(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
 				Version: "v1",
 			},
@@ -1979,10 +2027,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 
 	t.Run("Kubernetes Mode - no value without operator", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = components_v1alpha1.DynamicValue{
+		mockBinding.Spec.Metadata[0].Value = componentsV1alpha1.DynamicValue{
 			JSON: v1.JSON{Raw: []byte("")},
 		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
+		mockBinding.Spec.Metadata[0].SecretKeyRef = componentsV1alpha1.SecretKeyRef{
 			Key:  "key1",
 			Name: "name1",
 		}
@@ -1990,10 +2038,11 @@ func TestProcessComponentSecrets(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}),
+			},
+			secretstoresLoader.BuiltinKubernetesSecretStore,
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
@@ -2005,10 +2054,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 
 	t.Run("Look up name only", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = components_v1alpha1.DynamicValue{
+		mockBinding.Spec.Metadata[0].Value = componentsV1alpha1.DynamicValue{
 			JSON: v1.JSON{Raw: []byte("")},
 		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
+		mockBinding.Spec.Metadata[0].SecretKeyRef = componentsV1alpha1.SecretKeyRef{
 			Name: "name1",
 		}
 		mockBinding.Auth.SecretStore = "mock"
@@ -2016,18 +2065,19 @@ func TestProcessComponentSecrets(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		defer stopRuntime(t, rt)
 
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("mock", func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return &mockSecretStore{}
-			}),
+			},
+			"mock",
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		err := rt.processComponentAndDependents(components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		err := rt.processComponentAndDependents(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "mock",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.mock",
 				Version: "v1",
 			},
@@ -2061,8 +2111,8 @@ func TestExtractComponentCategory(t *testing.T) {
 
 	for _, tt := range compCategoryTests {
 		t.Run(tt.specType, func(t *testing.T) {
-			fakeComp := components_v1alpha1.Component{
-				Spec: components_v1alpha1.ComponentSpec{
+			fakeComp := componentsV1alpha1.Component{
+				Spec: componentsV1alpha1.ComponentSpec{
 					Type:    tt.specType,
 					Version: "v1",
 				},
@@ -2082,17 +2132,19 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 			wasCalled = true
 		})
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}))
+			},
+			"kubernetesMock",
+		)
 
 		go rt.processComponents()
-		rt.pendingComponents <- components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		rt.pendingComponents <- componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
@@ -2102,16 +2154,18 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 		// Make sure that the goroutine was restarted and can flush a second time
 		wasCalled = false
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetesMock2", func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}))
+			},
+			"kubernetesMock2",
+		)
 
-		rt.pendingComponents <- components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		rt.pendingComponents <- componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "kubernetesMock2",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
@@ -2137,67 +2191,73 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 			wasCalledGrandChild = true
 		})
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}))
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetesMockChild", func() secretstores.SecretStore {
+			},
+			"kubernetesMock",
+		)
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return mc
-			}))
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New("kubernetesMockGrandChild", func() secretstores.SecretStore {
+			},
+			"kubernetesMockChild",
+		)
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return mgc
-			}))
+			},
+			"kubernetesMockGrandChild",
+		)
 
 		go rt.processComponents()
-		rt.pendingComponents <- components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		rt.pendingComponents <- componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "kubernetesMockGrandChild",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMockGrandChild",
 				Version: "v1",
-				Metadata: []components_v1alpha1.MetadataItem{
+				Metadata: []componentsV1alpha1.MetadataItem{
 					{
 						Name: "a",
-						SecretKeyRef: components_v1alpha1.SecretKeyRef{
+						SecretKeyRef: componentsV1alpha1.SecretKeyRef{
 							Key:  "key1",
 							Name: "name1",
 						},
 					},
 				},
 			},
-			Auth: components_v1alpha1.Auth{
+			Auth: componentsV1alpha1.Auth{
 				SecretStore: "kubernetesMockChild",
 			},
 		}
-		rt.pendingComponents <- components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		rt.pendingComponents <- componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "kubernetesMockChild",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMockChild",
 				Version: "v1",
-				Metadata: []components_v1alpha1.MetadataItem{
+				Metadata: []componentsV1alpha1.MetadataItem{
 					{
 						Name: "a",
-						SecretKeyRef: components_v1alpha1.SecretKeyRef{
+						SecretKeyRef: componentsV1alpha1.SecretKeyRef{
 							Key:  "key1",
 							Name: "name1",
 						},
 					},
 				},
 			},
-			Auth: components_v1alpha1.Auth{
+			Auth: componentsV1alpha1.Auth{
 				SecretStore: "kubernetesMock",
 			},
 		}
-		rt.pendingComponents <- components_v1alpha1.Component{
-			ObjectMeta: meta_v1.ObjectMeta{
+		rt.pendingComponents <- componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
-			Spec: components_v1alpha1.ComponentSpec{
+			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
@@ -2216,10 +2276,11 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		defer stopRuntime(t, rt)
 
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}),
+			},
+			secretstoresLoader.BuiltinKubernetesSecretStore,
 		)
 
 		assertBuiltInSecretStore(t, rt)
@@ -2249,16 +2310,17 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		defer stopRuntime(t, rt)
 		rt.componentAuthorizers = []ComponentAuthorizer{
-			func(component components_v1alpha1.Component) bool {
+			func(component componentsV1alpha1.Component) bool {
 				return false
 			},
 		}
 
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.Register(
-			secretstores_loader.New(secretstores_loader.BuiltinKubernetesSecretStore, func() secretstores.SecretStore {
+		rt.secretStoresRegistry.RegisterComponent(
+			func(_ logger.Logger) secretstores.SecretStore {
 				return m
-			}),
+			},
+			secretstoresLoader.BuiltinKubernetesSecretStore,
 		)
 
 		assertBuiltInSecretStore(t, rt)
@@ -2271,7 +2333,7 @@ func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
 		for comp := range rt.pendingComponents {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
-			if comp.Name == secretstores_loader.BuiltinKubernetesSecretStore {
+			if comp.Name == secretstoresLoader.BuiltinKubernetesSecretStore {
 				wg.Done()
 			}
 		}
@@ -2300,9 +2362,12 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
+	rt.topicRoutes = map[string]TopicRoutes{}
+	rt.topicRoutes[TestPubsubName] = TopicRoutes{
+		"topic1": TopicRouteElem{
+			rules: []*runtimePubsub.Rule{{Path: "topic1"}},
+		},
+	}
 
 	t.Run("ok without result body", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -2410,9 +2475,12 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
+	rt.topicRoutes = map[string]TopicRoutes{}
+	rt.topicRoutes[TestPubsubName] = TopicRoutes{
+		"topic1": TopicRouteElem{
+			rules: []*runtimePubsub.Rule{{Path: "topic1"}},
+		},
+	}
 
 	testcases := []struct {
 		Name        string
@@ -2498,9 +2566,12 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
-	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{rules: []*runtime_pubsub.Rule{{Path: "topic1"}}}
+	rt.topicRoutes = map[string]TopicRoutes{}
+	rt.topicRoutes[TestPubsubName] = TopicRoutes{
+		"topic1": TopicRouteElem{
+			rules: []*runtimePubsub.Rule{{Path: "topic1"}},
+		},
+	}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -2832,10 +2903,10 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
-			rt.topicRoutes = map[string]TopicRoute{}
-			rt.topicRoutes[TestPubsubName] = TopicRoute{
-				routes: map[string]Route{
-					topic: {rules: []*runtime_pubsub.Rule{{Path: topic}}},
+			rt.topicRoutes = map[string]TopicRoutes{}
+			rt.topicRoutes[TestPubsubName] = TopicRoutes{
+				topic: TopicRouteElem{
+					rules: []*runtimePubsub.Rule{{Path: topic}},
 				},
 			}
 			var grpcServer *grpc.Server
@@ -2874,8 +2945,310 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	}
 }
 
+func TestPubsubLifecycle(t *testing.T) {
+	rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt.pubSubRegistry = pubsubLoader.NewRegistry()
+	defer func() {
+		if rt != nil {
+			stopRuntime(t, rt)
+		}
+	}()
+
+	comp1 := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "mockPubSub1",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSubAlpha",
+			Version:  "v1",
+			Metadata: []componentsV1alpha1.MetadataItem{},
+		},
+	}
+	comp2 := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "mockPubSub2",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSubBeta",
+			Version:  "v1",
+			Metadata: []componentsV1alpha1.MetadataItem{},
+		},
+	}
+	comp3 := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "mockPubSub3",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSubBeta",
+			Version:  "v1",
+			Metadata: []componentsV1alpha1.MetadataItem{},
+		},
+	}
+
+	rt.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
+		c := new(daprt.InMemoryPubsub)
+		c.On("Init", mock.AnythingOfType("pubsub.Metadata")).Return(nil)
+		return c
+	}, "mockPubSubAlpha")
+	rt.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
+		c := new(daprt.InMemoryPubsub)
+		c.On("Init", mock.AnythingOfType("pubsub.Metadata")).Return(nil)
+		return c
+	}, "mockPubSubBeta")
+
+	err := rt.processComponentAndDependents(comp1)
+	assert.Nil(t, err)
+	err = rt.processComponentAndDependents(comp2)
+	assert.Nil(t, err)
+	err = rt.processComponentAndDependents(comp3)
+	assert.Nil(t, err)
+
+	forEachPubSub := func(f func(name string, comp *daprt.InMemoryPubsub)) int {
+		i := 0
+		for name, ps := range rt.pubSubs {
+			f(name, ps.component.(*daprt.InMemoryPubsub))
+			i++
+		}
+		return i
+	}
+	getPubSub := func(name string) *daprt.InMemoryPubsub {
+		return rt.pubSubs[name].component.(*daprt.InMemoryPubsub)
+	}
+
+	done := forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+		comp.AssertNumberOfCalls(t, "Init", 1)
+	})
+	require.Equal(t, 3, done)
+
+	subscriptions := make(map[string][]string)
+	messages := make(map[string][]*pubsub.NewMessage)
+	var (
+		subscriptionsCh  chan struct{}
+		messagesCh       chan struct{}
+		subscriptionsMux sync.Mutex
+		msgMux           sync.Mutex
+	)
+	forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+		comp.SetOnSubscribedTopicsChanged(func(topics []string) {
+			sort.Strings(topics)
+			subscriptionsMux.Lock()
+			subscriptions[name] = topics
+			subscriptionsMux.Unlock()
+			if subscriptionsCh != nil {
+				subscriptionsCh <- struct{}{}
+			}
+		})
+		comp.SetHandler(func(topic string, msg *pubsub.NewMessage) {
+			msgMux.Lock()
+			if messages[name+"|"+topic] == nil {
+				messages[name+"|"+topic] = []*pubsub.NewMessage{msg}
+			} else {
+				messages[name+"|"+topic] = append(messages[name+"|"+topic], msg)
+			}
+			msgMux.Unlock()
+			if messagesCh != nil {
+				messagesCh <- struct{}{}
+			}
+		})
+	})
+
+	setTopicRoutes := func() {
+		rt.topicRoutes = map[string]TopicRoutes{
+			"mockPubSub1": {
+				"topic1": {
+					metadata: map[string]string{"rawPayload": "true"},
+					rules:    []*runtimePubsub.Rule{{Path: "topic1"}},
+				},
+			},
+			"mockPubSub2": {
+				"topic2": {
+					metadata: map[string]string{"rawPayload": "true"},
+					rules:    []*runtimePubsub.Rule{{Path: "topic2"}},
+				},
+				"topic3": {
+					metadata: map[string]string{"rawPayload": "true"},
+					rules:    []*runtimePubsub.Rule{{Path: "topic3"}},
+				},
+			},
+		}
+
+		forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+			comp.Calls = nil
+			comp.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
+		})
+	}
+
+	resetState := func() {
+		messages = make(map[string][]*pubsub.NewMessage)
+		forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+			comp.Calls = nil
+		})
+	}
+
+	subscribePredefined := func(t *testing.T) {
+		setTopicRoutes()
+
+		subscriptionsCh = make(chan struct{}, 5)
+		rt.startSubscriptions()
+
+		done := forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
+			switch name {
+			case "mockPubSub1":
+				comp.AssertNumberOfCalls(t, "Subscribe", 1)
+			case "mockPubSub2":
+				comp.AssertNumberOfCalls(t, "Subscribe", 2)
+			case "mockPubSub3":
+				comp.AssertNumberOfCalls(t, "Subscribe", 0)
+			}
+		})
+		require.Equal(t, 3, done)
+
+		for i := 0; i < 3; i++ {
+			<-subscriptionsCh
+		}
+		close(subscriptionsCh)
+		subscriptionsCh = nil
+
+		assert.True(t, reflect.DeepEqual(subscriptions["mockPubSub1"], []string{"topic1"}),
+			"expected %v to equal %v", subscriptions["mockPubSub1"], []string{"topic1"})
+		assert.True(t, reflect.DeepEqual(subscriptions["mockPubSub2"], []string{"topic2", "topic3"}),
+			"expected %v to equal %v", subscriptions["mockPubSub2"], []string{"topic2", "topic3"})
+		assert.Len(t, subscriptions["mockPubSub3"], 0)
+	}
+
+	t.Run("subscribe to 3 topics on 2 components", subscribePredefined)
+
+	ciao := []byte("ciao")
+	sendMessages := func(t *testing.T, expect int) {
+		send := []pubsub.PublishRequest{
+			{Data: ciao, PubsubName: "mockPubSub1", Topic: "topic1"},
+			{Data: ciao, PubsubName: "mockPubSub2", Topic: "topic2"},
+			{Data: ciao, PubsubName: "mockPubSub2", Topic: "topic3"},
+			{Data: ciao, PubsubName: "mockPubSub3", Topic: "topic4"},
+			{Data: ciao, PubsubName: "mockPubSub3", Topic: "not-subscribed"},
+		}
+
+		messagesCh = make(chan struct{}, expect+2)
+
+		for _, m := range send {
+			//nolint:gosec
+			err = rt.Publish(&m)
+			assert.NoError(t, err)
+		}
+
+		for i := 0; i < expect; i++ {
+			<-messagesCh
+		}
+
+		// Sleep to ensure no new messages have come in
+		time.Sleep(10 * time.Millisecond)
+		assert.Len(t, messagesCh, 0)
+
+		close(messagesCh)
+		messagesCh = nil
+	}
+
+	t.Run("messages are delivered to 3 topics", func(t *testing.T) {
+		resetState()
+		sendMessages(t, 3)
+
+		require.Len(t, messages, 3)
+		_ = assert.Len(t, messages["mockPubSub1|topic1"], 1) &&
+			assert.Equal(t, messages["mockPubSub1|topic1"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub2|topic2"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic2"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+	})
+
+	t.Run("unsubscribe from mockPubSub2/topic2", func(t *testing.T) {
+		resetState()
+		comp := getPubSub("mockPubSub2")
+		comp.On("unsubscribed", "topic2").Return(nil).Once()
+
+		err = rt.unsubscribeTopic("mockPubSub2", "topic2")
+		require.NoError(t, err)
+
+		sendMessages(t, 2)
+
+		require.Len(t, messages, 2)
+		_ = assert.Len(t, messages["mockPubSub1|topic1"], 1) &&
+			assert.Equal(t, messages["mockPubSub1|topic1"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+		comp.AssertCalled(t, "unsubscribed", "topic2")
+	})
+
+	t.Run("unsubscribe from mockPubSub1/topic1", func(t *testing.T) {
+		resetState()
+		comp := getPubSub("mockPubSub1")
+		comp.On("unsubscribed", "topic1").Return(nil).Once()
+
+		err = rt.unsubscribeTopic("mockPubSub1", "topic1")
+		require.NoError(t, err)
+
+		sendMessages(t, 1)
+
+		require.Len(t, messages, 1)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+		comp.AssertCalled(t, "unsubscribed", "topic1")
+	})
+
+	t.Run("subscribe to mockPubSub3/topic4", func(t *testing.T) {
+		resetState()
+
+		err = rt.subscribeTopic(rt.pubsubCtx, "mockPubSub3", "topic4", TopicRouteElem{})
+		require.NoError(t, err)
+
+		sendMessages(t, 2)
+
+		require.Len(t, messages, 2)
+		_ = assert.Len(t, messages["mockPubSub2|topic3"], 1) &&
+			assert.Equal(t, messages["mockPubSub2|topic3"][0].Data, ciao)
+		_ = assert.Len(t, messages["mockPubSub3|topic4"], 1) &&
+			assert.Equal(t, messages["mockPubSub3|topic4"][0].Data, ciao)
+	})
+
+	t.Run("stopSubscriptions", func(t *testing.T) {
+		resetState()
+		comp2 := getPubSub("mockPubSub2")
+		comp2.On("unsubscribed", "topic3").Return(nil).Once()
+		comp3 := getPubSub("mockPubSub3")
+		comp3.On("unsubscribed", "topic4").Return(nil).Once()
+
+		rt.stopSubscriptions()
+
+		sendMessages(t, 0)
+
+		require.Len(t, messages, 0)
+		comp2.AssertCalled(t, "unsubscribed", "topic3")
+		comp3.AssertCalled(t, "unsubscribed", "topic4")
+	})
+
+	t.Run("restart subscriptions with pre-defined ones", subscribePredefined)
+
+	t.Run("shutdown", func(t *testing.T) {
+		resetState()
+
+		comp1 := getPubSub("mockPubSub1")
+		comp1.On("unsubscribed", "topic1").Return(nil).Once()
+		comp2 := getPubSub("mockPubSub2")
+		comp2.On("unsubscribed", "topic2").Return(nil).Once()
+		comp2.On("unsubscribed", "topic3").Return(nil).Once()
+
+		stopRuntime(t, rt)
+		rt = nil
+
+		comp1.AssertCalled(t, "unsubscribed", "topic1")
+		comp2.AssertCalled(t, "unsubscribed", "topic2")
+		comp2.AssertCalled(t, "unsubscribed", "topic3")
+	})
+}
+
 func TestPubsubWithResiliency(t *testing.T) {
 	r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
+	r.pubSubRegistry = pubsubLoader.NewRegistry()
 	defer stopRuntime(t, r)
 
 	failingPubsub := daprt.FailingPubsub{
@@ -2909,11 +3282,9 @@ func TestPubsubWithResiliency(t *testing.T) {
 		},
 	}
 
-	r.pubSubRegistry.Register(pubsub_loader.New(
-		"failingPubsub", func() pubsub.PubSub { return &failingPubsub },
-	))
+	r.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub { return &failingPubsub }, "failingPubsub")
 
-	component := components_v1alpha1.Component{}
+	component := componentsV1alpha1.Component{}
 	component.ObjectMeta.Name = "failPubsub"
 	component.Spec.Type = "pubsub.failingPubsub"
 
@@ -2950,43 +3321,59 @@ func TestPubsubWithResiliency(t *testing.T) {
 	r.appChannel = &failingAppChannel
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
-		r.topicRoutes = make(map[string]TopicRoute)
-		r.topicRoutes["failPubsub"] = TopicRoute{routes: map[string]Route{
+		r.topicRoutes = make(map[string]TopicRoutes)
+		r.topicRoutes["failPubsub"] = TopicRoutes{
 			"failingSubTopic": {
 				metadata: map[string]string{
 					"rawPayload": "true",
 				},
-				rules: []*runtime_pubsub.Rule{
+				rules: []*runtimePubsub.Rule{
 					{
 						Path: "failingPubsub",
 					},
 				},
 			},
-		}}
+		}
+		r.pubSubs = map[string]pubsubItem{
+			"failPubsub": {
+				component: &failingPubsub,
+			},
+		}
 
-		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
+		r.topicCtxCancels = map[string]context.CancelFunc{}
+		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
+		defer r.pubsubCancel()
+		err := r.beginPubSub("failPubsub")
 
 		assert.NoError(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["failingSubTopic"])
 	})
 
 	t.Run("pubsub times out sending event to app with resiliency", func(t *testing.T) {
-		r.topicRoutes = make(map[string]TopicRoute)
-		r.topicRoutes["failPubsub"] = TopicRoute{routes: map[string]Route{
+		r.topicRoutes = make(map[string]TopicRoutes)
+		r.topicRoutes["failPubsub"] = TopicRoutes{
 			"timeoutSubTopic": {
 				metadata: map[string]string{
 					"rawPayload": "true",
 				},
-				rules: []*runtime_pubsub.Rule{
+				rules: []*runtimePubsub.Rule{
 					{
 						Path: "failingPubsub",
 					},
 				},
 			},
-		}}
+		}
+		r.pubSubs = map[string]pubsubItem{
+			"failPubsub": {
+				component: &failingPubsub,
+			},
+		}
 
+		r.topicCtxCancels = map[string]context.CancelFunc{}
+		r.pubsubCtx, r.pubsubCancel = context.WithCancel(context.Background())
+		defer r.pubsubCancel()
 		start := time.Now()
-		err := r.beginPubSub(context.Background(), "failPubsub", &failingPubsub)
+		err := r.beginPubSub("failPubsub")
 		end := time.Now()
 
 		// This is eaten, technically.
@@ -3039,11 +3426,11 @@ func (m *mockSubscribePubSub) Features() []pubsub.Feature {
 
 func TestPubSubDeadLetter(t *testing.T) {
 	testDeadLetterPubsub := "failPubsub"
-	pubsubComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: testDeadLetterPubsub,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
@@ -3053,16 +3440,17 @@ func TestPubSubDeadLetter(t *testing.T) {
 	t.Run("succeeded to publish message to dead letter when send message to app returns error", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		rt.pubSubRegistry.Register(
-			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
 				return &mockSubscribePubSub{}
-			}),
+			},
+			"mockPubSub",
 		)
 		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		req.WithHTTPExtension(http.MethodGet, "")
 		req.WithRawData(nil, invokev1.JSONContentType)
 
-		subscriptionItems := []runtime_pubsub.SubscriptionJSON{
+		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
 			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
 		}
@@ -3072,12 +3460,12 @@ func TestPubSubDeadLetter(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), req).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
 		// Mock send message to app returns error.
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("failed to send"))
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
@@ -3085,7 +3473,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Data:       []byte(`{"id":"1"}`),
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.pubCount["topic0"])
 		// Ensure the message is sent to dead letter topic.
 		assert.Equal(t, 1, pubsubIns.pubCount["topic1"])
@@ -3096,16 +3484,17 @@ func TestPubSubDeadLetter(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.resiliency = resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency)
-		rt.pubSubRegistry.Register(
-			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
 				return &mockSubscribePubSub{}
-			}),
+			},
+			"mockPubSub",
 		)
 		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		req.WithHTTPExtension(http.MethodGet, "")
 		req.WithRawData(nil, invokev1.JSONContentType)
 
-		subscriptionItems := []runtime_pubsub.SubscriptionJSON{
+		subscriptionItems := []runtimePubsub.SubscriptionJSON{
 			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
 			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
 		}
@@ -3120,7 +3509,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.timerCtx"), mock.Anything).Return(nil, errors.New("failed to send"))
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
-		rt.startSubscribing()
+		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
@@ -3128,7 +3517,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Data:       []byte(`{"id":"1"}`),
 		})
 		assert.Nil(t, err)
-		pubsubIns := rt.pubSubs[testDeadLetterPubsub].(*mockSubscribePubSub)
+		pubsubIns := rt.pubSubs[testDeadLetterPubsub].component.(*mockSubscribePubSub)
 		// Consider of resiliency, publish message may retry in some cases, make sure the pub count is greater than 1.
 		assert.True(t, pubsubIns.pubCount["topic0"] >= 1)
 		// Make sure every message that is sent to topic0 is sent to its dead letter topic1.
@@ -3207,11 +3596,11 @@ func getFakeProperties() map[string]string {
 	}
 }
 
-func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
-	return []components_v1alpha1.MetadataItem{
+func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
+	return []componentsV1alpha1.MetadataItem{
 		{
 			Name: "host",
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("localhost"),
 				},
@@ -3219,7 +3608,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		},
 		{
 			Name: "password",
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("fakePassword"),
 				},
@@ -3227,7 +3616,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		},
 		{
 			Name: "consumerID",
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(TestRuntimeConfigID),
 				},
@@ -3235,7 +3624,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		},
 		{
 			Name: scopes.SubscriptionScopes,
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
 				},
@@ -3243,7 +3632,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		},
 		{
 			Name: scopes.PublishingScopes,
-			Value: components_v1alpha1.DynamicValue{
+			Value: componentsV1alpha1.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
 				},
@@ -3259,38 +3648,48 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(mode, protocol, appPort)
 
-	return NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt.stateStoreRegistry = stateLoader.NewRegistry()
+	rt.secretStoresRegistry = secretstoresLoader.NewRegistry()
+	rt.nameResolutionRegistry = nrLoader.NewRegistry()
+	rt.bindingsRegistry = bindingsLoader.NewRegistry()
+	rt.pubSubRegistry = pubsubLoader.NewRegistry()
+	rt.httpMiddlewareRegistry = httpMiddlewareLoader.NewRegistry()
+	rt.configurationStoreRegistry = configurationLoader.NewRegistry()
+	rt.lockStoreRegistry = lockLoader.NewRegistry()
+
+	return rt
 }
 
 func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *Config {
-	return NewRuntimeConfig(
-		TestRuntimeConfigID,
-		[]string{"10.10.10.12"},
-		"10.10.10.11",
-		cors.DefaultAllowedOrigins,
-		"globalConfig",
-		"",
-		protocol,
-		string(mode),
-		DefaultDaprHTTPPort,
-		0,
-		DefaultDaprAPIGRPCPort,
-		[]string{DefaultAPIListenAddress},
-		nil,
-		appPort,
-		DefaultProfilePort,
-		false,
-		-1,
-		false,
-		"",
-		false,
-		4,
-		"",
-		4,
-		false,
-		time.Second,
-		true,
-		false)
+	return NewRuntimeConfig(NewRuntimeConfigOpts{
+		ID:                           TestRuntimeConfigID,
+		PlacementAddresses:           []string{"10.10.10.12"},
+		controlPlaneAddress:          "10.10.10.11",
+		AllowedOrigins:               cors.DefaultAllowedOrigins,
+		GlobalConfig:                 "globalConfig",
+		ComponentsPath:               "",
+		AppProtocol:                  protocol,
+		Mode:                         string(mode),
+		HTTPPort:                     DefaultDaprHTTPPort,
+		InternalGRPCPort:             0,
+		APIGRPCPort:                  DefaultDaprAPIGRPCPort,
+		APIListenAddresses:           []string{DefaultAPIListenAddress},
+		PublicPort:                   nil,
+		AppPort:                      appPort,
+		ProfilePort:                  DefaultProfilePort,
+		EnableProfiling:              false,
+		MaxConcurrency:               -1,
+		MTLSEnabled:                  false,
+		SentryAddress:                "",
+		AppSSL:                       false,
+		MaxRequestBodySize:           4,
+		UnixDomainSocket:             "",
+		ReadBufferSize:               4,
+		GracefulShutdownDuration:     time.Second,
+		EnableAPILogging:             true,
+		DisableBuiltinK8sSecretStore: false,
+	})
 }
 
 func TestGracefulShutdown(t *testing.T) {
@@ -3527,6 +3926,31 @@ func TestReadInputBindings(t *testing.T) {
 
 		assert.Equal(t, string(testInputBindingData), b.data)
 	})
+
+	t.Run("start and stop reading", func(t *testing.T) {
+		rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, rt)
+
+		closeCh := make(chan struct{})
+		defer close(closeCh)
+
+		b := &daprt.MockBinding{}
+		b.SetOnReadCloseCh(closeCh)
+		b.On("Read", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil).Once()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		rt.readFromBinding(ctx, testInputBindingName, b)
+		time.Sleep(80 * time.Millisecond)
+		cancel()
+		select {
+		case <-closeCh:
+			// All good
+		case <-time.After(time.Second):
+			t.Fatal("timeout while waiting for binding to stop reading")
+		}
+
+		b.AssertNumberOfCalls(t, "Read", 1)
+	})
 }
 
 func TestNamespace(t *testing.T) {
@@ -3575,10 +3999,10 @@ func TestAuthorizedComponents(t *testing.T) {
 	t.Run("standalone mode, no namespce", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 1)
 		assert.Equal(t, testCompName, comps[0].Name)
 	})
@@ -3588,11 +4012,11 @@ func TestAuthorizedComponents(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.namespace = "a"
 
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)
 	})
 
@@ -3601,11 +4025,11 @@ func TestAuthorizedComponents(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.namespace = "a"
 
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 1)
 	})
 
@@ -3614,12 +4038,12 @@ func TestAuthorizedComponents(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.namespace = "a"
 
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{TestRuntimeConfigID}
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 1)
 	})
 
@@ -3628,12 +4052,12 @@ func TestAuthorizedComponents(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.namespace = "a"
 
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{"other"}
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)
 	})
 
@@ -3642,12 +4066,12 @@ func TestAuthorizedComponents(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.namespace = "a"
 
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{TestRuntimeConfigID}
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)
 	})
 
@@ -3656,12 +4080,12 @@ func TestAuthorizedComponents(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.namespace = "a"
 
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{"other"}
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)
 	})
 
@@ -3672,11 +4096,11 @@ func TestAuthorizedComponents(t *testing.T) {
 		// Namespace mismatch, should be accepted anyways
 		rt.namespace = "a"
 
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 1)
 		assert.Equal(t, testCompName, comps[0].Name)
 	})
@@ -3685,30 +4109,30 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.componentAuthorizers = []ComponentAuthorizer{
-			func(component components_v1alpha1.Component) bool {
+			func(component componentsV1alpha1.Component) bool {
 				return false
 			},
 		}
 
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
 		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPProtocol), 1024)
 		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
-		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component components_v1alpha1.Component) bool {
+		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false
 		})
 		defer stopRuntime(t, rt)
 
-		component := components_v1alpha1.Component{}
+		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		comps := rt.getAuthorizedComponents([]componentsV1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)
 	})
 }
@@ -3797,14 +4221,16 @@ func TestInitActors(t *testing.T) {
 func TestInitBindings(t *testing.T) {
 	t.Run("single input binding", func(t *testing.T) {
 		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
-		r.bindingsRegistry.RegisterInputBindings(
-			bindings_loader.NewInput("testInputBinding", func() bindings.InputBinding {
+		r.bindingsRegistry.RegisterInputBinding(
+			func(_ logger.Logger) bindings.InputBinding {
 				return &daprt.MockBinding{}
-			}),
+			},
+			"testInputBinding",
 		)
 
-		c := components_v1alpha1.Component{}
+		c := componentsV1alpha1.Component{}
 		c.ObjectMeta.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
 		err := r.initBinding(c)
@@ -3813,14 +4239,16 @@ func TestInitBindings(t *testing.T) {
 
 	t.Run("single output binding", func(t *testing.T) {
 		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
-		r.bindingsRegistry.RegisterOutputBindings(
-			bindings_loader.NewOutput("testOutputBinding", func() bindings.OutputBinding {
+		r.bindingsRegistry.RegisterOutputBinding(
+			func(_ logger.Logger) bindings.OutputBinding {
 				return &daprt.MockBinding{}
-			}),
+			},
+			"testOutputBinding",
 		)
 
-		c := components_v1alpha1.Component{}
+		c := componentsV1alpha1.Component{}
 		c.ObjectMeta.Name = "testOutputBinding"
 		c.Spec.Type = "bindings.testOutputBinding"
 		err := r.initBinding(c)
@@ -3829,26 +4257,29 @@ func TestInitBindings(t *testing.T) {
 
 	t.Run("one input binding, one output binding", func(t *testing.T) {
 		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r.bindingsRegistry = bindingsLoader.NewRegistry()
 		defer stopRuntime(t, r)
-		r.bindingsRegistry.RegisterInputBindings(
-			bindings_loader.NewInput("testinput", func() bindings.InputBinding {
+		r.bindingsRegistry.RegisterInputBinding(
+			func(_ logger.Logger) bindings.InputBinding {
 				return &daprt.MockBinding{}
-			}),
+			},
+			"testinput",
 		)
 
-		r.bindingsRegistry.RegisterOutputBindings(
-			bindings_loader.NewOutput("testoutput", func() bindings.OutputBinding {
+		r.bindingsRegistry.RegisterOutputBinding(
+			func(_ logger.Logger) bindings.OutputBinding {
 				return &daprt.MockBinding{}
-			}),
+			},
+			"testoutput",
 		)
 
-		input := components_v1alpha1.Component{}
+		input := componentsV1alpha1.Component{}
 		input.ObjectMeta.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
 		err := r.initBinding(input)
 		assert.NoError(t, err)
 
-		output := components_v1alpha1.Component{}
+		output := componentsV1alpha1.Component{}
 		output.ObjectMeta.Name = "testinput"
 		output.Spec.Type = "bindings.testoutput"
 		err = r.initBinding(output)
@@ -3858,6 +4289,7 @@ func TestInitBindings(t *testing.T) {
 
 func TestBindingResiliency(t *testing.T) {
 	r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
+	r.bindingsRegistry = bindingsLoader.NewRegistry()
 	defer stopRuntime(t, r)
 
 	failingChannel := daprt.FailingAppChannel{
@@ -3890,13 +4322,14 @@ func TestBindingResiliency(t *testing.T) {
 		},
 	}
 
-	r.bindingsRegistry.RegisterOutputBindings(
-		bindings_loader.NewOutput("failingoutput", func() bindings.OutputBinding {
+	r.bindingsRegistry.RegisterOutputBinding(
+		func(_ logger.Logger) bindings.OutputBinding {
 			return &failingBinding
-		}),
+		},
+		"failingoutput",
 	)
 
-	output := components_v1alpha1.Component{}
+	output := componentsV1alpha1.Component{}
 	output.ObjectMeta.Name = "failOutput"
 	output.Spec.Type = "bindings.failingoutput"
 	err := r.initBinding(output)
@@ -4094,89 +4527,93 @@ func TestStopWithErrors(t *testing.T) {
 
 	testErr := errors.New("mock close error")
 
-	rt.bindingsRegistry.RegisterOutputBindings(
-		bindings_loader.NewOutput("output", func() bindings.OutputBinding {
+	rt.bindingsRegistry.RegisterOutputBinding(
+		func(_ logger.Logger) bindings.OutputBinding {
 			return &mockBinding{closeErr: testErr}
-		}),
+		},
+		"output",
 	)
-	rt.pubSubRegistry.Register(
-		pubsub_loader.New("pubsub", func() pubsub.PubSub {
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
 			return &mockPubSub{closeErr: testErr}
-		}),
+		},
+		"pubsub",
 	)
-	rt.stateStoreRegistry.Register(
-		state_loader.New("statestore", func() state.Store {
+	rt.stateStoreRegistry.RegisterComponent(
+		func(_ logger.Logger) state.Store {
 			return &mockStateStore{closeErr: testErr}
-		}),
+		},
+		"statestore",
 	)
-	rt.secretStoresRegistry.Register(
-		secretstores_loader.New("secretstore", func() secretstores.SecretStore {
+	rt.secretStoresRegistry.RegisterComponent(
+		func(_ logger.Logger) secretstores.SecretStore {
 			return &mockSecretStore{closeErr: testErr}
-		}),
+		},
+		"secretstore",
 	)
 
-	mockOutputBindingComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	mockOutputBindingComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "bindings.output",
 			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
+			Metadata: []componentsV1alpha1.MetadataItem{
 				{
 					Name: "output",
-					Value: components_v1alpha1.DynamicValue{
+					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
 			},
 		},
 	}
-	mockPubSubComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	mockPubSubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "pubsub.pubsub",
 			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
+			Metadata: []componentsV1alpha1.MetadataItem{
 				{
 					Name: "pubsub",
-					Value: components_v1alpha1.DynamicValue{
+					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
 			},
 		},
 	}
-	mockStateComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	mockStateComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "state.statestore",
 			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
+			Metadata: []componentsV1alpha1.MetadataItem{
 				{
 					Name: "statestore",
-					Value: components_v1alpha1.DynamicValue{
+					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
 			},
 		},
 	}
-	mockSecretsComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
+	mockSecretsComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: TestPubsubName,
 		},
-		Spec: components_v1alpha1.ComponentSpec{
+		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "secretstores.secretstore",
 			Version: "v1",
-			Metadata: []components_v1alpha1.MetadataItem{
+			Metadata: []componentsV1alpha1.MetadataItem{
 				{
 					Name: "secretstore",
-					Value: components_v1alpha1.DynamicValue{
+					Value: componentsV1alpha1.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
@@ -4207,7 +4644,7 @@ func stopRuntime(t *testing.T, rt *DaprRuntime) {
 func TestFindMatchingRoute(t *testing.T) {
 	r, err := createRoutingRule(`event.type == "MyEventType"`, "mypath")
 	require.NoError(t, err)
-	rules := []*runtime_pubsub.Rule{r}
+	rules := []*runtimePubsub.Rule{r}
 	path, shouldProcess, err := findMatchingRoute(rules, map[string]interface{}{
 		"type": "MyEventType",
 	})
@@ -4216,7 +4653,7 @@ func TestFindMatchingRoute(t *testing.T) {
 	assert.True(t, shouldProcess)
 }
 
-func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
+func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 	var e *expr.Expr
 	matchTrimmed := strings.TrimSpace(match)
 	if matchTrimmed != "" {
@@ -4226,7 +4663,7 @@ func createRoutingRule(match, path string) (*runtime_pubsub.Rule, error) {
 		}
 	}
 
-	return &runtime_pubsub.Rule{
+	return &runtimePubsub.Rule{
 		Match: e,
 		Path:  path,
 	}, nil
@@ -4247,12 +4684,15 @@ func TestComponentsCallback(t *testing.T) {
 	c := make(chan struct{})
 	callbackInvoked := false
 
-	rt.Run(WithComponentsCallback(func(components ComponentRegistry) error {
-		close(c)
-		callbackInvoked = true
+	rt.Run(
+		WithComponentsCallback(func(components ComponentRegistry) error {
+			close(c)
+			callbackInvoked = true
 
-		return nil
-	}))
+			return nil
+		}),
+		WithNameResolutions(nrLoader.NewRegistry()),
+	)
 	defer rt.Shutdown(0)
 
 	select {
@@ -4270,16 +4710,17 @@ func TestGRPCProxy(t *testing.T) {
 	require.NoError(t, err)
 	defer teardown()
 
-	mockNameResolution := nr_loader.NameResolution{
-		Names: []string{"mdns"}, // for standalone mode
-		FactoryMethod: func() nameresolution.Resolver {
+	nr := nrLoader.NewRegistry()
+	nr.RegisterComponent(
+		func(_ logger.Logger) nameresolution.Resolver {
 			mockResolver := new(daprt.MockResolver)
 			// proxy to server anytime
 			mockResolver.On("Init", mock.Anything).Return(nil)
 			mockResolver.On("ResolveID", mock.Anything).Return(fmt.Sprintf("localhost:%d", serverPort), nil)
 			return mockResolver
 		},
-	}
+		"mdns", // for standalone mode
+	)
 
 	// setup proxy
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "grpc", serverPort)
@@ -4288,7 +4729,7 @@ func TestGRPCProxy(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	go func() {
-		rt.Run(WithNameResolutions(mockNameResolution))
+		rt.Run(WithNameResolutions(nr))
 	}()
 	defer rt.Shutdown(0)
 
@@ -4337,11 +4778,11 @@ func TestGRPCProxy(t *testing.T) {
 }
 
 func TestGetComponentsCapabilitiesMap(t *testing.T) {
-	cPubSub := components_v1alpha1.Component{}
+	cPubSub := componentsV1alpha1.Component{}
 	cPubSub.ObjectMeta.Name = "mockPubSub"
 	cPubSub.Spec.Type = "pubsub.mockPubSub"
 
-	cStateStore := components_v1alpha1.Component{}
+	cStateStore := componentsV1alpha1.Component{}
 	cStateStore.ObjectMeta.Name = "testStateStoreName"
 	cStateStore.Spec.Type = "state.mockState"
 
@@ -4349,38 +4790,42 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	mockStateStore := new(daprt.MockStateStore)
-	rt.stateStoreRegistry.Register(
-		state_loader.New("mockState", func() state.Store {
+	rt.stateStoreRegistry.RegisterComponent(
+		func(_ logger.Logger) state.Store {
 			return mockStateStore
-		}),
+		},
+		"mockState",
 	)
 
 	mockStateStore.On("Init", mock.Anything).Return(nil)
 
 	mockPubSub := new(daprt.MockPubSub)
-	rt.pubSubRegistry.Register(
-		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
-		}),
+		},
+		"mockPubSub",
 	)
 
 	mockPubSub.On("Init", mock.Anything).Return(nil)
 
-	rt.bindingsRegistry.RegisterInputBindings(
-		bindings_loader.NewInput("testInputBinding", func() bindings.InputBinding {
+	rt.bindingsRegistry.RegisterInputBinding(
+		func(_ logger.Logger) bindings.InputBinding {
 			return &daprt.MockBinding{}
-		}),
+		},
+		"testInputBinding",
 	)
-	cin := components_v1alpha1.Component{}
+	cin := componentsV1alpha1.Component{}
 	cin.ObjectMeta.Name = "testInputBinding"
 	cin.Spec.Type = "bindings.testInputBinding"
 
-	rt.bindingsRegistry.RegisterOutputBindings(
-		bindings_loader.NewOutput("testOutputBinding", func() bindings.OutputBinding {
+	rt.bindingsRegistry.RegisterOutputBinding(
+		func(_ logger.Logger) bindings.OutputBinding {
 			return &daprt.MockBinding{}
-		}),
+		},
+		"testOutputBinding",
 	)
-	cout := components_v1alpha1.Component{}
+	cout := componentsV1alpha1.Component{}
 	cout.ObjectMeta.Name = "testOutputBinding"
 	cout.Spec.Type = "bindings.testOutputBinding"
 
@@ -4447,4 +4892,9 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 		counter++
 	}
 	return nil
+}
+
+func matchContextInterface(v any) bool {
+	_, ok := v.(context.Context)
+	return ok
 }

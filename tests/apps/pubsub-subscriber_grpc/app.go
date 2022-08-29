@@ -94,7 +94,7 @@ func main() {
 
 	// Stop the gRPC server when we get a termination signal
 	stopCh := make(chan os.Signal, 1)
-	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(stopCh, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGINT) //nolint:staticcheck
 	go func() {
 		// Wait for cancelation signal
 		<-stopCh
@@ -188,7 +188,7 @@ func (s *server) setRespondWithInvalidStatus() {
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*pb.TopicSubscription{
+		Subscriptions: []*commonv1pb.TopicSubscription{
 			{
 				PubsubName: "messagebus",
 				Topic:      pubsubA,
@@ -222,7 +222,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	if respondWithRetry {
 		log.Printf("(%s) Responding with RETRY", reqID)
 		return &pb.TopicEventResponse{
-			Status: pb.TopicEventResponse_RETRY,
+			Status: pb.TopicEventResponse_RETRY, //nolint:nosnakecase
 		}, nil
 	} else if respondWithError {
 		log.Printf("(%s) Responding with ERROR", reqID)
@@ -240,7 +240,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 		log.Printf("(%s) Responding with DROP. in.Data is nil", reqID)
 		// Return success with DROP status to drop message
 		return &pb.TopicEventResponse{
-			Status: pb.TopicEventResponse_DROP,
+			Status: pb.TopicEventResponse_DROP, //nolint:nosnakecase
 		}, nil
 	}
 
@@ -250,7 +250,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 		log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
 		// Return success with DROP status to drop message
 		return &pb.TopicEventResponse{
-			Status: pb.TopicEventResponse_DROP,
+			Status: pb.TopicEventResponse_DROP, //nolint:nosnakecase
 		}, err
 	}
 
@@ -285,7 +285,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 
 	log.Printf("(%s) Responding with SUCCESS", reqID)
 	return &pb.TopicEventResponse{
-		Status: pb.TopicEventResponse_SUCCESS,
+		Status: pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 	}, nil
 }
 

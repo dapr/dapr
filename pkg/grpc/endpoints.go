@@ -31,10 +31,12 @@ var endpoints = map[string][]string{
 		"/dapr.proto.runtime.v1.Dapr/GetState",
 		"/dapr.proto.runtime.v1.Dapr/GetBulkState",
 		"/dapr.proto.runtime.v1.Dapr/SaveState",
-		"/dapr.proto.runtime.v1.Dapr/QueryState",
 		"/dapr.proto.runtime.v1.Dapr/DeleteState",
 		"/dapr.proto.runtime.v1.Dapr/DeleteBulkState",
 		"/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction",
+	},
+	"state.v1alpha1": {
+		"/dapr.proto.runtime.v1.Dapr/QueryStateAlpha1",
 	},
 	"publish.v1": {
 		"/dapr.proto.runtime.v1.Dapr/PublishEvent",
@@ -60,6 +62,17 @@ var endpoints = map[string][]string{
 		"/dapr.proto.runtime.v1.Dapr/GetMetadata",
 		"/dapr.proto.runtime.v1.Dapr/SetMetadata",
 	},
+	"configuration.v1alpha1": {
+		"/dapr.proto.runtime.v1.Dapr/GetConfigurationAlpha1",
+		"/dapr.proto.runtime.v1.Dapr/SubscribeConfigurationAlpha1",
+		"/dapr.proto.runtime.v1.Dapr/UnsubscribeConfigurationAlpha1",
+	},
+	"lock.v1alpha1": {
+		"/dapr.proto.runtime.v1.Dapr/TryLockAlpha1",
+	},
+	"unlock.v1alpha1": {
+		"/dapr.proto.runtime.v1.Dapr/UnlockAlpha1",
+	},
 	"shutdown.v1": {
 		"/dapr.proto.runtime.v1.Dapr/Shutdown",
 	},
@@ -68,30 +81,33 @@ var endpoints = map[string][]string{
 const protocol = "grpc"
 
 func setAPIEndpointsMiddlewareUnary(rules []config.APIAccessRule) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		var grpcRules []config.APIAccessRule
+	allowed := map[string]struct{}{}
 
-		for _, rule := range rules {
-			if rule.Protocol == protocol {
-				grpcRules = append(grpcRules, rule)
-			}
+	for _, rule := range rules {
+		if rule.Protocol != protocol {
+			continue
 		}
 
-		if len(grpcRules) == 0 {
+		if list, ok := endpoints[rule.Name+"."+rule.Version]; ok {
+			for _, method := range list {
+				allowed[method] = struct{}{}
+			}
+		}
+	}
+
+	// Passthrough if no gRPC rules
+	if len(allowed) == 0 {
+		return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 			return handler(ctx, req)
 		}
+	}
 
-		for _, rule := range grpcRules {
-			if list, ok := endpoints[rule.Name+"."+rule.Version]; ok {
-				for _, method := range list {
-					if method == info.FullMethod {
-						return handler(ctx, req)
-					}
-				}
-			}
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		_, ok := allowed[info.FullMethod]
+		if !ok {
+			return nil, v1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
 		}
 
-		err := v1.ErrorFromHTTPResponseCode(http.StatusNotImplemented, "requested endpoint is not available")
-		return nil, err
+		return handler(ctx, req)
 	}
 }

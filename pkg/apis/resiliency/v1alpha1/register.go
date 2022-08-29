@@ -45,8 +45,8 @@ var (
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(
 		SchemeGroupVersion,
-		&Resiliency{},     // nolint:exhaustivestruct
-		&ResiliencyList{}, // nolint:exhaustivestruct
+		&Resiliency{},     //nolint:exhaustivestruct
+		&ResiliencyList{}, //nolint:exhaustivestruct
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
