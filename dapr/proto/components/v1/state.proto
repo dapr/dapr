@@ -179,6 +179,8 @@ message SetRequest {
   // The request metadata.
   map<string, string> metadata = 4;
   dapr.proto.common.v1.StateOptions options = 5;
+  // The data contenttype
+  string content_type = 6;
 }
 
 message BulkDeleteRequest {

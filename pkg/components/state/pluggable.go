@@ -311,12 +311,17 @@ func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 			return nil, err
 		}
 	}
+	var contentType string
+	if req.ContentType != nil {
+		contentType = *req.ContentType
+	}
 
 	return &proto.SetRequest{
-		Key:      req.GetKey(),
-		Value:    dataBytes,
-		Etag:     toETagRequest(req.ETag),
-		Metadata: req.GetMetadata(),
+		Key:         req.GetKey(),
+		Value:       dataBytes,
+		Etag:        toETagRequest(req.ETag),
+		Metadata:    req.GetMetadata(),
+		ContentType: contentType,
 		Options: &v1.StateOptions{
 			Concurrency: concurrencyOf(req.Options.Concurrency),
 			Consistency: consistencyOf(req.Options.Consistency),
