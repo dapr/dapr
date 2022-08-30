@@ -17,7 +17,7 @@ import (
 	"context"
 	"net"
 	"os"
-	"sync"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,6 +42,10 @@ func (f *fakeClient) Ping(context.Context, *emptypb.Empty, ...grpc.CallOption) (
 }
 
 func TestGRPCConnector(t *testing.T) {
+	// gRPC Pluggable component requires Unix Domain Socket to work, I'm skipping this test when running on windows.
+	if runtime.GOOS == "windows" {
+		return
+	}
 	const (
 		fakeName          = "name"
 		fakeType          = "type"
@@ -82,27 +86,24 @@ func TestGRPCConnector(t *testing.T) {
 		defer os.Clearenv()
 		os.Setenv(daprSocketFolderEnvVar, "/tmp")
 
-		var grpcConnectionGroup, netUnixSocketListenGroup sync.WaitGroup
-		grpcConnectionGroup.Add(1)
-		netUnixSocketListenGroup.Add(1)
-		go func() {
-			socket := connector.socketPathFor(fakeComponentName)
-			listener, err := net.Listen("unix", socket)
-			require.NoError(t, err)
-			grpcConnectionGroup.Wait()
-			if listener != nil {
-				listener.Close()
-			}
-			netUnixSocketListenGroup.Done()
-		}()
-		require.NoError(t, connector.Dial(fakeComponentName))
+		socket := connector.socketPathFor(fakeComponentName)
+
+		listener, err := net.Listen("unix", socket)
+		require.NoError(t, err)
+		defer listener.Close()
+
+		require.NoError(t, connector.Dial(fakeComponentName), grpc.WithBlock())
+		defer connector.Close()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+
 		assert.True(t, connector.conn.WaitForStateChange(ctx, connectivity.Idle))
 		// could be in a transient failure for short time window.
 		if connector.conn.GetState() == connectivity.TransientFailure {
 			assert.True(t, connector.conn.WaitForStateChange(ctx, connectivity.TransientFailure))
 		}
+		// https://grpc.github.io/grpc/core/md_doc_connectivity-semantics-and-api.html
 		notAcceptedStatus := []connectivity.State{
 			connectivity.TransientFailure,
 			connectivity.Idle,
@@ -110,9 +111,5 @@ func TestGRPCConnector(t *testing.T) {
 		}
 
 		assert.NotContains(t, notAcceptedStatus, connector.conn.GetState())
-
-		grpcConnectionGroup.Done()
-		netUnixSocketListenGroup.Wait()
-		connector.Close()
 	})
 }
