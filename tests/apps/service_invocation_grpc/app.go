@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"strconv"
 
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -33,6 +35,15 @@ import (
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
+var appPort = 3000
+
+func init() {
+	p := os.Getenv("PORT")
+	if p != "" && p != "0" {
+		appPort, _ = strconv.Atoi(p)
+	}
+}
+
 // server is our user app
 type server struct{}
 
@@ -44,7 +55,7 @@ func main() {
 	log.Printf("Initializing grpc")
 
 	/* #nosec */
-	lis, err := net.Listen("tcp", ":3000")
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", appPort))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -80,10 +91,12 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	requestMD := map[string][]string{}
+	fmt.Print("incoming md: ")
 	for k, vals := range md {
 		requestMD[k] = vals
-		fmt.Printf("incoming md: %s %q", k, vals)
+		fmt.Printf("%s='%q' ", k, vals)
 	}
+	fmt.Print("\n")
 
 	header := metadata.Pairs(
 		"DaprTest-Response-1", "DaprTest-Response-Value-1",
