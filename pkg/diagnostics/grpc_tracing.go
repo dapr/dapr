@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	grpcTraceContextKey = "grpc-trace-bin"
+	GRPCTraceContextKey = "grpc-trace-bin"
 	GRPCProxyAppIDKey   = "dapr-app-id"
 	daprPackagePrefix   = "/dapr.proto"
 )
@@ -87,7 +87,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		// Add grpc-trace-bin header for all non-invocation api's
 		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
 			traceContextBinary := diagUtils.BinaryFromSpanContext(span.SpanContext())
-			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
+			grpc.SetHeader(ctx, metadata.Pairs(GRPCTraceContextKey, string(traceContextBinary)))
 		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
@@ -211,7 +211,7 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 	if md, ok = metadata.FromIncomingContext(ctx); !ok {
 		return sc, false
 	}
-	traceContext := md[grpcTraceContextKey]
+	traceContext := md[GRPCTraceContextKey]
 	if len(traceContext) > 0 {
 		sc, ok = diagUtils.SpanContextFromBinary([]byte(traceContext[0]))
 	} else {
@@ -219,11 +219,11 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 		// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
 		// TODO : Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827
-		traceContext = md[traceparentHeader]
+		traceContext = md[TraceparentHeader]
 		if len(traceContext) > 0 {
 			sc, ok = SpanContextFromW3CString(traceContext[0])
-			if ok && len(md[tracestateHeader]) > 0 {
-				ts := TraceStateFromW3CString(md[tracestateHeader][0])
+			if ok && len(md[TracestateHeader]) > 0 {
+				ts := TraceStateFromW3CString(md[TracestateHeader][0])
 				sc.WithTraceState(*ts)
 			}
 		}
@@ -238,7 +238,7 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 		return ctx
 	}
 
-	return metadata.AppendToOutgoingContext(ctx, grpcTraceContextKey, string(traceContextBinary))
+	return metadata.AppendToOutgoingContext(ctx, GRPCTraceContextKey, string(traceContextBinary))
 }
 
 func isInternalCalls(method string) bool {

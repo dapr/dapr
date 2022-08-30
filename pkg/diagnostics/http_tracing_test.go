@@ -135,7 +135,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 		sc := trace.SpanContext{}
 		SpanContextToHTTPHeaders(sc, req.Header.Set)
 
-		assert.Nil(t, req.Header.Peek(traceparentHeader))
+		assert.Nil(t, req.Header.Peek(TraceparentHeader))
 	})
 }
 
@@ -383,7 +383,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler(testRequestCtx)
 		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.Equal(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
+		assert.Equal(t, testRequestCtx.Response.Header.Peek(TraceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
 
 	t.Run("traceparent given in response", func(t *testing.T) {
@@ -393,14 +393,14 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 				"dapr-userdefined": "value",
 			},
 			map[string]string{
-				traceparentHeader: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-				tracestateHeader:  "xyz=t61pCWkhMzZ",
+				TraceparentHeader: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+				TracestateHeader:  "xyz=t61pCWkhMzZ",
 			},
 		)
 		handler(testRequestCtx)
 		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.NotEqual(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
+		assert.NotEqual(t, testRequestCtx.Response.Header.Peek(TraceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
 
 	t.Run("path is /v1.0/invoke/*", func(t *testing.T) {
