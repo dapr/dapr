@@ -24,9 +24,9 @@ import (
 	"strings"
 	"sync"
 
-	cl "actorload/pkg/actor/client"
-	http_client "actorload/pkg/actor/client/http"
-	actor_rt "actorload/pkg/actor/runtime"
+	cl "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client"
+	http_client "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client/http"
+	actor_rt "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/runtime"
 
 	"github.com/go-chi/chi"
 )
