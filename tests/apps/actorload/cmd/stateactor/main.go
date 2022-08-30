@@ -22,7 +22,7 @@ import (
 
 	serve "github.com/dapr/dapr/tests/apps/actorload/cmd/stateactor/service"
 	cl "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client"
-	http_client "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client/http"
+	httpClient "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client/http"
 	rt "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/runtime"
 )
 
@@ -45,20 +45,20 @@ type stateActor struct {
 
 func newStateActor() *stateActor {
 	return &stateActor{
-		actorClient: http_client.NewClient(),
+		actorClient: httpClient.NewClient(),
 	}
 }
 
 func (s *stateActor) setActorState(actorType, actorID string, data []byte, metadata map[string]string) ([]byte, error) {
-	upsertReq := http_client.TransactionalStateOperation{
+	upsertReq := httpClient.TransactionalStateOperation{
 		Operation: "upsert",
-		Request: http_client.TransactionalRequest{
+		Request: httpClient.TransactionalRequest{
 			Key:   actorStateName,
 			Value: string(data),
 		},
 	}
 
-	operations := []http_client.TransactionalStateOperation{upsertReq}
+	operations := []httpClient.TransactionalStateOperation{upsertReq}
 	serialized, err := json.Marshal(operations)
 	if err != nil {
 		return nil, err
