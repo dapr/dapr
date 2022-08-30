@@ -2047,9 +2047,11 @@ func TestGetMetadata(t *testing.T) {
 	})
 
 	fakeAPI := &api{
-		id:         "fakeAPI",
-		actor:      mockActors,
-		components: []componentsV1alpha.Component{fakeComponent},
+		id:    "fakeAPI",
+		actor: mockActors,
+		getComponentsFn: func() []componentsV1alpha.Component {
+			return []componentsV1alpha.Component{fakeComponent}
+		},
 		getComponentsCapabilitesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["testComponent"] = []string{"mock.feat.testComponent"}
