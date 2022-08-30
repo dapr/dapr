@@ -41,7 +41,7 @@ type GRPCConnector[TClient GRPCClient] struct {
 	Cancel context.CancelFunc
 	// Client is the proto client.
 	Client        TClient
-	pluggable     components.Pluggable
+	socketFactory func(string) string
 	conn          *grpc.ClientConn
 	clientFactory func(grpc.ClientConnInterface) TClient
 }
@@ -51,10 +51,18 @@ const (
 	defaultSocketFolder    = "/var/run"
 )
 
+// socketFactoryFor returns a socket factory that returns the socket that will be used for the given pluggable component.
+func socketFactoryFor(pc components.Pluggable) func(string) string {
+	socketPrefix := fmt.Sprintf("%s/dapr-%s.%s-%s", utils.GetEnvOrElse(DaprSocketFolderEnvVar, defaultSocketFolder), pc.Type, pc.Name, pc.Version)
+	return func(componentName string) string {
+		return fmt.Sprintf("%s-%s.sock", socketPrefix, componentName)
+	}
+}
+
 // socketPathFor returns a unique socket for the given component.
 // the socket path will be composed by the pluggable component, name, version and type plus the component name.
 func (g *GRPCConnector[TClient]) socketPathFor(componentName string) string {
-	return fmt.Sprintf("%s/dapr-%s.%s-%s-%s.sock", utils.GetEnvOrElse(DaprSocketFolderEnvVar, defaultSocketFolder), g.pluggable.Type, g.pluggable.Name, g.pluggable.Version, componentName)
+	return g.socketFactory(componentName)
 }
 
 // Dial opens a grpcConnection and creates a new client instance.
@@ -89,14 +97,19 @@ func (g *GRPCConnector[TClient]) Close() error {
 	return g.conn.Close()
 }
 
-// NewGRPCConnector creates a new grpc connector for the given client.
-func NewGRPCConnector[TClient GRPCClient](pc components.Pluggable, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
+// NewGRPCConnectorWithFactory creates a new grpc connector for the given client factory and socket factory.
+func NewGRPCConnectorWithFactory[TClient GRPCClient](socketFactory func(string) string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &GRPCConnector[TClient]{
 		Context:       ctx,
 		Cancel:        cancel,
-		pluggable:     pc,
+		socketFactory: socketFactory,
 		clientFactory: factory,
 	}
+}
+
+// NewGRPCConnector creates a new grpc connector for the given client.
+func NewGRPCConnector[TClient GRPCClient](pc components.Pluggable, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
+	return NewGRPCConnectorWithFactory(socketFactoryFor(pc), factory)
 }

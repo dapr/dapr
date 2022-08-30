@@ -409,16 +409,21 @@ func newStateStoreClient(cc grpc.ClientConnInterface) stateStoreClient {
 }
 
 // fromPluggable creates a new state store for the given pluggable component.
-func fromPluggable(_ logger.Logger, pc components.Pluggable) *grpcStateStore {
-	return &grpcStateStore{
-		features:      make([]state.Feature, 0),
-		GRPCConnector: pluggable.NewGRPCConnector(pc, newStateStoreClient),
-	}
+func fromPluggable(l logger.Logger, pc components.Pluggable) *grpcStateStore {
+	return NewGRPCStateStore(l, pluggable.NewGRPCConnector(pc, newStateStoreClient))
 }
 
 // newGRPCStateStore creates a new state store for the given pluggable component.
 func newGRPCStateStore(l logger.Logger, pc components.Pluggable) state.Store {
 	return fromPluggable(l, pc)
+}
+
+// NewGRPCStateStore creates a new GRPC state store using the given underlying connector.
+func NewGRPCStateStore(_ logger.Logger, connector *pluggable.GRPCConnector[stateStoreClient]) *grpcStateStore {
+	return &grpcStateStore{
+		features:      make([]state.Feature, 0),
+		GRPCConnector: connector,
+	}
 }
 
 func init() {

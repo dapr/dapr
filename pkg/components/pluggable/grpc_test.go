@@ -81,10 +81,10 @@ func TestGRPCConnector(t *testing.T) {
 			fakeFactoryCalled++
 			return clientFake
 		}
-		connector := NewGRPCConnector(fakePluggable, fakeFactory)
-
 		defer os.Clearenv()
 		os.Setenv(DaprSocketFolderEnvVar, "/tmp")
+
+		connector := NewGRPCConnector(fakePluggable, fakeFactory)
 
 		socket := connector.socketPathFor(fakeComponentName)
 
