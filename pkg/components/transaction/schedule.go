@@ -166,10 +166,10 @@ func RequestServiceInvoke(directMessaging messaging.DirectMessaging, bunchTransa
 	// Save headers to internal metadata
 	if bunchTransactionReqsParam.Header != nil {
 		req.WithFastHTTPHeaders(bunchTransactionReqsParam.Header)
+	} else {
+		req.WithFastHTTPHeaders(&fasthttp.RequestHeader{})
 	}
 
-	log.Debug(bunchTransactionReqsParam.TargetID)
-	log.Debug(req)
 	ctx := context.Background()
 	i := 1
 	for i <= retryTimes {
