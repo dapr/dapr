@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/modes"
@@ -61,7 +60,6 @@ type directMessaging struct {
 	grpcPort            int
 	namespace           string
 	resolver            nr.Resolver
-	tracingSpec         config.TracingSpec
 	hostAddress         string
 	hostName            string
 	maxRequestBodySize  int
@@ -77,45 +75,47 @@ type remoteApp struct {
 	address   string
 }
 
+// NewDirectMessaging contains the options for NewDirectMessaging.
+type NewDirectMessagingOpts struct {
+	AppID               string
+	Namespace           string
+	Port                int
+	Mode                modes.DaprMode
+	AppChannel          channel.AppChannel
+	ClientConnFn        messageClientConnection
+	Resolver            nr.Resolver
+	MaxRequestBodySize  int
+	Proxy               Proxy
+	ReadBufferSize      int
+	Resiliency          resiliency.Provider
+	IsResiliencyEnabled bool
+}
+
 // NewDirectMessaging returns a new direct messaging api.
-func NewDirectMessaging(
-	appID, namespace string,
-	port int, mode modes.DaprMode,
-	appChannel channel.AppChannel,
-	clientConnFn messageClientConnection,
-	resolver nr.Resolver,
-	tracingSpec config.TracingSpec,
-	maxRequestBodySize int,
-	proxy Proxy,
-	readBufferSize int,
-	streamRequestBody bool,
-	resiliency resiliency.Provider,
-	isResiliencyEnabled bool,
-) DirectMessaging {
+func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appChannel:          appChannel,
-		connectionCreatorFn: clientConnFn,
-		appID:               appID,
-		mode:                mode,
-		grpcPort:            port,
-		namespace:           namespace,
-		resolver:            resolver,
-		tracingSpec:         tracingSpec,
+		appID:               opts.AppID,
+		namespace:           opts.Namespace,
+		grpcPort:            opts.Port,
+		mode:                opts.Mode,
+		appChannel:          opts.AppChannel,
+		connectionCreatorFn: opts.ClientConnFn,
+		resolver:            opts.Resolver,
+		maxRequestBodySize:  opts.MaxRequestBodySize,
+		proxy:               opts.Proxy,
+		readBufferSize:      opts.ReadBufferSize,
+		resiliency:          opts.Resiliency,
+		isResiliencyEnabled: opts.IsResiliencyEnabled,
 		hostAddress:         hAddr,
 		hostName:            hName,
-		maxRequestBodySize:  maxRequestBodySize,
-		proxy:               proxy,
-		readBufferSize:      readBufferSize,
-		resiliency:          resiliency,
-		isResiliencyEnabled: isResiliencyEnabled,
 	}
 
-	if proxy != nil {
-		proxy.SetRemoteAppFn(dm.getRemoteApp)
-		proxy.SetTelemetryFn(dm.setContextSpan)
+	if dm.proxy != nil {
+		dm.proxy.SetRemoteAppFn(dm.getRemoteApp)
+		dm.proxy.SetTelemetryFn(dm.setContextSpan)
 	}
 
 	return dm
@@ -159,7 +159,7 @@ func (d *directMessaging) invokeWithRetry(
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
-		if d.resiliency.PolicyDefined(app.id, resiliency.Endpoint) == nil {
+		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
 			retriesExhaustedPath := false // Used to track final error state.
 			nullifyResponsePath := false  // Used to track final response state.
 			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)

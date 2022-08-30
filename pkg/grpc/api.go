@@ -135,8 +135,8 @@ type api struct {
 	accessControlList          *config.AccessControlList
 	appProtocol                string
 	extendedMetadata           sync.Map
-	components                 []componentsV1alpha.Component
 	shutdown                   func()
+	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
 }
@@ -315,6 +315,7 @@ func NewAPI(
 		accessControlList:          accessControlList,
 		appProtocol:                appProtocol,
 		shutdown:                   shutdown,
+		getComponentsFn:            getComponentsFn,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
 	}
@@ -592,7 +593,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	start := time.Now()
 	var bulkGet bool
 	var responses []state.BulkGetResponse
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) (rErr error) {
 		bulkGet, responses, rErr = store.BulkGet(reqs)
 		return rErr
@@ -699,7 +700,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	var getResponse *state.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = store.Get(&req)
@@ -784,7 +785,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
 		return store.BulkSet(reqs)
 	})
@@ -831,7 +832,7 @@ func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRe
 	req.Metadata = in.GetMetadata()
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	var resp *state.QueryResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = querier.Query(&req)
@@ -906,7 +907,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
 		return store.Delete(&req)
 	})
@@ -952,7 +953,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err = policy(func(ctx context.Context) error {
 		return store.BulkDelete(reqs)
 	})
@@ -994,7 +995,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.GetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(req)
@@ -1037,7 +1038,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.BulkGetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(req)
@@ -1287,7 +1288,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Statestore)
 	err := policy(func(ctx context.Context) error {
 		return transactionalStore.Multi(&state.TransactionalStateRequest{
 			Operations: operations,
@@ -1575,15 +1576,13 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
 	extendedMetadata := make(map[string]string)
-
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
 		extendedMetadata[key.(string)] = value.(string)
 		return true
 	})
 	extendedMetadata[daprRuntimeVersionKey] = a.daprRunTimeVersion
-	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
-	componentsCapabilities := a.getComponentsCapabilitesFn()
+
 	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
 	if a.actor != nil {
 		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {
@@ -1594,7 +1593,10 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		}
 	}
 
-	for _, comp := range a.components {
+	components := a.getComponentsFn()
+	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(components))
+	componentsCapabilities := a.getComponentsCapabilitesFn()
+	for _, comp := range components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
@@ -1603,12 +1605,14 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
+
 	response := &runtimev1pb.GetMetadataResponse{
 		Id:                   a.id,
 		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
 	}
+
 	return response, nil
 }
 
@@ -1666,7 +1670,7 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, in.StoreName, resiliency.Configuration)
 	var getResponse *configuration.GetResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		getResponse, rErr = store.Get(ctx, &req)
@@ -1682,14 +1686,13 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 		return &runtimev1pb.GetConfigurationResponse{}, err
 	}
 
-	cachedItems := make([]*commonv1pb.ConfigurationItem, 0)
-	for _, v := range getResponse.Items {
-		cachedItems = append(cachedItems, &commonv1pb.ConfigurationItem{
-			Key:      v.Key,
+	cachedItems := make(map[string]*commonv1pb.ConfigurationItem, len(getResponse.Items))
+	for k, v := range getResponse.Items {
+		cachedItems[k] = &commonv1pb.ConfigurationItem{
 			Metadata: v.Metadata,
 			Value:    v.Value,
 			Version:  v.Version,
-		})
+		}
 	}
 
 	response := &runtimev1pb.GetConfigurationResponse{
@@ -1706,14 +1709,13 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
-	items := make([]*commonv1pb.ConfigurationItem, 0)
-	for _, v := range e.Items {
-		items = append(items, &commonv1pb.ConfigurationItem{
-			Key:      v.Key,
+	items := make(map[string]*commonv1pb.ConfigurationItem, len(e.Items))
+	for k, v := range e.Items {
+		items[k] = &commonv1pb.ConfigurationItem{
 			Value:    v.Value,
 			Version:  v.Version,
 			Metadata: v.Metadata,
-		})
+		}
 	}
 
 	if err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
@@ -1756,8 +1758,10 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		}
 
 		items := resp.GetItems()
-		for _, item := range items {
-			subscribeKeys = append(subscribeKeys, item.Key)
+		for key := range items {
+			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, key)]; !ok {
+				subscribeKeys = append(subscribeKeys, key)
+			}
 		}
 	} else {
 		subscribeKeys = append(subscribeKeys, request.Keys...)
@@ -1776,7 +1780,7 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(newCtx, request.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(newCtx, request.StoreName, resiliency.Configuration)
 	var id string
 	err = policy(func(ctx context.Context) (rErr error) {
 		id, rErr = store.Subscribe(ctx, req, handler.updateEventHandler)
@@ -1823,7 +1827,7 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	delete(a.configurationSubscribe, subscribeID)
 	close(stop)
 
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, request.StoreName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, request.StoreName, resiliency.Configuration)
 
 	start := time.Now()
 	err = policy(func(ctx context.Context) error {

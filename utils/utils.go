@@ -124,10 +124,11 @@ func ParseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.Volu
 	return volumeMounts
 }
 
-// StringSliceContains return true if an array contains the "str" string.
-func StringSliceContains(needle string, haystack []string) bool {
-	for _, item := range haystack {
-		if item == needle {
+// Contains reports whether v is present in s.
+// Similar to https://pkg.go.dev/golang.org/x/exp/slices#Contains.
+func Contains[T comparable](s []T, v T) bool {
+	for _, e := range s {
+		if e == v {
 			return true
 		}
 	}

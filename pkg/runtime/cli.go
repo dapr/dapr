@@ -72,7 +72,6 @@ func FromFlags() (*DaprRuntime, error) {
 	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", DefaultMaxRequestBodySize, "Increasing max size of request body in MB to handle uploading of big files")
 	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
 	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers")
-	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
 	daprGracefulShutdownSeconds := flag.Int("dapr-graceful-shutdown-seconds", int(DefaultGracefulShutdownDuration/time.Second), "Graceful shutdown time in seconds")
 	enableAPILogging := flag.Bool("enable-api-logging", false, "Enable API logging for API calls")
 	disableBuiltinK8sSecretStore := flag.Bool("disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")
@@ -174,11 +173,11 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if applicationPort == daprHTTP {
-		return nil, fmt.Errorf("the 'dapr-http-port' argument value %q conflicts with 'app-port'", daprHTTP)
+		return nil, fmt.Errorf("the 'dapr-http-port' argument value %d conflicts with 'app-port'", daprHTTP)
 	}
 
 	if applicationPort == daprAPIGRPC {
-		return nil, fmt.Errorf("the 'dapr-grpc-port' argument value %q conflicts with 'app-port'", daprAPIGRPC)
+		return nil, fmt.Errorf("the 'dapr-grpc-port' argument value %d conflicts with 'app-port'", daprAPIGRPC)
 	}
 
 	var maxRequestBodySize int
@@ -272,7 +271,6 @@ func FromFlags() (*DaprRuntime, error) {
 		MaxRequestBodySize:           maxRequestBodySize,
 		UnixDomainSocket:             *unixDomainSocket,
 		ReadBufferSize:               readBufferSize,
-		StreamRequestBody:            *daprHTTPStreamRequestBody,
 		GracefulShutdownDuration:     gracefulShutdownDuration,
 		EnableAPILogging:             *enableAPILogging,
 		DisableBuiltinK8sSecretStore: *disableBuiltinK8sSecretStore,
