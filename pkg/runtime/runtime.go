@@ -70,6 +70,7 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 

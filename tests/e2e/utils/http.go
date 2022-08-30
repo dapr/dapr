@@ -210,7 +210,7 @@ func HTTPDeleteWithBodyAndStatus(url string, data []byte) ([]byte, int, error) {
 	}
 	defer res.Body.Close()
 
-	body, err := extractBody(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, 0, err
 	}
