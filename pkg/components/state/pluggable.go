@@ -296,8 +296,6 @@ func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 	}
 	var dataBytes []byte
 	switch reqValue := req.Value.(type) {
-	case string:
-		dataBytes = []byte(reqValue)
 	case []byte:
 		dataBytes = reqValue
 	default:

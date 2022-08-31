@@ -16,6 +16,7 @@ package state
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -178,6 +179,11 @@ func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err er
 	}, nil
 }
 
+// wrapString into quotes
+func wrapString(str string) string {
+	return fmt.Sprintf("\"%s\"", str)
+}
+
 func TestComponentCalls(t *testing.T) {
 	t.Run("features should return the component features'", func(t *testing.T) {
 		stStore, cleanup, err := getStateStore(&server{})
@@ -303,7 +309,7 @@ func TestComponentCalls(t *testing.T) {
 		svc := &server{
 			onSetCalled: func(req *proto.SetRequest) {
 				assert.Equal(t, req.Key, fakeKey)
-				assert.Equal(t, req.Value, []byte(fakeData))
+				assert.Equal(t, req.Value, []byte(wrapString(fakeData)))
 			},
 			setErr: errors.New("fake-set-err"),
 		}
@@ -326,7 +332,7 @@ func TestComponentCalls(t *testing.T) {
 		svc := &server{
 			onSetCalled: func(req *proto.SetRequest) {
 				assert.Equal(t, req.Key, fakeKey)
-				assert.Equal(t, req.Value, []byte(fakeData))
+				assert.Equal(t, req.Value, []byte(wrapString(fakeData)))
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
@@ -725,6 +731,35 @@ func TestMappers(t *testing.T) {
 		req, err := toSetRequest(nil)
 		require.NoError(t, err)
 		assert.Nil(t, req)
+	})
+
+	t.Run("toSetRequest should wrap string into quotes", func(t *testing.T) {
+		const fakeKey, fakePropValue = "fakeKey", "fakePropValue"
+		fakeEtag := "fakeEtag"
+		for _, fakeValue := range []any{"fakeStrValue", []byte(`fakeByteValue`), make(map[string]string)} {
+			req, err := toSetRequest(&state.SetRequest{
+				Key:   fakeKey,
+				Value: fakeValue,
+				ETag:  &fakeEtag,
+				Metadata: map[string]string{
+					fakeKey: fakePropValue,
+				},
+				Options: state.SetStateOption{
+					Concurrency: "CONCURRENCY_LAST_WRITE",
+					Consistency: "CONSISTENCY_EVENTUAL",
+				},
+			})
+			require.NoError(t, err)
+			assert.NotNil(t, req)
+			assert.Equal(t, req.Key, fakeKey)
+			assert.NotNil(t, req.Value)
+			if v, ok := fakeValue.(string); ok {
+				assert.Equal(t, string(req.Value), wrapString(v))
+			}
+			assert.Equal(t, req.Metadata[fakeKey], fakePropValue)
+			assert.Equal(t, req.Options.Concurrency, v1.StateOptions_CONCURRENCY_LAST_WRITE)
+			assert.Equal(t, req.Options.Consistency, v1.StateOptions_CONSISTENCY_EVENTUAL)
+		}
 	})
 
 	t.Run("toSetRequest accept and parse values as []byte", func(t *testing.T) {
