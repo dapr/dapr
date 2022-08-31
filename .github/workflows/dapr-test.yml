@@ -151,20 +151,17 @@ jobs:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
     strategy:
-      fail-fast: false
-      matrix:
-        dapr-linux-amd64:
-          os: ubuntu-latest
-          target_os: linux
-          target_arch: amd64
-        dapr-linux-arm64:
-          os: ubuntu-latest
-          target_os: linux
-          target_arch: arm64
-        dapr-windows-amd64:
-          os: windows-2019
-          target_os: windows
-          target_arch: amd64
+        os: [ubuntu-latest, windows-2019]
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm64
+          - os: windows-2019
+            target_os: windows
+            target_arch: amd64
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -316,18 +313,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dapr-linux-amd64:
-          os: ubuntu-latest
-          target_os: linux
-          target_arch: amd64
-        dapr-linux-arm64:
-          os: ubuntu-latest
-          target_os: linux
-          target_arch: arm64
-        dapr-windows-amd64:
-          os: windows-2019
-          target_os: windows
-          target_arch: amd64
+        os: [ubuntu-latest, windows-2019]
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm64
+          - os: windows-2019
+            target_os: windows
+            target_arch: amd64
     steps:
       - name: Set up log paths
         run: |
