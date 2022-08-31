@@ -472,7 +472,15 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
 
-	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
+	// Retry on stream error.
+	err = backoff.Retry(func() error {
+		errr := a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
+		if errr != nil {
+			log.Errorf("failed to start API gRPC server, retrying: %s", errr)
+			return errr
+		}
+		return nil
+	}, backoff.NewExponentialBackOff())
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
