@@ -151,6 +151,8 @@ jobs:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
     strategy:
+      fail-fast: false
+      matrix:
         os: [ubuntu-latest, windows-2019]
         include:
           - os: ubuntu-latest
