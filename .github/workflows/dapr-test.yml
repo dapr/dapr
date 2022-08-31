@@ -108,8 +108,8 @@ jobs:
           REGION1=${REGIONS[$REGIONS_IDX]}
           REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
           REGION2=${REGIONS[$REGIONS_IDX]}
-          echo "Deploying to Azure regions: Linux=${REGION1} Windows=${REGION2}"
-
+          REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
+          REGION3=${REGIONS[$REGIONS_IDX]}
           # Tags
           DATE_TAG=$(date --iso-8601=seconds)
           echo "Tags: date=${DATE_TAG}"
@@ -126,6 +126,7 @@ jobs:
                 namePrefix="${{ env.TEST_PREFIX }}" \
                 location1=${REGION1} \
                 location2=${REGION2} \
+                location3=${REGION3} \
                 dateTag="${DATE_TAG}" \
                 diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
                 diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
@@ -148,13 +149,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2019]
-        target_arch: [amd64]
-        include:
-          - os: ubuntu-latest
-            target_os: linux
-          - os: windows-2019
-            target_os: windows
+        'dapr_linux_amd64':
+          os: ubuntu-latest
+          target_os: linux\
+          target_arch: amd64
+        'dapr_linux_arm64':
+          os: ubuntu-latest
+          target_os: linux
+          target_arch: arm64
+        'dapr_windows_amd64':
+          os: windows-2019
+          target_os: windows
+          target_arch: amd64
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -306,8 +312,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target_os: [linux, windows]
-        target_arch: [amd64]
+        'dapr_linux_amd64':
+          os: ubuntu-latest
+          target_os: linux\
+          target_arch: amd64
+        'dapr_linux_arm64':
+          os: ubuntu-latest
+          target_os: linux
+          target_arch: arm64
+        'dapr_windows_amd64':
+          os: windows-2019
+          target_os: windows
+          target_arch: amd64]
     steps:
       - name: Set up log paths
         run: |

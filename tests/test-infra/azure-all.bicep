@@ -26,6 +26,9 @@ param location1 string
 @description('The location of the second set of resources')
 param location2 string
 
+@description('The location of the third set of resources')
+param location3 string
+
 @description('Optional value for the date tag for resource groups')
 param dateTag string = ''
 
@@ -56,6 +59,7 @@ module linuxCluster 'azure.bicep' = {
     namePrefix: '${namePrefix}l'
     location: location1
     enableWindows: false
+    enableArm : false
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
     diagStorageResourceId: diagStorageResourceId
     enableCosmosDB: enableCosmosDB
@@ -78,6 +82,30 @@ module windowsCluster 'azure.bicep' = {
     namePrefix: '${namePrefix}w'
     location: location2
     enableWindows: true
+    enableArm64 : false
+    diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
+    diagStorageResourceId: diagStorageResourceId
+    enableCosmosDB: enableCosmosDB
+    enableServiceBus: enableServiceBus
+  }
+}
+
+// Deploy the Arm cluster in the third location
+resource linuxResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
+  name: 'Dapr-E2E-${namePrefix}l'
+  location: location3
+  tags: dateTag != '' ? {
+    date: dateTag
+  } : {}
+}
+module armCluster 'azure.bicep' = {
+  name: 'armCluster'
+  scope: ArmResources
+  params: {
+    namePrefix: '${namePrefix}l'
+    location: location1
+    enableWindows: false
+    enableArm64 : false
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
     diagStorageResourceId: diagStorageResourceId
     enableCosmosDB: enableCosmosDB

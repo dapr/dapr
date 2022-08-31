@@ -17,6 +17,9 @@ param namePrefix string
 @description('The location of the resources')
 param location string = resourceGroup().location
 
+@description('If enabled, add a Arm64 pool')
+param enableArm bool = false
+
 @description('If enabled, add a Windows pool')
 param enableWindows bool = false
 
@@ -25,6 +28,9 @@ param linuxVMSize string = 'Standard_DS2_v2'
 
 @description('VM size to use for Windows nodes, if enabled')
 param windowsVMSize string = 'Standard_DS3_v2'
+
+@description('VM size to use for Arm64 nodes if enabled')
+param armVMSize string = 'Standard_D2ps_v5'
 
 @description('If set, sends certain diagnostic logs to Log Analytics')
 param diagLogAnalyticsWorkspaceResourceId string = ''
@@ -126,7 +132,33 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           vnetSubnetID: aksVNet::defaultSubnet.id
           tags: {}
         }
-      ] : [])
+      ],
+      enableArm ? [
+        {
+          name: 'armpol'
+          osDiskSizeGB: osDiskSizeGB
+          osDiskType: 'Ephemeral'
+          enableAutoScaling: false
+          count: 2
+          vmSize: armVMSize
+          osType: 'Linux'
+          type: 'VirtualMachineScaleSets'
+          mode: 'User'
+          maxPods: 110
+          availabilityZones: [
+            '1'
+            '2'
+            '3'
+          ]
+          nodeLabels: {}
+          nodeTaints: []
+          enableNodePublicIP: false
+          vnetSubnetID: enableWindows ? aksVNet::defaultSubnet.id : null
+          tags: {}
+        }
+      ]
+      
+       : [])
     networkProfile: union({
         loadBalancerSku: 'standard'
       }, enableWindows ? networkProfileWindows : networkProfileLinux)
