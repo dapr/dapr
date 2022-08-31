@@ -2943,7 +2943,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 }
 
 func TestPubsubLifecycle(t *testing.T) {
-	rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.pubSubRegistry = pubsubLoader.NewRegistry()
 	defer func() {
 		if rt != nil {

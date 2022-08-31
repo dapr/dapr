@@ -1675,6 +1675,8 @@ func (a *DaprRuntime) getSubscriptions() (map[string]runtimePubsub.Subscription,
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		list, err = runtimePubsub.GetSubscriptionsGRPC(client, log, a.resiliency, resiliencyEnabled)
+	} else {
+		return nil, fmt.Errorf("invalid app protocol: %v", a.runtimeConfig.ApplicationProtocol)
 	}
 	if err != nil {
 		return nil, err
