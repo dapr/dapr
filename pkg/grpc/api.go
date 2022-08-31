@@ -537,9 +537,20 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
 	req := &bindings.InvokeRequest{
-		Metadata:  in.Metadata,
+		Metadata:  make(map[string]string),
 		Operation: bindings.OperationKind(in.Operation),
 	}
+	for key, val := range in.Metadata {
+		req.Metadata[key] = val
+	}
+
+	// Allow for distributed tracing by passing context metadata.
+	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		for key, val := range incomingMD {
+			req.Metadata[key] = val[0]
+		}
+	}
+
 	if in.Data != nil {
 		req.Data = in.Data
 	}
