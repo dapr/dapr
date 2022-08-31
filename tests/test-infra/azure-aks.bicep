@@ -30,7 +30,7 @@ param linuxVMSize string = 'Standard_DS2_v2'
 param windowsVMSize string = 'Standard_DS3_v2'
 
 @description('VM size to use for Arm64 nodes if enabled')
-param armVMSize string = 'Standard_D2ps_v5'
+param armVMSize string = 'Standard_D4pds_v5'
 
 @description('If set, sends certain diagnostic logs to Log Analytics')
 param diagLogAnalyticsWorkspaceResourceId string = ''
@@ -132,8 +132,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           vnetSubnetID: aksVNet::defaultSubnet.id
           tags: {}
         }
-      ],
-      enableArm ? [
+      ] : [] , enableArm ? [
         {
           name: 'armpol'
           osDiskSizeGB: osDiskSizeGB
@@ -156,9 +155,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
           vnetSubnetID: enableWindows ? aksVNet::defaultSubnet.id : null
           tags: {}
         }
-      ]
-      
-       : [])
+      ] : [])
     networkProfile: union({
         loadBalancerSku: 'standard'
       }, enableWindows ? networkProfileWindows : networkProfileLinux)
