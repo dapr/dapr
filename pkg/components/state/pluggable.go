@@ -142,11 +142,12 @@ func (ss *grpcStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGet
 	items := make([]state.BulkGetResponse, len(bulkGetResponse.Items))
 	for idx, resp := range bulkGetResponse.Items {
 		items[idx] = state.BulkGetResponse{
-			Key:      resp.GetKey(),
-			Data:     resp.GetData(),
-			ETag:     fromETagResponse(resp.GetEtag()),
-			Metadata: resp.GetMetadata(),
-			Error:    resp.Error,
+			Key:         resp.GetKey(),
+			Data:        resp.GetData(),
+			ETag:        fromETagResponse(resp.GetEtag()),
+			Metadata:    resp.GetMetadata(),
+			Error:       resp.Error,
+			ContentType: strNilIfEmpty(resp.ContentType),
 		}
 	}
 	return bulkGetResponse.Got, items, nil
@@ -255,13 +256,11 @@ func fromQueryResponse(resp *proto.QueryResponse) *state.QueryResponse {
 
 	for idx, item := range resp.Items {
 		itemIdx := state.QueryItem{
-			Key:   item.Key,
-			Data:  item.Data,
-			ETag:  fromETagResponse(item.Etag),
-			Error: item.Error,
-		}
-		if item.ContentType != "" {
-			itemIdx.ContentType = &item.ContentType
+			Key:         item.Key,
+			Data:        item.Data,
+			ETag:        fromETagResponse(item.Etag),
+			Error:       item.Error,
+			ContentType: strNilIfEmpty(item.ContentType),
 		}
 
 		results[idx] = itemIdx
@@ -311,17 +310,13 @@ func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 			return nil, err
 		}
 	}
-	var contentType string
-	if req.ContentType != nil {
-		contentType = *req.ContentType
-	}
 
 	return &proto.SetRequest{
 		Key:         req.GetKey(),
 		Value:       dataBytes,
 		Etag:        toETagRequest(req.ETag),
 		Metadata:    req.GetMetadata(),
-		ContentType: contentType,
+		ContentType: strValueIfNotNil(req.ContentType),
 		Options: &v1.StateOptions{
 			Concurrency: concurrencyOf(req.Options.Concurrency),
 			Consistency: consistencyOf(req.Options.Consistency),
@@ -331,9 +326,10 @@ func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 
 func fromGetResponse(resp *proto.GetResponse) *state.GetResponse {
 	return &state.GetResponse{
-		Data:     resp.GetData(),
-		ETag:     fromETagResponse(resp.GetEtag()),
-		Metadata: resp.GetMetadata(),
+		Data:        resp.GetData(),
+		ETag:        fromETagResponse(resp.GetEtag()),
+		Metadata:    resp.GetMetadata(),
+		ContentType: strNilIfEmpty(resp.ContentType),
 	}
 }
 
@@ -402,6 +398,22 @@ type stateStoreClient struct {
 	proto.StateStoreClient
 	proto.TransactionalStateStoreClient
 	proto.QueriableStateStoreClient
+}
+
+// strNilIfEmpty returns nil if string is empty
+func strNilIfEmpty(str string) *string {
+	if str == "" {
+		return nil
+	}
+	return &str
+}
+
+// strValueIfNotNil returns the string value if not nil
+func strValueIfNotNil(str *string) string {
+	if str != nil {
+		return *str
+	}
+	return ""
 }
 
 // newStateStoreClient creates a new stateStore client instance.

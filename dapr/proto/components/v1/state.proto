@@ -157,6 +157,8 @@ message GetResponse {
   dapr.proto.common.v1.Etag etag = 2;
   // Metadata related to the response.
   map<string, string> metadata = 3;
+  // The response data contenttype
+  string content_type = 4;
 }
 
 message DeleteRequest {
@@ -178,6 +180,7 @@ message SetRequest {
   dapr.proto.common.v1.Etag etag = 3;
   // The request metadata.
   map<string, string> metadata = 4;
+  // The Set request options.
   dapr.proto.common.v1.StateOptions options = 5;
   // The data contenttype
   string content_type = 6;
@@ -202,6 +205,8 @@ message BulkStateItem {
   string error = 4;
   // The State Item metadata.
   map<string, string> metadata = 5;
+  // The data contenttype
+  string content_type = 6;
 }
 
 message BulkGetResponse {
