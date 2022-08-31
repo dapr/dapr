@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dapr/kit/ptr"
 	"github.com/pkg/errors"
 
 	"github.com/dapr/kit/logger"
@@ -46,6 +47,7 @@ import (
 // FromFlags parses command flags and returns DaprRuntime instance.
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
+	namespace := flag.String("namespace", "", "micrologic namespace, default empty. and it also be set by env `NAMESPACE`")
 	daprHTTPPort := flag.String("dapr-http-port", strconv.Itoa(DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
 	daprPublicPort := flag.String("dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
@@ -247,8 +249,12 @@ func FromFlags() (*DaprRuntime, error) {
 		healthThreshold = int32(*appHealthThreshold)
 	}
 
+	if *namespace == "" {
+		namespace = ptr.Of(os.Getenv("NAMESPACE"))
+	}
 	runtimeConfig := NewRuntimeConfig(NewRuntimeConfigOpts{
 		ID:                           *appID,
+		Namespace:                    *namespace,
 		PlacementAddresses:           placementAddresses,
 		controlPlaneAddress:          *controlPlaneAddress,
 		AllowedOrigins:               *allowedOrigins,
@@ -326,15 +332,13 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	var accessControlList *daprGlobalConfig.AccessControlList
-	var namespace string
 	var podName string
 
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			namespace = os.Getenv("NAMESPACE")
 			podName = os.Getenv("POD_NAME")
-			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, namespace, podName, operatorClient)
+			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(*config, runtimeConfig.Namespace, podName, operatorClient)
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(*config)
 		}
@@ -361,8 +365,7 @@ func FromFlags() (*DaprRuntime, error) {
 		var resiliencyConfigs []*resiliencyV1alpha.Resiliency
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			namespace = os.Getenv("NAMESPACE")
-			resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, namespace, operatorClient)
+			resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, *appID, runtimeConfig.Namespace, operatorClient)
 		case modes.StandaloneMode:
 			resiliencyConfigs = resiliencyConfig.LoadStandaloneResiliency(log, *appID, *componentsPath)
 		}
