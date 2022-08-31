@@ -30,7 +30,11 @@ on:
   # Dispatch on external events
   repository_dispatch:
     types: [e2e-test]
-
+  pull_request:
+    branches:
+      - master
+      - release-*
+      - feature/*
 env:
   # Version of Go
   GOVER: "1.19"
