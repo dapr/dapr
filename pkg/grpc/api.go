@@ -1502,7 +1502,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 			ActorID:          in.ActorId,
 			InvokeMethodName: in.Method,
 			Verb:             string(req.Message().GetHttpExtension().GetVerb()),
-			QueryArgs:        req.Message().HttpExtension.Querystring,
+			QueryArgs:        "",
 			Data:             in.Data,
 			ContentType:      req.Message().ContentType,
 			ActorType:        in.ActorType,
