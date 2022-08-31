@@ -22,10 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dapr/kit/ptr"
 	"github.com/pkg/errors"
-
-	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/acl"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -42,6 +39,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
