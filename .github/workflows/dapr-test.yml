@@ -153,15 +153,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        'dapr_linux_amd64':
+        dapr_linux_amd64:
           os: ubuntu-latest
-          target_os: linux\
+          target_os: linux
           target_arch: amd64
-        'dapr_linux_arm64':
+        dapr_linux_arm64:
           os: ubuntu-latest
           target_os: linux
           target_arch: arm64
-        'dapr_windows_amd64':
+        dapr_windows_amd64:
           os: windows-2019
           target_os: windows
           target_arch: amd64
@@ -316,18 +316,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        'dapr_linux_amd64':
+        dapr_linux_amd64:
           os: ubuntu-latest
-          target_os: linux\
+          target_os: linux
           target_arch: amd64
-        'dapr_linux_arm64':
+        dapr_linux_arm64:
           os: ubuntu-latest
           target_os: linux
           target_arch: arm64
-        'dapr_windows_amd64':
+        dapr_windows_amd64:
           os: windows-2019
           target_os: windows
-          target_arch: amd64]
+          target_arch: amd64
     steps:
       - name: Set up log paths
         run: |
