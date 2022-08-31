@@ -154,17 +154,17 @@ jobs:
       fail-fast: false
       matrix:
         dapr_linux_amd64:
-          os: ubuntu-latest
-          target_os: linux
-          target_arch: amd64
+          os: 'ubuntu-latest'
+          target_os: 'linux'
+          target_arch: 'amd64'
         dapr_linux_arm64:
-          os: ubuntu-latest
-          target_os: linux
-          target_arch: arm64
+          os: 'ubuntu-latest'
+          target_os: 'linux'
+          target_arch: 'arm64'
         dapr_windows_amd64:
-          os: windows-2019
-          target_os: windows
-          target_arch: amd64
+          os: 'windows-2019'
+          target_os: 'windows'
+          target_arch: 'amd64'
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
