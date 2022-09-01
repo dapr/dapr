@@ -514,6 +514,15 @@ func TestActorFeatures(t *testing.T) {
 		err := tr.Platform.Restart(appName)
 		require.NoError(t, err)
 
+		// update externalURL after app restarted
+		newExternalURL := tr.Platform.AcquireAppExternalURL(appName)
+		require.NotEmpty(t, newExternalURL, "external URL must not be empty!")
+		if newExternalURL != externalURL {
+			log.Printf("externalURL changed from %s to %s after %s app restarted", externalURL, newExternalURL, appName)
+			externalURL = newExternalURL
+			logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
+		}
+
 		err = backoff.Retry(func() error {
 			time.Sleep(30 * time.Second)
 			resp, errb := httpGet(logsURL)
