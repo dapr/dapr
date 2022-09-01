@@ -457,9 +457,15 @@ func (p *ActorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 }
 
 // WaitUntilPlacementTableIsReady waits until placement table is until table lock is unlocked.
-func (p *ActorPlacement) WaitUntilPlacementTableIsReady() {
-	if p.tableIsBlocked.Load() {
-		<-p.unblockSignal
+func (p *ActorPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) error {
+	if !p.tableIsBlocked.Load() {
+		return nil
+	}
+	select {
+	case <-p.unblockSignal:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

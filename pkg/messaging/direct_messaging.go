@@ -15,6 +15,8 @@ package messaging
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -25,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/kit/logger"
@@ -38,6 +41,7 @@ import (
 	"github.com/dapr/dapr/utils"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
@@ -160,11 +164,18 @@ func (d *directMessaging) invokeWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if d.isResiliencyEnabled {
 		if d.resiliency.GetPolicy(app.id, &resiliency.EndpointPolicy{}) == nil {
-			retriesExhaustedPath := false // Used to track final error state.
-			nullifyResponsePath := false  // Used to track final response state.
+			var (
+				resp                 *invokev1.InvokeMethodResponse
+				retriesExhaustedPath bool // Used to track final error state.
+				nullifyResponsePath  bool // Used to track final response state.
+			)
 			policy := d.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInServiceRetries)
-			var resp *invokev1.InvokeMethodResponse
+			// This policy has built-in retries so enable replay in the request
+			req.WithReplay(true)
 			err := policy(func(ctx context.Context) (rErr error) {
+				if resp != nil {
+					resp.Close()
+				}
 				retriesExhaustedPath = false
 				resp, rErr = fn(ctx, app.id, app.namespace, app.address, req)
 				if rErr == nil {
@@ -190,6 +201,9 @@ func (d *directMessaging) invokeWithRetry(
 			}
 
 			if nullifyResponsePath {
+				if resp != nil {
+					resp.Close()
+				}
 				resp = nil
 			}
 
@@ -197,8 +211,18 @@ func (d *directMessaging) invokeWithRetry(
 		}
 		return fn(ctx, app.id, app.namespace, app.address, req)
 	}
+
+	// We need to enable replaying because the request may be attempted again in this path
+	req.WithReplay(true)
+	var (
+		resp *invokev1.InvokeMethodResponse
+		err  error
+	)
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(ctx, app.id, app.namespace, app.address, req)
+		if resp != nil {
+			resp.Close()
+		}
+		resp, err = fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {
 			return resp, nil
 		}
@@ -249,15 +273,165 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
-	var opts []grpc.CallOption
-	opts = append(opts, grpc.MaxCallRecvMsgSize(d.maxRequestBodySize*1024*1024), grpc.MaxCallSendMsgSize(d.maxRequestBodySize*1024*1024))
+	opts := []grpc.CallOption{
+		grpc.MaxCallRecvMsgSize(d.maxRequestBodySize * 1024 * 1024),
+		grpc.MaxCallSendMsgSize(d.maxRequestBodySize * 1024 * 1024),
+	}
 
-	resp, err := clientV1.CallLocal(ctx, req.Proto(), opts...)
+	// If the request contains a message in the body, send an unary request
+	if req.HasMessageData() {
+		var resp *internalv1pb.InternalInvokeResponse
+		resp, err = clientV1.CallLocal(ctx, req.Proto(), opts...)
+		if err != nil {
+			return nil, err
+		}
+
+		// Short-circuit
+		return invokev1.InternalInvokeResponse(resp)
+	}
+
+	// Send the request using a stream
+	stream, err := clientV1.CallLocalStream(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
+	r := req.RawData()
+	reqProto := req.Proto()
+	buf := make([]byte, 4096) // 4KB buffer
+	var (
+		proto *internalv1pb.InternalInvokeRequestStream
+		n     int
+	)
+	for {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 
-	return invokev1.InternalInvokeResponse(resp)
+		proto = &internalv1pb.InternalInvokeRequestStream{
+			Payload: &commonv1pb.StreamPayload{},
+		}
+
+		// First message only
+		if reqProto != nil {
+			proto.Request = reqProto
+			reqProto = nil
+		}
+
+		if r != nil {
+			n, err = r.Read(buf)
+			if err == io.EOF {
+				proto.Payload.Complete = true
+				err = nil
+			} else if err != nil {
+				return nil, err
+			}
+			if n > 0 {
+				proto.Payload.Data = &anypb.Any{
+					Value: buf[:n],
+				}
+			}
+		} else {
+			proto.Payload.Complete = true
+		}
+		err = stream.Send(proto)
+		if err != nil {
+			return nil, err
+		}
+
+		// Stop with the last chunk
+		if proto.Payload.Complete {
+			break
+		}
+	}
+
+	// Read the first chunk of the response
+	chunk := &internalv1pb.InternalInvokeResponseStream{}
+	err = stream.RecvMsg(chunk)
+	if err != nil {
+		return nil, err
+	}
+	if chunk.Response == nil || chunk.Response.Status == nil || chunk.Response.Headers == nil {
+		return nil, errors.New("response does not contain the required fields in the leading chunk")
+	}
+	pr, pw := io.Pipe()
+	res, err := invokev1.InternalInvokeResponse(chunk.Response)
+	if err != nil {
+		return nil, err
+	}
+	var ct string
+	if chunk.Response.Message != nil {
+		ct = chunk.Response.Message.ContentType
+	}
+	res.WithRawData(pr, ct)
+
+	// Read the response into the stream in the background
+	go func() {
+		var (
+			done    bool
+			readErr error
+		)
+		for {
+			if ctx.Err() != nil {
+				pw.CloseWithError(ctx.Err())
+				return
+			}
+
+			done, readErr = ReadChunk(chunk, pw)
+			if readErr != nil {
+				pw.CloseWithError(readErr)
+				return
+			}
+
+			if done {
+				break
+			}
+
+			readErr = stream.RecvMsg(chunk)
+			if err != nil {
+				pw.CloseWithError(readErr)
+				return
+			}
+
+			if chunk.Response != nil && (chunk.Response.Status != nil || chunk.Response.Headers != nil || chunk.Response.Message != nil) {
+				pw.CloseWithError(errors.New("response metadata found in non-leading chunk"))
+				return
+			}
+		}
+
+		pw.Close()
+	}()
+
+	return res, nil
+}
+
+// Interface for *internalv1pb.InternalInvokeResponseStream and *internalv1pb.InternalInvokeRequestStream
+type chunkWithPayload interface {
+	GetPayload() *commonv1pb.StreamPayload
+}
+
+// ReadChunk reads a chunk of data from an InternalInvokeResponseStream or InternalInvokeRequestStream object
+func ReadChunk(chunk chunkWithPayload, out io.Writer) (done bool, err error) {
+	payload := chunk.GetPayload()
+	if payload == nil {
+		return false, nil
+	}
+
+	if payload.Complete {
+		done = true
+	}
+
+	if payload.Data != nil && len(payload.Data.Value) > 0 {
+		var n int
+		n, err = out.Write(payload.Data.Value)
+		if err != nil {
+			return false, err
+		}
+		if n != len(payload.Data.Value) {
+			return false, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.Data.Value))
+		}
+	}
+
+	return done, nil
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {

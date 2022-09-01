@@ -20,6 +20,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -33,6 +34,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -150,6 +152,12 @@ func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalIn
 	return resp.Proto(), nil
 }
 
+func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
+	resp.WithRawData(ExtractSpanContext(stream.Context()), "text/plains")
+	return nil
+}
+
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
 	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
@@ -200,9 +208,9 @@ func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Re
 	return &emptypb.Empty{}, nil
 }
 
-func ExtractSpanContext(ctx context.Context) []byte {
+func ExtractSpanContext(ctx context.Context) io.ReadCloser {
 	span := diagUtils.SpanFromContext(ctx)
-	return []byte(SerializeSpanContext(span.SpanContext()))
+	return io.NopCloser(strings.NewReader(SerializeSpanContext(span.SpanContext())))
 }
 
 // SerializeSpanContext serializes a span context into a simple string.
@@ -316,8 +324,10 @@ func TestCallActorWithTracing(t *testing.T) {
 
 	client := internalv1pb.NewServiceInvocationClient(clientConn)
 
-	request := invokev1.NewInvokeMethodRequest("method")
-	request.WithActor("test-actor", "actor-1")
+	request := invokev1.
+		NewInvokeMethodRequest("method").
+		WithActor("test-actor", "actor-1")
+	defer request.Close()
 
 	resp, err := client.CallActor(context.Background(), request.Proto())
 	assert.NoError(t, err)
@@ -355,9 +365,10 @@ func TestCallLocal(t *testing.T) {
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
+		request := invokev1.NewInvokeMethodRequest("method")
+		defer request.Close()
 
-		_, err := client.CallLocal(context.Background(), request)
+		_, err := client.CallLocal(context.Background(), request.Proto())
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 
@@ -427,7 +438,7 @@ func TestAPIToken(t *testing.T) {
 		token := "1234"
 
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp.WithRawDataString("fakeDirectMessageResponse", "application/json")
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -475,7 +486,7 @@ func TestAPIToken(t *testing.T) {
 		token := "1234"
 
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp.WithRawDataString("fakeDirectMessageResponse", "application/json")
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -517,7 +528,7 @@ func TestAPIToken(t *testing.T) {
 		token := "1234"
 
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp.WithRawDataString("fakeDirectMessageResponse", "application/json")
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -609,7 +620,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 	for _, tt := range httpResponseTests {
 		t.Run(fmt.Sprintf("handle http %d response code", tt.status), func(t *testing.T) {
 			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil)
-			fakeResp.WithRawData([]byte(tt.errHTTPMessage), "application/json")
+			fakeResp.WithRawDataString(tt.errHTTPMessage, "application/json")
 
 			// Set up direct messaging mock
 			mockDirectMessaging.Calls = nil // reset call count
@@ -679,7 +690,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 				}),
 			},
 		)
-		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+		fakeResp.WithRawDataString("fakeDirectMessageResponse", "application/json")
 
 		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
@@ -2972,16 +2983,20 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	t.Run("Test invoke direct message retries with resiliency", func(t *testing.T) {
-		_, err := client.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{
+		val := []byte("failingKey")
+		res, err := client.InvokeService(context.Background(), &runtimev1pb.InvokeServiceRequest{
 			Id: "failingApp",
 			Message: &commonv1pb.InvokeRequest{
 				Method: "test",
-				Data:   &anypb.Any{Value: []byte("failingKey")},
+				Data:   &anypb.Any{Value: val},
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["failingKey"])
+		require.NotNil(t, res)
+		require.NotNil(t, res.Data)
+		assert.Equal(t, val, res.Data.Value)
 	})
 
 	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
@@ -3142,7 +3157,9 @@ func TestUnlockResponseToGrpcResponse(t *testing.T) {
 
 func TestTryLock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName: "abc",
 		}
@@ -3155,7 +3172,10 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName: "abc",
 		}
@@ -3168,7 +3188,10 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:  "abc",
 			ResourceId: "resource",
@@ -3182,7 +3205,10 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"abc": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:  "abc",
@@ -3198,7 +3224,10 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "abc",
@@ -3224,7 +3253,10 @@ func TestTryLock(t *testing.T) {
 				Success: true,
 			}, nil
 		})
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "mock",
 			ResourceId:      "resource",
@@ -3239,7 +3271,9 @@ func TestTryLock(t *testing.T) {
 
 func TestUnlock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName: "abc",
@@ -3253,7 +3287,10 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName: "abc",
@@ -3267,7 +3304,10 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
 			ResourceId: "resource",
@@ -3281,7 +3321,10 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
@@ -3305,7 +3348,10 @@ func TestUnlock(t *testing.T) {
 				Status: lock.Success,
 			}, nil
 		})
-		api := NewAPI("", nil, nil, nil, nil, nil, nil, map[string]lock.Store{"mock": mockLockStore}, nil, nil, nil, nil, config.TracingSpec{}, nil, "", nil, nil, nil)
+		api := NewAPI(NewAPIOpts{
+			LockStores:  map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec: config.TracingSpec{},
+		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "mock",
 			ResourceId: "resource",

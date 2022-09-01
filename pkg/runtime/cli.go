@@ -24,8 +24,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/acl"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -41,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
@@ -71,7 +70,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
 	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", DefaultMaxRequestBodySize, "Increasing max size of request body in MB to handle uploading of big files")
 	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
-	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers")
+	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers. By default 4 KB.")
 	daprGracefulShutdownSeconds := flag.Int("dapr-graceful-shutdown-seconds", int(DefaultGracefulShutdownDuration/time.Second), "Graceful shutdown time in seconds")
 	enableAPILogging := flag.Bool("enable-api-logging", false, "Enable API logging for API calls")
 	disableBuiltinK8sSecretStore := flag.Bool("disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")

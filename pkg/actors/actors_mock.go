@@ -21,6 +21,7 @@ package actors
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	mock "github.com/stretchr/testify/mock"
 
 	v1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -238,10 +239,22 @@ type FailingActors struct {
 }
 
 func (f *FailingActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
-	if err := f.Failure.PerformFailure(req.Actor().ActorId); err != nil {
+	proto, err := req.ProtoWithData()
+	if err != nil {
 		return nil, err
 	}
-	resp := v1.NewInvokeMethodResponse(200, "Success", nil)
+	if proto == nil || proto.Actor == nil {
+		return nil, errors.New("proto.Actor is nil")
+	}
+	if err := f.Failure.PerformFailure(proto.Actor.ActorId); err != nil {
+		return nil, err
+	}
+	var data []byte
+	if proto.Message != nil && proto.Message.Data != nil {
+		data = proto.Message.Data.Value
+	}
+	resp := v1.NewInvokeMethodResponse(200, "Success", nil).
+		WithRawDataBytes(data, "")
 	return resp, nil
 }
 

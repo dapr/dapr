@@ -35,8 +35,7 @@ type (
 // Policy returns a policy runner that encapsulates the configured
 // resiliency policies in a simple execution wrapper.
 func Policy(ctx context.Context, log logger.Logger, operationName string, t time.Duration, r *retry.Config, cb *breaker.CircuitBreaker) Runner {
-	return func(oper Operation) error {
-		operation := oper
+	return func(operation Operation) error {
 		if t > 0 {
 			// Handle timeout.
 			// TODO: This should ideally be handled by the underlying service/component. Revisit once those understand contexts.
@@ -45,7 +44,7 @@ func Policy(ctx context.Context, log logger.Logger, operationName string, t time
 				ctx, cancel := context.WithTimeout(ctx, t)
 				defer cancel()
 
-				done := make(chan error, 1)
+				done := make(chan error)
 				go func() {
 					done <- operCopy(ctx)
 				}()

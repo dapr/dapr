@@ -11,18 +11,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package streams
 
-// ServerConfig is the config object for a grpc server.
-type ServerConfig struct {
-	AppID              string
-	HostAddress        string
-	Port               int
-	APIListenAddresses []string
-	NameSpace          string
-	TrustDomain        string
-	MaxRequestBodySize int
-	UnixDomainSocket   string
-	ReadBufferSize     int
-	EnableAPILogging   bool
+import (
+	"bufio"
+	"io"
+	"strings"
+
+	"github.com/tidwall/transform"
+)
+
+// UppercaseTransformer uppercases all characters in the stream, by calling strings.ToUpper() on them.
+func UppercaseTransformer(r io.Reader) io.Reader {
+	br := bufio.NewReader(r)
+	return transform.NewTransformer(func() ([]byte, error) {
+		c, _, err := br.ReadRune()
+		if err != nil {
+			return nil, err
+		}
+		return []byte(strings.ToUpper(string([]rune{c}))), nil
+	})
 }

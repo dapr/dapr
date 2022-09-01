@@ -1186,9 +1186,11 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		req := invokev1.NewInvokeMethodRequest(path)
-		req.WithHTTPExtension(nethttp.MethodPost, "")
-		req.WithRawData(data, invokev1.JSONContentType)
+		req := invokev1.
+			NewInvokeMethodRequest(path).
+			WithHTTPExtension(nethttp.MethodPost, "").
+			WithRawDataBytes(data, invokev1.JSONContentType)
+		defer req.Close()
 
 		reqMetadata := map[string][]string{}
 		for k, v := range metadata {
@@ -1196,10 +1198,19 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		req.WithMetadata(reqMetadata)
 
+		// If the request can be retried, we need to enable replaying
+		pd := a.resiliency.GetPolicy(bindingName, &resiliency.ComponentInboundPolicy)
+		if pd != nil && pd.HasRetries() {
+			req.WithReplay(true)
+		}
+
 		var resp *invokev1.InvokeMethodResponse
 		respErr := false
 		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
 		err := policy(func(ctx context.Context) (err error) {
+			if resp != nil {
+				resp.Close()
+			}
 			respErr = false
 			resp, err = a.appChannel.InvokeMethod(ctx, req)
 			if err != nil {
@@ -1215,6 +1226,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		if err != nil && !respErr {
 			return nil, errors.Wrap(err, "error invoking app")
 		}
+		defer resp.Close()
 
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
@@ -1226,12 +1238,16 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		// ::TODO report metrics for http, such as grpc
 		if resp.Status().Code != nethttp.StatusOK {
-			_, body := resp.RawData()
-			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
+			body, _ := io.ReadAll(resp.RawData())
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
 
-		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
-			appResponseBody = resp.Message().Data.Value
+		proto, err := resp.ProtoWithData()
+		if err != nil {
+			return nil, fmt.Errorf("error reading response from app: %v", err)
+		}
+		if proto.Message.Data != nil && len(proto.Message.Data.Value) > 0 {
+			appResponseBody = proto.Message.Data.Value
 		}
 	}
 
@@ -1265,23 +1281,25 @@ func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, bind
 }
 
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID,
-		a.appChannel,
-		a.directMessaging,
-		a.getComponents,
-		a.resiliency,
-		a.stateStores,
-		a.lockStores,
-		a.secretStores,
-		a.secretsConfiguration,
-		a.configurationStores,
-		a.getPublishAdapter(),
-		a.actor,
-		a.sendToOutputBinding,
-		a.globalConfig.Spec.TracingSpec,
-		a.ShutdownWithWait,
-		a.getComponentsCapabilitesMap,
-	)
+	a.daprHTTPAPI = http.NewAPI(http.NewAPIOpts{
+		AppID:                       a.runtimeConfig.ID,
+		AppChannel:                  a.appChannel,
+		DirectMessaging:             a.directMessaging,
+		GetComponentsFn:             a.getComponents,
+		Resiliency:                  a.resiliency,
+		StateStores:                 a.stateStores,
+		LockStores:                  a.lockStores,
+		SecretStores:                a.secretStores,
+		SecretsConfiguration:        a.secretsConfiguration,
+		ConfigurationStores:         a.configurationStores,
+		PubsubAdapter:               a.getPublishAdapter(),
+		Actor:                       a.actor,
+		SendToOutputBindingFn:       a.sendToOutputBinding,
+		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		Shutdown:                    a.ShutdownWithWait,
+		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		MaxRequestBodySize:          int64(a.runtimeConfig.MaxRequestBodySize) << 20, // Convert from MB to bytes
+	})
 
 	serverConf := http.ServerConfig{
 		AppID:              a.runtimeConfig.ID,
@@ -1344,29 +1362,41 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.EnableAPILogging)
+	return grpc.ServerConfig{
+		AppID:              a.runtimeConfig.ID,
+		HostAddress:        a.hostAddress,
+		Port:               port,
+		APIListenAddresses: apiListenAddresses,
+		NameSpace:          a.namespace,
+		TrustDomain:        trustDomain,
+		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
+	}
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID,
-		a.appChannel,
-		a.resiliency,
-		a.stateStores,
-		a.secretStores,
-		a.secretsConfiguration,
-		a.configurationStores,
-		a.lockStores,
-		a.getPublishAdapter(),
-		a.directMessaging,
-		a.actor,
-		a.sendToOutputBinding,
-		a.globalConfig.Spec.TracingSpec,
-		a.accessControlList,
-		string(a.runtimeConfig.ApplicationProtocol),
-		a.getComponents,
-		a.ShutdownWithWait,
-		a.getComponentsCapabilitesMap,
-	)
+	return grpc.NewAPI(grpc.NewAPIOpts{
+		AppID:                       a.runtimeConfig.ID,
+		AppChannel:                  a.appChannel,
+		Resiliency:                  a.resiliency,
+		StateStores:                 a.stateStores,
+		SecretStores:                a.secretStores,
+		SecretsConfiguration:        a.secretsConfiguration,
+		ConfigurationStores:         a.configurationStores,
+		LockStores:                  a.lockStores,
+		PubsubAdapter:               a.getPublishAdapter(),
+		DirectMessaging:             a.directMessaging,
+		Actor:                       a.actor,
+		SendToOutputBindingFn:       a.sendToOutputBinding,
+		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		AccessControlList:           a.accessControlList,
+		AppProtocol:                 string(a.runtimeConfig.ApplicationProtocol),
+		Shutdown:                    a.ShutdownWithWait,
+		GetComponentsFn:             a.getComponents,
+		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+	})
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
@@ -1402,9 +1432,11 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		// if HTTP, check if there's an endpoint listening for that binding
 		path := a.inputBindingRoutes[binding]
-		req := invokev1.NewInvokeMethodRequest(path)
-		req.WithHTTPExtension(nethttp.MethodOptions, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
+		req := invokev1.
+			NewInvokeMethodRequest(path).
+			WithHTTPExtension(nethttp.MethodOptions, "").
+			WithRawData(nil, invokev1.JSONContentType)
+		defer req.Close()
 
 		// TODO: Propagate Context
 		ctx := context.Background()
@@ -1412,6 +1444,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 		if err != nil {
 			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %w", path, err)
 		}
+		defer resp.Close()
 		code := resp.Status().Code
 
 		return code/100 == 2 || code == nethttp.StatusMethodNotAllowed
@@ -1883,10 +1916,11 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 
 	var span trace.Span
 
-	req := invokev1.NewInvokeMethodRequest(msg.path)
-	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.data, contenttype.CloudEventContentType)
-	req.WithCustomHTTPMetadata(msg.metadata)
+	req := invokev1.NewInvokeMethodRequest(msg.path).
+		WithHTTPExtension(nethttp.MethodPost, "").
+		WithRawDataBytes(msg.data, contenttype.CloudEventContentType).
+		WithCustomHTTPMetadata(msg.metadata)
+	defer req.Close()
 
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
@@ -1898,11 +1932,11 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	start := time.Now()
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	elapsed := diag.ElapsedSince(start)
-
 	if err != nil {
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
 		return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
 	}
+	defer resp.Close()
 
 	statusCode := int(resp.Status().Code)
 
@@ -1913,12 +1947,10 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		span.End()
 	}
 
-	_, body := resp.RawData()
-
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
 		var appResponse pubsub.AppResponse
-		err := json.Unmarshal(body, &appResponse)
+		err := json.NewDecoder(resp.RawData()).Decode(&appResponse)
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
@@ -1945,6 +1977,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField], appResponse.Status)
 	}
 
+	body, _ := io.ReadAll(resp.RawData())
 	if statusCode == nethttp.StatusNotFound {
 		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
@@ -1955,9 +1988,10 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	}
 
 	// Every error from now on is a retriable error.
-	log.Warnf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	log.Warnf(errMsg)
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-	return errors.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	return errors.Errorf(errMsg)
 }
 
 func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
@@ -2099,12 +2133,26 @@ func (a *DaprRuntime) initActors() error {
 	if a.actorStateStoreName == "" {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID,
-		a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort,
-		a.namespace, a.appConfig)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig,
-		a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features,
-		a.resiliency, a.actorStateStoreName)
+	actorConfig := actors.NewConfig(actors.NewConfigOpts{
+		HostAddress:        a.hostAddress,
+		AppID:              a.runtimeConfig.ID,
+		PlacementAddresses: a.runtimeConfig.PlacementAddresses,
+		Port:               a.runtimeConfig.InternalGRPCPort,
+		Namespace:          a.namespace,
+		AppConfig:          a.appConfig,
+	})
+
+	act := actors.NewActors(actors.NewActorOpts{
+		StateStore:       a.stateStores[a.actorStateStoreName],
+		AppChannel:       a.appChannel,
+		GRPCConnectionFn: a.grpc.GetGRPCConnection,
+		Config:           actorConfig,
+		CertChain:        a.runtimeConfig.CertChain,
+		TracingSpec:      a.globalConfig.Spec.TracingSpec,
+		Features:         a.globalConfig.Spec.Features,
+		Resiliency:       a.resiliency,
+		StateStoreName:   a.actorStateStoreName,
+	})
 	err = act.Init()
 	if err == nil {
 		a.actor = act
@@ -2550,7 +2598,8 @@ func (a *DaprRuntime) loadAppConfiguration() {
 		return
 	}
 
-	appConfig, err := a.appChannel.GetAppConfig()
+	// TODO Propagate context
+	appConfig, err := a.appChannel.GetAppConfig(context.Background())
 	if err != nil {
 		return
 	}

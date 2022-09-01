@@ -15,6 +15,8 @@ package http
 
 import (
 	"encoding/json"
+	"io"
+	"net"
 
 	"github.com/valyala/fasthttp"
 )
@@ -101,6 +103,37 @@ func with(code int, obj []byte) option {
 		if len(ctx.Response.Header.ContentType()) == 0 {
 			ctx.Response.Header.SetContentType(jsonContentTypeHeader)
 		}
+	}
+}
+
+// withStream is like "with" but accepts a stream
+// The stream is closed at the end if it implements the Close() method
+func withStream(code int, r io.Reader, onDone func()) option {
+	return func(ctx *fasthttp.RequestCtx) {
+		if len(ctx.Response.Header.ContentType()) == 0 {
+			ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+		}
+		ctx.Response.SetStatusCode(code)
+
+		// This is a bit hacky, but it seems to be the only way we can actually send data to the client in a streamed way
+		// (believe me, I've spent over a day on this and I'm not exaggerating)
+		ctx.HijackSetNoResponse(true)
+		ctx.Hijack(func(c net.Conn) {
+			// Write the headers
+			c.Write(ctx.Response.Header.Header())
+			// Send the data as a stream
+			_, err := io.Copy(c, r)
+			if err != nil {
+				log.Warn("Error while copying response into connection: ", err)
+			}
+			if rc, ok := r.(io.Closer); ok {
+				_ = rc.Close()
+			}
+			// c is closed automatically
+			if onDone != nil {
+				onDone()
+			}
+		})
 	}
 }
 

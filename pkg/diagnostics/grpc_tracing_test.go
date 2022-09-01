@@ -210,7 +210,6 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 	interceptor := GRPCTraceStreamServerInterceptor("test", config.TracingSpec{})
 
 	t.Run("invalid proxy request, return nil", func(t *testing.T) {
-		ctx := context.TODO()
 		fakeInfo := &grpc.StreamServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
@@ -219,17 +218,16 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			return nil
 		}
 
-		err := interceptor(ctx, nil, fakeInfo, h)
+		err := interceptor(context.Background(), &fakeStream{}, fakeInfo, h)
 		assert.Nil(t, err)
 	})
 
 	t.Run("valid proxy request without app id, return error", func(t *testing.T) {
-		ctx := context.TODO()
 		fakeInfo := &grpc.StreamServerInfo{
 			FullMethod: "/myapp.v1.DoSomething",
 		}
 
-		err := interceptor(ctx, &fakeStream{}, fakeInfo, nil)
+		err := interceptor(context.Background(), &fakeStream{}, fakeInfo, nil)
 		assert.Error(t, err)
 	})
 }
