@@ -374,21 +374,33 @@ func toGetRequest(req *state.GetRequest) *proto.GetRequest {
 }
 
 //nolint:nosnakecase
+var consistencyModels = map[string]v1.StateOptions_StateConsistency{
+	state.Eventual: v1.StateOptions_CONSISTENCY_EVENTUAL,
+	state.Strong:   v1.StateOptions_CONSISTENCY_STRONG,
+}
+
+//nolint:nosnakecase
 func consistencyOf(value string) v1.StateOptions_StateConsistency {
-	consistency, ok := v1.StateOptions_StateConsistency_value[value]
+	consistency, ok := consistencyModels[value]
 	if !ok {
 		return v1.StateOptions_CONSISTENCY_UNSPECIFIED
 	}
-	return v1.StateOptions_StateConsistency(consistency)
+	return consistency
+}
+
+//nolint:nosnakecase
+var concurrencyModels = map[string]v1.StateOptions_StateConcurrency{
+	state.FirstWrite: v1.StateOptions_CONCURRENCY_FIRST_WRITE,
+	state.LastWrite:  v1.StateOptions_CONCURRENCY_LAST_WRITE,
 }
 
 //nolint:nosnakecase
 func concurrencyOf(value string) v1.StateOptions_StateConcurrency {
-	concurrency, ok := v1.StateOptions_StateConcurrency_value[value]
+	concurrency, ok := concurrencyModels[value]
 	if !ok {
 		return v1.StateOptions_CONCURRENCY_UNSPECIFIED
 	}
-	return v1.StateOptions_StateConcurrency(concurrency)
+	return concurrency
 }
 
 // stateStoreClient wrapps the conventional stateStoreClient and the transactional stateStore client.
