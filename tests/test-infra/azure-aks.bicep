@@ -17,7 +17,7 @@ param namePrefix string
 @description('The location of the resources')
 param location string = resourceGroup().location
 
-@description('If enabled, add a Arm64 pool')
+@description('If enabled, add a ARM64 pool')
 param enableArm bool = false
 
 @description('If enabled, add a Windows pool')
@@ -29,7 +29,7 @@ param linuxVMSize string = 'Standard_DS2_v2'
 @description('VM size to use for Windows nodes, if enabled')
 param windowsVMSize string = 'Standard_DS3_v2'
 
-@description('VM size to use for Arm64 nodes if enabled')
+@description('VM size to use for ARM64 nodes if enabled')
 param armVMSize string = 'Standard_D4pds_v5'
 
 @description('If set, sends certain diagnostic logs to Log Analytics')
@@ -136,7 +136,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
         {
           name: 'armpol'
           osDiskSizeGB: osDiskSizeGB
-          osDiskType: 'Ephemeral'
           enableAutoScaling: false
           count: 2
           vmSize: armVMSize

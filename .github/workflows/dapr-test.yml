@@ -315,17 +315,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2019]
-        include:
-          - os: ubuntu-latest
-            target_os: linux
-            target_arch: amd64
-          - os: ubuntu-latest
-            target_os: linux
-            target_arch: arm64
-          - os: windows-2019
-            target_os: windows
-            target_arch: amd64
+        target_os: [linux, windows]
+        target_arch: [amd64]
     steps:
       - name: Set up log paths
         run: |

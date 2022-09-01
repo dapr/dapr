@@ -23,7 +23,7 @@ param location string = resourceGroup().location
 @description('If enabled, add a Windows pool')
 param enableWindows bool = false
 
-@description('If enabled, add a Arm64 pool')
+@description('If enabled, add a ARM64 pool')
 param enableArm bool = false
 
 @description('If set, sends certain diagnostic logs to Log Analytics')
