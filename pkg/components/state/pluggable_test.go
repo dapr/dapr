@@ -656,8 +656,8 @@ func TestMappers(t *testing.T) {
 	})
 
 	t.Run("consistencyOf should return proper consistency when well-known consistency is used", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONSISTENCY_EVENTUAL, consistencyOf("CONSISTENCY_EVENTUAL"))
-		assert.Equal(t, v1.StateOptions_CONSISTENCY_STRONG, consistencyOf("CONSISTENCY_STRONG"))
+		assert.Equal(t, v1.StateOptions_CONSISTENCY_EVENTUAL, consistencyOf(state.Eventual))
+		assert.Equal(t, v1.StateOptions_CONSISTENCY_STRONG, consistencyOf(state.Strong))
 	})
 
 	t.Run("concurrencyOf should return unspecified for unknown concurrency", func(t *testing.T) {
@@ -665,8 +665,8 @@ func TestMappers(t *testing.T) {
 	})
 
 	t.Run("concurrencyOf should return proper concurrency when well-known concurrency is used", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONCURRENCY_FIRST_WRITE, concurrencyOf("CONCURRENCY_FIRST_WRITE"))
-		assert.Equal(t, v1.StateOptions_CONCURRENCY_LAST_WRITE, concurrencyOf("CONCURRENCY_LAST_WRITE"))
+		assert.Equal(t, v1.StateOptions_CONCURRENCY_FIRST_WRITE, concurrencyOf(state.FirstWrite))
+		assert.Equal(t, v1.StateOptions_CONCURRENCY_LAST_WRITE, concurrencyOf(state.LastWrite))
 	})
 
 	t.Run("toGetRequest should return nil when receiving a nil request", func(t *testing.T) {
@@ -681,7 +681,7 @@ func TestMappers(t *testing.T) {
 				fakeKey: fakeKey,
 			},
 			Options: state.GetStateOption{
-				Consistency: "CONSISTENCY_EVENTUAL",
+				Consistency: state.Eventual,
 			},
 		})
 		assert.Equal(t, getRequest.Key, fakeKey)
@@ -745,8 +745,8 @@ func TestMappers(t *testing.T) {
 					fakeKey: fakePropValue,
 				},
 				Options: state.SetStateOption{
-					Concurrency: "CONCURRENCY_LAST_WRITE",
-					Consistency: "CONSISTENCY_EVENTUAL",
+					Concurrency: state.LastWrite,
+					Consistency: state.Eventual,
 				},
 			})
 			require.NoError(t, err)
@@ -774,8 +774,8 @@ func TestMappers(t *testing.T) {
 					fakeKey: fakePropValue,
 				},
 				Options: state.SetStateOption{
-					Concurrency: "CONCURRENCY_LAST_WRITE",
-					Consistency: "CONSISTENCY_EVENTUAL",
+					Concurrency: state.LastWrite,
+					Consistency: state.Eventual,
 				},
 			})
 			require.NoError(t, err)
