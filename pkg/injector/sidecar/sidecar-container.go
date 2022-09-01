@@ -148,8 +148,8 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 
 	if cfg.Annotations.GetBoolOrDefault(annotations.KeyEnableAppHealthCheck, annotations.DefaultEnableAppHealthCheck) {
 		appHealthCheckPath := cfg.Annotations.GetStringOrDefault(annotations.KeyAppHealthCheckPath, annotations.DefaultAppCheckPath)
-		appHealthProbeInterval := cfg.Annotations.GetInt32OrDefault(annotations.KeyAppHealthProbeInterval, annotations.DefaultAppHealthProbeInterval)
-		appHealthProbeTimeout := cfg.Annotations.GetInt32OrDefault(annotations.KeyAppHealthProbeTimeout, annotations.DefaultAppHealthProbeTimeout)
+		appHealthProbeInterval := cfg.Annotations.GetInt32OrDefault(annotations.KeyAppHealthProbeInterval, annotations.DefaultAppHealthProbeIntervalSeconds)
+		appHealthProbeTimeout := cfg.Annotations.GetInt32OrDefault(annotations.KeyAppHealthProbeTimeout, annotations.DefaultAppHealthProbeTimeoutMilliseconds)
 		appHealthThreshold := cfg.Annotations.GetInt32OrDefault(annotations.KeyAppHealthThreshold, annotations.DefaultAppHealthThreshold)
 		args = append(args,
 			"--enable-app-health-check=true",
