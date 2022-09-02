@@ -38,9 +38,9 @@ func CommitAction(scheduleTransactionRequest ScheduleTransactionRequest) error {
 	}
 	bunchTransactions := reqs.BunchTransactions
 	retryTimes := transactionInstance.GetRetryTimes()
-	schema := transactionInstance.GetTransactionSchema()
+	scheme := transactionInstance.GetTransactionScheme()
 
-	log.Debugf("disrtibute transaction schema is %s :", schema)
+	log.Debugf("disrtibute transaction scheme is %s :", scheme)
 
 	allBunchTransactionCommitSuccess := true
 
@@ -50,7 +50,7 @@ func CommitAction(scheduleTransactionRequest ScheduleTransactionRequest) error {
 		bunchTransactionReqsParam := bunchTransaction.BunchTransactionRequestParam
 		if state == stateForRequestSuccess {
 			// try to commit a bunch transaction
-			responseStatusCode := Commit(scheduleTransactionRequest, bunchTransactionReqsParam, schema, retryTimes)
+			responseStatusCode := Commit(scheduleTransactionRequest, bunchTransactionReqsParam, scheme, retryTimes)
 
 			if responseStatusCode != fasthttp.StatusOK {
 				allBunchTransactionCommitSuccess = false
@@ -93,9 +93,9 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 	}
 	bunchTransactions := reqs.BunchTransactions
 	retryTimes := transactionInstance.GetRetryTimes()
-	schema := transactionInstance.GetTransactionSchema()
+	scheme := transactionInstance.GetTransactionScheme()
 
-	log.Debugf("disrtibute transaction schema is %s :", schema)
+	log.Debugf("disrtibute transaction scheme is %s :", scheme)
 
 	allBunchTransactionRollbackSuccess := true
 
@@ -105,7 +105,7 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 		bunchTransactionReqsParam := bunchTransaction.BunchTransactionRequestParam
 		if state == stateForRequestSuccess {
 			// try to commit a bunch transaction
-			responseStatusCode := Rollback(scheduleTransactionRequest, bunchTransactionReqsParam, schema, retryTimes)
+			responseStatusCode := Rollback(scheduleTransactionRequest, bunchTransactionReqsParam, scheme, retryTimes)
 
 			if responseStatusCode != fasthttp.StatusOK {
 				allBunchTransactionRollbackSuccess = false
@@ -137,20 +137,20 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 	return nil
 }
 
-func Commit(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionRequestParam, schema string, retryTimes int) int {
+func Commit(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionRequestParam, scheme string, retryTimes int) int {
 	log.Debug("switch to a Commit action with : ", bunchTransactionReqsParam)
 	responseStatusCode := 0
-	switch schema {
+	switch scheme {
 	case "tcc":
 		responseStatusCode = ConfirmForTcc(scheduleTransactionRequest, bunchTransactionReqsParam, retryTimes)
 	}
 	return responseStatusCode
 }
 
-func Rollback(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionRequestParam, schema string, retryTimes int) int {
+func Rollback(scheduleTransactionRequest ScheduleTransactionRequest, bunchTransactionReqsParam *transactionComponent.TransactionRequestParam, scheme string, retryTimes int) int {
 	log.Debug("switch to a Rollback action with : ", bunchTransactionReqsParam)
 	responseStatusCode := 0
-	switch schema {
+	switch scheme {
 	case "tcc":
 		responseStatusCode = CancelForTcc(scheduleTransactionRequest, bunchTransactionReqsParam, retryTimes)
 	}
