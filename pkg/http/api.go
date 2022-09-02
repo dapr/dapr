@@ -776,7 +776,8 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	resp, err := a.workFlows[component].Start(reqCtx, &req)
 	if err != nil {
-		log.Debug(err)
+		log.Error(err)
+		return
 
 	}
 	response, err := json.Marshal(resp)
@@ -817,7 +818,8 @@ func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	resp, err := a.workFlows[component].Get(reqCtx, &req)
 	if err != nil {
-		log.Debug(err)
+		log.Error(err)
+		return
 	}
 	log.Debug(resp)
 	response, err := json.Marshal(resp)
@@ -850,8 +852,8 @@ func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
 
 	err := a.workFlows[component].Terminate(reqCtx, &req)
 	if err != nil {
-		log.Debug(err)
-
+		log.Error(err)
+		return
 	}
 }
 

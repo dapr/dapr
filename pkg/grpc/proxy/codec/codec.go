@@ -22,7 +22,7 @@ func init() {
 
 // Register manually registers the codec.
 func Register() {
-	// encoding.RegisterCodec(codec())
+	encoding.RegisterCodec(codec())
 }
 
 // codec returns a proxying grpc.codec with the default protobuf codec as parent.

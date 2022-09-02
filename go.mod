@@ -344,7 +344,7 @@ require (
 	go.opentelemetry.io/proto/otlp v0.16.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
 	go.temporal.io/api v1.11.0 // indirect
-	go.temporal.io/sdk v1.15.0 // indirect
+	go.temporal.io/sdk v1.16.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
@@ -393,14 +393,10 @@ replace (
 
 replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
 
-replace go.temporal.io/api => go.temporal.io/api v1.8.0
-
-replace go.temporal.io/sdk => go.temporal.io/sdk v1.15.0
-
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => ../components-contrib
+// replace github.com/dapr/components-contrib => ../components-contrib
 
 //
 // Then, run `make modtidy` in this repository.
