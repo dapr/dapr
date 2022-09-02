@@ -1,5 +1,5 @@
 #
-# Copyright 2021 The Dapr Authors
+# Copyright 2022 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -14,7 +14,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestore
+  name: statestore-actors
 spec:
   type: state.mongodb
   version: v1
@@ -22,3 +22,27 @@ spec:
   metadata:
   - name: host
     value: dapr-mongodb.dapr-tests.svc.cluster.local:27017
+  - name: actorStateStore
+    value: true
+scopes:
+# actortestclient is deliberately omitted to ensure that `actor_features_test` works without a state store
+- actor1
+- actor2 
+- actorapp
+- actorfeatures
+- reentrantactor
+- actorreminder
+- actorreminderpartition
+- actorinvocationapp
+- actorjava
+- actordotnet
+- actorpython
+- actorphp
+- resiliencyapp
+- resiliencyappgrpc
+- perf-actor-activation-service
+- perf-actor-activation-client
+- perf-actor-reminder-service
+- perf-actor-reminder-client
+- perf-actor-timer-service
+- perf-actor-timer-client

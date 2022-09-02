@@ -69,19 +69,30 @@ jobs:
         # Map between K8s and KinD versions.
         # This is attempting to make it a bit clearer what's being tested.
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
+        # Also added other test variations without adding to matrix:
+        #  statestore
+        #  querystatestore
         include:
         - k8s-version: v1.21.12
           kind-version: v0.14.0
           kind-image-sha: sha256:f316b33dd88f8196379f38feb80545ef3ed44d9197dca1bfd48bcb1583210207
+          statestore: redis
+          querystatestore: mongodb
         - k8s-version: v1.22.9
           kind-version: v0.14.0
           kind-image-sha: sha256:8135260b959dfe320206eb36b3aeda9cffcb262f4b44cda6b33f7bb73f453105
+          statestore: redis
+          querystatestore: mongodb
         - k8s-version: v1.23.6
           kind-version: v0.14.0
           kind-image-sha: sha256:b1fa224cc6c7ff32455e0b1fd9cbfd3d3bc87ecaa8fcb06961ed1afb3db0f9ae
+          statestore: mongodb
+          querystatestore: mongodb
         - k8s-version: v1.24.0
           kind-version: v0.14.0
           kind-image-sha: sha256:0866296e693efe1fed79d5e6c7af8df71fc73ae45e3679af05342239cdc5bc8e
+          statestore: mongodb
+          querystatestore: mongodb
         exclude:
         - k8s-version: v1.21.12
           mode: non-ha
@@ -148,11 +159,17 @@ jobs:
                   -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
         echo "MINIKUBE_NODE_IP=$NODE_IP" >> $GITHUB_ENV
 
-    - name: Setup test output
+    - name: Setup test env variables
       shell: bash
       run: |
         export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
         echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
+
+        export DAPR_TEST_STATE_STORE=${{ matrix.statestore }}
+        echo "DAPR_TEST_STATE_STORE=$DAPR_TEST_STATE_STORE" >> $GITHUB_ENV
+
+        export DAPR_TEST_QUERY_STATE_STORE=${{ matrix.querystatestore }}
+        echo "DAPR_TEST_QUERY_STATE_STORE=$DAPR_TEST_QUERY_STATE_STORE" >> $GITHUB_ENV
 
     - name: Setup local registry
       run: |
