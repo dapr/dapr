@@ -1478,39 +1478,6 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	req.WithActor(in.ActorType, in.ActorId)
 	req.WithRawData(in.Data, "")
 
-	hasDistributeTransaction := false
-	var transactionHeader transaction_loader.TransactionRequestHeader
-	var transactionRequestParam transaction.TransactionRequestParam
-
-	dMetaMap := make(map[string]interface{})
-	err := json.Unmarshal(in.Data, &dMetaMap)
-	apiServerLogger.Debug("Data : ", in.Data)
-	apiServerLogger.Debug("dMetaMap : ", dMetaMap)
-
-	if err == nil &&
-		dMetaMap["distribute-transaction-id"] != nil &&
-		dMetaMap["distribute-bunch-transaction-id"] != nil &&
-		dMetaMap["distribute-transaction-store"] != nil {
-		// actor invoke with distribute transaction
-		hasDistributeTransaction = true
-
-		transactionHeader.TransactionID = dMetaMap["distribute-transaction-id"].(string)
-		transactionHeader.BunchTransactionID = dMetaMap["distribute-bunch-transaction-id"].(string)
-		transactionHeader.TransactionStoreName = dMetaMap["distribute-transaction-store"].(string)
-		transactionRequestParam = transaction.TransactionRequestParam{
-			Type:             "actor",
-			ActorID:          in.ActorId,
-			InvokeMethodName: in.Method,
-			Verb:             string(req.Message().GetHttpExtension().GetVerb()),
-			QueryArgs:        "",
-			Data:             in.Data,
-			ContentType:      req.Message().ContentType,
-			ActorType:        in.ActorType,
-		}
-		apiServerLogger.Debug("transactionHeader : ", transactionHeader)
-		apiServerLogger.Debug("transactionRequestParam : ", transactionRequestParam)
-	}
-
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
 	// Having the retry here allows us to capture that and be resilient to host failure.
@@ -1520,19 +1487,10 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// after the timeout.
 	resp := invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
 	policy := a.resiliency.ActorPreLockPolicy(ctx, in.ActorType, in.ActorId)
-	err = policy(func(ctx context.Context) (rErr error) {
+	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.actor.Call(ctx, req)
 		return rErr
 	})
-
-	if hasDistributeTransaction {
-		apiServerLogger.Debug("store the state operation in service invoke")
-		requestState := 0
-		if err == nil {
-			requestState = 1
-		}
-		a.saveDistributeTransaction(transactionHeader, requestState, transactionRequestParam)
-	}
 
 	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)

@@ -18,14 +18,7 @@ func ConfirmForTcc(scheduleTransactionRequest ScheduleTransactionRequest, bunchT
 			log.Debug(err)
 		}
 		return responseStatusCode
-	} else if bunchTransactionReqsParam.Type == bunchTransactionActorType {
-		responseStatusCode, err := RequestActor(scheduleTransactionRequest.Actor, bunchTransactionReqsParam, actionConfirm, retryTimes)
-		if err != nil {
-			log.Debug(err)
-		}
-		return responseStatusCode
 	}
-
 	return responseStatusCode
 }
 
@@ -37,13 +30,6 @@ func CancelForTcc(scheduleTransactionRequest ScheduleTransactionRequest, bunchTr
 			log.Debug(err)
 		}
 		return responseStatusCode
-	} else if bunchTransactionReqsParam.Type == bunchTransactionActorType {
-		responseStatusCode, err := RequestActor(scheduleTransactionRequest.Actor, bunchTransactionReqsParam, actionCancel, retryTimes)
-		if err != nil {
-			log.Debug(err)
-		}
-		return responseStatusCode
 	}
-
 	return responseStatusCode
 }

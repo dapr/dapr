@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	transactionComponent "github.com/dapr/components-contrib/transaction"
-	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/kit/logger"
@@ -23,7 +22,6 @@ var (
 	stateForRollbackFailure = 3
 	// requestStatusOK                   = 1
 	bunchTransactionServiceInvokeType = "service-invoke"
-	bunchTransactionActorType         = "actor"
 	log                               = logger.NewLogger("dapr.components.transaction")
 )
 
@@ -195,45 +193,5 @@ func RequestServiceInvoke(directMessaging messaging.DirectMessaging, bunchTransa
 		}
 
 	}
-	return 0, nil
-}
-
-func RequestActor(actor actors.Actors, bunchTransactionReqsParam *transactionComponent.TransactionRequestParam, action string, retryTimes int) (int, error) {
-
-	req := invokev1.NewInvokeMethodRequest(bunchTransactionReqsParam.InvokeMethodName + action)
-	req.WithActor(bunchTransactionReqsParam.ActorType, bunchTransactionReqsParam.ActorID)
-	req.WithHTTPExtension(bunchTransactionReqsParam.Verb, bunchTransactionReqsParam.QueryArgs)
-	req.WithRawData(bunchTransactionReqsParam.Data, bunchTransactionReqsParam.ContentType)
-
-	// Save headers to metadata.
-	metadata := map[string][]string{}
-	if bunchTransactionReqsParam.Header != nil {
-		header := bunchTransactionReqsParam.Header
-		header.VisitAll(func(key []byte, value []byte) {
-			metadata[string(key)] = []string{string(value)}
-		})
-		req.WithMetadata(metadata)
-	}
-
-	ctx := context.Background()
-	i := 1
-	for i <= retryTimes {
-		i++
-		resp, err := actor.Call(ctx, req)
-		if err != nil {
-			return 0, err
-		}
-		statusCode := int(resp.Status().Code)
-
-		if !resp.IsHTTPResponse() {
-			statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
-		}
-		if statusCode == fasthttp.StatusOK {
-			return statusCode, nil
-		} else {
-			continue
-		}
-	}
-
 	return 0, nil
 }

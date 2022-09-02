@@ -1771,34 +1771,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	method := reqCtx.UserValue(methodParam).(string)
 	body := reqCtx.PostBody()
 
-	hasDistributeTransaction := false
-	var transactionHeader transaction_loader.TransactionRequestHeader
-	var transactionRequestParam transaction.TransactionRequestParam
-	if len(reqCtx.Request.Header.Peek("distribute-transaction-id")) > 0 &&
-		len(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id")) > 0 &&
-		len(reqCtx.Request.Header.Peek("distribute-transaction-store")) > 0 {
-		// actor invoke with distribute transaction
-		hasDistributeTransaction = true
-
-		transactionHeader.TransactionID = string(reqCtx.Request.Header.Peek("distribute-transaction-id"))
-		transactionHeader.BunchTransactionID = string(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id"))
-		transactionHeader.TransactionStoreName = string(reqCtx.Request.Header.Peek("distribute-transaction-store"))
-
-		transactionRequestParam = transaction.TransactionRequestParam{
-			Type:             "actor",
-			InvokeMethodName: method,
-			Verb:             verb,
-			QueryArgs:        reqCtx.QueryArgs().String(),
-			Data:             body,
-			ContentType:      string(reqCtx.Request.Header.ContentType()),
-			Header:           &reqCtx.Request.Header,
-			ActorType:        actorType,
-			ActorID:          actorID,
-		}
-		log.Debug("transactionHeader : ", transactionHeader)
-		log.Debug("transactionRequestParam : ", transactionRequestParam)
-	}
-
 	req := invokev1.NewInvokeMethodRequest(method)
 	req.WithActor(actorType, actorID)
 	req.WithHTTPExtension(verb, reqCtx.QueryArgs().String())
@@ -1837,15 +1809,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 
 	// Construct response.
 	statusCode := int(resp.Status().Code)
-
-	if hasDistributeTransaction {
-		log.Debug("run a bunch transaction in actor")
-		requestState := 0
-		if statusCode == fasthttp.StatusOK {
-			requestState = 1
-		}
-		a.saveDistributeTransaction(transactionHeader, requestState, transactionRequestParam)
-	}
 
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
