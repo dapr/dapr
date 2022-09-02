@@ -35,6 +35,7 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
@@ -60,18 +61,20 @@ type Channel struct {
 	maxResponseBodySize int
 	appHealthCheckPath  string
 	appHealth           *apphealth.AppHealth
+	pipeline            httpMiddleware.Pipeline
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
 //
 //nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize, readBufferSize int) (channel.AppChannel, error) {
 	scheme := httpScheme
 	if sslEnabled {
 		scheme = httpsScheme
 	}
 
 	c := &Channel{
+		pipeline: pipeline,
 		client: &fasthttp.Client{
 			MaxConnsPerHost:           1000000,
 			MaxIdemponentCallAttempts: 0,
@@ -220,6 +223,8 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 
 func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	channelReq := h.constructRequest(ctx, req)
+	c := fasthttp.RequestCtx{}
+	c.Init(channelReq, nil, nil)
 
 	if h.ch != nil {
 		h.ch <- struct{}{}
@@ -235,24 +240,29 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, verb, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
-	// Send request to user application
-	resp := fasthttp.AcquireResponse()
+	var err error
 
-	err := h.client.Do(channelReq, resp)
+	doReq := func(ctx *fasthttp.RequestCtx) {
+		err = h.client.Do(&ctx.Request, &ctx.Response)
+	}
+
+	execPipeline := h.pipeline.Apply(doReq)
+
+	execPipeline(&c)
+
 	defer func() {
 		fasthttp.ReleaseRequest(channelReq)
-		fasthttp.ReleaseResponse(resp)
 	}()
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(resp.Header.ContentLength()), elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(c.Response.Header.ContentLength()), elapsedMs)
 		return nil, err
 	}
 
-	rsp := h.parseChannelResponse(req, resp)
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(resp.Header.ContentLength()), elapsedMs)
+	rsp := h.parseChannelResponse(req, &c.Response)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(c.Response.Header.ContentLength()), elapsedMs)
 
 	return rsp, nil
 }
