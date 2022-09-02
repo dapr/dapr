@@ -32,11 +32,11 @@ import (
 
 const (
 	numHealthChecks        = 60 // Number of times to check for endpoint health per app.
-	serviceApplicationName = "perf-actor-subscriber"
-	clientApplicationName  = "perf-actor-publisher"
-	actorType              = "testactorpubsub"
+	serviceApplicationName = "perf-actor-pubsub-subscriber"
+	clientApplicationName  = "perf-actor-pubsub-publisher"
+	actorType              = "testActorPubsubTypePerf"
 	defaultpubsubName      = "messagebus"
-	defaultTopicNameHTTP   = "mytopic"
+	defaultTopicNameHTTP   = "topicActorPubsubPerf"
 )
 
 var tr *runner.TestRunner

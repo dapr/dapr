@@ -573,8 +573,15 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 	case GRPCProtocol:
 		publishFunc = a.publishMessageGRPC
 	}
-	topicRoutes, _ := a.getTopicRoutes()
-	v := topicRoutes[name]
+
+	topicRoutes, err := a.getTopicRoutes()
+	if err != nil {
+		return err
+	}
+	v, ok := topicRoutes[name]
+	if !ok {
+		return nil
+	}
 
 	for topic, route := range v.routes {
 		allowed := a.isPubSubOperationAllowed(name, topic, a.scopedSubscriptions[name])
@@ -645,6 +652,22 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 				a.sendToDeadLetterIfConfigured(name, msg)
 				return nil
 			}
+			// Check if any actor subscribed to topic
+			if _, ok := routeMetadata["ActorType"]; ok {
+				for _, actorPubSubSubscription := range a.appConfig.Pubsub {
+					if actorPubSubSubscription.Topic == msg.Topic && actorPubSubSubscription.PubSubName == name {
+						if cloudEvent[pubsub.ActorTypeField] == "" || cloudEvent[pubsub.ActorTypeField] == actorPubSubSubscription.ActorType {
+							err = a.callActorPubsub(ctx, cloudEvent, actorPubSubSubscription)
+							if err != nil {
+								return err
+							}
+							return nil
+						}
+					}
+				}
+				log.Warnf("Actor Subscription not found for pubsub: %s and topic %s", name, msg.Topic)
+				return nil
+			}
 
 			routePath, shouldProcess, err := findMatchingRoute(routeRules, cloudEvent)
 			if err != nil {
@@ -689,111 +712,46 @@ func (a *DaprRuntime) beginPubSub(subscribeCtx context.Context, name string, ps 
 			log.Errorf("failed to subscribe to topic %s: %s", topic, err)
 		}
 	}
-
-	for _, actorConfigSubscriptions := range a.appConfig.Pubsub {
-		if actorConfigSubscriptions.PubSubName == name {
-			allowed := a.isPubSubOperationAllowed(name, actorConfigSubscriptions.Topic, a.scopedSubscriptions[name])
-			if !allowed {
-				log.Warnf("Actor Pubsub: subscription to topic %s on pubsub %s is not allowed", actorConfigSubscriptions.Topic, name)
-				continue
-			}
-			log.Debugf("Actor Pubsub: subscribing to topic=%s on pubsub=%s", actorConfigSubscriptions.Topic, name)
-
-			if subscribeError := ps.Subscribe(subscribeCtx, pubsub.SubscribeRequest{
-				Topic:    actorConfigSubscriptions.Topic,
-				Metadata: make(map[string]string),
-			}, func(ctx context.Context, msg *pubsub.NewMessage) error {
-				// Match Config with message
-				for _, actorPubSubSubscription := range a.appConfig.Pubsub {
-					// Match Topic with config Topic
-					if actorPubSubSubscription.Topic == msg.Topic && actorPubSubSubscription.PubSubName == name {
-						var cloudEvent map[string]interface{}
-						err := json.Unmarshal(msg.Data, &cloudEvent)
-						if err != nil {
-							log.Errorf("Actor Pubsub: error deserializing cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-							if configured, dlqErr := a.sendToDeadLetterIfConfigured(name, msg); configured && dlqErr == nil {
-								// dlq has been configured and message is successfully sent to dlq.
-								diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-								return nil
-							}
-							diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
-							return err
-						}
-
-						if pubsub.HasExpired(cloudEvent) {
-							log.Debugf("Actor Pubsub: dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-							diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-							a.sendToDeadLetterIfConfigured(name, msg)
-							return nil
-						}
-						// Actor calling if ActorType is correct
-						if cloudEvent[pubsub.ActorTypeField] == "" || cloudEvent[pubsub.ActorTypeField] == actorPubSubSubscription.ActorType {
-							err := a.callActorPubsub(ctx, cloudEvent, actorPubSubSubscription)
-							if err != nil {
-								return err
-							}
-							return nil
-						}
-					}
-				}
-				return nil
-			}); subscribeError != nil {
-				log.Error("Actor Pubsub: Failed to subscribe to topic %s", actorConfigSubscriptions.Topic)
-				return subscribeError
-			}
-		}
-	}
 	return nil
 }
 
 // actorCallPubsub calls the actor that was declared in the cloudevent or in the app.Config
 func (a *DaprRuntime) callActorPubsub(ctx context.Context, cloudEvent map[string]interface{}, actorPubSubSubscription config.PubSubConfig) error {
 	sendData, _ := json.Marshal(cloudEvent[pubsub.DataField])
+	invokeActorID := ""
 	if cloudEvent[pubsub.ActorIdField] == "" {
 		// Actor id is not in the cloudevent
 		if actorPubSubSubscription.ActorIDDataAttribute == "" {
-			log.Debug("Actor Pubsub: ActorID and ActorIDDataAttribute not declared in cloud event id - %s", cloudEvent[pubsub.IDField])
-		} else {
-			dataMap := make(map[string]string)
-			// Must be a string string map
-			err := json.Unmarshal(sendData, &dataMap)
-			if err != nil {
-				log.Debugf("Actor Pubsub: Error Actor ID attribute can only be used with JSON type data: %s", err)
-				return err
-			}
-			if attribute, ok := dataMap[actorPubSubSubscription.ActorIDDataAttribute]; ok {
-				req := invokev1.NewInvokeMethodRequest(actorPubSubSubscription.Method)
-				req.WithActor(actorPubSubSubscription.ActorType, attribute)
-				req.WithHTTPExtension(nethttp.MethodPost, "")
-				req.WithRawData(sendData, contenttype.CloudEventContentType)
-				log.Infof("Invoking Actor %+v: with method %s", req.Actor(), req.Message().GetMethod())
-
-				res, err := a.actor.Call(ctx, req)
-				if err != nil {
-					log.Debugf("Error invoking actor: %s", err.Error())
-					return err
-				}
-				log.Debugf("Actor response: %v", res.Message().GetData())
-			} else {
-				log.Debug("Actor Pubsub: Not a valid ActorIDAttribute for this actor")
-			}
+			log.Warnf("Actor Pubsub: ActorID and ActorIDDataAttribute not declared in cloud event id - %s", cloudEvent[pubsub.IDField])
+			return nil
 		}
-	} else {
-		// actor id is in the cloud event
-		actorid := fmt.Sprint(cloudEvent[pubsub.ActorIdField])
-		req := invokev1.NewInvokeMethodRequest(actorPubSubSubscription.Method)
-		req.WithActor(actorPubSubSubscription.ActorType, actorid)
-		req.WithHTTPExtension(nethttp.MethodPost, "")
-		req.WithRawData(sendData, contenttype.JSONContentType)
-		log.Infof("Invoking Actor %+v: with method %s", req.Actor(), req.Message().GetMethod())
-
-		res, err := a.actor.Call(ctx, req)
+		dataMap := make(map[string]string)
+		// Must be a string string map
+		err := json.Unmarshal(sendData, &dataMap)
 		if err != nil {
-			log.Debugf("Error invoking actor: %s", err.Error())
+			log.Errorf("Actor Pubsub: Error deserializing data in cloud event to find ActorIDDataAttribute: %s", err)
 			return err
 		}
-		log.Debugf("Actor response: %v", res.Message().GetData())
+		if attribute, ok := dataMap[actorPubSubSubscription.ActorIDDataAttribute]; ok {
+			invokeActorID = attribute
+		} else {
+			log.Warnf("Actor Pusub: ActorIDAttribute not found for subscription %s-%s-%s", actorPubSubSubscription.Topic, actorPubSubSubscription.ActorType, actorPubSubSubscription.Method)
+			return nil
+		}
+	} else {
+		invokeActorID = fmt.Sprint(cloudEvent[pubsub.ActorIdField])
 	}
+	req := invokev1.NewInvokeMethodRequest(actorPubSubSubscription.Method)
+	req.WithActor(actorPubSubSubscription.ActorType, invokeActorID)
+	req.WithHTTPExtension(nethttp.MethodPost, "")
+	req.WithRawData(sendData, contenttype.CloudEventContentType)
+	log.Debugf("Invoking Actor %+v: with method %s", req.Actor(), req.Message().GetMethod())
+	res, err := a.actor.Call(ctx, req)
+	if err != nil {
+		log.Errorf("Error invoking actor: %s", err.Error())
+		return err
+	}
+	log.Debugf("Actor response: %v", res.Status())
 	return nil
 }
 
@@ -1553,6 +1511,22 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 	return subs
 }
 
+func (a *DaprRuntime) getActorSubscriptions() []runtime_pubsub.Subscription {
+	actorSubscriptions := make([]runtime_pubsub.Subscription, len(a.appConfig.Pubsub))
+	for index, subscriptionActor := range a.appConfig.Pubsub {
+		actorSubscriptions[index] = runtime_pubsub.Subscription{
+			PubsubName:      subscriptionActor.PubSubName,
+			Topic:           subscriptionActor.Topic,
+			DeadLetterTopic: "",
+			Metadata: map[string]string{
+				"ActorType": subscriptionActor.ActorType,
+			},
+			Scopes: []string{},
+		}
+	}
+	return actorSubscriptions
+}
+
 func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	if a.topicRoutes != nil {
 		return a.topicRoutes, nil
@@ -1579,6 +1553,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	if len(a.appConfig.Pubsub) > 0 {
+		subscriptions = append(subscriptions, a.getActorSubscriptions()...)
 	}
 
 	// handle declarative subscriptions

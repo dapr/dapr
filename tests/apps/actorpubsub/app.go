@@ -47,12 +47,12 @@ const (
 	daprPortHTTP            = 3500
 	daprPortGRPC            = 50001
 	defaultpubsubName       = "messagebus"
-	defaultTopicNameHTTP    = "mytopic-http"
-	defaultTopicNamegRPC    = "mytopic-grpc"
+	defaultTopicNameHTTP    = "myactorpubsubtopic-http"
+	defaultTopicNamegRPC    = "myactorpubsubtopic-grpc"
 	defaultMethod           = "actormethod"
-	defaultActorType        = "myActorType"
-	firstSubActorType       = "actorType1" // Actor Type with first subscription registered. Used in NoActoType test
-	SecondSubActorType      = "actorType2" // Actor Type with second subscription registered. Used in NoActoType test
+	defaultActorType        = "actorPubsubTypeE2e"
+	firstSubActorType       = "actorTypeTest1Sub" // Actor Type with first subscription registered. Used in NoActoType test
+	SecondSubActorType      = "actorTypeTest2Sub" // Actor Type with second subscription registered. Used in NoActoType test
 )
 
 type publishCommand struct {

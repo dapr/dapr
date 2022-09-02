@@ -73,7 +73,6 @@ type API interface {
 
 	// Dapr Service methods
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
-	PublishActorEventAlpha1(ctx context.Context, in *runtimev1pb.PublishActorEventRequest) (*emptypb.Empty, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
@@ -99,6 +98,7 @@ type API interface {
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
+	PublishActorEventAlpha1(ctx context.Context, in *runtimev1pb.PublishActorEventRequest) (*emptypb.Empty, error)
 	TryLockAlpha1(ctx context.Context, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error)
 	UnlockAlpha1(ctx context.Context, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error)
 	// Gets metadata of the sidecar
@@ -388,17 +388,6 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		datacontectType: in.DataContentType,
 	}
 	return a.internalPublishEvent(ctx, publishRequestStruct, "", "")
-}
-
-func (a *api) PublishActorEventAlpha1(ctx context.Context, in *runtimev1pb.PublishActorEventRequest) (*emptypb.Empty, error) {
-	publishRequestStruct := internalPublishRequest{
-		pubsubName:      in.PubsubName,
-		topic:           in.Topic,
-		metadata:        in.Metadata,
-		data:            in.Data,
-		datacontectType: in.DataContentType,
-	}
-	return a.internalPublishEvent(ctx, publishRequestStruct, in.ActorType, in.ActorId)
 }
 
 func (a *api) internalPublishEvent(ctx context.Context, in internalPublishRequest, actorType string, actorID string) (*emptypb.Empty, error) {
@@ -1477,6 +1466,17 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	return &runtimev1pb.InvokeActorResponse{
 		Data: body,
 	}, nil
+}
+
+func (a *api) PublishActorEventAlpha1(ctx context.Context, in *runtimev1pb.PublishActorEventRequest) (*emptypb.Empty, error) {
+	publishRequestStruct := internalPublishRequest{
+		pubsubName:      in.PubsubName,
+		topic:           in.Topic,
+		metadata:        in.Metadata,
+		data:            in.Data,
+		datacontectType: in.DataContentType,
+	}
+	return a.internalPublishEvent(ctx, publishRequestStruct, in.ActorType, in.ActorId)
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {

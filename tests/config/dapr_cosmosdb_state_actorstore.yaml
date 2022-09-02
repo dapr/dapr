@@ -57,4 +57,4 @@ scopes:
 - perf-actor-reminder-client
 - perf-actor-timer-service
 - perf-actor-timer-client
-- perf-actor-subscriber
+- perf-actor-pubsub-subscriber

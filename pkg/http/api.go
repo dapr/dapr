@@ -373,7 +373,7 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/publish/{pubsubname}/{topic:*}",
 			Version: apiVersionV1alpha1,
-			Handler: a.onActorPublishAlpha1,
+			Handler: a.onPublish,
 		},
 	}
 }
@@ -1885,16 +1885,6 @@ func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
-	a.onPubSubPublish(reqCtx, "", "")
-}
-
-func (a *api) onActorPublishAlpha1(reqCtx *fasthttp.RequestCtx) {
-	actortype := reqCtx.UserValue(actorTypeParam).(string)
-	actorid := reqCtx.UserValue(actorIDParam).(string)
-	a.onPubSubPublish(reqCtx, actortype, actorid)
-}
-
-func (a *api) onPubSubPublish(reqCtx *fasthttp.RequestCtx, actortype string, actorid string) {
 	if a.pubsubAdapter == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1926,6 +1916,16 @@ func (a *api) onPubSubPublish(reqCtx *fasthttp.RequestCtx, actortype string, act
 		log.Debug(msg)
 
 		return
+	}
+
+	// Pubsub for Actors check
+	actortype := ""
+	actorid := ""
+	if paramactortype, ok := reqCtx.UserValue(actorTypeParam).(string); ok {
+		actortype = paramactortype
+	}
+	if paramactorID, ok := reqCtx.UserValue(actorIDParam).(string); ok {
+		actorid = paramactorID
 	}
 
 	body := reqCtx.PostBody()

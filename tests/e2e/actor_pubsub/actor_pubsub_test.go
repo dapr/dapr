@@ -40,9 +40,9 @@ var tr *runner.TestRunner
 const (
 	numberOfMessagesToPublish = 60
 	publishRateLimitRPS       = 25
-	defaultActorType          = "myActorType"
-	firstSubActorType         = "actorType1"
-	SecondSubActorType        = "actorType2"
+	defaultActorType          = "actorPubsubTypeE2e"
+	firstSubActorType         = "actorTypeTest1Sub"
+	SecondSubActorType        = "actorTypeTest2Sub"
 	anotherActorID            = "10"
 	defaultActorId            = "8"            // Published actor id
 	AppName                   = "actor-pubsub" // App name in Dapr.
@@ -266,8 +266,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorPubSub(t *testing.T) {
-	t.Log("Enter Test Actor PubSub HTTP")
-
 	// Get the external url from the app
 	actorPubsubExternalURL := tr.Platform.AcquireAppExternalURL("actorpubsub")
 	require.NotEmpty(t, actorPubsubExternalURL, "Actor External URL must not be empty!")
@@ -286,7 +284,7 @@ func TestActorPubSub(t *testing.T) {
 	t.Run(fmt.Sprintf("%s_%s", "actor-pubsub-publish", protocol), func(t *testing.T) {
 		// testPublishSubscribeSuccessfully(t, actorPubsubExternalURL, protocol, "mytopic")
 		// Call publish function for the specific topic
-		_, err := sendToPublisher(t, actorPubsubExternalURL, "mytopic", protocol, nil, "")
+		_, err := sendToPublisher(t, actorPubsubExternalURL, "myactorpubsubtopic", protocol, nil, "")
 		require.NoError(t, err)
 
 		// Wait for actor to receive the method
@@ -311,7 +309,7 @@ func TestActorPubSub(t *testing.T) {
 	// PUBLISH with gRPC protocol (different topic)
 	protocol = "grpc"
 	t.Run(fmt.Sprintf("%s_%s", "actor-pubsub-publish", protocol), func(t *testing.T) {
-		_, err := sendToPublisher(t, actorPubsubExternalURL, "mytopic", protocol, nil, "")
+		_, err := sendToPublisher(t, actorPubsubExternalURL, "myactorpubsubtopic", protocol, nil, "")
 		require.NoError(t, err)
 
 		// Wait for actor to receive the method
@@ -331,7 +329,7 @@ func TestActorPubSub(t *testing.T) {
 
 	// Check default subscription (Without sending actor type)
 	t.Run(fmt.Sprintf("%s_%s", "actor-pubsub-publish-no-actortype", protocol), func(t *testing.T) {
-		_, err := sendToPublisherNoType(t, actorPubsubExternalURL, "mytopic", protocol, nil, "")
+		_, err := sendToPublisherNoType(t, actorPubsubExternalURL, "myactorpubsubtopic", protocol, nil, "")
 		require.NoError(t, err)
 
 		// Wait for actor to receive the method

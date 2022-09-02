@@ -1829,47 +1829,54 @@ func TestPublishActorTopic(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 
-	_, err := client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	t.Run("Actors Pubsub Invalid Argument", func(t *testing.T) {
+		_, err := client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
-		ActorType:  "fakeActorType",
-		ActorId:    "fakeActorID",
-		PubsubName: "pubsub",
+		_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
+			ActorType:  "fakeActorType",
+			ActorId:    "fakeActorID",
+			PubsubName: "pubsub",
+		})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
-		ActorType:  "fakeActorType",
-		ActorId:    "fakeActorID",
-		PubsubName: "pubsub",
-		Topic:      "topic",
+	t.Run("Actors Pubsub Successful", func(t *testing.T) {
+		_, err := client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
+			ActorType:  "fakeActorType",
+			ActorId:    "fakeActorID",
+			PubsubName: "pubsub",
+			Topic:      "topic",
+		})
+		assert.Nil(t, err)
 	})
-	assert.Nil(t, err)
-
-	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
-		ActorType:  "fakeActorType",
-		ActorId:    "fakeActorID",
-		PubsubName: "pubsub",
-		Topic:      "error-topic",
+	t.Run("Actors Pubsub Topic Error", func(t *testing.T) {
+		_, err := client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
+			ActorType:  "fakeActorType",
+			ActorId:    "fakeActorID",
+			PubsubName: "pubsub",
+			Topic:      "error-topic",
+		})
+		assert.Equal(t, codes.Internal, status.Code(err))
 	})
-	assert.Equal(t, codes.Internal, status.Code(err))
-
-	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
-		ActorType:  "fakeActorType",
-		ActorId:    "fakeActorID",
-		PubsubName: "pubsub",
-		Topic:      "err-not-found",
+	t.Run("Actors Pubsub Topic not found", func(t *testing.T) {
+		_, err := client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
+			ActorType:  "fakeActorType",
+			ActorId:    "fakeActorID",
+			PubsubName: "pubsub",
+			Topic:      "err-not-found",
+		})
+		assert.Equal(t, codes.NotFound, status.Code(err))
 	})
-	assert.Equal(t, codes.NotFound, status.Code(err))
-
-	_, err = client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
-		ActorType:  "fakeActorType",
-		ActorId:    "fakeActorID",
-		PubsubName: "pubsub",
-		Topic:      "err-not-allowed",
+	t.Run("Actors Pubsub Permission Denied", func(t *testing.T) {
+		_, err := client.PublishActorEventAlpha1(context.Background(), &runtimev1pb.PublishActorEventRequest{
+			ActorType:  "fakeActorType",
+			ActorId:    "fakeActorID",
+			PubsubName: "pubsub",
+			Topic:      "err-not-allowed",
+		})
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestPublishTopic(t *testing.T) {

@@ -29,15 +29,15 @@ const (
 	actorMethodURLFormat    = daprV1URL + "/actors/%s/%s/%s/%s"
 	actorSaveStateURLFormat = daprV1URL + "/actors/%s/%s/state/"
 	actorGetStateURLFormat  = daprV1URL + "/actors/%s/%s/state/%s/"
-	defaultActorType        = "testactorpubsub"     // Actor type must be unique per test app.
-	actorTypeEnvName        = "TEST_APP_ACTOR_TYPE" // Env variable tests can set to change actor type.
+	defaultActorType        = "testActorPubsubTypePerf" // Actor type must be unique per test app.
+	actorTypeEnvName        = "TEST_APP_ACTOR_TYPE"     // Env variable tests can set to change actor type.
 	actorIdleTimeout        = "1h"
 	actorScanInterval       = "30s"
 	drainOngoingCallTimeout = "30s"
 	drainRebalancedActors   = true
 	secondsToWaitInMethod   = 5
 	defaultpubsubName       = "messagebus"
-	defaultTopicNameHTTP    = "mytopic"
+	defaultTopicName        = "topicActorPubsubPerf"
 )
 
 type PubSubConfig struct {
@@ -68,7 +68,7 @@ var daprConfigResponse = daprConfig{
 	Pubsub: []PubSubConfig{
 		{
 			PubSubName: defaultpubsubName,
-			Topic:      defaultTopicNameHTTP,
+			Topic:      defaultTopicName,
 			ActorType:  defaultActorType,
 			Method:     "mymethod",
 		},
@@ -95,7 +95,6 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(daprConfigResponse)
-	log.Printf("CONFIGURATIONMADE")
 }
 
 func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
