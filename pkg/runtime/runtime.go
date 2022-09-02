@@ -181,7 +181,7 @@ type DaprRuntime struct {
 	secretStores           map[string]secretstores.SecretStore
 	pubSubRegistry         pubsub_loader.Registry
 	pubSubs                map[string]pubsub.PubSub
-	workFlows              map[string]wfs.Workflow
+	workflows              map[string]wfs.Workflow
 	nameResolver           nr.Resolver
 	httpMiddlewareRegistry http_middleware_loader.Registry
 	hostAddress            string
@@ -264,7 +264,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretStores:           map[string]secretstores.SecretStore{},
 		stateStores:            map[string]state.Store{},
 		pubSubs:                map[string]pubsub.PubSub{},
-		workFlows:              map[string]wfs.Workflow{},
+		workflows:              map[string]wfs.Workflow{},
 		stateStoreRegistry:     state_loader.NewRegistry(),
 		bindingsRegistry:       bindings_loader.NewRegistry(),
 		pubSubRegistry:         pubsub_loader.NewRegistry(),
@@ -448,7 +448,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.pubSubRegistry.Register(opts.pubsubs...)
 	a.secretStoresRegistry.Register(opts.secretStores...)
 	a.stateStoreRegistry.Register(opts.states...)
-	a.workflowsRegistry.Register(opts.workFlows...)
+	a.workflowsRegistry.Register(opts.workflows...)
 	a.configurationStoreRegistry.Register(opts.configurations...)
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
@@ -546,7 +546,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			OutputBindings:  a.outputBindings,
 			SecretStores:    a.secretStores,
 			PubSubs:         a.pubSubs,
-			WorkFlows:       a.workFlows,
+			WorkFlows:       a.workflows,
 		}); err != nil {
 			log.Fatalf("failed to register components with callback: %s", err)
 		}
@@ -1166,7 +1166,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.getComponents,
 		a.resiliency,
 		a.stateStores,
-		a.workFlows,
+		a.workflows,
 		a.lockStores,
 		a.secretStores,
 		a.secretsConfiguration,
@@ -1241,7 +1241,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		a.appChannel,
 		a.resiliency,
 		a.stateStores,
-		a.workFlows,
+		a.workflows,
 		a.secretStores,
 		a.secretsConfiguration,
 		a.configurationStores,
@@ -1443,7 +1443,7 @@ func (a *DaprRuntime) initWorkflow(s components_v1alpha1.Component) error {
 		log.Warnf("error initializing workflow component %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
 		return err
 	}
-	a.workFlows[s.ObjectMeta.Name] = workflowComp
+	a.workflows[s.ObjectMeta.Name] = workflowComp
 	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 
 	return nil
@@ -2263,7 +2263,7 @@ func (a *DaprRuntime) shutdownOutputComponents() error {
 		}
 	}
 
-	for name, wf := range a.workFlows {
+	for name, wf := range a.workflows {
 		if closer, ok := wf.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
 				err = fmt.Errorf("error closing workflows %s: %w", name, err)
