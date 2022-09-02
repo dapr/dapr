@@ -66,10 +66,12 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
+	mdata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+
 	"github.com/dapr/kit/logger"
 
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -344,7 +346,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testlock (lock.mockLock/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test error when lock version invalid", func(t *testing.T) {
@@ -367,7 +369,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, err.Error(), "couldn't find lock store lock.mockLock/v3")
+		assert.Equal(t, err.Error(), NewInitError(CreateComponentFailure, "testlock (lock.mockLock/v3)", fmt.Errorf("couldn't find lock store lock.mockLock/v3")).Error())
 	})
 
 	t.Run("test error when lock prefix strategy invalid", func(t *testing.T) {
@@ -432,7 +434,7 @@ func TestDoProcessComponent(t *testing.T) {
 			"mockPubSub",
 		)
 		expectedMetadata := pubsub.Metadata{
-			Properties: getFakeProperties(),
+			Base: mdata.Base{Properties: getFakeProperties()},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
@@ -442,7 +444,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (pubsub.mockPubSub/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test invalid category component", func(t *testing.T) {
@@ -727,12 +729,12 @@ func TestInitState(t *testing.T) {
 			"mockState",
 		)
 
-		expectedMetadata := state.Metadata{
+		expectedMetadata := state.Metadata{Base: mdata.Base{
 			Properties: map[string]string{
 				actorStateStore:        "true",
 				"primaryEncryptionKey": primaryKey,
 			},
-		}
+		}}
 
 		mockStateStore.On("Init", expectedMetadata).Return(e)
 
@@ -759,7 +761,7 @@ func TestInitState(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected error")
-		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
@@ -801,7 +803,7 @@ func TestInitNameResolution(t *testing.T) {
 			resolverName,
 		)
 
-		expectedMetadata := nameresolution.Metadata{
+		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
 			Properties: map[string]string{
 				nameresolution.DaprHTTPPort:        strconv.Itoa(rt.runtimeConfig.HTTPPort),
 				nameresolution.DaprPort:            strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
@@ -812,7 +814,7 @@ func TestInitNameResolution(t *testing.T) {
 				nameresolution.MDNSInstanceAddress: rt.hostAddress,
 				nameresolution.MDNSInstancePort:    strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
 			},
-		}
+		}}
 
 		mockResolver.On("Init", expectedMetadata).Return(e)
 
@@ -1096,6 +1098,53 @@ func TestMetadataPodName(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestMetadataNamespace(t *testing.T) {
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	pubsubComponent.Spec.Metadata = append(
+		pubsubComponent.Spec.Metadata,
+		componentsV1alpha1.MetadataItem{
+			Name: "consumerID",
+			Value: componentsV1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{namespace}"),
+				},
+			},
+		})
+	rt := NewTestDaprRuntime(modes.KubernetesMode)
+	rt.namespace = "test"
+	rt.runtimeConfig.ID = "app1"
+
+	defer stopRuntime(t, rt)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
+			return mockPubSub
+		},
+		"mockPubSub",
+	)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		consumerID := metadata.Properties["consumerID"]
+
+		assert.Equal(t, "test.app1", consumerID)
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
+}
+
 func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec changed, component is updated", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
@@ -1286,7 +1335,7 @@ func TestInitPubSub(t *testing.T) {
 		}, "mockPubSub2")
 
 		expectedMetadata := pubsub.Metadata{
-			Properties: getFakeProperties(),
+			Base: mdata.Base{Properties: getFakeProperties()},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(nil)
@@ -3019,11 +3068,12 @@ func TestPubsubLifecycle(t *testing.T) {
 	require.Equal(t, 3, done)
 
 	subscriptions := make(map[string][]string)
-	var subscriptionsMux sync.Mutex
 	messages := make(map[string][]*pubsub.NewMessage)
 	var (
-		subscriptionsCh chan struct{}
-		messagesCh      chan struct{}
+		subscriptionsCh  chan struct{}
+		messagesCh       chan struct{}
+		subscriptionsMux sync.Mutex
+		msgMux           sync.Mutex
 	)
 	forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
 		comp.SetOnSubscribedTopicsChanged(func(topics []string) {
@@ -3036,11 +3086,13 @@ func TestPubsubLifecycle(t *testing.T) {
 			}
 		})
 		comp.SetHandler(func(topic string, msg *pubsub.NewMessage) {
+			msgMux.Lock()
 			if messages[name+"|"+topic] == nil {
 				messages[name+"|"+topic] = []*pubsub.NewMessage{msg}
 			} else {
 				messages[name+"|"+topic] = append(messages[name+"|"+topic], msg)
 			}
+			msgMux.Unlock()
 			if messagesCh != nil {
 				messagesCh <- struct{}{}
 			}
@@ -4279,6 +4331,36 @@ func TestInitBindings(t *testing.T) {
 		output.Spec.Type = "bindings.testoutput"
 		err = r.initBinding(output)
 		assert.NoError(t, err)
+	})
+}
+
+func TestBindingTracingHttp(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	defer stopRuntime(t, rt)
+
+	t.Run("traceparent passed through", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+		rt.appChannel = mockAppChannel
+
+		_, err := rt.sendBindingEventToApp("mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
+		assert.Nil(t, err)
+		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
+		assert.Len(t, mockAppChannel.Calls, 1)
+		req := mockAppChannel.Calls[0].Arguments.Get(1).(*invokev1.InvokeMethodRequest)
+		assert.Contains(t, req.Metadata(), "traceparent")
+		assert.Contains(t, req.Metadata()["traceparent"].Values, "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01")
+	})
+
+	t.Run("bad traceparent does not fail request", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+		rt.appChannel = mockAppChannel
+
+		_, err := rt.sendBindingEventToApp("mockBinding", []byte(""), map[string]string{"traceparent": "I am not a traceparent"})
+		assert.Nil(t, err)
+		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
+		assert.Len(t, mockAppChannel.Calls, 1)
 	})
 }
 

@@ -132,8 +132,8 @@ type api struct {
 	accessControlList          *config.AccessControlList
 	appProtocol                string
 	extendedMetadata           sync.Map
-	components                 []componentsV1alpha.Component
 	shutdown                   func()
+	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
 }
@@ -312,6 +312,7 @@ func NewAPI(
 		accessControlList:          accessControlList,
 		appProtocol:                appProtocol,
 		shutdown:                   shutdown,
+		getComponentsFn:            getComponentsFn,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
 	}
@@ -535,9 +536,20 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
 	req := &bindings.InvokeRequest{
-		Metadata:  in.Metadata,
+		Metadata:  make(map[string]string),
 		Operation: bindings.OperationKind(in.Operation),
 	}
+	for key, val := range in.Metadata {
+		req.Metadata[key] = val
+	}
+
+	// Allow for distributed tracing by passing context metadata.
+	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		for key, val := range incomingMD {
+			req.Metadata[key] = val[0]
+		}
+	}
+
 	if in.Data != nil {
 		req.Data = in.Data
 	}
@@ -1473,15 +1485,13 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
 	extendedMetadata := make(map[string]string)
-
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
 		extendedMetadata[key.(string)] = value.(string)
 		return true
 	})
 	extendedMetadata[daprRuntimeVersionKey] = a.daprRunTimeVersion
-	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
-	componentsCapabilities := a.getComponentsCapabilitesFn()
+
 	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
 	if a.actor != nil {
 		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {
@@ -1492,7 +1502,10 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		}
 	}
 
-	for _, comp := range a.components {
+	components := a.getComponentsFn()
+	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(components))
+	componentsCapabilities := a.getComponentsCapabilitesFn()
+	for _, comp := range components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
 			Version:      comp.Spec.Version,
@@ -1501,12 +1514,14 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		}
 		registeredComponents = append(registeredComponents, registeredComp)
 	}
+
 	response := &runtimev1pb.GetMetadataResponse{
 		Id:                   a.id,
 		ExtendedMetadata:     extendedMetadata,
 		RegisteredComponents: registeredComponents,
 		ActiveActorsCount:    activeActorsCount,
 	}
+
 	return response, nil
 }
 
@@ -1580,14 +1595,13 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 		return &runtimev1pb.GetConfigurationResponse{}, err
 	}
 
-	cachedItems := make([]*commonv1pb.ConfigurationItem, 0)
-	for _, v := range getResponse.Items {
-		cachedItems = append(cachedItems, &commonv1pb.ConfigurationItem{
-			Key:      v.Key,
+	cachedItems := make(map[string]*commonv1pb.ConfigurationItem, len(getResponse.Items))
+	for k, v := range getResponse.Items {
+		cachedItems[k] = &commonv1pb.ConfigurationItem{
 			Metadata: v.Metadata,
 			Value:    v.Value,
 			Version:  v.Version,
-		})
+		}
 	}
 
 	response := &runtimev1pb.GetConfigurationResponse{
@@ -1604,14 +1618,13 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
-	items := make([]*commonv1pb.ConfigurationItem, 0)
-	for _, v := range e.Items {
-		items = append(items, &commonv1pb.ConfigurationItem{
-			Key:      v.Key,
+	items := make(map[string]*commonv1pb.ConfigurationItem, len(e.Items))
+	for k, v := range e.Items {
+		items[k] = &commonv1pb.ConfigurationItem{
 			Value:    v.Value,
 			Version:  v.Version,
 			Metadata: v.Metadata,
-		})
+		}
 	}
 
 	if err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
@@ -1654,8 +1667,10 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		}
 
 		items := resp.GetItems()
-		for _, item := range items {
-			subscribeKeys = append(subscribeKeys, item.Key)
+		for key := range items {
+			if _, ok := a.configurationSubscribe[fmt.Sprintf("%s||%s", request.StoreName, key)]; !ok {
+				subscribeKeys = append(subscribeKeys, key)
+			}
 		}
 	} else {
 		subscribeKeys = append(subscribeKeys, request.Keys...)

@@ -708,7 +708,12 @@ func TestActorFeatures(t *testing.T) {
 		require.NotNil(t, logTwo)
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
-		require.True(t, (logOne.StartTimestamp >= logTwo.EndTimestamp) || (logTwo.StartTimestamp >= logOne.EndTimestamp))
+		startEndTimeCheck := (logOne.StartTimestamp >= logTwo.EndTimestamp) || (logTwo.StartTimestamp >= logOne.EndTimestamp)
+		if !startEndTimeCheck {
+			log.Printf("failed for start/end time check: logOne.StartTimestamp='%d' logOne.EndTimestamp='%d' logTwo.StartTimestamp='%d' logTwo.EndTimestamp='%d'",
+				logOne.StartTimestamp, logOne.EndTimestamp, logTwo.StartTimestamp, logTwo.EndTimestamp)
+		}
+		require.True(t, startEndTimeCheck)
 	})
 
 	t.Run("Actor concurrency different actor ids.", func(t *testing.T) {
@@ -746,7 +751,12 @@ func TestActorFeatures(t *testing.T) {
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
 		// Both methods run in parallel, with the sleep time both should start before the other ends.
-		require.True(t, (logOne.StartTimestamp <= logTwo.EndTimestamp) && (logTwo.StartTimestamp <= logOne.EndTimestamp))
+		startEndTimeCheck := (logOne.StartTimestamp <= logTwo.EndTimestamp) && (logTwo.StartTimestamp <= logOne.EndTimestamp)
+		if !startEndTimeCheck {
+			log.Printf("failed for start/end time check: logOne.StartTimestamp='%d' logOne.EndTimestamp='%d' logTwo.StartTimestamp='%d' logTwo.EndTimestamp='%d'",
+				logOne.StartTimestamp, logOne.EndTimestamp, logTwo.StartTimestamp, logTwo.EndTimestamp)
+		}
+		require.True(t, startEndTimeCheck)
 	})
 
 	t.Run("Actor fails over to another hostname.", func(t *testing.T) {
