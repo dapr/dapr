@@ -11,24 +11,49 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:nosnakecase
 package grpc
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/config"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
+
+func TestEndpointCompleteness(t *testing.T) {
+	// Get the list of endpoints in the runtime
+	runtimeEndpoints := []string{}
+	prefix := "/" + runtimev1pb.Dapr_ServiceDesc.ServiceName + "/"
+	for _, m := range runtimev1pb.Dapr_ServiceDesc.Methods {
+		runtimeEndpoints = append(runtimeEndpoints, prefix+m.MethodName)
+	}
+	for _, m := range runtimev1pb.Dapr_ServiceDesc.Streams {
+		runtimeEndpoints = append(runtimeEndpoints, prefix+m.StreamName)
+	}
+	sort.Strings(runtimeEndpoints)
+
+	// Get the list of endpoints in this package (regardless of group)
+	packageEndpoints := []string{}
+	for _, g := range endpoints {
+		packageEndpoints = append(packageEndpoints, g...)
+	}
+	sort.Strings(packageEndpoints)
+
+	assert.Equal(t, runtimeEndpoints, packageEndpoints, "the list of endpoints defined in this package does not match the endpoints defined in the %s gRPC service", runtimev1pb.Dapr_ServiceDesc.ServiceName)
+}
 
 func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 	h := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return nil, nil
 	}
 
-	t.Run("state endpoints allowed", func(t *testing.T) {
+	t.Run("state.v1 endpoints allowed", func(t *testing.T) {
 		a := []config.APIAccessRule{
 			{
 				Name:     "state",
@@ -48,6 +73,36 @@ func TestSetAPIEndpointsMiddlewareUnary(t *testing.T) {
 
 		for k, v := range endpoints {
 			if k != "state.v1" {
+				for _, e := range v {
+					_, err := f(nil, nil, &grpc.UnaryServerInfo{
+						FullMethod: e,
+					}, h)
+					assert.Error(t, err)
+				}
+			}
+		}
+	})
+
+	t.Run("state.v1alpha1 endpoints allowed", func(t *testing.T) {
+		a := []config.APIAccessRule{
+			{
+				Name:     "state",
+				Version:  "v1alpha1",
+				Protocol: "grpc",
+			},
+		}
+
+		f := setAPIEndpointsMiddlewareUnary(a)
+
+		for _, e := range endpoints["state.v1alpha1"] {
+			_, err := f(nil, nil, &grpc.UnaryServerInfo{
+				FullMethod: e,
+			}, h)
+			assert.NoError(t, err)
+		}
+
+		for k, v := range endpoints {
+			if k != "state.v1alpha1" {
 				for _, e := range v {
 					_, err := f(nil, nil, &grpc.UnaryServerInfo{
 						FullMethod: e,

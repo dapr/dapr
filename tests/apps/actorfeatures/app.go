@@ -37,6 +37,7 @@ const (
 	actorMethodURLFormat            = daprV1URL + "/actors/%s/%s/%s/%s"
 	actorSaveStateURLFormat         = daprV1URL + "/actors/%s/%s/state/"
 	actorGetStateURLFormat          = daprV1URL + "/actors/%s/%s/state/%s/"
+	actorDeleteReminderURLFormat    = daprV1URL + "/actors/%s/%s/%s/%s"
 	defaultActorType                = "testactorfeatures"                   // Actor type must be unique per test app.
 	actorTypeEnvName                = "TEST_APP_ACTOR_TYPE"                 // To set to change actor type.
 	actorRemindersPartitionsEnvName = "TEST_APP_ACTOR_REMINDERS_PARTITIONS" // To set actor type partition count.
@@ -255,6 +256,15 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Specific case to test reminder that deletes itself in its callback
+	if id == "1001e" {
+		url := fmt.Sprintf(actorDeleteReminderURLFormat, actorType, id, "reminders", method)
+		_, e := httpCall("DELETE", url, nil, 204)
+		if e != nil {
+			return
+		}
+	}
+
 	hostname, err := os.Hostname()
 	var data []byte
 	if method == "hostname" {
@@ -275,7 +285,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		fmt.Printf("Error: %v", err.Error())
+		fmt.Printf("Error: %v", err.Error()) //nolint:forbidigo
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -319,7 +329,6 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // calls Dapr's Actor method/timer/reminder: simulating actor client call.
-// nolint:gosec
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
 
@@ -607,11 +616,11 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 		var errBody []byte
 		errBody, err = io.ReadAll(res.Body)
 		if err == nil {
-			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody))
+			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody)) //nolint:stylecheck
 			return nil, t
 		}
 
-		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode)
+		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode) //nolint:stylecheck
 		return nil, t
 	}
 
@@ -669,5 +678,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Actor App - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }

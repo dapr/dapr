@@ -107,6 +107,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 		deserializer: serializer.NewCodecFactory(
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
+		//nolint:gosec
 		server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,
@@ -122,14 +123,17 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
-	allowedList := strings.Split(cfg.AllowedServiceAccounts, ",")
+	allowedList := []string{}
+	if cfg.AllowedServiceAccounts != "" {
+		allowedList = append(allowedList, strings.Split(cfg.AllowedServiceAccounts, ",")...)
+	}
 	allowedList = append(allowedList, AllowedServiceAccountInfos...)
 
 	return getServiceAccount(ctx, kubeClient, allowedList)
 }
 
 // getServiceAccount parses "service-account:namespace" k/v list and returns an array of UID.
-func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedServiceAcccountInfos []string) ([]string, error) {
+func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, allowedServiceAccountInfos []string) ([]string, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, getKubernetesServiceAccountTimeoutSeconds*time.Second)
 	defer cancel()
 
@@ -140,15 +144,19 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 
 	allowedUids := []string{}
 
-	for _, allowedServiceInfo := range allowedServiceAcccountInfos {
+	for _, allowedServiceInfo := range allowedServiceAccountInfos {
 		serviceAccountInfo := strings.Split(allowedServiceInfo, ":")
+		found := false
 		for _, sa := range serviceaccounts.Items {
 			if sa.Name == serviceAccountInfo[0] && sa.Namespace == serviceAccountInfo[1] {
 				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
+				found = true
 				break
 			}
 		}
-		log.Warnf("Unable to get SA %s UID (%s)", allowedServiceInfo, err)
+		if !found {
+			log.Warnf("Unable to get SA %s UID", allowedServiceInfo)
+		}
 	}
 
 	return allowedUids, nil
@@ -226,7 +234,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
-		if !(utils.StringSliceContains(ar.Request.UserInfo.UID, i.authUIDs) || utils.StringSliceContains(systemGroup, ar.Request.UserInfo.Groups)) {
+		if !(utils.Contains(i.authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {
 			log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)
 		} else if ar.Request.Kind.Kind != "Pod" {
 			log.Errorf("invalid kind for review: %s", ar.Kind)

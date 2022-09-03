@@ -21,13 +21,12 @@ import (
 	"io"
 	"log"
 	"net/http"
-	net_url "net/url"
+	netUrl "net/url"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"google.golang.org/grpc"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -64,11 +63,9 @@ type callSubscriberMethodRequest struct {
 }
 
 var (
-	grpcConn   *grpc.ClientConn
 	grpcClient runtimev1pb.DaprClient
+	httpClient = utils.NewHTTPClient()
 )
-
-var httpClient = utils.NewHTTPClient()
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +76,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // when called by the test, this function publishes to dapr
-// nolint:gosec
 func performPublish(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	reqID := "s-" + uuid.New().String()
@@ -159,11 +155,10 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// nolint:gosec
 func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, pubsubName, topic)
 	if len(metadata) > 0 {
-		params := net_url.Values{}
+		params := netUrl.Values{}
 		for k, v := range metadata {
 			params.Set(fmt.Sprintf("metadata.%s", k), v)
 		}
@@ -174,7 +169,7 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonValue))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonValue))
 	if err != nil {
 		return 0, err
 	}
@@ -265,9 +260,9 @@ func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 	invokeReq := &commonv1pb.InvokeRequest{
 		Method: method,
 	}
-	qs := net_url.Values{"reqid": []string{reqID}}.Encode()
+	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
 	invokeReq.HttpExtension = &commonv1pb.HTTPExtension{
-		Verb:        commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value["POST"]),
+		Verb:        commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value["POST"]), //nolint:nosnakecase
 		Querystring: qs,
 	}
 	req := &runtimev1pb.InvokeServiceRequest{
@@ -286,11 +281,11 @@ func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 }
 
 func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
-	qs := net_url.Values{"reqid": []string{reqID}}.Encode()
+	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s?%s", daprPortHTTP, appName, method, qs)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer([]byte{})) //nolint: gosec
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer([]byte{}))
 	if err != nil {
 		return nil, err
 	}
@@ -336,33 +331,9 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func initGRPCClient() {
-	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
-	log.Printf("Connecting to dapr using url %s", url)
-
-	start := time.Now()
-	for retries := 10; retries > 0; retries-- {
-		var err error
-		if grpcConn, err = grpc.Dial(url, grpc.WithInsecure(), grpc.WithBlock()); err == nil {
-			break
-		}
-
-		if retries == 0 {
-			log.Printf("Could not connect to dapr: %v", err)
-			log.Panic(err)
-		}
-
-		log.Printf("Could not connect to dapr: %v, retrying...", err)
-		time.Sleep(5 * time.Second)
-	}
-	elapsed := time.Since(start)
-	log.Printf("gRPC connect elapsed: %v", elapsed)
-	grpcClient = runtimev1pb.NewDaprClient(grpcConn)
-}
-
 func main() {
-	initGRPCClient()
+	grpcClient = utils.GetGRPCClient(daprPortGRPC)
 
 	log.Printf("PubSub Publisher - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }
