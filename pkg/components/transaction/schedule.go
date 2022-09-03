@@ -103,7 +103,7 @@ func RollbackAction(scheduleTransactionRequest ScheduleTransactionRequest) error
 		state := bunchTransaction.StatusCode
 		// data of the origin request param
 		bunchTransactionReqsParam := bunchTransaction.BunchTransactionRequestParam
-		if state == stateForRequestSuccess {
+		if state != stateForRollbackSuccess {
 			// try to commit a bunch transaction
 			responseStatusCode := Rollback(scheduleTransactionRequest, bunchTransactionReqsParam, scheme, retryTimes)
 
