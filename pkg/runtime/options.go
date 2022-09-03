@@ -9,6 +9,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	transactionLoader "github.com/dapr/dapr/pkg/components/transaction"
 )
 
 type (
@@ -22,6 +23,7 @@ type (
 		nameResolutionRegistry *nrLoader.Registry
 		bindingRegistry        *bindingsLoader.Registry
 		httpMiddlewareRegistry *httpMiddlewareLoader.Registry
+		transactionRegistry    *transactionLoader.Registry
 		componentsCallback     ComponentsCallback
 	}
 
@@ -88,5 +90,11 @@ func WithHTTPMiddlewares(registry *httpMiddlewareLoader.Registry) Option {
 func WithComponentsCallback(componentsCallback ComponentsCallback) Option {
 	return func(o *runtimeOpts) {
 		o.componentsCallback = componentsCallback
+	}
+}
+
+func WithTransactions(registry *transactionLoader.Registry) Option {
+	return func(o *runtimeOpts) {
+		o.transactionRegistry = registry
 	}
 }

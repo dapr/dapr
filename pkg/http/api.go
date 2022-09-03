@@ -42,11 +42,13 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/transaction"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	transaction_loader "github.com/dapr/dapr/pkg/components/transaction"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -96,6 +98,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
+	transactions               map[string]transaction.Transaction
 }
 
 type registeredComponent struct {
@@ -134,6 +137,8 @@ const (
 	tracestateHeader         = "tracestate"
 	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
+	transactionStoreName     = "transactionStoreName"
+	transactionStateParam    = "transactionId"
 )
 
 // NewAPI returns a new API.
@@ -154,6 +159,7 @@ func NewAPI(
 	tracingSpec config.TracingSpec,
 	shutdown func(),
 	getComponentsCapabilitiesFn func() map[string][]string,
+	transactions map[string]transaction.Transaction,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -181,6 +187,7 @@ func NewAPI(
 		shutdown:                   shutdown,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
+		transactions:               transactions,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -197,7 +204,7 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, api.constructConfigurationEndpoints()...)
 	api.endpoints = append(api.endpoints, healthEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
-
+	api.endpoints = append(api.endpoints, api.constructTransactionEndpoints()...)
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
 
@@ -1392,6 +1399,33 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	hasDistributeTransaction := false
+	var transactionHeader transaction_loader.TransactionRequestHeader
+	var transactionRequestParam transaction.TransactionRequestParam
+	if len(reqCtx.Request.Header.Peek("distribute-transaction-id")) > 0 &&
+		len(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id")) > 0 &&
+		len(reqCtx.Request.Header.Peek("distribute-transaction-store")) > 0 {
+		// service invoke with distribute transaction
+		hasDistributeTransaction = true
+
+		transactionHeader.TransactionID = string(reqCtx.Request.Header.Peek("distribute-transaction-id"))
+		transactionHeader.BunchTransactionID = string(reqCtx.Request.Header.Peek("distribute-bunch-transaction-id"))
+		transactionHeader.TransactionStoreName = string(reqCtx.Request.Header.Peek("distribute-transaction-store"))
+
+		transactionRequestParam = transaction.TransactionRequestParam{
+			Type:             "service-invoke",
+			TargetID:         targetID,
+			InvokeMethodName: invokeMethodName,
+			Verb:             verb,
+			QueryArgs:        reqCtx.QueryArgs().String(),
+			Data:             reqCtx.Request.Body(),
+			ContentType:      string(reqCtx.Request.Header.ContentType()),
+			Header:           &reqCtx.Request.Header,
+		}
+		log.Debug("transactionHeader : ", transactionHeader)
+		log.Debug("transactionRequestParam : ", transactionRequestParam)
+	}
+
 	// Construct internal invoke method request
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, reqCtx.QueryArgs().String())
 	req.WithRawData(reqCtx.Request.Body(), string(reqCtx.Request.Header.ContentType()))
@@ -1417,6 +1451,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 				statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
 			msg = NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr))
+
 			return rErr
 		}
 
@@ -1441,8 +1476,18 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		} else if statusCode != fasthttp.StatusOK {
 			return errors.Errorf("Received non-successful status code: %d", statusCode)
 		}
+
 		return nil
 	})
+
+	if hasDistributeTransaction {
+		log.Debug("store the state operation in service invoke")
+		requestState := 0
+		if statusCode == fasthttp.StatusOK {
+			requestState = 1
+		}
+		a.saveDistributeTransaction(transactionHeader, requestState, transactionRequestParam)
+	}
 
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
@@ -1454,6 +1499,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		respond(reqCtx, withError(statusCode, msg))
 		return
 	}
+
 	respond(reqCtx, with(statusCode, body))
 }
 
@@ -1776,6 +1822,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 
 	// Construct response.
 	statusCode := int(resp.Status().Code)
+
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
@@ -2298,4 +2345,209 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
+}
+
+/**
+ * regist transaction component api
+ */
+func (a *api) constructTransactionEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "transaction/{transactionStoreName}/begin",
+			Version: apiVersionV1,
+			Handler: a.onDistributeTransactionBegin,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "transaction/{transactionStoreName}/commit",
+			Version: apiVersionV1,
+			Handler: a.onDistributeTransactionCommit,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "transaction/{transactionStoreName}/rollback",
+			Version: apiVersionV1,
+			Handler: a.onDistributeTransactionRollback,
+		},
+
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "transaction/{transactionStoreName}/getState/{transactionId}",
+			Version: apiVersionV1,
+			Handler: a.onDistributeTransactionGetState,
+		},
+	}
+}
+
+/**
+ * switch transaction component instance
+ */
+func (a *api) getTransactionWithRequestValidation(reqCtx *fasthttp.RequestCtx) (transaction.Transaction, string, error) {
+	if a.transactions == nil || len(a.transactions) == 0 {
+		msg := NewErrorResponse("ERR_TRANSACTION_NOT_CONFIGURED", messages.ErrTransactionsNotConfigured)
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		return nil, "", errors.New(msg.Message)
+	}
+
+	transactionStoreName := a.getTransactionStoreName(reqCtx)
+	if a.transactions[transactionStoreName] == nil {
+		msg := NewErrorResponse("ERR_TRANSACTION_NOT_FOUND", fmt.Sprintf(messages.ErrTransactionNotFound, transactionStoreName))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		return nil, "", errors.New(msg.Message)
+	}
+	return a.transactions[transactionStoreName], transactionStoreName, nil
+}
+
+func (a *api) getTransactionStoreName(reqCtx *fasthttp.RequestCtx) string {
+	return reqCtx.UserValue(transactionStoreName).(string)
+}
+
+// Begin a distribute transaction
+func (a *api) onDistributeTransactionBegin(reqCtx *fasthttp.RequestCtx) {
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	if err != nil {
+		respond(reqCtx, withEmpty())
+		return
+	}
+	// Regist distribute transaction ID and bunch transactionID
+	var req transaction.BeginTransactionRequest
+	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		return
+	}
+	reqs, err := transactionInstance.Begin(req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionRgist, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		return
+	}
+
+	response, err := json.Marshal(reqs)
+	if err != nil {
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_REGIST", fmt.Sprintf(messages.ErrTransactionRgist, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		return
+	}
+
+	respond(reqCtx, withJSON(fasthttp.StatusOK, response))
+}
+
+// Commit a distribute transaction
+func (a *api) onDistributeTransactionCommit(reqCtx *fasthttp.RequestCtx) {
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	log.Debug("distribute transaction Commit operation calling, transactionInstance is : ", transactionInstance)
+	if err != nil {
+		respond(reqCtx, withEmpty())
+		return
+	}
+	var req transaction_loader.TransactionScheduleRequest
+	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		log.Debug(msg)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		return
+	}
+
+	err = transaction_loader.CommitAction(transaction_loader.ScheduleTransactionRequest{
+		TransactionID:       req.TransactionID,
+		TransactionInstance: transactionInstance,
+		DirectMessaging:     a.directMessaging,
+		Actor:               a.actor,
+	})
+
+	if err != nil {
+		msg := NewErrorResponse("ERR_TRANSACTION_COMMIT", fmt.Sprintf(messages.ErrTransactionCommit, req.TransactionID))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+	respond(reqCtx, with(fasthttp.StatusOK, []byte("success to commit distribute transaction")))
+}
+
+// Rollback a distribute transaction
+func (a *api) onDistributeTransactionRollback(reqCtx *fasthttp.RequestCtx) {
+
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	if err != nil {
+		respond(reqCtx, withEmpty())
+		return
+	}
+	var req transaction_loader.TransactionScheduleRequest
+	if err = json.Unmarshal(reqCtx.PostBody(), &req); err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		log.Debug(msg)
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		return
+	}
+	err = transaction_loader.RollbackAction(transaction_loader.ScheduleTransactionRequest{
+		TransactionID:       req.TransactionID,
+		TransactionInstance: transactionInstance,
+		DirectMessaging:     a.directMessaging,
+		Actor:               a.actor,
+	})
+
+	if err != nil {
+		msg := NewErrorResponse("ERR_TRANSACTION_ROLLBACK", fmt.Sprintf(messages.ErrTransactionRollback, req.TransactionID))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+	respond(reqCtx, with(fasthttp.StatusOK, []byte("success to rollback distribute transaction")))
+}
+
+// record each bunch transaciton request state
+func (a *api) saveDistributeTransaction(transactionHeader transaction_loader.TransactionRequestHeader, statusCode int, saveRequest transaction.TransactionRequestParam) error {
+
+	transactionInstance := a.transactions[transactionHeader.TransactionStoreName]
+	log.Debug("distribute transaction save operation calling, transactionInstance is : ", transactionInstance)
+
+	if transactionInstance == nil {
+		log.Debug(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
+		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
+	}
+
+	requestStatusOK := 0
+	if statusCode == 1 {
+		requestStatusOK = 1
+	}
+
+	err := transactionInstance.SaveBunchTransactionState(transaction.SaveBunchTransactionRequest{
+		TransactionID:                transactionHeader.TransactionID,
+		BunchTransactionID:           transactionHeader.BunchTransactionID,
+		StatusCode:                   requestStatusOK,
+		BunchTransactionRequestParam: &saveRequest,
+	})
+
+	if err != nil {
+		log.Debug(fmt.Sprintf(messages.ErrTransactionRgist, err))
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_STORE", fmt.Sprintf(messages.ErrTransactionStore, err))
+		return fmt.Errorf(fmt.Sprintf(messages.ErrTransactionStore, msg))
+	}
+	return nil
+}
+
+func (a *api) onDistributeTransactionGetState(reqCtx *fasthttp.RequestCtx) {
+	transactionInstance, _, err := a.getTransactionWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+	transactionID := reqCtx.UserValue(transactionStateParam).(string)
+
+	log.Debug("transaction id is ", transactionID)
+
+	reqs, err := transactionInstance.GetBunchTransactionState(
+		transaction.GetBunchTransactionsRequest{
+			TransactionID: transactionID,
+		},
+	)
+	if err != nil {
+		msg := NewErrorResponse("ERR_DISTRIBUTE_TRANSACTION_FAILED", fmt.Sprintf(messages.ErrTransactionFailed, err))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+	}
+
+	response, _ := json.Marshal(reqs)
+	respond(reqCtx, withJSON(fasthttp.StatusOK, response))
 }

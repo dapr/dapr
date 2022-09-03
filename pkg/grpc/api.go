@@ -41,11 +41,13 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/transaction"
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	transaction_loader "github.com/dapr/dapr/pkg/components/transaction"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -110,6 +112,15 @@ type API interface {
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
+
+	// Begin a distribute transaction
+	DistributeTransactionBegin(ctx context.Context, in *runtimev1pb.BeginTransactionRequest) (*runtimev1pb.BeginResponse, error)
+	// Get distribute transaction state
+	GetDistributeTransactionState(ctx context.Context, in *runtimev1pb.GetDistributeTransactionStateRequest) (*runtimev1pb.GetDistributeTransactionStateResponse, error)
+
+	DistributeTransactionCommit(ctx context.Context, in *runtimev1pb.DistributeTransactionScheduleRequest) (*runtimev1pb.DistributeTransactionScheduleResponse, error)
+
+	DistributeTransactionRollback(ctx context.Context, in *runtimev1pb.DistributeTransactionScheduleRequest) (*runtimev1pb.DistributeTransactionScheduleResponse, error)
 }
 
 type api struct {
@@ -136,6 +147,7 @@ type api struct {
 	getComponentsFn            func() []componentsV1alpha.Component
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
+	transactions               map[string]transaction.Transaction
 }
 
 func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
@@ -286,6 +298,7 @@ func NewAPI(
 	getComponentsFn func() []componentsV1alpha.Component,
 	shutdown func(),
 	getComponentsCapabilitiesFn func() map[string][]string,
+	transactions map[string]transaction.Transaction,
 ) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
@@ -315,6 +328,7 @@ func NewAPI(
 		getComponentsFn:            getComponentsFn,
 		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
+		transactions:               transactions,
 	}
 }
 
@@ -491,6 +505,37 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
+	hasDistributeTransaction := false
+	var transactionHeader transaction_loader.TransactionRequestHeader
+	var transactionRequestParam transaction.TransactionRequestParam
+
+	dMetaMap := make(map[string]interface{})
+	err := json.Unmarshal(in.Message.Data.GetValue(), &dMetaMap)
+
+	apiServerLogger.Debug("Data : ", in.Message.Data.String())
+	apiServerLogger.Debug("dMetaMap : ", dMetaMap)
+	if err == nil &&
+		dMetaMap["distribute-transaction-id"] != nil &&
+		dMetaMap["distribute-bunch-transaction-id"] != nil &&
+		dMetaMap["distribute-transaction-store"] != nil {
+		// service invoke with distribute transaction
+		hasDistributeTransaction = true
+
+		transactionHeader.TransactionID = dMetaMap["distribute-transaction-id"].(string)
+		transactionHeader.BunchTransactionID = dMetaMap["distribute-bunch-transaction-id"].(string)
+		transactionHeader.TransactionStoreName = dMetaMap["distribute-transaction-store"].(string)
+		transactionRequestParam = transaction.TransactionRequestParam{
+			Type:             "service-invoke",
+			TargetID:         in.Id,
+			InvokeMethodName: req.Message().Method,
+			Verb:             string(req.Message().GetHttpExtension().GetVerb()),
+			QueryArgs:        req.Message().HttpExtension.Querystring,
+			Data:             []byte(in.Message.Data.String()),
+			ContentType:      req.Message().ContentType,
+		}
+		apiServerLogger.Debug("transactionHeader : ", transactionHeader)
+		apiServerLogger.Debug("transactionRequestParam : ", transactionRequestParam)
+	}
 	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
 	var resp *invokev1.InvokeMethodResponse
 	var requestErr bool
@@ -526,6 +571,15 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 		return respError
 	})
+
+	if hasDistributeTransaction {
+		apiServerLogger.Debug("store the state operation in service invoke")
+		requestState := 0
+		if !requestErr {
+			requestState = 1
+		}
+		a.saveDistributeTransaction(transactionHeader, requestState, transactionRequestParam)
+	}
 
 	// In this case, there was an error with the actual request or a resiliency policy stopped the request.
 	if requestErr || (errors.Is(respError, context.DeadlineExceeded) || breaker.IsErrorPermanent(respError)) {
@@ -1451,6 +1505,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		resp, rErr = a.actor.Call(ctx, req)
 		return rErr
 	})
+
 	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		apiServerLogger.Debug(err)
@@ -1757,4 +1812,149 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
+}
+
+func (a *api) getTransactionStore(name string) (transaction.Transaction, error) {
+	if a.transactions == nil || len(a.transactions) == 0 {
+		return nil, status.Error(codes.FailedPrecondition, messages.ErrTransactionsNotConfigured)
+	}
+
+	if a.transactions[name] == nil {
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrTransactionsNotConfigured, name)
+	}
+	return a.transactions[name], nil
+}
+
+func (a *api) DistributeTransactionBegin(ctx context.Context, request *runtimev1pb.BeginTransactionRequest) (*runtimev1pb.BeginResponse, error) {
+	transactionInstance, err := a.getTransactionStore(request.GetStoreName())
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.BeginResponse{}, err
+	}
+	// Regist distribute transaction ID and bunch transactionID
+
+	reqs, err := transactionInstance.Begin(transaction.BeginTransactionRequest{
+		BunchTransactionNum: int(request.BunchTransactionNum),
+	})
+
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.BeginResponse{}, err
+	}
+	return &runtimev1pb.BeginResponse{
+		TransactionID:       reqs.TransactionID,
+		BunchTransactionIDs: reqs.BunchTransactionIDs,
+	}, nil
+}
+
+func (a *api) GetDistributeTransactionState(ctx context.Context, request *runtimev1pb.GetDistributeTransactionStateRequest) (*runtimev1pb.GetDistributeTransactionStateResponse, error) {
+	transactionInstance, err := a.getTransactionStore(request.GetStoreName())
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetDistributeTransactionStateResponse{}, err
+	}
+	reqs, err := transactionInstance.GetBunchTransactionState(
+		transaction.GetBunchTransactionsRequest{
+			TransactionID: request.TransactionID,
+		},
+	)
+
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetDistributeTransactionStateResponse{}, err
+	}
+	var bunchTransactionStates map[string]string
+	states, _ := json.Marshal(reqs.BunchTransactionStates)
+	json.Unmarshal(states, &bunchTransactionStates)
+
+	return &runtimev1pb.GetDistributeTransactionStateResponse{
+		TransactionID:          request.TransactionID,
+		BunchTransactionStates: bunchTransactionStates,
+	}, nil
+}
+
+func (a *api) DistributeTransactionCommit(ctx context.Context, request *runtimev1pb.DistributeTransactionScheduleRequest) (*runtimev1pb.DistributeTransactionScheduleResponse, error) {
+	transactionInstance, err := a.getTransactionStore(request.GetStoreName())
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.DistributeTransactionScheduleResponse{
+			Message: "failed to commit distribute transaction",
+		}, err
+	}
+
+	err = transaction_loader.CommitAction(transaction_loader.ScheduleTransactionRequest{
+		TransactionID:       request.TransactionID,
+		TransactionInstance: transactionInstance,
+		DirectMessaging:     a.directMessaging,
+		Actor:               a.actor,
+	})
+
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.DistributeTransactionScheduleResponse{
+			Message: "failed to commit distribute transaction",
+		}, err
+	}
+
+	return &runtimev1pb.DistributeTransactionScheduleResponse{
+		Message: "success to commit distribute transaction",
+	}, nil
+}
+
+func (a *api) DistributeTransactionRollback(ctx context.Context, request *runtimev1pb.DistributeTransactionScheduleRequest) (*runtimev1pb.DistributeTransactionScheduleResponse, error) {
+	transactionInstance, err := a.getTransactionStore(request.GetStoreName())
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.DistributeTransactionScheduleResponse{
+			Message: "failed to rollback distribute transaction",
+		}, err
+	}
+
+	err = transaction_loader.RollbackAction(transaction_loader.ScheduleTransactionRequest{
+		TransactionID:       request.TransactionID,
+		TransactionInstance: transactionInstance,
+		DirectMessaging:     a.directMessaging,
+		Actor:               a.actor,
+	})
+
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.DistributeTransactionScheduleResponse{
+			Message: "failed to rollback distribute transaction",
+		}, err
+	}
+
+	return &runtimev1pb.DistributeTransactionScheduleResponse{
+		Message: "success to rollback distribute transaction",
+	}, nil
+}
+
+// record each bunch transaciton request state
+func (a *api) saveDistributeTransaction(transactionHeader transaction_loader.TransactionRequestHeader, statusCode int, saveRequest transaction.TransactionRequestParam) error {
+
+	transactionInstance := a.transactions[transactionHeader.TransactionStoreName]
+	apiServerLogger.Debug("distribute transaction save operation calling, transactionInstance is : ", transactionInstance)
+
+	if transactionInstance == nil {
+		apiServerLogger.Debug(fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
+		return status.Errorf(codes.FailedPrecondition, fmt.Sprintf(messages.ErrTransactionNotFound, transactionHeader.TransactionStoreName))
+	}
+
+	requestStatusOK := 0
+	if statusCode == 1 {
+		requestStatusOK = 1
+	}
+
+	err := transactionInstance.SaveBunchTransactionState(transaction.SaveBunchTransactionRequest{
+		TransactionID:                transactionHeader.TransactionID,
+		BunchTransactionID:           transactionHeader.BunchTransactionID,
+		StatusCode:                   requestStatusOK,
+		BunchTransactionRequestParam: &saveRequest,
+	})
+
+	if err != nil {
+		apiServerLogger.Debug(fmt.Sprintf(messages.ErrTransactionStore, err))
+		return status.Errorf(codes.FailedPrecondition, fmt.Sprintf(messages.ErrTransactionStore, err))
+	}
+	return nil
 }

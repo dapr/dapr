@@ -31,6 +31,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	transactionLoader "github.com/dapr/dapr/pkg/components/transaction"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
@@ -58,6 +59,7 @@ func main() {
 	nrLoader.DefaultRegistry.Logger = logContrib
 	bindingsLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log
+	transactionLoader.DefaultRegistry.Logger = logContrib
 
 	err = rt.Run(
 		runtime.WithSecretStores(secretstoresLoader.DefaultRegistry),
@@ -68,6 +70,7 @@ func main() {
 		runtime.WithNameResolutions(nrLoader.DefaultRegistry),
 		runtime.WithBindings(bindingsLoader.DefaultRegistry),
 		runtime.WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry),
+		runtime.WithTransactions(transactionLoader.DefaultRegistry),
 	)
 	if err != nil {
 		log.Fatalf("fatal error from runtime: %s", err)

@@ -47,12 +47,14 @@ import (
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/dapr/components-contrib/transaction"
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
+	transactionLoader "github.com/dapr/dapr/pkg/components/transaction"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -122,7 +124,8 @@ const (
 	configurationComponent ComponentCategory = "configuration"
 	lockComponent          ComponentCategory = "lock"
 
-	defaultComponentInitTimeout = time.Second * 5
+	defaultComponentInitTimeout                   = time.Second * 5
+	transactionComponent        ComponentCategory = "transaction"
 )
 
 var componentCategoriesNeedProcess = []ComponentCategory{
@@ -133,6 +136,7 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	middlewareComponent,
 	configurationComponent,
 	lockComponent,
+	transactionComponent,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -180,6 +184,8 @@ type DaprRuntime struct {
 	secretStores           map[string]secretstores.SecretStore
 	pubSubRegistry         *pubsubLoader.Registry
 	pubSubs                map[string]pubsubItem // Key is "componentName"
+	transactionRegistry    *transactionLoader.Registry
+	transactions           map[string]transaction.Transaction
 	nameResolver           nr.Resolver
 	httpMiddlewareRegistry *httpMiddlewareLoader.Registry
 	hostAddress            string
@@ -279,6 +285,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
+		transactions:               map[string]transaction.Transaction{},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -439,7 +446,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry = opts.bindingRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
-
+	a.transactionRegistry = opts.transactionRegistry
 	go a.processComponents()
 
 	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
@@ -1281,6 +1288,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		a.globalConfig.Spec.TracingSpec,
 		a.ShutdownWithWait,
 		a.getComponentsCapabilitesMap,
+		a.transactions,
 	)
 
 	serverConf := http.ServerConfig{
@@ -1366,6 +1374,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		a.getComponents,
 		a.ShutdownWithWait,
 		a.getComponentsCapabilitesMap,
+		a.transactions,
 	)
 }
 
@@ -2308,6 +2317,8 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 		return a.initConfiguration(comp)
 	case lockComponent:
 		return a.initLock(comp)
+	case transactionComponent:
+		return a.initTransaction(comp)
 	}
 	return nil
 }
@@ -2802,6 +2813,22 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 			continue
 		}
 	}
+	return nil
+}
+
+func (a *DaprRuntime) initTransaction(s componentsV1alpha1.Component) error {
+	transactionIns, err := a.transactionRegistry.Create(s.Spec.Type, s.Spec.Version)
+	if err != nil {
+		log.Warnf("error initializing pub sub %s/%s: %s", s.Spec.Type, s.Spec.Version, err)
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+		return err
+	}
+	properties := a.convertMetadataItemsToProperties(s.Spec.Metadata)
+	transactionIns.Init(transaction.Metadata{
+		Properties: properties,
+	})
+
+	a.transactions[s.ObjectMeta.Name] = transactionIns
 	return nil
 }
 

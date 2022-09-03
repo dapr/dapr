@@ -85,4 +85,13 @@ const (
 	ErrLockOwnerEmpty             = "LockOwner is empty in lock store %s"
 	ErrExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store %s"
 	ErrLockStoreNotFound          = "lock store %s not found"
+
+	// Transactions.
+	ErrTransactionsNotConfigured = "error transaction not configured"
+	ErrTransactionNotFound       = "transaction %s not found"
+	ErrTransactionRgist          = "transaction regist error"
+	ErrTransactionFailed         = "trasaction has something wrond %s"
+	ErrTransactionStore          = "transaction store operation has some err %s"
+	ErrTransactionCommit         = "fail to commit distribute transaction %s"
+	ErrTransactionRollback       = "fail to rollback distribute transaction %s"
 )

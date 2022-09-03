@@ -109,6 +109,16 @@ service Dapr {
 
   // Shutdown the sidecar
   rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
+
+  // Begin a distribute transaction
+  rpc DistributeTransactionBegin(BeginTransactionRequest) returns (BeginResponse) {}
+
+  // Get distribute transaction state
+	rpc GetDistributeTransactionState(GetDistributeTransactionStateRequest) returns (GetDistributeTransactionStateResponse){}
+
+  rpc DistributeTransactionCommit(DistributeTransactionScheduleRequest) returns (DistributeTransactionScheduleResponse){}
+
+  rpc DistributeTransactionRollback(DistributeTransactionScheduleRequest) returns (DistributeTransactionScheduleResponse){}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -595,4 +605,33 @@ message UnlockResponse {
   }
 
   Status status = 1;
+}
+
+message BeginTransactionRequest {
+  string StoreName = 1;
+  int32 BunchTransactionNum = 2;
+}
+
+message BeginResponse {
+	string TransactionID = 1;
+	repeated string BunchTransactionIDs = 2;
+}
+
+message GetDistributeTransactionStateRequest {
+  string StoreName = 1;
+  string TransactionID = 2;
+}
+
+message GetDistributeTransactionStateResponse {
+  string TransactionID = 1;
+  map<string, string> BunchTransactionStates = 2;
+}
+
+message DistributeTransactionScheduleRequest {
+  string StoreName = 1;
+  string TransactionID = 2;
+}
+
+message DistributeTransactionScheduleResponse {
+  string Message = 1;
 }
