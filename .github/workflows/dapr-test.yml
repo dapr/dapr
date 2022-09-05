@@ -14,6 +14,10 @@
 # Required secrets:
 # - AZURE_CREDENTIALS: JSON object containing the Azure service principal credentials. Docs: https://github.com/Azure/login#configure-a-service-principal-with-a-secret
 # - DAPR_BOT_TOKEN: Token for the Dapr bot
+#
+# Optional secrets:
+# - AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
+# - AZURE_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
 
 name: dapr-test
 
@@ -29,7 +33,7 @@ on:
 
 env:
   # Version of Go
-  GOVER: "1.18"
+  GOVER: "1.19"
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
@@ -46,6 +50,8 @@ env:
   HA_MODE: true
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "westus3"
+  # Container registry where to cache e2e test images
+  DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
 
 jobs:
   deploy-infrastructure:
@@ -121,6 +127,8 @@ jobs:
                 location1=${REGION1} \
                 location2=${REGION2} \
                 dateTag="${DATE_TAG}" \
+                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
+                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
               && success=true \
               && break \
               || sleep 120
@@ -168,6 +176,12 @@ jobs:
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
                 `CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
+      # In windows-2019 images, WSL comes with bash.exe (but no distribution) and that causes issues
+      # See: https://github.community/t/wsl-not-available-for-hosted-windows-machine/124389
+      - name: Remove bash.exe from WSL
+        if: runner.os == 'Windows'
+        run: |
+          rm.exe "C:/WINDOWS/system32/bash.EXE"
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
         uses: actions/setup-go@v3
@@ -204,6 +218,11 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Login to cache registry
+        if: env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+        run: |
+          az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
+        shell: bash
       - name: Build test prefix and set env vars
         if: env.CHECKOUT_REPO != ''
         run: |
@@ -223,18 +242,19 @@ jobs:
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
         shell: bash
-      - name: Build dapr and its docker image
+      - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''
         run: |
           make build
-          make docker-build
-        shell: bash
-      - name: Build e2e test apps
-        if: env.TEST_PREFIX != ''
-        run: |
-          make build-e2e-app-all
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
+            # For Linux, we use images based on Mariner
+            DOCKERFILE=Dockerfile-mariner make docker-build
+          else
+            make docker-build
+          fi
         shell: bash
       - name: Wait for Azure Container Registry deployment
+        timeout-minutes: 30
         if: env.TEST_PREFIX != ''
         run: |
           elapsed=0
@@ -255,11 +275,20 @@ jobs:
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash
-      - name: Push all container images to the registry
+      - name: Push Dapr container images
         if: env.TEST_PREFIX != ''
         run: |
-          make docker-push
-          make push-e2e-app-all
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
+            # For Linux, we use images based on Mariner
+            DOCKERFILE=Dockerfile-mariner make docker-push
+          else
+            make docker-push
+          fi
+        shell: bash
+      - name: Build and push E2E test apps
+        if: env.TEST_PREFIX != ''
+        run: |
+          make build-push-e2e-app-all
         shell: bash
 
   test-e2e:
@@ -273,15 +302,17 @@ jobs:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
       TEST_OUTPUT_FILE_PREFIX: "test_report"
+      PULL_POLICY: IfNotPresent
     strategy:
       fail-fast: false
       matrix:
         target_os: [linux, windows]
         target_arch: [amd64]
     steps:
-      - name: Set up container log path
+      - name: Set up log paths
         run: |
           echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
+          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
         shell: bash
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -356,6 +387,11 @@ jobs:
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
         shell: bash
+      - name: Enable tcpdump
+        run: |
+          sudo tcpdump -nn -i any -w sntp.cap &
+          sleep 1
+        shell: bash
       - name: Connect to Kubernetes
         if: env.TEST_PREFIX != ''
         run: |
@@ -379,6 +415,8 @@ jobs:
         shell: bash
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
+        env:
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''
@@ -397,12 +435,38 @@ jobs:
         if: always() && env.TEST_PREFIX != ''
         run: |
           make save-dapr-control-plane-k8s-logs
+      - name: Stop tcpdump
+        if: always()
+        run: |
+          sleep 1
+          sudo kill -2 $(pgrep tcpdump)
+          sleep 1
+      # Container log files can be bigger than the maximum file size allowed by GitHub
+      - name: Compress logs
+        if: always()
+        run: |
+          gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
+          gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
+          gzip --fast sntp.cap
+        shell: bash
+      - name: Upload tcpdump
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_tcpdump
+          path: sntp.cap.gz
       - name: Upload container logs
         if: always()
         uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_logs
+          path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@master

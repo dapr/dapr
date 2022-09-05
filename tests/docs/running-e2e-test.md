@@ -82,11 +82,14 @@ If you are starting from scratch and just want to build dapr, deploy it, and run
    make delete-test-namespace
    ```
 
+    > Note: please make sure that you have executed helm uninstall command before you deleted dapr test namespace. Otherwise if you directly deleted the dapr test namespace without helm unisntall command and re-installed dapr control plane, the dapr sidecar injector won't work and fail for "bad certificate". And you have already run into this problem, you can recover by helm uninstall command. See https://github.com/dapr/dapr/issues/4612
+
 3. Build, deploy, run tests from start to finish
 
    ```bash
    make e2e-build-deploy-run
    ```
+
 
 ### Option 2: Step by step guide
 
@@ -194,6 +197,58 @@ If you want to run the tests in a similar environment, you can deploy the test i
 
 > Before you run the commands below, ensure that you have an Azure subscription, have the Azure CLI installed, and are logged into Azure (`az login`)
 
+## Run E2E tests using a Wireguard Tunnel with tailscale
+
+[Tailscale](https://tailscale.com/) is a zero-config VPN that provides NAT traversal out-of-the-box allowing our services and pods to be called directly - using its ClusterIP - without needed to be exposed using a loadbalancer.
+
+This provides a few advantages including the decrease of the total test duration.
+
+if you want to run the tests using tailscale as your network, few things are necessary:
+
+1. [Create a tailscale account](https://login.tailscale.com/), this will be necessary since we're going to use personal keys.
+2. [Download and install](https://tailscale.com/download/) the tailscale client for your OS.
+3. When you're logged in, navigate to the menu `Access Controls` and two things are necessary, edit the ACL definition with:
+   1. Create a new tag that will be used later to assign permissions to keys.
+    ```json
+    {...
+      "tagOwners": {
+        "tag:dapr-tests": ["your_email_comes_here@your_domain.com"],
+      }
+    }
+    ```
+   2. Assign permissions to the created tag. Since we are going to use the [tailscale subnet router](https://tailscale.com/kb/1185/kubernetes/), it is much convenient that the subnet router should auto approve the registered routes, for that, use the following acl.
+   ```json
+     {...
+       "autoApprovers": {
+         "routes": {
+           "10.0.0.0/8": ["tag:dapr-tests"],
+         },
+       }
+     }
+   ```
+   > Warning: as we are using `10.0.0.0/8` we must guarantee that our CIDR block used in the kubernetes cluster must be a subset of it
+4. Now, go to the Settings > Personal Settings > Keys.
+5. Once in the keys section, generate a new ephemeral key by clicking in `Generate auth key`.
+6. Mark as `reusable`, `ephemeral` and add the created tag `dapr-tests` and do not forget to copy out the value.
+
+Now, we're almost set.
+
+The next step will be install the tailscale subnet router in your kubernetes cluster, for that, run
+
+```sh
+TAILSCALE_AUTH_KEY=your_key_goes_here make setup-tailscale
+```
+
+> TIP: for security reasons you could run `unset HISTFILE` before the tailscale command so that will discard your history file
+
+Now, you have to login on tailscale client using your personal account, to verify if the subnet router deployment works, browse to the `Machines` on the tailscale portal, the subnet router should show up there.
+
+One more config is necessary, `TEST_E2E_USE_INTERNAL_IP=true`, you can use it as a variable when running tests as the following:
+
+```sh
+TEST_E2E_USE_INTERNAL_IP=true make test-e2e-all
+```
+
 ### Deploy AKS only
 
 If you want to deploy AKS and the Azure Container Registry only (without Azure Cosmos DB and Azure Service Bus), you can use this script:
@@ -290,3 +345,46 @@ make create-test-namespace
 ```
 
 After this, run the E2E tests as per instructions above, making sure to use the newly-created Azure Container Registry as Docker registry (make sure you maintain the environmental variables set in the steps above).
+
+### Collect container and diagnostic logs from AKS
+
+You can optionally configure AKS to collect certain logs, including:
+
+- All container logs, sent to Azure Log Analytics
+- Diagnostic logs (`kube-apiserver` and `kube-controller-manager`), sent to Azure Log Analytics
+- Audit logs (`kube-audit`), sent to Azure Storage
+
+To do that, first provision the required resources by deploying the `azure-aks-diagnostic.bicep` template (this template is not part of the `azure.bicep` or `azure-all.bicep` templates, as it's considered shared infrastructure):
+
+```sh
+# Name of the resource group where to deploy the diagnostic resources
+DIAG_RESOURCE_GROUP="MyDaprTestLogs"
+
+# Name prefix for the diagnostic resources (should be globally-unique)
+DIAG_NAME_PREFIX="mydaprdiag42"
+
+# Create a resource group
+az group create \
+  --resource-group "${DIAG_RESOURCE_GROUP}" \
+  --location "${AZURE_REGION}"
+
+# Deploy the test infrastructure
+az deployment group create \
+  --resource-group "${DIAG_RESOURCE_GROUP}" \
+  --template-file ./tests/test-infra/azure-aks-diagnostic.bicep \
+  --parameters name=${DIAG_NAME_PREFIX} location=${AZURE_REGION}
+```
+
+The output of the last command includes two values that are resource IDs:
+
+- `diagLogAnalyticsWorkspaceResourceId`, for example: `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`
+- `diagStorageResourceId`, for example: `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`
+
+Use those values as parameters when deploying the `azure.bicep` or `azure-all.bicep` templates. For example:
+
+```sh
+az deployment group create \
+  --resource-group "${TEST_RESOURCE_GROUP}" \
+  --template-file ./tests/test-infra/azure.bicep \
+  --parameters namePrefix=${TEST_PREFIX} location=${AZURE_REGION} enableWindows=${ENABLE_WINDOWS} diagLogAnalyticsWorkspaceResourceId=... diagStorageResourceId=...
+```

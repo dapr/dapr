@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/dapr/tests/apps/utils"
+
 	"github.com/gorilla/mux"
 )
 
@@ -137,6 +139,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+//nolint:forbidigo
 func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
 
@@ -172,7 +175,8 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // calls Dapr's Actor method: simulating actor client call.
-// nolint:gosec
+//
+//nolint:gosec
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
 
@@ -215,6 +219,9 @@ func epoch() int {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
@@ -230,6 +237,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Actor App - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true, false)
 }

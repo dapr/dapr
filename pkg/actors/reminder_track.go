@@ -17,4 +17,5 @@ package actors
 type ReminderTrack struct {
 	LastFiredTime  string `json:"lastFiredTime"`
 	RepetitionLeft int    `json:"repetitionLeft"`
+	Etag           *string
 }

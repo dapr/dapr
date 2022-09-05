@@ -21,12 +21,14 @@ import (
 
 // Config represents configuration options for the Dapr Sidecar Injector webhook server.
 type Config struct {
-	TLSCertFile            string `envconfig:"TLS_CERT_FILE" required:"true"`
-	TLSKeyFile             string `envconfig:"TLS_KEY_FILE" required:"true"`
-	SidecarImage           string `envconfig:"SIDECAR_IMAGE" required:"true"`
-	SidecarImagePullPolicy string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
-	Namespace              string `envconfig:"NAMESPACE" required:"true"`
-	KubeClusterDomain      string `envconfig:"KUBE_CLUSTER_DOMAIN"`
+	TLSCertFile                 string `envconfig:"TLS_CERT_FILE" required:"true"`
+	TLSKeyFile                  string `envconfig:"TLS_KEY_FILE" required:"true"`
+	SidecarImage                string `envconfig:"SIDECAR_IMAGE" required:"true"`
+	SidecarImagePullPolicy      string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
+	Namespace                   string `envconfig:"NAMESPACE" required:"true"`
+	KubeClusterDomain           string `envconfig:"KUBE_CLUSTER_DOMAIN"`
+	AllowedServiceAccounts      string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
+	IgnoreEntrypointTolerations string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
 }
 
 // NewConfigWithDefaults returns a Config object with default values already

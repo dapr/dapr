@@ -15,6 +15,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -102,20 +103,149 @@ func TestParseEnvString(t *testing.T) {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			envVars := ParseEnvString(tc.envStr)
-			fmt.Println(tc.testName)
+			fmt.Println(tc.testName) //nolint:forbidigo
 			assert.Equal(t, tc.expEnvLen, len(envVars))
 			assert.Equal(t, tc.expEnv, envVars)
 		})
 	}
 }
 
-func TestStringSliceContains(t *testing.T) {
+func TestParseVolumeMountsString(t *testing.T) {
+	testCases := []struct {
+		testName     string
+		mountStr     string
+		readOnly     bool
+		expMountsLen int
+		expMounts    []corev1.VolumeMount
+	}{
+		{
+			testName:     "empty volume mount string.",
+			mountStr:     "",
+			readOnly:     false,
+			expMountsLen: 0,
+			expMounts:    []corev1.VolumeMount{},
+		},
+		{
+			testName:     "valid volume mount string with readonly false.",
+			mountStr:     "my-mount:/tmp/mount1,another-mount:/home/user/mount2, mount3:/root/mount3",
+			readOnly:     false,
+			expMountsLen: 3,
+			expMounts: []corev1.VolumeMount{
+				{
+					Name:      "my-mount",
+					MountPath: "/tmp/mount1",
+				},
+				{
+					Name:      "another-mount",
+					MountPath: "/home/user/mount2",
+				},
+				{
+					Name:      "mount3",
+					MountPath: "/root/mount3",
+				},
+			},
+		},
+		{
+			testName:     "valid volume mount string with readonly true.",
+			mountStr:     " my-mount:/tmp/mount1,mount2:/root/mount2 ",
+			readOnly:     true,
+			expMountsLen: 2,
+			expMounts: []corev1.VolumeMount{
+				{
+					Name:      "my-mount",
+					MountPath: "/tmp/mount1",
+					ReadOnly:  true,
+				},
+				{
+					Name:      "mount2",
+					MountPath: "/root/mount2",
+					ReadOnly:  true,
+				},
+			},
+		},
+		{
+			testName:     "volume mount string with invalid mounts",
+			mountStr:     "my-mount:/tmp/mount1:rw,mount2:/root/mount2,mount3",
+			readOnly:     false,
+			expMountsLen: 1,
+			expMounts: []corev1.VolumeMount{
+				{
+					Name:      "mount2",
+					MountPath: "/root/mount2",
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			mounts := ParseVolumeMountsString(tc.mountStr, tc.readOnly)
+			assert.Equal(t, tc.expMountsLen, len(mounts))
+			assert.Equal(t, tc.expMounts, mounts)
+		})
+	}
+}
+
+func TestContains(t *testing.T) {
+	type customType struct {
+		v1 string
+		v2 int
+	}
+
 	t.Run("find a item", func(t *testing.T) {
-		assert.True(t, StringSliceContains("item", []string{"item-1", "item"}))
+		assert.True(t, Contains([]string{"item-1", "item"}, "item"))
+		assert.True(t, Contains([]int{1, 2, 3}, 1))
+		assert.True(t, Contains([]customType{{v1: "first", v2: 1}, {v1: "second", v2: 2}}, customType{v1: "second", v2: 2}))
 	})
 
 	t.Run("didn't find a item", func(t *testing.T) {
-		assert.False(t, StringSliceContains("not-in-item", []string{}))
-		assert.False(t, StringSliceContains("not-in-item", nil))
+		assert.False(t, Contains([]string{"item-1", "item"}, "not-in-item"))
+		assert.False(t, Contains([]string{}, "not-in-item"))
+		assert.False(t, Contains(nil, "not-in-item"))
+		assert.False(t, Contains([]int{1, 2, 3}, 100))
+		assert.False(t, Contains([]int{}, 100))
+		assert.False(t, Contains(nil, 100))
+		assert.False(t, Contains([]customType{{v1: "first", v2: 1}, {v1: "second", v2: 2}}, customType{v1: "foo", v2: 100}))
+		assert.False(t, Contains([]customType{}, customType{v1: "foo", v2: 100}))
+		assert.False(t, Contains(nil, customType{v1: "foo", v2: 100}))
 	})
+}
+
+func TestSetEnvVariables(t *testing.T) {
+	t.Run("set environment variables success", func(t *testing.T) {
+		err := SetEnvVariables(map[string]string{
+			"testKey": "testValue",
+		})
+		assert.Nil(t, err)
+		assert.Equal(t, "testValue", os.Getenv("testKey"))
+	})
+	t.Run("set environment variables failed", func(t *testing.T) {
+		err := SetEnvVariables(map[string]string{
+			"": "testValue",
+		})
+		assert.NotNil(t, err)
+		assert.NotEqual(t, "testValue", os.Getenv(""))
+	})
+}
+
+func TestIsYaml(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected bool
+	}{
+		{
+			input:    "a.yaml",
+			expected: true,
+		}, {
+			input:    "a.yml",
+			expected: true,
+		}, {
+			input:    "a.txt",
+			expected: false,
+		},
+	}
+	for _, tc := range testCases {
+		assert.Equal(t, IsYaml(tc.input), tc.expected)
+	}
 }

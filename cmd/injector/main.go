@@ -15,11 +15,12 @@ package main
 
 import (
 	"flag"
-	"time"
+	"path/filepath"
 
-	"github.com/dapr/kit/logger"
+	"k8s.io/client-go/util/homedir"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/injector"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
@@ -27,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 var (
@@ -47,26 +49,27 @@ func main() {
 	conf := utils.GetConfig()
 	daprClient, _ := scheme.NewForConfig(conf)
 
+	healthzServer := health.NewServer(log)
 	go func() {
-		healthzServer := health.NewServer(log)
-		healthzServer.Ready()
-
 		healthzErr := healthzServer.Run(ctx, healthzPort)
 		if healthzErr != nil {
 			log.Fatalf("failed to start healthz server: %s", healthzErr)
 		}
 	}()
 
-	uids, err := injector.AllowedControllersServiceAccountUID(ctx, kubeClient)
+	uids, err := injector.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
 	if err != nil {
 		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}
 
-	injector.NewInjector(uids, cfg, daprClient, kubeClient).Run(ctx)
+	inj := injector.NewInjector(uids, cfg, daprClient, kubeClient)
 
-	shutdownDuration := 5 * time.Second
-	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
-	<-time.After(shutdownDuration)
+	// Blocking call
+	inj.Run(ctx, func() {
+		healthzServer.Ready()
+	})
+
+	log.Infof("Dapr sidecar injector shut down")
 }
 
 func init() {
@@ -75,10 +78,26 @@ func init() {
 
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	var kubeconfig *string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
 
 	flag.IntVar(&healthzPort, "healthz-port", 8080, "The port used for health checks")
 
+	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-secret-key", credentials.RootCertFilename, "Certificate Authority certificate secret key")
+	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-secret-key", credentials.IssuerCertFilename, "Issuer certificate secret key")
+	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-secret-key", credentials.IssuerKeyFilename, "Issuer private key secret key")
+
 	flag.Parse()
+
+	if err := utils.SetEnvVariables(map[string]string{
+		utils.KubeConfigVar: *kubeconfig,
+	}); err != nil {
+		log.Fatalf("error set env failed:  %s", err.Error())
+	}
 
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {

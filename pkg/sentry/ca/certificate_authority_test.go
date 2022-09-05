@@ -79,6 +79,7 @@ func getTestCertAuth() CertificateAuthority {
 	return certAuth
 }
 
+//nolint:gosec
 func writeTestCredentialsToDisk() {
 	os.WriteFile("ca.crt", []byte(rootCert), 0o644)
 	os.WriteFile("issuer.crt", []byte(issuerCert), 0o644)
@@ -121,7 +122,7 @@ func TestSignCSR(t *testing.T) {
 		csr := getTestCSR("test.a.com")
 		pk, _ := getECDSAPrivateKey()
 		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
-		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
@@ -139,7 +140,7 @@ func TestSignCSR(t *testing.T) {
 		csr := getTestCSR("test.a.com")
 		pk, _ := getECDSAPrivateKey()
 		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
-		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
@@ -170,7 +171,7 @@ func TestSignCSR(t *testing.T) {
 		csr := getTestCSR("test.a.com")
 		pk, _ := getECDSAPrivateKey()
 		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
-		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.BlockTypeCertificate, Bytes: csrb})
 
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()

@@ -21,8 +21,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/golang/protobuf/ptypes/any"
-	"github.com/golang/protobuf/ptypes/empty"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -106,6 +106,7 @@ func main() {
 	}
 }
 
+//nolint:forbidigo
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.GetData().Value))
 
@@ -129,7 +130,7 @@ func (s *server) GetReceivedTopics(ctx context.Context, in *commonv1pb.InvokeReq
 		log.Printf("Could not encode response: %s", err.Error())
 		return &commonv1pb.InvokeResponse{}, err
 	}
-	data := any.Any{
+	data := anypb.Any{
 		Value: rawResp,
 	}
 	return &commonv1pb.InvokeResponse{
@@ -138,10 +139,10 @@ func (s *server) GetReceivedTopics(ctx context.Context, in *commonv1pb.InvokeReq
 }
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to.
-func (s *server) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
+func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*pb.TopicSubscription{},
+		Subscriptions: []*commonv1pb.TopicSubscription{},
 	}, nil
 }
 
@@ -164,11 +165,11 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	messages.add(message)
 
 	return &pb.TopicEventResponse{
-		Status: pb.TopicEventResponse_SUCCESS,
+		Status: pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 	}, nil
 }
 
-func (s *server) ListInputBindings(ctx context.Context, in *empty.Empty) (*pb.ListInputBindingsResponse, error) {
+func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
 	log.Println("List Input Bindings called")
 	return &pb.ListInputBindingsResponse{
 		Bindings: []string{
@@ -178,6 +179,8 @@ func (s *server) ListInputBindings(ctx context.Context, in *empty.Empty) (*pb.Li
 }
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
+//
+//nolint:forbidigo
 func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
 	fmt.Printf("Invoked from binding: %s - %s\n", in.Name, string(in.Data))
 	return &pb.BindingEventResponse{}, nil

@@ -14,7 +14,7 @@ limitations under the License.
 package utils
 
 import (
-	"flag"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -24,12 +24,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
 )
 
 var (
-	clientSet  *kubernetes.Clientset
-	kubeConfig *rest.Config
+	clientSet     *kubernetes.Clientset
+	kubeConfig    *rest.Config
+	KubeConfigVar = "KUBE_CONFIG"
 
 	envRegexp = regexp.MustCompile(`(?m)(,)\s*[a-zA-Z\_][a-zA-Z0-9\_]*=`)
 )
@@ -49,18 +49,9 @@ func GetConfig() *rest.Config {
 	if kubeConfig != nil {
 		return kubeConfig
 	}
-
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
-
 	conf, err := rest.InClusterConfig()
 	if err != nil {
-		conf, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
+		conf, err = clientcmd.BuildConfigFromFlags("", os.Getenv(KubeConfigVar))
 		if err != nil {
 			panic(err)
 		}
@@ -110,12 +101,65 @@ func ParseEnvString(envStr string) []corev1.EnvVar {
 	return envVars
 }
 
-// StringSliceContains return true if an array containe the "str" string.
-func StringSliceContains(needle string, haystack []string) bool {
-	for _, item := range haystack {
-		if item == needle {
+// ParseVolumeMountsString parses the annotation and returns volume mounts.
+// The format of the annotation is: "mountPath1:hostPath1,mountPath2:hostPath2"
+// The readOnly parameter applies to all mounts.
+func ParseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.VolumeMount {
+	volumeMounts := make([]corev1.VolumeMount, 0)
+
+	vs := strings.Split(volumeMountStr, ",")
+	for _, v := range vs {
+		vmount := strings.Split(strings.TrimSpace(v), ":")
+		if len(vmount) != 2 {
+			continue
+		}
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      vmount[0],
+			MountPath: vmount[1],
+			ReadOnly:  readOnly,
+		})
+	}
+	return volumeMounts
+}
+
+// Contains reports whether v is present in s.
+// Similar to https://pkg.go.dev/golang.org/x/exp/slices#Contains.
+func Contains[T comparable](s []T, v T) bool {
+	for _, e := range s {
+		if e == v {
 			return true
 		}
+	}
+	return false
+}
+
+// SetEnvVariables set variables to environment.
+func SetEnvVariables(variables map[string]string) error {
+	for key, value := range variables {
+		err := os.Setenv(key, value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// IsTruthy returns true if a string is a truthy value.
+// Truthy values are "y", "yes", "true", "t", "on", "1" (case-insensitive); everything else is false.
+func IsTruthy(val string) bool {
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "y", "yes", "true", "t", "on", "1":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsYaml checks whether the file is yaml or not.
+func IsYaml(fileName string) bool {
+	extension := strings.ToLower(filepath.Ext(fileName))
+	if extension == ".yaml" || extension == ".yml" {
+		return true
 	}
 	return false
 }

@@ -25,6 +25,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
@@ -60,6 +63,8 @@ var (
 	bindingsDaprGRPCError, bindingsDaprGRPCSuccess uint32
 )
 
+var httpClient = utils.NewHTTPClient()
+
 // indexHandler is the handler for root path.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("indexHandler is called\n")
@@ -83,8 +88,7 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 func invokeDaprHTTPAPI() error {
 	healthURL := fmt.Sprintf("http://%s/v1.0/healthz", daprHTTPAddr)
-	// nolint: gosec
-	r, err := http.Get(healthURL)
+	r, err := httpClient.Get(healthURL)
 	if err != nil {
 		return err
 	}
@@ -98,7 +102,7 @@ func invokeDaprGRPCAPI() error {
 	defer cancel()
 	conn, err := grpc.DialContext(ctx,
 		daprGRPCAddr,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock())
 	if err != nil {
 		return err
@@ -210,16 +214,14 @@ func appRouter() *mux.Router {
 	log.Printf("Enter appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
-
 	router.HandleFunc("/tests/pubsub", getPubsubDaprAPIResponse).Methods("GET")
-
 	router.HandleFunc("/tests/bindings", getBindingsDaprAPIResponse).Methods("GET")
-
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
-
 	router.HandleFunc("/"+bindingsTopic, onInputBinding).Methods("POST", "OPTIONS")
-
 	router.HandleFunc("/"+pubsubHTTPTopic, onPubsub).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
@@ -229,6 +231,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Hello Dapr v2 - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true, false)
 }

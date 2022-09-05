@@ -21,6 +21,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/dapr/dapr/tests/apps/utils"
+
 	"github.com/gorilla/mux"
 )
 
@@ -99,7 +101,7 @@ func callActorMethod(w http.ResponseWriter, r *http.Request) {
 	invokeURL := fmt.Sprintf(daprActorMethodURL, request.ActorType, request.ActorID, request.Method)
 	log.Printf("Calling actor with: %s\n", invokeURL)
 
-	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer(body)) // nolint:gosec
+	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer(body)) //nolint:gosec
 	if resp != nil {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
@@ -138,7 +140,7 @@ func callDifferentActor(w http.ResponseWriter, r *http.Request) {
 	invokeURL := fmt.Sprintf(daprActorMethodURL, request.RemoteActorType, request.RemoteActorID, "logCall")
 	log.Printf("Calling remote actor with: %s\n", invokeURL)
 
-	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer([]byte{})) // nolint:gosec
+	resp, err := http.Post(invokeURL, "application/json", bytes.NewBuffer([]byte{})) //nolint:gosec
 	if resp != nil {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
@@ -164,6 +166,9 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	// Actor methods are individually bound so we can experiment with missing messages
 	router.HandleFunc("/actors/{actorType}/{actorId}/method/logCall", logCall).Methods("POST", "PUT")
@@ -179,6 +184,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Actor Invocation App - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true, false)
 }

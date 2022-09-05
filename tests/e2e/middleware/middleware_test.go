@@ -52,6 +52,9 @@ func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 }
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("middleware")
+	utils.InitHTTPClient(true)
+
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -90,7 +93,7 @@ func TestSimpleMiddleware(t *testing.T) {
 	t.Logf("middlewareURL is '%s'\n", middlewareURL)
 	t.Logf("noMiddlewareURL is '%s'\n", noMiddlewareURL)
 
-	t.Run("test_basic_middleware", func(t *testing.T) {
+	t.Run("test_basicMiddleware", func(t *testing.T) {
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", middlewareURL, appName), []byte{})
 
 		require.Nil(t, err)
@@ -104,7 +107,7 @@ func TestSimpleMiddleware(t *testing.T) {
 		require.Equal(t, "HELLO", results.Output)
 	})
 
-	t.Run("test_no_middleware", func(t *testing.T) {
+	t.Run("test_noMiddleware", func(t *testing.T) {
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", noMiddlewareURL, "no-middleware"), []byte{})
 
 		require.Nil(t, err)

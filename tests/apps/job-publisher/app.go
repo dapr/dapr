@@ -17,10 +17,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
-	"net/http"
 	"os"
 	"time"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
@@ -31,11 +33,15 @@ const (
 	publishRetries = 10
 )
 
+var httpClient = utils.NewHTTPClient()
+
 func stopSidecar() {
 	log.Printf("Shutting down the sidecar at %s", fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
 	for retryCount := 0; retryCount < 200; retryCount++ {
-		r, err := http.Post(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort), "", bytes.NewBuffer([]byte{}))
+		r, err := httpClient.Post(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort), "", bytes.NewBuffer([]byte{}))
 		if r != nil {
+			// Drain before closing
+			_, _ = io.Copy(io.Discard, r.Body)
 			r.Body.Close()
 		}
 		if err != nil {
@@ -59,10 +65,11 @@ func publishMessagesToPubsub() error {
 		log.Printf("Error marshalling %s to JSON", message)
 	}
 	log.Printf("Publishing to %s", daprPubsubURL)
-	// nolint: gosec
-	r, err := http.Post(daprPubsubURL, "application/json", bytes.NewBuffer(jsonValue))
+	r, err := httpClient.Post(daprPubsubURL, "application/json", bytes.NewBuffer(jsonValue))
 	if r != nil {
-		defer r.Body.Close()
+		// Drain before closing
+		_, _ = io.Copy(io.Discard, r.Body)
+		r.Body.Close()
 	}
 	if err != nil {
 		log.Printf("Error publishing messages to pubsub: %+v", err)

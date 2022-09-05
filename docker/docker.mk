@@ -16,25 +16,25 @@
 DOCKER:=docker
 DOCKERFILE_DIR?=./docker
 
-DAPR_SYSTEM_IMAGE_NAME=$(RELEASE_NAME)
-DAPR_RUNTIME_IMAGE_NAME=daprd
-DAPR_PLACEMENT_IMAGE_NAME=placement
-DAPR_SENTRY_IMAGE_NAME=sentry
+DAPR_SYSTEM_IMAGE_NAME?=$(RELEASE_NAME)
+DAPR_RUNTIME_IMAGE_NAME?=daprd
+DAPR_PLACEMENT_IMAGE_NAME?=placement
+DAPR_SENTRY_IMAGE_NAME?=sentry
 
 # build docker image for linux
 BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)
 
 ifeq ($(TARGET_OS), windows)
-  DOCKERFILE:=Dockerfile-windows
+  DOCKERFILE?=Dockerfile-windows
   BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(origin DEBUG), undefined)
-  DOCKERFILE:=Dockerfile
+  DOCKERFILE?=Dockerfile
   BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(DEBUG),0)
-  DOCKERFILE:=Dockerfile
+  DOCKERFILE?=Dockerfile
   BIN_PATH := $(BIN_PATH)/release
 else
-  DOCKERFILE:=Dockerfile-debug
+  DOCKERFILE?=Dockerfile-debug
   BIN_PATH := $(BIN_PATH)/debug
 endif
 
@@ -47,7 +47,7 @@ else
 endif
 
 # Supported docker image architecture
-DOCKERMUTI_ARCH=linux-amd64 linux-arm linux-arm64 windows-amd64
+DOCKER_MULTI_ARCH?=linux-amd64 linux-arm linux-arm64 windows-amd64
 
 ################################################################################
 # Target: docker-build, docker-push                                            #
@@ -131,15 +131,15 @@ docker-push-kind: docker-build
 
 # publish muti-arch docker image to the registry
 docker-manifest-create: check-docker-env
-	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
 ifeq ($(LATEST_RELEASE),true)
-	$(DOCKER) manifest create $(DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
-	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
 endif
 
 docker-publish: docker-manifest-create
@@ -160,14 +160,12 @@ ifeq ($(WINDOWS_VERSION),)
 endif
 
 docker-windows-base-build: check-windows-version
-	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-base . -t $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
-	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-java-base . -t $(DAPR_REGISTRY)/windows-java-base:$(WINDOWS_VERSION)
-	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-php-base . -t $(DAPR_REGISTRY)/windows-php-base:$(WINDOWS_VERSION)
-	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-python-base . -t $(DAPR_REGISTRY)/windows-python-base:$(WINDOWS_VERSION)
+	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
+	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-php-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-php-base:$(WINDOWS_VERSION)
+	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-python-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-python-base:$(WINDOWS_VERSION)
 
 docker-windows-base-push: check-windows-version
 	$(DOCKER) push $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
-	$(DOCKER) push $(DAPR_REGISTRY)/windows-java-base:$(WINDOWS_VERSION)
 	$(DOCKER) push $(DAPR_REGISTRY)/windows-php-base:$(WINDOWS_VERSION)
 	$(DOCKER) push $(DAPR_REGISTRY)/windows-python-base:$(WINDOWS_VERSION)
 
@@ -176,10 +174,10 @@ docker-windows-base-push: check-windows-version
 ################################################################################
 
 # Update whenever you upgrade dev container image
-DEV_CONTAINER_VERSION_TAG?=0.1.7
+DEV_CONTAINER_VERSION_TAG?=0.1.8
 
 # Use this to pin a specific version of the Dapr CLI to a devcontainer
-DEV_CONTAINER_CLI_TAG?=1.7.0
+DEV_CONTAINER_CLI_TAG?=1.8.0
 
 # Dapr container image name
 DEV_CONTAINER_IMAGE_NAME=dapr-dev

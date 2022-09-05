@@ -15,12 +15,13 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"sync"
 
 	"github.com/gorilla/mux"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const appPort = 3000
@@ -76,7 +77,7 @@ func (m *messageBuffer) fail(failedMessage string) bool {
 	return false
 }
 
-var messages messageBuffer = messageBuffer{
+var messages = messageBuffer{
 	lock:            &sync.RWMutex{},
 	successMessages: []string{},
 }
@@ -173,6 +174,9 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test-topic", testTopicHandler).Methods("POST", "OPTIONS")
 	router.HandleFunc("/custom-path", testRoutedTopicHandler).Methods("POST", "OPTIONS")
@@ -185,6 +189,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true, false)
 }

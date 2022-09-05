@@ -23,17 +23,19 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const appPort = 3000
 
 // kubernetes is the name of the secret store
 const (
-	secretStore      = "kubernetes"
-	nonexistentStore = "nonexistent"
 	/* #nosec */
 	secretURL = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
 )
+
+var httpClient = utils.NewHTTPClient()
 
 // daprSecret represents a secret in Dapr.
 type daprSecret struct {
@@ -67,7 +69,7 @@ func get(key, store string) (*map[string]string, int, error) {
 	log.Printf("Fetching state from %s", url)
 	// url is created from user input, it is OK since this is a test app only and will not run in prod.
 	/* #nosec */
-	res, err := http.Get(url)
+	res, err := httpClient.Get(url)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
 	}
@@ -190,6 +192,9 @@ func epoch() int {
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test/{command}", handler).Methods("POST")
 
@@ -201,6 +206,5 @@ func appRouter() *mux.Router {
 func main() {
 	log.Printf("Secret App - listening on http://localhost:%d", appPort)
 	log.Printf("Secret endpoint - to be saved at %s", secretURL)
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+	utils.StartServer(appPort, appRouter, true, false)
 }

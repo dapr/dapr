@@ -21,7 +21,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/dapr/dapr/tests/apps/utils"
+	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/metadata"
 )
@@ -31,7 +34,7 @@ type appResponse struct {
 }
 
 func run(w http.ResponseWriter, r *http.Request) {
-	conn, err := grpc.Dial("localhost:50001", grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial("localhost:50001", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
@@ -65,7 +68,18 @@ func run(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
+func appRouter() *mux.Router {
+	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
+	router.HandleFunc("/tests/invoke_test", run).Methods("POST")
+
+	return router
+}
+
 func main() {
-	http.HandleFunc("/tests/invoke_test", run)
-	log.Fatal(http.ListenAndServe(":3000", nil))
+	log.Printf("Hello Dapr - listening on http://localhost:%d", 3000)
+	utils.StartServer(3000, appRouter, true, false)
 }

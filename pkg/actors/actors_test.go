@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -292,7 +291,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	}
 
 	if b.config == nil {
-		config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
+		config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
 		b.config = &config
 	}
 
@@ -316,6 +315,23 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
+	config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
+	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+
+	return a.(*actorsRuntime)
+}
+
+func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
+	spec := config.TracingSpec{SamplingRate: "1"}
+	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
+	a := NewActors(nil, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+
+	return a.(*actorsRuntime)
+}
+
+func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *actorsRuntime {
+	spec := config.TracingSpec{SamplingRate: "1"}
+	var store state.Store
 	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
 	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
 
@@ -335,21 +351,28 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 			},
 		},
 	}
-	c := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
-	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{
-		{
-			Name:    config.ActorTypeMetadata,
-			Enabled: true,
-		},
-	}, resiliency.New(log), "actorStore")
+	c := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
+	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{}, resiliency.New(log), "actorStore")
 
 	return a.(*actorsRuntime)
+}
+
+func newTestActorsRuntimeWithoutStore() *actorsRuntime {
+	appChannel := new(mockAppChannel)
+
+	return newTestActorsRuntimeWithMockAndNoStore(appChannel)
 }
 
 func newTestActorsRuntime() *actorsRuntime {
 	appChannel := new(mockAppChannel)
 
 	return newTestActorsRuntimeWithMock(appChannel)
+}
+
+func newTestActorsRuntimeWithoutPlacement() *actorsRuntime {
+	appChannel := new(mockAppChannel)
+
+	return newTestActorsRuntimeWithMockWithoutPlacement(appChannel)
 }
 
 func getTestActorTypeAndID() (string, string) {
@@ -462,7 +485,7 @@ func TestStoreIsNotInited(t *testing.T) {
 	})
 
 	t.Run("updateReminderTrack", func(t *testing.T) {
-		e := testActorsRuntime.updateReminderTrack("foo", "bar", 1, time.Now())
+		e := testActorsRuntime.updateReminderTrack("foo", "bar", 1, time.Now(), nil)
 		assert.NotNil(t, e)
 	})
 
@@ -543,7 +566,7 @@ func TestSetReminderTrack(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	noRepetition := -1
-	err := testActorsRuntime.updateReminderTrack(actorType, actorID, noRepetition, time.Now())
+	err := testActorsRuntime.updateReminderTrack(actorType, actorID, noRepetition, time.Now(), nil)
 	assert.Nil(t, err)
 }
 
@@ -560,7 +583,7 @@ func TestGetReminderTrack(t *testing.T) {
 		actorType, actorID := getTestActorTypeAndID()
 		repetition := 10
 		now := time.Now()
-		testActorsRuntime.updateReminderTrack(actorType, actorID, repetition, now)
+		testActorsRuntime.updateReminderTrack(actorType, actorID, repetition, now, nil)
 		r, _ := testActorsRuntime.getReminderTrack(actorType, actorID)
 		assert.NotEmpty(t, r.LastFiredTime)
 		assert.Equal(t, repetition, r.RepetitionLeft)
@@ -1545,7 +1568,7 @@ func TestGetState(t *testing.T) {
 	fakeData := strconv.Quote("fakeData")
 
 	var val interface{}
-	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
+	json.Unmarshal([]byte(fakeData), &val)
 
 	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
 
@@ -1582,7 +1605,7 @@ func TestDeleteState(t *testing.T) {
 	fakeData := strconv.Quote("fakeData")
 
 	var val interface{}
-	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
+	json.Unmarshal([]byte(fakeData), &val)
 
 	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
 
@@ -1827,6 +1850,30 @@ func TestActorsAppHealthCheck(t *testing.T) {
 	assert.False(t, testActorRuntime.appHealthy.Load())
 }
 
+func TestHostedActorsWithoutStateStore(t *testing.T) {
+	testActorRuntime := newTestActorsRuntimeWithoutStore()
+	testActorRuntime.config.HostedActorTypes = []string{"actor1"}
+	go testActorRuntime.startAppHealthCheck(
+		health.WithFailureThreshold(1),
+		health.WithInterval(1*time.Second),
+		health.WithRequestTimeout(100*time.Millisecond))
+
+	time.Sleep(time.Second * 2)
+	assert.False(t, testActorRuntime.appHealthy.Load())
+}
+
+func TestNoHostedActorsWithoutStateStore(t *testing.T) {
+	testActorRuntime := newTestActorsRuntimeWithoutStore()
+	testActorRuntime.config.HostedActorTypes = []string{}
+	go testActorRuntime.startAppHealthCheck(
+		health.WithFailureThreshold(1),
+		health.WithInterval(1*time.Second),
+		health.WithRequestTimeout(100*time.Millisecond))
+
+	time.Sleep(time.Second * 2)
+	assert.True(t, testActorRuntime.appHealthy.Load())
+}
+
 func TestShutdown(t *testing.T) {
 	testActorRuntime := newTestActorsRuntime()
 
@@ -2042,7 +2089,7 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
@@ -2070,7 +2117,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
 	reentrantAppChannel.callLog = []string{}
@@ -2098,7 +2145,7 @@ func TestReentrancyStackLimit(t *testing.T) {
 	stackDepth := 0
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
@@ -2328,5 +2375,17 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, 4, failingState.Failure.CallCount[callKey]) // Should be called 2 more times.
 		assert.Less(t, end.Sub(start), time.Second*10)
+	})
+}
+
+func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntimeWithoutPlacement()
+
+	t.Run("placement is empty", func(t *testing.T) {
+		assert.Nil(t, testActorsRuntime.placement)
+	})
+
+	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
+		assert.Nil(t, testActorsRuntime.store)
 	})
 }

@@ -17,14 +17,16 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"k8s.io/apimachinery/pkg/util/sets"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
@@ -101,7 +103,7 @@ func initializeSets() {
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, _ *http.Request) {
-	log.Printf("indexHandler is called\n")
+	log.Printf("indexHandler called")
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
@@ -110,8 +112,6 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 // this handles /dapr/subscribe, which is called from dapr into this app.
 // this returns the list of topics the app is subscribed to.
 func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
-	log.Printf("configureSubscribeHandler called\n")
-
 	t := []subscription{
 		{
 			PubsubName: pubsubName,
@@ -131,7 +131,7 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			},
 		},
 	}
-	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)
+	log.Printf("configureSubscribeHandler called; subscribing to: %v\n", t)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(t)
@@ -161,19 +161,29 @@ func eventHandlerF(w http.ResponseWriter, r *http.Request) {
 	eventHandler(w, r, routedMessagesF)
 }
 
-// this handles messages published to "pubsub-a-topic"
 func eventHandler(w http.ResponseWriter, r *http.Request, set sets.String) {
+	reqID, ok := r.Context().Value("reqid").(string)
+	if reqID == "" || !ok {
+		reqID = uuid.New().String()
+	}
+
+	log.Printf("(%s) eventHandler called %s", reqID, r.URL)
+
 	var err error
 	var body []byte
 	if r.Body != nil {
-		if body, err = io.ReadAll(r.Body); err == nil {
-			log.Printf("assigned\n")
+		var data []byte
+		data, err = io.ReadAll(r.Body)
+		if err == nil {
+			body = data
 		}
+	} else {
+		log.Printf("(%s) r.Body is nil", reqID)
 	}
 
-	msg, err := extractMessage(body)
+	msg, err := extractMessage(reqID, body)
 	if err != nil {
-		log.Printf("Responding with DROP")
+		log.Printf("(%s) Responding with DROP. Error from extractMessage: %v", reqID, err)
 		// Return success with DROP status to drop message
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -188,42 +198,40 @@ func eventHandler(w http.ResponseWriter, r *http.Request, set sets.String) {
 	set.Insert(msg)
 
 	w.WriteHeader(http.StatusOK)
-	log.Printf("Responding with SUCCESS")
+	log.Printf("(%s) Responding with SUCCESS", reqID)
 	json.NewEncoder(w).Encode(appResponse{
 		Message: "consumed",
 		Status:  "SUCCESS",
 	})
 }
 
-func extractMessage(body []byte) (string, error) {
-	log.Printf("extractMessage() called")
+func extractMessage(reqID string, body []byte) (string, error) {
+	log.Printf("(%s) extractMessage() called with body=%s", reqID, string(body))
 	if body == nil {
 		return "", errors.New("no body")
 	}
 
-	log.Printf("body=%s", string(body))
-
 	m := make(map[string]interface{})
 	err := json.Unmarshal(body, &m)
 	if err != nil {
-		log.Printf("Could not unmarshal, %s", err.Error())
+		log.Printf("(%s) Could not unmarshal: %v", reqID, err)
 		return "", err
 	}
 
 	if m["data_base64"] != nil {
 		b, err := base64.StdEncoding.DecodeString(m["data_base64"].(string))
 		if err != nil {
-			log.Printf("Could not base64 decode, %s", err.Error())
+			log.Printf("(%s) Could not base64 decode: %v", reqID, err)
 			return "", err
 		}
 
 		msg := string(b)
-		log.Printf("output='%s'\n", msg)
+		log.Printf("(%s) output from base64='%s'", reqID, msg)
 		return msg, nil
 	}
 
 	msg := m["data"].(string)
-	log.Printf("output='%s'\n", msg)
+	log.Printf("(%s) output='%s'", reqID, msg)
 
 	return msg, nil
 }
@@ -235,8 +243,11 @@ func initializeHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // the test calls this to get the messages received
-func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
-	log.Println("Enter getReceivedMessages")
+func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
+	reqID, ok := r.Context().Value("reqid").(string)
+	if reqID == "" || !ok {
+		reqID = "s-" + uuid.New().String()
+	}
 
 	response := routedMessagesResponse{
 		RouteA: unique(routedMessagesA.List()),
@@ -247,7 +258,7 @@ func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 		RouteF: unique(routedMessagesF.List()),
 	}
 
-	log.Printf("routedMessagesResponse=%s", response)
+	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
@@ -267,8 +278,11 @@ func unique(slice []string) []string {
 
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
-	log.Printf("Enter appRouter()")
+	log.Printf("Called appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/getMessages", getReceivedMessages).Methods("POST")
@@ -288,9 +302,9 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Dapr E2E test app: pubsub subscriber with routing- listening on http://localhost:%d", appPort)
-
 	// initialize sets on application start
 	initializeSets()
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
+
+	log.Printf("Dapr E2E test app: pubsub subscriber with routing - listening on http://localhost:%d", appPort)
+	utils.StartServer(appPort, appRouter, true, false)
 }

@@ -28,14 +28,14 @@ import (
 
 	"github.com/dapr/kit/logger"
 
-	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 var log = logger.NewLogger("dapr.placement")
 
-type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer
+type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer //nolint:nosnakecase
 
 const (
 	// membershipChangeChSize is the channel size of membership change request from Dapr runtime.
@@ -134,14 +134,14 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 }
 
 // Run starts the placement service gRPC server.
-func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
+func (p *Service) Run(port string, certChain *daprCredentials.CertChain) {
 	var err error
 	p.serverListener, err = net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	opts, err := dapr_credentials.GetServerOptions(certChain)
+	opts, err := daprCredentials.GetServerOptions(certChain)
 	if err != nil {
 		log.Fatalf("error creating gRPC options: %s", err)
 	}
@@ -184,7 +184,7 @@ TIMEOUT:
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
-func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error {
+func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
 	registeredMemberID := ""
 	isActorRuntime := false
 
@@ -285,4 +285,16 @@ func (p *Service) deleteStreamConn(conn placementGRPCStream) {
 		}
 	}
 	p.streamConnPoolLock.Unlock()
+}
+
+func (p *Service) hasStreamConn(conn placementGRPCStream) bool {
+	p.streamConnPoolLock.RLock()
+	defer p.streamConnPoolLock.RUnlock()
+
+	for _, c := range p.streamConnPool {
+		if c == conn {
+			return true
+		}
+	}
+	return false
 }

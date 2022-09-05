@@ -35,6 +35,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type testCommandRequest struct {
@@ -46,6 +47,9 @@ const numHealthChecks = 60 // Number of times to check for endpoint health per a
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("metrics")
+	utils.InitHTTPClient(false)
+
 	// This test shows how to deploy the multiple test apps, validate the side-car injection
 	// and validate the response by using test app's service endpoint
 
@@ -147,11 +151,14 @@ func TestMetrics(t *testing.T) {
 			// Get the metrics from the metrics endpoint
 			res, err := utils.HTTPGetRawNTimes(fmt.Sprintf("http://localhost:%v", metricsPort), numHealthChecks)
 			require.NoError(t, err)
+			defer func() {
+				// Drain before closing
+				_, _ = io.Copy(io.Discard, res.Body)
+				res.Body.Close()
+			}()
 
 			// Evaluate the metrics are as expected
 			tt.evaluate(t, tt.app, res)
-
-			res.Body.Close()
 		})
 	}
 }
@@ -246,7 +253,7 @@ func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) 
 
 func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
 	daprAddress := fmt.Sprintf("localhost:%d", daprPort)
-	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
+	conn, err := grpc.Dial(daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -277,7 +284,7 @@ func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
 	// This test will loop through each of the metrics and look for a specifc
 	// metric `dapr_grpc_io_server_completed_rpcs`. This metric will exist for
 	// multiple `grpc_server_method` labels, therefore, we loop through the labels
-	// to find the the instance that has `grpc_server_method="SaveState". Once we
+	// to find the instance that has `grpc_server_method="SaveState". Once we
 	// find the desired metric entry, we check the metric's value is as expected.`
 	var foundMetric bool
 	var foundMethod bool

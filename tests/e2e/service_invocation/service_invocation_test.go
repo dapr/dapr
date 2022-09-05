@@ -24,13 +24,14 @@ import (
 	"strings"
 	"testing"
 
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.opencensus.io/trace/propagation"
 )
 
 type testCommandRequest struct {
@@ -65,6 +66,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	utils.SetupLogs("service_invocation")
+	utils.InitHTTPClient(false)
+
 	// These apps will be deployed for hellodapr test before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -533,7 +537,7 @@ func TestHeaders(t *testing.T) {
 
 		assert.NotNil(t, responseHeaders["dapr-content-length"][0])
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
-		assert.Equal(t, "application/json; utf-8", responseHeaders["dapr-content-type"][0])
+		assert.True(t, strings.HasPrefix(responseHeaders["dapr-content-type"][0], "application/json"))
 		assert.NotNil(t, responseHeaders["dapr-date"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
@@ -596,7 +600,7 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
 
 		assert.NotNil(t, responseHeaders["Content-Length"][0])
-		assert.Equal(t, "application/json", responseHeaders["Content-Type"][0])
+		assert.True(t, strings.HasPrefix(responseHeaders["Content-Type"][0], "application/json"))
 		assert.NotNil(t, responseHeaders["Date"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
@@ -680,7 +684,7 @@ func TestHeaders(t *testing.T) {
 				t.Logf("received response grpc header..%s\n", traceContext)
 				assert.Equal(t, expectedEncodedTraceID, traceContext)
 				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-				gotSc, ok := propagation.FromBinary(decoded)
+				gotSc, ok := diagUtils.SpanContextFromBinary(decoded)
 
 				assert.True(t, ok)
 				assert.NotNil(t, gotSc)
@@ -767,7 +771,7 @@ func TestHeaders(t *testing.T) {
 				t.Logf("received response grpc header..%s\n", traceContext)
 				assert.Equal(t, expectedEncodedTraceID, traceContext)
 				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-				gotSc, ok := propagation.FromBinary(decoded)
+				gotSc, ok := diagUtils.SpanContextFromBinary(decoded)
 
 				assert.True(t, ok)
 				assert.NotNil(t, gotSc)
@@ -838,7 +842,7 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 	require.NoError(t, err)
 	assert.NotNil(t, requestHeaders["Accept-Encoding"][0])
 	assert.NotNil(t, requestHeaders["Content-Length"][0])
-	assert.Equal(t, "application/json", requestHeaders["Content-Type"][0])
+	assert.True(t, strings.HasPrefix(requestHeaders["Content-Type"][0], "application/json"))
 	assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
 	assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
 	assert.NotNil(t, requestHeaders["Traceparent"][0])
@@ -848,7 +852,7 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 	assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
 
 	assert.NotNil(t, responseHeaders["Content-Length"][0])
-	assert.Equal(t, "application/json; utf-8", responseHeaders["Content-Type"][0])
+	assert.True(t, strings.HasPrefix(responseHeaders["Content-Type"][0], "application/json"))
 	assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
 	assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
 	assert.NotNil(t, responseHeaders["Traceparent"][0])
