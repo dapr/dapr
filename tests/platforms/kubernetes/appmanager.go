@@ -616,25 +616,26 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 
 // AcquireExternalURLFromService gets external url from Service Object.
 func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
-	if svc.Status.LoadBalancer.Ingress != nil && len(svc.Status.LoadBalancer.Ingress) > 0 && len(svc.Spec.Ports) > 0 {
-		address := ""
-		if svc.Status.LoadBalancer.Ingress[0].Hostname != "" {
-			address = svc.Status.LoadBalancer.Ingress[0].Hostname
+	svcPorts := svc.Spec.Ports
+	if len(svcPorts) == 0 {
+		return ""
+	}
+
+	svcFstPort, svcIngress := svcPorts[0], svc.Status.LoadBalancer.Ingress
+	// the default service address is the internal one
+	address, port := svc.Spec.ClusterIP, svcFstPort.Port
+	if svcIngress != nil && len(svcIngress) > 0 {
+		if svcIngress[0].Hostname != "" {
+			address = svcIngress[0].Hostname
 		} else {
-			address = svc.Status.LoadBalancer.Ingress[0].IP
+			address = svcIngress[0].IP
 		}
-		return fmt.Sprintf("%s:%d", address, svc.Spec.Ports[0].Port)
-	}
-
-	// TODO: Support the other local k8s clusters
-	if minikubeExternalIP := m.minikubeNodeIP(); minikubeExternalIP != "" {
+		// TODO: Support the other local k8s clusters
+	} else if minikubeExternalIP := m.minikubeNodeIP(); minikubeExternalIP != "" {
 		// if test cluster is minikube, external ip address is minikube node address
-		if len(svc.Spec.Ports) > 0 {
-			return fmt.Sprintf("%s:%d", minikubeExternalIP, svc.Spec.Ports[0].NodePort)
-		}
+		address, port = minikubeExternalIP, svcFstPort.NodePort
 	}
-
-	return ""
+	return fmt.Sprintf("%s:%d", address, port)
 }
 
 // IsServiceIngressReady returns true if external ip is available.
@@ -647,11 +648,9 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 		return true
 	}
 
-	// TODO: Support the other local k8s clusters
-	if m.minikubeNodeIP() != "" {
-		if len(svc.Spec.Ports) > 0 {
-			return true
-		}
+	if len(svc.Spec.Ports) > 0 {
+		// TODO: Support the other local k8s clusters
+		return m.minikubeNodeIP() != "" || !m.app.ShouldBeExposed()
 	}
 
 	return false
@@ -702,7 +701,7 @@ func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	return nil
 }
 
-// DeleteService deletes deployment for the test app.
+// DeleteService deletes service for the test app.
 func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	serviceClient := m.client.Services(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
@@ -769,7 +768,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	return result, nil
 }
 
-// SaveContainerLogs get container logs for all containers in the pod and saves them to disk.
+// StreamContainerLogs get container logs for all containers in the pod and saves them to disk.
 func (m *AppManager) StreamContainerLogs() error {
 	podClient := m.client.Pods(m.namespace)
 

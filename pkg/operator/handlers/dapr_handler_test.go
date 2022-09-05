@@ -11,8 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 )
@@ -129,6 +131,48 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
 }
 
+func TestPatchDaprService(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+
+	s := runtime.NewScheme()
+	err := scheme.AddToScheme(s)
+	assert.NoError(t, err)
+	testDaprHandler.Scheme = s
+
+	cli := fake.NewClientBuilder().WithScheme(s).Build()
+	testDaprHandler.Client = cli
+
+	ctx := context.Background()
+	myDaprService := types.NamespacedName{
+		Namespace: "test",
+		Name:      "test",
+	}
+	deployment := getDeployment("test", "true")
+
+	err = testDaprHandler.createDaprService(ctx, myDaprService, deployment)
+	assert.NoError(t, err)
+	var actualService corev1.Service
+	err = cli.Get(ctx, myDaprService, &actualService)
+	assert.NoError(t, err)
+	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
+	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
+	assert.Len(t, actualService.OwnerReferences, 1)
+	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
+	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
+
+	err = testDaprHandler.patchDaprService(ctx, myDaprService, deployment, actualService)
+	assert.NoError(t, err)
+	err = cli.Get(ctx, myDaprService, &actualService)
+	assert.NoError(t, err)
+	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
+	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
+	assert.Len(t, actualService.OwnerReferences, 1)
+	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
+	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
+}
+
 func TestGetMetricsPort(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 	t.Run("metrics port override", func(t *testing.T) {
@@ -167,7 +211,7 @@ func TestWrapper(t *testing.T) {
 	deploymentWrapper := getDeployment("test_id", "true")
 	statefulsetWrapper := getStatefulSet("test_id", "true")
 
-	t.Run("get match labal from wrapper", func(t *testing.T) {
+	t.Run("get match label from wrapper", func(t *testing.T) {
 		assert.Equal(t, "test", deploymentWrapper.GetMatchLabels()["app"])
 		assert.Equal(t, "test", statefulsetWrapper.GetMatchLabels()["app"])
 	})
@@ -207,8 +251,8 @@ func TestInit(t *testing.T) {
 
 		trueA := true
 		srv = &corev1.Service{
-			ObjectMeta: meta_v1.ObjectMeta{
-				OwnerReferences: []meta_v1.OwnerReference{
+			ObjectMeta: metaV1.ObjectMeta{
+				OwnerReferences: []metaV1.OwnerReference{
 					{
 						Name:       "TestName",
 						Controller: &trueA,
@@ -254,7 +298,7 @@ func getDeploymentWithMetricsPortAnnotation(daprID string, daprEnabled string, m
 
 func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 	// Arrange
-	metadata := meta_v1.ObjectMeta{
+	metadata := metaV1.ObjectMeta{
 		Name:   "app",
 		Labels: map[string]string{"app": "test_app"},
 		Annotations: map[string]string{
@@ -269,13 +313,13 @@ func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 	}
 
 	deployment := appsv1.Deployment{
-		ObjectMeta: meta_v1.ObjectMeta{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: "app",
 		},
 
 		Spec: appsv1.DeploymentSpec{
 			Template: podTemplateSpec,
-			Selector: &meta_v1.LabelSelector{
+			Selector: &metaV1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": "test",
 				},
@@ -288,7 +332,7 @@ func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 
 func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 	// Arrange
-	metadata := meta_v1.ObjectMeta{
+	metadata := metaV1.ObjectMeta{
 		Name:   "app",
 		Labels: map[string]string{"app": "test_app"},
 		Annotations: map[string]string{
@@ -302,14 +346,14 @@ func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 		ObjectMeta: metadata,
 	}
 
-	stratefulset := appsv1.StatefulSet{
-		ObjectMeta: meta_v1.ObjectMeta{
+	statefulset := appsv1.StatefulSet{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name: "app",
 		},
 
 		Spec: appsv1.StatefulSetSpec{
 			Template: podTemplateSpec,
-			Selector: &meta_v1.LabelSelector{
+			Selector: &metaV1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": "test",
 				},
@@ -318,7 +362,7 @@ func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 	}
 
 	return &StatefulSetWrapper{
-		stratefulset,
+		statefulset,
 	}
 }
 

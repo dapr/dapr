@@ -23,12 +23,12 @@ import (
 	"net"
 	gohttp "net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -41,30 +41,29 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
-	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/kit/logger"
-
-	"github.com/dapr/components-contrib/lock"
+	"github.com/dapr/dapr/pkg/actors"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
-	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
+	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
-	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var invalidJSON = []byte{0x7b, 0x7b}
@@ -143,11 +142,11 @@ func TestPubSubEndpoints(t *testing.T) {
 				}
 
 				if req.PubsubName == "errnotfound" {
-					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+					return runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				}
 
 				if req.PubsubName == "errnotallowed" {
-					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+					return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				}
 
 				return nil
@@ -1743,19 +1742,19 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		getComponentsFn: func() []components_v1alpha1.Component {
-			return []components_v1alpha1.Component{
+		getComponentsFn: func() []componentsV1alpha1.Component {
+			return []componentsV1alpha1.Component{
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "MockComponent1Name",
 					},
-					Spec: components_v1alpha1.ComponentSpec{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    "mock.component1Type",
 						Version: "v1.0",
-						Metadata: []components_v1alpha1.MetadataItem{
+						Metadata: []componentsV1alpha1.MetadataItem{
 							{
 								Name: "actorMockComponent1",
-								Value: components_v1alpha1.DynamicValue{
+								Value: componentsV1alpha1.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -1763,16 +1762,16 @@ func TestV1MetadataEndpoint(t *testing.T) {
 					},
 				},
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "MockComponent2Name",
 					},
-					Spec: components_v1alpha1.ComponentSpec{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    "mock.component2Type",
 						Version: "v1.0",
-						Metadata: []components_v1alpha1.MetadataItem{
+						Metadata: []componentsV1alpha1.MetadataItem{
 							{
 								Name: "actorMockComponent2",
-								Value: components_v1alpha1.DynamicValue{
+								Value: componentsV1alpha1.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -1781,6 +1780,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			}
 		},
+		extendedMetadata: sync.Map{},
 		getComponentsCapabilitesFn: func() map[string][]string {
 			capsMap := make(map[string][]string)
 			capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
@@ -1788,13 +1788,18 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			return capsMap
 		},
 	}
+	// PutMetadata only stroes string(request body)
+	testAPI.extendedMetadata.Store("test", "value")
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
 	expectedBody := map[string]interface{}{
-		"id":       "xyz",
-		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
-		"extended": make(map[string]string),
+		"id":     "xyz",
+		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
+		"extended": map[string]string{
+			"test":               "value",
+			"daprRuntimeVersion": "edge",
+		},
 		"components": []map[string]interface{}{
 			{
 				"name":         "MockComponent1Name",
@@ -1820,6 +1825,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 		testAPI.id = "xyz"
 		testAPI.actor = mockActors
+		testAPI.daprRunTimeVersion = "edge"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
@@ -2107,7 +2113,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1.0"}
-	pipe := http_middleware.Pipeline{}
+	pipe := httpMiddleware.Pipeline{}
 
 	createExporters(&buffer)
 
@@ -2172,13 +2178,14 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 1, len(resp.JSONBody.([]interface{})))
-		rspMap := resp.JSONBody.([]interface{})[0]
+		assert.Equal(t, 1, len(resp.JSONBody.(map[string]interface{})))
+		rspMap := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap)
-		assert.Equal(t, "good-key1", rspMap.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value1", rspMap.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version1", rspMap.(map[string]interface{})["version"].(string))
-		metadata := rspMap.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Contains(t, rspMap, "good-key1")
+		goodkeyVal := rspMap["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal["version"].(string))
+		metadata := goodkeyVal["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
 	})
 	t.Run("Get Configurations with good keys", func(t *testing.T) {
@@ -2187,21 +2194,23 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good keys should return 200")
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.([]interface{})))
-		rspMap1 := resp.JSONBody.([]interface{})[0]
+		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
-		assert.Equal(t, "good-key1", rspMap1.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value1", rspMap1.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version1", rspMap1.(map[string]interface{})["version"].(string))
-		metadata := rspMap1.(map[string]interface{})["metadata"].(map[string]interface{})
-		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+		assert.Contains(t, rspMap1, "good-key1")
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
+		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.([]interface{})[1]
+		rspMap2 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap2)
-		assert.Equal(t, "good-key2", rspMap2.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value2", rspMap2.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version2", rspMap2.(map[string]interface{})["version"].(string))
-		metadata2 := rspMap2.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Contains(t, rspMap2, "good-key2")
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
+		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
+		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -2213,21 +2222,23 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.([]interface{})))
-		rspMap1 := resp.JSONBody.([]interface{})[0]
+		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
-		assert.Equal(t, "good-key1", rspMap1.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value1", rspMap1.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version1", rspMap1.(map[string]interface{})["version"].(string))
-		metadata := rspMap1.(map[string]interface{})["metadata"].(map[string]interface{})
-		assert.Equal(t, "metadata-value1", metadata["metadata-key1"])
+		assert.Contains(t, rspMap1, "good-key1")
+		goodkeyVal1 := rspMap1["good-key1"].(map[string]interface{})
+		assert.Equal(t, "good-value1", goodkeyVal1["value"].(string))
+		assert.Equal(t, "version1", goodkeyVal1["version"].(string))
+		metadata1 := goodkeyVal1["metadata"].(map[string]interface{})
+		assert.Equal(t, "metadata-value1", metadata1["metadata-key1"])
 
-		rspMap2 := resp.JSONBody.([]interface{})[1]
+		rspMap2 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap2)
-		assert.Equal(t, "good-key2", rspMap2.(map[string]interface{})["key"].(string))
-		assert.Equal(t, "good-value2", rspMap2.(map[string]interface{})["value"].(string))
-		assert.Equal(t, "version2", rspMap2.(map[string]interface{})["version"].(string))
-		metadata2 := rspMap2.(map[string]interface{})["metadata"].(map[string]interface{})
+		assert.Contains(t, rspMap2, "good-key2")
+		goodkeyVal2 := rspMap2["good-key2"].(map[string]interface{})
+		assert.Equal(t, "good-value2", goodkeyVal2["value"].(string))
+		assert.Equal(t, "version2", goodkeyVal2["version"].(string))
+		metadata2 := goodkeyVal2["metadata"].(map[string]interface{})
 		assert.Equal(t, "metadata-value2", metadata2["metadata-key2"])
 	})
 
@@ -2249,6 +2260,60 @@ func TestV1Alpha1ConfigurationGet(t *testing.T) {
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
 		assert.Equal(t, "error configuration stores nonExistStore not found", resp.ErrorBody["message"])
+	})
+}
+
+func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	var fakeConfigurationStore configuration.Store = &fakeConfigurationStore{}
+
+	storeName := "store1"
+
+	fakeConfigurationStores := map[string]configuration.Store{
+		storeName: fakeConfigurationStore,
+	}
+	testAPI := &api{
+		resiliency:          resiliency.New(nil),
+		configurationStores: fakeConfigurationStores,
+	}
+	fakeServer.StartServer(testAPI.constructConfigurationEndpoints())
+
+	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+
+		rspMap1 := resp1.JSONBody
+		assert.NotNil(t, rspMap1)
+
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"].(string))
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 200, resp2.StatusCode, "unsubscribe configuration store,should return 200")
+		assert.NotNil(t, resp2.JSONBody, "Unsubscribe configuration should return a non nil response body")
+	})
+
+	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
+		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
+		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+
+		rspMap1 := resp1.JSONBody
+		assert.NotNil(t, rspMap1)
+
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", rspMap1.(map[string]interface{})["id"].(string))
+
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+
+		assert.Equal(t, 400, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
+	})
+
+	t.Run("error in unsubscribe configurations", func(t *testing.T) {
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, "subscribe_id_err")
+		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
+		assert.Equal(t, 500, resp2.StatusCode, "Expected error during unsubscribe api")
+		assert.NotNil(t, resp2.ErrorBody, "Unsubscribe configuration should return a non nil response body")
 	})
 }
 
@@ -2420,26 +2485,28 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 }
 
-func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
-	registry := http_middleware_loader.NewRegistry()
-	registry.Register(http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) (http_middleware.Middleware, error) {
-		return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-			return func(ctx *fasthttp.RequestCtx) {
-				body := string(ctx.PostBody())
-				ctx.Request.SetBody([]byte(strings.ToUpper(body)))
-				h(ctx)
-			}
-		}, nil
-	}))
-	var handlers []http_middleware.Middleware
+func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
+	registry := httpMiddlewareLoader.NewRegistry()
+	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
+		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+			return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+				return func(ctx *fasthttp.RequestCtx) {
+					body := string(ctx.PostBody())
+					ctx.Request.SetBody([]byte(strings.ToUpper(body)))
+					h(ctx)
+				}
+			}, nil
+		}
+	}, "uppercase")
+	var handlers []httpMiddleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
 		handler, err := registry.Create(spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{})
 		if err != nil {
-			return http_middleware.Pipeline{}
+			return httpMiddleware.Pipeline{}
 		}
 		handlers = append(handlers, handler)
 	}
-	return http_middleware.Pipeline{Handlers: handlers}
+	return httpMiddleware.Pipeline{Handlers: handlers}
 }
 
 func TestSinglePipelineWithTracer(t *testing.T) {
@@ -2650,7 +2717,7 @@ func (f *fakeHTTPServer) StartServerWithAPIToken(endpoints []Endpoint) {
 	}
 }
 
-func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline http_middleware.Pipeline, endpoints []Endpoint) {
+func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline httpMiddleware.Pipeline, endpoints []Endpoint) {
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
@@ -3018,7 +3085,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3051,7 +3118,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3425,7 +3492,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
 			Data: []byte("\"bGlmZSBpcyBnb29k\""),
-			ETag: ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+			ETag: ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 		}, nil
 	}
 	if req.Key == "error-key" {
@@ -3440,7 +3507,7 @@ func (c fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetRe
 }
 
 func (c fakeStateStore) Init(metadata state.Metadata) error {
-	c.counter = 0
+	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 
@@ -3693,16 +3760,15 @@ func (c fakeConfigurationStore) Ping() error {
 func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
 	if len(req.Keys) == 0 {
 		return &configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:     "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value:   "good-value1",
 					Version: "version1",
 					Metadata: map[string]string{
 						"metadata-key1": "metadata-value1",
 					},
-				}, {
-					Key:     "good-key2",
+				},
+				"good-key2": {
 					Value:   "good-value2",
 					Version: "version2",
 					Metadata: map[string]string{
@@ -3715,29 +3781,28 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 
 	if len(req.Keys) == 1 && req.Keys[0] == "good-key1" {
 		return &configuration.GetResponse{
-			Items: []*configuration.Item{{
-				Key:     "good-key1",
-				Value:   "good-value1",
-				Version: "version1",
-				Metadata: map[string]string{
-					"metadata-key1": "metadata-value1",
-				},
-			}},
-		}, nil
-	}
-
-	if len(req.Keys) == 2 && req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" {
-		return &configuration.GetResponse{
-			Items: []*configuration.Item{
-				{
-					Key:     "good-key1",
+			Items: map[string]*configuration.Item{
+				"good-key1": {
 					Value:   "good-value1",
 					Version: "version1",
 					Metadata: map[string]string{
 						"metadata-key1": "metadata-value1",
 					},
-				}, {
-					Key:     "good-key2",
+				},
+			},
+		}, nil
+	}
+
+	if len(req.Keys) == 2 && req.Keys[0] == "good-key1" && req.Keys[1] == "good-key2" {
+		return &configuration.GetResponse{
+			Items: map[string]*configuration.Item{
+				"good-key1": {
+					Value:   "good-value1",
+					Version: "version1",
+					Metadata: map[string]string{
+						"metadata-key1": "metadata-value1",
+					},
+				}, "good-key2": {
 					Value:   "good-value2",
 					Version: "version2",
 					Metadata: map[string]string{
@@ -3756,7 +3821,7 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 }
 
 func (c fakeConfigurationStore) Init(metadata configuration.Metadata) error {
-	c.counter = 0
+	c.counter = 0 //nolint:staticcheck
 	return nil
 }
 
@@ -3765,6 +3830,9 @@ func (c *fakeConfigurationStore) Subscribe(ctx context.Context, req *configurati
 }
 
 func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
+	if req.ID == "subscribe_id_err" {
+		return errors.New("Error occurred during unsubscribe op")
+	}
 	return nil
 }
 

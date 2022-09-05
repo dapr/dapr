@@ -25,14 +25,15 @@ import (
 	nethttp "net/http"
 
 	"github.com/valyala/fasthttp"
-	"go.opencensus.io/plugin/ochttp/propagation/tracecontext"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -52,14 +53,17 @@ const (
 type Channel struct {
 	client              *fasthttp.Client
 	baseAddress         string
-	ch                  chan int
+	ch                  chan struct{}
 	tracingSpec         config.TracingSpec
 	appHeaderToken      string
 	maxResponseBodySize int
+	appHealthCheckPath  string
+	appHealth           *apphealth.AppHealth
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
-// nolint:gosec
+//
+//nolint:gosec
 func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
 	scheme := httpScheme
 	if sslEnabled {
@@ -85,7 +89,7 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 	}
 
 	if maxConcurrency > 0 {
-		c.ch = make(chan int, maxConcurrency)
+		c.ch = make(chan struct{}, maxConcurrency)
 	}
 
 	return c, nil
@@ -140,19 +144,23 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 
 // InvokeMethod invokes user code via HTTP.
 func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
+	}
+
 	// Check if HTTP Extension is given. Otherwise, it will return error.
 	httpExt := req.Message().GetHttpExtension()
 	if httpExt == nil {
 		return nil, status.Error(codes.InvalidArgument, "missing HTTP extension field")
 	}
-	if httpExt.GetVerb() == commonv1pb.HTTPExtension_NONE {
+	if httpExt.GetVerb() == commonv1pb.HTTPExtension_NONE { //nolint:nosnakecase
 		return nil, status.Error(codes.InvalidArgument, "invalid HTTP verb")
 	}
 
 	var rsp *invokev1.InvokeMethodResponse
 	var err error
 	switch req.APIVersion() {
-	case internalv1pb.APIVersion_V1:
+	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
 		rsp, err = h.invokeMethodV1(ctx, req)
 
 	default:
@@ -163,12 +171,63 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	return rsp, err
 }
 
+// SetAppHealthCheckPath sets the path where to send requests for health probes.
+func (h *Channel) SetAppHealthCheckPath(path string) {
+	h.appHealthCheckPath = "/" + strings.TrimPrefix(path, "/")
+}
+
+// SetAppHealth sets the apphealth.AppHealth object.
+func (h *Channel) SetAppHealth(ah *apphealth.AppHealth) {
+	h.appHealth = ah
+}
+
+// HealthProbe performs a health probe.
+func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
+	channelReq := fasthttp.AcquireRequest()
+	channelResp := fasthttp.AcquireResponse()
+
+	defer func() {
+		fasthttp.ReleaseRequest(channelReq)
+		fasthttp.ReleaseResponse(channelResp)
+	}()
+
+	channelReq.URI().Update(h.baseAddress + h.appHealthCheckPath)
+	channelReq.URI().DisablePathNormalizing = true
+	channelReq.Header.SetMethod(fasthttp.MethodGet)
+
+	diag.DefaultHTTPMonitoring.AppHealthProbeStarted(ctx)
+	startRequest := time.Now()
+
+	err := h.client.Do(channelReq, channelResp)
+
+	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
+
+	if err != nil {
+		// Errors here are network-level errors, so we are not returning them as errors
+		// Instead, we just return a failed probe
+		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(nethttp.StatusInternalServerError), elapsedMs)
+		//nolint:nilerr
+		return false, nil
+	}
+
+	code := channelResp.StatusCode()
+	status := code >= 200 && code < 300
+	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(code), elapsedMs)
+
+	return status, nil
+}
+
 func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	channelReq := h.constructRequest(ctx, req)
 
 	if h.ch != nil {
-		h.ch <- 1
+		h.ch <- struct{}{}
 	}
+	defer func() {
+		if h.ch != nil {
+			<-h.ch
+		}
+	}()
 
 	// Emit metric when request is sent
 	verb := string(channelReq.Header.Method())
@@ -189,10 +248,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	if err != nil {
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(resp.Header.ContentLength()), elapsedMs)
 		return nil, err
-	}
-
-	if h.ch != nil {
-		<-h.ch
 	}
 
 	rsp := h.parseChannelResponse(req, resp)
@@ -221,9 +276,9 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
-	span := diag_utils.SpanFromContext(ctx)
-	httpFormat := &tracecontext.HTTPFormat{}
-	tp, ts := httpFormat.SpanContextToHeaders(span.SpanContext())
+	span := diagUtils.SpanFromContext(ctx)
+	tp := diag.SpanContextToW3CString(span.SpanContext())
+	ts := diag.TraceStateToW3CString(span.SpanContext())
 	channelReq.Header.Set("traceparent", tp)
 	if ts != "" {
 		channelReq.Header.Set("tracestate", ts)

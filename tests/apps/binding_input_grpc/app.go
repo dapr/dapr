@@ -106,6 +106,7 @@ func main() {
 	}
 }
 
+//nolint:forbidigo
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.GetData().Value))
 
@@ -141,7 +142,7 @@ func (s *server) GetReceivedTopics(ctx context.Context, in *commonv1pb.InvokeReq
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*pb.TopicSubscription{},
+		Subscriptions: []*commonv1pb.TopicSubscription{},
 	}, nil
 }
 
@@ -164,7 +165,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	messages.add(message)
 
 	return &pb.TopicEventResponse{
-		Status: pb.TopicEventResponse_SUCCESS,
+		Status: pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 	}, nil
 }
 
@@ -178,6 +179,8 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.
 }
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
+//
+//nolint:forbidigo
 func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
 	fmt.Printf("Invoked from binding: %s - %s\n", in.Name, string(in.Data))
 	return &pb.BindingEventResponse{}, nil

@@ -17,6 +17,7 @@ E2E_TEST_APPS=actorjava \
 actordotnet \
 actorpython \
 actorphp \
+healthapp \
 hellodapr \
 stateapp \
 secretapp \
@@ -369,6 +370,15 @@ setup-helm-init:
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
 	$(HELM) repo update
 
+# setup tailscale
+.PHONY: setup-tailscale
+setup-tailscale:
+ifeq ($(TAILSCALE_AUTH_KEY),)
+	$(error TAILSCALE_AUTH_KEY environment variable must be set)
+else
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) TAILSCALE_AUTH_KEY=$(TAILSCALE_AUTH_KEY) ./tests/setup_tailscale.sh
+endif
+
 # install redis to the cluster without password
 setup-test-env-redis:
 	$(HELM) install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
@@ -432,6 +442,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_query.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badhost.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_vault_secretstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_reentrant_actor.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -445,6 +456,9 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/resiliency_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	# TODO: Remove once AppHealthCheck feature is finalized
+	$(KUBECTL) apply -f ./tests/config/app_healthcheck.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
@@ -485,15 +499,15 @@ else
 endif
 
 setup-minikube-darwin:
-	minikube start --memory=4g --cpus=4 --driver=hyperkit --kubernetes-version=v1.18.8
+	minikube start --memory=4g --cpus=4 --driver=hyperkit
 	minikube addons enable metrics-server
 
 setup-minikube-windows:
-	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.8
+	minikube start --memory=4g --cpus=4
 	minikube addons enable metrics-server
 
 setup-minikube-linux:
-	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.8
+	minikube start --memory=4g --cpus=4
 	minikube addons enable metrics-server
 
 setup-minikube: setup-minikube-$(detected_OS)

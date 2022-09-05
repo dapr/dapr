@@ -15,42 +15,58 @@ package kubernetes
 
 import (
 	"encoding/json"
+	"os"
 
 	apiv1 "k8s.io/api/core/v1"
+
+	"github.com/dapr/dapr/utils"
+)
+
+const (
+	// useServiceInternalIP is used to identify wether the connection between the kubernetes platform could be made using its internal ips.
+	useServiceInternalIP = "TEST_E2E_USE_INTERNAL_IP"
 )
 
 // AppDescription holds the deployment information of test app.
 type AppDescription struct {
-	AppName            string            `json:",omitempty"`
-	AppPort            int               `json:",omitempty"`
-	AppProtocol        string            `json:",omitempty"`
-	AppEnv             map[string]string `json:",omitempty"`
-	DaprEnabled        bool              `json:",omitempty"`
-	ImageName          string            `json:",omitempty"`
-	ImageSecret        string            `json:",omitempty"`
-	RegistryName       string            `json:",omitempty"`
-	Replicas           int32             `json:",omitempty"`
-	IngressEnabled     bool              `json:",omitempty"`
-	MetricsEnabled     bool              `json:",omitempty"` // This controls the setting for the dapr.io/enable-metrics annotation
-	MetricsPort        string            `json:",omitempty"`
-	Config             string            `json:",omitempty"`
-	AppCPULimit        string            `json:",omitempty"`
-	AppCPURequest      string            `json:",omitempty"`
-	AppMemoryLimit     string            `json:",omitempty"`
-	AppMemoryRequest   string            `json:",omitempty"`
-	DaprCPULimit       string            `json:",omitempty"`
-	DaprCPURequest     string            `json:",omitempty"`
-	DaprMemoryLimit    string            `json:",omitempty"`
-	DaprMemoryRequest  string            `json:",omitempty"`
-	Namespace          *string           `json:",omitempty"`
-	IsJob              bool              `json:",omitempty"`
-	SecretStoreDisable bool              `json:",omitempty"`
-	DaprVolumeMounts   string            `json:",omitempty"`
-	Labels             map[string]string `json:",omitempty"` // Adds custom labels to pods
-	PodAffinityLabels  map[string]string `json:",omitempty"` // If set, adds a podAffinity rule matching those labels
-	Volumes            []apiv1.Volume    `json:",omitempty"`
-	InitContainers     []apiv1.Container `json:",omitempty"`
-	PlacementAddresses []string          `json:",omitempty"`
+	AppName                string              `json:",omitempty"`
+	AppPort                int                 `json:",omitempty"`
+	AppProtocol            string              `json:",omitempty"`
+	AppEnv                 map[string]string   `json:",omitempty"`
+	AppVolumeMounts        []apiv1.VolumeMount `json:",omitempty"`
+	DaprEnabled            bool                `json:",omitempty"`
+	ImageName              string              `json:",omitempty"`
+	ImageSecret            string              `json:",omitempty"`
+	RegistryName           string              `json:",omitempty"`
+	Replicas               int32               `json:",omitempty"`
+	IngressEnabled         bool                `json:",omitempty"`
+	IngressPort            int                 `json:",omitempty"` // Defaults to AppPort if empty
+	MetricsEnabled         bool                `json:",omitempty"` // This controls the setting for the dapr.io/enable-metrics annotation
+	MetricsPort            string              `json:",omitempty"`
+	Config                 string              `json:",omitempty"`
+	AppCPULimit            string              `json:",omitempty"`
+	AppCPURequest          string              `json:",omitempty"`
+	AppMemoryLimit         string              `json:",omitempty"`
+	AppMemoryRequest       string              `json:",omitempty"`
+	DaprCPULimit           string              `json:",omitempty"`
+	DaprCPURequest         string              `json:",omitempty"`
+	DaprMemoryLimit        string              `json:",omitempty"`
+	DaprMemoryRequest      string              `json:",omitempty"`
+	DaprEnv                string              `json:",omitempty"`
+	Namespace              *string             `json:",omitempty"`
+	IsJob                  bool                `json:",omitempty"`
+	SecretStoreDisable     bool                `json:",omitempty"`
+	DaprVolumeMounts       string              `json:",omitempty"`
+	Labels                 map[string]string   `json:",omitempty"` // Adds custom labels to pods
+	PodAffinityLabels      map[string]string   `json:",omitempty"` // If set, adds a podAffinity rule matching those labels
+	Volumes                []apiv1.Volume      `json:",omitempty"`
+	InitContainers         []apiv1.Container   `json:",omitempty"`
+	PlacementAddresses     []string            `json:",omitempty"`
+	EnableAppHealthCheck   bool                `json:",omitempty"`
+	AppHealthCheckPath     string              `json:",omitempty"`
+	AppHealthProbeInterval int                 `json:",omitempty"` // In seconds
+	AppHealthProbeTimeout  int                 `json:",omitempty"` // In milliseconds
+	AppHealthThreshold     int                 `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {
@@ -58,6 +74,11 @@ func (a AppDescription) String() string {
 	// This method overrides the default stringifier to use the custom JSON stringifier which hides ImageSecret
 	j, _ := json.Marshal(a)
 	return string(j)
+}
+
+// ShouldBeExposed returns if the app should be exposed as a loadbalancer/nodeport service.
+func (a AppDescription) ShouldBeExposed() bool {
+	return a.IngressEnabled && !utils.IsTruthy(os.Getenv(useServiceInternalIP))
 }
 
 func (a AppDescription) MarshalJSON() ([]byte, error) {

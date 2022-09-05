@@ -11,6 +11,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subscriptions "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
@@ -57,12 +58,12 @@ func (o *mockOperator) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb
 	}, nil
 }
 
-func (o *mockOperator) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error {
+func (o *mockOperator) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
 	return nil
 }
 
 func getOperatorClient(address string) operatorv1pb.OperatorClient {
-	conn, _ := grpc.Dial(address, grpc.WithInsecure())
+	conn, _ := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	return operatorv1pb.NewOperatorClient(conn)
 }
 

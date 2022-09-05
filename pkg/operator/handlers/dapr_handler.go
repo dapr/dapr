@@ -8,7 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -74,7 +74,7 @@ func (h *DaprHandler) Init() error {
 		daprServiceOwnerField,
 		func(rawObj client.Object) []string {
 			svc := rawObj.(*corev1.Service)
-			owner := meta_v1.GetControllerOf(svc)
+			owner := metaV1.GetControllerOf(svc)
 			if owner == nil || owner.APIVersion != appsv1.SchemeGroupVersion.String() || (owner.Kind != "Deployment" && owner.Kind != "StatefulSet") {
 				return nil
 			}
@@ -178,12 +178,17 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 	appID := h.getAppID(wrapper)
 	service := h.createDaprServiceValues(ctx, expectedService, wrapper, appID)
 
+	if err := ctrl.SetControllerReference(wrapper.GetObject(), service, h.Scheme); err != nil {
+		return err
+	}
+
 	service.ObjectMeta.ResourceVersion = daprSvc.ObjectMeta.ResourceVersion
 
 	if err := h.Update(ctx, service); err != nil {
 		return err
 	}
 
+	monitoring.RecordServiceUpdatedCount(appID)
 	return nil
 }
 
@@ -220,7 +225,7 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	}
 
 	return &corev1.Service{
-		ObjectMeta: meta_v1.ObjectMeta{
+		ObjectMeta: metaV1.ObjectMeta{
 			Name:        expectedService.Name,
 			Namespace:   expectedService.Namespace,
 			Labels:      map[string]string{daprEnabledAnnotationKey: "true"},

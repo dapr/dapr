@@ -18,6 +18,8 @@ import (
 	"log"
 	"os"
 
+	corev1 "k8s.io/api/core/v1"
+
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
@@ -47,6 +49,7 @@ type PlatformInterface interface {
 	GetSidecarUsage(appName string) (*AppUsage, error)
 	GetTotalRestarts(appname string) (int, error)
 	GetConfiguration(name string) (*configurationv1alpha1.Configuration, error)
+	GetService(name string) (*corev1.Service, error)
 }
 
 // AppUsage holds the CPU and Memory information for the application.

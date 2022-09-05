@@ -25,6 +25,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/tests/apps/utils"
 )
@@ -87,7 +88,6 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 func invokeDaprHTTPAPI() error {
 	healthURL := fmt.Sprintf("http://%s/v1.0/healthz", daprHTTPAddr)
-	// nolint: gosec
 	r, err := httpClient.Get(healthURL)
 	if err != nil {
 		return err
@@ -102,7 +102,7 @@ func invokeDaprGRPCAPI() error {
 	defer cancel()
 	conn, err := grpc.DialContext(ctx,
 		daprGRPCAddr,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock())
 	if err != nil {
 		return err
@@ -231,5 +231,5 @@ func appRouter() *mux.Router {
 
 func main() {
 	log.Printf("Hello Dapr v2 - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }
