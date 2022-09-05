@@ -42,6 +42,8 @@ type DaprClient interface {
 	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Publishes multiple events to the specified topic in specified pubsub.
+	PublishBatchEvent(ctx context.Context, in *PublishEventsRequest, opts ...grpc.CallOption) (*PublishEventsResponse, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -165,6 +167,15 @@ func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteSta
 func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PublishEvent", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) PublishBatchEvent(ctx context.Context, in *PublishEventsRequest, opts ...grpc.CallOption) (*PublishEventsResponse, error) {
+	out := new(PublishEventsResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PublishBatchEvent", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -387,6 +398,8 @@ type DaprServer interface {
 	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
+	// Publishes multiple events to the specified topic in specified pubsub.
+	PublishBatchEvent(context.Context, *PublishEventsRequest) (*PublishEventsResponse, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -457,6 +470,9 @@ func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *Execute
 }
 func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
+}
+func (UnimplementedDaprServer) PublishBatchEvent(context.Context, *PublishEventsRequest) (*PublishEventsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PublishBatchEvent not implemented")
 }
 func (UnimplementedDaprServer) InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeBinding not implemented")
@@ -685,6 +701,24 @@ func _Dapr_PublishEvent_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).PublishEvent(ctx, req.(*PublishEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_PublishBatchEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PublishEventsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).PublishBatchEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/PublishBatchEvent",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).PublishBatchEvent(ctx, req.(*PublishEventsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1076,6 +1110,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PublishEvent",
 			Handler:    _Dapr_PublishEvent_Handler,
+		},
+		{
+			MethodName: "PublishBatchEvent",
+			Handler:    _Dapr_PublishBatchEvent_Handler,
 		},
 		{
 			MethodName: "InvokeBinding",
