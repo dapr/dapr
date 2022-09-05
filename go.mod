@@ -397,3 +397,6 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
+
+// Will change to the pubsub batching branch once changes merged in components contrib ... This is temporary change
+replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20220912085210-c7daa32d35ea

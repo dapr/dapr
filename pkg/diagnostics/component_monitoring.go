@@ -32,10 +32,12 @@ const (
 
 // componentMetrics holds dapr runtime metrics for components.
 type componentMetrics struct {
-	pubsubIngressCount   *stats.Int64Measure
-	pubsubIngressLatency *stats.Float64Measure
-	pubsubEgressCount    *stats.Int64Measure
-	pubsubEgressLatency  *stats.Float64Measure
+	pubsubIngressCount      *stats.Int64Measure
+	pubsubIngressLatency    *stats.Float64Measure
+	bulkPubsubEgressCount   *stats.Int64Measure
+	bulkPubsubEgressLatency *stats.Float64Measure
+	pubsubEgressCount       *stats.Int64Measure
+	pubsubEgressLatency     *stats.Float64Measure
 
 	inputBindingCount    *stats.Int64Measure
 	inputBindingLatency  *stats.Float64Measure
@@ -74,6 +76,14 @@ func newComponentMetrics() *componentMetrics {
 		pubsubEgressLatency: stats.Float64(
 			"component/pubsub_egress/latencies",
 			"The latency of the response from the pub/sub component.",
+			stats.UnitMilliseconds),
+		bulkPubsubEgressCount: stats.Int64(
+			"component/pubsub_egress/count",
+			"The number of bulk publish calls to the pub/sub component.",
+			stats.UnitDimensionless),
+		bulkPubsubEgressLatency: stats.Float64(
+			"component/pubsub_egress/latencies",
+			"The latency of the response for bulk publish from the pub/sub component.",
 			stats.UnitMilliseconds),
 		inputBindingCount: stats.Int64(
 			"component/input_binding/count",
@@ -155,6 +165,23 @@ func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, pr
 				ctx,
 				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
 				c.pubsubIngressLatency.M(elapsed))
+		}
+	}
+}
+
+// BulkPubsubEgressEvent records the metris for a pub/sub egress event.
+func (c *componentMetrics) BulkPubsubEgressEvent(ctx context.Context, component, topic string, success bool, elapsed float64) {
+	if c.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success), topicKey, topic),
+			c.bulkPubsubEgressCount.M(1))
+
+		if elapsed > 0 {
+			stats.RecordWithTags(
+				ctx,
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success), topicKey, topic),
+				c.bulkPubsubEgressLatency.M(elapsed))
 		}
 	}
 }
