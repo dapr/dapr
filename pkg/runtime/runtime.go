@@ -601,7 +601,7 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec) (httpMiddleware.Pipeline, error) {
+func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (httpMiddleware.Pipeline, error) {
 	var handlers []httpMiddleware.Middleware
 
 	if a.globalConfig != nil {
@@ -619,7 +619,7 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec) (httpMi
 			if err != nil {
 				return httpMiddleware.Pipeline{}, err
 			}
-			log.Infof("enabled %s/%s http middleware", middlewareSpec.Type, middlewareSpec.Version)
+			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
 			handlers = append(handlers, handler)
 		}
 	}
@@ -636,11 +636,11 @@ func (a *DaprRuntime) initPluggableComponents() {
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
-	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec)
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
 }
 
 func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
-	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec)
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
 }
 
 // registerPluggableComponents loads and register the loaded pluggable components.

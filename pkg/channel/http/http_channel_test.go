@@ -96,6 +96,76 @@ func (t *testStatusCodeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	w.Write([]byte(strconv.Itoa(code)))
 }
 
+func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
+	defaultStatusCode := http.StatusOK
+	th := &testStatusCodeHandler{Code: defaultStatusCode}
+	server := httptest.NewServer(th)
+	ctx := context.Background()
+
+	t.Run("pipeline should be called when handlers are not empty", func(t *testing.T) {
+		called := 0
+		middleware := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+			return func(ctx *fasthttp.RequestCtx) {
+				called++
+				h(ctx)
+			}
+		})
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				middleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method")
+		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, 1, called)
+		assert.Equal(t, int32(defaultStatusCode), resp.Status().Code)
+	})
+
+	t.Run("request can be short-circuited by middleware pipeline", func(t *testing.T) {
+		called := 0
+		shortcircuitStatusCode := http.StatusBadGateway
+		middleware := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+			return func(ctx *fasthttp.RequestCtx) {
+				called++
+				ctx.Response.SetStatusCode(shortcircuitStatusCode)
+			}
+		})
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				middleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method")
+		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, 1, called)
+		assert.Equal(t, int32(shortcircuitStatusCode), resp.Status().Code)
+	})
+
+	server.Close()
+}
+
 func TestInvokeMethod(t *testing.T) {
 	th := &testHTTPHandler{t: t, serverURL: ""}
 	server := httptest.NewServer(th)
