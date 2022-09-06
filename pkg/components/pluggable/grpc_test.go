@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )

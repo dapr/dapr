@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
