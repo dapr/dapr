@@ -20,11 +20,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/mux"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -37,6 +34,8 @@ const (
 	daprPort = 3500
 )
 
+var daprClient runtimev1pb.DaprClient
+
 type testCommandRequest struct {
 	Messages []struct {
 		Data      string `json:"data,omitempty"`
@@ -47,11 +46,6 @@ type testCommandRequest struct {
 type indexHandlerResponse struct {
 	Message string `json:"message,omitempty"`
 }
-
-var (
-	grpcConn   *grpc.ClientConn
-	daprClient runtimev1pb.DaprClient
-)
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -171,30 +165,8 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func initGRPCClient() {
-	url := fmt.Sprintf("localhost:%d", 50001)
-	log.Printf("Connecting to dapr using url %s", url)
-	for retries := 10; retries > 0; retries-- {
-		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err == nil {
-			break
-		}
-
-		if retries == 0 {
-			log.Printf("Could not connect to dapr: %v", err)
-			log.Panic(err)
-		}
-
-		log.Printf("Could not connect to dapr: %v, retrying...", err)
-		time.Sleep(5 * time.Second)
-	}
-
-	daprClient = runtimev1pb.NewDaprClient(grpcConn)
-}
-
 func main() {
-	initGRPCClient()
+	daprClient = utils.GetGRPCClient(50001)
 
 	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
 	utils.StartServer(appPort, appRouter, true, false)

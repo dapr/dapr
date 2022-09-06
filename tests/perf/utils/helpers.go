@@ -27,6 +27,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
+	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/kit/logger"
 )
@@ -93,11 +94,13 @@ func UploadAzureBlob(report *perf.TestReport) error {
 	azblob := blobstorage.NewAzureBlobStorage(l)
 
 	err = azblob.Init(bindings.Metadata{
-		Properties: map[string]string{
-			"storageAccount":    accountName,
-			"storageAccessKey":  accountKey,
-			"container":         container,
-			"publicAccessLevel": "container",
+		Base: metadata.Base{
+			Properties: map[string]string{
+				"storageAccount":    accountName,
+				"storageAccessKey":  accountKey,
+				"container":         container,
+				"publicAccessLevel": "container",
+			},
 		},
 	})
 	if err != nil {

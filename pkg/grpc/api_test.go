@@ -1879,7 +1879,7 @@ func TestInvokeBinding(t *testing.T) {
 			if name == "error-binding" {
 				return nil, errors.New("error when invoke binding")
 			}
-			return &bindings.InvokeResponse{Data: []byte("ok")}, nil
+			return &bindings.InvokeResponse{Data: []byte("ok"), Metadata: req.Metadata}, nil
 		},
 	}
 	server := startTestServerAPI(port, srv)
@@ -1893,6 +1893,15 @@ func TestInvokeBinding(t *testing.T) {
 	assert.Nil(t, err)
 	_, err = client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
+
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
+	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
+	assert.Nil(t, err)
+	assert.NotNil(t, resp)
+	assert.Contains(t, resp.Metadata, "traceparent")
+	assert.Equal(t, resp.Metadata["traceparent"], "Test")
+	assert.Contains(t, resp.Metadata, "userMetadata")
+	assert.Equal(t, resp.Metadata["userMetadata"], "val1")
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {
