@@ -23,9 +23,11 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+type AppHealthStatus uint8
+
 const (
-	AppStatusUnhealthy uint8 = 0
-	AppStatusHealthy   uint8 = 1
+	AppStatusUnhealthy AppHealthStatus = 0
+	AppStatusHealthy   AppHealthStatus = 1
 )
 
 var log = logger.NewLogger("dapr.apphealth")
@@ -35,7 +37,7 @@ type AppHealth struct {
 	config       *Config
 	probeFn      ProbeFunction
 	changeCb     ChangeCallback
-	report       chan uint8
+	report       chan AppHealthStatus
 	failureCount *atomic.Int32
 	lastReport   *atomic.Int64
 	queue        chan struct{}
@@ -51,14 +53,14 @@ type AppHealth struct {
 type ProbeFunction func(context.Context) (bool, error)
 
 // ChangeCallback is the signature of the callback that is invoked when the app's health status changes.
-type ChangeCallback func(status uint8)
+type ChangeCallback func(status AppHealthStatus)
 
 // NewAppHealth creates a new AppHealth object.
 func NewAppHealth(config *Config, probeFn ProbeFunction) *AppHealth {
 	return &AppHealth{
 		config:            config,
 		probeFn:           probeFn,
-		report:            make(chan uint8, 1),
+		report:            make(chan AppHealthStatus, 1),
 		failureCount:      atomic.NewInt32(config.Threshold), // Initial state is unhealthy until we validate it
 		lastReport:        atomic.NewInt64(0),
 		reportMinInterval: 1e6,
@@ -118,7 +120,7 @@ func (h *AppHealth) Enqueue() {
 }
 
 // ReportHealth is used by the runtime to report a health signal from the app.
-func (h *AppHealth) ReportHealth(status uint8) {
+func (h *AppHealth) ReportHealth(status AppHealthStatus) {
 	// If the user wants health probes only, short-circuit here
 	if h.config.ProbeOnly {
 		return
@@ -140,7 +142,7 @@ func (h *AppHealth) ReportHealth(status uint8) {
 }
 
 // GetStatus returns the status of the app's health
-func (h *AppHealth) GetStatus() uint8 {
+func (h *AppHealth) GetStatus() AppHealthStatus {
 	fc := h.failureCount.Load()
 	if fc >= h.config.Threshold {
 		return AppStatusUnhealthy

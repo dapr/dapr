@@ -200,6 +200,7 @@ type DaprRuntime struct {
 	apiClosers             []io.Closer
 	componentAuthorizers   []ComponentAuthorizer
 	appHealth              *apphealth.AppHealth
+	appHealthStatus        apphealth.AppHealthStatus
 
 	secretsConfiguration map[string]config.SecretsScope
 
@@ -569,7 +570,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 // Sets the status of the app to healthy or un-healthy
 // Callback for apphealth when the detected status changed
-func (a *DaprRuntime) appHealthChanged(status uint8) {
+func (a *DaprRuntime) appHealthChanged(status apphealth.AppHealthStatus) {
+	if status == a.appHealthStatus {
+		// Status has not changed and return directly.
+		return
+	}
+
 	switch status {
 	case apphealth.AppStatusHealthy:
 		// Start subscribing to topics and reading from input bindings
