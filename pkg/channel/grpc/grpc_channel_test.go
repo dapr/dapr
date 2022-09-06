@@ -32,7 +32,7 @@ import (
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 // TODO: Add APIVersion testing
@@ -101,7 +101,7 @@ func TestInvokeMethod(t *testing.T) {
 
 	assert.Equal(t, "POST", actual["httpverb"])
 	assert.Equal(t, "method", actual["method"])
-	assert.Equal(t, "token1", actual[auth.APITokenHeader])
+	assert.Equal(t, "token1", actual[authConsts.APITokenHeader])
 	assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
 }
 
