@@ -11,7 +11,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -110,7 +109,7 @@ var QueriableStateStore_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type TransactionalStateStoreClient interface {
 	// Multi executes multiples operation in a transactional environment.
-	Multi(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Multi(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*TransactionalStateResponse, error)
 }
 
 type transactionalStateStoreClient struct {
@@ -121,8 +120,8 @@ func NewTransactionalStateStoreClient(cc grpc.ClientConnInterface) Transactional
 	return &transactionalStateStoreClient{cc}
 }
 
-func (c *transactionalStateStoreClient) Multi(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *transactionalStateStoreClient) Multi(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*TransactionalStateResponse, error) {
+	out := new(TransactionalStateResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.TransactionalStateStore/Multi", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -135,14 +134,14 @@ func (c *transactionalStateStoreClient) Multi(ctx context.Context, in *Transacti
 // for forward compatibility
 type TransactionalStateStoreServer interface {
 	// Multi executes multiples operation in a transactional environment.
-	Multi(context.Context, *TransactionalStateRequest) (*emptypb.Empty, error)
+	Multi(context.Context, *TransactionalStateRequest) (*TransactionalStateResponse, error)
 }
 
 // UnimplementedTransactionalStateStoreServer should be embedded to have forward compatible implementations.
 type UnimplementedTransactionalStateStoreServer struct {
 }
 
-func (UnimplementedTransactionalStateStoreServer) Multi(context.Context, *TransactionalStateRequest) (*emptypb.Empty, error) {
+func (UnimplementedTransactionalStateStoreServer) Multi(context.Context, *TransactionalStateRequest) (*TransactionalStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Multi not implemented")
 }
 
@@ -196,23 +195,23 @@ var TransactionalStateStore_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StateStoreClient interface {
 	// Initializes the state store component with the given metadata.
-	Init(ctx context.Context, in *MetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Init(ctx context.Context, in *InitRequest, opts ...grpc.CallOption) (*InitResponse, error)
 	// Returns a list of implemented state store features.
-	Features(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*FeaturesResponse, error)
+	Features(ctx context.Context, in *FeaturesRequest, opts ...grpc.CallOption) (*FeaturesResponse, error)
 	// Deletes the specified key from the state store.
-	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
 	// Get data from the given key.
 	Get(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error)
 	// Sets the value of the specified key.
-	Set(ctx context.Context, in *SetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Set(ctx context.Context, in *SetRequest, opts ...grpc.CallOption) (*SetResponse, error)
 	// Ping the state store. Used for liveness porpuses.
-	Ping(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 	// Deletes many keys at once.
-	BulkDelete(ctx context.Context, in *BulkDeleteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	BulkDelete(ctx context.Context, in *BulkDeleteRequest, opts ...grpc.CallOption) (*BulkDeleteResponse, error)
 	// Retrieves many keys at once.
 	BulkGet(ctx context.Context, in *BulkGetRequest, opts ...grpc.CallOption) (*BulkGetResponse, error)
 	// Set the value of many keys at once.
-	BulkSet(ctx context.Context, in *BulkSetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	BulkSet(ctx context.Context, in *BulkSetRequest, opts ...grpc.CallOption) (*BulkSetResponse, error)
 }
 
 type stateStoreClient struct {
@@ -223,8 +222,8 @@ func NewStateStoreClient(cc grpc.ClientConnInterface) StateStoreClient {
 	return &stateStoreClient{cc}
 }
 
-func (c *stateStoreClient) Init(ctx context.Context, in *MetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *stateStoreClient) Init(ctx context.Context, in *InitRequest, opts ...grpc.CallOption) (*InitResponse, error) {
+	out := new(InitResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.StateStore/Init", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -232,7 +231,7 @@ func (c *stateStoreClient) Init(ctx context.Context, in *MetadataRequest, opts .
 	return out, nil
 }
 
-func (c *stateStoreClient) Features(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*FeaturesResponse, error) {
+func (c *stateStoreClient) Features(ctx context.Context, in *FeaturesRequest, opts ...grpc.CallOption) (*FeaturesResponse, error) {
 	out := new(FeaturesResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.StateStore/Features", in, out, opts...)
 	if err != nil {
@@ -241,8 +240,8 @@ func (c *stateStoreClient) Features(ctx context.Context, in *emptypb.Empty, opts
 	return out, nil
 }
 
-func (c *stateStoreClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *stateStoreClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error) {
+	out := new(DeleteResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.StateStore/Delete", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -259,8 +258,8 @@ func (c *stateStoreClient) Get(ctx context.Context, in *GetRequest, opts ...grpc
 	return out, nil
 }
 
-func (c *stateStoreClient) Set(ctx context.Context, in *SetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *stateStoreClient) Set(ctx context.Context, in *SetRequest, opts ...grpc.CallOption) (*SetResponse, error) {
+	out := new(SetResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.StateStore/Set", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -268,8 +267,8 @@ func (c *stateStoreClient) Set(ctx context.Context, in *SetRequest, opts ...grpc
 	return out, nil
 }
 
-func (c *stateStoreClient) Ping(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *stateStoreClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
+	out := new(PingResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.StateStore/Ping", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -277,8 +276,8 @@ func (c *stateStoreClient) Ping(ctx context.Context, in *emptypb.Empty, opts ...
 	return out, nil
 }
 
-func (c *stateStoreClient) BulkDelete(ctx context.Context, in *BulkDeleteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *stateStoreClient) BulkDelete(ctx context.Context, in *BulkDeleteRequest, opts ...grpc.CallOption) (*BulkDeleteResponse, error) {
+	out := new(BulkDeleteResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.StateStore/BulkDelete", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -295,8 +294,8 @@ func (c *stateStoreClient) BulkGet(ctx context.Context, in *BulkGetRequest, opts
 	return out, nil
 }
 
-func (c *stateStoreClient) BulkSet(ctx context.Context, in *BulkSetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *stateStoreClient) BulkSet(ctx context.Context, in *BulkSetRequest, opts ...grpc.CallOption) (*BulkSetResponse, error) {
+	out := new(BulkSetResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.StateStore/BulkSet", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -309,54 +308,54 @@ func (c *stateStoreClient) BulkSet(ctx context.Context, in *BulkSetRequest, opts
 // for forward compatibility
 type StateStoreServer interface {
 	// Initializes the state store component with the given metadata.
-	Init(context.Context, *MetadataRequest) (*emptypb.Empty, error)
+	Init(context.Context, *InitRequest) (*InitResponse, error)
 	// Returns a list of implemented state store features.
-	Features(context.Context, *emptypb.Empty) (*FeaturesResponse, error)
+	Features(context.Context, *FeaturesRequest) (*FeaturesResponse, error)
 	// Deletes the specified key from the state store.
-	Delete(context.Context, *DeleteRequest) (*emptypb.Empty, error)
+	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
 	// Get data from the given key.
 	Get(context.Context, *GetRequest) (*GetResponse, error)
 	// Sets the value of the specified key.
-	Set(context.Context, *SetRequest) (*emptypb.Empty, error)
+	Set(context.Context, *SetRequest) (*SetResponse, error)
 	// Ping the state store. Used for liveness porpuses.
-	Ping(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	Ping(context.Context, *PingRequest) (*PingResponse, error)
 	// Deletes many keys at once.
-	BulkDelete(context.Context, *BulkDeleteRequest) (*emptypb.Empty, error)
+	BulkDelete(context.Context, *BulkDeleteRequest) (*BulkDeleteResponse, error)
 	// Retrieves many keys at once.
 	BulkGet(context.Context, *BulkGetRequest) (*BulkGetResponse, error)
 	// Set the value of many keys at once.
-	BulkSet(context.Context, *BulkSetRequest) (*emptypb.Empty, error)
+	BulkSet(context.Context, *BulkSetRequest) (*BulkSetResponse, error)
 }
 
 // UnimplementedStateStoreServer should be embedded to have forward compatible implementations.
 type UnimplementedStateStoreServer struct {
 }
 
-func (UnimplementedStateStoreServer) Init(context.Context, *MetadataRequest) (*emptypb.Empty, error) {
+func (UnimplementedStateStoreServer) Init(context.Context, *InitRequest) (*InitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Init not implemented")
 }
-func (UnimplementedStateStoreServer) Features(context.Context, *emptypb.Empty) (*FeaturesResponse, error) {
+func (UnimplementedStateStoreServer) Features(context.Context, *FeaturesRequest) (*FeaturesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Features not implemented")
 }
-func (UnimplementedStateStoreServer) Delete(context.Context, *DeleteRequest) (*emptypb.Empty, error) {
+func (UnimplementedStateStoreServer) Delete(context.Context, *DeleteRequest) (*DeleteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Delete not implemented")
 }
 func (UnimplementedStateStoreServer) Get(context.Context, *GetRequest) (*GetResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Get not implemented")
 }
-func (UnimplementedStateStoreServer) Set(context.Context, *SetRequest) (*emptypb.Empty, error) {
+func (UnimplementedStateStoreServer) Set(context.Context, *SetRequest) (*SetResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Set not implemented")
 }
-func (UnimplementedStateStoreServer) Ping(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+func (UnimplementedStateStoreServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
 }
-func (UnimplementedStateStoreServer) BulkDelete(context.Context, *BulkDeleteRequest) (*emptypb.Empty, error) {
+func (UnimplementedStateStoreServer) BulkDelete(context.Context, *BulkDeleteRequest) (*BulkDeleteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BulkDelete not implemented")
 }
 func (UnimplementedStateStoreServer) BulkGet(context.Context, *BulkGetRequest) (*BulkGetResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BulkGet not implemented")
 }
-func (UnimplementedStateStoreServer) BulkSet(context.Context, *BulkSetRequest) (*emptypb.Empty, error) {
+func (UnimplementedStateStoreServer) BulkSet(context.Context, *BulkSetRequest) (*BulkSetResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BulkSet not implemented")
 }
 
@@ -372,7 +371,7 @@ func RegisterStateStoreServer(s grpc.ServiceRegistrar, srv StateStoreServer) {
 }
 
 func _StateStore_Init_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MetadataRequest)
+	in := new(InitRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -384,13 +383,13 @@ func _StateStore_Init_Handler(srv interface{}, ctx context.Context, dec func(int
 		FullMethod: "/dapr.proto.components.v1.StateStore/Init",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StateStoreServer).Init(ctx, req.(*MetadataRequest))
+		return srv.(StateStoreServer).Init(ctx, req.(*InitRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _StateStore_Features_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
+	in := new(FeaturesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -402,7 +401,7 @@ func _StateStore_Features_Handler(srv interface{}, ctx context.Context, dec func
 		FullMethod: "/dapr.proto.components.v1.StateStore/Features",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StateStoreServer).Features(ctx, req.(*emptypb.Empty))
+		return srv.(StateStoreServer).Features(ctx, req.(*FeaturesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -462,7 +461,7 @@ func _StateStore_Set_Handler(srv interface{}, ctx context.Context, dec func(inte
 }
 
 func _StateStore_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
+	in := new(PingRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -474,7 +473,7 @@ func _StateStore_Ping_Handler(srv interface{}, ctx context.Context, dec func(int
 		FullMethod: "/dapr.proto.components.v1.StateStore/Ping",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StateStoreServer).Ping(ctx, req.(*emptypb.Empty))
+		return srv.(StateStoreServer).Ping(ctx, req.(*PingRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

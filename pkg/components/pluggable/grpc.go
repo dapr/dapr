@@ -22,15 +22,15 @@ import (
 
 	"github.com/pkg/errors"
 
+	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // GRPCClient is any client that supports common pluggable grpc operations.
 type GRPCClient interface {
 	// Ping is for liveness purposes.
-	Ping(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Ping(ctx context.Context, in *proto.PingRequest, opts ...grpc.CallOption) (*proto.PingResponse, error)
 }
 
 // GRPCConnector is a connector that uses underlying gRPC protocol for common operations.
@@ -86,7 +86,7 @@ func (g *GRPCConnector[TClient]) Dial(componentName string, additionalOpts ...gr
 // Ping pings the grpc component.
 // It uses "WaitForReady" avoiding failing in transient failures.
 func (g *GRPCConnector[TClient]) Ping() error {
-	_, err := g.Client.Ping(g.Context, &emptypb.Empty{}, grpc.WaitForReady(true))
+	_, err := g.Client.Ping(g.Context, &proto.PingRequest{}, grpc.WaitForReady(true))
 	return err
 }
 

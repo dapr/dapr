@@ -28,7 +28,6 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -57,7 +56,7 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 
 	// TODO Static data could be retrieved in another way, a necessary discussion should start soon.
 	// we need to call the method here because features could return an error and the features interface doesn't support errors
-	featureResponse, err := ss.Client.Features(ss.Context, &emptypb.Empty{})
+	featureResponse, err := ss.Client.Features(ss.Context, &proto.FeaturesRequest{})
 	if err != nil {
 		return err
 	}
@@ -67,7 +66,9 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 		ss.features[idx] = state.Feature(f)
 	}
 
-	_, err = ss.Client.Init(ss.Context, protoMetadata)
+	_, err = ss.Client.Init(ss.Context, &proto.InitRequest{
+		Metadata: protoMetadata,
+	})
 	return err
 }
 

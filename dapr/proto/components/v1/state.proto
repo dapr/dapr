@@ -14,7 +14,6 @@ syntax = "proto3";
 
 package dapr.proto.components.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/any.proto";
 import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/components/v1/common.proto";
@@ -90,7 +89,7 @@ message QueryResponse {
 // TransactionalStateStore service provides a gRPC interface for transactional state store components.
 service TransactionalStateStore {
     // Multi executes multiples operation in a transactional environment.
-    rpc Multi(TransactionalStateRequest) returns (google.protobuf.Empty) {}
+    rpc Multi(TransactionalStateRequest) returns (TransactionalStateResponse) {}
 }
 
 // TransactionalStateOperation describes operation type, key, and value for transactional operation.
@@ -111,35 +110,46 @@ message TransactionalStateRequest {
   map<string, string> metadata = 2;
 }
 
+// reserved for future-proof extensibility
+message TransactionalStateResponse {}
+
 // StateStore service provides a gRPC interface for state store components.
 service StateStore {
   // Initializes the state store component with the given metadata.
-  rpc Init(MetadataRequest) returns (google.protobuf.Empty) {}
+  rpc Init(InitRequest) returns (InitResponse) {}
 
   // Returns a list of implemented state store features.
-  rpc Features(google.protobuf.Empty) returns (FeaturesResponse) {}
+  rpc Features(FeaturesRequest) returns (FeaturesResponse) {}
 
   // Deletes the specified key from the state store.
-  rpc Delete(DeleteRequest) returns (google.protobuf.Empty) {}
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
 
   // Get data from the given key.
   rpc Get(GetRequest) returns (GetResponse) {}
 
   // Sets the value of the specified key.
-  rpc Set(SetRequest) returns (google.protobuf.Empty) {}
+  rpc Set(SetRequest) returns (SetResponse) {}
 
   // Ping the state store. Used for liveness porpuses.
-  rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Ping(PingRequest) returns (PingResponse) {}
 
   // Deletes many keys at once.
-  rpc BulkDelete(BulkDeleteRequest) returns (google.protobuf.Empty) {}
+  rpc BulkDelete(BulkDeleteRequest) returns (BulkDeleteResponse) {}
 
   // Retrieves many keys at once.
   rpc BulkGet(BulkGetRequest) returns (BulkGetResponse) {}
 
   // Set the value of many keys at once.
-  rpc BulkSet(BulkSetRequest) returns (google.protobuf.Empty) {}
+  rpc BulkSet(BulkSetRequest) returns (BulkSetResponse) {}
 }
+
+// InitRequest is the request for initializing the component.
+message InitRequest {
+  MetadataRequest metadata = 1;
+}
+
+// reserved for future-proof extensibility
+message InitResponse {}
 
 message GetRequest {
   // The key that should be retrieved.
@@ -171,6 +181,9 @@ message DeleteRequest {
   dapr.proto.common.v1.StateOptions options = 4;
 }
 
+// reserved for future-proof extensibility
+message DeleteResponse {}
+
 message SetRequest {
   // The key that should be set.
   string key = 1;
@@ -186,9 +199,15 @@ message SetRequest {
   string content_type = 6;
 }
 
+// reserved for future-proof extensibility
+message SetResponse {}
+
 message BulkDeleteRequest {
   repeated DeleteRequest items = 1;
 }
+
+// reserved for future-proof extensibility
+message BulkDeleteResponse {}
 
 message BulkGetRequest {
   repeated GetRequest items = 1;
@@ -217,3 +236,6 @@ message BulkGetResponse {
 message BulkSetRequest {
   repeated SetRequest items = 1;
 }
+
+// reserved for future-proof extensibility
+message BulkSetResponse {}

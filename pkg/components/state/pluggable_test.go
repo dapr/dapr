@@ -33,7 +33,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,20 +82,20 @@ func (s *server) Query(_ context.Context, req *proto.QueryRequest) (*proto.Query
 	return s.queryResp, s.queryErr
 }
 
-func (s *server) Multi(_ context.Context, req *proto.TransactionalStateRequest) (*emptypb.Empty, error) {
+func (s *server) Multi(_ context.Context, req *proto.TransactionalStateRequest) (*proto.TransactionalStateResponse, error) {
 	s.multiCalled.Add(1)
 	if s.onMultiCalled != nil {
 		s.onMultiCalled(req)
 	}
-	return &emptypb.Empty{}, s.multiErr
+	return &proto.TransactionalStateResponse{}, s.multiErr
 }
 
-func (s *server) Delete(ctx context.Context, req *proto.DeleteRequest) (*emptypb.Empty, error) {
+func (s *server) Delete(ctx context.Context, req *proto.DeleteRequest) (*proto.DeleteResponse, error) {
 	s.deleteCalled.Add(1)
 	if s.onDeleteCalled != nil {
 		s.onDeleteCalled(req)
 	}
-	return &emptypb.Empty{}, s.deleteErr
+	return &proto.DeleteResponse{}, s.deleteErr
 }
 
 func (s *server) Get(ctx context.Context, req *proto.GetRequest) (*proto.GetResponse, error) {
@@ -107,25 +106,25 @@ func (s *server) Get(ctx context.Context, req *proto.GetRequest) (*proto.GetResp
 	return s.getResponse, s.getErr
 }
 
-func (s *server) Set(ctx context.Context, req *proto.SetRequest) (*emptypb.Empty, error) {
+func (s *server) Set(ctx context.Context, req *proto.SetRequest) (*proto.SetResponse, error) {
 	s.setCalled.Add(1)
 	if s.onSetCalled != nil {
 		s.onSetCalled(req)
 	}
-	return &emptypb.Empty{}, s.setErr
+	return &proto.SetResponse{}, s.setErr
 }
 
-func (s *server) Ping(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+func (s *server) Ping(context.Context, *proto.PingRequest) (*proto.PingResponse, error) {
 	s.pingCalled.Add(1)
-	return &emptypb.Empty{}, s.pingErr
+	return &proto.PingResponse{}, s.pingErr
 }
 
-func (s *server) BulkDelete(ctx context.Context, req *proto.BulkDeleteRequest) (*emptypb.Empty, error) {
+func (s *server) BulkDelete(ctx context.Context, req *proto.BulkDeleteRequest) (*proto.BulkDeleteResponse, error) {
 	s.bulkDeleteCalled.Add(1)
 	if s.onBulkDeleteCalled != nil {
 		s.onBulkDeleteCalled(req)
 	}
-	return &emptypb.Empty{}, s.bulkDeleteErr
+	return &proto.BulkDeleteResponse{}, s.bulkDeleteErr
 }
 
 func (s *server) BulkGet(ctx context.Context, req *proto.BulkGetRequest) (*proto.BulkGetResponse, error) {
@@ -136,15 +135,15 @@ func (s *server) BulkGet(ctx context.Context, req *proto.BulkGetRequest) (*proto
 	return s.bulkGetResponse, s.bulkGetErr
 }
 
-func (s *server) BulkSet(ctx context.Context, req *proto.BulkSetRequest) (*emptypb.Empty, error) {
+func (s *server) BulkSet(ctx context.Context, req *proto.BulkSetRequest) (*proto.BulkSetResponse, error) {
 	s.bulkSetCalled.Add(1)
 	if s.onBulkSetCalled != nil {
 		s.onBulkSetCalled(req)
 	}
-	return &emptypb.Empty{}, s.bulkSetErr
+	return &proto.BulkSetResponse{}, s.bulkSetErr
 }
 
-func (s *server) Init(context.Context, *proto.MetadataRequest) (*emptypb.Empty, error) {
+func (s *server) Init(context.Context, *proto.InitRequest) (*proto.InitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Init not implemented")
 }
 

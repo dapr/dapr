@@ -27,18 +27,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type fakeClient struct {
 	pingCalled atomic.Int64
 }
 
-func (f *fakeClient) Ping(context.Context, *emptypb.Empty, ...grpc.CallOption) (*emptypb.Empty, error) {
+func (f *fakeClient) Ping(context.Context, *proto.PingRequest, ...grpc.CallOption) (*proto.PingResponse, error) {
 	f.pingCalled.Add(1)
-	return &emptypb.Empty{}, nil
+	return &proto.PingResponse{}, nil
 }
 
 func TestGRPCConnector(t *testing.T) {

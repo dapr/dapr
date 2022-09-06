@@ -20,10 +20,20 @@ option java_outer_classname = "ComponentProtos";
 option java_package = "io.dapr.v1";
 option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
 
+// Base metadata request for all components
 message MetadataRequest {
   map<string, string> properties = 1;
 }
 
+// reserved for future-proof extensibility
+message FeaturesRequest {}
+
 message FeaturesResponse {
   repeated string feature = 1;
 }
+
+// reserved for future-proof extensibility
+message PingRequest {}
+
+// reserved for future-proof extensibility
+message PingResponse {}
