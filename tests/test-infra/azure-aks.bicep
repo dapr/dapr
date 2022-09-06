@@ -30,7 +30,7 @@ param linuxVMSize string = 'Standard_DS2_v2'
 param windowsVMSize string = 'Standard_DS3_v2'
 
 @description('VM size to use for ARM64 nodes if enabled')
-param armVMSize string = 'Standard_D2pds_v5'
+param armVMSize string = 'Standard_D2ps_v5'
 
 @description('If set, sends certain diagnostic logs to Log Analytics')
 param diagLogAnalyticsWorkspaceResourceId string = ''

@@ -22,19 +22,11 @@
 name: dapr-test
 
 on:
-  # Run every 2 hours
-  schedule:
-    - cron: '0 */2 * * *'
   # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
   repository_dispatch:
     types: [e2e-test]
-  pull_request:
-    branches:
-      - master
-      - release-*
-      - feature/*
 env:
   # Version of Go
   GOVER: "1.19"
@@ -54,6 +46,7 @@ env:
   HA_MODE: true
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "westus3"
+  ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
 
@@ -105,15 +98,14 @@ jobs:
       - name: Deploy the test cluster
         if: env.TEST_PREFIX != ''
         run: |
-          # Select two random Azure regions
+          # Select three random Azure regions
           REGIONS=(${{ env.AZURE_REGIONS }})
           REGIONS_SIZE=${#REGIONS[@]}
           REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
           REGION1=${REGIONS[$REGIONS_IDX]}
           REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
           REGION2=${REGIONS[$REGIONS_IDX]}
-          REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
-          REGION3=${REGIONS[$REGIONS_IDX]}
+          REGION3=${{ env.ARM_REGIONS }}
           # Tags
           DATE_TAG=$(date --iso-8601=seconds)
           echo "Tags: date=${DATE_TAG}"
@@ -143,7 +135,7 @@ jobs:
         shell: bash
 
   build:
-    name: Build for  ${{ matrix.target_os }}
+    name: Build for  ${{ matrix.target_os }} on ${{ matrix.target_arch }}
     runs-on: ${{ matrix.os }}
     env:
       GOOS: ${{ matrix.target_os }}
@@ -154,16 +146,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-2019]
+        target_arch: [amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
-            target_arch: amd64
-          - os: ubuntu-latest
-            target_os: linux
-            target_arch: arm64
           - os: windows-2019
             target_os: windows
-            target_arch: amd64
+          - target_arch: arm64
+            target_os: linux
+            os: ubuntu-latest
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -240,6 +231,8 @@ jobs:
           TEST_PREFIX=""
           if [ "${{ env.TARGET_OS }}" == "windows" ] ; then
             TEST_PREFIX="dapre2e${SUFFIX}w"
+          elif [ "${{ env.TARGET_ARCH }}" == "arm64" ] ; then  
+            TEST_PREFIX="dapre2e${SUFFIX}la"
           else
             TEST_PREFIX="dapre2e${SUFFIX}l"
           fi
@@ -301,7 +294,7 @@ jobs:
         shell: bash
 
   test-e2e:
-    name: End-to-end ${{ matrix.target_os }} tests
+    name: End-to-end ${{ matrix.target_os }} on ${{ matrix.target_arch }} tests
     needs:
       - build
       - deploy-infrastructure
@@ -316,7 +309,10 @@ jobs:
       fail-fast: false
       matrix:
         target_os: [linux, windows]
-        target_arch: [amd64]
+        target_arch: [amd64, arm64]
+        exclude:
+          - target_os: windows
+            target_arch: arm64
     steps:
       - name: Set up log paths
         run: |
@@ -385,6 +381,8 @@ jobs:
           TEST_PREFIX=""
           if [ "${{ env.TARGET_OS }}" == "windows" ] ; then
             TEST_PREFIX="dapre2e${SUFFIX}w"
+          elif [ "${{ env.TARGET_ARCH }}" == "arm64" ] ; then  
+            TEST_PREFIX="dapre2e${SUFFIX}la"
           else
             TEST_PREFIX="dapre2e${SUFFIX}l"
           fi
@@ -549,4 +547,10 @@ jobs:
           # We are not waiting for these commands to complete, and we're ignoring errors
           echo "Starting removal of resource group Dapr-E2E-${{ env.TEST_PREFIX }}w"
           az group delete --no-wait --yes --name "Dapr-E2E-${{ env.TEST_PREFIX }}w" || true
+        shell: bash
+      - name: Delete Arm64 cluster
+        run: |
+          # We are not waiting for these commands to complete, and we're ignoring errors
+          echo "Starting removal of resource group Dapr-E2E-${{ env.TEST_PREFIX }}la"
+          az group delete --no-wait --yes --name "Dapr-E2E-${{ env.TEST_PREFIX }}la" || true
         shell: bash

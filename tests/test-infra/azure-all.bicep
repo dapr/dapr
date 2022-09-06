@@ -82,7 +82,7 @@ module windowsCluster 'azure.bicep' = {
     namePrefix: '${namePrefix}w'
     location: location2
     enableWindows: true
-    enableArm64 : false
+    enableArm : false
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
     diagStorageResourceId: diagStorageResourceId
     enableCosmosDB: enableCosmosDB
@@ -105,7 +105,7 @@ module armCluster 'azure.bicep' = {
     namePrefix: '${namePrefix}la'
     location: location3
     enableWindows: false
-    enableArm64 : true
+    enableArm : true
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
     diagStorageResourceId: diagStorageResourceId
     enableCosmosDB: enableCosmosDB
