@@ -2654,6 +2654,9 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha
 			}
 			val = strings.Replace(val, "{podName}", a.podName, 1)
 		}
+		for strings.Contains(val, "{namespace}") {
+			val = strings.Replace(val, "{namespace}", fmt.Sprintf("%s.%s", a.namespace, a.runtimeConfig.ID), 1)
+		}
 		properties[c.Name] = val
 	}
 	return properties

@@ -38,6 +38,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 const (
@@ -285,7 +286,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	}
 
 	if h.appHeaderToken != "" {
-		channelReq.Header.Set(auth.APITokenHeader, h.appHeaderToken)
+		channelReq.Header.Set(authConsts.APITokenHeader, h.appHeaderToken)
 	}
 
 	// Set Content body and types

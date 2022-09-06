@@ -88,7 +88,7 @@ spec:
               metadata:
                 additionalProperties:
                   type: string
-                description: The optional metadata to provide the the subscription.
+                description: The optional metadata to provide the subscription.
                 type: object
               pubsubname:
                 description: The PubSub component name.
