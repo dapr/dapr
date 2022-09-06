@@ -10,6 +10,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/dapr/pkg/sentry/kubernetes"
 )
 
@@ -39,7 +40,7 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 			credentials.IssuerKeyFilename:  issuerCertKey,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      KubeScrtName,
+			Name:      consts.TrustBundleK8sSecretName,
 			Namespace: namespace,
 		},
 		Type: v1.SecretTypeOpaque,
@@ -70,7 +71,7 @@ func CredentialsExist(conf config.SentryConfig) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		s, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), KubeScrtName, metav1.GetOptions{})
+		s, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), consts.TrustBundleK8sSecretName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}

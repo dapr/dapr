@@ -94,7 +94,7 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
-	"github.com/dapr/dapr/pkg/sentry/certs"
+	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -3751,9 +3751,9 @@ func TestMTLS(t *testing.T) {
 		rt.runtimeConfig.mtlsEnabled = true
 		rt.runtimeConfig.SentryServiceAddress = "1.1.1.1"
 
-		t.Setenv(certs.TrustAnchorsEnvVar, testCertRoot)
-		t.Setenv(certs.CertChainEnvVar, "a")
-		t.Setenv(certs.CertKeyEnvVar, "b")
+		t.Setenv(sentryConsts.TrustAnchorsEnvVar, testCertRoot)
+		t.Setenv(sentryConsts.CertChainEnvVar, "a")
+		t.Setenv(sentryConsts.CertKeyEnvVar, "b")
 
 		certChain, err := security.GetCertChain()
 		assert.Nil(t, err)
