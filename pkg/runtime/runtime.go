@@ -555,6 +555,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 		// Set the appHealth object in the channel so it's aware of the app's health status
 		a.appChannel.SetAppHealth(a.appHealth)
+		if hchannel, ok := a.appChannel.(*httpChannel.Channel); ok {
+			hchannel.SetAppHealthCheckPath(a.runtimeConfig.AppHealthCheckHTTPPath)
+		}
 
 		// Enqueue a probe right away
 		// This will also start the input components once the app is healthy
