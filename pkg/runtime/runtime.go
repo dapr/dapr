@@ -571,10 +571,11 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 // Sets the status of the app to healthy or un-healthy
 // Callback for apphealth when the detected status changed
 func (a *DaprRuntime) appHealthChanged(status apphealth.AppHealthStatus) {
-	if status == a.appHealthStatus {
+	if a.appHealthStatus == status {
 		// Status has not changed and return directly.
 		return
 	}
+	a.appHealthStatus = status
 
 	switch status {
 	case apphealth.AppStatusHealthy:
