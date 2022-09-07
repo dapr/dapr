@@ -188,6 +188,7 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 		return err
 	}
 
+	monitoring.RecordServiceUpdatedCount(appID)
 	return nil
 }
 

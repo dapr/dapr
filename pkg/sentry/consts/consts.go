@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,11 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package injector
+package consts
 
-// PatchOperation represents a discreet change to be applied to a Kubernetes resource.
-type PatchOperation struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
-}
+const (
+	// TrustBundleK8sSecretName is the name of the kubernetes secret that holds the trust bundle.
+	TrustBundleK8sSecretName = "dapr-trust-bundle" /* #nosec */
+	// TrustAnchorsEnvVar is the environment variable name for the trust anchors in the sidecar.
+	TrustAnchorsEnvVar = "DAPR_TRUST_ANCHORS"
+	CertChainEnvVar    = "DAPR_CERT_CHAIN"
+	CertKeyEnvVar      = "DAPR_CERT_KEY"
+)
