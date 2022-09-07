@@ -55,8 +55,9 @@ var (
 )
 
 const (
-	invokeURL  = "http://localhost:%s/v1.0/invoke/%s/method/%s"
-	publishURL = "http://localhost:%s/v1.0/publish/inmemorypubsub/mytopic"
+	invokeURL       = "http://localhost:%s/v1.0/invoke/%s/method/%s"
+	publishURL      = "http://localhost:%s/v1.0/publish/inmemorypubsub/mytopic"
+	inputBindingURL = "http://localhost:%s/v1.0/bindings/schedule"
 )
 
 func main() {
@@ -85,6 +86,11 @@ func main() {
 	go func() {
 		<-ready
 		startPublishing(ctx)
+	}()
+
+	go func() {
+		<-ready
+		startInputBinding(ctx)
 	}()
 
 	if appProtocol == "grpc" {
@@ -164,7 +170,7 @@ func (c *countAndLast) MarshalJSON() ([]byte, error) {
 
 func startControlServer() {
 	// Wait until the first health probe
-	log.Print("Waiting for signalto start control server…")
+	log.Print("Waiting for signal to start control server...")
 	<-ready
 
 	port, _ := strconv.Atoi(controlPort)
@@ -245,6 +251,31 @@ func startControlServer() {
 	}, false, false)
 }
 
+func startInputBinding(ctx context.Context) {
+	t := time.NewTicker(time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Context done; stop invoke input binding")
+		case <-t.C:
+			invokeBinding()
+		}
+	}
+}
+
+func invokeBinding() {
+	u := fmt.Sprintf(inputBindingURL, daprPort)
+	log.Println("Invoking Binding URL", u)
+	res, err := httpClient.Post(u, "application/json", nil)
+	if err != nil {
+		log.Printf("Failed to invoke input binding. Error: %v", err)
+		return
+	}
+	// Drain before closing
+	_, _ = io.Copy(io.Discard, res.Body)
+	res.Body.Close()
+}
+
 func startPublishing(ctx context.Context) {
 	t := time.NewTicker(time.Second)
 	var i int
@@ -261,7 +292,7 @@ func startPublishing(ctx context.Context) {
 
 func publishMessage(count int) {
 	u := fmt.Sprintf(publishURL, daprPort)
-	log.Println("Invoking URL", u)
+	log.Println("Invoking Publish URL", u)
 	body := fmt.Sprintf(`{"orderId": "%d"}`, count)
 	res, err := httpClient.Post(u, "application/json", strings.NewReader(body))
 	if err != nil {
@@ -417,9 +448,9 @@ func (s *grpcServer) OnBindingEvent(_ context.Context, in *runtimev1pb.BindingEv
 }
 
 type healthCheck struct {
-	plan  []bool
-	count int
-	lock  *sync.Mutex
+	plan      []bool
+	indexPlan int
+	lock      *sync.Mutex
 }
 
 func newHealthCheck() *healthCheck {
@@ -434,7 +465,7 @@ func (h *healthCheck) SetPlan(plan []bool) {
 
 	// Set the new plan and reset the counter
 	h.plan = plan
-	h.count = 0
+	h.indexPlan = 0
 }
 
 func (h *healthCheck) Do() error {
@@ -442,9 +473,9 @@ func (h *healthCheck) Do() error {
 	defer h.lock.Unlock()
 
 	success := true
-	if h.count < len(h.plan) {
-		success = h.plan[h.count]
-		h.count++
+	if h.indexPlan < len(h.plan) {
+		success = h.plan[h.indexPlan]
+		h.indexPlan++
 	}
 
 	if success {

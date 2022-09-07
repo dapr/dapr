@@ -179,7 +179,7 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 	t.Run("set plan and trigger failures", func(t *testing.T) {
 		u := fmt.Sprintf("%s/set-plan", appExternalURL)
 		log.Println("Invoking method", "POST", u)
-		plan, _ := json.Marshal([]bool{false, false, false, false, false, false})
+		plan, _ := json.Marshal([]bool{false, false, false})
 		_, err := utils.HTTPPost(u, plan)
 		require.NoError(t, err)
 
@@ -255,14 +255,14 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 			wg.Add(4)
 			go func() {
 				obj := getCountAndLast(t, "last-input-binding")
-				require.LessOrEqual(t, lastInputBinding.Count, obj.Count)
+				require.Equal(t, lastInputBinding.Count, obj.Count)
 				require.Greater(t, *obj.Last, int64(5000))
 				lastInputBinding = obj
 				wg.Done()
 			}()
 			go func() {
 				obj := getCountAndLast(t, "last-topic-message")
-				require.LessOrEqual(t, lastTopicMessage.Count, obj.Count)
+				require.Equal(t, lastTopicMessage.Count, obj.Count)
 				require.Greater(t, *obj.Last, int64(5000))
 				lastTopicMessage = obj
 				wg.Done()
