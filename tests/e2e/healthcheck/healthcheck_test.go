@@ -255,14 +255,14 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 			wg.Add(4)
 			go func() {
 				obj := getCountAndLast(t, "last-input-binding")
-				require.Less(t, lastInputBinding.Count, obj.Count)
+				require.LessOrEqual(t, lastInputBinding.Count, obj.Count)
 				require.Greater(t, *obj.Last, int64(5000))
 				lastInputBinding = obj
 				wg.Done()
 			}()
 			go func() {
 				obj := getCountAndLast(t, "last-topic-message")
-				require.Less(t, lastTopicMessage.Count, obj.Count)
+				require.LessOrEqual(t, lastTopicMessage.Count, obj.Count)
 				require.Greater(t, *obj.Last, int64(5000))
 				lastTopicMessage = obj
 				wg.Done()
