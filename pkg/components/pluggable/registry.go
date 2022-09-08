@@ -44,6 +44,7 @@ func Register(pcs ...components.Pluggable) int {
 		}
 		register(pc)
 		registeredComponents++
+		log.Infof("%s.%s %s pluggable component was successfully registered", pc.Type, pc.Name, pc.Version)
 	}
 	return registeredComponents
 }
