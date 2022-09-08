@@ -65,9 +65,9 @@ type server struct {
 	bulkSetCalled      atomic.Int64
 	onBulkSetCalled    func(*proto.BulkSetRequest)
 	bulkSetErr         error
-	multiCalled        atomic.Int64
-	onMultiCalled      func(*proto.TransactionalStateRequest)
-	multiErr           error
+	transactCalled     atomic.Int64
+	onTransactCalled   func(*proto.TransactionalStateRequest)
+	transactErr        error
 	queryCalled        atomic.Int64
 	onQueryCalled      func(*proto.QueryRequest)
 	queryResp          *proto.QueryResponse
@@ -82,12 +82,12 @@ func (s *server) Query(_ context.Context, req *proto.QueryRequest) (*proto.Query
 	return s.queryResp, s.queryErr
 }
 
-func (s *server) Multi(_ context.Context, req *proto.TransactionalStateRequest) (*proto.TransactionalStateResponse, error) {
-	s.multiCalled.Add(1)
-	if s.onMultiCalled != nil {
-		s.onMultiCalled(req)
+func (s *server) Transact(_ context.Context, req *proto.TransactionalStateRequest) (*proto.TransactionalStateResponse, error) {
+	s.transactCalled.Add(1)
+	if s.onTransactCalled != nil {
+		s.onTransactCalled(req)
 	}
-	return &proto.TransactionalStateResponse{}, s.multiErr
+	return &proto.TransactionalStateResponse{}, s.transactErr
 }
 
 func (s *server) Delete(ctx context.Context, req *proto.DeleteRequest) (*proto.DeleteResponse, error) {
@@ -540,9 +540,9 @@ func TestComponentCalls(t *testing.T) {
 		assert.Equal(t, int64(1), svc.bulkGetCalled.Load())
 	})
 
-	t.Run("multi should returns an error when grpc returns an error", func(t *testing.T) {
+	t.Run("transact should returns an error when grpc returns an error", func(t *testing.T) {
 		svc := &server{
-			multiErr: errors.New("multi-fake-err"),
+			transactErr: errors.New("transact-fake-err"),
 		}
 		stStore, cleanup, err := getStateStore(svc)
 		require.NoError(t, err)
@@ -554,10 +554,10 @@ func TestComponentCalls(t *testing.T) {
 		})
 
 		assert.NotNil(t, err)
-		assert.Equal(t, int64(1), svc.multiCalled.Load())
+		assert.Equal(t, int64(1), svc.transactCalled.Load())
 	})
 
-	t.Run("multi should send a multi containing all operations", func(t *testing.T) {
+	t.Run("transact should send a transact containing all operations", func(t *testing.T) {
 		const fakeKey, otherFakeKey, fakeData = "fakeKey", "otherFakeKey", "fakeData"
 		operations := []state.SetRequest{
 			{
@@ -570,7 +570,7 @@ func TestComponentCalls(t *testing.T) {
 			},
 		}
 		svc := &server{
-			onMultiCalled: func(bsr *proto.TransactionalStateRequest) {
+			onTransactCalled: func(bsr *proto.TransactionalStateRequest) {
 				assert.Len(t, bsr.Operations, len(operations))
 			},
 		}
@@ -590,7 +590,7 @@ func TestComponentCalls(t *testing.T) {
 		})
 
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), svc.multiCalled.Load())
+		assert.Equal(t, int64(1), svc.transactCalled.Load())
 	})
 
 	t.Run("query should return an error when grpc query returns an error", func(t *testing.T) {
@@ -786,7 +786,7 @@ func TestMappers(t *testing.T) {
 			assert.Equal(t, req.Options.Consistency, v1.StateOptions_CONSISTENCY_EVENTUAL)
 		}
 
-		t.Run("toMulti should return err when type is unrecognized", func(t *testing.T) {
+		t.Run("toTransact should return err when type is unrecognized", func(t *testing.T) {
 			req, err := toTransactOperation(state.TransactionalStateOperation{
 				Request: make(map[struct{}]struct{}),
 			})
@@ -794,7 +794,7 @@ func TestMappers(t *testing.T) {
 			assert.ErrorIs(t, err, ErrTransactOperationNotSupported)
 		})
 
-		t.Run("toMulti should return set operation when type is SetOperation", func(t *testing.T) {
+		t.Run("toTransact should return set operation when type is SetOperation", func(t *testing.T) {
 			const fakeData = "fakeData"
 			req, err := toTransactOperation(state.TransactionalStateOperation{
 				Request: state.SetRequest{
@@ -807,7 +807,7 @@ func TestMappers(t *testing.T) {
 			assert.IsType(t, &proto.TransactionalStateOperation_Set{}, req.Request)
 		})
 
-		t.Run("toMulti should return delete operation when type is SetOperation", func(t *testing.T) {
+		t.Run("toTransact should return delete operation when type is SetOperation", func(t *testing.T) {
 			req, err := toTransactOperation(state.TransactionalStateOperation{
 				Request: state.DeleteRequest{
 					Key: fakeKey,
