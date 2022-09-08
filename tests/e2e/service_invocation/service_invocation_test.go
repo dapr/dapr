@@ -97,6 +97,15 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
+			AppName:        "serviceinvocation-callee-2",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation",
+			Replicas:       1,
+			IngressEnabled: false,
+			MetricsEnabled: true,
+			Config:         "app-channel-pipeline",
+		},
+		{
 			AppName:        "grpcapp",
 			DaprEnabled:    true,
 			ImageName:      "e2e-service_invocation_grpc",
@@ -214,6 +223,13 @@ var moreServiceinvocationTests = []struct {
 		"serviceinvocation-callee-1",
 		"httptohttptest",
 		"success",
+	},
+	{
+		"Test HTTP to HTTP with App Channel Middleware",
+		"httptohttptest",
+		"serviceinvocation-callee-2",
+		"httptohttptest",
+		"SUCCESS", // uppercase should be applied
 	},
 	{
 		"Test HTTP to gRPC",
