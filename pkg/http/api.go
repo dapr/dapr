@@ -132,7 +132,7 @@ const (
 	nameParam                = "name"
 	workflowComponent        = "workflowComponent"
 	workflowType             = "workflowType"
-	instanceId               = "instanceId"
+	instanceID               = "instanceID"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
 	pubsubnameparam          = "pubsubname"
@@ -240,19 +240,19 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceId}",
+			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceID}",
 			Version: apiVersionV1alpha1,
 			Handler: a.onGetWorkflow,
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceId}/start",
+			Route:   "workflows/{workflowComponent}/{workflowType}/{instanceID}/start",
 			Version: apiVersionV1alpha1,
 			Handler: a.onStartWorkflow,
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
-			Route:   "workflows/{workflowComponent}/{instanceId}/terminate",
+			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
 			Handler: a.onTerminateWorkflow,
 		},
@@ -761,7 +761,7 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 		log.Errorf("Error while unmarshalling workflow info: %v\n", err)
 	}
 
-	instance := reqCtx.UserValue(instanceId).(string)
+	instance := reqCtx.UserValue(instanceID).(string)
 	if instance == "" {
 		log.Error("No instance, or empty instance was provided.")
 		return
@@ -772,7 +772,7 @@ func (a *api) onStartWorkflow(reqCtx *fasthttp.RequestCtx) {
 		WorkflowName: wfType,
 		Parameters:   startReq.Parameters,
 	}
-	req.WorkflowInfo.InstanceId = instance
+	req.WorkflowInfo.InstanceID = instance
 
 	resp, err := a.workflows[component].Start(reqCtx, &req)
 	if err != nil {
@@ -797,7 +797,7 @@ func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	instance := reqCtx.UserValue(instanceId).(string)
+	instance := reqCtx.UserValue(instanceID).(string)
 	if instance == "" {
 		log.Error("No instance, or empty instance was provided.")
 		return
@@ -813,8 +813,8 @@ func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	req := workflows.WorkflowStruct{
-		InstanceId: instance,
+	req := workflows.WorkflowReference{
+		InstanceID: instance,
 	}
 
 	resp, err := a.workflows[component].Get(reqCtx, &req)
@@ -832,7 +832,7 @@ func (a *api) onGetWorkflow(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
-	instance := reqCtx.UserValue(instanceId).(string)
+	instance := reqCtx.UserValue(instanceID).(string)
 	if instance == "" {
 		log.Error("No instance, or empty instance was provided.")
 		return
@@ -848,8 +848,8 @@ func (a *api) onTerminateWorkflow(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	req := workflows.WorkflowStruct{
-		InstanceId: instance,
+	req := workflows.WorkflowReference{
+		InstanceID: instance,
 	}
 
 	err := a.workflows[component].Terminate(reqCtx, &req)
