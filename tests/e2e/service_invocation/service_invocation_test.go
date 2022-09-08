@@ -24,6 +24,8 @@ import (
 	"strings"
 	"testing"
 
+	guuid "github.com/google/uuid"
+
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,10 +37,10 @@ import (
 )
 
 type testCommandRequest struct {
-	RemoteApp        string `json:"remoteApp,omitempty"`
-	Method           string `json:"method,omitempty"`
-	RemoteAppTracing string `json:"remoteAppTracing"`
-	SkipBodyCheck    bool   `json:"skipBodyCheck"`
+	RemoteApp        string  `json:"remoteApp,omitempty"`
+	Method           string  `json:"method,omitempty"`
+	RemoteAppTracing string  `json:"remoteAppTracing"`
+	Message          *string `json:"message"`
 }
 
 type appResponse struct {
@@ -210,13 +212,14 @@ var serviceinvocationPathTests = []struct {
 	},
 }
 
+var uppercaseMessage = strings.ToUpper(guuid.New().String())
 var moreServiceinvocationTests = []struct {
 	in               string
 	path             string
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
-	skipBodyCheck    bool
+	message          *string
 }{
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
@@ -225,7 +228,7 @@ var moreServiceinvocationTests = []struct {
 		"serviceinvocation-callee-1",
 		"httptohttptest",
 		"success",
-		false,
+		nil,
 	},
 	{
 		"Test HTTP to HTTP with App Channel Middleware",
@@ -233,7 +236,7 @@ var moreServiceinvocationTests = []struct {
 		"serviceinvocation-callee-2",
 		"httptohttptest",
 		"SUCCESS", // uppercase should be applied
-		true,
+		&uppercaseMessage,
 	},
 	{
 		"Test HTTP to gRPC",
@@ -241,7 +244,7 @@ var moreServiceinvocationTests = []struct {
 		"grpcapp",
 		"httptogrpctest",
 		"success",
-		false,
+		nil,
 	},
 	{
 		"Test gRPC to HTTP",
@@ -249,7 +252,7 @@ var moreServiceinvocationTests = []struct {
 		"serviceinvocation-callee-1",
 		"grpctohttptest",
 		"success",
-		false,
+		nil,
 	},
 	{
 		"Test gRPC to gRPC",
@@ -257,7 +260,7 @@ var moreServiceinvocationTests = []struct {
 		"grpcapp",
 		"grpcToGrpcTest",
 		"success",
-		false,
+		nil,
 	},
 }
 
@@ -348,9 +351,9 @@ func TestServiceInvocation(t *testing.T) {
 	for _, tt := range moreServiceinvocationTests {
 		t.Run(tt.in, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
-				RemoteApp:     tt.remoteApp,
-				Method:        tt.appMethod,
-				SkipBodyCheck: tt.skipBodyCheck,
+				RemoteApp: tt.remoteApp,
+				Method:    tt.appMethod,
+				Message:   tt.message,
 			})
 			require.NoError(t, err)
 

@@ -74,7 +74,8 @@ type testCommandRequest struct {
 	RemoteApp        string `json:"remoteApp,omitempty"`
 	Method           string `json:"method,omitempty"`
 	RemoteAppTracing string `json:"remoteAppTracing"`
-	SkipBodyCheck    bool   `json:"skipBodyCheck"`
+	// Optionally override the message
+	Message *string `json:"message,omitempty"`
 }
 
 type appResponse struct {
@@ -852,7 +853,11 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	for _, test := range testMethods {
 		testMessage := "ok"
 		if test.SendBody {
-			testMessage = guuid.New().String()
+			if commandBody.Message != nil {
+				testMessage = *commandBody.Message
+			} else {
+				testMessage = guuid.New().String()
+			}
 		}
 		url := fmt.Sprintf(
 			"http://localhost:%s/v1.0/invoke/%s/method/%s",
@@ -878,7 +883,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if !commandBody.SkipBodyCheck && (test.ExpectBody && testMessage != resp.Message) {
+		if test.ExpectBody && testMessage != resp.Message {
 			errorMessage := "Expected " + testMessage + " received " + resp.Message
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(appResponse{
