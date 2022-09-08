@@ -179,7 +179,8 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 	t.Run("set plan and trigger failures", func(t *testing.T) {
 		u := fmt.Sprintf("%s/set-plan", appExternalURL)
 		log.Println("Invoking method", "POST", u)
-		plan, _ := json.Marshal([]bool{false, false, false})
+		// after 4(false)* 3 seconds=12 seconds and the app will be healhty.
+		plan, _ := json.Marshal([]bool{false, false, false, false})
 		_, err := utils.HTTPPost(u, plan)
 		require.NoError(t, err)
 
@@ -244,41 +245,6 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 				res, status := invokeFoo(t)
 				require.Contains(t, string(res), "ERR_DIRECT_INVOKE")
 				require.Greater(t, status, 299)
-				wg.Done()
-			}()
-			wg.Wait()
-		})
-
-		t.Run("after delay, counters aren't increasing", func(t *testing.T) {
-			// Wait 5 seconds then repeat, expecting the same results for counters
-			time.Sleep(5 * time.Second)
-			wg.Add(4)
-			go func() {
-				obj := getCountAndLast(t, "last-input-binding")
-				require.Equal(t, lastInputBinding.Count, obj.Count)
-				require.Greater(t, *obj.Last, int64(5000))
-				lastInputBinding = obj
-				wg.Done()
-			}()
-			go func() {
-				obj := getCountAndLast(t, "last-topic-message")
-				require.Equal(t, lastTopicMessage.Count, obj.Count)
-				require.Greater(t, *obj.Last, int64(5000))
-				lastTopicMessage = obj
-				wg.Done()
-			}()
-			go func() {
-				obj := getCountAndLast(t, "last-health-check")
-				require.Greater(t, obj.Count, lastHealthCheck.Count)
-				require.Less(t, *obj.Last, int64(3000))
-				lastHealthCheck = obj
-				wg.Done()
-			}()
-			// Service invocation should fail again
-			go func() {
-				res, status := invokeFoo(t)
-				require.Greater(t, status, 299)
-				require.Contains(t, string(res), "ERR_DIRECT_INVOKE")
 				wg.Done()
 			}()
 			wg.Wait()
