@@ -38,6 +38,7 @@ type testCommandRequest struct {
 	RemoteApp        string `json:"remoteApp,omitempty"`
 	Method           string `json:"method,omitempty"`
 	RemoteAppTracing string `json:"remoteAppTracing"`
+	SkipBodyCheck    bool   `json:"skipBodyCheck"`
 }
 
 type appResponse struct {
@@ -215,6 +216,7 @@ var moreServiceinvocationTests = []struct {
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
+	skipBodyCheck    bool
 }{
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
@@ -223,6 +225,7 @@ var moreServiceinvocationTests = []struct {
 		"serviceinvocation-callee-1",
 		"httptohttptest",
 		"success",
+		false,
 	},
 	{
 		"Test HTTP to HTTP with App Channel Middleware",
@@ -230,6 +233,7 @@ var moreServiceinvocationTests = []struct {
 		"serviceinvocation-callee-2",
 		"httptohttptest",
 		"SUCCESS", // uppercase should be applied
+		true,
 	},
 	{
 		"Test HTTP to gRPC",
@@ -237,6 +241,7 @@ var moreServiceinvocationTests = []struct {
 		"grpcapp",
 		"httptogrpctest",
 		"success",
+		false,
 	},
 	{
 		"Test gRPC to HTTP",
@@ -244,6 +249,7 @@ var moreServiceinvocationTests = []struct {
 		"serviceinvocation-callee-1",
 		"grpctohttptest",
 		"success",
+		false,
 	},
 	{
 		"Test gRPC to gRPC",
@@ -251,6 +257,7 @@ var moreServiceinvocationTests = []struct {
 		"grpcapp",
 		"grpcToGrpcTest",
 		"success",
+		false,
 	},
 }
 
@@ -341,8 +348,9 @@ func TestServiceInvocation(t *testing.T) {
 	for _, tt := range moreServiceinvocationTests {
 		t.Run(tt.in, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
-				RemoteApp: tt.remoteApp,
-				Method:    tt.appMethod,
+				RemoteApp:     tt.remoteApp,
+				Method:        tt.appMethod,
+				SkipBodyCheck: tt.skipBodyCheck,
 			})
 			require.NoError(t, err)
 

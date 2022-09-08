@@ -74,6 +74,7 @@ type testCommandRequest struct {
 	RemoteApp        string `json:"remoteApp,omitempty"`
 	Method           string `json:"method,omitempty"`
 	RemoteAppTracing string `json:"remoteAppTracing"`
+	SkipBodyCheck    bool   `json:"skipBodyCheck"`
 }
 
 type appResponse struct {
@@ -877,7 +878,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if test.ExpectBody && testMessage != resp.Message {
+		if !commandBody.SkipBodyCheck && (test.ExpectBody && testMessage != resp.Message) {
 			errorMessage := "Expected " + testMessage + " received " + resp.Message
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(appResponse{
