@@ -242,7 +242,7 @@ func (c *cmdE2EPerf) getCachedImage() (string, error) {
 	}
 
 	// If cache is enable, try pulling from cache first
-	cachedImage := fmt.Sprintf("%s/%s-%s:%s-%s", c.flags.CacheRegistry, c.cmdType, c.flags.Name, c.flags.TargetOS, hashDir)
+	cachedImage := fmt.Sprintf("%s/%s-%s:%s-%s-%s", c.flags.CacheRegistry, c.cmdType, c.flags.Name, c.flags.TargetOS, c.flags.TargetArch, hashDir)
 	return cachedImage, nil
 }
 
