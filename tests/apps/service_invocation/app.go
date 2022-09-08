@@ -71,11 +71,10 @@ func init() {
 }
 
 type testCommandRequest struct {
-	RemoteApp        string `json:"remoteApp,omitempty"`
-	Method           string `json:"method,omitempty"`
-	RemoteAppTracing string `json:"remoteAppTracing"`
-	// Optionally override the message
-	Message *string `json:"message,omitempty"`
+	RemoteApp        string  `json:"remoteApp,omitempty"`
+	Method           string  `json:"method,omitempty"`
+	RemoteAppTracing string  `json:"remoteAppTracing"`
+	Message          *string `json:"message,omitempty"`
 }
 
 type appResponse struct {
@@ -779,10 +778,6 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 	// validate response ends with "[testMessage] | [httpMethod]"
 	if testMessage != responseMessage.Message {
 		errorMessage := "Expected " + testMessage + " received " + responseMessage.Message
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(appResponse{
-			Message: errorMessage,
-		})
 		logAndSetResponse(w, http.StatusInternalServerError, errorMessage)
 		return
 	}
@@ -885,10 +880,6 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 
 		if test.ExpectBody && testMessage != resp.Message {
 			errorMessage := "Expected " + testMessage + " received " + resp.Message
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(appResponse{
-				Message: errorMessage,
-			})
 			logAndSetResponse(w, http.StatusInternalServerError, errorMessage)
 			return
 		}
