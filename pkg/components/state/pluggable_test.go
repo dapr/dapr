@@ -787,16 +787,16 @@ func TestMappers(t *testing.T) {
 		}
 
 		t.Run("toMulti should return err when type is unrecognized", func(t *testing.T) {
-			req, err := toMultiOperation(state.TransactionalStateOperation{
+			req, err := toTransactOperation(state.TransactionalStateOperation{
 				Request: make(map[struct{}]struct{}),
 			})
 			assert.Nil(t, req)
-			assert.ErrorIs(t, err, ErrMultiOperationNotSupported)
+			assert.ErrorIs(t, err, ErrTransactOperationNotSupported)
 		})
 
 		t.Run("toMulti should return set operation when type is SetOperation", func(t *testing.T) {
 			const fakeData = "fakeData"
-			req, err := toMultiOperation(state.TransactionalStateOperation{
+			req, err := toTransactOperation(state.TransactionalStateOperation{
 				Request: state.SetRequest{
 					Key:   fakeKey,
 					Value: fakeData,
@@ -808,7 +808,7 @@ func TestMappers(t *testing.T) {
 		})
 
 		t.Run("toMulti should return delete operation when type is SetOperation", func(t *testing.T) {
-			req, err := toMultiOperation(state.TransactionalStateOperation{
+			req, err := toTransactOperation(state.TransactionalStateOperation{
 				Request: state.DeleteRequest{
 					Key: fakeKey,
 				},

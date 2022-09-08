@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -22,6 +22,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
 
 
 // QueriableStateStore service provides a gRPC interface for querier state store components.
+// It was designed to embed query features to the StateStore Service as a complementary service.
 service QueriableStateStore {
   // Query performs a query request on the statestore.
   rpc Query(QueryRequest) returns (QueryResponse) {}
@@ -87,9 +88,10 @@ message QueryResponse {
 }
 
 // TransactionalStateStore service provides a gRPC interface for transactional state store components.
+// It was designed to embed transactional features to the StateStore Service as a complementary service.
 service TransactionalStateStore {
-    // Multi executes multiples operation in a transactional environment.
-    rpc Multi(TransactionalStateRequest) returns (TransactionalStateResponse) {}
+    // Transact executes multiples operation in a transactional environment.
+    rpc Transact(TransactionalStateRequest) returns (TransactionalStateResponse) {}
 }
 
 // TransactionalStateOperation describes operation type, key, and value for transactional operation.

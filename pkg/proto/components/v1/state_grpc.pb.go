@@ -108,8 +108,8 @@ var QueriableStateStore_ServiceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type TransactionalStateStoreClient interface {
-	// Multi executes multiples operation in a transactional environment.
-	Multi(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*TransactionalStateResponse, error)
+	// Transact executes multiples operation in a transactional environment.
+	Transact(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*TransactionalStateResponse, error)
 }
 
 type transactionalStateStoreClient struct {
@@ -120,9 +120,9 @@ func NewTransactionalStateStoreClient(cc grpc.ClientConnInterface) Transactional
 	return &transactionalStateStoreClient{cc}
 }
 
-func (c *transactionalStateStoreClient) Multi(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*TransactionalStateResponse, error) {
+func (c *transactionalStateStoreClient) Transact(ctx context.Context, in *TransactionalStateRequest, opts ...grpc.CallOption) (*TransactionalStateResponse, error) {
 	out := new(TransactionalStateResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.TransactionalStateStore/Multi", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.TransactionalStateStore/Transact", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -133,16 +133,16 @@ func (c *transactionalStateStoreClient) Multi(ctx context.Context, in *Transacti
 // All implementations should embed UnimplementedTransactionalStateStoreServer
 // for forward compatibility
 type TransactionalStateStoreServer interface {
-	// Multi executes multiples operation in a transactional environment.
-	Multi(context.Context, *TransactionalStateRequest) (*TransactionalStateResponse, error)
+	// Transact executes multiples operation in a transactional environment.
+	Transact(context.Context, *TransactionalStateRequest) (*TransactionalStateResponse, error)
 }
 
 // UnimplementedTransactionalStateStoreServer should be embedded to have forward compatible implementations.
 type UnimplementedTransactionalStateStoreServer struct {
 }
 
-func (UnimplementedTransactionalStateStoreServer) Multi(context.Context, *TransactionalStateRequest) (*TransactionalStateResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Multi not implemented")
+func (UnimplementedTransactionalStateStoreServer) Transact(context.Context, *TransactionalStateRequest) (*TransactionalStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Transact not implemented")
 }
 
 // UnsafeTransactionalStateStoreServer may be embedded to opt out of forward compatibility for this service.
@@ -156,20 +156,20 @@ func RegisterTransactionalStateStoreServer(s grpc.ServiceRegistrar, srv Transact
 	s.RegisterService(&TransactionalStateStore_ServiceDesc, srv)
 }
 
-func _TransactionalStateStore_Multi_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _TransactionalStateStore_Transact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TransactionalStateRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TransactionalStateStoreServer).Multi(ctx, in)
+		return srv.(TransactionalStateStoreServer).Transact(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.components.v1.TransactionalStateStore/Multi",
+		FullMethod: "/dapr.proto.components.v1.TransactionalStateStore/Transact",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TransactionalStateStoreServer).Multi(ctx, req.(*TransactionalStateRequest))
+		return srv.(TransactionalStateStoreServer).Transact(ctx, req.(*TransactionalStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -182,8 +182,8 @@ var TransactionalStateStore_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*TransactionalStateStoreServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Multi",
-			Handler:    _TransactionalStateStore_Multi_Handler,
+			MethodName: "Transact",
+			Handler:    _TransactionalStateStore_Transact_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

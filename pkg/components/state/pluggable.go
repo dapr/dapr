@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -31,9 +31,9 @@ import (
 )
 
 var (
-	ErrNilSetValue                = errors.New("an attempt to set a nil value was received, try to use Delete instead")
-	ErrRespNil                    = errors.New("the response for GetRequest is nil")
-	ErrMultiOperationNotSupported = errors.New("multi operation not supported")
+	ErrNilSetValue                   = errors.New("an attempt to set a nil value was received, try to use Delete instead")
+	ErrRespNil                       = errors.New("the response for GetRequest is nil")
+	ErrTransactOperationNotSupported = errors.New("transact operation not supported")
 )
 
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
@@ -191,13 +191,13 @@ func (ss *grpcStateStore) Query(req *state.QueryRequest) (*state.QueryResponse, 
 func (ss *grpcStateStore) Multi(request *state.TransactionalStateRequest) error {
 	operations := make([]*proto.TransactionalStateOperation, len(request.Operations))
 	for idx, op := range request.Operations {
-		multiOp, err := toMultiOperation(op)
+		transactOp, err := toTransactOperation(op)
 		if err != nil {
 			return err
 		}
-		operations[idx] = multiOp
+		operations[idx] = transactOp
 	}
-	_, err := ss.Client.Multi(ss.Context, &proto.TransactionalStateRequest{
+	_, err := ss.Client.Transact(ss.Context, &proto.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   request.Metadata,
 	})
@@ -273,7 +273,7 @@ func fromQueryResponse(resp *proto.QueryResponse) *state.QueryResponse {
 	}
 }
 
-func toMultiOperation(req state.TransactionalStateOperation) (*proto.TransactionalStateOperation, error) {
+func toTransactOperation(req state.TransactionalStateOperation) (*proto.TransactionalStateOperation, error) {
 	switch request := req.Request.(type) {
 	case state.SetRequest:
 		setReq, err := toSetRequest(&request)
@@ -288,7 +288,7 @@ func toMultiOperation(req state.TransactionalStateOperation) (*proto.Transaction
 			Request: &proto.TransactionalStateOperation_Delete{Delete: toDeleteRequest(&request)}, //nolint:nosnakecase
 		}, nil
 	}
-	return nil, ErrMultiOperationNotSupported
+	return nil, ErrTransactOperationNotSupported
 }
 
 func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
