@@ -263,7 +263,7 @@ func TestComponentUpdate(t *testing.T) {
 }
 
 func TestListsNamespaced(t *testing.T) {
-	t.Run("list pluggable components should not be namespaced", func(t *testing.T) {
+	t.Run("list pluggable components should be namespaced", func(t *testing.T) {
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		assert.NoError(t, err)
@@ -301,7 +301,7 @@ func TestListsNamespaced(t *testing.T) {
 		})
 
 		assert.Nil(t, err)
-		assert.Equal(t, 2, len(res.GetPluggableComponents()))
+		assert.Equal(t, 1, len(res.GetPluggableComponents()))
 
 		var sub componentsapi.PluggableComponent
 		err = yaml.Unmarshal(res.GetPluggableComponents()[0], &sub)
@@ -315,7 +315,7 @@ func TestListsNamespaced(t *testing.T) {
 			Namespace: "namespace-c",
 		})
 		assert.Nil(t, err)
-		assert.Equal(t, 2, len(res.GetPluggableComponents()))
+		assert.Equal(t, 0, len(res.GetPluggableComponents()))
 	})
 	t.Run("list components namespace scoping", func(t *testing.T) {
 		s := runtime.NewScheme()

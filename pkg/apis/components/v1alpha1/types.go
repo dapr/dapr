@@ -45,7 +45,6 @@ func (Component) Kind() string {
 //+genclient
 //+genclient:noStatus
 //+kubebuilder:object:root=true
-//+kubebuilder:resource:scope=Cluster
 
 // PluggableComponent is a especification for a pluggable component.
 type PluggableComponent struct {

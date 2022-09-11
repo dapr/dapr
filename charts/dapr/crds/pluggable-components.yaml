@@ -13,7 +13,7 @@ spec:
     listKind: PluggableComponentList
     plural: pluggablecomponents
     singular: pluggablecomponent
-  scope: Cluster
+  scope: Namespaced
   versions:
     - name: v1alpha1
       schema:

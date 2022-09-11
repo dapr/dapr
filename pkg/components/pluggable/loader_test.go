@@ -132,7 +132,7 @@ func getOperatorClient(srv *fakeOperator) (client operatorv1pb.OperatorClient, c
 }
 
 func TestLoadPluggableComponentsK8S(t *testing.T) {
-	t.Run("list pluggable components should return the namespace pluggable components", func(t *testing.T) {
+	t.Run("list pluggable components should call operators' list pluggable components", func(t *testing.T) {
 		pc := v1alpha1.PluggableComponent{}
 		pc.ObjectMeta.Name = "test"
 		pc.ObjectMeta.Labels = map[string]string{

@@ -137,7 +137,9 @@ func (a *apiServer) OnComponentUpdated(component *componentsapi.Component) {
 // ListPluggableComponents returns a list of Dapr Pluggable components.
 func (a *apiServer) ListPluggableComponents(ctx context.Context, in *operatorv1pb.ListPluggableComponentsRequest) (*operatorv1pb.ListPluggableComponentsResponse, error) {
 	var pluggableComponents componentsapi.PluggableComponentList
-	if err := a.Client.List(ctx, &pluggableComponents, &client.ListOptions{}); err != nil {
+	if err := a.Client.List(ctx, &pluggableComponents, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
 		return nil, errors.Wrap(err, "error getting pluggable components")
 	}
 	resp := &operatorv1pb.ListPluggableComponentsResponse{
