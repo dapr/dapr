@@ -311,6 +311,19 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 		"-t", destImage,
 		filepath.Join(appDir, c.flags.Name, "."),
 	)
+
+	if runtime.GOARCH != "arm64" && c.flags.TargetArch == "arm64" {
+		fmt.Printf("Building arm64 docker image: %s\n", destImage)
+		e = exec.Command("docker",
+			"buildx",
+			"build",
+			"--platform", "linux/arm64/v8",
+			"-f", dockerfile,
+			"-t", destImage,
+			filepath.Join(appDir, c.flags.Name, "."),
+			"--load",
+		)
+	}
 	e.Stdout = os.Stdout
 	e.Stderr = os.Stderr
 	err = e.Run()
