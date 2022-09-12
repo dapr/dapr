@@ -101,10 +101,14 @@ jobs:
       - name: Deploy the test cluster
         if: env.TEST_PREFIX != ''
         run: |
-          # Select three random Azure regions
-          REGION1=${{ env.AZURE_REGIONS }}
-          REGION2=${{ env.AZURE_REGIONS }}
+          # Select one random Azure region
+          REGIONS=(${{ env.AZURE_REGIONS }})
+          REGIONS_SIZE=${#REGIONS[@]}
+          REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
+          REGION1=${REGIONS[$REGIONS_IDX]}
+          REGION2=${REGIONS[$REGIONS_IDX]}
           REGION3=${{ env.AZURE_ARM_REGIONS }}
+          echo "Deploying to Azure regions: Linux_amd64=${REGION1} Windows=${REGION2} Linux_arm64=${REGION3}"
           # Tags
           DATE_TAG=$(date --iso-8601=seconds)
           echo "Tags: date=${DATE_TAG}"
