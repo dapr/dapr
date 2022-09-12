@@ -105,17 +105,17 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 
 	for _, app := range apps {
 		if app.RegistryName == "" {
-			app.RegistryName = c.imageRegistry()
+			app.RegistryName = GetTestImageRegistry()
 		}
 
 		if app.ImageSecret == "" {
-			app.ImageSecret = c.imageSecret()
+			app.ImageSecret = GetTestImageSecret()
 		}
 
 		if app.ImageName == "" {
 			return fmt.Errorf("%s app doesn't have imagename property", app.AppName)
 		}
-		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, c.imageTag())
+		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, GetTestImageTag())
 
 		if dt {
 			app.Config = disableTelemetryConfig
@@ -160,7 +160,7 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 	return nil
 }
 
-func (c *KubeTestPlatform) imageRegistry() string {
+func GetTestImageRegistry() string {
 	reg := os.Getenv("DAPR_TEST_REGISTRY")
 	if reg == "" {
 		return defaultImageRegistry
@@ -168,7 +168,7 @@ func (c *KubeTestPlatform) imageRegistry() string {
 	return reg
 }
 
-func (c *KubeTestPlatform) imageSecret() string {
+func GetTestImageSecret() string {
 	secret := os.Getenv("DAPR_TEST_REGISTRY_SECRET")
 	if secret == "" {
 		return ""
@@ -176,7 +176,7 @@ func (c *KubeTestPlatform) imageSecret() string {
 	return secret
 }
 
-func (c *KubeTestPlatform) imageTag() string {
+func GetTestImageTag() string {
 	tag := os.Getenv("DAPR_TEST_TAG")
 	if tag == "" {
 		return defaultImageTag
