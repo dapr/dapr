@@ -381,6 +381,18 @@ func generateSpecificLengthSample(sizeInBytes int) requestResponse {
 }
 
 var tr *runner.TestRunner
+var stateStoreApps []struct {
+	name       string
+	stateStore string
+} = []struct {
+	name       string
+	stateStore string
+}{
+	{
+		name:       appName,
+		stateStore: "statestore",
+	},
+}
 
 func TestMain(m *testing.M) {
 	utils.SetupLogs("stateapp")
@@ -397,7 +409,10 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 			MetricsEnabled: true,
 		},
-		{
+	}
+
+	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
+		testApps = append(testApps, kube.AppDescription{
 			AppName:        appNamePluggable,
 			DaprEnabled:    true,
 			ImageName:      "e2e-stateapp",
@@ -411,7 +426,14 @@ func TestMain(m *testing.M) {
 					Image: runner.BuildTestImageName(redisPluggableApp),
 				},
 			},
-		},
+		})
+		stateStoreApps = append(stateStoreApps, struct {
+			name       string
+			stateStore string
+		}{
+			name:       appNamePluggable,
+			stateStore: "pluggable-statestore",
+		})
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
@@ -422,24 +444,7 @@ func TestStateApp(t *testing.T) {
 	testCases := generateTestCases(true)                       // For HTTP
 	testCases = append(testCases, generateTestCases(false)...) // For gRPC
 
-	var apps []struct {
-		name       string
-		stateStore string
-	} = []struct {
-		name       string
-		stateStore string
-	}{
-		{
-			name:       appName,
-			stateStore: "statestore",
-		},
-		{
-			name:       appNamePluggable,
-			stateStore: "pluggable-statestore",
-		},
-	}
-
-	for _, app := range apps {
+	for _, app := range stateStoreApps {
 		externalURL := tr.Platform.AcquireAppExternalURL(app.name)
 		require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
