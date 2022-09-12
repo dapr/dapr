@@ -1,4 +1,4 @@
-module github.com/dapr-sandbox/components-go-sdk/examples/redis
+module github.com/dapr/dapr/tests/apps/pluggable_redis
 
 go 1.19
 
