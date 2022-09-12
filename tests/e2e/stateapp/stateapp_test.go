@@ -404,6 +404,7 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
+			Config:         "pluggablecomponentsconfig",
 			PluggableComponents: map[string]apiv1.Container{
 				"dapr-state.redis-pluggable-v1-pluggable-statestore.sock": {
 					Name:  "redis-pluggable", // e2e-pluggable_redis
