@@ -53,6 +53,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -294,8 +295,7 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 		opt(&o)
 	}
 
-	err := a.initRuntime(&o)
-	if err != nil {
+	if err := a.initRuntime(&o); err != nil {
 		return err
 	}
 
@@ -316,6 +316,13 @@ func (a *DaprRuntime) getNamespace() string {
 
 func (a *DaprRuntime) getPodName() string {
 	return os.Getenv("POD_NAME")
+}
+
+func (a *DaprRuntime) loadPluggableComponents() ([]components.Pluggable, error) {
+	if a.runtimeConfig.Mode == modes.StandaloneMode {
+		return pluggable.LoadFromDisk(a.runtimeConfig.Standalone.ComponentsPath)
+	}
+	return pluggable.LoadFromKubernetes()
 }
 
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
@@ -432,6 +439,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry = opts.bindingRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
+
+	if err = a.registerPluggableComponents(); err != nil {
+		log.Warnf("failed to register pluggable components: %s", err)
+	}
 
 	go a.processComponents()
 
@@ -599,7 +610,7 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 					middlewareSpec.Version)
 			}
 			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version,
-				middleware.Metadata{Base: contribMetadata.Base{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)}})
+				middleware.Metadata{Base: a.toBaseMetadata(component)})
 			if err != nil {
 				return httpMiddleware.Pipeline{}, err
 			}
@@ -608,6 +619,18 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 		}
 	}
 	return httpMiddleware.Pipeline{Handlers: handlers}, nil
+}
+
+// registerPluggableComponents loads and register the loaded pluggable components.
+func (a *DaprRuntime) registerPluggableComponents() error {
+	pluggables, err := a.loadPluggableComponents()
+	if err != nil {
+		return err
+	}
+	log.Infof("found %d pluggable components", len(pluggables))
+	log.Infof("%d pluggable components were registered", pluggable.Register(pluggables...))
+
+	return nil
 }
 
 func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
@@ -1267,7 +1290,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, binding bindings.InputBinding) error {
-	return binding.Read(readCtx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
+	return binding.Read(readCtx, func(_ context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		if resp == nil {
 			return nil, nil
 		}
@@ -1448,10 +1471,7 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
-	err = binding.Init(bindings.Metadata{Base: contribMetadata.Base{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-		Name:       c.ObjectMeta.Name,
-	}})
+	err = binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -1479,10 +1499,7 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	}
 
 	if binding != nil {
-		err := binding.Init(bindings.Metadata{Base: contribMetadata.Base{
-			Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-			Name:       c.ObjectMeta.Name,
-		}})
+		err := binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 			fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -1503,10 +1520,7 @@ func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
-		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-		err := store.Init(configuration.Metadata{Base: contribMetadata.Base{
-			Properties: props,
-		}})
+		err := store.Init(configuration.Metadata{Base: a.toBaseMetadata(s)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
@@ -1532,10 +1546,9 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 		return nil
 	}
 	// initialization
-	props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-	err = store.InitLockStore(lock.Metadata{Base: contribMetadata.Base{
-		Properties: props,
-	}})
+	baseMetadata := a.toBaseMetadata(s)
+	props := baseMetadata.Properties
+	err = store.InitLockStore(lock.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
@@ -1581,10 +1594,9 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 			}
 		}
 
-		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-		err = store.Init(state.Metadata{Base: contribMetadata.Base{
-			Properties: props,
-		}})
+		baseMetadata := a.toBaseMetadata(s)
+		props := baseMetadata.Properties
+		err = store.Init(state.Metadata{Base: baseMetadata})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
 			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
@@ -1729,16 +1741,15 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
-	properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+	baseMetadata := a.toBaseMetadata(c)
+	properties := baseMetadata.Properties
 	consumerID := strings.TrimSpace(properties["consumerID"])
 	if consumerID == "" {
 		consumerID = a.runtimeConfig.ID
 	}
 	properties["consumerID"] = consumerID
 
-	err = pubSub.Init(pubsub.Metadata{Base: contribMetadata.Base{
-		Properties: properties,
-	}})
+	err = pubSub.Init(pubsub.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -1860,6 +1871,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	resolver, err = a.nameResolutionRegistry.Create(resolverName, resolverVersion)
+	resolverMetadata.Name = resolverName
 	resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
 	resolverMetadata.Properties = map[string]string{
 		nr.DaprHTTPPort: strconv.Itoa(a.runtimeConfig.HTTPPort),
@@ -2639,9 +2651,7 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
-	err = secretStore.Init(secretstores.Metadata{Base: contribMetadata.Base{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-	}})
+	err = secretStore.Init(secretstores.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -2672,6 +2682,13 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha
 		properties[c.Name] = val
 	}
 	return properties
+}
+
+func (a *DaprRuntime) toBaseMetadata(c componentsV1alpha1.Component) contribMetadata.Base {
+	return contribMetadata.Base{
+		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+		Name:       c.Name,
+	}
 }
 
 func (a *DaprRuntime) getComponent(componentType string, name string) (componentsV1alpha1.Component, bool) {
