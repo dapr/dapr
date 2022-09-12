@@ -3432,14 +3432,19 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 // mockSubscribePubSub is an in-memory pubsub component.
 type mockSubscribePubSub struct {
-	handlers map[string]pubsub.Handler
-	pubCount map[string]int
+	bulkHandlers    map[string]pubsub.BulkHandler
+	handlers        map[string]pubsub.Handler
+	pubCount        map[string]int
+	bulkPubCount    map[string]int
+	isBulkSubscribe bool
 }
 
 // Init is a mock initialization method.
 func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
+	m.bulkHandlers = make(map[string]pubsub.BulkHandler)
 	m.handlers = make(map[string]pubsub.Handler)
 	m.pubCount = make(map[string]int)
+	m.bulkPubCount = make(map[string]int)
 	return nil
 }
 
@@ -3452,8 +3457,20 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 			Topic: req.Topic,
 		}
 		handler(context.Background(), pubsubMsg)
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		m.bulkPubCount[req.Topic]++
+		nbei := pubsub.BulkMessageEntry{
+			EntryID: "0",
+			Event:   req.Data,
+		}
+		msgArr := make([]pubsub.BulkMessageEntry, 0)
+		msgArr = append(msgArr, nbei)
+		nbm := &pubsub.BulkMessage{
+			Entries: msgArr,
+			Topic:   req.Topic,
+		}
+		bulkHandler(context.Background(), nbm)
 	}
-
 	return nil
 }
 
@@ -3469,6 +3486,186 @@ func (m *mockSubscribePubSub) Close() error {
 
 func (m *mockSubscribePubSub) Features() []pubsub.Feature {
 	return nil
+}
+
+func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
+	m.isBulkSubscribe = true
+	m.bulkHandlers[req.Topic] = handler
+	return nil
+}
+
+func (m *mockSubscribePubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	m.bulkPubCount[req.Topic]++
+	if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		nbm := &pubsub.BulkMessage{
+			Entries: req.Entries,
+			Topic:   req.Topic,
+		}
+		bulkHandler(context.Background(), nbm)
+	}
+	return pubsub.BulkPublishResponse{}, nil
+}
+
+func TestBulkSubscribe(t *testing.T) {
+	testBulkSubscribePubsub := "bulkSubscribePubSub"
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: testBulkSubscribePubsub,
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	t.Run("bulk Subscribe Message for raw payload", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			},
+			"mockPubSub",
+		)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+		req.WithHTTPExtension(http.MethodGet, "")
+		req.WithRawData(nil, invokev1.JSONContentType)
+
+		subscriptionItems := []runtimePubsub.SubscriptionJSON{
+			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true", "rawPayload": "true"}},
+		}
+		sub, _ := json.Marshal(subscriptionItems)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData(sub, "application/json")
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.Init()
+		rt.appChannel = mockAppChannel
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscriptions()
+
+		err := rt.Publish(&pubsub.PublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Data:       []byte(`{"orderId":"1"}`),
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
+		assert.True(t, pubsubIns.isBulkSubscribe)
+		reqs := mockAppChannel.GetInvokedRequest()
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		assert.Contains(t, string(reqs[1].Message().Data.Value), "event\":\"eyJvcmRlcklkIjoiMSJ9\"")
+	})
+
+	t.Run("bulk Subscribe Message for cloud event", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			},
+			"mockPubSub",
+		)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+		req.WithHTTPExtension(http.MethodGet, "")
+		req.WithRawData(nil, invokev1.JSONContentType)
+
+		subscriptionItems := []runtimePubsub.SubscriptionJSON{
+			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true"}},
+		}
+		sub, _ := json.Marshal(subscriptionItems)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData(sub, "application/json")
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.Init()
+		rt.appChannel = mockAppChannel
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscriptions()
+
+		var order = `{"data":{"orderId":1},"datacontenttype":"application/json","id":"8b540b03-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
+
+		err := rt.Publish(&pubsub.PublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Data:       []byte(order),
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
+		assert.True(t, pubsubIns.isBulkSubscribe)
+		reqs := mockAppChannel.GetInvokedRequest()
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		assert.Contains(t, string(reqs[1].Message().Data.Value), "\"event\":"+order)
+	})
+
+	t.Run("bulk Subscribe multiple Messages at once for cloud events", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			},
+			"mockPubSub",
+		)
+		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+		req.WithHTTPExtension(http.MethodGet, "")
+		req.WithRawData(nil, invokev1.JSONContentType)
+
+		subscriptionItems := []runtimePubsub.SubscriptionJSON{
+			{PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders", Metadata: map[string]string{"bulkSubscribe": "true"}},
+		}
+		sub, _ := json.Marshal(subscriptionItems)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData(sub, "application/json")
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.Init()
+		rt.appChannel = mockAppChannel
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), req).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscriptions()
+
+		var order1 = `{"data":{"orderId":1},"datacontenttype":"application/json","id":"9b6767c3-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
+		var order2 = `{"data":{"orderId":2},"datacontenttype":"application/json","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"com.dapr.event.sent"}`
+
+		nbei1 := pubsub.BulkMessageEntry{
+			EntryID: "0",
+			Event:   []byte(order1),
+		}
+		nbei2 := pubsub.BulkMessageEntry{
+			EntryID: "1",
+			Event:   []byte(order2),
+		}
+		msgArr := make([]pubsub.BulkMessageEntry, 0)
+		msgArr = append(msgArr, nbei1)
+		msgArr = append(msgArr, nbei2)
+
+		err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+		assert.Nil(t, err)
+
+		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
+		assert.True(t, pubsubIns.isBulkSubscribe)
+		reqs := mockAppChannel.GetInvokedRequest()
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		assert.Contains(t, string(reqs[1].Message().Data.Value), "\"event\":"+order1)
+		assert.Contains(t, string(reqs[1].Message().Data.Value), "\"event\":"+order2)
+	})
 }
 
 func TestPubSubDeadLetter(t *testing.T) {
@@ -4207,6 +4404,14 @@ func (m *mockPublishPubSub) Close() error {
 
 func (m *mockPublishPubSub) Features() []pubsub.Feature {
 	return nil
+}
+
+func (m *mockPublishPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
+	return nil
+}
+
+func (m *mockPublishPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	return pubsub.BulkPublishResponse{}, nil
 }
 
 func TestInitActors(t *testing.T) {

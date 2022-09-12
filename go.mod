@@ -37,7 +37,7 @@ require (
 	github.com/prometheus/common v0.35.0
 	github.com/sony/gobreaker v0.4.2-0.20210216022020-dd874f9dd33b
 	github.com/stretchr/testify v1.8.0
-	github.com/valyala/fasthttp v1.31.1-0.20211216042702-258a4c17b4f4
+	github.com/valyala/fasthttp v1.34.0
 	go.opencensus.io v0.23.0
 	go.opentelemetry.io/otel v1.7.0
 	go.uber.org/atomic v1.9.0
@@ -134,7 +134,7 @@ require (
 	github.com/aliyun/aliyun-tablestore-go-sdk v1.6.0 // indirect
 	github.com/aliyun/credentials-go v1.1.2 // indirect
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
-	github.com/andybalholm/brotli v1.0.2 // indirect
+	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/antlr/antlr4/runtime/Go/antlr v0.0.0-20210826220005-b48c857c3a0e // indirect
 	github.com/apache/dubbo-getty v1.4.9-0.20220610060150-8af010f3f3dc // indirect
 	github.com/apache/dubbo-go-hessian2 v1.11.0 // indirect
@@ -393,7 +393,8 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-// replace github.com/dapr/components-contrib => ../components-contrib
+replace github.com/dapr/components-contrib => github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20220912174448-d1d3384d6575
+
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
