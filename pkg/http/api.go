@@ -2090,7 +2090,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	err := json.Unmarshal(body, &incomingEntries)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-			fmt.Sprintf(messages.ErrMetadataGet, err.Error()))
+			fmt.Sprintf(messages.ErrPubsubUnmarshal, topic, pubsubName, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
 
@@ -2109,7 +2109,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				dBytes = v
 			default:
 				msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-					fmt.Sprintf(messages.ErrMetadataGet, "error: mismatch between dataContentType and event"))
+					fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: mismatch between dataContentType and event"))
 				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 				log.Debug(msg)
 
@@ -2119,7 +2119,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			dBytes, err = json.Marshal(entry.Event)
 			if err != nil {
 				msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-					fmt.Sprintf(messages.ErrMetadataGet, err.Error()))
+					fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, err.Error()))
 				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 				log.Debug(msg)
 
@@ -2133,11 +2133,15 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		if entry.Metadata != nil {
 			entries[i].Metadata = entry.Metadata
 		}
-		if entry.EntryID != "" {
-			entries[i].EntryID = entry.EntryID
-		} else {
-			entries[i].EntryID = fmt.Sprintf("%d", i)
+		if entry.EntryID == "" {
+			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: entryID is not present for entry"))
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+			log.Debug(msg)
+
+			return
 		}
+		entries[i].EntryID = entry.EntryID
 	}
 
 	spanMap := map[int]trace.Span{}

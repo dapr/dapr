@@ -26,14 +26,13 @@ func (m *MockPubSub) Publish(req *pubsub.PublishRequest) error {
 	return args.Error(0)
 }
 
-// TODO fix batch UT
-// Publish is a mock publish method.
+// BulkPublish is a mock bulk publish method.
 func (m *MockPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 	args := m.Called(req)
 	return pubsub.BulkPublishResponse{}, args.Error(0)
 }
 
-// Publish is a mock publish method.
+// BulkSubscribe is a mock bulk subscribe method.
 func (m *MockPubSub) BulkSubscribe(rctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
 	args := m.Called(req)
 	return pubsub.BulkSubscribeResponse{}, args.Error(0)
