@@ -199,7 +199,7 @@ func LoadStandaloneResiliency(log logger.Logger, runtimeID, path string) []*resi
 
 	files, err := os.ReadDir(path)
 	if err != nil {
-		log.Errorf("failed to read resiliences from path %s: %s", err)
+		log.Errorf("failed to read resiliences from path %s: %s", path, err)
 		return nil
 	}
 
