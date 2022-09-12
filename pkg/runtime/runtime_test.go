@@ -3591,7 +3591,7 @@ func TestBulkSubscribe(t *testing.T) {
 		require.NoError(t, rt.initPubSub(pubsubComponent))
 		rt.startSubscriptions()
 
-		var order = `{"data":{"orderId":1},"datacontenttype":"application/json","id":"8b540b03-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
+		order := `{"data":{"orderId":1},"datacontenttype":"application/json","id":"8b540b03-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
 
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -3636,8 +3636,8 @@ func TestBulkSubscribe(t *testing.T) {
 		require.NoError(t, rt.initPubSub(pubsubComponent))
 		rt.startSubscriptions()
 
-		var order1 = `{"data":{"orderId":1},"datacontenttype":"application/json","id":"9b6767c3-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
-		var order2 = `{"data":{"orderId":2},"datacontenttype":"application/json","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"com.dapr.event.sent"}`
+		order1 := `{"data":{"orderId":1},"datacontenttype":"application/json","id":"9b6767c3-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
+		order2 := `{"data":{"orderId":2},"datacontenttype":"application/json","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"com.dapr.event.sent"}`
 
 		nbei1 := pubsub.BulkMessageEntry{
 			EntryID: "0",
@@ -3648,8 +3648,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Event:   []byte(order2),
 		}
 		msgArr := make([]pubsub.BulkMessageEntry, 0)
-		msgArr = append(msgArr, nbei1)
-		msgArr = append(msgArr, nbei2)
+		msgArr = append(msgArr, nbei1, nbei2)
 
 		err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,

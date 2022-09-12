@@ -86,11 +86,11 @@ func (f *FailingPubsub) Features() []pubsub.Feature {
 	return nil
 }
 
-func (m *FailingPubsub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
+func (f *FailingPubsub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
 	return nil
 }
 
-func (m *FailingPubsub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+func (f *FailingPubsub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 	return pubsub.BulkPublishResponse{}, nil
 }
 
