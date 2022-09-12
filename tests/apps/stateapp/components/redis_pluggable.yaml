@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: PluggableComponent
 metadata:
-  name: redis-pluggable-store
+  name: redis-pluggable
 spec:
   type: state
   version: v1
@@ -9,17 +9,13 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: pluggable-state-store
+  name: pluggable-statestore
 spec:
-  type: state.redis-pluggable-store
+  type: state.redis-pluggable
   version: v1
   initTimeout: 20s
   metadata:
     - name: redisHost
-      secretKeyRef:
-        name: redissecret
-        key: host
+      value: localhost:6379
     - name: redisPassword
       value: ""
-scopes:
-  - stateapp

@@ -50,7 +50,7 @@ spec:
           image: ghcr.io/mcandeia/redis-pluggable-component:0.1.0-alpha-linux-amd64
           env:
             - name: DAPR_COMPONENT_SOCKET_PATH
-              value: /dapr-unix-domain-sockets/dapr-state.redis-pluggable-store-v1-pluggable-state-store.sock
+              value: /dapr-unix-domain-sockets/dapr-state.redis-pluggable-v1-pluggable-statestore.sock
         - name: stateapp
           image: docker.io/YOUR_DOCKER_ALIAS/e2e-stateapp:dev
           ports:

@@ -66,7 +66,7 @@ type testStep struct {
 	expectedStatusCode int
 }
 
-//  stateTransactionRequest represents a request for state transactions
+// stateTransactionRequest represents a request for state transactions
 type stateTransaction struct {
 	Key           string    `json:"key,omitempty"`
 	Value         *appState `json:"value,omitempty"`
@@ -414,37 +414,39 @@ func TestStateApp(t *testing.T) {
 	// Now we are ready to run the actual tests
 	for _, tt := range testCases {
 		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			for _, step := range tt.steps {
-				body, err := json.Marshal(step.request)
-				require.NoError(t, err)
-
-				url := fmt.Sprintf("%s/test/%s/%s/statestore", externalURL, tt.protocol, step.command)
-
-				resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
-				require.NoError(t, err)
-				require.Equal(t, step.expectedStatusCode, statusCode, url)
-
-				var appResp requestResponse
-				if statusCode != 204 {
-					err = json.Unmarshal(resp, &appResp)
-
+		for _, statestore := range []string{"statestore", "pluggable-statestore"} {
+			t.Run(fmt.Sprintf("%s-%s", tt.name, statestore), func(t *testing.T) {
+				for _, step := range tt.steps {
+					body, err := json.Marshal(step.request)
 					require.NoError(t, err)
-				}
 
-				for _, er := range step.expectedResponse.States {
-					for _, ri := range appResp.States {
-						if er.Key == ri.Key {
-							require.True(t, reflect.DeepEqual(er.Key, ri.Key))
+					url := fmt.Sprintf("%s/test/%s/%s/%s", externalURL, tt.protocol, step.command, statestore)
 
-							if er.Value != nil {
-								require.True(t, reflect.DeepEqual(er.Value.Data, ri.Value.Data))
+					resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
+					require.NoError(t, err)
+					require.Equal(t, step.expectedStatusCode, statusCode, url)
+
+					var appResp requestResponse
+					if statusCode != 204 {
+						err = json.Unmarshal(resp, &appResp)
+
+						require.NoError(t, err)
+					}
+
+					for _, er := range step.expectedResponse.States {
+						for _, ri := range appResp.States {
+							if er.Key == ri.Key {
+								require.True(t, reflect.DeepEqual(er.Key, ri.Key))
+
+								if er.Value != nil {
+									require.True(t, reflect.DeepEqual(er.Value.Data, ri.Value.Data))
+								}
 							}
 						}
 					}
 				}
-			}
-		})
+			})
+		}
 	}
 }
 
