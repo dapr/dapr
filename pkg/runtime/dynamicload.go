@@ -88,7 +88,7 @@ func (a *DaprRuntime) loadDynamicComponents(filename string) error {
 
 	authorizedComps := a.getAuthorizedComponents(componentsToLoad)
 	a.componentsLock.Lock()
-	a.components = authorizedComps
+	a.components = append(a.components, authorizedComps...)
 	a.componentsLock.Unlock()
 
 	for _, comp := range authorizedComps {
