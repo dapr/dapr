@@ -153,6 +153,9 @@ type TopicRouteElem struct {
 // The function receives the component and must return true if the component is authorized.
 type ComponentAuthorizer func(component componentsV1alpha1.Component) bool
 
+// Name of file containing Dynamic Components
+type DynamicComponentsFile string
+
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
 	ctx                    context.Context
@@ -162,6 +165,7 @@ type DaprRuntime struct {
 	accessControlList      *config.AccessControlList
 	componentsLock         *sync.RWMutex
 	components             []componentsV1alpha1.Component
+	dynamicComponents      map[DynamicComponentsFile][]componentsV1alpha1.Component
 	grpc                   *grpc.Manager
 	appChannel             channel.AppChannel
 	appConfig              config.ApplicationConfig
@@ -262,6 +266,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		accessControlList:          accessControlList,
 		componentsLock:             &sync.RWMutex{},
 		components:                 make([]componentsV1alpha1.Component, 0),
+		dynamicComponents:				  map[DynamicComponentsFile][]componentsV1alpha1.Component{},
 		actorStateStoreLock:        &sync.RWMutex{},
 		grpc:                       grpc.NewGRPCManager(runtimeConfig.Mode),
 		inputBindings:              map[string]bindings.InputBinding{},
@@ -564,6 +569,16 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.appHealthChanged(apphealth.AppStatusHealthy)
 	}
 
+	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.DynamicComponentsPath != "" {
+	dir, err := os.Stat(a.runtimeConfig.Standalone.DynamicComponentsPath)
+	if err != nil {
+		log.Fatalf("failed to get dynamic components directory: %s", err)
+	} else if !dir.IsDir() {
+		log.Fatalf("dynamic components path is not a directory: %s", a.runtimeConfig.Standalone.DynamicComponentsPath)
+	} else {
+		a.watchPathForDynamicLoading()
+	}
+	}
 	return nil
 }
 
@@ -2135,6 +2150,25 @@ func (a *DaprRuntime) isComponentAuthorized(component componentsV1alpha1.Compone
 	return true
 }
 
+func (a *DaprRuntime) IsComponentLoaded(component componentsV1alpha1.Component) bool {
+	for _, loadedComp := range a.components {
+		if strings.Compare(component.ObjectMeta.Name, loadedComp.ObjectMeta.Name) == 0 {
+			if strings.Compare(component.Spec.Type, loadedComp.Spec.Type) == 0 {
+				if strings.Compare(component.Spec.Version, loadedComp.Spec.Version) == 0 {
+					log.Warnf("Cannot load multiple instances of same component with dynamic loading. Component name already in use - name: %s type: %s/%s. Skipping dynamic loading.", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+					return true
+				} else {
+					log.Warnf("Component with different version already loaded. Cannot load multiple instances with same name. Component name in use - name: %s type: %s/%s. Skipping dynamic loading.", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+					return true
+				}
+			}
+			log.Infof("Component name already in use - name: %s type: %s/%s. Skipping dynamic loading.", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+			return true
+		}
+	}
+	return false
+}
+
 func (a *DaprRuntime) namespaceComponentAuthorizer(component componentsV1alpha1.Component) bool {
 	if a.namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
 		if len(component.Scopes) == 0 {
@@ -2201,6 +2235,18 @@ func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Com
 
 	if !replaced {
 		a.components = append(a.components, component)
+	}
+}
+
+func (a *DaprRuntime) unloadComponent(component componentsV1alpha1.Component) {
+	a.componentsLock.Lock()
+	defer a.componentsLock.Unlock()
+
+	for i, c := range a.components {
+		if c.Spec.Type == component.Spec.Type && c.ObjectMeta.Name == component.Name {
+			a.components = append(a.components[:i], a.components[i+1:]...)
+			break
+		}
 	}
 }
 
