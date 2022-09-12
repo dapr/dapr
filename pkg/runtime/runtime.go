@@ -630,6 +630,9 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 
 // registerPluggableComponents loads and register the loaded pluggable components.
 func (a *DaprRuntime) registerPluggableComponents() error {
+	if !config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PluggableComponents) {
+		return nil
+	}
 	pluggables, err := a.loadPluggableComponents()
 	if err != nil {
 		return err

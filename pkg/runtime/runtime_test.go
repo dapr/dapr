@@ -1345,10 +1345,7 @@ func TestPluggableComponents(t *testing.T) {
 		assert.Equal(t, fakeVersion, pluggableComponents[0].Version)
 	})
 
-	t.Run("register pluggable components should call register", func(t *testing.T) {
-		rts := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rts)
-
+	t.Run("register pluggable components call register", func(t *testing.T) {
 		require.NoError(t, os.Mkdir(componentsDir, 0o777))
 		defer os.RemoveAll(componentsDir)
 
@@ -1366,13 +1363,48 @@ func TestPluggableComponents(t *testing.T) {
 			},
 		}
 
-		cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
-		require.NoError(t, err)
-		defer cleanup()
+		t.Run("when flag is enabled", func(t *testing.T) {
+			rts := NewTestDaprRuntime(modes.StandaloneMode)
+			rts.globalConfig.Spec.Features = append(rts.globalConfig.Spec.Features, config.FeatureSpec{
+				Name:    config.PluggableComponents,
+				Enabled: true,
+			})
 
-		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
-		err = rts.registerPluggableComponents()
-		require.NoError(t, err)
+			defer stopRuntime(t, rts)
+
+			cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
+			require.NoError(t, err)
+			defer cleanup()
+
+			rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
+			err = rts.registerPluggableComponents()
+
+			require.NoError(t, err)
+			_, err = stateLoader.DefaultRegistry.Create("state.mypluggable", "v1")
+			require.NoError(t, err)
+		})
+
+		t.Run("when flag is disabled", func(t *testing.T) {
+			rts := NewTestDaprRuntime(modes.StandaloneMode)
+			rts.globalConfig.Spec.Features = append(rts.globalConfig.Spec.Features, config.FeatureSpec{
+				Name:    config.PluggableComponents,
+				Enabled: false,
+			})
+
+			defer stopRuntime(t, rts)
+
+			s.Name = "my-pluggable-new"
+			cleanup, err := writeComponentToDisk(s, "pluggable-feature-enabled.yaml")
+			require.NoError(t, err)
+			defer cleanup()
+
+			rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
+			err = rts.registerPluggableComponents()
+
+			require.NoError(t, err)
+			_, err = stateLoader.DefaultRegistry.Create("state.my-pluggable-new", "v1")
+			assert.NotNil(t, err)
+		})
 	})
 }
 

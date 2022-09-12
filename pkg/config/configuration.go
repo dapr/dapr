@@ -45,6 +45,7 @@ const (
 	Resiliency           Feature = "Resiliency"
 	NoDefaultContentType Feature = "ServiceInvocation.NoDefaultContentType"
 	AppHealthCheck       Feature = "AppHealthCheck"
+	PluggableComponents  Feature = "PluggableComponents"
 )
 
 type Feature string
