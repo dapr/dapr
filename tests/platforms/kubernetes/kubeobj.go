@@ -107,6 +107,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.DaprEnv != "" {
 		annotationObject["dapr.io/env"] = appDesc.DaprEnv
 	}
+	if appDesc.UnixDomainSocketPath != "" {
+		annotationObject["dapr.io/unix-domain-socket-path"] = appDesc.UnixDomainSocketPath
+	}
 	if appDesc.EnableAppHealthCheck {
 		annotationObject["dapr.io/enable-app-health-check"] = "true"
 	}
@@ -160,6 +163,25 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		}
 	}
 
+	containers := []apiv1.Container{{
+		Name:            appDesc.AppName,
+		Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
+		ImagePullPolicy: apiv1.PullAlways,
+		Ports: []apiv1.ContainerPort{
+			{
+				Name:          "http",
+				Protocol:      apiv1.ProtocolTCP,
+				ContainerPort: DefaultContainerPort,
+			},
+		},
+		Env:          appEnv,
+		VolumeMounts: appDesc.AppVolumeMounts,
+	}}
+
+	if len(appDesc.PluggableComponents) != 0 {
+		containers = append(containers, adaptAndBuildPluggableComponents(&appDesc)...)
+	}
+
 	return apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      labels,
@@ -167,22 +189,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		},
 		Spec: apiv1.PodSpec{
 			InitContainers: appDesc.InitContainers,
-			Containers: []apiv1.Container{
-				{
-					Name:            appDesc.AppName,
-					Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
-					ImagePullPolicy: apiv1.PullAlways,
-					Ports: []apiv1.ContainerPort{
-						{
-							Name:          "http",
-							Protocol:      apiv1.ProtocolTCP,
-							ContainerPort: DefaultContainerPort,
-						},
-					},
-					Env:          appEnv,
-					VolumeMounts: appDesc.AppVolumeMounts,
-				},
-			},
+			Containers:     containers,
 			Affinity: &apiv1.Affinity{
 				NodeAffinity: &apiv1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{

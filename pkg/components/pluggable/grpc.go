@@ -52,9 +52,14 @@ const (
 	defaultSocketFolder    = "/var/run"
 )
 
+// GetSocketFolderPath returns the shared unix domain socket folder path
+func GetSocketFolderPath() string {
+	return utils.GetEnvOrElse(DaprSocketFolderEnvVar, defaultSocketFolder)
+}
+
 // socketFactoryFor returns a socket factory that returns the socket that will be used for the given pluggable component.
 func socketFactoryFor(pc components.Pluggable) func(string) string {
-	socketPrefix := fmt.Sprintf("%s/dapr-%s.%s-%s", utils.GetEnvOrElse(DaprSocketFolderEnvVar, defaultSocketFolder), pc.Type, pc.Name, pc.Version)
+	socketPrefix := fmt.Sprintf("%s/dapr-%s.%s-%s", GetSocketFolderPath(), pc.Type, pc.Name, pc.Version)
 	return func(componentName string) string {
 		return fmt.Sprintf("%s-%s.sock", socketPrefix, componentName)
 	}

@@ -29,12 +29,14 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	guuid "github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
 )
 
 const (
-	appName              = "stateapp" // App name in Dapr.
-	numHealthChecks      = 60         // Number of get calls before starting tests.
-	testManyEntriesCount = 5          // Anything between 1 and the number above (inclusive).
+	appName              = "stateapp"           // App name in Dapr.
+	appNamePluggable     = "stateapp-pluggable" // App name with pluggable components in Dapr.
+	numHealthChecks      = 60                   // Number of get calls before starting tests.
+	testManyEntriesCount = 5                    // Anything between 1 and the number above (inclusive).
 )
 
 type testCommandRequest struct {
@@ -394,6 +396,20 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 			MetricsEnabled: true,
 		},
+		{
+			AppName:        appNamePluggable,
+			DaprEnabled:    true,
+			ImageName:      "e2e-stateapp",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
+			PluggableComponents: map[string]apiv1.Container{
+				"dapr-state.redis-pluggable-v1-pluggable-statestore.sock": {
+					Name:  "redis-pluggable",
+					Image: "ghcr.io/mcandeia/redis-pluggable-component:0.1.0-alpha-linux-amd64",
+				},
+			},
+		},
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
@@ -401,26 +417,44 @@ func TestMain(m *testing.M) {
 }
 
 func TestStateApp(t *testing.T) {
-	externalURL := tr.Platform.AcquireAppExternalURL(appName)
-	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 	testCases := generateTestCases(true)                       // For HTTP
 	testCases = append(testCases, generateTestCases(false)...) // For gRPC
 
-	// This initial probe makes the test wait a little bit longer when needed,
-	// making this test less flaky due to delays in the deployment.
-	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-	require.NoError(t, err)
+	var apps []struct {
+		name       string
+		stateStore string
+	} = []struct {
+		name       string
+		stateStore string
+	}{
+		{
+			name:       appName,
+			stateStore: "statestore",
+		},
+		{
+			name:       appNamePluggable,
+			stateStore: "pluggable-statestore",
+		},
+	}
 
-	// Now we are ready to run the actual tests
-	for _, tt := range testCases {
-		tt := tt
-		for _, statestore := range []string{"statestore", "pluggable-statestore"} {
-			t.Run(fmt.Sprintf("%s-%s", tt.name, statestore), func(t *testing.T) {
+	for _, app := range apps {
+		externalURL := tr.Platform.AcquireAppExternalURL(app.name)
+		require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+		// This initial probe makes the test wait a little bit longer when needed,
+		// making this test less flaky due to delays in the deployment.
+		_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+		require.NoError(t, err)
+
+		// Now we are ready to run the actual tests
+		for _, tt := range testCases {
+			tt := tt
+			t.Run(fmt.Sprintf("%s-%s", tt.name, app.stateStore), func(t *testing.T) {
 				for _, step := range tt.steps {
 					body, err := json.Marshal(step.request)
 					require.NoError(t, err)
 
-					url := fmt.Sprintf("%s/test/%s/%s/%s", externalURL, tt.protocol, step.command, statestore)
+					url := fmt.Sprintf("%s/test/%s/%s/%s", externalURL, tt.protocol, step.command, app.stateStore)
 
 					resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
 					require.NoError(t, err)
@@ -448,6 +482,7 @@ func TestStateApp(t *testing.T) {
 			})
 		}
 	}
+
 }
 
 func TestStateTransactionApps(t *testing.T) {
