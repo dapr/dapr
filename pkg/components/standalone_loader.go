@@ -88,6 +88,24 @@ func (s *StandaloneComponents) loadComponentsFromFile(filename string) []compone
 	return components
 }
 
+func (s *StandaloneComponents) LoadDynamicComponentsFromFile(filename string) []componentsV1alpha1.Component {
+	var errors []error
+
+	components := []componentsV1alpha1.Component{}
+	path := filepath.Join(s.config.DynamicComponentsPath, filename)
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		log.Warnf("daprd load dynamic components error when reading file %s : %s", path, err)
+		return components
+	}
+	components, errors = s.decodeYaml(b)
+	for _, err := range errors {
+		log.Warnf("daprd load dynamic components error when parsing components yaml resource in %s : %s", path, err)
+	}
+	return components
+}
+
 // decodeYaml decodes the yaml document.
 func (s *StandaloneComponents) decodeYaml(b []byte) ([]componentsV1alpha1.Component, []error) {
 	list := []componentsV1alpha1.Component{}
