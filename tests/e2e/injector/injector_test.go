@@ -98,7 +98,7 @@ func TestMain(m *testing.M) {
 			InitContainers: []apiv1.Container{
 				{
 					Name:            fmt.Sprintf("%s-init", appName),
-					Image:           fmt.Sprintf("%s/e2e-%s-init:%s", runner.GetTestImageRegistry(), appName, runner.GetTestImageTag()),
+					Image:           runner.BuildTestImageName(fmt.Sprintf("e2e-%s-init", appName)),
 					ImagePullPolicy: apiv1.PullAlways,
 					VolumeMounts: []apiv1.VolumeMount{
 						{

@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/kit/logger"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,6 +35,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
+
+var testLogger = logger.NewLogger("pluggable-components-test")
 
 const configPrefix = "."
 
@@ -114,7 +117,7 @@ func getOperatorClient(srv *fakeOperator) (client operatorv1pb.OperatorClient, c
 	operatorv1pb.RegisterOperatorServer(s, srv)
 	go func() {
 		if serveErr := s.Serve(lis); serveErr != nil {
-			log.Debugf("Server exited with error: %v", serveErr)
+			testLogger.Debugf("Server exited with error: %v", serveErr)
 		}
 	}()
 	ctx := context.Background()
