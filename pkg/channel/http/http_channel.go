@@ -252,6 +252,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	defer func() {
 		fasthttp.ReleaseRequest(channelReq)
+		c.Response.Reset()
+		c.ResetUserValues()
 	}()
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
