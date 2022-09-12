@@ -82,4 +82,14 @@ const (
 	ErrLockOwnerEmpty             = "LockOwner is empty in lock store %s"
 	ErrExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store %s"
 	ErrLockStoreNotFound          = "lock store %s not found"
+
+	// Workflow
+	ErrWorkflowNameMissing    = "workflow name is not configured"
+	ErrMissingOrEmptyInstance = "no instance or empty instance was provided"
+	ErrMissingWorkflowType    = "missing workflow type"
+	ErrNoOrMissingComponent   = "no component or empty component was provided"
+	ErrComponentDoesNotExist  = "provided component does not exist %s"
+	ErrWorkflowGetResponse    = "error while getting workflow info %s"
+	ErrStartWorkflow          = "error starting workflow %s"
+	ErrTerminateWorkflow      = "error terminating workflow %s"
 )
