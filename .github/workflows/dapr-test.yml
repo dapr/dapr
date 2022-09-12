@@ -49,7 +49,7 @@ env:
   HA_MODE: true
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "westus3"
-  ARM_REGIONS: "eastus"
+  AZURE_ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
 
@@ -102,13 +102,9 @@ jobs:
         if: env.TEST_PREFIX != ''
         run: |
           # Select three random Azure regions
-          REGIONS=(${{ env.AZURE_REGIONS }})
-          REGIONS_SIZE=${#REGIONS[@]}
-          REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
-          REGION1=${REGIONS[$REGIONS_IDX]}
-          REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
-          REGION2=${REGIONS[$REGIONS_IDX]}
-          REGION3=${{ env.ARM_REGIONS }}
+          REGION1=${{ env.AZURE_REGIONS }}
+          REGION2=${{ env.AZURE_REGIONS }}
+          REGION3=${{ env.AZURE_ARM_REGIONS }}
           # Tags
           DATE_TAG=$(date --iso-8601=seconds)
           echo "Tags: date=${DATE_TAG}"
