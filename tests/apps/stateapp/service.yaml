@@ -12,9 +12,9 @@ spec:
   selector:
     testapp: stateapp
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 3000
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
   type: LoadBalancer
 
 ---
@@ -34,13 +34,25 @@ spec:
       labels:
         testapp: stateapp
       annotations:
+        dapr.io/unix-domain-socket-path: "/var/run"
         dapr.io/enabled: "true"
         dapr.io/app-id: "stateapp"
         dapr.io/app-port: "3000"
     spec:
+      volumes:
+        - name: dapr-unix-domain-socket
+          emptyDir: {}
       containers:
-      - name: stateapp
-        image: docker.io/YOUR_DOCKER_ALIAS/e2e-stateapp:dev
-        ports:
-        - containerPort: 3000
-        imagePullPolicy: Always
+        - name: redis-pluggable
+          volumeMounts:
+            - name: dapr-unix-domain-socket
+              mountPath: /dapr-unix-domain-sockets
+          image: ghcr.io/mcandeia/redis-pluggable-component:0.1.0-alpha-linux-amd64
+          env:
+            - name: DAPR_COMPONENT_SOCKET_PATH
+              value: /dapr-unix-domain-sockets/dapr-state.redis-pluggable-store-v1-pluggable-state-store.sock
+        - name: stateapp
+          image: docker.io/YOUR_DOCKER_ALIAS/e2e-stateapp:dev
+          ports:
+            - containerPort: 3000
+          imagePullPolicy: Always
