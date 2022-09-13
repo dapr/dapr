@@ -110,7 +110,7 @@ func (o *fakeOperator) ListPluggableComponents(ctx context.Context, in *operator
 	return o.listPluggableComponentsResp, o.listPluggableComponentsErr
 }
 
-// getStateStore returns a state store connected to the given server
+// getOperatorClient returns a operator client connected to the given operator server
 func getOperatorClient(srv *fakeOperator) (client operatorv1pb.OperatorClient, cleanup func(), err error) {
 	lis := bufconn.Listen(bufSize)
 	s := grpc.NewServer()
