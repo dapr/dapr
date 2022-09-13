@@ -305,25 +305,22 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 
 	// Build the Docker image
 	fmt.Printf("Building Docker image: %s\n", destImage)
-	e := exec.Command("docker",
+	args := []string{
 		"build",
 		"-f", dockerfile,
 		"-t", destImage,
 		filepath.Join(appDir, c.flags.Name, "."),
-	)
-
-	if c.flags.TargetArch == "arm64" {
-		fmt.Printf("Building arm64 docker image: %s\n", destImage)
-		e = exec.Command("docker",
-			"buildx",
-			"build",
-			"--platform", "linux/arm64/v8",
-			"-f", dockerfile,
-			"-t", destImage,
-			filepath.Join(appDir, c.flags.Name, "."),
-			"--load",
-		)
 	}
+	switch c.flags.TargetArch {
+	case "arm64":
+		args = append(args, "--platform", c.flags.TargetOS+"/arm64/v8")
+	case "amd64":
+		args = append(args, "--platform", c.flags.TargetOS+"/amd64")
+	default:
+		args = append(args, "--platform", c.flags.TargetOS+"/amd64")
+	}
+	e := exec.Command("docker", args...)
+
 	e.Stdout = os.Stdout
 	e.Stderr = os.Stderr
 	err = e.Run()

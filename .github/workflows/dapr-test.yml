@@ -251,7 +251,7 @@ jobs:
         if: env.TEST_PREFIX != ''
         run: |
           make build
-          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm64" ]; then
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
             # For Linux, we use images based on Mariner
             DOCKERFILE=Dockerfile-mariner make docker-build
           else
@@ -283,7 +283,7 @@ jobs:
       - name: Push Dapr container images
         if: env.TEST_PREFIX != ''
         run: |
-          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm64" ]; then
+          if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
             # For Linux, we use images based on Mariner
             DOCKERFILE=Dockerfile-mariner make docker-push
           else
