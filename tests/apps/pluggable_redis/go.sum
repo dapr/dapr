@@ -19,6 +19,8 @@ github.com/cncf/xds/go v0.0.0-20211001041855-01bcc9b48dfe/go.mod h1:eXthEFrGJvWH
 github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20220912162439-c8fd51054b88 h1:coC9T6sSmgI4T3FubjlBbHYlRjZFNCf/aVJPF7dFpFE=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20220912162439-c8fd51054b88/go.mod h1:YW84xHuuF7Bl9hBOPye/aFSTmMI0pXXRrFJ/w+pEl6s=
+github.com/dapr-sandbox/components-go-sdk v0.0.0-20220913223951-edf6740c94e8 h1:xoZqv0HLNrEH4bLNAHcbX5iuawiRO+T8G/3SnLhllvc=
+github.com/dapr-sandbox/components-go-sdk v0.0.0-20220913223951-edf6740c94e8/go.mod h1:YW84xHuuF7Bl9hBOPye/aFSTmMI0pXXRrFJ/w+pEl6s=
 github.com/dapr/components-contrib v1.8.0-rc.1.0.20220901165827-19341e5a0ff4 h1:dtp6v5a9viHQSQfrfSaumAoSBMAbsqPrHdoHIxcPAJ4=
 github.com/dapr/components-contrib v1.8.0-rc.1.0.20220901165827-19341e5a0ff4/go.mod h1:zllmwB5vkb108A+XU9437LhH48/OICqYcN4r+FQum2k=
 github.com/dapr/dapr v1.8.4-0.20220909163359-efaca389cc32 h1:GEwxdaIwu97SFANaxXP4AfIFMLfJF+4wY7cea1mmqRk=

@@ -3,7 +3,7 @@ module github.com/dapr/dapr/tests/apps/pluggable_redis
 go 1.19
 
 require (
-	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220912162439-c8fd51054b88
+	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220913223951-edf6740c94e8
 	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220901165827-19341e5a0ff4
 	github.com/dapr/kit v0.0.2
 )
