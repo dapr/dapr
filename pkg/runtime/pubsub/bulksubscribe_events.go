@@ -28,13 +28,6 @@ type BulkSubscribeMessageItem struct {
 	ContentType string            `json:"contentType,omitempty"`
 }
 
-// type BulkSubscribeRawPayloadMessageItem struct {
-// 	EntryID     string            `json:"entryID"`
-// 	Event       string            `json:"event"`
-// 	ContentType string            `json:"contentType,omitempty"`
-// 	Metadata    map[string]string `json:"metadata"`
-// }
-
 type BulkSubscribeEnvelope struct {
 	ID        string
 	Entries   []BulkSubscribeMessageItem
@@ -45,7 +38,6 @@ type BulkSubscribeEnvelope struct {
 }
 
 func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]interface{} {
-	// defaults
 	id := req.ID
 	if id == "" {
 		id = uuid.New().String()
@@ -54,10 +46,6 @@ func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]interface{}
 	if eventType == "" {
 		eventType = contribPubsub.DefaultBulkCloudEventType
 	}
-
-	// var ceData interface{}
-	// ceDataField := contribPubsub.DataField
-	// ceData = req.Entries
 
 	bulkSubEnvelope := map[string]interface{}{
 		contribPubsub.IDField:     id,
@@ -68,6 +56,5 @@ func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]interface{}
 		contribPubsub.DataField:   req.Entries,
 	}
 
-	// ce[ceDataField] = ceData
 	return bulkSubEnvelope
 }
