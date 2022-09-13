@@ -148,19 +148,30 @@ type mockGRPCAPI struct{}
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
+	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
 	return resp.Proto(), nil
 }
 
 func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
 	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(stream.Context()), "text/plains")
+	resp.WithRawData(ExtractSpanContext(stream.Context()), "text/plain")
+	pd, err := resp.ProtoWithData()
+	if err != nil {
+		return err
+	}
+	stream.Send(&internalv1pb.InternalInvokeResponseStream{
+		Response: resp.Proto(),
+		Payload: &commonv1pb.StreamPayload{
+			Data:     pd.Message.Data,
+			Complete: true,
+		},
+	})
 	return nil
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	resp := invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
+	resp.WithRawData(ExtractSpanContext(ctx), "text/plain")
 	return resp.Proto(), nil
 }
 
@@ -306,7 +317,10 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server
 }
 
 func createTestClient(port int) *grpc.ClientConn {
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(
+		fmt.Sprintf("localhost:%d", port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		panic(err)
 	}

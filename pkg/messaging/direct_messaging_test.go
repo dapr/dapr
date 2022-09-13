@@ -14,13 +14,26 @@ limitations under the License.
 package messaging
 
 import (
+	"context"
+	"fmt"
+	"net"
 	"testing"
+	"time"
 
+	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/kit/logger"
 )
+
+const maxGRPCServerUptime = 100 * time.Millisecond
 
 func newDirectMessaging() *directMessaging {
 	return &directMessaging{}
@@ -122,4 +135,188 @@ func TestKubernetesNamespace(t *testing.T) {
 
 		assert.Error(t, err)
 	})
+}
+
+func TestInvokeRemote(t *testing.T) {
+	log.SetOutputLevel(logger.FatalLevel)
+	defer log.SetOutputLevel(logger.InfoLevel)
+
+	prepareEnvironment := func(t *testing.T, enableStreaming bool) *internalv1pb.InternalInvokeResponse {
+		port, err := freeport.GetFreePort()
+		require.NoError(t, err)
+		server := startInternalServer(port, enableStreaming)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		messaging := NewDirectMessaging(NewDirectMessagingOpts{
+			MaxRequestBodySize: 10 << 20,
+			ClientConnFn: func(ctx context.Context, address, id, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error) {
+				return clientConn, func() {}, nil
+			},
+		}).(*directMessaging)
+
+		request := invokev1.NewInvokeMethodRequest("method").
+			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
+		defer request.Close()
+
+		res, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		require.NoError(t, err)
+
+		pd, err := res.ProtoWithData()
+		require.NoError(t, err)
+
+		return pd
+	}
+
+	t.Run("target supports streaming", func(t *testing.T) {
+		pd := prepareEnvironment(t, true)
+
+		assert.Equal(t, "🐱", string(pd.Message.Data.Value))
+	})
+
+	t.Run("target does not support streaming", func(t *testing.T) {
+		pd := prepareEnvironment(t, false)
+
+		assert.Equal(t, "🐶", string(pd.Message.Data.Value))
+	})
+}
+
+func createTestClient(port int) *grpc.ClientConn {
+	conn, err := grpc.Dial(
+		fmt.Sprintf("localhost:%d", port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		panic(err)
+	}
+	return conn
+}
+
+func startInternalServer(port int, enableStreaming bool) *grpc.Server {
+	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+
+	server := grpc.NewServer()
+
+	if enableStreaming {
+		stream := &mockGRPCServerStream{}
+		server.RegisterService(&grpc.ServiceDesc{
+			ServiceName: "dapr.proto.internals.v1.ServiceInvocation",
+			HandlerType: (*mockGRPCServerStreamI)(nil),
+			Methods:     stream.methods(),
+			Streams:     stream.streams(),
+		}, stream)
+	} else {
+		unary := &mockGRPCServerUnary{}
+		server.RegisterService(&grpc.ServiceDesc{
+			ServiceName: "dapr.proto.internals.v1.ServiceInvocation",
+			HandlerType: (*mockGRPCServerUnaryI)(nil),
+			Methods:     unary.methods(),
+		}, unary)
+	}
+
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	// wait until server starts
+	time.Sleep(maxGRPCServerUptime)
+
+	return server
+}
+
+type mockGRPCServerUnaryI interface {
+	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+}
+
+type mockGRPCServerUnary struct{}
+
+func (m *mockGRPCServerUnary) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	resp := invokev1.NewInvokeMethodResponse(0, "", nil).
+		WithRawDataString("🐶", "text/plain")
+	return resp.ProtoWithData()
+}
+
+func (m *mockGRPCServerUnary) methods() []grpc.MethodDesc {
+	return []grpc.MethodDesc{
+		{
+			MethodName: "CallLocal",
+			Handler: func(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
+				in := new(internalv1pb.InternalInvokeRequest)
+				if err := dec(in); err != nil {
+					return nil, err
+				}
+				if interceptor == nil {
+					return srv.(mockGRPCServerUnaryI).CallLocal(ctx, in)
+				}
+				info := &grpc.UnaryServerInfo{
+					Server:     srv,
+					FullMethod: "/dapr.proto.internals.v1.ServiceInvocation/CallLocal",
+				}
+				handler := func(ctx context.Context, req any) (any, error) {
+					return srv.(mockGRPCServerUnaryI).CallLocal(ctx, req.(*internalv1pb.InternalInvokeRequest))
+				}
+				return interceptor(ctx, in, info, handler)
+			},
+		},
+	}
+}
+
+type mockGRPCServerStreamI interface {
+	mockGRPCServerUnaryI
+
+	CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error //nolint:nosnakecase
+}
+
+type mockGRPCServerStream struct {
+	mockGRPCServerUnary
+}
+
+func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
+	resp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataString("🐱", "text/plain").
+		WithHTTPHeaders(map[string][]string{"foo": {"bar"}})
+	pd, err := resp.ProtoWithData()
+	if err != nil {
+		return err
+	}
+	stream.Send(&internalv1pb.InternalInvokeResponseStream{
+		Response: resp.Proto(),
+		Payload: &commonv1pb.StreamPayload{
+			Data:     pd.Message.Data,
+			Complete: true,
+		},
+	})
+	return nil
+}
+
+func (m *mockGRPCServerStream) streams() []grpc.StreamDesc {
+	return []grpc.StreamDesc{
+		{
+			StreamName: "CallLocalStream",
+			Handler: func(srv any, stream grpc.ServerStream) error {
+				return srv.(mockGRPCServerStreamI).CallLocalStream(&serviceInvocationCallLocalStreamServer{stream})
+			},
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	}
+}
+
+type serviceInvocationCallLocalStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *serviceInvocationCallLocalStreamServer) Send(m *internalv1pb.InternalInvokeResponseStream) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *serviceInvocationCallLocalStreamServer) Recv() (*internalv1pb.InternalInvokeRequestStream, error) {
+	m := new(internalv1pb.InternalInvokeRequestStream)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }

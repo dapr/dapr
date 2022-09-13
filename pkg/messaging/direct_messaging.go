@@ -150,9 +150,8 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 	}
 }
 
-// invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
-// TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target
-// Server shuts down.
+// invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures.
+// TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target server shuts down.
 func (d *directMessaging) invokeWithRetry(
 	ctx context.Context,
 	numRetries int,
@@ -296,15 +295,6 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	// Send the request using a stream
 	stream, err := clientV1.CallLocalStream(ctx, opts...)
 	if err != nil {
-		// If we're connecting to a sidecar that doesn't support CallLocalStream, fallback to the unary RPC
-		if status.Code(err) == codes.Unimplemented {
-			log.Warnf("App %s does not support streaming-based service invocation (likely due to being on an older version of Dapr); falling back to unary calls", appID)
-			reqProto, err = req.ProtoWithData()
-			if err != nil {
-				return nil, err
-			}
-			return d.invokeRemoteUnary(ctx, clientV1, reqProto, opts)
-		}
 		return nil, err
 	}
 	r := req.RawData()
@@ -359,6 +349,15 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	chunk := &internalv1pb.InternalInvokeResponseStream{}
 	err = stream.RecvMsg(chunk)
 	if err != nil {
+		// If we're connecting to a sidecar that doesn't support CallLocalStream, fallback to the unary RPC
+		if status.Code(err) == codes.Unimplemented {
+			log.Warnf("App %s does not support streaming-based service invocation (likely due to being on an older version of Dapr); falling back to unary calls", appID)
+			reqProto, err = req.ProtoWithData()
+			if err != nil {
+				return nil, err
+			}
+			return d.invokeRemoteUnary(ctx, clientV1, reqProto, opts)
+		}
 		return nil, err
 	}
 	if chunk.Response == nil || chunk.Response.Status == nil || chunk.Response.Headers == nil {
