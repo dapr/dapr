@@ -447,9 +447,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
 
-	if err = a.registerPluggableComponents(); err != nil {
-		log.Warnf("failed to register pluggable components: %s", err)
-	}
+	a.initPluggableComponents()
 
 	go a.processComponents()
 
@@ -626,6 +624,15 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 		}
 	}
 	return httpMiddleware.Pipeline{Handlers: handlers}, nil
+}
+
+// initPluggableComponents register the pluggable components if the featureflag is enabled and execute the required bootstrap.
+func (a *DaprRuntime) initPluggableComponents() {
+	if config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PluggableComponents) {
+		if err := a.registerPluggableComponents(); err != nil {
+			log.Warnf("failed to register pluggable components: %s", err)
+		}
+	}
 }
 
 // registerPluggableComponents loads and register the loaded pluggable components.
