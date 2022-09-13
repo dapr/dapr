@@ -17,6 +17,7 @@ limitations under the License.
 package metrics_e2e
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -168,10 +169,18 @@ func invokeDaprHTTP(t *testing.T, app string, n, daprPort int) {
 		Message: "Hello Dapr.",
 	})
 	require.NoError(t, err)
+	target := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/tests/green", daprPort, app)
 	for i := 0; i < n; i++ {
+		// Because we're using port forwarding here, we need to create a new HTTP client for each request to avoid. Otherwise, only the first call will succeed and the subsequent ones will fail with a EOF
+		// Not sure exaclty why, but I've seen this behavior with certain port forwarders before, where the connection closing isn't communicated to the other side clearly enough
+		client := utils.NewHTTPClient(false)
 		// We don't evaluate the response here as we're only testing the metrics
-		_, err = utils.HTTPPost(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/tests/green", daprPort, app), body)
+		res, err := client.Post(target, "application/json", bytes.NewReader(body))
 		require.NoError(t, err)
+		// Drain before closing
+		_, _ = io.ReadAll(res.Body)
+		res.Body.Close()
+		require.Equal(t, res.StatusCode, 200)
 	}
 }
 
