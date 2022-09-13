@@ -223,8 +223,6 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 
 func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	channelReq := h.constructRequest(ctx, req)
-	c := fasthttp.RequestCtx{}
-	c.Init(channelReq, nil, nil)
 
 	if h.ch != nil {
 		h.ch <- struct{}{}
@@ -240,31 +238,48 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, verb, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
-	var err error
+	var (
+		response *fasthttp.Response
+		err      error
+	)
 
-	doReq := func(ctx *fasthttp.RequestCtx) {
-		err = h.client.Do(&ctx.Request, &ctx.Response)
+	// FIXME as fasthttp requestctx does not support using a response from response pool (i.e fasthttp.AcquireResponse())
+	// this check avoid using it when no handlers are specified, hence improving memory consumption by using response pool.
+	if len(h.pipeline.Handlers) == 0 {
+		// Send request to user application
+		response = fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseResponse(response)
+		err = h.client.Do(channelReq, response)
+	} else { // exec pipeline only if at least one handler is specified
+		c := fasthttp.RequestCtx{}
+		c.Init(channelReq, nil, nil)
+
+		defer func() {
+			c.Response.Reset()
+			c.ResetUserValues()
+		}()
+
+		doReq := func(ctx *fasthttp.RequestCtx) {
+			err = h.client.Do(&ctx.Request, &ctx.Response)
+		}
+
+		execPipeline := h.pipeline.Apply(doReq)
+
+		execPipeline(&c)
+		response = &c.Response
 	}
 
-	execPipeline := h.pipeline.Apply(doReq)
-
-	execPipeline(&c)
-
-	defer func() {
-		fasthttp.ReleaseRequest(channelReq)
-		c.Response.Reset()
-		c.ResetUserValues()
-	}()
+	defer fasthttp.ReleaseRequest(channelReq)
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(c.Response.Header.ContentLength()), elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(response.Header.ContentLength()), elapsedMs)
 		return nil, err
 	}
 
-	rsp := h.parseChannelResponse(req, &c.Response)
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(c.Response.Header.ContentLength()), elapsedMs)
+	rsp := h.parseChannelResponse(req, response)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(response.Header.ContentLength()), elapsedMs)
 
 	return rsp, nil
 }
