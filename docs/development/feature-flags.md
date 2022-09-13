@@ -2,6 +2,10 @@
 
 Feature Toggles (a.k.a [feature flags](https://martinfowler.com/articles/feature-toggles.html)) are a powerful way to change runtime behavior without changing the code itself. We encourage the use of the feature flags especially for preview features - explicit opt-in, and this document is focused on showing best practices/examples, how to configure and how they can be enabled when appropriate (i.e running e2e tests).
 
+![image](https://martinfowler.com/articles/feature-toggles/chart-4.png)
+
+Dapr feature flags are something between Release Toggles and Ops Toggles and mostly behaving as Kill-Switches with months of longevity.
+
 ## Declaring
 
 The set of all possible feature flags are defined by dapr contributors by changing the codebase and the toggle is made by the user (i.e app developer) when configuring the application.
