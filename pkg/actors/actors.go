@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"io"
 	nethttp "net/http"
 	"reflect"
 	"regexp"
@@ -82,12 +83,15 @@ type Actors interface {
 	GetActiveActorsCount(ctx context.Context) []ActiveActorsCount
 }
 
+// GRPCConnectionFn is the type of the function that returns a gRPC connection
+type GRPCConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
+
 type actorsRuntime struct {
 	appChannel             channel.AppChannel
 	store                  state.Store
 	transactionalStore     state.TransactionalStore
 	placement              *internal.ActorPlacement
-	grpcConnectionFn       func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
+	grpcConnectionFn       GRPCConnectionFn
 	config                 Config
 	actorsTable            *sync.Map
 	activeTimers           *sync.Map
@@ -139,32 +143,39 @@ const (
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
 
+// NewActorOpts contains options for NewActors.
+type NewActorOpts struct {
+	StateStore       state.Store
+	AppChannel       channel.AppChannel
+	GRPCConnectionFn GRPCConnectionFn
+	Config           Config
+	CertChain        *daprCredentials.CertChain
+	TracingSpec      configuration.TracingSpec
+	Features         []configuration.FeatureSpec
+	Resiliency       resiliency.Provider
+	StateStoreName   string
+}
+
 // NewActors create a new actors runtime with given config.
-func NewActors(
-	stateStore state.Store,
-	appChannel channel.AppChannel,
-	grpcConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error),
-	config Config,
-	certChain *daprCredentials.CertChain,
-	tracingSpec configuration.TracingSpec,
-	features []configuration.FeatureSpec,
-	resiliency resiliency.Provider,
-	stateStoreName string,
-) Actors {
+func NewActors(opts NewActorOpts) Actors {
 	var transactionalStore state.TransactionalStore
-	if stateStore != nil {
-		features := stateStore.Features()
+	if opts.StateStore != nil {
+		features := opts.StateStore.Features()
 		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
-			transactionalStore = stateStore.(state.TransactionalStore)
+			transactionalStore = opts.StateStore.(state.TransactionalStore)
 		}
 	}
 
 	return &actorsRuntime{
-		appChannel:             appChannel,
-		config:                 config,
-		store:                  stateStore,
+		store:                  opts.StateStore,
+		appChannel:             opts.AppChannel,
+		grpcConnectionFn:       opts.GRPCConnectionFn,
+		config:                 opts.Config,
+		certChain:              opts.CertChain,
+		tracingSpec:            opts.TracingSpec,
+		resiliency:             opts.Resiliency,
+		storeName:              opts.StateStoreName,
 		transactionalStore:     transactionalStore,
-		grpcConnectionFn:       grpcConnectionFn,
 		actorsTable:            &sync.Map{},
 		activeTimers:           &sync.Map{},
 		activeTimersLock:       &sync.RWMutex{},
@@ -177,11 +188,7 @@ func NewActors(
 		evaluationBusy:         false,
 		evaluationChan:         make(chan bool),
 		appHealthy:             atomic.NewBool(true),
-		certChain:              certChain,
-		tracingSpec:            tracingSpec,
-		resiliency:             resiliency,
-		storeName:              stateStoreName,
-		isResiliencyEnabled:    configuration.IsFeatureEnabled(features, configuration.Resiliency),
+		isResiliencyEnabled:    configuration.IsFeatureEnabled(opts.Features, configuration.Resiliency),
 	}
 }
 
@@ -256,9 +263,11 @@ func decomposeCompositeKey(compositeKey string) []string {
 }
 
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
-	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID))
-	req.WithHTTPExtension(nethttp.MethodDelete, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
+	req := invokev1.
+		NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID)).
+		WithHTTPExtension(nethttp.MethodDelete, "").
+		WithRawData(nil, invokev1.JSONContentType)
+	defer req.Close()
 
 	// TODO Propagate context.
 	ctx := context.Background()
@@ -267,10 +276,11 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
 	}
+	defer resp.Close()
 
 	if resp.Status().Code != nethttp.StatusOK {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
-		_, body := resp.RawData()
+		body, _ := io.ReadAll(resp.RawData())
 		return errors.Errorf("error from actor service: %s", string(body))
 	}
 
@@ -316,7 +326,10 @@ func (a *actorsRuntime) startDeactivationTicker(configuration Config) {
 }
 
 func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	a.placement.WaitUntilPlacementTableIsReady()
+	err := a.placement.WaitUntilPlacementTableIsReady(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	actor := req.Actor()
 	targetActorAddress, appID := "", ""
@@ -341,8 +354,6 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	}
 
 	var resp *invokev1.InvokeMethodResponse
-	var err error
-
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(ctx, req)
 	} else {
@@ -353,6 +364,9 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 		if errors.Is(err, ErrDaprResponseHeader) {
 			// We return the response to maintain the .NET Actor contract which communicates errors via the body, but resiliency needs the error to retry.
 			return resp, err
+		}
+		if resp != nil {
+			resp.Close()
 		}
 		return nil, err
 	}
@@ -370,11 +384,18 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if a.isResiliencyEnabled {
 		if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
-			retriesExhaustedPath := false // Used to track final error state.
-			nullifyResponsePath := false  // Used to track final response state.
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
-			var resp *invokev1.InvokeMethodResponse
+			var (
+				resp                 *invokev1.InvokeMethodResponse
+				retriesExhaustedPath bool // Used to track final error state.
+				nullifyResponsePath  bool // Used to track final response state.
+			)
+			// This policy has built-in retries so enable replay in the request
+			req.WithReplay(true)
 			err := policy(func(ctx context.Context) (rErr error) {
+				if resp != nil {
+					resp.Close()
+				}
 				retriesExhaustedPath = false
 				resp, rErr = fn(ctx, targetAddress, targetID, req)
 				if rErr == nil {
@@ -400,6 +421,9 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 			}
 
 			if nullifyResponsePath {
+				if resp != nil {
+					resp.Close()
+				}
 				resp = nil
 			}
 
@@ -408,8 +432,18 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		}
 		return fn(ctx, targetAddress, targetID, req)
 	}
+
+	// We need to enable replaying because the request may be attempted again in this path
+	req.WithReplay(true)
+	var (
+		resp *invokev1.InvokeMethodResponse
+		err  error
+	)
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(ctx, targetAddress, targetID, req)
+		if resp != nil {
+			resp.Close()
+		}
+		resp, err = fn(ctx, targetAddress, targetID, req)
 		if err == nil {
 			return resp, nil
 		}
@@ -469,22 +503,32 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	defer act.unlock()
 
 	// Replace method to actors method.
-	originalMethod := req.Message().Method
-	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)
+	msg := req.Message()
+	originalMethod := msg.Method
+	msg.Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), msg.Method)
 
 	// Reset the method so we can perform retries.
-	defer func() { req.Message().Method = originalMethod }()
+	defer func() { msg.Method = originalMethod }()
 
 	// Original code overrides method with PUT. Why?
-	if req.Message().GetHttpExtension() == nil {
+	if msg.HttpExtension == nil {
 		req.WithHTTPExtension(nethttp.MethodPut, "")
 	} else {
-		req.Message().HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
+		msg.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
+	}
+
+	// If the request can be retried, we need to enable replaying
+	pd := a.resiliency.GetPolicy(act.actorType, &resiliency.ActorPolicy{})
+	if pd != nil && pd.HasRetries() {
+		req.WithReplay(true)
 	}
 
 	policy := a.resiliency.ActorPostLockPolicy(ctx, act.actorType, act.actorID)
 	var resp *invokev1.InvokeMethodResponse
 	err = policy(func(ctx context.Context) (rErr error) {
+		if resp != nil {
+			resp.Close()
+		}
 		resp, rErr = a.appChannel.InvokeMethod(ctx, req)
 		return rErr
 	})
@@ -493,8 +537,9 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		return nil, err
 	}
 
-	_, respData := resp.RawData()
 	if resp.Status().Code != nethttp.StatusOK {
+		respData, _ := io.ReadAll(resp.RawData())
+		resp.Close()
 		return nil, errors.Errorf("error from actor service: %s", string(respData))
 	}
 
@@ -517,10 +562,15 @@ func (a *actorsRuntime) callRemoteActor(
 		return nil, err
 	}
 
+	pd, err := req.ProtoWithData()
+	if err != nil {
+		return nil, err
+	}
+
 	span := diagUtils.SpanFromContext(ctx)
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	client := internalv1pb.NewServiceInvocationClient(conn)
-	resp, err := client.CallActor(ctx, req.Proto())
+	resp, err := client.CallActor(ctx, pd)
 	if err != nil {
 		return nil, err
 	}
@@ -990,13 +1040,24 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	}
 
 	log.Debugf("executing reminder %s for actor type %s with id %s", reminder.Name, reminder.ActorType, reminder.ActorID)
-	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder.Name))
-	req.WithActor(reminder.ActorType, reminder.ActorID)
-	req.WithRawData(b, invokev1.JSONContentType)
+	req := invokev1.
+		NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder.Name)).
+		WithActor(reminder.ActorType, reminder.ActorID).
+		WithRawDataBytes(b, invokev1.JSONContentType)
+	defer req.Close()
+
+	// If the request can be retried, we need to enable replaying
+	pd := a.resiliency.GetPolicy(reminder.ActorType, &resiliency.ActorPolicy{})
+	if pd != nil && pd.HasRetries() {
+		req.WithReplay(true)
+	}
 
 	policy := a.resiliency.ActorPreLockPolicy(context.Background(), reminder.ActorType, reminder.ActorID)
 	return policy(func(ctx context.Context) error {
-		_, err := a.callLocalActor(ctx, req)
+		resp, err := a.callLocalActor(ctx, req)
+		if resp != nil {
+			resp.Close()
+		}
 		return err
 	})
 }
@@ -1347,13 +1408,24 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	}
 
 	log.Debugf("executing timer %s for actor type %s with id %s", name, actorType, actorID)
-	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("timer/%s", name))
-	req.WithActor(actorType, actorID)
-	req.WithRawData(b, invokev1.JSONContentType)
+	req := invokev1.
+		NewInvokeMethodRequest(fmt.Sprintf("timer/%s", name)).
+		WithActor(actorType, actorID).
+		WithRawDataBytes(b, invokev1.JSONContentType)
+	defer req.Close()
+
+	// If the request can be retried, we need to enable replaying
+	pd := a.resiliency.GetPolicy(actorType, &resiliency.ActorPolicy{})
+	if pd != nil && pd.HasRetries() {
+		req.WithReplay(true)
+	}
 
 	policy := a.resiliency.ActorPreLockPolicy(context.Background(), actorType, actorID)
-	err = policy(func(ctx context.Context) error {
-		_, err = a.callLocalActor(ctx, req)
+	err = policy(func(ctx context.Context) (err error) {
+		resp, err := a.callLocalActor(ctx, req)
+		if resp != nil {
+			resp.Close()
+		}
 		return err
 	})
 	if err != nil {

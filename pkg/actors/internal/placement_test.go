@@ -14,6 +14,7 @@ limitations under the License.
 package internal
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -206,8 +207,10 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	asserted := atomic.Bool{}
 	asserted.Store(false)
 	go func() {
-		testPlacement.WaitUntilPlacementTableIsReady()
-		asserted.Store(true)
+		err := testPlacement.WaitUntilPlacementTableIsReady(context.Background())
+		if assert.NoError(t, err) {
+			asserted.Store(true)
+		}
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -217,6 +220,38 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "unlock"})
 
 	// ensure that it is unlocked
+	time.Sleep(50 * time.Millisecond)
+	assert.True(t, asserted.Load())
+}
+
+func TestWaitUntilPlacementTableIsReadyContextCanceled(t *testing.T) {
+	appHealthFunc := func() bool { return true }
+	tableUpdateFunc := func() {}
+	testPlacement := NewActorPlacement(
+		[]string{}, nil,
+		"testAppID", "127.0.0.1:1000",
+		[]string{"actorOne", "actorTwo"},
+		appHealthFunc, tableUpdateFunc)
+
+	testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
+
+	asserted := atomic.Bool{}
+	asserted.Store(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		err := testPlacement.WaitUntilPlacementTableIsReady(ctx)
+		if assert.ErrorIs(t, err, context.Canceled) {
+			asserted.Store(true)
+		}
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	assert.False(t, asserted.Load())
+
+	// cancel context
+	cancel()
+
+	// ensure that it is still locked
 	time.Sleep(50 * time.Millisecond)
 	assert.True(t, asserted.Load())
 }

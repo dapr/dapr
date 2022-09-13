@@ -68,7 +68,7 @@ func (g *Channel) GetBaseAddress() string {
 }
 
 // GetAppConfig gets application config from user application.
-func (g *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (g *Channel) GetAppConfig(ctx context.Context) (*config.ApplicationConfig, error) {
 	return nil, nil
 }
 
@@ -96,12 +96,18 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 
 // invokeMethodV1 calls user applications using daprclient v1.
 func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	// Read the request, including the data
+	pd, err := req.ProtoWithData()
+	if err != nil {
+		return nil, err
+	}
+
 	if g.ch != nil {
 		g.ch <- struct{}{}
 	}
 
 	clientV1 := runtimev1pb.NewAppCallbackClient(g.client)
-	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
+	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.Metadata, true)
 
 	if g.appMetadataToken != "" {
 		grpcMetadata.Set(authConsts.APITokenHeader, g.appMetadataToken)
@@ -112,11 +118,14 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	var header, trailer metadata.MD
 
-	var opts []grpc.CallOption
-	opts = append(opts, grpc.Header(&header), grpc.Trailer(&trailer),
-		grpc.MaxCallSendMsgSize(g.maxRequestBodySize*1024*1024), grpc.MaxCallRecvMsgSize(g.maxRequestBodySize*1024*1024))
+	opts := []grpc.CallOption{
+		grpc.Header(&header),
+		grpc.Trailer(&trailer),
+		grpc.MaxCallSendMsgSize(g.maxRequestBodySize * 1024 * 1024),
+		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize * 1024 * 1024),
+	}
 
-	resp, err := clientV1.OnInvoke(ctx, req.Message(), opts...)
+	resp, err := clientV1.OnInvoke(ctx, pd.Message, opts...)
 
 	if g.ch != nil {
 		<-g.ch
@@ -132,9 +141,11 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
 	}
 
-	rsp.WithHeaders(header).WithTrailers(trailer)
+	rsp.WithHeaders(header).
+		WithTrailers(trailer).
+		WithMessage(resp)
 
-	return rsp.WithMessage(resp), nil
+	return rsp, nil
 }
 
 // HealthProbe performs a health probe.

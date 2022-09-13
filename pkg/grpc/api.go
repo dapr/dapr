@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"sync"
@@ -33,6 +34,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -74,6 +76,7 @@ type API interface {
 	// DaprInternal Service methods
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+	CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error
 
 	// Dapr Service methods
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
@@ -267,53 +270,57 @@ func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.Un
 	return result
 }
 
+// NewAPIOpts contains options for NewAPI.
+type NewAPIOpts struct {
+	AppID                       string
+	AppChannel                  channel.AppChannel
+	Resiliency                  resiliency.Provider
+	StateStores                 map[string]state.Store
+	SecretStores                map[string]secretstores.SecretStore
+	SecretsConfiguration        map[string]config.SecretsScope
+	ConfigurationStores         map[string]configuration.Store
+	LockStores                  map[string]lock.Store
+	PubsubAdapter               runtimePubsub.Adapter
+	DirectMessaging             messaging.DirectMessaging
+	Actor                       actors.Actors
+	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec                 config.TracingSpec
+	AccessControlList           *config.AccessControlList
+	AppProtocol                 string
+	Shutdown                    func()
+	GetComponentsFn             func() []componentsV1alpha.Component
+	GetComponentsCapabilitiesFn func() map[string][]string
+}
+
 // NewAPI returns a new gRPC API.
-func NewAPI(
-	appID string, appChannel channel.AppChannel,
-	resiliency resiliency.Provider,
-	stateStores map[string]state.Store,
-	secretStores map[string]secretstores.SecretStore,
-	secretsConfiguration map[string]config.SecretsScope,
-	configurationStores map[string]configuration.Store,
-	lockStores map[string]lock.Store,
-	pubsubAdapter runtimePubsub.Adapter,
-	directMessaging messaging.DirectMessaging,
-	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec,
-	accessControlList *config.AccessControlList,
-	appProtocol string,
-	getComponentsFn func() []componentsV1alpha.Component,
-	shutdown func(),
-	getComponentsCapabilitiesFn func() map[string][]string,
-) API {
+func NewAPI(opts NewAPIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
-	for key, store := range stateStores {
+	for key, store := range opts.StateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
 	return &api{
-		directMessaging:            directMessaging,
-		actor:                      actor,
-		id:                         appID,
-		resiliency:                 resiliency,
-		appChannel:                 appChannel,
-		pubsubAdapter:              pubsubAdapter,
-		stateStores:                stateStores,
+		directMessaging:            opts.DirectMessaging,
+		actor:                      opts.Actor,
+		id:                         opts.AppID,
+		resiliency:                 opts.Resiliency,
+		appChannel:                 opts.AppChannel,
+		pubsubAdapter:              opts.PubsubAdapter,
+		stateStores:                opts.StateStores,
 		transactionalStateStores:   transactionalStateStores,
-		secretStores:               secretStores,
-		configurationStores:        configurationStores,
+		secretStores:               opts.SecretStores,
+		configurationStores:        opts.ConfigurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
-		lockStores:                 lockStores,
-		secretsConfiguration:       secretsConfiguration,
-		sendToOutputBindingFn:      sendToOutputBindingFn,
-		tracingSpec:                tracingSpec,
-		accessControlList:          accessControlList,
-		appProtocol:                appProtocol,
-		shutdown:                   shutdown,
-		getComponentsFn:            getComponentsFn,
-		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
+		lockStores:                 opts.LockStores,
+		secretsConfiguration:       opts.SecretsConfiguration,
+		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
+		tracingSpec:                opts.TracingSpec,
+		accessControlList:          opts.AccessControlList,
+		appProtocol:                opts.AppProtocol,
+		shutdown:                   opts.Shutdown,
+		getComponentsFn:            opts.GetComponentsFn,
+		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
 	}
 }
@@ -328,7 +335,155 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
+	defer req.Close()
 
+	err = a.callLocalACL(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
+	}
+	defer resp.Close()
+
+	// Response message
+	return resp.ProtoWithData()
+}
+
+// CallLocalStream is a variant of CallLocal that uses gRPC streams to send data in chunks, rather than in an unary RPC.
+// It is invoked by another Dapr instance with a request to the local app.
+func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
+	if a.appChannel == nil {
+		return status.Error(codes.Internal, messages.ErrChannelNotFound)
+	}
+
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+
+	// Read the first chunk of the incoming request
+	// This contains the metadata of the request
+	chunk := &internalv1pb.InternalInvokeRequestStream{}
+	err := stream.RecvMsg(chunk)
+	if err != nil {
+		return err
+	}
+	if chunk.Request == nil || chunk.Request.Metadata == nil || chunk.Request.Message == nil {
+		return errors.New("request does not contain the required fields in the leading chunk")
+	}
+	pr, pw := io.Pipe()
+	req, err := invokev1.InternalInvokeRequest(chunk.Request)
+	if err != nil {
+		return err
+	}
+	req.WithRawData(pr, chunk.Request.Message.ContentType)
+	defer req.Close()
+
+	err = a.callLocalACL(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	// Read the rest of the data in background as we submit the request
+	go func() {
+		var (
+			done    bool
+			readErr error
+		)
+		for {
+			if ctx.Err() != nil {
+				pw.CloseWithError(ctx.Err())
+				return
+			}
+
+			done, readErr = messaging.ReadChunk(chunk, pw)
+			if readErr != nil {
+				pw.CloseWithError(readErr)
+				return
+			}
+
+			if done {
+				break
+			}
+
+			readErr = stream.RecvMsg(chunk)
+			if err != nil {
+				pw.CloseWithError(readErr)
+				return
+			}
+
+			if chunk.Request != nil && (chunk.Request.Metadata != nil || chunk.Request.Message != nil) {
+				pw.CloseWithError(errors.New("request metadata found in non-leading chunk"))
+				return
+			}
+		}
+
+		pw.Close()
+	}()
+
+	// Submit the request to the app
+	res, err := a.appChannel.InvokeMethod(ctx, req)
+	if err != nil {
+		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
+	}
+	defer res.Close()
+
+	// Respond to the caller
+	r := res.RawData()
+	resProto := res.Proto()
+	buf := make([]byte, 4096) // 4KB buffer
+	var (
+		proto *internalv1pb.InternalInvokeResponseStream
+		n     int
+	)
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		proto = &internalv1pb.InternalInvokeResponseStream{
+			Payload: &commonv1pb.StreamPayload{},
+		}
+
+		// First message only
+		if resProto != nil {
+			proto.Response = resProto
+			resProto = nil
+		}
+
+		if r != nil {
+			n, err = r.Read(buf)
+			if err == io.EOF {
+				proto.Payload.Complete = true
+			} else if err != nil {
+				return err
+			}
+			if n > 0 {
+				proto.Payload.Data = &anypb.Any{
+					Value: buf[:n],
+				}
+			}
+		} else {
+			proto.Payload.Complete = true
+		}
+
+		err = stream.Send(proto)
+		if err != nil {
+			return err
+		}
+
+		// Stop with the last chunk
+		if proto.Payload.Complete {
+			break
+		}
+	}
+
+	return nil
+}
+
+// Used by CallLocal and CallLocalStream to check the request against the access control list
+func (a *api) callLocalACL(ctx context.Context, req *invokev1.InvokeMethodRequest) error {
 	if a.accessControlList != nil {
 		// An access control policy has been specified for the app. Apply the policies.
 		operation := req.Message().Method
@@ -343,16 +498,11 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol, a.accessControlList)
 
 		if !callAllowed {
-			return nil, status.Errorf(codes.PermissionDenied, errMsg)
+			return status.Errorf(codes.PermissionDenied, errMsg)
 		}
 	}
 
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
-		return nil, err
-	}
-	return resp.Proto(), err
+	return nil
 }
 
 // CallActor invokes a virtual actor.
@@ -361,19 +511,26 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
+	defer req.Close()
 
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	resp, err := a.actor.Call(ctx, req)
+	defer func() {
+		if resp != nil {
+			resp.Close()
+		}
+	}()
 	if err != nil {
 		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
 		if errors.Is(err, actors.ErrDaprResponseHeader) {
-			return resp.Proto(), nil
+			return resp.ProtoWithData()
 		}
 
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
 	}
-	return resp.Proto(), nil
+
+	return resp.ProtoWithData()
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
@@ -482,6 +639,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
+	defer req.Close()
 
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		req.WithMetadata(incomingMD)
@@ -491,9 +649,18 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
+	// If the request can be retried, we need to enable replaying
+	pd := a.resiliency.GetPolicy(in.Id, &resiliency.EndpointPolicy{})
+	if pd != nil && pd.HasRetries() {
+		req.WithReplay(true)
+	}
+
 	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
-	var resp *invokev1.InvokeMethodResponse
-	var requestErr bool
+	var (
+		resp       *invokev1.InvokeMethodResponse
+		proto      *internalv1pb.InternalInvokeResponse
+		requestErr bool
+	)
 	respError := policy(func(ctx context.Context) (rErr error) {
 		requestErr = false
 		resp, rErr = a.directMessaging.Invoke(ctx, in.Id, req)
@@ -506,12 +673,22 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 		headerMD := invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
 
+		proto = nil
+		if resp != nil {
+			defer resp.Close()
+
+			proto, rErr = resp.ProtoWithData()
+			if rErr != nil {
+				return rErr
+			}
+		}
+
 		// If the status is OK, respError will be nil.
 		var respError error
 		if resp.IsHTTPResponse() {
 			errorMessage := []byte("")
-			if resp != nil {
-				_, errorMessage = resp.RawData()
+			if proto != nil && proto.Message != nil && proto.Message.Data != nil {
+				errorMessage = proto.Message.Data.Value
 			}
 			respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
 			// Populate http status code to header
@@ -531,7 +708,12 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	if requestErr || (errors.Is(respError, context.DeadlineExceeded) || breaker.IsErrorPermanent(respError)) {
 		return nil, respError
 	}
-	return resp.Message(), respError
+
+	if respError != nil {
+		return nil, respError
+	}
+
+	return proto.Message, nil
 }
 
 func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
@@ -1434,9 +1616,17 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return &runtimev1pb.InvokeActorResponse{}, err
 	}
 
-	req := invokev1.NewInvokeMethodRequest(in.Method)
-	req.WithActor(in.ActorType, in.ActorId)
-	req.WithRawData(in.Data, "")
+	req := invokev1.
+		NewInvokeMethodRequest(in.Method).
+		WithActor(in.ActorType, in.ActorId).
+		WithRawDataBytes(in.Data, "")
+	defer req.Close()
+
+	// If the request can be retried, we need to enable replaying
+	pd := a.resiliency.GetPolicy(in.ActorType, &resiliency.ActorPolicy{})
+	if pd != nil && pd.HasRetries() {
+		req.WithReplay(true)
+	}
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1445,10 +1635,16 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	resp := invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
+	var body []byte
 	policy := a.resiliency.ActorPreLockPolicy(ctx, in.ActorType, in.ActorId)
-	err := policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = a.actor.Call(ctx, req)
+	err := policy(func(ctx context.Context) error {
+		resp, rErr := a.actor.Call(ctx, req)
+		if rErr != nil {
+			return rErr
+		}
+		defer resp.Close()
+
+		body, rErr = io.ReadAll(resp.RawData())
 		return rErr
 	})
 	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
@@ -1457,7 +1653,6 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return &runtimev1pb.InvokeActorResponse{}, err
 	}
 
-	_, body := resp.RawData()
 	return &runtimev1pb.InvokeActorResponse{
 		Data: body,
 	}, nil
@@ -1491,7 +1686,6 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		return true
 	})
 	extendedMetadata[daprRuntimeVersionKey] = a.daprRunTimeVersion
-
 	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
 	if a.actor != nil {
 		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {

@@ -14,10 +14,12 @@ limitations under the License.
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	nethttp "net/http"
 	"strconv"
 	"strings"
@@ -37,6 +39,7 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/version"
+	streamutils "github.com/dapr/dapr/utils/streams"
 
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -96,6 +99,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
+	maxRequestBodySize         int64 // In bytes
 }
 
 type registeredComponent struct {
@@ -136,50 +140,55 @@ const (
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
+// NewAPIOpts contains the options for NewAPI.
+type NewAPIOpts struct {
+	AppID                       string
+	AppChannel                  channel.AppChannel
+	DirectMessaging             messaging.DirectMessaging
+	GetComponentsFn             func() []componentsV1alpha1.Component
+	Resiliency                  resiliency.Provider
+	StateStores                 map[string]state.Store
+	LockStores                  map[string]lock.Store
+	SecretStores                map[string]secretstores.SecretStore
+	SecretsConfiguration        map[string]config.SecretsScope
+	ConfigurationStores         map[string]configuration.Store
+	PubsubAdapter               runtimePubsub.Adapter
+	Actor                       actors.Actors
+	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec                 config.TracingSpec
+	Shutdown                    func()
+	GetComponentsCapabilitiesFn func() map[string][]string
+	MaxRequestBodySize          int64 // In bytes
+}
+
 // NewAPI returns a new API.
-func NewAPI(
-	appID string,
-	appChannel channel.AppChannel,
-	directMessaging messaging.DirectMessaging,
-	getComponentsFn func() []componentsV1alpha1.Component,
-	resiliency resiliency.Provider,
-	stateStores map[string]state.Store,
-	lockStores map[string]lock.Store,
-	secretStores map[string]secretstores.SecretStore,
-	secretsConfiguration map[string]config.SecretsScope,
-	configurationStores map[string]configuration.Store,
-	pubsubAdapter runtimePubsub.Adapter,
-	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec,
-	shutdown func(),
-	getComponentsCapabilitiesFn func() map[string][]string,
-) API {
+func NewAPI(opts NewAPIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
-	for key, store := range stateStores {
+	for key, store := range opts.StateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
 	api := &api{
-		appChannel:                 appChannel,
-		getComponentsFn:            getComponentsFn,
-		resiliency:                 resiliency,
-		directMessaging:            directMessaging,
-		stateStores:                stateStores,
-		lockStores:                 lockStores,
+		id:                         opts.AppID,
+		appChannel:                 opts.AppChannel,
+		directMessaging:            opts.DirectMessaging,
+		getComponentsFn:            opts.GetComponentsFn,
+		resiliency:                 opts.Resiliency,
+		stateStores:                opts.StateStores,
+		lockStores:                 opts.LockStores,
+		secretStores:               opts.SecretStores,
+		secretsConfiguration:       opts.SecretsConfiguration,
+		configurationStores:        opts.ConfigurationStores,
+		pubsubAdapter:              opts.PubsubAdapter,
+		actor:                      opts.Actor,
+		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
+		tracingSpec:                opts.TracingSpec,
+		shutdown:                   opts.Shutdown,
+		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+		maxRequestBodySize:         opts.MaxRequestBodySize,
 		transactionalStateStores:   transactionalStateStores,
-		secretStores:               secretStores,
-		secretsConfiguration:       secretsConfiguration,
-		configurationStores:        configurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
-		actor:                      actor,
-		pubsubAdapter:              pubsubAdapter,
-		sendToOutputBindingFn:      sendToOutputBindingFn,
-		id:                         appID,
-		tracingSpec:                tracingSpec,
-		shutdown:                   shutdown,
-		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
 	}
 
@@ -463,10 +472,9 @@ func (a *api) constructDistributedLockEndpoints() []Endpoint {
 
 func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
-	body := reqCtx.PostBody()
 
 	var req OutputBindingRequest
-	err := json.Unmarshal(body, &req)
+	err := a.parseJSONBody(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -529,7 +537,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	var req BulkGetRequest
-	err = json.Unmarshal(reqCtx.PostBody(), &req)
+	err = a.parseJSONBody(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -747,7 +755,8 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if encryption.EncryptedStateStore(storeName) {
-		val, err := encryption.TryDecryptValue(storeName, resp.Data)
+		var val []byte
+		val, err = encryption.TryDecryptValue(storeName, resp.Data)
 		if err != nil {
 			msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
 			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -798,10 +807,18 @@ type configurationEventHandler struct {
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
 	for key := range e.Items {
-		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, key))
-		req.WithHTTPExtension(nethttp.MethodPost, "")
 		eventBody, _ := json.Marshal(e)
-		req.WithRawData(eventBody, invokev1.JSONContentType)
+		req := invokev1.
+			NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, key)).
+			WithHTTPExtension(nethttp.MethodPost, "").
+			WithRawDataBytes(eventBody, invokev1.JSONContentType)
+		defer req.Close()
+
+		// If the request can be retried, we need to enable replaying
+		pd := h.res.GetPolicy(h.storeName, &resiliency.ComponentInboundPolicy)
+		if pd != nil && pd.HasRetries() {
+			req.WithReplay(true)
+		}
 
 		policy := h.res.ComponentInboundPolicy(ctx, h.storeName, resiliency.Configuration)
 		err := policy(func(ctx context.Context) (err error) {
@@ -809,9 +826,12 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 			if err != nil {
 				return err
 			}
+			if resp != nil {
+				defer resp.Close()
 
-			if resp != nil && resp.Status().Code != nethttp.StatusOK {
-				return errors.Errorf("Error sending configuration item to application, status %d", resp.Status().Code)
+				if resp.Status().Code != nethttp.StatusOK {
+					return errors.Errorf("Error sending configuration item to application, status %d", resp.Status().Code)
+				}
 			}
 			return nil
 		})
@@ -830,7 +850,7 @@ func (a *api) onLock(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	req := lock.TryLockRequest{}
-	err = json.Unmarshal(reqCtx.PostBody(), &req)
+	err = a.parseJSONBody(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -872,7 +892,7 @@ func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	req := lock.UnlockRequest{}
-	err = json.Unmarshal(reqCtx.PostBody(), &req)
+	err = a.parseJSONBody(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -907,6 +927,10 @@ func (a *api) onUnlock(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	store, storeName, err := a.getConfigurationStoreWithRequestValidation(reqCtx)
 	if err != nil {
 		log.Debug(err)
@@ -930,7 +954,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		start := time.Now()
-		policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Configuration)
+		policy := a.resiliency.ComponentOutboundPolicy(ctx, storeName, resiliency.Configuration)
 		var getResponse *configuration.GetResponse
 		err = policy(func(ctx context.Context) (rErr error) {
 			getResponse, rErr = store.Get(ctx, getConfigurationReq)
@@ -1265,7 +1289,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	reqs := []state.SetRequest{}
-	err = json.Unmarshal(reqCtx.PostBody(), &reqs)
+	err = a.parseJSONBody(reqCtx, &reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1376,10 +1400,15 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	// Because this responds with `withStream()`, we can't defer a call to cancel() here
+	ctx, cancel := context.WithCancel(reqCtx)
+
 	targetID := a.findTargetID(reqCtx)
 	if targetID == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
 		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
+		cancel()
 		return
 	}
 
@@ -1389,23 +1418,52 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if a.directMessaging == nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNotReady)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		cancel()
 		return
 	}
 
-	// Construct internal invoke method request
-	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, reqCtx.QueryArgs().String())
-	req.WithRawData(reqCtx.Request.Body(), string(reqCtx.Request.Header.ContentType()))
-	// Save headers to internal metadata
-	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
+	// It's possible for the body stream to be nil if the request is being read in a non-streaming way
+	bodyStream := reqCtx.RequestBodyStream()
+	if bodyStream == nil {
+		bodyStream = bytes.NewReader(reqCtx.Request.Body())
+	}
+	reqBody := io.NopCloser(bodyStream)
 
-	policy := a.resiliency.EndpointPolicy(reqCtx, targetID, fmt.Sprintf("%s:%s", targetID, invokeMethodName))
+	// Limit the body size if needed
+	if a.maxRequestBodySize > 0 {
+		reqBody = streamutils.LimitReadCloser(reqBody, a.maxRequestBodySize)
+	}
+
+	// Construct internal invoke method request
+	req := invokev1.
+		NewInvokeMethodRequest(invokeMethodName).
+		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
+		// Set the stream
+		WithRawData(reqBody, string(reqCtx.Request.Header.ContentType())).
+		// Save headers to internal metadata
+		WithFastHTTPHeaders(&reqCtx.Request.Header)
+	defer req.Close()
+
+	// If the request can be retried, we need to enable replaying
+	pd := a.resiliency.GetPolicy(targetID, &resiliency.EndpointPolicy{})
+	if pd != nil && pd.HasRetries() {
+		req.WithReplay(true)
+	}
+
+	policy := a.resiliency.EndpointPolicy(ctx, targetID, targetID+":"+invokeMethodName)
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
-	var resp *invokev1.InvokeMethodResponse
-	var body []byte
-	var statusCode int
-	var msg ErrorResponse
-	errorOccurred := false
+	var (
+		resp          *invokev1.InvokeMethodResponse
+		r             io.Reader
+		statusCode    int
+		errBody       []byte
+		msg           ErrorResponse
+		errorOccurred bool
+	)
 	err := policy(func(ctx context.Context) (rErr error) {
+		if resp != nil {
+			resp.Close()
+		}
 		resp, rErr = a.directMessaging.Invoke(ctx, targetID, req)
 
 		if rErr != nil {
@@ -1422,21 +1480,23 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 		errorOccurred = false
 		invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
-		var contentType string
-		contentType, body = resp.RawData()
-		reqCtx.Response.Header.SetContentType(contentType)
+		r = resp.RawData()
+		reqCtx.Response.Header.SetContentType(resp.ContentType())
 
 		// Construct response
 		statusCode = int(resp.Status().Code)
 		if !resp.IsHTTPResponse() {
 			statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 			if statusCode != fasthttp.StatusOK {
-				if body, rErr = invokev1.ProtobufToJSON(resp.Status()); rErr != nil {
+				errBody, rErr = invokev1.ProtobufToJSON(resp.Status())
+				if rErr != nil {
 					errorOccurred = true
 					msg = NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error())
 					statusCode = fasthttp.StatusInternalServerError
 					return rErr
 				}
+				r = io.NopCloser(bytes.NewReader(errBody))
+				resp.Close()
 			}
 		} else if statusCode != fasthttp.StatusOK {
 			return errors.Errorf("Received non-successful status code: %d", statusCode)
@@ -1447,14 +1507,18 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
 		respond(reqCtx, withError(500, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
+		cancel()
 		return
 	}
 
 	if errorOccurred {
 		respond(reqCtx, withError(statusCode, msg))
+		cancel()
 		return
 	}
-	respond(reqCtx, with(statusCode, body))
+
+	// This will also close the response stream automatically; no need to invoke resp.Close()
+	respond(reqCtx, withStream(statusCode, r, cancel))
 }
 
 // findTargetID tries to find ID of the target service from the following three places:
@@ -1484,6 +1548,10 @@ func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 }
 
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1495,7 +1563,7 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 
 	var req actors.CreateReminderRequest
-	err := json.Unmarshal(reqCtx.PostBody(), &req)
+	err := a.parseJSONBody(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1507,7 +1575,7 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.actor.CreateReminder(reqCtx, &req)
+	err = a.actor.CreateReminder(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", fmt.Sprintf(messages.ErrActorReminderCreate, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1518,6 +1586,10 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1529,7 +1601,7 @@ func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 
 	var req actors.RenameReminderRequest
-	err := json.Unmarshal(reqCtx.PostBody(), &req)
+	err := a.parseJSONBody(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1541,7 +1613,7 @@ func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.actor.RenameReminder(reqCtx, &req)
+	err = a.actor.RenameReminder(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_RENAME", fmt.Sprintf(messages.ErrActorReminderRename, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1552,6 +1624,10 @@ func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1564,7 +1640,7 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 
 	var req actors.CreateTimerRequest
-	err := json.Unmarshal(reqCtx.PostBody(), &req)
+	err := a.parseJSONBody(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1576,7 +1652,7 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.actor.CreateTimer(reqCtx, &req)
+	err = a.actor.CreateTimer(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_CREATE", fmt.Sprintf(messages.ErrActorTimerCreate, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1587,6 +1663,10 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1604,7 +1684,7 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 		ActorType: actorType,
 	}
 
-	err := a.actor.DeleteReminder(reqCtx, &req)
+	err := a.actor.DeleteReminder(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_DELETE", fmt.Sprintf(messages.ErrActorReminderDelete, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1615,6 +1695,10 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1624,10 +1708,9 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
-	body := reqCtx.PostBody()
 
 	var ops []actors.TransactionalOperation
-	err := json.Unmarshal(body, &ops)
+	err := a.parseJSONBody(reqCtx, &ops)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1635,7 +1718,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1653,7 +1736,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		Operations: ops,
 	}
 
-	err = a.actor.TransactionalStateOperation(reqCtx, &req)
+	err = a.actor.TransactionalStateOperation(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION_SAVE", fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1664,6 +1747,10 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1675,7 +1762,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	resp, err := a.actor.GetReminder(reqCtx, &actors.GetReminderRequest{
+	resp, err := a.actor.GetReminder(ctx, &actors.GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Name:      name,
@@ -1698,6 +1785,10 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1714,7 +1805,7 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 		ActorID:   actorID,
 		ActorType: actorType,
 	}
-	err := a.actor.DeleteTimer(reqCtx, &req)
+	err := a.actor.DeleteTimer(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", fmt.Sprintf(messages.ErrActorTimerDelete, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1725,10 +1816,15 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	// Because this responds with `withStream()`, we can't defer a call to cancel() here
+	ctx, cancel := context.WithCancel(reqCtx)
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
+		cancel()
 		return
 	}
 
@@ -1736,12 +1832,25 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	method := reqCtx.UserValue(methodParam).(string)
-	body := reqCtx.PostBody()
 
-	req := invokev1.NewInvokeMethodRequest(method)
-	req.WithActor(actorType, actorID)
-	req.WithHTTPExtension(verb, reqCtx.QueryArgs().String())
-	req.WithRawData(body, string(reqCtx.Request.Header.ContentType()))
+	// It's possible for the body stream to be nil if the request is being read in a non-streaming way
+	bodyStream := reqCtx.RequestBodyStream()
+	if bodyStream == nil {
+		bodyStream = bytes.NewReader(reqCtx.Request.Body())
+	}
+	reqBody := io.NopCloser(bodyStream)
+
+	// Limit the body size if needed
+	if a.maxRequestBodySize > 0 {
+		reqBody = streamutils.LimitReadCloser(reqBody, a.maxRequestBodySize)
+	}
+
+	req := invokev1.
+		NewInvokeMethodRequest(method).
+		WithActor(actorType, actorID).
+		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
+		WithRawData(reqBody, string(reqCtx.Request.Header.ContentType()))
+	defer req.Close()
 
 	// Save headers to metadata.
 	metadata := map[string][]string{}
@@ -1750,6 +1859,12 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	})
 	req.WithMetadata(metadata)
 
+	// If the request can be retried, we need to enable replaying
+	pd := a.resiliency.GetPolicy(actorType, &resiliency.ActorPolicy{})
+	if pd != nil && pd.HasRetries() {
+		req.WithReplay(true)
+	}
+
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
 	// Having the retry here allows us to capture that and be resilient to host failure.
@@ -1757,9 +1872,12 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policy := a.resiliency.ActorPreLockPolicy(reqCtx, actorType, actorID)
+	policy := a.resiliency.ActorPreLockPolicy(ctx, actorType, actorID)
 	var resp *invokev1.InvokeMethodResponse
 	err := policy(func(ctx context.Context) (rErr error) {
+		if resp != nil {
+			resp.Close()
+		}
 		resp, rErr = a.actor.Call(ctx, req)
 		return rErr
 	})
@@ -1767,22 +1885,31 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
+		if resp != nil {
+			resp.Close()
+		}
+		cancel()
 		return
 	}
 
 	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
-	contentType, body := resp.RawData()
-	reqCtx.Response.Header.SetContentType(contentType)
+	reqCtx.Response.Header.SetContentType(resp.ContentType())
 
 	// Construct response.
 	statusCode := int(resp.Status().Code)
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
-	respond(reqCtx, with(statusCode, body))
+
+	// This will also close the response stream automatically; no need to invoke resp.Close()
+	respond(reqCtx, withStream(statusCode, resp.RawData(), cancel))
 }
 
 func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1794,7 +1921,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
 
-	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1812,7 +1939,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		Key:       key,
 	}
 
-	resp, err := a.actor.GetState(reqCtx, &req)
+	resp, err := a.actor.GetState(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_GET", fmt.Sprintf(messages.ErrActorStateGet, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -1827,18 +1954,21 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	temp := make(map[string]string)
 
 	// Copy synchronously so it can be serialized to JSON.
 	a.extendedMetadata.Range(func(key, value interface{}) bool {
 		temp[key.(string)] = value.(string)
-
 		return true
 	})
 	temp[daprRuntimeVersionKey] = a.daprRunTimeVersion
 	activeActorsCount := []actors.ActiveActorsCount{}
 	if a.actor != nil {
-		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
+		activeActorsCount = a.actor.GetActiveActorsCount(ctx)
 	}
 	componentsCapabilties := a.getComponentsCapabilitesFn()
 	components := a.getComponentsFn()
@@ -1865,9 +1995,11 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_METADATA_GET", fmt.Sprintf(messages.ErrMetadataGet, err))
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
 		log.Debug(msg)
-	} else {
-		respond(reqCtx, withJSON(fasthttp.StatusOK, mtdBytes))
+
+		return
 	}
+
+	respond(reqCtx, withJSON(fasthttp.StatusOK, mtdBytes))
 }
 
 func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
@@ -1879,7 +2011,14 @@ func getOrDefaultCapabilites(dict map[string][]string, key string) []string {
 
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 	key := fmt.Sprintf("%v", reqCtx.UserValue("key"))
-	body := reqCtx.PostBody()
+	body, err := a.readBody(reqCtx)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+
+		return
+	}
 	a.extendedMetadata.Store(key, string(body))
 	respond(reqCtx, withEmpty())
 }
@@ -1896,6 +2035,10 @@ func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.pubsubAdapter == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1931,7 +2074,15 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	body := reqCtx.PostBody()
+	body, err := a.readBody(reqCtx)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+
+		return
+	}
+
 	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
 	metadata := getMetadataFromRequest(reqCtx)
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
@@ -1945,7 +2096,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// Extract trace context from context.
-	span := diagUtils.SpanFromContext(reqCtx)
+	span := diagUtils.SpanFromContext(ctx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 	// Populate W3C tracestate to cloudevent envelope
@@ -1954,7 +2105,8 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	data := body
 
 	if !rawPayload {
-		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+		var envelope map[string]interface{}
+		envelope, err = runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			ID:              a.id,
 			Topic:           topic,
 			DataContentType: contentType,
@@ -1993,7 +2145,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(&req)
+	err = a.pubsubAdapter.Publish(&req)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
@@ -2067,6 +2219,10 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
@@ -2091,9 +2247,9 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	body := reqCtx.PostBody()
 	var req state.TransactionalStateRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	err := a.parseJSONBody(reqCtx, &req)
+	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
@@ -2119,7 +2275,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		switch o.Operation {
 		case state.Upsert:
 			var upsertReq state.SetRequest
-			err := mapstructure.Decode(o.Request, &upsertReq)
+			err = mapstructure.Decode(o.Request, &upsertReq)
 			if err != nil {
 				msg := NewErrorResponse("ERR_MALFORMED_REQUEST",
 					fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
@@ -2140,7 +2296,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			})
 		case state.Delete:
 			var delReq state.DeleteRequest
-			err := mapstructure.Decode(o.Request, &delReq)
+			err = mapstructure.Decode(o.Request, &delReq)
 			if err != nil {
 				msg := NewErrorResponse("ERR_MALFORMED_REQUEST",
 					fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
@@ -2174,7 +2330,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			if op.Operation == state.Upsert {
 				req := op.Request.(*state.SetRequest)
 				data := []byte(fmt.Sprintf("%v", req.Value))
-				val, err := encryption.TryEncryptValue(storeName, data)
+				var val []byte
+				val, err = encryption.TryEncryptValue(storeName, data)
 				if err != nil {
 					msg := NewErrorResponse(
 						"ERR_SAVE_STATE",
@@ -2191,8 +2348,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
-	err := policy(func(ctx context.Context) error {
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, storeName, resiliency.Statestore)
+	err = policy(func(ctx context.Context) error {
 		return transactionalStore.Multi(&state.TransactionalStateRequest{
 			Operations: operations,
 			Metadata:   req.Metadata,
@@ -2212,6 +2369,10 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
+	// Need a context specific to this request. See: https://github.com/valyala/fasthttp/issues/1350
+	ctx, cancel := context.WithCancel(reqCtx)
+	defer cancel()
+
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
 		// error has been already logged
@@ -2234,7 +2395,8 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	var req state.QueryRequest
-	if err = json.Unmarshal(reqCtx.PostBody(), &req.Query); err != nil {
+	err = a.parseJSONBody(reqCtx, &req.Query)
+	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 		log.Debug(msg)
@@ -2243,7 +2405,7 @@ func (a *api) onQueryState(reqCtx *fasthttp.RequestCtx) {
 	req.Metadata = getMetadataFromRequest(reqCtx)
 
 	start := time.Now()
-	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, storeName, resiliency.Statestore)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, storeName, resiliency.Statestore)
 	var resp *state.QueryResponse
 	err = policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = querier.Query(&req)
@@ -2298,4 +2460,26 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
+}
+
+// Reads the request body in full, supporting streams as well as in-memory bodies
+func (a *api) readBody(reqCtx *fasthttp.RequestCtx) ([]byte, error) {
+	if s := reqCtx.RequestBodyStream(); s != nil {
+		if a.maxRequestBodySize > 0 {
+			s = io.LimitReader(s, a.maxRequestBodySize)
+		}
+		return io.ReadAll(s)
+	}
+	return reqCtx.PostBody(), nil
+}
+
+// Reads and parses the request body as JSON, supporting streams as well as in-memory bodies
+func (a *api) parseJSONBody(reqCtx *fasthttp.RequestCtx, v any) error {
+	if s := reqCtx.RequestBodyStream(); s != nil {
+		if a.maxRequestBodySize > 0 {
+			s = io.LimitReader(s, a.maxRequestBodySize)
+		}
+		return json.NewDecoder(s).Decode(v)
+	}
+	return json.Unmarshal(reqCtx.PostBody(), v)
 }

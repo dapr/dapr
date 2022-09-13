@@ -99,7 +99,7 @@ func TestRegisterActorTimer(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.RegisterActorTimer(context.TODO(), &runtimev1pb.RegisterActorTimerRequest{})
+		_, err := client.RegisterActorTimer(context.Background(), &runtimev1pb.RegisterActorTimerRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
@@ -116,7 +116,7 @@ func TestGetActorState(t *testing.T) {
 		defer clientConn.Close()
 
 		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.GetActorState(context.TODO(), &runtimev1pb.GetActorStateRequest{})
+		_, err := client.GetActorState(context.Background(), &runtimev1pb.GetActorStateRequest{})
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 

@@ -129,8 +129,8 @@ func (s *server) StartNonBlocking() error {
 		// has a handle on the underlying listener.
 		customServer := &fasthttp.Server{
 			Handler:            handler,
-			MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
-			ReadBufferSize:     s.config.ReadBufferSize * 1024,
+			MaxRequestBodySize: s.config.MaxRequestBodySize << 20, // To MB
+			ReadBufferSize:     s.config.ReadBufferSize << 10,     // To KB
 		}
 		s.servers = append(s.servers, customServer)
 
@@ -148,7 +148,7 @@ func (s *server) StartNonBlocking() error {
 
 		healthServer := &fasthttp.Server{
 			Handler:            publicHandler,
-			MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+			MaxRequestBodySize: s.config.MaxRequestBodySize << 20, // To MB
 		}
 		s.servers = append(s.servers, healthServer)
 
@@ -180,7 +180,7 @@ func (s *server) StartNonBlocking() error {
 			// has a handle on the underlying listener.
 			profServer := &fasthttp.Server{
 				Handler:            pprofhandler.PprofHandler,
-				MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+				MaxRequestBodySize: s.config.MaxRequestBodySize << 20, // To MB
 			}
 			s.servers = append(s.servers, profServer)
 

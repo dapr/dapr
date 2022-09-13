@@ -18,7 +18,7 @@ type MockAppChannel struct {
 }
 
 // GetAppConfig provides a mock function with given fields:
-func (_m *MockAppChannel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (_m *MockAppChannel) GetAppConfig(ctx context.Context) (*config.ApplicationConfig, error) {
 	ret := _m.Called()
 
 	var r0 *config.ApplicationConfig

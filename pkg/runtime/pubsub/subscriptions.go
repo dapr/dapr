@@ -70,9 +70,13 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 		subscriptionItems []SubscriptionJSON
 	)
 
-	req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-	req.WithHTTPExtension(http.MethodGet, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
+	req := invokev1.
+		NewInvokeMethodRequest("dapr/subscribe").
+		WithHTTPExtension(http.MethodGet, "").
+		WithRawData(nil, invokev1.JSONContentType).
+		// The built-in policy has retries so we need to enable replaying (although the body of the request is currently empty)
+		WithReplay(true)
+	defer req.Close()
 
 	// TODO Propagate Context
 	ctx := context.Background()
@@ -86,12 +90,18 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	if resiliencyEnabled {
 		policy := r.BuiltInPolicy(ctx, resiliency.BuiltInInitializationRetries)
 		err = policy(func(ctx context.Context) (rErr error) {
+			if resp != nil {
+				resp.Close()
+			}
 			resp, rErr = channel.InvokeMethod(ctx, req)
 			return rErr
 		})
 	} else {
 		backoff := getSubscriptionsBackoff()
 		retry.NotifyRecover(func() error {
+			if resp != nil {
+				resp.Close()
+			}
 			resp, err = channel.InvokeMethod(ctx, req)
 			return err
 		}, backoff, func(err error, d time.Duration) {
@@ -102,11 +112,12 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Close()
 
 	switch resp.Status().Code {
 	case http.StatusOK:
-		_, body := resp.RawData()
-		if err := json.Unmarshal(body, &subscriptionItems); err != nil {
+		body := resp.RawData()
+		if err := json.NewDecoder(body).Decode(&subscriptionItems); err != nil {
 			log.Errorf(deserializeTopicsError, err)
 			return nil, errors.Errorf(deserializeTopicsError, err)
 		}

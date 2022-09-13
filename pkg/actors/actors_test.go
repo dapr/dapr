@@ -107,7 +107,7 @@ func (m *mockAppChannel) GetBaseAddress() string {
 func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if m.requestC != nil {
 		var request testRequest
-		if err := json.Unmarshal(req.Message().Data.Value, &request); err == nil {
+		if err := json.NewDecoder(req.RawData()).Decode(&request); err == nil {
 			m.requestC <- request
 		}
 	}
@@ -291,7 +291,14 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	}
 
 	if b.config == nil {
-		config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
+		config := NewConfig(NewConfigOpts{
+			HostAddress:        "",
+			AppID:              TestAppID,
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               0,
+			Namespace:          "",
+			AppConfig:          config.ApplicationConfig{},
+		})
 		b.config = &config
 	}
 
@@ -307,7 +314,17 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		storeName = b.actorStoreName
 	}
 
-	a := NewActors(store, b.appChannel, nil, *b.config, nil, tracingSpec, b.featureSpec, resiliency.FromConfigurations(log, testResiliency), storeName)
+	a := NewActors(NewActorOpts{
+		StateStore:       store,
+		AppChannel:       b.appChannel,
+		GRPCConnectionFn: nil,
+		Config:           *b.config,
+		CertChain:        nil,
+		TracingSpec:      tracingSpec,
+		Features:         b.featureSpec,
+		Resiliency:       resiliency.FromConfigurations(log, testResiliency),
+		StateStoreName:   storeName,
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -315,16 +332,51 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
-	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+	config := NewConfig(NewConfigOpts{
+		HostAddress:        "",
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		Port:               0,
+		Namespace:          "",
+		AppConfig:          config.ApplicationConfig{},
+	})
+
+	a := NewActors(NewActorOpts{
+		StateStore:       store,
+		AppChannel:       appChannel,
+		GRPCConnectionFn: nil,
+		Config:           config,
+		CertChain:        nil,
+		TracingSpec:      spec,
+		Features:         nil,
+		Resiliency:       resiliency.New(log),
+		StateStoreName:   "actorStore",
+	})
 
 	return a.(*actorsRuntime)
 }
 
 func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
-	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
-	a := NewActors(nil, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+	config := NewConfig(NewConfigOpts{
+		HostAddress:        "",
+		AppID:              TestAppID,
+		PlacementAddresses: []string{""},
+		Port:               0,
+		Namespace:          "",
+		AppConfig:          config.ApplicationConfig{},
+	})
+	a := NewActors(NewActorOpts{
+		StateStore:       nil,
+		AppChannel:       appChannel,
+		GRPCConnectionFn: nil,
+		Config:           config,
+		CertChain:        nil,
+		TracingSpec:      spec,
+		Features:         nil,
+		Resiliency:       resiliency.New(log),
+		StateStoreName:   "actorStore",
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -332,8 +384,25 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	var store state.Store
-	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
-	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+	config := NewConfig(NewConfigOpts{
+		HostAddress:        "",
+		AppID:              TestAppID,
+		PlacementAddresses: []string{""},
+		Port:               0,
+		Namespace:          "",
+		AppConfig:          config.ApplicationConfig{},
+	})
+	a := NewActors(NewActorOpts{
+		StateStore:       store,
+		AppChannel:       appChannel,
+		GRPCConnectionFn: nil,
+		Config:           config,
+		CertChain:        nil,
+		TracingSpec:      spec,
+		Features:         nil,
+		Resiliency:       resiliency.New(log),
+		StateStoreName:   "actorStore",
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -351,8 +420,25 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 			},
 		},
 	}
-	c := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
-	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{}, resiliency.New(log), "actorStore")
+	c := NewConfig(NewConfigOpts{
+		HostAddress:        "",
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		Port:               0,
+		Namespace:          "",
+		AppConfig:          appConfig,
+	})
+	a := NewActors(NewActorOpts{
+		StateStore:       store,
+		AppChannel:       appChannel,
+		GRPCConnectionFn: nil,
+		Config:           c,
+		CertChain:        nil,
+		TracingSpec:      spec,
+		Features:         []config.FeatureSpec{},
+		Resiliency:       resiliency.New(log),
+		StateStoreName:   "actorStore",
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -1904,7 +1990,14 @@ func TestConfig(t *testing.T) {
 		Reentrancy:                 config.ReentrancyConfig{},
 		RemindersStoragePartitions: 0,
 	}
-	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+	c := NewConfig(NewConfigOpts{
+		HostAddress:        "localhost:5050",
+		AppID:              "app1",
+		PlacementAddresses: []string{"placement:5050"},
+		Port:               3500,
+		Namespace:          "default",
+		AppConfig:          appConfig,
+	})
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
 	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
@@ -1920,7 +2013,14 @@ func TestConfig(t *testing.T) {
 func TestReentrancyConfig(t *testing.T) {
 	appConfig := DefaultAppConfig
 	t.Run("Test empty reentrancy values", func(t *testing.T) {
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+		c := NewConfig(NewConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
 		assert.False(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
@@ -1935,7 +2035,14 @@ func TestReentrancyConfig(t *testing.T) {
 				},
 			},
 		}
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+		c := NewConfig(NewConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
 		assert.False(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
@@ -1944,7 +2051,14 @@ func TestReentrancyConfig(t *testing.T) {
 
 	t.Run("Test minimum reentrancy values", func(t *testing.T) {
 		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+		c := NewConfig(NewConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
 		assert.True(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
@@ -1953,7 +2067,14 @@ func TestReentrancyConfig(t *testing.T) {
 	t.Run("Test full reentrancy values", func(t *testing.T) {
 		reentrancyLimit := 64
 		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+		c := NewConfig(NewConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
 		assert.True(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 64, *c.Reentrancy.MaxStackDepth)
@@ -2089,7 +2210,14 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
+	reentrantConfig := NewConfig(NewConfigOpts{
+		HostAddress:        "",
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		Port:               0,
+		Namespace:          "",
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
@@ -2117,7 +2245,14 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
+	reentrantConfig := NewConfig(NewConfigOpts{
+		HostAddress:        "",
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		Port:               0,
+		Namespace:          "",
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
 	reentrantAppChannel.callLog = []string{}
@@ -2145,7 +2280,14 @@ func TestReentrancyStackLimit(t *testing.T) {
 	stackDepth := 0
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}
-	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
+	reentrantConfig := NewConfig(NewConfigOpts{
+		HostAddress:        "",
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		Port:               0,
+		Namespace:          "",
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
@@ -2176,7 +2318,14 @@ func TestReentrancyPerActor(t *testing.T) {
 			},
 		},
 	}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig(NewConfigOpts{
+		HostAddress:        "",
+		AppID:              TestAppID,
+		PlacementAddresses: []string{""},
+		Port:               0,
+		Namespace:          "",
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
@@ -2212,7 +2361,14 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 			},
 		},
 	}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig(NewConfigOpts{
+		HostAddress:        "",
+		AppID:              TestAppID,
+		PlacementAddresses: []string{""},
+		Port:               0,
+		Namespace:          "",
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
