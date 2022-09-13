@@ -16,9 +16,16 @@ package pubsub
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
+	"os"
+	"runtime"
 	"sync"
 	"testing"
 
+	guuid "github.com/google/uuid"
+
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 
 	"go.uber.org/atomic"
@@ -39,14 +46,33 @@ var testLogger = logger.NewLogger("pubsub-pluggable-test")
 
 type server struct {
 	proto.UnimplementedPubSubServer
+	initCalled        atomic.Int64
+	onInitCalled      func(*proto.PubSubInitRequest)
+	initErr           error
+	featuresCalled    atomic.Int64
+	featuresErr       error
 	publishCalled     atomic.Int64
 	onPublishCalled   func(*proto.PublishRequest)
-	publishResp       *proto.PublishResponse
 	publishErr        error
 	subscribeCalled   atomic.Int64
 	onSubscribeCalled func(*proto.SubscribeRequest)
 	subscribeErr      error
 	subscribeChan     chan *proto.Message
+	pingCalled        atomic.Int64
+	pingErr           error
+}
+
+func (s *server) Init(_ context.Context, req *proto.PubSubInitRequest) (*proto.PubSubInitResponse, error) {
+	s.initCalled.Add(1)
+	if s.onInitCalled != nil {
+		s.onInitCalled(req)
+	}
+	return &proto.PubSubInitResponse{}, s.initErr
+}
+
+func (s *server) Features(context.Context, *proto.FeaturesRequest) (*proto.FeaturesResponse, error) {
+	s.featuresCalled.Add(1)
+	return &proto.FeaturesResponse{}, s.featuresErr
 }
 
 func (s *server) Publish(_ context.Context, req *proto.PublishRequest) (*proto.PublishResponse, error) {
@@ -54,7 +80,12 @@ func (s *server) Publish(_ context.Context, req *proto.PublishRequest) (*proto.P
 	if s.onPublishCalled != nil {
 		s.onPublishCalled(req)
 	}
-	return s.publishResp, s.publishErr
+	return &proto.PublishResponse{}, s.publishErr
+}
+
+func (s *server) Ping(context.Context, *proto.PingRequest) (*proto.PingResponse, error) {
+	s.pingCalled.Add(1)
+	return &proto.PingResponse{}, s.pingErr
 }
 
 //nolint:nosnakecase
@@ -81,6 +112,48 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		return pubsub
 	})
 
+	if runtime.GOOS != "windows" {
+		t.Run("test init should populate features and call grpc init", func(t *testing.T) {
+			const (
+				fakeName          = "name"
+				fakeType          = "type"
+				fakeVersion       = "v1"
+				fakeComponentName = "component"
+				fakeSocketFolder  = "/tmp"
+			)
+
+			uniqueID := guuid.New().String()
+			socket := fmt.Sprintf("%s/%s.sock", fakeSocketFolder, uniqueID)
+			defer os.Remove(socket)
+
+			connector := pluggable.NewGRPCConnectorWithFactory(func(string) string {
+				return socket
+			}, proto.NewPubSubClient)
+			defer connector.Close()
+
+			listener, err := net.Listen("unix", socket)
+			require.NoError(t, err)
+			defer listener.Close()
+			s := grpc.NewServer()
+			srv := &server{}
+			proto.RegisterPubSubServer(s, srv)
+			go func() {
+				if serveErr := s.Serve(listener); serveErr != nil {
+					testLogger.Debugf("Server exited with error: %v", serveErr)
+				}
+			}()
+
+			ps := fromConnector(testLogger, connector)
+			err = ps.Init(pubsub.Metadata{
+				Base: contribMetadata.Base{},
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, int64(1), srv.featuresCalled.Load())
+			assert.Equal(t, int64(1), srv.initCalled.Load())
+		})
+	}
+
 	t.Run("features should return the component features'", func(t *testing.T) {
 		ps, cleanup, err := getPubSub(&server{})
 		require.NoError(t, err)
@@ -98,7 +171,6 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			onPublishCalled: func(req *proto.PublishRequest) {
 				assert.Equal(t, req.Topic, fakeTopic)
 			},
-			publishResp: &proto.PublishResponse{},
 		}
 		ps, cleanup, err := getPubSub(svc)
 		require.NoError(t, err)
