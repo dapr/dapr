@@ -49,6 +49,8 @@ else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
 	TARGET_ARCH_LOCAL=arm
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),arm64)
 	TARGET_ARCH_LOCAL=arm64
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 7),aarch64)
+	TARGET_ARCH_LOCAL=arm64
 else
 	TARGET_ARCH_LOCAL=amd64
 endif
@@ -340,7 +342,7 @@ init-proto:
 ################################################################################
 # Target: gen-proto                                                            #
 ################################################################################
-GRPC_PROTOS:=common internals operator placement runtime sentry
+GRPC_PROTOS:=common internals operator placement runtime sentry components
 PROTO_PREFIX:=github.com/dapr/dapr
 
 # Generate archive files for each binary
