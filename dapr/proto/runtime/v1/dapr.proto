@@ -612,21 +612,19 @@ message WorkflowReference {
 }
 
 message GetWorkflowRequest {
-  WorkflowReference WorkflowInfo  = 1;
-  string WorkflowType = 2;
-  string InstanceID = 3;
-  string WorkflowComponent = 4; 
+  WorkflowReference WorkflowReference  = 1;
+  string InstanceID = 2;
+  string WorkflowComponent = 3; 
 }
 
 message GetWorkflowResponse {
-  WorkflowReference WorkflowInfo  = 1;
+  WorkflowReference WorkflowReference  = 1;
   google.protobuf.Timestamp StartTime = 2;
-  string TaskQueue = 3;
-  string Status = 4; 
+  map<string, string> Response = 3;
 }
 
 message StartWorkflowRequest {
-  WorkflowReference WorkflowInfo = 1;
+  WorkflowReference WorkflowReference = 1;
   string WorkflowComponent = 2;
   string WorkflowName = 3;
   map<string, string> Options = 4;
@@ -634,6 +632,6 @@ message StartWorkflowRequest {
 }
 
 message TerminateWorkflowRequest {
-  WorkflowReference WorkflowInfo = 1;
+  WorkflowReference WorkflowReference = 1;
   string WorkflowComponent = 2;
 }

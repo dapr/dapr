@@ -92,4 +92,5 @@ const (
 	ErrWorkflowGetResponse    = "error while getting workflow info %s"
 	ErrStartWorkflow          = "error starting workflow %s"
 	ErrTerminateWorkflow      = "error terminating workflow %s"
+	ErrTimerParse             = "error parsing time - %s"
 )

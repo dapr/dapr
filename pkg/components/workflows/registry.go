@@ -56,8 +56,8 @@ func NewRegistry() Registry {
 	}
 }
 
-// // Register registers a new factory method that creates an instance of a Workflow.
-// // The key is the name of the workflow
+// Register registers a new factory method that creates an instance of a Workflow.
+// The key is the name of the workflow
 func (s *workflowRegistry) Register(components ...Workflow) {
 	for _, component := range components {
 		for _, name := range component.Names {

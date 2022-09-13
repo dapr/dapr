@@ -1518,12 +1518,7 @@ func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataReques
 }
 
 func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if in.WorkflowType == "" {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrMissingWorkflowType))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	if in.WorkflowInfo.InstanceID == "" {
+	if in.WorkflowReference.InstanceID == "" {
 		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
@@ -1539,7 +1534,7 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 	req := workflows.WorkflowReference{
-		InstanceID: in.WorkflowInfo.InstanceID,
+		InstanceID: in.WorkflowReference.InstanceID,
 	}
 	response, err := a.workflows[in.WorkflowComponent].Get(ctx, &req)
 	if err != nil {
@@ -1554,16 +1549,18 @@ func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflow
 
 	t, err := time.Parse(time.RFC3339, response.StartTime)
 	if err != nil {
-		panic(err)
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTimerParse, err))
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
-
 	pb := timestamppb.New(t)
-
 	res := &runtimev1pb.GetWorkflowResponse{
-		WorkflowInfo: id,
-		StartTime:    pb,
-		TaskQueue:    response.TaskQueue,
-		Status:       response.Status,
+		WorkflowReference: id,
+		StartTime:         pb,
+		Response: map[string]string{
+			"TaskQueue": response.TaskQueue,
+			"Status":    response.Status,
+		},
 	}
 	return res, nil
 }
@@ -1576,19 +1573,19 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 	}
 
 	if in.WorkflowComponent == "" || a.workflows[in.WorkflowComponent] == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrNoOrMissingComponent))
+		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
-	if in.WorkflowInfo.InstanceID == "" {
+	if in.WorkflowReference.InstanceID == "" {
 		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.WorkflowReference{}, err
 	}
 
 	wf := workflows.WorkflowReference{
-		InstanceID: in.WorkflowInfo.InstanceID,
+		InstanceID: in.WorkflowReference.InstanceID,
 	}
 	req := workflows.StartRequest{
 		WorkflowInfo: wf,
@@ -1610,33 +1607,33 @@ func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWork
 }
 
 func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
-	if in.WorkflowInfo.InstanceID == "" {
+	if in.WorkflowReference.InstanceID == "" {
 		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrMissingOrEmptyInstance))
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, nil
+		return &emptypb.Empty{}, err
 	}
 
 	if in.WorkflowComponent == "" {
 		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrNoOrMissingComponent))
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, nil
+		return &emptypb.Empty{}, err
 	}
 
 	if _, ok := a.workflows[in.WorkflowComponent]; !ok {
 		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrComponentDoesNotExist, in.WorkflowComponent))
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, nil
+		return &emptypb.Empty{}, err
 	}
 
 	req := workflows.WorkflowReference{
-		InstanceID: in.WorkflowInfo.InstanceID,
+		InstanceID: in.WorkflowReference.InstanceID,
 	}
 
 	err := a.workflows[in.WorkflowComponent].Terminate(ctx, &req)
 	if err != nil {
 		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, nil
+		return &emptypb.Empty{}, err
 	}
 	return &emptypb.Empty{}, nil
 }
