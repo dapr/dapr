@@ -207,6 +207,8 @@ if you want to run the tests using tailscale as your network, few things are nec
 
 1. [Create a tailscale account](https://login.tailscale.com/), this will be necessary since we're going to use personal keys.
 2. [Download and install](https://tailscale.com/download/) the tailscale client for your OS.
+    - Make sure to configure the client to [accept subnet routes](https://tailscale.com/kb/1019/subnets/#step-5-use-your-subnet-routes-from-other-machines).
+    - Also please note that the subnet exposed by the Kubernetes cluster is usually `10.0.0.0/8`, which may conflict with local subnets.
 3. When you're logged in, navigate to the menu `Access Controls` and two things are necessary, edit the ACL definition with:
    1. Create a new tag that will be used later to assign permissions to keys.
     ```json
@@ -236,6 +238,8 @@ Now, we're almost set.
 The next step will be install the tailscale subnet router in your kubernetes cluster, for that, run
 
 ```sh
+export TAILSCALE_NAMESPACE=tailscale
+kubectl create namespace $TAILSCALE_NAMESPCE
 TAILSCALE_AUTH_KEY=your_key_goes_here make setup-tailscale
 ```
 
