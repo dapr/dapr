@@ -1,8 +1,8 @@
-# Feature Flags
+# Preview Features
 
 Feature Toggles (a.k.a [feature flags](https://martinfowler.com/articles/feature-toggles.html)) are a powerful way to change runtime behavior without changing the code itself. We encourage the use of the feature flags especially for preview features - explicit opt-in, and this document is focused on showing best practices/examples, how to configure and how they can be enabled when appropriate (i.e running e2e tests).
 
-Dapr feature flags are something between Release Toggles and Ops Toggles and mostly behaving as Kill-Switches with months of longevity.
+Dapr flags for preview features are something between Release Toggles and Ops Toggles and mostly behaving as Kill-Switches with months of longevity.
 
 ## Declaring
 
@@ -91,7 +91,7 @@ testApps := []kube.AppDescription{
 
 ## Documentation
 
-When a new feature flag is added our [documentation should be updated](https://github.com/dapr/docs/blob/4674817212c141acd4256a4d3ac441d5559f1eef/daprdocs/content/en/operations/support/support-preview-features.md). As a followup action create a new issue on docs repository, [check an example](https://github.com/dapr/docs/issues/2786).
+When a new [preview feature](https://docs.dapr.io/operations/support/support-preview-features/) is added our [documentation should be updated](https://github.com/dapr/docs/blob/4674817212c141acd4256a4d3ac441d5559f1eef/daprdocs/content/en/operations/support/support-preview-features.md). As a followup action create a new issue on docs repository, [check an example](https://github.com/dapr/docs/issues/2786).
 
 ## Release GA
 
