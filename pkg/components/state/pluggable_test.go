@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"sync/atomic"
 	"testing"
 
@@ -30,15 +29,11 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-const bufSize = 1024 * 1024
 
 type server struct {
 	proto.UnimplementedStateStoreServer
@@ -149,41 +144,23 @@ func (s *server) Init(context.Context, *proto.InitRequest) (*proto.InitResponse,
 
 var testLogger = logger.NewLogger("state-pluggable-logger")
 
-// getStateStore returns a state store connected to the given server
-func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err error) {
-	lis := bufconn.Listen(bufSize)
-	s := grpc.NewServer()
-	proto.RegisterStateStoreServer(s, srv)
-	proto.RegisterTransactionalStateStoreServer(s, srv)
-	proto.RegisterQueriableStateStoreServer(s, srv)
-	go func() {
-		if serveErr := s.Serve(lis); serveErr != nil {
-			testLogger.Debugf("Server exited with error: %v", serveErr)
-		}
-	}()
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
-		return lis.Dial()
-	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	client := newStateStoreClient(conn)
-	stStore = fromPluggable(testLogger, components.Pluggable{})
-	stStore.Client = client
-	return stStore, func() {
-		lis.Close()
-		conn.Close()
-	}, nil
-}
-
 // wrapString into quotes
 func wrapString(str string) string {
 	return fmt.Sprintf("\"%s\"", str)
 }
 
 func TestComponentCalls(t *testing.T) {
+	getStateStore := components.PluggableComponentTestServerFor(testLogger, func(s *grpc.Server, svc *server) {
+		proto.RegisterStateStoreServer(s, svc)
+		proto.RegisterTransactionalStateStoreServer(s, svc)
+		proto.RegisterQueriableStateStoreServer(s, svc)
+	}, func(cci grpc.ClientConnInterface) *grpcStateStore {
+		client := newStateStoreClient(cci)
+		stStore := fromPluggable(testLogger, components.Pluggable{})
+		stStore.Client = client
+		return stStore
+	})
+
 	t.Run("features should return the component features'", func(t *testing.T) {
 		stStore, cleanup, err := getStateStore(&server{})
 		require.NoError(t, err)
