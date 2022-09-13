@@ -66,7 +66,7 @@ type testStep struct {
 	expectedStatusCode int
 }
 
-// stateTransactionRequest represents a request for state transactions
+//  stateTransactionRequest represents a request for state transactions
 type stateTransaction struct {
 	Key           string    `json:"key,omitempty"`
 	Value         *appState `json:"value,omitempty"`

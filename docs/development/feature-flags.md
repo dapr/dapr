@@ -94,3 +94,7 @@ testApps := []kube.AppDescription{
 ## Documentation
 
 When a new feature flag is added our [documentation should be updated](https://github.com/dapr/docs/blob/4674817212c141acd4256a4d3ac441d5559f1eef/daprdocs/content/en/operations/support/support-preview-features.md). As a followup action create a new issue on docs repository, [check an example](https://github.com/dapr/docs/issues/2786).
+
+## Release GA
+
+When the feature flag is no longer needed as the feature has published for General Availability, then all previous steps should be revisited, documentation, code reference and additional settings. Creating a feature flag removal issue for a future milestone is seen as good practice.
