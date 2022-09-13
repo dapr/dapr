@@ -259,6 +259,15 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 	return ctx
 }
 
+func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, reqProto *internalv1pb.InternalInvokeRequest, opts []grpc.CallOption) (*invokev1.InvokeMethodResponse, error) {
+	var resp *internalv1pb.InternalInvokeResponse
+	resp, err := clientV1.CallLocal(ctx, reqProto, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return invokev1.InternalInvokeResponse(resp)
+}
+
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, namespace, false, false, false)
 	defer teardown()
@@ -279,24 +288,26 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	}
 
 	// If the request contains a message in the body, send an unary request
+	reqProto := req.Proto()
 	if req.HasMessageData() {
-		var resp *internalv1pb.InternalInvokeResponse
-		resp, err = clientV1.CallLocal(ctx, req.Proto(), opts...)
-		if err != nil {
-			return nil, err
-		}
-
-		// Short-circuit
-		return invokev1.InternalInvokeResponse(resp)
+		return d.invokeRemoteUnary(ctx, clientV1, reqProto, opts)
 	}
 
 	// Send the request using a stream
 	stream, err := clientV1.CallLocalStream(ctx, opts...)
 	if err != nil {
+		// If we're connecting to a sidecar that doesn't support CallLocalStream, fallback to the unary RPC
+		if status.Code(err) == codes.Unimplemented {
+			log.Warnf("App %s does not support streaming-based service invocation (likely due to being on an older version of Dapr); falling back to unary calls", appID)
+			reqProto, err = req.ProtoWithData()
+			if err != nil {
+				return nil, err
+			}
+			return d.invokeRemoteUnary(ctx, clientV1, reqProto, opts)
+		}
 		return nil, err
 	}
 	r := req.RawData()
-	reqProto := req.Proto()
 	buf := make([]byte, 4096) // 4KB buffer
 	var (
 		proto *internalv1pb.InternalInvokeRequestStream

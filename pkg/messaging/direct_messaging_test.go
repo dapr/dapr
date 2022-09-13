@@ -29,8 +29,9 @@ func newDirectMessaging() *directMessaging {
 func TestDestinationHeaders(t *testing.T) {
 	t.Run("destination header present", func(t *testing.T) {
 		appID := "test1"
-		req := invokev1.NewInvokeMethodRequest("GET")
-		req.WithMetadata(map[string][]string{})
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.addDestinationAppIDHeaderToMetadata(appID, req)
@@ -41,8 +42,9 @@ func TestDestinationHeaders(t *testing.T) {
 
 func TestForwardedHeaders(t *testing.T) {
 	t.Run("forwarded headers present", func(t *testing.T) {
-		req := invokev1.NewInvokeMethodRequest("GET")
-		req.WithMetadata(map[string][]string{})
+		req := invokev1.NewInvokeMethodRequest("GET").
+			WithMetadata(map[string][]string{})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.hostAddress = "1"
@@ -67,6 +69,7 @@ func TestForwardedHeaders(t *testing.T) {
 			fasthttp.HeaderXForwardedHost: {"originalXForwardedHost"},
 			fasthttp.HeaderForwarded:      {"originalForwarded"},
 		})
+		defer req.Close()
 
 		dm := newDirectMessaging()
 		dm.hostAddress = "1"
