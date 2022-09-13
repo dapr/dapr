@@ -1,0 +1,79 @@
+/*
+Copyright 2022 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.components.v1;
+
+import "dapr/proto/components/v1/common.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
+
+// PubSub service provides a gRPC interface for pubsub components.
+service PubSub {
+  // Initializes the pubsub component with the given metadata.
+  rpc Init(PubSubInitRequest) returns (PubSubInitResponse) {}
+
+  // Returns a list of implemented pubsub features.
+  rpc Features(FeaturesRequest) returns (FeaturesResponse) {}
+
+  // Publish publishes a new message for the given topic.
+  rpc Publish(PublishRequest) returns (PublishResponse) {}
+
+  // Subscribe returns a server-stream of messages for the given topic.
+  rpc Subscribe(SubscribeRequest) returns (stream Message) {}
+
+  // Ping the state store. Used for liveness porpuses.
+  rpc Ping(PingRequest) returns (PingResponse) {}
+}
+
+// PubSubInitRequest is the request for initializing the pubsub component.
+message PubSubInitRequest {
+  MetadataRequest metadata = 1;
+}
+
+// reserved for future-proof extensibility
+message PubSubInitResponse {}
+
+message PublishRequest {
+  bytes data = 1;
+  // The pubsub name.
+  string pubsub_name = 2;
+  // The publishing topic.
+  string topic = 3;
+  // Message metadata.
+  map<string, string> metadata = 4;
+  // The data content type.
+  string content_type = 5;
+}
+
+// reserved for future-proof extensibility
+message PublishResponse {}
+
+message SubscribeRequest {
+  // The topic desired to be subscribed
+  string topic = 1;
+  // Metadata related subscribe request.
+  map<string, string> metadata = 2;
+}
+
+message Message {
+  // The message content.
+  bytes data = 1;
+  // The topic where the message come from.
+  string topic = 2;
+  // The message related metadata.
+  map<string, string> metadata = 3;
+  // The message content type.
+  string content_type = 4;
+}
