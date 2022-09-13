@@ -4,6 +4,9 @@ metadata:
   name: dapr-dashboard
   labels:
     app: dapr-dashboard
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
