@@ -98,7 +98,6 @@ func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName st
 	netCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
 	_, span := tracer.Start(netCtx, spanName, kindOption)
-	diagUtils.SpanToFastHTTPContext(ctx, span)
 	return ctx, span
 }
 

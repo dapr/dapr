@@ -160,6 +160,10 @@ func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishE
 	return &emptypb.Empty{}, nil
 }
 
+func (m *mockGRPCAPI) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
+	return &runtimev1pb.BulkPublishResponse{}, nil
+}
+
 func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	return &commonv1pb.InvokeResponse{}, nil
 }
@@ -1797,6 +1801,21 @@ func TestPublishTopic(t *testing.T) {
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
 				return &daprt.MockPubSub{}
 			},
+			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+				if req.Topic == "error-topic" {
+					return pubsub.BulkPublishResponse{}, errors.New("error when publish")
+				}
+
+				if req.Topic == "err-not-found" {
+					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
+				}
+
+				if req.Topic == "err-not-allowed" {
+					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				}
+
+				return pubsub.BulkPublishResponse{}, nil
+			},
 		},
 	}
 	server := startTestServerAPI(port, srv)
@@ -1834,6 +1853,38 @@ func TestPublishTopic(t *testing.T) {
 	assert.Equal(t, codes.NotFound, status.Code(err))
 
 	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName: "pubsub",
+		Topic:      "err-not-allowed",
+	})
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+	})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "topic",
+	})
+	assert.Nil(t, err)
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "error-topic",
+	})
+	assert.Equal(t, codes.Internal, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
+		PubsubName: "pubsub",
+		Topic:      "err-not-found",
+	})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+
+	_, err = client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 		PubsubName: "pubsub",
 		Topic:      "err-not-allowed",
 	})
