@@ -528,12 +528,15 @@ jobs:
       - name: Compress logs
         if: always()
         run: |
-          test -f ${{ env.DAPR_CONTAINER_LOG_PATH }} && \
-            gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
-          test -f ${{ env.DAPR_TEST_LOG_PATH }} && \
-            gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
-          test -f sntp.cap && \
-            gzip --fast sntp.cap
+          test ${{ env.DAPR_CONTAINER_LOG_PATH }} \
+            && gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }} \
+            || true
+          test ${{ env.DAPR_TEST_LOG_PATH }} \
+            && gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }} \
+            || true
+          test -f sntp.cap \
+            && gzip --fast sntp.cap \
+            || true
         shell: bash
       - name: Upload tcpdump
         if: always() && env.TCP_DUMPS == 'true'
