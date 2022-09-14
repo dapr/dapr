@@ -33,7 +33,7 @@ service PubSub {
   // Subscribe returns a server-stream of messages for the given topic.
   rpc Subscribe(SubscribeRequest) returns (stream Message) {}
 
-  // Ping the state store. Used for liveness porpuses.
+  // Ping the pubsub. Used for liveness porpuses.
   rpc Ping(PingRequest) returns (PingResponse) {}
 }
 

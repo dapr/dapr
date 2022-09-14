@@ -30,7 +30,7 @@ type PubSubClient interface {
 	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error)
 	// Subscribe returns a server-stream of messages for the given topic.
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (PubSub_SubscribeClient, error)
-	// Ping the state store. Used for liveness porpuses.
+	// Ping the pubsub. Used for liveness porpuses.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 }
 
@@ -122,7 +122,7 @@ type PubSubServer interface {
 	Publish(context.Context, *PublishRequest) (*PublishResponse, error)
 	// Subscribe returns a server-stream of messages for the given topic.
 	Subscribe(*SubscribeRequest, PubSub_SubscribeServer) error
-	// Ping the state store. Used for liveness porpuses.
+	// Ping the pubsub. Used for liveness porpuses.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
 }
 
