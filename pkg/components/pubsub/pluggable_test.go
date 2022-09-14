@@ -43,6 +43,30 @@ import (
 	"google.golang.org/grpc"
 )
 
+type ackStreamMock struct {
+	grpc.ClientStream
+	ctx          context.Context
+	sendCalled   atomic.Int64
+	onSendCalled func(*proto.AckMessageRequest)
+	sendErr      error
+}
+
+func (m *ackStreamMock) Send(msg *proto.AckMessageRequest) error {
+	m.sendCalled.Add(1)
+	if m.onSendCalled != nil {
+		m.onSendCalled(msg)
+	}
+	return m.sendErr
+}
+
+func (m *ackStreamMock) CloseAndRecv() (*proto.AckMessageResponse, error) {
+	return nil, nil
+}
+
+func (m *ackStreamMock) Context() context.Context {
+	return m.ctx
+}
+
 var testLogger = logger.NewLogger("pubsub-pluggable-test")
 
 type server struct {
@@ -61,6 +85,28 @@ type server struct {
 	subscribeChan     chan *proto.Message
 	pingCalled        atomic.Int64
 	pingErr           error
+	onAckReceived     func(*proto.AckMessageRequest)
+	ackCalled         atomic.Int64
+	ackErr            error
+}
+
+//nolint:nosnakecase
+func (s *server) AckMessage(svc proto.PubSub_AckMessageServer) error {
+	s.ackCalled.Add(1)
+
+	if s.onAckReceived != nil {
+		go func() {
+			for {
+				msg, err := svc.Recv()
+				if err != nil {
+					return
+				}
+				s.onAckReceived(msg)
+			}
+		}()
+	}
+
+	return s.ackErr
 }
 
 func (s *server) Init(_ context.Context, req *proto.PubSubInitRequest) (*proto.PubSubInitResponse, error) {
@@ -110,6 +156,9 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		client := proto.NewPubSubClient(cci)
 		pubsub := fromConnector(testLogger, pluggable.NewGRPCConnector(components.Pluggable{}, proto.NewPubSubClient))
 		pubsub.Client = client
+		pubsub.ackStream = &ackStreamMock{
+			ctx: context.TODO(),
+		}
 		return pubsub
 	})
 
@@ -152,6 +201,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, int64(1), srv.featuresCalled.Load())
 			assert.Equal(t, int64(1), srv.initCalled.Load())
+			assert.NotNil(t, ps.ackStream)
 		})
 	}
 
@@ -269,10 +319,29 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
+		var ackCalled sync.WaitGroup
+		ackCalled.Add(len(messages))
+
+		totalAckErrors := atomic.Int64{}
+
+		streamMock := &ackStreamMock{
+			onSendCalled: func(m *proto.AckMessageRequest) {
+				if m.Error != nil {
+					totalAckErrors.Add(1)
+				}
+				ackCalled.Done()
+			},
+		}
+		ps.ackStream = streamMock
+
 		var messagesWg sync.WaitGroup
 
 		messagesWg.Add(len(messages))
 		called := atomic.Int64{}
+
+		handleErrors := make(chan error, 1) // simulating an ack error
+		handleErrors <- errors.New("fake-error")
+		close(handleErrors)
 
 		err = ps.Subscribe(context.Background(), pubsub.SubscribeRequest{
 			Topic: fakeTopic,
@@ -280,14 +349,17 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			called.Add(1)
 			messagesWg.Done()
 			assert.Contains(t, messagesData, m.Data)
-			return nil
+			return <-handleErrors
 		})
+		require.NoError(t, err)
 
 		subscribeCalledWg.Wait()
 		messagesWg.Wait()
+		ackCalled.Wait()
 
-		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.subscribeCalled.Load())
 		assert.Equal(t, int64(len(messages)), called.Load())
+		assert.Equal(t, int64(len(messages)), streamMock.sendCalled.Load())
+		assert.Equal(t, int64(1), totalAckErrors.Load()) // at least one message should be an error
 	})
 }

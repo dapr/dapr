@@ -33,9 +33,29 @@ service PubSub {
   // Subscribe returns a server-stream of messages for the given topic.
   rpc Subscribe(SubscribeRequest) returns (stream Message) {}
 
+  // AckMessage acknowledge a handled message either failures or successes.
+  rpc AckMessage(stream AckMessageRequest) returns (AckMessageResponse) {}
+
   // Ping the pubsub. Used for liveness porpuses.
   rpc Ping(PingRequest) returns (PingResponse) {}
 }
+
+// Used for describing errors when ack'ing messages.
+message AckMessageError {
+  string message = 1;
+}
+
+// Used for acknowledge a message.
+message AckMessageRequest {
+  // The unique message ID.
+  string message_id = 1;
+  // Optional, should not be fulfilled when the message was successfully
+  // handled.
+  AckMessageError error = 2;
+}
+
+// reserved for future-proof extensibility
+message AckMessageResponse {}
 
 // PubSubInitRequest is the request for initializing the pubsub component.
 message PubSubInitRequest {
@@ -76,4 +96,6 @@ message Message {
   map<string, string> metadata = 3;
   // The message content type.
   string content_type = 4;
+  // The message {transient} ID. Its used for ack'ing it later.
+  string id = 5;
 }

@@ -31,10 +31,10 @@ import (
 // grpcPubSub is a implementation of a pubsub over a gRPC Protocol.
 type grpcPubSub struct {
 	*pluggable.GRPCConnector[proto.PubSubClient]
-	pubsub.PubSub
 	// features the list of state store implemented features features.
-	features []pubsub.Feature
-	logger   logger.Logger
+	features  []pubsub.Feature
+	logger    logger.Logger
+	ackStream proto.PubSub_AckMessageClient //nolint:nosnakecase
 }
 
 // Init initializes the grpc pubsub passing out the metadata to the grpc component.
@@ -63,6 +63,13 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 	_, err = p.Client.Init(p.Context, &proto.PubSubInitRequest{
 		Metadata: protoMetadata,
 	})
+
+	if err != nil {
+		return err
+	}
+
+	ackStream, err := p.Client.AckMessage(p.Context)
+	p.ackStream = ackStream
 	return err
 }
 
@@ -82,6 +89,32 @@ func (p *grpcPubSub) Publish(req *pubsub.PublishRequest) error {
 	return err
 }
 
+// handleAndAck handles the message and ack in case of success or failure.
+func (p *grpcPubSub) handleAndAck(ctx context.Context, msg *proto.Message, handler pubsub.Handler) {
+	m := pubsub.NewMessage{
+		Data:        msg.Data,
+		ContentType: &msg.ContentType,
+		Topic:       msg.Topic,
+		Metadata:    msg.Metadata,
+	}
+
+	var ackError *proto.AckMessageError
+
+	if err := handler(ctx, &m); err != nil {
+		p.logger.Errorf("error when handling message on topic %s", msg.Topic)
+		ackError = &proto.AckMessageError{
+			Message: err.Error(),
+		}
+	}
+
+	if err := p.ackStream.Send(&proto.AckMessageRequest{
+		MessageId: msg.Id,
+		Error:     ackError,
+	}); err != nil {
+		p.logger.Errorf("error when ack'ing message %s from topic %s", msg.Id, msg.Topic)
+	}
+}
+
 // Subscribe subscribes to a given topic and callback the handler when a new message arrives.
 func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	protoReq := proto.SubscribeRequest{
@@ -99,22 +132,17 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 			if err == io.EOF { // no more messages
 				return
 			}
+
 			if err != nil {
 				p.logger.Errorf("failed to receive message: %v", err)
 				return
 			}
 
 			p.logger.Debugf("received message from stream on topic %s", resp.Topic)
-			m := pubsub.NewMessage{
-				Data:        resp.Data,
-				ContentType: &resp.ContentType,
-				Topic:       resp.Topic,
-				Metadata:    resp.Metadata,
-			}
 
-			if err := handler(streamCtx, &m); err != nil { // TODO should we add retries?
-				p.logger.Errorf("error when handling message on topic %s", resp.Topic)
-			}
+			go func(message *proto.Message) {
+				p.handleAndAck(streamCtx, message, handler)
+			}(resp)
 		}
 	}()
 

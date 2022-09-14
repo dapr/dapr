@@ -30,6 +30,8 @@ type PubSubClient interface {
 	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error)
 	// Subscribe returns a server-stream of messages for the given topic.
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (PubSub_SubscribeClient, error)
+	// AckMessage acknowledge a handled message either failures or successes.
+	AckMessage(ctx context.Context, opts ...grpc.CallOption) (PubSub_AckMessageClient, error)
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 }
@@ -101,6 +103,40 @@ func (x *pubSubSubscribeClient) Recv() (*Message, error) {
 	return m, nil
 }
 
+func (c *pubSubClient) AckMessage(ctx context.Context, opts ...grpc.CallOption) (PubSub_AckMessageClient, error) {
+	stream, err := c.cc.NewStream(ctx, &PubSub_ServiceDesc.Streams[1], "/dapr.proto.components.v1.PubSub/AckMessage", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &pubSubAckMessageClient{stream}
+	return x, nil
+}
+
+type PubSub_AckMessageClient interface {
+	Send(*AckMessageRequest) error
+	CloseAndRecv() (*AckMessageResponse, error)
+	grpc.ClientStream
+}
+
+type pubSubAckMessageClient struct {
+	grpc.ClientStream
+}
+
+func (x *pubSubAckMessageClient) Send(m *AckMessageRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *pubSubAckMessageClient) CloseAndRecv() (*AckMessageResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(AckMessageResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *pubSubClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
 	out := new(PingResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.PubSub/Ping", in, out, opts...)
@@ -122,6 +158,8 @@ type PubSubServer interface {
 	Publish(context.Context, *PublishRequest) (*PublishResponse, error)
 	// Subscribe returns a server-stream of messages for the given topic.
 	Subscribe(*SubscribeRequest, PubSub_SubscribeServer) error
+	// AckMessage acknowledge a handled message either failures or successes.
+	AckMessage(PubSub_AckMessageServer) error
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
 }
@@ -141,6 +179,9 @@ func (UnimplementedPubSubServer) Publish(context.Context, *PublishRequest) (*Pub
 }
 func (UnimplementedPubSubServer) Subscribe(*SubscribeRequest, PubSub_SubscribeServer) error {
 	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
+}
+func (UnimplementedPubSubServer) AckMessage(PubSub_AckMessageServer) error {
+	return status.Errorf(codes.Unimplemented, "method AckMessage not implemented")
 }
 func (UnimplementedPubSubServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
@@ -232,6 +273,32 @@ func (x *pubSubSubscribeServer) Send(m *Message) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _PubSub_AckMessage_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(PubSubServer).AckMessage(&pubSubAckMessageServer{stream})
+}
+
+type PubSub_AckMessageServer interface {
+	SendAndClose(*AckMessageResponse) error
+	Recv() (*AckMessageRequest, error)
+	grpc.ServerStream
+}
+
+type pubSubAckMessageServer struct {
+	grpc.ServerStream
+}
+
+func (x *pubSubAckMessageServer) SendAndClose(m *AckMessageResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *pubSubAckMessageServer) Recv() (*AckMessageRequest, error) {
+	m := new(AckMessageRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func _PubSub_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PingRequest)
 	if err := dec(in); err != nil {
@@ -279,6 +346,11 @@ var PubSub_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Subscribe",
 			Handler:       _PubSub_Subscribe_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "AckMessage",
+			Handler:       _PubSub_AckMessage_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "dapr/proto/components/v1/pubsub.proto",
