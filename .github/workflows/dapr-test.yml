@@ -95,6 +95,8 @@ jobs:
             # Dapr E2E test
 
             🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+
+            Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
         uses: actions/checkout@v2
