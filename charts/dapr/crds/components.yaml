@@ -70,6 +70,20 @@ spec:
                 type: string
               version:
                 type: string
+              validations:
+                type: array
+                description: Validation is a key-value array to validate micrologic metadata.
+                items:
+                  description: Key-value validation metadata
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: Metadata's key.
+                    value:
+                      type: string
+                      description: It is used to determine how to handle the incoming metadata key field.
+                      enum: ["required", "optional", "denied"]
             required:
             - metadata
             - type

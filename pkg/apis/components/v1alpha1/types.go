@@ -46,6 +46,8 @@ type ComponentSpec struct {
 	Metadata     []MetadataItem `json:"metadata"`
 	// +optional
 	InitTimeout string `json:"initTimeout"`
+	// +optional
+	Validations []Validation `json:"validations"`
 }
 
 // MetadataItem is a name/value pair for a metadata.
@@ -55,6 +57,14 @@ type MetadataItem struct {
 	Value DynamicValue `json:"value,omitempty"`
 	// +optional
 	SecretKeyRef SecretKeyRef `json:"secretKeyRef,omitempty"`
+}
+
+// Validation is a key-value array to validate micrologic metadata.
+type Validation struct {
+	// +optional
+	Name string `json:"name"`
+	// +optional
+	Value string `json:"value"`
 }
 
 // SecretKeyRef is a reference to a secret holding the value for the metadata item. Name is the secret name, and key is the field in the secret.

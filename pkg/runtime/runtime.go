@@ -1427,8 +1427,9 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	err = binding.Init(bindings.Metadata{Base: contribMetadata.Base{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-		Name:       c.ObjectMeta.Name,
+		Validations: a.convertValidationToMap(c.Spec.Validations),
+		Properties:  a.convertMetadataItemsToProperties(c.Spec.Metadata),
+		Name:        c.ObjectMeta.Name,
 	}})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
@@ -1458,8 +1459,9 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 
 	if binding != nil {
 		err := binding.Init(bindings.Metadata{Base: contribMetadata.Base{
-			Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-			Name:       c.ObjectMeta.Name,
+			Validations: a.convertValidationToMap(c.Spec.Validations),
+			Properties:  a.convertMetadataItemsToProperties(c.Spec.Metadata),
+			Name:        c.ObjectMeta.Name,
 		}})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
@@ -1473,108 +1475,111 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
-	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
+func (a *DaprRuntime) initConfiguration(c componentsV1alpha1.Component) error {
+	store, err := a.configurationStoreRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
-		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
+		props := a.convertMetadataItemsToProperties(c.Spec.Metadata)
 		err := store.Init(configuration.Metadata{Base: contribMetadata.Base{
-			Properties: props,
+			Validations: a.convertValidationToMap(c.Spec.Validations),
+			Properties:  props,
 		}})
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 			return NewInitError(InitComponentFailure, fName, err)
 		}
 
-		a.configurationStores[s.ObjectMeta.Name] = store
-		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
+		a.configurationStores[c.ObjectMeta.Name] = store
+		diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	}
 
 	return nil
 }
 
-func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
+func (a *DaprRuntime) initLock(c componentsV1alpha1.Component) error {
 	// create the component
-	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
+	store, err := a.lockStoreRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store == nil {
 		return nil
 	}
 	// initialization
-	props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
+	props := a.convertMetadataItemsToProperties(c.Spec.Metadata)
 	err = store.InitLockStore(lock.Metadata{Base: contribMetadata.Base{
-		Properties: props,
+		Validations: a.convertValidationToMap(c.Spec.Validations),
+		Properties:  props,
 	}})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		return NewInitError(InitComponentFailure, fName, err)
 	}
 	// save lock related configuration
-	a.lockStores[s.ObjectMeta.Name] = store
-	err = lockLoader.SaveLockConfiguration(s.ObjectMeta.Name, props)
+	a.lockStores[c.ObjectMeta.Name] = store
+	err = lockLoader.SaveLockConfiguration(c.ObjectMeta.Name, props)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
-		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		return NewInitError(InitComponentFailure, fName, wrapError)
 	}
-	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
+	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 
 	return nil
 }
 
 // Refer for state store api decision  https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
-func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
-	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
+func (a *DaprRuntime) initState(c componentsV1alpha1.Component) error {
+	store, err := a.stateStoreRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
-		secretStoreName := a.authSecretStoreOrDefault(s)
+		secretStoreName := a.authSecretStoreOrDefault(c)
 
 		secretStore := a.getSecretStore(secretStoreName)
-		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
+		encKeys, encErr := encryption.ComponentEncryptionKey(c, secretStore)
 		if encErr != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-			fName := fmt.Sprintf(componentFormat+" encyption", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat+" encyption", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 			return NewInitError(CreateComponentFailure, fName, err)
 		}
 
 		if encKeys.Primary.Key != "" {
-			ok := encryption.AddEncryptedStateStore(s.ObjectMeta.Name, encKeys)
+			ok := encryption.AddEncryptedStateStore(c.ObjectMeta.Name, encKeys)
 			if ok {
-				log.Infof("automatic encryption enabled for state store %s", s.ObjectMeta.Name)
+				log.Infof("automatic encryption enabled for state store %s", c.ObjectMeta.Name)
 			}
 		}
 
-		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
+		props := a.convertMetadataItemsToProperties(c.Spec.Metadata)
 		err = store.Init(state.Metadata{Base: contribMetadata.Base{
-			Properties: props,
+			Validations: a.convertValidationToMap(c.Spec.Validations),
+			Properties:  props,
 		}})
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 			return NewInitError(InitComponentFailure, fName, err)
 		}
 
-		a.stateStores[s.ObjectMeta.Name] = store
-		err = stateLoader.SaveStateConfiguration(s.ObjectMeta.Name, props)
+		a.stateStores[c.ObjectMeta.Name] = store
+		err = stateLoader.SaveStateConfiguration(c.ObjectMeta.Name, props)
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
-			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 			return NewInitError(InitComponentFailure, fName, wrapError)
 		}
 
@@ -1585,15 +1590,15 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 			if actorStoreSpecified == "true" {
 				a.actorStateStoreLock.Lock()
 				if a.actorStateStoreName == "" {
-					log.Infof("detected actor state store: %s", s.ObjectMeta.Name)
-					a.actorStateStoreName = s.ObjectMeta.Name
-				} else if a.actorStateStoreName != s.ObjectMeta.Name {
-					log.Fatalf("detected duplicate actor state store: %s", s.ObjectMeta.Name)
+					log.Infof("detected actor state store: %s", c.ObjectMeta.Name)
+					a.actorStateStoreName = c.ObjectMeta.Name
+				} else if a.actorStateStoreName != c.ObjectMeta.Name {
+					log.Fatalf("detected duplicate actor state store: %s", c.ObjectMeta.Name)
 				}
 				a.actorStateStoreLock.Unlock()
 			}
 		}
-		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
+		diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	}
 
 	return nil
@@ -1726,7 +1731,8 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	properties["consumerID"] = consumerID
 
 	err = pubSub.Init(pubsub.Metadata{Base: contribMetadata.Base{
-		Properties: properties,
+		Validations: a.convertValidationToMap(c.Spec.Validations),
+		Properties:  properties,
 	}})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
@@ -2627,7 +2633,8 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 	}
 
 	err = secretStore.Init(secretstores.Metadata{Base: contribMetadata.Base{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+		Validations: a.convertValidationToMap(c.Spec.Validations),
+		Properties:  a.convertMetadataItemsToProperties(c.Spec.Metadata),
 	}})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
@@ -2638,6 +2645,26 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 	a.secretStores[c.ObjectMeta.Name] = secretStore
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	return nil
+}
+
+func (a *DaprRuntime) convertValidationToMap(validations []componentsV1alpha1.Validation) map[string]contribMetadata.ValidationType {
+	validationMap := make(map[string]contribMetadata.ValidationType)
+
+	for _, item := range validations {
+		val := contribMetadata.ValidationType(item.Value)
+		switch val {
+		case contribMetadata.Required:
+			validationMap[item.Name] = val
+		case contribMetadata.Optional:
+			validationMap[item.Name] = val
+		case contribMetadata.Denied:
+			validationMap[item.Name] = val
+		default:
+			log.Errorf("field name: %s, unknown validation emum value", item.Name)
+		}
+	}
+
+	return validationMap
 }
 
 func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha1.MetadataItem) map[string]string {
