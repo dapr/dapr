@@ -17,9 +17,11 @@ import (
 	"context"
 	"time"
 
-	contribPubsub "github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/dapr/utils"
 	"github.com/google/uuid"
+
+	"github.com/dapr/dapr/utils"
+
+	contribPubsub "github.com/dapr/components-contrib/pubsub"
 )
 
 const (
