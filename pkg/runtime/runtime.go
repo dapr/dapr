@@ -1746,10 +1746,6 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	}
 	properties["consumerID"] = consumerID
 
-	err = pubSub.Init(pubsub.Metadata{Base: contribMetadata.Base{
-		Validations: a.convertValidationToMap(c.Spec.Validations),
-		Properties:  properties,
-	}})
 	err = pubSub.Init(pubsub.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
