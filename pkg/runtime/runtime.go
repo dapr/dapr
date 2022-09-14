@@ -1765,21 +1765,20 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) error {
+func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 	ps, ok := a.pubSubs[req.PubsubName]
 	if !ok {
-		return runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
 	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
-		return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(a.ctx, req.PubsubName, resiliency.Pubsub)
-	return policy(func(ctx context.Context) (err error) {
-		_, err = ps.component.BulkPublish(req)
-		return err
-	})
+	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
+		return bulkPublisher.BulkPublish(req)
+	}
+	return pubsub.BulkPublishResponse{}, errors.Errorf("pubsub %s does not implement the BulkPublish method", req.PubsubName)
 }
 
 // Publish is an adapter method for the runtime to pre-validate publish requests
@@ -1915,19 +1914,21 @@ func (a *DaprRuntime) initNameResolution() error {
 
 func (a *DaprRuntime) sendBulkToDeadLetter(
 	name string, msg *pubsub.BulkMessage, deadLetterTopic string,
-	bulkResponses []pubsub.BulkSubscribeResponseEntry,
+	entryIDIndexMap *map[string]int, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
 ) error {
 	data := make([]pubsub.BulkMessageEntry, 0)
 
-	for _, message := range msg.Entries {
-		entryID, err := strconv.Atoi(message.EntryID)
-		if err != nil {
-			log.Errorf("error sending message to dead letter as entry id not provided correctly, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
-		}
-		if bulkResponses == nil || bulkResponses[entryID].Error != nil {
-			data = append(data, message)
+	if bulkResponses == nil {
+		data = msg.Entries
+	} else {
+		for _, message := range msg.Entries {
+			entryID := (*entryIDIndexMap)[message.EntryID]
+			if (*bulkResponses)[entryID].Error != nil {
+				data = append(data, message)
+			}
 		}
 	}
+
 	req := &pubsub.BulkPublishRequest{
 		Entries:    data,
 		PubsubName: name,
@@ -1935,7 +1936,7 @@ func (a *DaprRuntime) sendBulkToDeadLetter(
 		Metadata:   msg.Metadata,
 	}
 
-	err := a.BulkPublish(req)
+	_, err := a.BulkPublish(req)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 	}
@@ -1943,242 +1944,244 @@ func (a *DaprRuntime) sendBulkToDeadLetter(
 }
 
 func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.Runner,
-	name string, topic string, route TopicRouteElem,
+	psName string, topic string, route TopicRouteElem,
 ) error {
-	err := a.pubSubs[name].component.BulkSubscribe(ctx, pubsub.SubscribeRequest{
-		Topic:    topic,
-		Metadata: route.metadata,
-	}, func(ctx context.Context, msg *pubsub.BulkMessage) ([]pubsub.BulkSubscribeResponseEntry, error) {
-		if msg.Metadata == nil {
-			msg.Metadata = make(map[string]string, 1)
-		}
-
-		msg.Metadata[pubsubName] = name
-
-		rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
-		if err != nil {
-			log.Errorf("error deserializing pubsub metadata: %s", err)
-			if route.deadLetterTopic != "" {
-				if dlqErr := a.sendBulkToDeadLetter(name, msg, route.deadLetterTopic, nil); dlqErr == nil {
-					// dlq has been configured and whole bulk of messages is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-					return nil, nil
-				}
+	if bulkSubscriber, ok := a.pubSubs[psName].component.(pubsub.BulkSubscriber); ok {
+		return bulkSubscriber.BulkSubscribe(ctx, pubsub.SubscribeRequest{
+			Topic:    topic,
+			Metadata: route.metadata,
+		}, func(ctx context.Context, msg *pubsub.BulkMessage) ([]pubsub.BulkSubscribeResponseEntry, error) {
+			if msg.Metadata == nil {
+				msg.Metadata = make(map[string]string, 1)
 			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
-			return nil, err
-		}
 
-		cloudEvents := make([]map[string]interface{}, 0)
-		routePathBulkMessageMap := make(map[string]pubsubBulkSubscribedMessage, 0)
-		bulkResponses := make([]pubsub.BulkSubscribeResponseEntry, len(msg.Entries))
-		entryIDIndexMap := make(map[string]int)
-		hasAnyError := false
-		for i, message := range msg.Entries {
-			if message.EntryID == "" {
-				log.Warnf("Invalid entry id %v received while processing bulk pub/sub event, won't be able to process it", message.EntryID)
-			}
-			entryIDIndexMap[message.EntryID] = i
-			if rawPayload {
-				rPath, shouldProcess, routeErr := findMatchingRoute(route.rules, string(message.Event))
-				if routeErr != nil {
-					log.Errorf("error finding matching route for event in bulk subscribe %s and topic %s for entry id %s: %s", name, topic, message.EntryID, err)
-					bulkResponses[i].EntryID = message.EntryID
-					bulkResponses[i].Error = err
-					hasAnyError = true
-					continue
-				}
-				if !shouldProcess {
-					// The event does not match any route specified so ignore it.
-					log.Debugf("no matching route for event in pubsub %s and topic %s; skipping", name, topic)
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), topic, 0)
-					if route.deadLetterTopic != "" {
-						_ = a.sendToDeadLetter(name, &pubsub.NewMessage{
-							Data:        message.Event,
-							Topic:       topic,
-							Metadata:    message.Metadata,
-							ContentType: &message.ContentType,
-						}, route.deadLetterTopic)
-					}
-					bulkResponses[i].EntryID = message.EntryID
-					bulkResponses[i].Error = nil
-					continue
-				}
-				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
-				childMessage := runtimePubsub.BulkSubscribeMessageItem{
-					Event:       dataB64,
-					Metadata:    message.Metadata,
-					EntryID:     message.EntryID,
-					ContentType: "application/octet-stream",
-				}
-				if val, ok := routePathBulkMessageMap[rPath]; ok {
-					val.rawData = append(val.rawData, childMessage)
-					val.entries = append(val.entries, &msg.Entries[i])
-					routePathBulkMessageMap[rPath] = val
-				} else {
-					rawDataItems := make([]runtimePubsub.BulkSubscribeMessageItem, 0)
-					rawDataItems = append(rawDataItems, childMessage)
-					entries := make([]*pubsub.BulkMessageEntry, 0)
-					entries = append(entries, &msg.Entries[i])
-					psm := pubsubBulkSubscribedMessage{
-						cloudEvents: cloudEvents,
-						rawData:     rawDataItems,
-						entries:     entries,
-						topic:       msg.Topic,
-						metadata:    msg.Metadata,
-						pubsub:      name,
-					}
-					routePathBulkMessageMap[rPath] = psm
-				}
-			} else {
-				var cloudEvent map[string]interface{}
-				err = json.Unmarshal(message.Event, &cloudEvent)
-				if err != nil {
-					log.Errorf("error deserializing one of the messages in bulk cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
-					bulkResponses[i].Error = err
-					bulkResponses[i].EntryID = message.EntryID
-					hasAnyError = true
-					continue
-				}
+			msg.Metadata[pubsubName] = psName
 
-				if pubsub.HasExpired(cloudEvent) {
-					log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), topic, 0)
-					if route.deadLetterTopic != "" {
-						_ = a.sendToDeadLetter(name, &pubsub.NewMessage{
-							Data:        message.Event,
-							Topic:       topic,
-							Metadata:    message.Metadata,
-							ContentType: &message.ContentType,
-						}, route.deadLetterTopic)
-					}
-					bulkResponses[i].EntryID = message.EntryID
-					bulkResponses[i].Error = nil
-					continue
-				}
-				rPath, shouldProcess, routeErr := findMatchingRoute(route.rules, cloudEvent)
-				if routeErr != nil {
-					log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, topic, err)
-					bulkResponses[i].Error = err
-					bulkResponses[i].EntryID = message.EntryID
-					hasAnyError = true
-					continue
-				}
-				if !shouldProcess {
-					// The event does not match any route specified so ignore it.
-					log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, topic)
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), topic, 0)
-					if route.deadLetterTopic != "" {
-						_ = a.sendToDeadLetter(name, &pubsub.NewMessage{
-							Data:        message.Event,
-							Topic:       topic,
-							Metadata:    message.Metadata,
-							ContentType: &message.ContentType,
-						}, route.deadLetterTopic)
-					}
-					bulkResponses[i].EntryID = message.EntryID
-					bulkResponses[i].Error = nil
-					continue
-				}
-				childMessage := runtimePubsub.BulkSubscribeMessageItem{
-					Event:       cloudEvent,
-					Metadata:    message.Metadata,
-					EntryID:     message.EntryID,
-					ContentType: contenttype.CloudEventContentType,
-				}
-
-				if val, ok := routePathBulkMessageMap[rPath]; ok {
-					val.cloudEvents = append(val.cloudEvents, cloudEvent)
-					val.rawData = append(val.rawData, childMessage)
-					val.entries = append(val.entries, &msg.Entries[i])
-					routePathBulkMessageMap[rPath] = val
-				} else {
-					rawDataItems := make([]runtimePubsub.BulkSubscribeMessageItem, 0)
-					rawDataItems = append(rawDataItems, childMessage)
-					entries := make([]*pubsub.BulkMessageEntry, 0)
-					entries = append(entries, &msg.Entries[i])
-					cloudEvents = append(cloudEvents, cloudEvent)
-					psm := pubsubBulkSubscribedMessage{
-						cloudEvents: cloudEvents,
-						rawData:     rawDataItems,
-						entries:     entries,
-						topic:       msg.Topic,
-						metadata:    msg.Metadata,
-						pubsub:      name,
-					}
-					routePathBulkMessageMap[rPath] = psm
-				}
-			}
-		}
-		for path, psm := range routePathBulkMessageMap {
-			envelope := runtimePubsub.NewBulkSubscribeEnvelope(&runtimePubsub.BulkSubscribeEnvelope{
-				ID:       uuid.New().String(),
-				Topic:    topic,
-				Entries:  psm.rawData,
-				Pubsub:   name,
-				Metadata: msg.Metadata,
-			})
-			da, marshalErr := json.Marshal(&envelope)
-			if marshalErr != nil {
-				log.Errorf("error serializing bulk cloud event in pubsub %s and topic %s: %s", name, msg.Topic, err)
+			rawPayload, err := contribMetadata.IsRawPayload(route.metadata)
+			if err != nil {
+				log.Errorf("error deserializing pubsub metadata: %s", err)
 				if route.deadLetterTopic != "" {
-					ent := make([]pubsub.BulkMessageEntry, 0)
-					for _, entry := range psm.entries {
-						ent = append(ent, *entry)
-					}
-					bulkMsg := pubsub.BulkMessage{
-						Entries:  ent,
-						Topic:    msg.Topic,
-						Metadata: msg.Metadata,
-					}
-					if dlqErr := a.sendBulkToDeadLetter(name, &bulkMsg, route.deadLetterTopic, nil); dlqErr == nil {
-						// dlq has been configured and message is successfully sent to dlq.
+					if dlqErr := a.sendBulkToDeadLetter(psName, msg, route.deadLetterTopic, nil, nil); dlqErr == nil {
+						// dlq has been configured and whole bulk of messages is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-						for _, item := range psm.entries {
-							ind := entryIDIndexMap[item.EntryID]
-							bulkResponses[ind].EntryID = item.EntryID
-							bulkResponses[ind].Error = nil
-						}
-						continue
+						return nil, nil
 					}
 				}
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
-				for _, item := range psm.entries {
-					ind := entryIDIndexMap[item.EntryID]
-					bulkResponses[ind].EntryID = item.EntryID
-					bulkResponses[ind].Error = err
-				}
-				continue
+				return nil, err
 			}
-			psm.data = da
-			psm.path = path
-			err = policy(func(ctx context.Context) error {
-				switch a.runtimeConfig.ApplicationProtocol {
-				case HTTPProtocol:
-					psm := psm
-					errPub := a.publishBulkMessageHTTP(ctx, &psm, &bulkResponses, entryIDIndexMap)
-					return errPub
-				default:
-					return backoff.Permanent(errors.New("invalid application protocol"))
+
+			cloudEvents := make([]map[string]interface{}, 0)
+			routePathBulkMessageMap := make(map[string]pubsubBulkSubscribedMessage, 0)
+			bulkResponses := make([]pubsub.BulkSubscribeResponseEntry, len(msg.Entries))
+			entryIDIndexMap := make(map[string]int)
+			hasAnyError := false
+			for i, message := range msg.Entries {
+				if message.EntryID == "" {
+					log.Warnf("Invalid entry id %v received while processing bulk pub/sub event, won't be able to process it", message.EntryID)
 				}
-			})
-		}
-		if (err != nil || hasAnyError) && err != context.Canceled {
-			// Sending msg to dead letter queue.
-			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
-			if route.deadLetterTopic != "" {
-				if dlqErr := a.sendBulkToDeadLetter(name, msg, route.deadLetterTopic, bulkResponses); dlqErr == nil {
-					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
-					return nil, nil
+				entryIDIndexMap[message.EntryID] = i
+				if rawPayload {
+					rPath, shouldProcess, routeErr := findMatchingRoute(route.rules, string(message.Event))
+					if routeErr != nil {
+						log.Errorf("error finding matching route for event in bulk subscribe %s and topic %s for entry id %s: %s", psName, topic, message.EntryID, err)
+						bulkResponses[i].EntryID = message.EntryID
+						bulkResponses[i].Error = err
+						hasAnyError = true
+						continue
+					}
+					if !shouldProcess {
+						// The event does not match any route specified so ignore it.
+						log.Debugf("no matching route for event in pubsub %s and topic %s; skipping", psName, topic)
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), topic, 0)
+						if route.deadLetterTopic != "" {
+							_ = a.sendToDeadLetter(psName, &pubsub.NewMessage{
+								Data:        message.Event,
+								Topic:       topic,
+								Metadata:    message.Metadata,
+								ContentType: &message.ContentType,
+							}, route.deadLetterTopic)
+						}
+						bulkResponses[i].EntryID = message.EntryID
+						bulkResponses[i].Error = nil
+						continue
+					}
+					dataB64 := base64.StdEncoding.EncodeToString(message.Event)
+					childMessage := runtimePubsub.BulkSubscribeMessageItem{
+						Event:       dataB64,
+						Metadata:    message.Metadata,
+						EntryID:     message.EntryID,
+						ContentType: "application/octet-stream",
+					}
+					if val, ok := routePathBulkMessageMap[rPath]; ok {
+						val.rawData = append(val.rawData, childMessage)
+						val.entries = append(val.entries, &msg.Entries[i])
+						routePathBulkMessageMap[rPath] = val
+					} else {
+						rawDataItems := make([]runtimePubsub.BulkSubscribeMessageItem, 0)
+						rawDataItems = append(rawDataItems, childMessage)
+						entries := make([]*pubsub.BulkMessageEntry, 0)
+						entries = append(entries, &msg.Entries[i])
+						psm := pubsubBulkSubscribedMessage{
+							cloudEvents: cloudEvents,
+							rawData:     rawDataItems,
+							entries:     entries,
+							topic:       msg.Topic,
+							metadata:    msg.Metadata,
+							pubsub:      psName,
+						}
+						routePathBulkMessageMap[rPath] = psm
+					}
+				} else {
+					var cloudEvent map[string]interface{}
+					err = json.Unmarshal(message.Event, &cloudEvent)
+					if err != nil {
+						log.Errorf("error deserializing one of the messages in bulk cloud event in pubsub %s and topic %s: %s", psName, msg.Topic, err)
+						bulkResponses[i].Error = err
+						bulkResponses[i].EntryID = message.EntryID
+						hasAnyError = true
+						continue
+					}
+
+					if pubsub.HasExpired(cloudEvent) {
+						log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), topic, 0)
+						if route.deadLetterTopic != "" {
+							_ = a.sendToDeadLetter(psName, &pubsub.NewMessage{
+								Data:        message.Event,
+								Topic:       topic,
+								Metadata:    message.Metadata,
+								ContentType: &message.ContentType,
+							}, route.deadLetterTopic)
+						}
+						bulkResponses[i].EntryID = message.EntryID
+						bulkResponses[i].Error = nil
+						continue
+					}
+					rPath, shouldProcess, routeErr := findMatchingRoute(route.rules, cloudEvent)
+					if routeErr != nil {
+						log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], psName, topic, err)
+						bulkResponses[i].Error = err
+						bulkResponses[i].EntryID = message.EntryID
+						hasAnyError = true
+						continue
+					}
+					if !shouldProcess {
+						// The event does not match any route specified so ignore it.
+						log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], psName, topic)
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), topic, 0)
+						if route.deadLetterTopic != "" {
+							_ = a.sendToDeadLetter(psName, &pubsub.NewMessage{
+								Data:        message.Event,
+								Topic:       topic,
+								Metadata:    message.Metadata,
+								ContentType: &message.ContentType,
+							}, route.deadLetterTopic)
+						}
+						bulkResponses[i].EntryID = message.EntryID
+						bulkResponses[i].Error = nil
+						continue
+					}
+					childMessage := runtimePubsub.BulkSubscribeMessageItem{
+						Event:       cloudEvent,
+						Metadata:    message.Metadata,
+						EntryID:     message.EntryID,
+						ContentType: contenttype.CloudEventContentType,
+					}
+
+					if val, ok := routePathBulkMessageMap[rPath]; ok {
+						val.cloudEvents = append(val.cloudEvents, cloudEvent)
+						val.rawData = append(val.rawData, childMessage)
+						val.entries = append(val.entries, &msg.Entries[i])
+						routePathBulkMessageMap[rPath] = val
+					} else {
+						rawDataItems := make([]runtimePubsub.BulkSubscribeMessageItem, 0)
+						rawDataItems = append(rawDataItems, childMessage)
+						entries := make([]*pubsub.BulkMessageEntry, 0)
+						entries = append(entries, &msg.Entries[i])
+						cloudEvents = append(cloudEvents, cloudEvent)
+						psm := pubsubBulkSubscribedMessage{
+							cloudEvents: cloudEvents,
+							rawData:     rawDataItems,
+							entries:     entries,
+							topic:       msg.Topic,
+							metadata:    msg.Metadata,
+							pubsub:      psName,
+						}
+						routePathBulkMessageMap[rPath] = psm
+					}
 				}
 			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+			for path, psm := range routePathBulkMessageMap {
+				envelope := runtimePubsub.NewBulkSubscribeEnvelope(&runtimePubsub.BulkSubscribeEnvelope{
+					ID:       uuid.New().String(),
+					Topic:    topic,
+					Entries:  psm.rawData,
+					Pubsub:   psName,
+					Metadata: msg.Metadata,
+				})
+				da, marshalErr := json.Marshal(&envelope)
+				if marshalErr != nil {
+					log.Errorf("error serializing bulk cloud event in pubsub %s and topic %s: %s", psName, msg.Topic, err)
+					if route.deadLetterTopic != "" {
+						ent := make([]pubsub.BulkMessageEntry, 0)
+						for _, entry := range psm.entries {
+							ent = append(ent, *entry)
+						}
+						bulkMsg := pubsub.BulkMessage{
+							Entries:  ent,
+							Topic:    msg.Topic,
+							Metadata: msg.Metadata,
+						}
+						if dlqErr := a.sendBulkToDeadLetter(psName, &bulkMsg, route.deadLetterTopic, &entryIDIndexMap, nil); dlqErr == nil {
+							// dlq has been configured and message is successfully sent to dlq.
+							diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+							for _, item := range psm.entries {
+								ind := entryIDIndexMap[item.EntryID]
+								bulkResponses[ind].EntryID = item.EntryID
+								bulkResponses[ind].Error = nil
+							}
+							continue
+						}
+					}
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+					for _, item := range psm.entries {
+						ind := entryIDIndexMap[item.EntryID]
+						bulkResponses[ind].EntryID = item.EntryID
+						bulkResponses[ind].Error = err
+					}
+					continue
+				}
+				psm.data = da
+				psm.path = path
+				err = policy(func(ctx context.Context) error {
+					switch a.runtimeConfig.ApplicationProtocol {
+					case HTTPProtocol:
+						psm := psm
+						errPub := a.publishBulkMessageHTTP(ctx, &psm, &bulkResponses, entryIDIndexMap)
+						return errPub
+					default:
+						return backoff.Permanent(errors.New("invalid application protocol"))
+					}
+				})
+			}
+			if (err != nil || hasAnyError) && err != context.Canceled {
+				// Sending msg to dead letter queue.
+				// If no DLQ is configured, return error for backwards compatibility (component-level retry).
+				if route.deadLetterTopic != "" {
+					if dlqErr := a.sendBulkToDeadLetter(psName, msg, route.deadLetterTopic, &entryIDIndexMap, &bulkResponses); dlqErr == nil {
+						// dlq has been configured and message is successfully sent to dlq.
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
+						return nil, nil
+					}
+				}
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msg.Topic, 0)
+				return bulkResponses, err
+			}
 			return bulkResponses, err
-		}
-		return bulkResponses, err
-	})
-	return err
+		})
+	}
+	return errors.Errorf("pubsub %s does not implement the BulkSubscribe method", psName)
 }
 
 func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscribedMessage) error {

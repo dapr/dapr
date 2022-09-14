@@ -47,7 +47,7 @@ func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]interface{}
 	}
 	eventType := req.EventType
 	if eventType == "" {
-		eventType = contribPubsub.DefaultBulkCloudEventType
+		eventType = contribPubsub.DefaultBulkEventType
 	}
 
 	bulkSubEnvelope := map[string]interface{}{

@@ -3650,7 +3650,7 @@ func TestBulkSubscribe(t *testing.T) {
 		msgArr := make([]pubsub.BulkMessageEntry, 0)
 		msgArr = append(msgArr, nbei1, nbei2)
 
-		err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
