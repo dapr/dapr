@@ -54,6 +54,9 @@ rules:
     resources: ["components"]
     verbs: [ "get", "list", "watch"]
   - apiGroups: ["dapr.io"]
+    resources: ["pluggablecomponents"]
+    verbs: [ "get", "list", "watch"]
+  - apiGroups: ["dapr.io"]
     resources: ["configurations"]
     verbs: [ "get", "list", "watch"]
   - apiGroups: ["dapr.io"]
@@ -100,7 +103,7 @@ metadata:
   name: dashboard-reader
 rules:
 - apiGroups: ["", "dapr.io", "apps", "extensions"]
-  resources: ["deployments", "pods", "pods/log", "components", "configurations", "namespaces"]
+  resources: ["deployments", "pods", "pods/log", "components", "configurations", "namespaces", "pluggablecomponents"]
   verbs: ["get", "list"]
 ---
 kind: ClusterRoleBinding
