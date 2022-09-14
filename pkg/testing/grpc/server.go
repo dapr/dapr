@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package grpc
 
 import (
 	"context"
@@ -26,8 +26,19 @@ import (
 
 const bufSize = 1024 * 1024
 
-// PluggableComponentTestServerFor is used for creating a client factory that bootstrap a service and a client for the given pluggable component.
-func PluggableComponentTestServerFor[TServer any, TClient any](logger logger.Logger, registersvc func(*grpc.Server, TServer), clientFactory func(grpc.ClientConnInterface) TClient) func(svc TServer) (client TClient, cleanup func(), err error) {
+// TestServerFor returns a grpcServer factory that bootstraps a grpcserver backed by a buf connection (in memory), and returns the the given clientFactory instance to communicate with it.
+// it also provides cleanup function for close the grpcserver and client connection.
+//
+//	usage,
+//
+//		serverFactory := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *your_service_goes_here) {
+//				proto.RegisterMyService(s, svc) // your service
+//		}, proto.NewMyServiceClient)
+//
+//	 	client, cleanup, err := serverFactory(&your_service{})
+//		require.NoError(t, err)
+//		defer cleanup()
+func TestServerFor[TServer any, TClient any](logger logger.Logger, registersvc func(*grpc.Server, TServer), clientFactory func(grpc.ClientConnInterface) TClient) func(svc TServer) (client TClient, cleanup func(), err error) {
 	return func(srv TServer) (client TClient, cleanup func(), err error) {
 		lis := bufconn.Listen(bufSize)
 		s := grpc.NewServer()
@@ -46,8 +57,7 @@ func PluggableComponentTestServerFor[TServer any, TClient any](logger logger.Log
 			return zero, nil, err
 		}
 
-		pcClient := clientFactory(conn)
-		return pcClient, func() {
+		return clientFactory(conn), func() {
 			lis.Close()
 			conn.Close()
 		}, nil

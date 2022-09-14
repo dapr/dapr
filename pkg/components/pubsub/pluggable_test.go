@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
+	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
 
 	"github.com/dapr/kit/logger"
 
@@ -103,7 +104,7 @@ func (s *server) Subscribe(req *proto.SubscribeRequest, stream proto.PubSub_Subs
 }
 
 func TestPubSubPluggableCalls(t *testing.T) {
-	getPubSub := components.PluggableComponentTestServerFor(testLogger, func(s *grpc.Server, svc *server) {
+	getPubSub := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *server) {
 		proto.RegisterPubSubServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcPubSub {
 		client := proto.NewPubSubClient(cci)

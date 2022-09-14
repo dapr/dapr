@@ -66,7 +66,7 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 	return err
 }
 
-// Features list all implemented features.
+// Features lists all implemented features.
 func (p *grpcPubSub) Features() []pubsub.Feature {
 	return p.features
 }
@@ -82,7 +82,7 @@ func (p *grpcPubSub) Publish(req *pubsub.PublishRequest) error {
 	return err
 }
 
-// Subscrib subscribes to a given topic and callback the handler when a new message arrives.
+// Subscribe subscribes to a given topic and callback the handler when a new message arrives.
 func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	protoReq := proto.SubscribeRequest{
 		Topic:    req.Topic,

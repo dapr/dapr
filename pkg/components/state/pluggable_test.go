@@ -25,6 +25,8 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
+	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
+
 	"github.com/dapr/kit/logger"
 
 	"google.golang.org/grpc"
@@ -150,7 +152,7 @@ func wrapString(str string) string {
 }
 
 func TestComponentCalls(t *testing.T) {
-	getStateStore := components.PluggableComponentTestServerFor(testLogger, func(s *grpc.Server, svc *server) {
+	getStateStore := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *server) {
 		proto.RegisterStateStoreServer(s, svc)
 		proto.RegisterTransactionalStateStoreServer(s, svc)
 		proto.RegisterQueriableStateStoreServer(s, svc)
