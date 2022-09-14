@@ -1979,6 +1979,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 			for i, message := range msg.Entries {
 				if message.EntryID == "" {
 					log.Warnf("Invalid entry id %v received while processing bulk pub/sub event, won't be able to process it", message.EntryID)
+					continue
 				}
 				entryIDIndexMap[message.EntryID] = i
 				if rawPayload {
