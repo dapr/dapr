@@ -76,6 +76,21 @@ func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 	}, m.Error
 }
 
+func (m *MockServer) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, len(in.Entries))
+	for i, reqEntry := range in.Entries {
+		responseEntry := runtimev1pb.TopicEventBulkResponseEntry{
+			Status:  m.TopicEventResponseStatus,
+			EntryID: reqEntry.EntryID,
+		}
+		responseEntries[i] = &responseEntry
+	}
+
+	return &runtimev1pb.TopicEventBulkResponse{
+		Statuses: responseEntries,
+	}, m.Error
+}
+
 func (m *MockServer) HealthCheck(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.HealthCheckResponse, error) {
 	return &runtimev1pb.HealthCheckResponse{}, m.Error
 }
