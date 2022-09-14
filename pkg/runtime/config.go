@@ -50,8 +50,6 @@ const (
 	DefaultGracefulShutdownDuration = time.Second * 5
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
 	DefaultAppHealthCheckPath = "/health"
-	// Metadata needed to call bulk subscribe
-	BulkSubscribe = "bulkSubscribe"
 )
 
 // Config holds the Dapr Runtime configuration.

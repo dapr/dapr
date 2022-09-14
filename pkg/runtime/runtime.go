@@ -109,6 +109,8 @@ const (
 	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 
 	componentFormat = "%s (%s/%s)"
+	// Metadata needed to call bulk subscribe
+	BulkSubscribe = "bulkSubscribe"
 )
 
 type ComponentCategory string
@@ -260,6 +262,7 @@ type pubsubBulkSubscribedMessage struct {
 	metadata    map[string]string
 	pubsub      string
 	path        string
+	length      int
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
@@ -1771,7 +1774,7 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
-	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
+	if !a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings) {
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
@@ -1916,17 +1919,20 @@ func (a *DaprRuntime) sendBulkToDeadLetter(
 	name string, msg *pubsub.BulkMessage, deadLetterTopic string,
 	entryIDIndexMap *map[string]int, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
 ) error {
-	data := make([]pubsub.BulkMessageEntry, 0)
+	data := make([]pubsub.BulkMessageEntry, len(msg.Entries))
 
 	if bulkResponses == nil {
 		data = msg.Entries
 	} else {
+		n := 0
 		for _, message := range msg.Entries {
 			entryID := (*entryIDIndexMap)[message.EntryID]
 			if (*bulkResponses)[entryID].Error != nil {
-				data = append(data, message)
+				data[n] = message
+				n++
 			}
 		}
+		data = data[:n]
 	}
 
 	req := &pubsub.BulkPublishRequest{
@@ -1971,8 +1977,8 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 				return nil, err
 			}
 
-			cloudEvents := make([]map[string]interface{}, 0)
-			routePathBulkMessageMap := make(map[string]pubsubBulkSubscribedMessage, 0)
+			cloudEvents := make([]map[string]interface{}, len(msg.Entries))
+			routePathBulkMessageMap := make(map[string]pubsubBulkSubscribedMessage)
 			bulkResponses := make([]pubsub.BulkSubscribeResponseEntry, len(msg.Entries))
 			entryIDIndexMap := make(map[string]int)
 			hasAnyError := false
@@ -2015,14 +2021,15 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 						ContentType: "application/octet-stream",
 					}
 					if val, ok := routePathBulkMessageMap[rPath]; ok {
-						val.rawData = append(val.rawData, childMessage)
-						val.entries = append(val.entries, &msg.Entries[i])
+						val.rawData[val.length] = childMessage
+						val.entries[val.length] = &msg.Entries[i]
+						val.length++
 						routePathBulkMessageMap[rPath] = val
 					} else {
-						rawDataItems := make([]runtimePubsub.BulkSubscribeMessageItem, 0)
-						rawDataItems = append(rawDataItems, childMessage)
-						entries := make([]*pubsub.BulkMessageEntry, 0)
-						entries = append(entries, &msg.Entries[i])
+						rawDataItems := make([]runtimePubsub.BulkSubscribeMessageItem, len(msg.Entries))
+						rawDataItems[0] = childMessage
+						entries := make([]*pubsub.BulkMessageEntry, len(msg.Entries))
+						entries[0] = &msg.Entries[i]
 						psm := pubsubBulkSubscribedMessage{
 							cloudEvents: cloudEvents,
 							rawData:     rawDataItems,
@@ -2030,6 +2037,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 							topic:       msg.Topic,
 							metadata:    msg.Metadata,
 							pubsub:      psName,
+							length:      1,
 						}
 						routePathBulkMessageMap[rPath] = psm
 					}
@@ -2091,16 +2099,17 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 					}
 
 					if val, ok := routePathBulkMessageMap[rPath]; ok {
-						val.cloudEvents = append(val.cloudEvents, cloudEvent)
-						val.rawData = append(val.rawData, childMessage)
-						val.entries = append(val.entries, &msg.Entries[i])
+						val.cloudEvents[val.length] = cloudEvent
+						val.rawData[val.length] = childMessage
+						val.entries[val.length] = &msg.Entries[i]
+						val.length++
 						routePathBulkMessageMap[rPath] = val
 					} else {
-						rawDataItems := make([]runtimePubsub.BulkSubscribeMessageItem, 0)
-						rawDataItems = append(rawDataItems, childMessage)
-						entries := make([]*pubsub.BulkMessageEntry, 0)
-						entries = append(entries, &msg.Entries[i])
-						cloudEvents = append(cloudEvents, cloudEvent)
+						rawDataItems := make([]runtimePubsub.BulkSubscribeMessageItem, len(msg.Entries))
+						rawDataItems[0] = childMessage
+						entries := make([]*pubsub.BulkMessageEntry, len(msg.Entries))
+						entries[0] = &msg.Entries[i]
+						cloudEvents[0] = cloudEvent
 						psm := pubsubBulkSubscribedMessage{
 							cloudEvents: cloudEvents,
 							rawData:     rawDataItems,
@@ -2108,14 +2117,19 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 							topic:       msg.Topic,
 							metadata:    msg.Metadata,
 							pubsub:      psName,
+							length:      1,
 						}
 						routePathBulkMessageMap[rPath] = psm
 					}
 				}
 			}
 			for path, psm := range routePathBulkMessageMap {
+				id, _ := uuid.NewRandom()
+				psm.cloudEvents = psm.cloudEvents[:psm.length]
+				psm.rawData = psm.rawData[:psm.length]
+				psm.entries = psm.entries[:psm.length]
 				envelope := runtimePubsub.NewBulkSubscribeEnvelope(&runtimePubsub.BulkSubscribeEnvelope{
-					ID:       uuid.New().String(),
+					ID:       id.String(),
 					Topic:    topic,
 					Entries:  psm.rawData,
 					Pubsub:   psName,
@@ -2389,7 +2403,8 @@ func endSpans(spans []trace.Span) {
 }
 
 func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBulkSubscribedMessage,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap map[string]int) error {
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap map[string]int,
+) error {
 	cloudEvents := msg.cloudEvents
 	spans := make([]trace.Span, 0)
 
@@ -2506,7 +2521,8 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 }
 
 func populateBulkSubscribeResponsesWithError(entries []*pubsub.BulkMessageEntry,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap *map[string]int, err error) {
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap *map[string]int, err error,
+) {
 	for _, item := range entries {
 		ind := (*entryIDIndexMap)[item.EntryID]
 		if (*bulkResponses)[ind].EntryID == "" {
