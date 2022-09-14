@@ -3640,11 +3640,11 @@ func TestBulkSubscribe(t *testing.T) {
 		order2 := `{"data":{"orderId":2},"datacontenttype":"application/json","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"com.dapr.event.sent"}`
 
 		nbei1 := pubsub.BulkMessageEntry{
-			EntryID: "0",
+			EntryID: "23456",
 			Event:   []byte(order1),
 		}
 		nbei2 := pubsub.BulkMessageEntry{
-			EntryID: "1",
+			EntryID: "56787uuu",
 			Event:   []byte(order2),
 		}
 		msgArr := make([]pubsub.BulkMessageEntry, 0)

@@ -19,7 +19,10 @@ import (
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 )
 
-const Metadata = "metadata"
+const (
+	Metadata = "metadata"
+	Entries  = "entries"
+)
 
 type BulkSubscribeMessageItem struct {
 	EntryID     string            `json:"entryID"`
@@ -53,7 +56,7 @@ func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]interface{}
 		contribPubsub.TopicField:  req.Topic,
 		contribPubsub.PubsubField: req.Pubsub,
 		Metadata:                  req.Metadata,
-		contribPubsub.DataField:   req.Entries,
+		Entries:                   req.Entries,
 	}
 
 	return bulkSubEnvelope
