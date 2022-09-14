@@ -2701,7 +2701,7 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha
 
 func (a *DaprRuntime) toBaseMetadata(c componentsV1alpha1.Component) contribMetadata.Base {
 	return contribMetadata.Base{
-	        Validations: a.convertValidationToMap(c.Spec.Validations),
+                Validations: a.convertValidationToMap(c.Spec.Validations),
 		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 		Name:       c.Name,
 	}
