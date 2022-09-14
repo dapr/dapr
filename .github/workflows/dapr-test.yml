@@ -52,11 +52,13 @@ env:
   AZURE_REGIONS: "westus3"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  # Whether to collect TCP dumps
+  TCP_DUMPS: false
 
 jobs:
   deploy-infrastructure:
     name: Deploy test infrastructure
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -66,7 +68,7 @@ jobs:
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -76,8 +78,25 @@ jobs:
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
-                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
             }
+      - name: Create PR comment
+        if: env.PR_NUMBER != ''
+        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          hide: true
+          hide_classify: OUTDATED
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            # Dapr E2E test
+
+            🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+
+            Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
         uses: actions/checkout@v2
@@ -106,8 +125,10 @@ jobs:
           REGIONS_SIZE=${#REGIONS[@]}
           REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
           REGION1=${REGIONS[$REGIONS_IDX]}
+          echo "REGION1=${REGION1}" >> $GITHUB_ENV
           REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
           REGION2=${REGIONS[$REGIONS_IDX]}
+          echo "REGION2=${REGION2}" >> $GITHUB_ENV
           echo "Deploying to Azure regions: Linux=${REGION1} Windows=${REGION2}"
 
           # Tags
@@ -136,6 +157,38 @@ jobs:
           # Exit with error if failed
           $success || exit 1
         shell: bash
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Infrastructure deployed
+
+            | Cluster | Resource group name | Azure region |
+            | --- | --- | --- |
+            | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
+            | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Infrastructure deployment failed
+
+            | Cluster | Resource group name | Azure region |
+            | --- | --- | --- |
+            | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
+            | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
+
+            Please check the logs for details on the failure.
 
   build:
     name: Build for  ${{ matrix.target_os }}
@@ -148,10 +201,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2019]
+        os: [ubuntu-22.04, windows-2019]
         target_arch: [amd64]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target_os: linux
           - os: windows-2019
             target_os: windows
@@ -164,7 +217,7 @@ jobs:
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -174,7 +227,9 @@ jobs:
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
-                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
             }
       # In windows-2019 images, WSL comes with bash.exe (but no distribution) and that causes issues
       # See: https://github.community/t/wsl-not-available-for-hosted-windows-machine/124389
@@ -290,6 +345,31 @@ jobs:
         run: |
           make build-push-e2e-app-all
         shell: bash
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Build succeeded for ${{ matrix.target_os }}/${{ matrix.target_arch }}
+
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Build failed for ${{ matrix.target_os }}/${{ matrix.target_arch }}
+
+            Please check the logs for details on the error.
 
   test-e2e:
     name: End-to-end ${{ matrix.target_os }} tests
@@ -297,7 +377,7 @@ jobs:
       - build
       - deploy-infrastructure
     # Always run on Linux as the local OS is irrelevant and this is faster
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
@@ -322,7 +402,7 @@ jobs:
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v6.2.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -332,7 +412,9 @@ jobs:
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
                 `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
-                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
@@ -388,6 +470,7 @@ jobs:
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
         shell: bash
       - name: Enable tcpdump
+        if: env.TCP_DUMPS == 'true'
         run: |
           sudo tcpdump -nn -i any -w sntp.cap &
           sleep 1
@@ -436,7 +519,7 @@ jobs:
         run: |
           make save-dapr-control-plane-k8s-logs
       - name: Stop tcpdump
-        if: always()
+        if: always() && env.TCP_DUMPS == 'true'
         run: |
           sleep 1
           sudo kill -2 $(pgrep tcpdump)
@@ -445,12 +528,15 @@ jobs:
       - name: Compress logs
         if: always()
         run: |
-          gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
-          gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
-          gzip --fast sntp.cap
+          test -f ${{ env.DAPR_CONTAINER_LOG_PATH }} && \
+            gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
+          test -f ${{ env.DAPR_TEST_LOG_PATH }} && \
+            gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
+          test -f sntp.cap && \
+            gzip --fast sntp.cap
         shell: bash
       - name: Upload tcpdump
-        if: always()
+        if: always() && env.TCP_DUMPS == 'true'
         uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_tcpdump
@@ -474,45 +560,47 @@ jobs:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
-      - name: Add test result comment to PR
-        if: always() && github.event_name == 'repository_dispatch' && env.TEST_PREFIX != ''
-        env:
-          JOB_CONTEXT: ${{ toJson(job) }}
-        uses: actions/github-script@0.3.0
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: marocchino/sticky-pull-request-comment@v2.2.0
         with:
-          github-token: ${{secrets.DAPR_BOT_TOKEN}}
-          script: |
-            const testPayload = context.payload.client_payload;
-            const jobContext = JSON.parse(process.env.JOB_CONTEXT);
-            const jobStatus = jobContext.status.toLowerCase();
-            const targetOs = process.env.TARGET_OS;
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Tests succeeded on ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
-            console.log(`Current Job Status: ${jobStatus}`);
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Tests failed on ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
-            var message = "";
+            Please check the logs for details on the error.
+      - name: Update PR comment for cancellation
+        if: cancelled() && env.PR_NUMBER != ''
+        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ⚠️ Tests cancelled for ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
-            const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-
-            if (jobStatus == "cancelled") {
-              message = `End-to-end tests cancelled on ${targetOs}. Please check the [build logs](${checkLink})`;
-            } else if (jobStatus == "success") {
-              message = `Congrats! All [end-to-end tests](${checkLink}) have passed on ${targetOs}. Thanks for your contribution!`;
-            } else if (jobStatus == "failure") {
-              message = `End-to-end tests failed on ${targetOs}. Please check the [build logs](${checkLink})`;
-            }
-
-            if (message) {
-              await github.issues.createComment({
-                owner: testPayload.issue.owner,
-                repo: testPayload.issue.repo,
-                issue_number: testPayload.issue.number,
-                body: message
-              });
-            }
+            The Action has been canceled
 
   cleanup:
     name: Clean up Azure resources
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs:
       - test-e2e
     if: always()
