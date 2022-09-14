@@ -1,6 +1,6 @@
 # current directory must be ./dist
 
-FROM golang:1.18 AS golang
+FROM golang:1.19.1 AS golang
 ENV GOPROXY=https://goproxy.io,direct
 RUN CGO_ENABLED=0 go install -ldflags '-s -w -extldflags -static' github.com/go-delve/delve/cmd/dlv@latest
 
