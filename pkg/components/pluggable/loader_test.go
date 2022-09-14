@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package pluggable
 
 import (
 	"io/fs"
@@ -19,9 +19,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	config "github.com/dapr/dapr/pkg/config/modes"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const configPrefix = "."
@@ -34,60 +33,46 @@ func writeTempConfig(path, content string) (delete func(), error error) {
 	}, err
 }
 
-func TestLoadComponentsFromFile(t *testing.T) {
-	t.Run("valid yaml content", func(t *testing.T) {
-		request := NewStandaloneComponents(config.StandaloneConfig{
-			ComponentsPath: configPrefix,
-		})
-		filename := "test-component-valid.yaml"
+func TestLoadPluggableComponentsFromFile(t *testing.T) {
+	t.Run("valid pluggable component yaml content", func(t *testing.T) {
+		filename := "test-pluggable-component-valid.yaml"
 		yaml := `
 apiVersion: dapr.io/v1alpha1
-kind: Component
+kind: PluggableComponent
 metadata:
-  name: statestore
+  name: mystate
 spec:
-  type: state.couchbase
-  metadata:
-  - name: prop1
-    value: value1
-  - name: prop2
-    value: value2
+  type: state
+  version: v1
 `
 		remove, err := writeTempConfig(filename, yaml)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer remove()
-		components, err := request.LoadComponents()
-		assert.Nil(t, err)
+		components, err := LoadFromDisk(configPrefix)
+		require.NoError(t, err)
 		assert.Len(t, components, 1)
 	})
 
 	t.Run("invalid yaml head", func(t *testing.T) {
-		request := NewStandaloneComponents(config.StandaloneConfig{
-			ComponentsPath: configPrefix,
-		})
-
-		filename := "test-component-invalid.yaml"
+		filename := "test-pluggable-component-invalid.yaml"
 		yaml := `
 INVALID_YAML_HERE
 apiVersion: dapr.io/v1alpha1
-kind: Component
+kind: PluggableComponent
 metadata:
 name: statestore`
 		remove, err := writeTempConfig(filename, yaml)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer remove()
-		components, err := request.LoadComponents()
-		assert.Nil(t, err)
+		components, err := LoadFromDisk(configPrefix)
+		require.NoError(t, err)
 		assert.Len(t, components, 0)
 	})
 
-	t.Run("load components file not exist", func(t *testing.T) {
-		request := NewStandaloneComponents(config.StandaloneConfig{
-			ComponentsPath: "test-path-no-exists",
-		})
+	t.Run("load pluggable components file not exist", func(t *testing.T) {
+		components, err := LoadFromDisk("path-not-exists")
 
-		components, err := request.LoadComponents()
-		assert.NotNil(t, err)
+		assert.Nil(t, err)
 		assert.Len(t, components, 0)
 	})
 }

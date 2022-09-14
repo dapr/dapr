@@ -93,6 +93,14 @@ func SetEnvVariables(variables map[string]string) error {
 	return nil
 }
 
+// GetEnvOrElse get the value from the OS environment or use the else value if variable is not present.
+func GetEnvOrElse(name, orElse string) string {
+	if value, ok := os.LookupEnv(name); ok {
+		return value
+	}
+	return orElse
+}
+
 // IsTruthy returns true if a string is a truthy value.
 // Truthy values are "y", "yes", "true", "t", "on", "1" (case-insensitive); everything else is false.
 func IsTruthy(val string) bool {
