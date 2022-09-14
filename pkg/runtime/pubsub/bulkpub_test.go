@@ -25,9 +25,8 @@ import (
 )
 
 func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
-	m := mock.Mock{}
-	m.On("Publish", mock.Anything).Return(nil)
-	mockPubSub := &daprt.MockPubSub{Mock: m}
+	mockPubSub := &daprt.MockPubSub{Mock: mock.Mock{}}
+	mockPubSub.Mock.On("Publish", mock.Anything).Return(nil)
 
 	bulkPublisher := NewDefaultBulkPublisher(mockPubSub)
 
@@ -36,13 +35,13 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			{
 				EntryID:     "78a48b5c-ff5a-4275-9bef-4a3bb8eefc3b",
 				Event:       []byte("event1"),
-				ContentType: "application/octet-stream",
+				ContentType: "text/plain",
 				Metadata:    map[string]string{},
 			},
 			{
 				EntryID:     "d64669e2-fab6-4452-a933-8de44e26ca02",
 				Event:       []byte("event2"),
-				ContentType: "application/octet-stream",
+				ContentType: "text/plain",
 				Metadata:    map[string]string{},
 			},
 		},

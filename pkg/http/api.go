@@ -2101,7 +2101,21 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	for i, entry := range incomingEntries {
 		log.Debugf("Incoming event:  %v\n", entry)
 		var dBytes []byte
-		if contribContentType.IsStringContentType(entry.DataContentType) || contribContentType.IsBinaryContentType(entry.DataContentType) {
+		if contribContentType.IsBinaryContentType(entry.DataContentType) {
+			// Here the expectation is that for a JSON request, the binary data will be base64 encoded.
+			// When content type is given as binary, try to decode base64 as []byte.
+
+			if dataAsString, ok := entry.Event.(string); ok {
+				decoded, decodeErr := base64.StdEncoding.DecodeString(dataAsString)
+				if decodeErr != nil {
+					msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
+						fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: unable to decode base64 application/octect-stream data"))
+					respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+					log.Debug(msg)
+				}
+				dBytes = decoded
+			}
+		} else if contribContentType.IsStringContentType(entry.DataContentType) {
 			switch v := entry.Event.(type) {
 			case string:
 				dBytes = []byte(v)

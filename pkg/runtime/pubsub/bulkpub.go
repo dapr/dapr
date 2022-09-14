@@ -16,9 +16,10 @@ package pubsub
 import (
 	"errors"
 
+	"golang.org/x/sync/errgroup"
+
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/utils"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -28,9 +29,7 @@ const (
 	defaultBulkPublishMaxConcurrency int = 100
 )
 
-var (
-	ErrBulkPublishFailure = errors.New("bulk publish failed")
-)
+var ErrBulkPublishFailure = errors.New("bulk publish failed")
 
 // defaultBulkPublisher is the default implementation of BulkPublisher.
 // It is used when the component does not implement BulkPublisher.
