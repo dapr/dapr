@@ -352,7 +352,7 @@ jobs:
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            ## ✅ Build succeeded for ${{ runner.os }}
+            ## ✅ Build succeeded for ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
             - Image tag: `${{ env.DAPR_TAG }}`
             - Test image tag: `${{ env.DAPR_TEST_TAG }}`
@@ -365,7 +365,7 @@ jobs:
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            ## ❌ Build failed for ${{ runner.os }}
+            ## ❌ Build failed for ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
             Please check the logs for details on the error.
 
@@ -567,7 +567,7 @@ jobs:
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            ## ✅ Tests succeeded on ${{ runner.os }}
+            ## ✅ Tests succeeded on ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
             - Image tag: `${{ env.DAPR_TAG }}`
             - Test image tag: `${{ env.DAPR_TEST_TAG }}`
@@ -580,7 +580,7 @@ jobs:
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            ## ❌ Tests failed on ${{ runner.os }}
+            ## ❌ Tests failed on ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
             Please check the logs for details on the error.
       - name: Update PR comment for cancellation
@@ -592,7 +592,7 @@ jobs:
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            ## ⚠️ Tests cancelled for ${{ runner.os }}
+            ## ⚠️ Tests cancelled for ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
             The Action has been canceled
 
