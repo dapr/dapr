@@ -105,51 +105,51 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 	for {
 		select {
 		case <-ctx.Done():
-			flushMessages(ctx, topic, &messages, &msgCbMap, handler)
+			messages, msgCbMap = flushMessages(ctx, topic, messages, msgCbMap, handler)
 			return
 		case msgCb := <-msgCbChan:
 			messages = append(messages, msgCb.msg)
 			msgCbMap[msgCb.msg.EntryID] = msgCb.cb
 			if len(messages) >= cfg.MaxBulkCount {
-				flushMessages(ctx, topic, &messages, &msgCbMap, handler)
+				messages, msgCbMap = flushMessages(ctx, topic, messages, msgCbMap, handler)
 			}
 		case <-ticker.C:
-			flushMessages(ctx, topic, &messages, &msgCbMap, handler)
+			messages, msgCbMap = flushMessages(ctx, topic, messages, msgCbMap, handler)
 		}
 	}
 }
 
 // flushMessages writes messages to a BulkHandler and clears the messages slice.
-func flushMessages(ctx context.Context, topic string, messages *[]contribPubsub.BulkMessageEntry, msgCbMap *map[string]func(error), handler contribPubsub.BulkHandler) {
-	if len(*messages) > 0 {
+func flushMessages(ctx context.Context, topic string, messages []contribPubsub.BulkMessageEntry, msgCbMap map[string]func(error), handler contribPubsub.BulkHandler) (
+	[]contribPubsub.BulkMessageEntry, map[string]func(error)) {
+	if len(messages) > 0 {
 		responses, err := handler(ctx, &contribPubsub.BulkMessage{
 			Topic:    topic,
 			Metadata: map[string]string{},
-			Entries:  *messages,
+			Entries:  messages,
 		})
 
 		if err != nil {
 			if responses != nil {
 				// invoke callbacks for each message
 				for _, r := range responses {
-					if cb, ok := (*msgCbMap)[r.EntryID]; ok {
+					if cb, ok := (msgCbMap)[r.EntryID]; ok {
 						cb(r.Error)
 					}
 				}
 			} else {
 				// all messages failed
-				for _, cb := range *msgCbMap {
+				for _, cb := range msgCbMap {
 					cb(err)
 				}
 			}
 		} else {
 			// no error has occurred
-			for _, cb := range *msgCbMap {
+			for _, cb := range msgCbMap {
 				cb(nil)
 			}
 		}
-
-		*messages = []contribPubsub.BulkMessageEntry{}
-		*msgCbMap = make(map[string]func(error))
 	}
+
+	return messages[:0], make(map[string]func(error))
 }
