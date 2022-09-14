@@ -1,7 +1,9 @@
 package client
 
 import (
+	"context"
 	"crypto/x509"
+	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
@@ -42,9 +44,12 @@ func GetOperatorClient(address, serverName string, certChain *daprCredentials.Ce
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to create tls config from cert and key")
 	}
-	opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)))
+	// block for connection
+	opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)), grpc.WithBlock())
 
-	conn, err := grpc.Dial(address, opts...)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelFunc()
+	conn, err := grpc.DialContext(ctx, address, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
