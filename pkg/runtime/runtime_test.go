@@ -171,6 +171,10 @@ type MockKubernetesStateStore struct {
 	callback func()
 }
 
+func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
+	return nil
+}
+
 func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
 	if m.callback != nil {
 		m.callback()

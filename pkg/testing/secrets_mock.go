@@ -21,6 +21,10 @@ import (
 
 type FakeSecretStore struct{}
 
+func (c FakeSecretStore) Features() []secretstores.Feature {
+	return nil
+}
+
 func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	if req.Name == "good-key" {
 		return secretstores.GetSecretResponse{
@@ -54,6 +58,10 @@ func (c FakeSecretStore) Close() error {
 
 type FailingSecretStore struct {
 	Failure Failure
+}
+
+func (c FailingSecretStore) Features() []secretstores.Feature {
+	return nil
 }
 
 func (c FailingSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {

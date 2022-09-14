@@ -609,12 +609,15 @@ func TestComponentCalls(t *testing.T) {
 	})
 
 	t.Run("query should send a QueryRequest containing all filters", func(t *testing.T) {
-		filters := map[string]interface{}{
-			"a": []string{"a"},
+		filters := map[string]any{
+			"EQ": map[string]any{
+				"state": "CA",
+			},
 		}
+
 		request := &state.QueryRequest{
 			Query: query.Query{
-				Filters: filters,
+				QueryFields: query.QueryFields{Filters: filters},
 			},
 			Metadata: map[string]string{},
 		}
