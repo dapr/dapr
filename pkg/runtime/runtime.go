@@ -1775,7 +1775,11 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
-	return ps.component.BulkPublish(req)
+	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
+		return bulkPublisher.BulkPublish(req)
+	}
+	// default bulk publish implementation will be follow-up commit
+	return pubsub.BulkPublishResponse{}, errors.Errorf("pubsub %s does not implement the BulkPublish method", req.PubsubName)
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.
