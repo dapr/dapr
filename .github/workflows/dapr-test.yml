@@ -135,7 +135,7 @@ jobs:
           DATE_TAG=$(date --iso-8601=seconds)
           echo "Tags: date=${DATE_TAG}"
 
-          # Deploy both Linux and Windows cluster
+          # Deploy Linux arm64/amd64 and Windows clusters
           # Retry the deployment twice in case of transient failures (such as capacity constraints)
           success=false
           for i in 1 2 3; do 
@@ -173,6 +173,7 @@ jobs:
             | --- | --- | --- |
             | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
             | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
+            | Linux_arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
       - name: Update PR comment for failure
         if: failure() && env.PR_NUMBER != ''
         uses: marocchino/sticky-pull-request-comment@v2.2.0
@@ -188,6 +189,7 @@ jobs:
             | --- | --- | --- |
             | Linux | `Dapr-E2E-${{ env.TEST_PREFIX }}l` | ${{ env.REGION1 }} |
             | Windows | `Dapr-E2E-${{ env.TEST_PREFIX }}w` | ${{ env.REGION2 }} |
+            | Linux_arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
 
             Please check the logs for details on the failure.
 
