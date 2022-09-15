@@ -83,9 +83,10 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			// Create publish requests for each message in the bulk request.
 			var pubReqs []*contribPubsub.PublishRequest
 			for _, entry := range req.Entries {
+				contenType := entry.ContentType
 				pubReqs = append(pubReqs, &contribPubsub.PublishRequest{
 					Data:        entry.Event,
-					ContentType: &entry.ContentType,
+					ContentType: &contenType,
 					Metadata:    entry.Metadata,
 					PubsubName:  req.PubsubName,
 					Topic:       req.Topic,
