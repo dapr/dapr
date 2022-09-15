@@ -14,6 +14,7 @@ limitations under the License.
 package pubsub
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -25,11 +26,6 @@ import (
 )
 
 func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
-	mockPubSub := &daprt.MockPubSub{Mock: mock.Mock{}}
-	mockPubSub.Mock.On("Publish", mock.Anything).Return(nil)
-
-	bulkPublisher := NewDefaultBulkPublisher(mockPubSub)
-
 	req := &contribPubsub.BulkPublishRequest{
 		Entries: []contribPubsub.BulkMessageEntry{
 			{
@@ -53,26 +49,71 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 	tcs := []struct {
 		name                   string
 		bulkPublishSeriallyKey string
+		publishErrors          []error
+		expectError            bool
 	}{
 		{
-			name:                   "bulkPublishSeriallyKey is set to true",
+			name:                   "bulkPublishSeriallyKey is set to true, without publish errors",
 			bulkPublishSeriallyKey: "true",
+			publishErrors:          []error{nil, nil},
+			expectError:            false,
 		},
 		{
-			name:                   "bulkPublishSeriallyKey is not true",
+			name:                   "bulkPublishSeriallyKey is set to true, with a publish error",
+			bulkPublishSeriallyKey: "true",
+			publishErrors:          []error{errors.New("publish error"), nil},
+			expectError:            true,
+		},
+		{
+			name:                   "bulkPublishSeriallyKey is not true, without publish errors",
 			bulkPublishSeriallyKey: "false",
+			publishErrors:          []error{nil, nil},
+			expectError:            false,
+		},
+		{
+			name:                   "bulkPublishSeriallyKey is not true, with a publish errors",
+			bulkPublishSeriallyKey: "false",
+			publishErrors:          []error{nil, errors.New("publish error")},
+			expectError:            true,
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(fmt.Sprintf("publishes all messages in a request, %s", tc.name), func(t *testing.T) {
+			// Create publish requests for each message in the bulk request.
+			var pubReqs []*contribPubsub.PublishRequest
+			for _, entry := range req.Entries {
+				pubReqs = append(pubReqs, &contribPubsub.PublishRequest{
+					Data:        entry.Event,
+					ContentType: &entry.ContentType,
+					Metadata:    entry.Metadata,
+					PubsubName:  req.PubsubName,
+					Topic:       req.Topic,
+				})
+			}
+
+			// Set up the mock pubsub to return the publish errors.
+			mockPubSub := &daprt.MockPubSub{Mock: mock.Mock{}}
+			for i, e := range tc.publishErrors {
+				mockPubSub.Mock.On("Publish", pubReqs[i]).Return(e)
+			}
+			bulkPublisher := NewDefaultBulkPublisher(mockPubSub)
+
+			// Set up metadata and invoke the bulk publish method.
 			req.Metadata[bulkPublishSeriallyKey] = tc.bulkPublishSeriallyKey
 			res, err := bulkPublisher.BulkPublish(req)
 
-			assert.NoError(t, err)
+			// Check if the bulk publish method returns an error.
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Response should contain an entry for each message in the bulk request.
 			assert.Len(t, res.Statuses, len(req.Entries))
 
-			var pubRequests []*contribPubsub.PublishRequest
+			var pubInvocationArgs []*contribPubsub.PublishRequest
 
 			// Assert that all Publish requests have the correct topic and pubsub name.
 			for _, call := range mockPubSub.Calls {
@@ -84,18 +125,12 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 				assert.Equal(t, req.PubsubName, pubReq.PubsubName)
 				assert.Equal(t, req.Topic, pubReq.Topic)
 
-				pubRequests = append(pubRequests, pubReq)
+				pubInvocationArgs = append(pubInvocationArgs, pubReq)
 			}
 
 			// Assert that a Publish request should be there for the message that was in the bulk publish request.
-			for _, entry := range req.Entries {
-				assert.Contains(t, pubRequests, &contribPubsub.PublishRequest{
-					Data:        entry.Event,
-					ContentType: &entry.ContentType,
-					Metadata:    entry.Metadata,
-					PubsubName:  req.PubsubName,
-					Topic:       req.Topic,
-				})
+			for _, pubReq := range pubReqs {
+				assert.Contains(t, pubInvocationArgs, pubReq)
 			}
 
 			var responseEntryIds []string
