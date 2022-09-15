@@ -101,7 +101,7 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 // processBulkMessages reads messages from msgChan and publishes them to a BulkHandler.
 // It buffers messages in memory and publishes them in bulk.
 func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msgWithCallback, cfg contribPubsub.BulkSubscribeConfig, handler contribPubsub.BulkHandler) {
-	var messages []contribPubsub.BulkMessageEntry
+	messages := make([]contribPubsub.BulkMessageEntry, 0, cfg.MaxBulkCount)
 	msgCbMap := make(map[string]func(error))
 
 	ticker := time.NewTicker(time.Duration(cfg.MaxBulkLatencyMilliSeconds) * time.Millisecond)
@@ -110,7 +110,7 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 	for {
 		select {
 		case <-ctx.Done():
-			messages, msgCbMap = flushMessages(ctx, topic, messages, msgCbMap, handler)
+			flushMessages(ctx, topic, messages, msgCbMap, handler)
 			return
 		case msgCb := <-msgCbChan:
 			messages = append(messages, msgCb.msg)
