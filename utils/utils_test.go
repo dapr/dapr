@@ -14,13 +14,12 @@ limitations under the License.
 package utils
 
 import (
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
+	"github.com/stretchr/testify/require"
 )
 
 func TestToISO8601DateTimeString(t *testing.T) {
@@ -48,143 +47,6 @@ func TestToISO8601DateTimeString(t *testing.T) {
 		assert.Equal(t, currentTime.UTC().Second(), parsed.Second())
 		assert.Equal(t, currentTime.UTC().Nanosecond()/1000, parsed.Nanosecond()/1000)
 	})
-}
-
-func TestParseEnvString(t *testing.T) {
-	testCases := []struct {
-		testName  string
-		envStr    string
-		expEnvLen int
-		expEnv    []corev1.EnvVar
-	}{
-		{
-			testName:  "empty environment string.",
-			envStr:    "",
-			expEnvLen: 0,
-			expEnv:    []corev1.EnvVar{},
-		},
-		{
-			testName:  "common valid environment string.",
-			envStr:    "ENV1=value1,ENV2=value2, ENV3=value3",
-			expEnvLen: 3,
-			expEnv: []corev1.EnvVar{
-				{
-					Name:  "ENV1",
-					Value: "value1",
-				},
-				{
-					Name:  "ENV2",
-					Value: "value2",
-				},
-				{
-					Name:  "ENV3",
-					Value: "value3",
-				},
-			},
-		},
-		{
-			testName:  "special valid environment string.",
-			envStr:    `HTTP_PROXY=http://myproxy.com, NO_PROXY="localhost,127.0.0.1,.amazonaws.com"`,
-			expEnvLen: 2,
-			expEnv: []corev1.EnvVar{
-				{
-					Name:  "HTTP_PROXY",
-					Value: "http://myproxy.com",
-				},
-				{
-					Name:  "NO_PROXY",
-					Value: `"localhost,127.0.0.1,.amazonaws.com"`,
-				},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.testName, func(t *testing.T) {
-			envVars := ParseEnvString(tc.envStr)
-			fmt.Println(tc.testName) //nolint:forbidigo
-			assert.Equal(t, tc.expEnvLen, len(envVars))
-			assert.Equal(t, tc.expEnv, envVars)
-		})
-	}
-}
-
-func TestParseVolumeMountsString(t *testing.T) {
-	testCases := []struct {
-		testName     string
-		mountStr     string
-		readOnly     bool
-		expMountsLen int
-		expMounts    []corev1.VolumeMount
-	}{
-		{
-			testName:     "empty volume mount string.",
-			mountStr:     "",
-			readOnly:     false,
-			expMountsLen: 0,
-			expMounts:    []corev1.VolumeMount{},
-		},
-		{
-			testName:     "valid volume mount string with readonly false.",
-			mountStr:     "my-mount:/tmp/mount1,another-mount:/home/user/mount2, mount3:/root/mount3",
-			readOnly:     false,
-			expMountsLen: 3,
-			expMounts: []corev1.VolumeMount{
-				{
-					Name:      "my-mount",
-					MountPath: "/tmp/mount1",
-				},
-				{
-					Name:      "another-mount",
-					MountPath: "/home/user/mount2",
-				},
-				{
-					Name:      "mount3",
-					MountPath: "/root/mount3",
-				},
-			},
-		},
-		{
-			testName:     "valid volume mount string with readonly true.",
-			mountStr:     " my-mount:/tmp/mount1,mount2:/root/mount2 ",
-			readOnly:     true,
-			expMountsLen: 2,
-			expMounts: []corev1.VolumeMount{
-				{
-					Name:      "my-mount",
-					MountPath: "/tmp/mount1",
-					ReadOnly:  true,
-				},
-				{
-					Name:      "mount2",
-					MountPath: "/root/mount2",
-					ReadOnly:  true,
-				},
-			},
-		},
-		{
-			testName:     "volume mount string with invalid mounts",
-			mountStr:     "my-mount:/tmp/mount1:rw,mount2:/root/mount2,mount3",
-			readOnly:     false,
-			expMountsLen: 1,
-			expMounts: []corev1.VolumeMount{
-				{
-					Name:      "mount2",
-					MountPath: "/root/mount2",
-				},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.testName, func(t *testing.T) {
-			mounts := ParseVolumeMountsString(tc.mountStr, tc.readOnly)
-			assert.Equal(t, tc.expMountsLen, len(mounts))
-			assert.Equal(t, tc.expMounts, mounts)
-		})
-	}
 }
 
 func TestContains(t *testing.T) {
@@ -248,4 +110,21 @@ func TestIsYaml(t *testing.T) {
 	for _, tc := range testCases {
 		assert.Equal(t, IsYaml(tc.input), tc.expected)
 	}
+}
+
+func TestEnvOrElse(t *testing.T) {
+	t.Run("envOrElse should return else value when env var is not present", func(t *testing.T) {
+		const elseValue, fakeEnVar = "fakeValue", "envVarThatDoesntExists"
+		require.NoError(t, os.Unsetenv(fakeEnVar))
+
+		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), elseValue)
+	})
+
+	t.Run("envOrElse should return env var value value when env var is present", func(t *testing.T) {
+		const elseValue, fakeEnVar, fakeEnvVarValue = "fakeValue", "envVarThatExists", "envVarValue"
+		defer os.Unsetenv(fakeEnVar)
+
+		require.NoError(t, os.Setenv(fakeEnVar, fakeEnvVarValue))
+		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), fakeEnvVarValue)
+	})
 }

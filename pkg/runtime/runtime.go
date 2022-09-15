@@ -41,6 +41,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
+	md "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -52,6 +53,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -106,6 +108,8 @@ const (
 	// setting this environment variable restores the
 	// partial hot reloading support for k8s.
 	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
+
+	componentFormat = "%s (%s/%s)"
 )
 
 type ComponentCategory string
@@ -298,8 +302,7 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 		opt(&o)
 	}
 
-	err := a.initRuntime(&o)
-	if err != nil {
+	if err := a.initRuntime(&o); err != nil {
 		return err
 	}
 
@@ -320,6 +323,13 @@ func (a *DaprRuntime) getNamespace() string {
 
 func (a *DaprRuntime) getPodName() string {
 	return os.Getenv("POD_NAME")
+}
+
+func (a *DaprRuntime) loadPluggableComponents() ([]components.Pluggable, error) {
+	if a.runtimeConfig.Mode == modes.StandaloneMode {
+		return pluggable.LoadFromDisk(a.runtimeConfig.Standalone.ComponentsPath)
+	}
+	return pluggable.LoadFromKubernetes(a.namespace, a.podName, a.operatorClient)
 }
 
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
@@ -402,7 +412,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Initialize metrics only if MetricSpec is enabled.
 	if a.globalConfig.Spec.MetricSpec.Enabled {
 		if err := diag.InitMetrics(a.runtimeConfig.ID, a.namespace); err != nil {
-			log.Errorf("failed to initialize metrics: %v", err)
+			log.Errorf(NewInitError(InitFailure, "metrics", err).Error())
 		}
 	}
 
@@ -426,7 +436,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.nameResolutionRegistry = opts.nameResolutionRegistry
 	err = a.initNameResolution()
 	if err != nil {
-		log.Warnf("failed to init name resolution: %s", err)
+		log.Errorf(err.Error())
 	}
 
 	a.pubSubRegistry = opts.pubsubRegistry
@@ -436,6 +446,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry = opts.bindingRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
+
+	a.initPluggableComponents()
 
 	go a.processComponents()
 
@@ -520,7 +532,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if len(a.runtimeConfig.PlacementAddresses) != 0 {
 		err = a.initActors()
 		if err != nil {
-			log.Warnf("failed to init actors: %v", err)
+			log.Warnf(err.Error())
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			grpcAPI.SetActorRuntime(a.actor)
@@ -603,7 +615,7 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 					middlewareSpec.Version)
 			}
 			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version,
-				middleware.Metadata{Base: contribMetadata.Base{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)}})
+				middleware.Metadata{Base: a.toBaseMetadata(component)})
 			if err != nil {
 				return httpMiddleware.Pipeline{}, err
 			}
@@ -614,17 +626,36 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 	return httpMiddleware.Pipeline{Handlers: handlers}, nil
 }
 
+// initPluggableComponents register the pluggable components if the featureflag is enabled and execute the required bootstrap.
+func (a *DaprRuntime) initPluggableComponents() {
+	if config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PluggableComponents) {
+		if err := a.registerPluggableComponents(); err != nil {
+			log.Warnf("failed to register pluggable components: %s", err)
+		}
+	}
+}
+
+// registerPluggableComponents loads and register the loaded pluggable components.
+func (a *DaprRuntime) registerPluggableComponents() error {
+	pluggables, err := a.loadPluggableComponents()
+	if err != nil {
+		return err
+	}
+	log.Infof("found %d pluggable components", len(pluggables))
+	log.Infof("%d pluggable components were registered", pluggable.Register(pluggables...))
+
+	return nil
+}
+
 func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
 	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initOutputBinding(c); err != nil {
-			log.Errorf("failed to init output bindings: %s", err)
 			return err
 		}
 	}
 
 	if a.bindingsRegistry.HasInputBinding(c.Spec.Type, c.Spec.Version) {
 		if err := a.initInputBinding(c); err != nil {
-			log.Errorf("failed to init input bindings: %s", err)
 			return err
 		}
 	}
@@ -1084,7 +1115,26 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+	spanContext := trace.SpanContext{}
+
+	// Check the grpc-trace-bin with fallback to traceparent.
+	validTraceparent := false
+	if val, ok := metadata[diag.GRPCTraceContextKey]; ok {
+		if sc, ok := diagUtils.SpanContextFromBinary([]byte(val)); ok {
+			spanContext = sc
+		}
+	} else if val, ok := metadata[diag.TraceparentHeader]; ok {
+		if sc, ok := diag.SpanContextFromW3CString(val); ok {
+			spanContext = sc
+			validTraceparent = true
+			// Only parse the tracestate if we've successfully parsed the traceparent.
+			if val, ok := metadata[diag.TracestateHeader]; ok {
+				ts := diag.TraceStateFromW3CString(val)
+				spanContext.WithTraceState(*ts)
+			}
+		}
+	}
+	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
 	path := a.inputBindingRoutes[bindingName]
@@ -1094,6 +1144,21 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+
+		// Add workaround to fallback on checking traceparent header.
+		// As grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus, tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
+		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path.
+		// TODO: Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827.
+		if validTraceparent {
+			spanContextHeaders := make(map[string]string, 2)
+			diag.SpanContextToHTTPHeaders(span.SpanContext(), func(key string, val string) {
+				spanContextHeaders[key] = val
+			})
+			for key, val := range spanContextHeaders {
+				ctx = md.AppendToOutgoingContext(ctx, key, val)
+			}
+		}
+
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		req := &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
@@ -1210,7 +1275,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, binding bindings.InputBinding) error {
-	return binding.Read(readCtx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
+	return binding.Read(readCtx, func(_ context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		if resp == nil {
 			return nil, nil
 		}
@@ -1387,18 +1452,15 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed to create input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
-	err = binding.Init(bindings.Metadata{Base: contribMetadata.Base{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-		Name:       c.ObjectMeta.Name,
-	}})
+	err = binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
-		log.Errorf("failed to init input binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -1416,20 +1478,17 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed to create output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
 	if binding != nil {
-		err := binding.Init(bindings.Metadata{Base: contribMetadata.Base{
-			Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-			Name:       c.ObjectMeta.Name,
-		}})
+		err := binding.Init(bindings.Metadata{Base: a.toBaseMetadata(c)})
 		if err != nil {
-			log.Errorf("failed to init output binding %s (%s/%s): %s", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
-			return err
+			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, err)
 		}
 		log.Infof("successful init for output binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 		a.outputBindings[c.ObjectMeta.Name] = binding
@@ -1441,19 +1500,16 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
 	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
-		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-		err := store.Init(configuration.Metadata{Base: contribMetadata.Base{
-			Properties: props,
-		}})
+		err := store.Init(configuration.Metadata{Base: a.toBaseMetadata(s)})
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-			log.Warnf("error initializing configuration store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-			return err
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, err)
 		}
 
 		a.configurationStores[s.ObjectMeta.Name] = store
@@ -1467,30 +1523,30 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 	// create the component
 	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store == nil {
 		return nil
 	}
 	// initialization
-	props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-	err = store.InitLockStore(lock.Metadata{Base: contribMetadata.Base{
-		Properties: props,
-	}})
+	baseMetadata := a.toBaseMetadata(s)
+	props := baseMetadata.Properties
+	err = store.InitLockStore(lock.Metadata{Base: baseMetadata})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-		log.Warnf("error initializing lock store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 	// save lock related configuration
 	a.lockStores[s.ObjectMeta.Name] = store
 	err = lockLoader.SaveLockConfiguration(s.ObjectMeta.Name, props)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-		log.Warnf("error save lock keyprefix: %s", err.Error())
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, wrapError)
 	}
 	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 
@@ -1501,9 +1557,9 @@ func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
 func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 	if store != nil {
 		secretStoreName := a.authSecretStoreOrDefault(s)
@@ -1511,9 +1567,9 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 		secretStore := a.getSecretStore(secretStoreName)
 		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
 		if encErr != nil {
-			log.Errorf("error initializing state store encryption %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, encErr)
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
-			return encErr
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat+" encyption", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(CreateComponentFailure, fName, err)
 		}
 
 		if encKeys.Primary.Key != "" {
@@ -1523,22 +1579,22 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 			}
 		}
 
-		props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
-		err = store.Init(state.Metadata{Base: contribMetadata.Base{
-			Properties: props,
-		}})
+		baseMetadata := a.toBaseMetadata(s)
+		props := baseMetadata.Properties
+		err = store.Init(state.Metadata{Base: baseMetadata})
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-			log.Warnf("error initializing state store %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-			return err
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, err)
 		}
 
 		a.stateStores[s.ObjectMeta.Name] = store
 		err = stateLoader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
-			log.Warnf("error save state keyprefix: %s", err.Error())
-			return err
+			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
+			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
+			fName := fmt.Sprintf(componentFormat, s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version)
+			return NewInitError(InitComponentFailure, fName, wrapError)
 		}
 
 		// when placement address list is not empty, set specified actor store.
@@ -1676,25 +1732,24 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("error creating pub sub %s (%s/%s): %s", &c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
-	properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+	baseMetadata := a.toBaseMetadata(c)
+	properties := baseMetadata.Properties
 	consumerID := strings.TrimSpace(properties["consumerID"])
 	if consumerID == "" {
 		consumerID = a.runtimeConfig.ID
 	}
 	properties["consumerID"] = consumerID
 
-	err = pubSub.Init(pubsub.Metadata{Base: contribMetadata.Base{
-		Properties: properties,
-	}})
+	err = pubSub.Init(pubsub.Metadata{Base: baseMetadata})
 	if err != nil {
-		log.Warnf("error initializing pub sub %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	pubsubName := c.ObjectMeta.Name
@@ -1800,7 +1855,8 @@ func (a *DaprRuntime) initNameResolution() error {
 		case modes.StandaloneMode:
 			resolverName = "mdns"
 		default:
-			return errors.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode))
+			fullName := fmt.Sprintf(componentFormat, resolverName, "nameResolution", resolverVersion)
+			return NewInitError(InitComponentFailure, fullName, errors.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode)))
 		}
 	}
 
@@ -1809,6 +1865,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	resolver, err = a.nameResolutionRegistry.Create(resolverName, resolverVersion)
+	resolverMetadata.Name = resolverName
 	resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
 	resolverMetadata.Properties = map[string]string{
 		nr.DaprHTTPPort: strconv.Itoa(a.runtimeConfig.HTTPPort),
@@ -1823,13 +1880,15 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	if err != nil {
-		log.Warnf("error creating name resolution resolver %s: %s", resolverName, err)
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "creation", resolverName)
+		fName := fmt.Sprintf(componentFormat, resolverName, "nameResolution", resolverVersion)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
 	if err = resolver.Init(resolverMetadata); err != nil {
-		log.Errorf("failed to initialize name resolution resolver %s: %s", resolverName, err)
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "init", resolverName)
+		fName := fmt.Sprintf(componentFormat, resolverName, "nameResolution", resolverVersion)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	a.nameResolver = resolver
@@ -2052,7 +2111,7 @@ func extractCloudEventProperty(cloudEvent map[string]interface{}, property strin
 func (a *DaprRuntime) initActors() error {
 	err := actors.ValidateHostEnvironment(a.runtimeConfig.mtlsEnabled, a.runtimeConfig.Mode, a.namespace)
 	if err != nil {
-		return err
+		return NewInitError(InitFailure, "actors", err)
 	}
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
@@ -2068,8 +2127,9 @@ func (a *DaprRuntime) initActors() error {
 	err = act.Init()
 	if err == nil {
 		a.actor = act
+		return nil
 	}
-	return err
+	return NewInitError(InitFailure, "actors", err)
 }
 
 func (a *DaprRuntime) getAuthorizedComponents(components []componentsV1alpha1.Component) []componentsV1alpha1.Component {
@@ -2230,7 +2290,10 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 			return err
 		}
 	case <-time.After(timeout):
-		return fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		err := fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+		fName := fmt.Sprintf(componentFormat, comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	log.Infof("component loaded. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
@@ -2577,18 +2640,16 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
-		log.Warnf("failed to create secret store %s/%s: %s", c.Spec.Type, c.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(CreateComponentFailure, fName, err)
 	}
 
-	err = secretStore.Init(secretstores.Metadata{Base: contribMetadata.Base{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-	}})
+	err = secretStore.Init(secretstores.Metadata{Base: a.toBaseMetadata(c)})
 	if err != nil {
-		log.Warnf("failed to init secret store %s/%s named %s: %s", c.Spec.Type, c.Spec.Version, c.ObjectMeta.Name, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
-		return err
+		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
+		fName := fmt.Sprintf(componentFormat, c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
+		return NewInitError(InitComponentFailure, fName, err)
 	}
 
 	a.secretStores[c.ObjectMeta.Name] = secretStore
@@ -2609,9 +2670,19 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha
 			}
 			val = strings.Replace(val, "{podName}", a.podName, 1)
 		}
+		for strings.Contains(val, "{namespace}") {
+			val = strings.Replace(val, "{namespace}", fmt.Sprintf("%s.%s", a.namespace, a.runtimeConfig.ID), 1)
+		}
 		properties[c.Name] = val
 	}
 	return properties
+}
+
+func (a *DaprRuntime) toBaseMetadata(c componentsV1alpha1.Component) contribMetadata.Base {
+	return contribMetadata.Base{
+		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+		Name:       c.Name,
+	}
 }
 
 func (a *DaprRuntime) getComponent(componentType string, name string) (componentsV1alpha1.Component, bool) {

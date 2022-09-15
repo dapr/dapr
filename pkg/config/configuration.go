@@ -30,24 +30,32 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
+// Feature Flags section
+
+type Feature string
+
 const (
-	operatorCallTimeout          = time.Second * 5
-	operatorMaxRetries           = 100
-	AllowAccess                  = "allow"
-	DenyAccess                   = "deny"
-	DefaultTrustDomain           = "public"
-	DefaultNamespace             = "default"
-	ActionPolicyApp              = "app"
-	ActionPolicyGlobal           = "global"
-	SpiffeIDPrefix               = "spiffe://"
-	HTTPProtocol                 = "http"
-	GRPCProtocol                 = "grpc"
 	Resiliency           Feature = "Resiliency"
 	NoDefaultContentType Feature = "ServiceInvocation.NoDefaultContentType"
 	AppHealthCheck       Feature = "AppHealthCheck"
+	PluggableComponents  Feature = "PluggableComponents"
 )
 
-type Feature string
+// end feature flags section
+
+const (
+	operatorCallTimeout = time.Second * 5
+	operatorMaxRetries  = 100
+	AllowAccess         = "allow"
+	DenyAccess          = "deny"
+	DefaultTrustDomain  = "public"
+	DefaultNamespace    = "default"
+	ActionPolicyApp     = "app"
+	ActionPolicyGlobal  = "global"
+	SpiffeIDPrefix      = "spiffe://"
+	HTTPProtocol        = "http"
+	GRPCProtocol        = "grpc"
+)
 
 var noDefaultContentTypeValue = false
 

@@ -37,7 +37,7 @@ param diagStorageResourceId string = ''
 var osDiskSizeGB = 0
 
 // Version of Kubernetes
-var kubernetesVersion = '1.24.0'
+var kubernetesVersion = '1.22.6'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2019-05-01' = {
   name: '${namePrefix}acr'
