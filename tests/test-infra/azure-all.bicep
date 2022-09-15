@@ -38,6 +38,12 @@ param diagLogAnalyticsWorkspaceResourceId string = ''
 @description('If set, sends certain diagnostic logs to Azure Storage')
 param diagStorageResourceId string = ''
 
+@description('If set, sends certain Arm64 diagnostic logs to Log Analytics')
+param armDiagLogAnalyticsWorkspaceResourceId string = ''
+
+@description('If set, sends certain Arm64 diagnostic logs to Azure Storage')
+param armDiagStorageResourceId string = ''
+
 @description('If enabled, deploy Cosmos DB')
 param enableCosmosDB bool = true
 
@@ -106,8 +112,8 @@ module armCluster 'azure.bicep' = {
     location: location3
     enableWindows: false
     enableArm : true
-    diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
-    diagStorageResourceId: diagStorageResourceId
+    diagLogAnalyticsWorkspaceResourceId: armDiagLogAnalyticsWorkspaceResourceId
+    diagStorageResourceId: armDiagStorageResourceId
     enableCosmosDB: enableCosmosDB
     enableServiceBus: enableServiceBus
   }
