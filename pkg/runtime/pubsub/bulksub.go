@@ -69,8 +69,13 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 		var err error
 		done := make(chan struct{})
 
+		entryId, err := uuid.NewRandom()
+		if err != nil {
+			return err
+		}
+
 		bulkMsg := contribPubsub.BulkMessageEntry{
-			EntryID:  uuid.NewString(),
+			EntryID:  entryId.String(),
 			Event:    msg.Data,
 			Metadata: msg.Metadata,
 		}
