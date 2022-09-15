@@ -1554,13 +1554,15 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				if count > retry {
 					break
 				}
-				count++
-				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
 				assert.NotNil(t, rsp)
 				assert.Nil(t, recvErr)
 				assert.Equal(t, tt.expectedResponse, rsp.Items)
 				subscribeID = rsp.Id
+				count++
+				time.Sleep(time.Millisecond * 10)
+				_, recvErr = resp.Recv()
+				assert.Nil(t, recvErr)
 			}
 			assert.Nil(t, err, "Error should be nil")
 			_, err = client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
