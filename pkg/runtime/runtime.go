@@ -2161,6 +2161,10 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 						psm := psm
 						errPub := a.publishBulkMessageHTTP(ctx, &psm, &bulkResponses, entryIDIndexMap)
 						return errPub
+					case GRPCProtocol:
+						psm := psm
+						errPub := a.publishBulkMessageGRPC(ctx, &psm, &bulkResponses, entryIDIndexMap)
+						return errPub
 					default:
 						return backoff.Permanent(errors.New("invalid application protocol"))
 					}
