@@ -153,7 +153,7 @@ jobs:
                 dateTag="${DATE_TAG}" \
                 diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
                 diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
-                armDiagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_ARM__DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
+                armDiagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_ARM_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
                 armDiagStorageResourceId="${{ secrets.AZURE_ARM_DIAG_STORAGE_ID }}" \
               && success=true \
               && break \
