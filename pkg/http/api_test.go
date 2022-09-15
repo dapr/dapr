@@ -498,7 +498,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
-			assert.Contains(t, resp.ErrorBody["message"], "error: mismatch between dataContentType and event")
+			assert.Contains(t, resp.ErrorBody["message"], "error: mismatch between contentType and event")
 		}
 	})
 
