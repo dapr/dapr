@@ -38,7 +38,8 @@ func TestFlushMessages(t *testing.T) {
 
 	t.Run("flushMessages should clear messages and msgCbMap", func(t *testing.T) {
 		emptyHandler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
-			[]contribPubsub.BulkSubscribeResponseEntry, error) {
+			[]contribPubsub.BulkSubscribeResponseEntry, error,
+		) {
 			return nil, nil
 		}
 
@@ -104,7 +105,8 @@ func TestFlushMessages(t *testing.T) {
 				handlerInvoked := false
 
 				handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
-					[]contribPubsub.BulkSubscribeResponseEntry, error) {
+					[]contribPubsub.BulkSubscribeResponseEntry, error,
+				) {
 					handlerInvoked = true
 					assert.Equal(t, len(tc.messages), len(msg.Entries))
 					for _, entry := range msg.Entries {
@@ -130,7 +132,7 @@ func TestFlushMessages(t *testing.T) {
 			name             string
 			handlerResponses []contribPubsub.BulkSubscribeResponseEntry
 			handlerErr       error
-			entryIdErrMap    map[string]struct{}
+			entryIDErrMap    map[string]struct{}
 		}{
 			{
 				"all callbacks should be invoked with nil error when handler returns nil error",
@@ -169,7 +171,8 @@ func TestFlushMessages(t *testing.T) {
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
 				handler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
-					[]contribPubsub.BulkSubscribeResponseEntry, error) {
+					[]contribPubsub.BulkSubscribeResponseEntry, error,
+				) {
 					return tc.handlerResponses, tc.handlerErr
 				}
 
@@ -184,7 +187,7 @@ func TestFlushMessages(t *testing.T) {
 				flushMessages(context.Background(), "topic", messages, msgCbMap, handler)
 
 				for id, err := range invokedCallbacks {
-					if _, ok := tc.entryIdErrMap[id]; ok {
+					if _, ok := tc.entryIDErrMap[id]; ok {
 						assert.NotNil(t, err)
 					} else {
 						assert.Nil(t, err)
