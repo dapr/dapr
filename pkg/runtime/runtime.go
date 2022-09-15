@@ -2151,12 +2151,12 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 			if marshalErr != nil {
 				log.Errorf("error serializing bulk cloud event in pubsub %s and topic %s: %s", psName, msg.Topic, err)
 				if route.deadLetterTopic != "" {
-					ent := make([]pubsub.BulkMessageEntry, 0)
-					for _, entry := range psm.entries {
-						ent = append(ent, *entry)
+					entries := make([]pubsub.BulkMessageEntry, len(psm.entries))
+					for i, entry := range psm.entries {
+						entries[i] = *entry
 					}
 					bulkMsg := pubsub.BulkMessage{
-						Entries:  ent,
+						Entries:  entries,
 						Topic:    msg.Topic,
 						Metadata: msg.Metadata,
 					}
@@ -2421,21 +2421,21 @@ func endSpans(spans []trace.Span) {
 func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBulkSubscribedMessage,
 	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap map[string]int,
 ) error {
-	spans := make([]trace.Span, 0)
+	spans := make([]trace.Span, len(msg.entries))
 
 	req := invokev1.NewInvokeMethodRequest(msg.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.data, contenttype.CloudEventContentType)
 	req.WithCustomHTTPMetadata(msg.metadata)
 
-	for _, cloudEvent := range msg.cloudEvents {
+	for i, cloudEvent := range msg.cloudEvents {
 		if cloudEvent[pubsub.TraceIDField] != nil {
 			traceID := cloudEvent[pubsub.TraceIDField].(string)
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 			var span trace.Span
 			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-			spans = append(spans, span)
+			spans[i] = span
 		}
 	}
 	defer endSpans(spans)
