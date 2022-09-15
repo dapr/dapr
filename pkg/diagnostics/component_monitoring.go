@@ -32,10 +32,12 @@ const (
 
 // componentMetrics holds dapr runtime metrics for components.
 type componentMetrics struct {
-	pubsubIngressCount   *stats.Int64Measure
-	pubsubIngressLatency *stats.Float64Measure
-	pubsubEgressCount    *stats.Int64Measure
-	pubsubEgressLatency  *stats.Float64Measure
+	pubsubIngressCount       *stats.Int64Measure
+	pubsubIngressLatency     *stats.Float64Measure
+	bulkPubsubIngressCount   *stats.Int64Measure
+	bulkPubsubIngressLatency *stats.Float64Measure
+	pubsubEgressCount        *stats.Int64Measure
+	pubsubEgressLatency      *stats.Float64Measure
 
 	inputBindingCount    *stats.Int64Measure
 	inputBindingLatency  *stats.Float64Measure
@@ -66,6 +68,14 @@ func newComponentMetrics() *componentMetrics {
 		pubsubIngressLatency: stats.Float64(
 			"component/pubsub_ingress/latencies",
 			"The consuming app event processing latency.",
+			stats.UnitMilliseconds),
+		bulkPubsubIngressCount: stats.Int64(
+			"component/bulk_pubsub_ingress/count",
+			"The number of incoming messages arriving from the bulk pub/sub component.",
+			stats.UnitDimensionless),
+		bulkPubsubIngressLatency: stats.Float64(
+			"component/bulk_pubsub_ingress/latencies",
+			"The consuming app event processing latency for the bulk pub/sub component.",
 			stats.UnitMilliseconds),
 		pubsubEgressCount: stats.Int64(
 			"component/pubsub_egress/count",
@@ -127,6 +137,8 @@ func (c *componentMetrics) Init(appID, namespace string) error {
 	return view.Register(
 		diagUtils.NewMeasureView(c.pubsubIngressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(c.pubsubIngressCount, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, view.Count()),
+		diagUtils.NewMeasureView(c.bulkPubsubIngressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(c.bulkPubsubIngressCount, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, view.Count()),
 		diagUtils.NewMeasureView(c.pubsubEgressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, topicKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(c.pubsubEgressCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, topicKey}, view.Count()),
 		diagUtils.NewMeasureView(c.inputBindingLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, defaultLatencyDistribution),
@@ -155,6 +167,23 @@ func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, pr
 				ctx,
 				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
 				c.pubsubIngressLatency.M(elapsed))
+		}
+	}
+}
+
+// BulkPubsubIngressEvent records the metrics for a bulk pub/sub ingress event.
+func (c *componentMetrics) BulkPubsubIngressEvent(ctx context.Context, component, processStatus, topic string, elapsed float64) {
+	if c.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
+			c.bulkPubsubIngressCount.M(1))
+
+		if elapsed > 0 {
+			stats.RecordWithTags(
+				ctx,
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
+				c.bulkPubsubIngressLatency.M(elapsed))
 		}
 	}
 }

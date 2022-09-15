@@ -249,3 +249,45 @@ func TestIsYaml(t *testing.T) {
 		assert.Equal(t, IsYaml(tc.input), tc.expected)
 	}
 }
+
+func TestGetIntOrDefault(t *testing.T) {
+	testMap := map[string]string{"key1": "1", "key2": "2", "key3": "3"}
+	tcs := []struct {
+		name     string
+		m        map[string]string
+		key      string
+		def      int
+		expected int
+	}{
+		{
+			name:     "key exists in the map",
+			m:        testMap,
+			key:      "key2",
+			def:      0,
+			expected: 2,
+		},
+		{
+			name:     "key does not exist in the map, default value is used",
+			m:        testMap,
+			key:      "key4",
+			def:      4,
+			expected: 4,
+		},
+		{
+			name:     "empty map, default value is used",
+			m:        map[string]string{},
+			key:      "key1",
+			def:      100,
+			expected: 100,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := GetIntOrDefault(tc.m, tc.key, tc.def)
+			if actual != tc.expected {
+				t.Errorf("expected %d, actual %d", tc.expected, actual)
+			}
+		})
+	}
+}

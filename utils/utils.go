@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -162,4 +163,14 @@ func IsYaml(fileName string) bool {
 		return true
 	}
 	return false
+}
+
+// GetIntOrDefault returns the value of the key in the map or the default value if the key is not present.
+func GetIntOrDefault(m map[string]string, key string, def int) int {
+	if val, ok := m[key]; ok {
+		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return def
 }
