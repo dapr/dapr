@@ -28,8 +28,6 @@ import (
 )
 
 const (
-	defaultImageRegistry        = "docker.io/dapriotest"
-	defaultImageTag             = "latest"
 	disableTelemetryConfig      = "disable-telemetry"
 	defaultSidecarCPULimit      = "1.0"
 	defaultSidecarMemoryLimit   = "256Mi"
@@ -105,17 +103,17 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 
 	for _, app := range apps {
 		if app.RegistryName == "" {
-			app.RegistryName = c.imageRegistry()
+			app.RegistryName = getTestImageRegistry()
 		}
 
 		if app.ImageSecret == "" {
-			app.ImageSecret = c.imageSecret()
+			app.ImageSecret = getTestImageSecret()
 		}
 
 		if app.ImageName == "" {
 			return fmt.Errorf("%s app doesn't have imagename property", app.AppName)
 		}
-		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, c.imageTag())
+		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, getTestImageTag())
 
 		if dt {
 			app.Config = disableTelemetryConfig
@@ -158,30 +156,6 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 	log.Printf("Apps are installed.")
 
 	return nil
-}
-
-func (c *KubeTestPlatform) imageRegistry() string {
-	reg := os.Getenv("DAPR_TEST_REGISTRY")
-	if reg == "" {
-		return defaultImageRegistry
-	}
-	return reg
-}
-
-func (c *KubeTestPlatform) imageSecret() string {
-	secret := os.Getenv("DAPR_TEST_REGISTRY_SECRET")
-	if secret == "" {
-		return ""
-	}
-	return secret
-}
-
-func (c *KubeTestPlatform) imageTag() string {
-	tag := os.Getenv("DAPR_TEST_TAG")
-	if tag == "" {
-		return defaultImageTag
-	}
-	return tag
 }
 
 func (c *KubeTestPlatform) disableTelemetry() bool {
