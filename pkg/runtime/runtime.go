@@ -2415,7 +2415,6 @@ func endSpans(spans []trace.Span) {
 func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBulkSubscribedMessage,
 	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap map[string]int,
 ) error {
-	cloudEvents := msg.cloudEvents
 	spans := make([]trace.Span, 0)
 
 	req := invokev1.NewInvokeMethodRequest(msg.path)
@@ -2467,7 +2466,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 		}
 
 		var hasAnyError bool
-		for i, response := range appBulkResponse.AppResponses {
+		for _, response := range appBulkResponse.AppResponses {
 			if entryID, ok := entryIDIndexMap[response.EntryID]; ok {
 				switch response.Status {
 				case "":
@@ -2484,7 +2483,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 					(*bulkResponses)[entryID].Error = nil
 				case pubsub.Drop:
 					diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
-					log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvents[i][pubsub.IDField])
+					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryID)
 					(*bulkResponses)[entryID].EntryID = response.EntryID
 					(*bulkResponses)[entryID].Error = nil
 				default:

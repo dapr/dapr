@@ -69,13 +69,13 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 		var err error
 		done := make(chan struct{})
 
-		entryId, err := uuid.NewRandom()
+		entryID, err := uuid.NewRandom()
 		if err != nil {
 			return err
 		}
 
 		bulkMsg := contribPubsub.BulkMessageEntry{
-			EntryID:  entryId.String(),
+			EntryID:  entryID.String(),
 			Event:    msg.Data,
 			Metadata: msg.Metadata,
 		}
@@ -126,7 +126,8 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 
 // flushMessages writes messages to a BulkHandler and clears the messages slice.
 func flushMessages(ctx context.Context, topic string, messages []contribPubsub.BulkMessageEntry, msgCbMap map[string]func(error), handler contribPubsub.BulkHandler) (
-	[]contribPubsub.BulkMessageEntry, map[string]func(error)) {
+	[]contribPubsub.BulkMessageEntry, map[string]func(error),
+) {
 	if len(messages) > 0 {
 		responses, err := handler(ctx, &contribPubsub.BulkMessage{
 			Topic:    topic,
