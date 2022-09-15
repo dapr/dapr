@@ -88,13 +88,14 @@ func (p *grpcPubSub) Publish(req *pubsub.PublishRequest) error {
 	return err
 }
 
-type messageHandler = func(context.Context, *proto.Message)
+type messageHandler = func(*proto.Message)
 
 // adaptHandler returns a non-error function that handle the message with the given handler and ack when returns.
 //
 //nolint:nosnakecase
-func (p *grpcPubSub) adaptHandler(ackStream proto.PubSub_PullMessagesClient, handler pubsub.Handler) messageHandler {
-	return func(ctx context.Context, msg *proto.Message) {
+func (p *grpcPubSub) adaptHandler(streamingPull proto.PubSub_PullMessagesClient, handler pubsub.Handler) messageHandler {
+	ctx := streamingPull.Context()
+	return func(msg *proto.Message) {
 		m := pubsub.NewMessage{
 			Data:        msg.Data,
 			ContentType: &msg.ContentType,
@@ -110,7 +111,7 @@ func (p *grpcPubSub) adaptHandler(ackStream proto.PubSub_PullMessagesClient, han
 			}
 		}
 
-		if err := ackStream.Send(&proto.MessageAcknowledgement{
+		if err := streamingPull.Send(&proto.MessageAcknowledgement{
 			MessageId: msg.Id,
 			Error:     ackError,
 		}); err != nil {
@@ -130,8 +131,7 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, subscriptionID string, ha
 		return err
 	}
 
-	pullCtx := pull.Context()
-	msgHandler := p.adaptHandler(pull, handler)
+	handle := p.adaptHandler(pull, handler)
 	go func() {
 		defer p.Client.Unsubscribe(p.Context, &proto.UnsubscribeRequest{
 			SubscriptionId: subscriptionID,
@@ -151,7 +151,7 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, subscriptionID string, ha
 
 			p.logger.Debugf("received message from stream on topic %s", msg.Topic)
 
-			go msgHandler(pullCtx, msg)
+			go handle(msg)
 		}
 	}()
 
