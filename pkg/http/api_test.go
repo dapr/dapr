@@ -342,7 +342,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				"key":   "first",
 				"value": "first value",
 			},
-			DataContentType: "application/json",
+			ContentType: "application/json",
 		},
 		{
 			EntryID: "2",
@@ -350,7 +350,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				"key":   "second",
 				"value": "second value",
 			},
-			DataContentType: "application/json",
+			ContentType: "application/json",
 			Metadata: map[string]string{
 				"md1": "mdVal1",
 				"md2": "mdVal2",
@@ -426,14 +426,14 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					"key":   "first",
 					"value": "first value",
 				},
-				DataContentType: "application/json",
+				ContentType: "application/json",
 			},
 			{
 				Event: map[string]string{
 					"key":   "second",
 					"value": "second value",
 				},
-				DataContentType: "application/json",
+				ContentType: "application/json",
 				Metadata: map[string]string{
 					"md1": "mdVal1",
 					"md2": "mdVal2",
@@ -474,7 +474,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					"key":   "first",
 					"value": "first value",
 				},
-				DataContentType: "application/json",
+				ContentType: "application/json",
 			},
 			{
 				EntryID: "2",
@@ -482,7 +482,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					"key":   "second",
 					"value": "second value",
 				},
-				DataContentType: "text/xml",
+				ContentType: "text/xml",
 				Metadata: map[string]string{
 					"md1": "mdVal1",
 					"md2": "mdVal2",

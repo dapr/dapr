@@ -2027,10 +2027,10 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 }
 
 type bulkPublishMessageEntry struct {
-	EntryID         string            `json:"entryID,omitempty"`
-	Event           interface{}       `json:"event"`
-	DataContentType string            `json:"dataContentType"`
-	Metadata        map[string]string `json:"metadata,omitempty"`
+	EntryID     string            `json:"entryID,omitempty"`
+	Event       interface{}       `json:"event"`
+	ContentType string            `json:"contentType"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
@@ -2101,7 +2101,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	for i, entry := range incomingEntries {
 		log.Debugf("Incoming event:  %v\n", entry)
 		var dBytes []byte
-		if contribContentType.IsBinaryContentType(entry.DataContentType) {
+		if contribContentType.IsBinaryContentType(entry.ContentType) {
 			// Here the expectation is that for a JSON request, the binary data will be base64 encoded.
 			// When content type is given as binary, try to decode base64 as []byte.
 
@@ -2115,7 +2115,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				}
 				dBytes = decoded
 			}
-		} else if contribContentType.IsStringContentType(entry.DataContentType) {
+		} else if contribContentType.IsStringContentType(entry.ContentType) {
 			switch v := entry.Event.(type) {
 			case string:
 				dBytes = []byte(v)
@@ -2123,7 +2123,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				dBytes = v
 			default:
 				msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-					fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: mismatch between dataContentType and event"))
+					fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: mismatch between contentType and event"))
 				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 				log.Debug(msg)
 
@@ -2142,7 +2142,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		}
 		entries[i] = pubsub.BulkMessageEntry{
 			Event:       dBytes,
-			ContentType: entry.DataContentType,
+			ContentType: entry.ContentType,
 		}
 		if entry.Metadata != nil {
 			// Populate entry metadata with request level metadata. Entry level metadata keys
