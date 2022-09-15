@@ -34,9 +34,6 @@ service PubSub {
   // messages.
   rpc Subscribe(SubscribeRequest) returns (SubscribeResponse) {}
 
-  // Unsubscribe explicit unsubscribe for a topic.
-  rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse) {}
-
   // Establishes a stream with the server, which sends messages down to the
   // client. The client streams acknowledgements back to the server. The server
   // will close the stream and return the status on any error. In case of closed
@@ -48,14 +45,6 @@ service PubSub {
   // Ping the pubsub. Used for liveness porpuses.
   rpc Ping(PingRequest) returns (PingResponse) {}
 }
-
-message UnsubscribeRequest {
-  // The subscription that want to unsubscribed.
-  string subscription_id = 1;
-}
-
-// reserved for future-proof extensibility
-message UnsubscribeResponse {}
 
 // Used for describing errors when ack'ing messages.
 message AckMessageError {

@@ -31,8 +31,6 @@ type PubSubClient interface {
 	// Subscribe returns a unique ID for the subscription to be used for pulling
 	// messages.
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error)
-	// Unsubscribe explicit unsubscribe for a topic.
-	Unsubscribe(ctx context.Context, in *UnsubscribeRequest, opts ...grpc.CallOption) (*UnsubscribeResponse, error)
 	// Establishes a stream with the server, which sends messages down to the
 	// client. The client streams acknowledgements back to the server. The server
 	// will close the stream and return the status on any error. In case of closed
@@ -82,15 +80,6 @@ func (c *pubSubClient) Publish(ctx context.Context, in *PublishRequest, opts ...
 func (c *pubSubClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error) {
 	out := new(SubscribeResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.PubSub/Subscribe", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *pubSubClient) Unsubscribe(ctx context.Context, in *UnsubscribeRequest, opts ...grpc.CallOption) (*UnsubscribeResponse, error) {
-	out := new(UnsubscribeResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.PubSub/Unsubscribe", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -150,8 +139,6 @@ type PubSubServer interface {
 	// Subscribe returns a unique ID for the subscription to be used for pulling
 	// messages.
 	Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error)
-	// Unsubscribe explicit unsubscribe for a topic.
-	Unsubscribe(context.Context, *UnsubscribeRequest) (*UnsubscribeResponse, error)
 	// Establishes a stream with the server, which sends messages down to the
 	// client. The client streams acknowledgements back to the server. The server
 	// will close the stream and return the status on any error. In case of closed
@@ -178,9 +165,6 @@ func (UnimplementedPubSubServer) Publish(context.Context, *PublishRequest) (*Pub
 }
 func (UnimplementedPubSubServer) Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
-}
-func (UnimplementedPubSubServer) Unsubscribe(context.Context, *UnsubscribeRequest) (*UnsubscribeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Unsubscribe not implemented")
 }
 func (UnimplementedPubSubServer) PullMessages(PubSub_PullMessagesServer) error {
 	return status.Errorf(codes.Unimplemented, "method PullMessages not implemented")
@@ -272,24 +256,6 @@ func _PubSub_Subscribe_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PubSub_Unsubscribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UnsubscribeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PubSubServer).Unsubscribe(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/dapr.proto.components.v1.PubSub/Unsubscribe",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PubSubServer).Unsubscribe(ctx, req.(*UnsubscribeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _PubSub_PullMessages_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(PubSubServer).PullMessages(&pubSubPullMessagesServer{stream})
 }
@@ -356,10 +322,6 @@ var PubSub_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Subscribe",
 			Handler:    _PubSub_Subscribe_Handler,
-		},
-		{
-			MethodName: "Unsubscribe",
-			Handler:    _PubSub_Unsubscribe_Handler,
 		},
 		{
 			MethodName: "Ping",

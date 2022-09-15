@@ -133,10 +133,6 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, subscriptionID string, ha
 
 	handle := p.adaptHandler(pull, handler)
 	go func() {
-		defer p.Client.Unsubscribe(p.Context, &proto.UnsubscribeRequest{
-			SubscriptionId: subscriptionID,
-		})
-
 		for {
 			msg, err := pull.Recv()
 			if err == io.EOF { // no more messages
