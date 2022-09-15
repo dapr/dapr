@@ -2181,6 +2181,10 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 					psm := psm
 					errPub := a.publishBulkMessageHTTP(ctx, &psm, &bulkResponses, entryIDIndexMap)
 					return errPub
+				case GRPCProtocol:
+					psm := psm
+					errPub := a.publishBulkMessageGRPC(ctx, &psm, &bulkResponses, entryIDIndexMap)
+					return errPub
 				default:
 					return backoff.Permanent(errors.New("invalid application protocol"))
 				}
@@ -2292,7 +2296,8 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 }
 
 func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBulkSubscribedMessage,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap map[string]int) error {
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap map[string]int,
+) error {
 	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(msg.entries))
 	for i, entry := range msg.entries {
 		item := &runtimev1pb.TopicEventBulkRequestEntry{
@@ -2339,11 +2344,11 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 	res, err := clientV1.OnBulkTopicEvent(ctx, envelope)
 	elapsed := diag.ElapsedSince(start)
 
-	for _, _span := range spans {
-		if _span != nil {
+	for _, span := range spans {
+		if span != nil {
 			m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
-			diag.AddAttributesToSpan(_span, m)
-			diag.UpdateSpanStatusFromGRPCError(_span, err)
+			diag.AddAttributesToSpan(span, m)
+			diag.UpdateSpanStatusFromGRPCError(span, err)
 		}
 	}
 
