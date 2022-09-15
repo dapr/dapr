@@ -2020,11 +2020,17 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
+				var contenttype string
+				if message.ContentType != "" {
+					contenttype = message.ContentType
+				} else {
+					contenttype = "application/octet-stream"
+				}
 				childMessage := runtimePubsub.BulkSubscribeMessageItem{
 					Event:       dataB64,
 					Metadata:    message.Metadata,
 					EntryID:     message.EntryID,
-					ContentType: "application/octet-stream",
+					ContentType: contenttype,
 				}
 				if val, ok := routePathBulkMessageMap[rPath]; ok {
 					val.rawData[val.length] = childMessage
