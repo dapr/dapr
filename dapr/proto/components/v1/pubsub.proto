@@ -30,15 +30,32 @@ service PubSub {
   // Publish publishes a new message for the given topic.
   rpc Publish(PublishRequest) returns (PublishResponse) {}
 
-  // Subscribe returns a server-stream of messages for the given topic.
-  rpc Subscribe(SubscribeRequest) returns (stream Message) {}
+  // Subscribe returns a unique ID for the subscription to be used for pulling
+  // messages.
+  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse) {}
 
-  // AckMessage acknowledge a handled message either failures or successes.
-  rpc AckMessage(stream AckMessageRequest) returns (AckMessageResponse) {}
+  // Unsubscribe explicit unsubscribe for a topic.
+  rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse) {}
+
+  // Establishes a stream with the server, which sends messages down to the
+  // client. The client streams acknowledgements back to the server. The server
+  // will close the stream and return the status on any error. In case of closed
+  // connection, the client should re-establish the stream.
+  // The first trailing metadata MUST contain a `subscription-id: X` to select
+  // the subscription that should be used for the streaming pull.
+  rpc PullMessages(stream MessageAcknowledgement) returns (stream Message) {}
 
   // Ping the pubsub. Used for liveness porpuses.
   rpc Ping(PingRequest) returns (PingResponse) {}
 }
+
+message UnsubscribeRequest {
+  // The subscription that want to unsubscribed.
+  string subscription_id = 1;
+}
+
+// reserved for future-proof extensibility
+message UnsubscribeResponse {}
 
 // Used for describing errors when ack'ing messages.
 message AckMessageError {
@@ -46,7 +63,7 @@ message AckMessageError {
 }
 
 // Used for acknowledge a message.
-message AckMessageRequest {
+message MessageAcknowledgement {
   // The unique message ID.
   string message_id = 1;
   // Optional, should not be fulfilled when the message was successfully
@@ -54,11 +71,9 @@ message AckMessageRequest {
   AckMessageError error = 2;
 }
 
-// reserved for future-proof extensibility
-message AckMessageResponse {}
-
 // PubSubInitRequest is the request for initializing the pubsub component.
 message PubSubInitRequest {
+  // The metadata request.
   MetadataRequest metadata = 1;
 }
 
@@ -85,6 +100,11 @@ message SubscribeRequest {
   string topic = 1;
   // Metadata related subscribe request.
   map<string, string> metadata = 2;
+}
+
+message SubscribeResponse {
+  // The unique subscription ID.
+  string subscription_id = 1;
 }
 
 message Message {

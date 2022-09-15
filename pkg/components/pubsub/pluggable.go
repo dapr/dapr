@@ -19,6 +19,8 @@ import (
 
 	"github.com/dapr/components-contrib/pubsub"
 
+	"google.golang.org/grpc/metadata"
+
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
@@ -32,9 +34,8 @@ import (
 type grpcPubSub struct {
 	*pluggable.GRPCConnector[proto.PubSubClient]
 	// features the list of state store implemented features features.
-	features  []pubsub.Feature
-	logger    logger.Logger
-	ackStream proto.PubSub_AckMessageClient //nolint:nosnakecase
+	features []pubsub.Feature
+	logger   logger.Logger
 }
 
 // Init initializes the grpc pubsub passing out the metadata to the grpc component.
@@ -68,8 +69,6 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 		return err
 	}
 
-	ackStream, err := p.Client.AckMessage(p.Context)
-	p.ackStream = ackStream
 	return err
 }
 
@@ -89,30 +88,74 @@ func (p *grpcPubSub) Publish(req *pubsub.PublishRequest) error {
 	return err
 }
 
-// handleAndAck handles the message and ack in case of success or failure.
-func (p *grpcPubSub) handleAndAck(ctx context.Context, msg *proto.Message, handler pubsub.Handler) {
-	m := pubsub.NewMessage{
-		Data:        msg.Data,
-		ContentType: &msg.ContentType,
-		Topic:       msg.Topic,
-		Metadata:    msg.Metadata,
-	}
+type messageHandler = func(context.Context, *proto.Message)
 
-	var ackError *proto.AckMessageError
+// adaptHandler returns a non-error function that handle the message with the given handler and ack when returns.
+//
+//nolint:nosnakecase
+func (p *grpcPubSub) adaptHandler(ackStream proto.PubSub_PullMessagesClient, handler pubsub.Handler) messageHandler {
+	return func(ctx context.Context, msg *proto.Message) {
+		m := pubsub.NewMessage{
+			Data:        msg.Data,
+			ContentType: &msg.ContentType,
+			Topic:       msg.Topic,
+			Metadata:    msg.Metadata,
+		}
+		var ackError *proto.AckMessageError
 
-	if err := handler(ctx, &m); err != nil {
-		p.logger.Errorf("error when handling message on topic %s", msg.Topic)
-		ackError = &proto.AckMessageError{
-			Message: err.Error(),
+		if err := handler(ctx, &m); err != nil {
+			p.logger.Errorf("error when handling message on topic %s", msg.Topic)
+			ackError = &proto.AckMessageError{
+				Message: err.Error(),
+			}
+		}
+
+		if err := ackStream.Send(&proto.MessageAcknowledgement{
+			MessageId: msg.Id,
+			Error:     ackError,
+		}); err != nil {
+			p.logger.Errorf("error when ack'ing message %s from topic %s", msg.Id, msg.Topic)
 		}
 	}
+}
 
-	if err := p.ackStream.Send(&proto.AckMessageRequest{
-		MessageId: msg.Id,
-		Error:     ackError,
-	}); err != nil {
-		p.logger.Errorf("error when ack'ing message %s from topic %s", msg.Id, msg.Topic)
+const metadataSubscriptionID = "subscription-id"
+
+// pullMessages pull messages of the given subscription and execute the handler for that messages.
+// it sends `subscription-id` as metadata in the first metadata request.
+func (p *grpcPubSub) pullMessages(ctx context.Context, subscriptionID string, handler pubsub.Handler) error {
+	// first pull should be sync and subsequent connections can be made in background if necessary
+	pull, err := p.Client.PullMessages(metadata.AppendToOutgoingContext(ctx, metadataSubscriptionID, subscriptionID))
+	if err != nil {
+		return err
 	}
+
+	pullCtx := pull.Context()
+	msgHandler := p.adaptHandler(pull, handler)
+	go func() {
+		defer p.Client.Unsubscribe(p.Context, &proto.UnsubscribeRequest{
+			SubscriptionId: subscriptionID,
+		})
+
+		for {
+			msg, err := pull.Recv()
+			if err == io.EOF { // no more messages
+				return
+			}
+
+			// TODO reconnect on error
+			if err != nil {
+				p.logger.Errorf("failed to receive message: %v", err)
+				return
+			}
+
+			p.logger.Debugf("received message from stream on topic %s", msg.Topic)
+
+			go msgHandler(pullCtx, msg)
+		}
+	}()
+
+	return nil
 }
 
 // Subscribe subscribes to a given topic and callback the handler when a new message arrives.
@@ -121,32 +164,12 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 		Topic:    req.Topic,
 		Metadata: req.Metadata,
 	}
-	msgStream, err := p.Client.Subscribe(ctx, &protoReq)
+	subscription, err := p.Client.Subscribe(ctx, &protoReq)
 	if err != nil {
 		return errors.Wrapf(err, "unable to subscribe")
 	}
-	streamCtx := msgStream.Context()
-	go func() {
-		for {
-			resp, err := msgStream.Recv()
-			if err == io.EOF { // no more messages
-				return
-			}
 
-			if err != nil {
-				p.logger.Errorf("failed to receive message: %v", err)
-				return
-			}
-
-			p.logger.Debugf("received message from stream on topic %s", resp.Topic)
-
-			go func(message *proto.Message) {
-				p.handleAndAck(streamCtx, message, handler)
-			}(resp)
-		}
-	}()
-
-	return nil
+	return p.pullMessages(ctx, subscription.SubscriptionId, handler)
 }
 
 func (p *grpcPubSub) Close() error {
