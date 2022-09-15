@@ -400,4 +400,4 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // This ensures that go.mod and go.sum are up-to-date.
 
 // Will change to the pubsub batching branch once changes merged in components contrib ... This is temporary change
-replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20220914053945-2230b3b80deb
+replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20220915100450-d6adf5b05adc

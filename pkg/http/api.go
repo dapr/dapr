@@ -34,7 +34,6 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
-	contribContentType "github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -2101,44 +2100,14 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	for i, entry := range incomingEntries {
 		log.Debugf("Incoming event:  %v\n", entry)
 		var dBytes []byte
-		if contribContentType.IsBinaryContentType(entry.ContentType) {
-			// Here the expectation is that for a JSON request, the binary data will be base64 encoded.
-			// When content type is given as binary, try to decode base64 as []byte.
 
-			if dataAsString, ok := entry.Event.(string); ok {
-				decoded, decodeErr := base64.StdEncoding.DecodeString(dataAsString)
-				if decodeErr != nil {
-					msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-						fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: unable to decode base64 application/octect-stream data"))
-					respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-					log.Debug(msg)
-				}
-				dBytes = decoded
-			}
-		} else if contribContentType.IsStringContentType(entry.ContentType) {
-			switch v := entry.Event.(type) {
-			case string:
-				dBytes = []byte(v)
-			case []byte:
-				dBytes = v
-			default:
-				msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-					fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: mismatch between contentType and event"))
-				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-				log.Debug(msg)
-
-				return
-			}
-		} else {
-			dBytes, err = json.Marshal(entry.Event)
-			if err != nil {
-				msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-					fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, err.Error()))
-				respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-				log.Debug(msg)
-
-				return
-			}
+		dBytes, cErr := convertEventToBytes(entry.Event, entry.ContentType)
+		if cErr != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, cErr.Error()))
+			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+			log.Debug(msg)
+			return
 		}
 		entries[i] = pubsub.BulkMessageEntry{
 			Event:       dBytes,
