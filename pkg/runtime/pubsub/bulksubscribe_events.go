@@ -16,6 +16,8 @@ package pubsub
 import (
 	"github.com/google/uuid"
 
+	"github.com/dapr/kit/logger"
+
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 )
 
@@ -23,6 +25,8 @@ const (
 	Metadata = "metadata"
 	Entries  = "entries"
 )
+
+var bulkPSLogger = logger.NewLogger("bulk.subscribe")
 
 type BulkSubscribeMessageItem struct {
 	EntryID     string            `json:"entryID"`
@@ -43,7 +47,11 @@ type BulkSubscribeEnvelope struct {
 func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]interface{} {
 	id := req.ID
 	if id == "" {
-		id = uuid.New().String()
+		reqID, err := uuid.NewRandom()
+		if err != nil {
+			bulkPSLogger.Warn("Unable to generate uuid for bulk subscribe request")
+		}
+		id = reqID.String()
 	}
 	eventType := req.EventType
 	if eventType == "" {
