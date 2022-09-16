@@ -16,6 +16,7 @@ package pubsub
 import (
 	"context"
 	"io"
+	"sync"
 
 	"github.com/dapr/components-contrib/pubsub"
 
@@ -89,6 +90,7 @@ type messageHandler = func(*proto.PullMessageResponse)
 //nolint:nosnakecase
 func (p *grpcPubSub) adaptHandler(streamingPull proto.PubSub_PullMessagesClient, handler pubsub.Handler) messageHandler {
 	ctx := streamingPull.Context()
+	sendLock := &sync.Mutex{}
 	return func(msg *proto.PullMessageResponse) {
 		m := pubsub.NewMessage{
 			Data:        msg.Data,
@@ -105,12 +107,20 @@ func (p *grpcPubSub) adaptHandler(streamingPull proto.PubSub_PullMessagesClient,
 			}
 		}
 
+		// As per documentation:
+		// When using streams,
+		// one must take care to avoid calling either SendMsg or RecvMsg multiple times against the same Stream from different goroutines.
+		// In other words, it's safe to have a goroutine calling SendMsg and another goroutine calling RecvMsg on the same stream at the same time.
+		// But it is not safe to call SendMsg on the same stream in different goroutines, or to call RecvMsg on the same stream in different goroutines.
+		// https://github.com/grpc/grpc-go/blob/master/Documentation/concurrency.md#streams
+		sendLock.Lock()
 		if err := streamingPull.Send(&proto.PullMessagesRequest{
 			AckMessageId: msg.Id,
 			AckError:     ackError,
 		}); err != nil {
 			p.logger.Errorf("error when ack'ing message %s from topic %s", msg.Id, msg.Topic)
 		}
+		sendLock.Unlock()
 	}
 }
 
