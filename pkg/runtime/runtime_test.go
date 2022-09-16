@@ -240,7 +240,7 @@ func writeComponentToDisk(content any, fileName string) (cleanup func(), error e
 // 'topics' are the topics for the first pubsub.
 // 'topics2' are the topics for the second pubsub.
 func getSubscriptionsJSONString(topics []string, topics2 []string) string {
-	var s []runtimePubsub.SubscriptionJSON
+	s := make([]runtimePubsub.SubscriptionJSON, 0, len(topics))
 	for _, t := range topics {
 		s = append(s, runtimePubsub.SubscriptionJSON{
 			PubsubName: TestPubsubName,
