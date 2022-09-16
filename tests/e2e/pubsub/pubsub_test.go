@@ -37,6 +37,8 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+
+	apiv1 "k8s.io/api/core/v1"
 )
 
 var tr *runner.TestRunner
@@ -53,8 +55,13 @@ const (
 
 	receiveMessageRetries = 5
 
-	publisherAppName  = "pubsub-publisher"
-	subscriberAppName = "pubsub-subscriber"
+	publisherAppName           = "pubsub-publisher"
+	subscriberAppName          = "pubsub-subscriber"
+	publisherPluggableAppName  = "pubsub-publisher-pluggable"
+	subscriberPluggableAppName = "pubsub-subscriber-pluggable"
+	redisPubSubPluggableApp    = "e2e-pluggable_redis-pubsub"
+	PubSubEnvVar               = "DAPR_TEST_PUBSUB_NAME"
+	PubSubPluggableName        = "pluggable-messagebus"
 )
 
 var offset int
@@ -437,6 +444,47 @@ func TestMain(m *testing.M) {
 			AppMemoryRequest: "100Mi",
 		},
 	}
+	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
+		redisPubsubPluggableComponent := map[string]apiv1.Container{
+			"dapr-pubsub.redis-pluggable-v1-pluggable-pubsub.sock": {
+				Name:  "redis-pubsub-pluggable",
+				Image: runner.BuildTestImageName(redisPubSubPluggableApp),
+			},
+		}
+		pluggableTestApps := []kube.AppDescription{
+			{
+				AppName:             publisherPluggableAppName,
+				DaprEnabled:         true,
+				ImageName:           "e2e-pubsub-publisher",
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				AppMemoryLimit:      "200Mi",
+				AppMemoryRequest:    "100Mi",
+				Config:              "pluggablecomponentsconfig",
+				PluggableComponents: redisPubsubPluggableComponent,
+				AppEnv: map[string]string{
+					PubSubEnvVar: PubSubPluggableName,
+				},
+			},
+			{
+				AppName:             subscriberPluggableAppName,
+				DaprEnabled:         true,
+				ImageName:           "e2e-pubsub-subscriber",
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				AppMemoryLimit:      "200Mi",
+				AppMemoryRequest:    "100Mi",
+				Config:              "pluggablecomponentsconfig",
+				PluggableComponents: redisPubsubPluggableComponent,
+				AppEnv: map[string]string{
+					PubSubEnvVar: PubSubPluggableName,
+				},
+			},
+		}
+		testApps = append(testApps, pluggableTestApps...)
+	}
 
 	log.Printf("Creating TestRunner\n")
 	tr = runner.NewTestRunner("pubsubtest", testApps, nil, nil)
@@ -480,28 +528,51 @@ var pubsubTests = []struct {
 }
 
 func TestPubSubHTTP(t *testing.T) {
-	t.Log("Enter TestPubSubHTTP")
-	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
-	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
+	var apps []struct {
+		suite      string
+		publisher  string
+		subscriber string
+	} = []struct {
+		suite      string
+		publisher  string
+		subscriber string
+	}{
+		{
+			suite:      "built-in",
+			publisher:  publisherAppName,
+			subscriber: subscriberAppName,
+		},
+		{
+			suite:      "pluggable",
+			publisher:  publisherPluggableAppName,
+			subscriber: subscriberPluggableAppName,
+		},
+	}
 
-	subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
-	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURLHTTP must not be empty!")
+	for _, app := range apps {
+		t.Log("Enter TestPubSubHTTP")
+		publisherExternalURL := tr.Platform.AcquireAppExternalURL(app.publisher)
+		require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 
-	// This initial probe makes the test wait a little bit longer when needed,
-	// making this test less flaky due to delays in the deployment.
-	_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
-	require.NoError(t, err)
+		subscriberExternalURL := tr.Platform.AcquireAppExternalURL(app.subscriber)
+		require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURLHTTP must not be empty!")
 
-	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
-	require.NoError(t, err)
+		// This initial probe makes the test wait a little bit longer when needed,
+		// making this test less flaky due to delays in the deployment.
+		_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
+		require.NoError(t, err)
 
-	err = publishHealthCheck(publisherExternalURL)
-	require.NoError(t, err)
+		_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
+		require.NoError(t, err)
 
-	protocol := "http"
-	for _, tc := range pubsubTests {
-		t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
-			subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol)
-		})
+		err = publishHealthCheck(publisherExternalURL)
+		require.NoError(t, err)
+
+		protocol := "http"
+		for _, tc := range pubsubTests {
+			t.Run(fmt.Sprintf("%s_%s_%s", app.suite, tc.name, protocol), func(t *testing.T) {
+				subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, app.subscriber, protocol)
+			})
+		}
 	}
 }

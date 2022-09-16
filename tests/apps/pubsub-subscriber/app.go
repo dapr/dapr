@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -40,6 +41,7 @@ const (
 	pubsubRaw        = "pubsub-raw-topic-http"
 	pubsubDead       = "pubsub-dead-topic-http"
 	pubsubDeadLetter = "pubsub-deadletter-topic-http"
+	PubSubEnvVar     = "DAPR_TEST_PUBSUB_NAME"
 )
 
 type appResponse struct {
@@ -103,6 +105,14 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
+}
+
+var pubsubName = "messagebus"
+
+func init() {
+	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
+		pubsubName = psName
+	}
 }
 
 // this handles /dapr/subscribe, which is called from dapr into this app.
