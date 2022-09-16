@@ -1731,9 +1731,10 @@ func TestInitPubSub(t *testing.T) {
 
 		assert.Nil(t, err)
 		assert.Equal(t, 2, len(res.Statuses))
-		assert.Equal(t, "1", res.Statuses[0].EntryID)
+		expectedIds := []string{"1", "2"}
+		assert.Contains(t, expectedIds, res.Statuses[0].EntryID)
 		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
-		assert.Equal(t, "2", res.Statuses[1].EntryID)
+		assert.Contains(t, expectedIds, res.Statuses[1].EntryID)
 		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[1].Status)
 	})
 
