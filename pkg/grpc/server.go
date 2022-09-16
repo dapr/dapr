@@ -219,6 +219,12 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 	if s.metricSpec.Enabled {
 		s.logger.Info("enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
+
+		if s.kind == apiServer {
+			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingServerInterceptor())
+		} else if s.kind == internalServer {
+			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingClientInterceptor())
+		}
 	}
 
 	enableAPILogging := s.config.EnableAPILogging
@@ -234,13 +240,11 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		grpcGo.UnaryInterceptor(chain),
 	)
 
-	if s.proxy != nil {
-		chainStream := grpcMiddleware.ChainStreamServer(
-			intrStream...,
-		)
+	chainStream := grpcMiddleware.ChainStreamServer(
+		intrStream...,
+	)
 
-		opts = append(opts, grpcGo.StreamInterceptor(chainStream))
-	}
+	opts = append(opts, grpcGo.StreamInterceptor(chainStream))
 
 	return opts
 }
