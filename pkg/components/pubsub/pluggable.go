@@ -88,8 +88,7 @@ type messageHandler = func(*proto.PullMessageResponse)
 // adaptHandler returns a non-error function that handle the message with the given handler and ack when returns.
 //
 //nolint:nosnakecase
-func (p *grpcPubSub) adaptHandler(streamingPull proto.PubSub_PullMessagesClient, handler pubsub.Handler) messageHandler {
-	ctx := streamingPull.Context()
+func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSub_PullMessagesClient, handler pubsub.Handler) messageHandler {
 	sendLock := &sync.Mutex{}
 	return func(msg *proto.PullMessageResponse) {
 		m := pubsub.NewMessage{
@@ -132,18 +131,27 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, subscription *proto.Subsc
 		return errors.Wrapf(err, "unable to subscribe")
 	}
 
+	streamCtx, cancel := context.WithCancel(pull.Context())
+
 	err = pull.Send(&proto.PullMessagesRequest{
 		Subscription: subscription,
 	})
-	if err != nil {
+
+	cleanup := func() {
 		if err := pull.CloseSend(); err != nil {
-			p.logger.Warnf("could not close pull stream %v", err)
+			p.logger.Warnf("could not close pull stream of topic %s: %v", subscription.Topic, err)
 		}
+		cancel()
+	}
+
+	if err != nil {
+		cleanup()
 		return errors.Wrapf(err, "unable to subscribe")
 	}
 
-	handle := p.adaptHandler(pull, handler)
+	handle := p.adaptHandler(streamCtx, pull, handler)
 	go func() {
+		defer cleanup()
 		for {
 			msg, err := pull.Recv()
 			if err == io.EOF { // no more messages
