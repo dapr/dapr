@@ -118,8 +118,6 @@ func init() {
 // this handles /dapr/subscribe, which is called from dapr into this app.
 // this returns the list of topics the app is subscribed to.
 func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
-	pubsubName := "messagebus"
-
 	t := []subscription{
 		{
 			PubsubName: pubsubName,

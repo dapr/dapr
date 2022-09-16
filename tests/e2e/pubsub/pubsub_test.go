@@ -412,6 +412,22 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	}
 }
 
+var apps []struct {
+	suite      string
+	publisher  string
+	subscriber string
+} = []struct {
+	suite      string
+	publisher  string
+	subscriber string
+}{
+	{
+		suite:      "built-in",
+		publisher:  publisherAppName,
+		subscriber: subscriberAppName,
+	},
+}
+
 func TestMain(m *testing.M) {
 	utils.SetupLogs("pubsub")
 	utils.InitHTTPClient(true)
@@ -444,6 +460,7 @@ func TestMain(m *testing.M) {
 			AppMemoryRequest: "100Mi",
 		},
 	}
+
 	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
 		redisPubsubPluggableComponent := map[string]apiv1.Container{
 			"dapr-pubsub.redis-pluggable-v1-pluggable-pubsub.sock": {
@@ -484,6 +501,15 @@ func TestMain(m *testing.M) {
 			},
 		}
 		testApps = append(testApps, pluggableTestApps...)
+		apps = append(apps, struct {
+			suite      string
+			publisher  string
+			subscriber string
+		}{
+			suite:      "pluggable",
+			publisher:  publisherPluggableAppName,
+			subscriber: subscriberPluggableAppName,
+		})
 	}
 
 	log.Printf("Creating TestRunner\n")
@@ -528,27 +554,6 @@ var pubsubTests = []struct {
 }
 
 func TestPubSubHTTP(t *testing.T) {
-	var apps []struct {
-		suite      string
-		publisher  string
-		subscriber string
-	} = []struct {
-		suite      string
-		publisher  string
-		subscriber string
-	}{
-		{
-			suite:      "built-in",
-			publisher:  publisherAppName,
-			subscriber: subscriberAppName,
-		},
-		{
-			suite:      "pluggable",
-			publisher:  publisherPluggableAppName,
-			subscriber: subscriberPluggableAppName,
-		},
-	}
-
 	for _, app := range apps {
 		t.Log("Enter TestPubSubHTTP")
 		publisherExternalURL := tr.Platform.AcquireAppExternalURL(app.publisher)

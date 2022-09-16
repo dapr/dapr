@@ -44,37 +44,6 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type ackStreamMock struct {
-	grpc.ClientStream
-	ctx           context.Context
-	sendCalled    atomic.Int64
-	onSendCalled  func(*proto.MessageAcknowledgement)
-	sendErr       error
-	receiveCalled atomic.Int64
-	receiveErr    error
-	receiveChan   chan *proto.Message
-}
-
-func (m *ackStreamMock) Send(msg *proto.MessageAcknowledgement) error {
-	m.sendCalled.Add(1)
-	if m.onSendCalled != nil {
-		m.onSendCalled(msg)
-	}
-	return m.sendErr
-}
-
-func (m *ackStreamMock) Recv() (*proto.Message, error) {
-	m.receiveCalled.Add(1)
-	if m.receiveChan != nil {
-		return <-m.receiveChan, nil
-	}
-	return &proto.Message{}, m.receiveErr
-}
-
-func (m *ackStreamMock) Context() context.Context {
-	return m.ctx
-}
-
 var testLogger = logger.NewLogger("pubsub-pluggable-test")
 
 type server struct {
