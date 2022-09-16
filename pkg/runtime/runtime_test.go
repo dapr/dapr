@@ -175,14 +175,14 @@ func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
 	return nil
 }
 
-func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
+func (m *MockKubernetesStateStore) Init(secretstores.Metadata) error {
 	if m.callback != nil {
 		m.callback()
 	}
 	return nil
 }
 
-func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (m *MockKubernetesStateStore) GetSecret(context.Context, secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"key1":   "value1",
@@ -192,7 +192,7 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 	}, nil
 }
 
-func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+func (m *MockKubernetesStateStore) BulkGetSecret(context.Context, secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
 	response := map[string]map[string]string{}
 	response["k8s-secret"] = map[string]string{
 		"key1":   "value1",
@@ -240,7 +240,7 @@ func writeComponentToDisk(content any, fileName string) (cleanup func(), error e
 // 'topics' are the topics for the first pubsub.
 // 'topics2' are the topics for the second pubsub.
 func getSubscriptionsJSONString(topics []string, topics2 []string) string {
-	s := []runtimePubsub.SubscriptionJSON{}
+	var s []runtimePubsub.SubscriptionJSON
 	for _, t := range topics {
 		s = append(s, runtimePubsub.SubscriptionJSON{
 			PubsubName: TestPubsubName,
@@ -4663,7 +4663,7 @@ type mockPubSub struct {
 	closeErr error
 }
 
-func (p *mockPubSub) Init(metadata pubsub.Metadata) error {
+func (p *mockPubSub) Init(pubsub.Metadata) error {
 	return nil
 }
 
@@ -4676,7 +4676,7 @@ type mockStateStore struct {
 	closeErr error
 }
 
-func (s *mockStateStore) Init(metadata state.Metadata) error {
+func (s *mockStateStore) Init(state.Metadata) error {
 	return nil
 }
 
@@ -4689,7 +4689,7 @@ type mockSecretStore struct {
 	closeErr error
 }
 
-func (s *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (s *mockSecretStore) GetSecret(context.Context, secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"key1":   "value1",
@@ -4699,7 +4699,7 @@ func (s *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretst
 	}, nil
 }
 
-func (s *mockSecretStore) Init(metadata secretstores.Metadata) error {
+func (s *mockSecretStore) Init(secretstores.Metadata) error {
 	return nil
 }
 
@@ -4712,7 +4712,7 @@ type mockNameResolver struct {
 	closeErr error
 }
 
-func (n *mockNameResolver) Init(metadata nameresolution.Metadata) error {
+func (n *mockNameResolver) Init(nameresolution.Metadata) error {
 	return nil
 }
 

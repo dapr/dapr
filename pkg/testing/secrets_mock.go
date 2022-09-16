@@ -14,6 +14,7 @@ limitations under the License.
 package testing
 
 import (
+	"context"
 	"errors"
 
 	"github.com/dapr/components-contrib/secretstores"
@@ -25,7 +26,7 @@ func (c FakeSecretStore) Features() []secretstores.Feature {
 	return nil
 }
 
-func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (c FakeSecretStore) GetSecret(_ context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	if req.Name == "good-key" {
 		return secretstores.GetSecretResponse{
 			Data: map[string]string{"good-key": "life is good"},
@@ -39,7 +40,7 @@ func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretsto
 	return secretstores.GetSecretResponse{}, nil
 }
 
-func (c FakeSecretStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+func (c FakeSecretStore) BulkGetSecret(context.Context, secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
 	response := map[string]map[string]string{}
 	response["good-key"] = map[string]string{"good-key": "life is good"}
 
@@ -64,7 +65,7 @@ func (c FailingSecretStore) Features() []secretstores.Feature {
 	return nil
 }
 
-func (c FailingSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (c FailingSecretStore) GetSecret(_ context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	err := c.Failure.PerformFailure(req.Name)
 	if err != nil {
 		return secretstores.GetSecretResponse{}, err
@@ -75,7 +76,7 @@ func (c FailingSecretStore) GetSecret(req secretstores.GetSecretRequest) (secret
 	}, nil
 }
 
-func (c FailingSecretStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+func (c FailingSecretStore) BulkGetSecret(_ context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
 	key := req.Metadata["key"]
 	err := c.Failure.PerformFailure(key)
 	if err != nil {

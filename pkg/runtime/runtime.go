@@ -2494,7 +2494,7 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 		resp, ok := cache[m.SecretKeyRef.Name]
 		if !ok {
-			r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
+			r, err := secretStore.GetSecret(a.ctx, secretstores.GetSecretRequest{
 				Name: m.SecretKeyRef.Name,
 				Metadata: map[string]string{
 					"namespace": component.ObjectMeta.Namespace,
