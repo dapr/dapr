@@ -5,13 +5,13 @@ go 1.19
 replace github.com/dapr/dapr => github.com/mcandeia/dapr v0.0.0-20220915194247-02e6753a9f34
 
 require (
+	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220916145653-f6328c98f5d4
 	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220901165827-19341e5a0ff4
 	github.com/dapr/kit v0.0.2
 )
 
 require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
-	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220916125357-8dae28d2a57f // indirect
 	github.com/dapr/dapr v1.8.4-0.20220909163359-efaca389cc32 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect

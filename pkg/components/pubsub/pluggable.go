@@ -63,10 +63,6 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 		Metadata: protoMetadata,
 	})
 
-	if err != nil {
-		return err
-	}
-
 	return err
 }
 
