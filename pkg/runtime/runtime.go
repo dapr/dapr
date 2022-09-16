@@ -1779,7 +1779,7 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 		return bulkPublisher.BulkPublish(context.TODO(), req)
 	}
 
-	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(req)
+	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(context.TODO(), req)
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.

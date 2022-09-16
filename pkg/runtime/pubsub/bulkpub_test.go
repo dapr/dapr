@@ -14,6 +14,7 @@ limitations under the License.
 package pubsub
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -102,7 +103,7 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 
 			// Set up metadata and invoke the bulk publish method.
 			req.Metadata[bulkPublishSeriallyKey] = tc.bulkPublishSeriallyKey
-			res, err := bulkPublisher.BulkPublish(req)
+			res, err := bulkPublisher.BulkPublish(context.TODO(), req)
 
 			// Check if the bulk publish method returns an error.
 			if tc.expectError {

@@ -14,6 +14,7 @@ limitations under the License.
 package pubsub
 
 import (
+	"context"
 	"errors"
 
 	"golang.org/x/sync/errgroup"
@@ -47,7 +48,7 @@ func NewDefaultBulkPublisher(p contribPubsub.PubSub) *defaultBulkPublisher {
 // BulkPublish publishes a list of messages to a topic as individual Publish requests.
 // If 'bulkPublishSerially' metadata is set to true, the messages are sent to the broker serially,
 // in the same order. Otherwise they are sent to the broker as parallel Publish requests.
-func (p *defaultBulkPublisher) BulkPublish(req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
+func (p *defaultBulkPublisher) BulkPublish(_ context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	if req.Metadata[bulkPublishSeriallyKey] == "true" {
 		return p.bulkPublishSerial(req)
 	} else {
