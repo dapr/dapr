@@ -1776,7 +1776,7 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
-		return bulkPublisher.BulkPublish(req)
+		return bulkPublisher.BulkPublish(context.TODO(), req)
 	}
 
 	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(req)

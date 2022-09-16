@@ -399,5 +399,6 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
 
-// Will change to the pubsub batching branch once changes merged in components contrib ... This is temporary change
-replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20220915100450-d6adf5b05adc
+// Will change to the master branch once changes merged in components contrib ... This is temporary change
+// This is because when running go get, a branch with a `/` is not allowed, so not able to get the version of `feature/pubsub-batching`
+replace github.com/dapr/components-contrib => github.com/mukundansundar/components-contrib v0.0.0-20220915201717-3f9c42c4b8d9
