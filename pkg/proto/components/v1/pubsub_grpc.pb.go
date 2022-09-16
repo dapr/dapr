@@ -28,15 +28,12 @@ type PubSubClient interface {
 	Features(ctx context.Context, in *FeaturesRequest, opts ...grpc.CallOption) (*FeaturesResponse, error)
 	// Publish publishes a new message for the given topic.
 	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error)
-	// Subscribe returns a unique ID for the subscription to be used for pulling
-	// messages.
-	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error)
 	// Establishes a stream with the server, which sends messages down to the
 	// client. The client streams acknowledgements back to the server. The server
 	// will close the stream and return the status on any error. In case of closed
 	// connection, the client should re-establish the stream.
-	// The first trailing metadata MUST contain a `subscription-id: X` to select
-	// the subscription that should be used for the streaming pull.
+	// The message MUST contain a `subscription` on it that should be used for the
+	// entire streaming pull.
 	PullMessages(ctx context.Context, opts ...grpc.CallOption) (PubSub_PullMessagesClient, error)
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
@@ -77,15 +74,6 @@ func (c *pubSubClient) Publish(ctx context.Context, in *PublishRequest, opts ...
 	return out, nil
 }
 
-func (c *pubSubClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error) {
-	out := new(SubscribeResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.PubSub/Subscribe", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *pubSubClient) PullMessages(ctx context.Context, opts ...grpc.CallOption) (PubSub_PullMessagesClient, error) {
 	stream, err := c.cc.NewStream(ctx, &PubSub_ServiceDesc.Streams[0], "/dapr.proto.components.v1.PubSub/PullMessages", opts...)
 	if err != nil {
@@ -96,8 +84,8 @@ func (c *pubSubClient) PullMessages(ctx context.Context, opts ...grpc.CallOption
 }
 
 type PubSub_PullMessagesClient interface {
-	Send(*MessageAcknowledgement) error
-	Recv() (*Message, error)
+	Send(*PullMessagesRequest) error
+	Recv() (*PullMessageResponse, error)
 	grpc.ClientStream
 }
 
@@ -105,12 +93,12 @@ type pubSubPullMessagesClient struct {
 	grpc.ClientStream
 }
 
-func (x *pubSubPullMessagesClient) Send(m *MessageAcknowledgement) error {
+func (x *pubSubPullMessagesClient) Send(m *PullMessagesRequest) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *pubSubPullMessagesClient) Recv() (*Message, error) {
-	m := new(Message)
+func (x *pubSubPullMessagesClient) Recv() (*PullMessageResponse, error) {
+	m := new(PullMessageResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -136,15 +124,12 @@ type PubSubServer interface {
 	Features(context.Context, *FeaturesRequest) (*FeaturesResponse, error)
 	// Publish publishes a new message for the given topic.
 	Publish(context.Context, *PublishRequest) (*PublishResponse, error)
-	// Subscribe returns a unique ID for the subscription to be used for pulling
-	// messages.
-	Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error)
 	// Establishes a stream with the server, which sends messages down to the
 	// client. The client streams acknowledgements back to the server. The server
 	// will close the stream and return the status on any error. In case of closed
 	// connection, the client should re-establish the stream.
-	// The first trailing metadata MUST contain a `subscription-id: X` to select
-	// the subscription that should be used for the streaming pull.
+	// The message MUST contain a `subscription` on it that should be used for the
+	// entire streaming pull.
 	PullMessages(PubSub_PullMessagesServer) error
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
@@ -162,9 +147,6 @@ func (UnimplementedPubSubServer) Features(context.Context, *FeaturesRequest) (*F
 }
 func (UnimplementedPubSubServer) Publish(context.Context, *PublishRequest) (*PublishResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Publish not implemented")
-}
-func (UnimplementedPubSubServer) Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
 }
 func (UnimplementedPubSubServer) PullMessages(PubSub_PullMessagesServer) error {
 	return status.Errorf(codes.Unimplemented, "method PullMessages not implemented")
@@ -238,31 +220,13 @@ func _PubSub_Publish_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PubSub_Subscribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SubscribeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PubSubServer).Subscribe(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/dapr.proto.components.v1.PubSub/Subscribe",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PubSubServer).Subscribe(ctx, req.(*SubscribeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _PubSub_PullMessages_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(PubSubServer).PullMessages(&pubSubPullMessagesServer{stream})
 }
 
 type PubSub_PullMessagesServer interface {
-	Send(*Message) error
-	Recv() (*MessageAcknowledgement, error)
+	Send(*PullMessageResponse) error
+	Recv() (*PullMessagesRequest, error)
 	grpc.ServerStream
 }
 
@@ -270,12 +234,12 @@ type pubSubPullMessagesServer struct {
 	grpc.ServerStream
 }
 
-func (x *pubSubPullMessagesServer) Send(m *Message) error {
+func (x *pubSubPullMessagesServer) Send(m *PullMessageResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *pubSubPullMessagesServer) Recv() (*MessageAcknowledgement, error) {
-	m := new(MessageAcknowledgement)
+func (x *pubSubPullMessagesServer) Recv() (*PullMessagesRequest, error) {
+	m := new(PullMessagesRequest)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -318,10 +282,6 @@ var PubSub_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Publish",
 			Handler:    _PubSub_Publish_Handler,
-		},
-		{
-			MethodName: "Subscribe",
-			Handler:    _PubSub_Subscribe_Handler,
 		},
 		{
 			MethodName: "Ping",

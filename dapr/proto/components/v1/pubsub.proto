@@ -30,17 +30,14 @@ service PubSub {
   // Publish publishes a new message for the given topic.
   rpc Publish(PublishRequest) returns (PublishResponse) {}
 
-  // Subscribe returns a unique ID for the subscription to be used for pulling
-  // messages.
-  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse) {}
-
   // Establishes a stream with the server, which sends messages down to the
   // client. The client streams acknowledgements back to the server. The server
   // will close the stream and return the status on any error. In case of closed
   // connection, the client should re-establish the stream.
-  // The first trailing metadata MUST contain a `subscription-id: X` to select
-  // the subscription that should be used for the streaming pull.
-  rpc PullMessages(stream MessageAcknowledgement) returns (stream Message) {}
+  // The message MUST contain a `subscription` on it that should be used for the
+  // entire streaming pull.
+  rpc PullMessages(stream PullMessagesRequest)
+      returns (stream PullMessageResponse) {}
 
   // Ping the pubsub. Used for liveness porpuses.
   rpc Ping(PingRequest) returns (PingResponse) {}
@@ -52,12 +49,16 @@ message AckMessageError {
 }
 
 // Used for acknowledge a message.
-message MessageAcknowledgement {
+message PullMessagesRequest {
+  // Required. The subscription for which to initialize the new stream. This
+  // must be provided in the first request on the stream, and must not be set in
+  // subsequent requests from client to server.
+  Subscription subscription = 1;
   // The unique message ID.
-  string message_id = 1;
+  string ack_message_id = 2;
   // Optional, should not be fulfilled when the message was successfully
   // handled.
-  AckMessageError error = 2;
+  AckMessageError ack_error = 3;
 }
 
 // PubSubInitRequest is the request for initializing the pubsub component.
@@ -84,19 +85,14 @@ message PublishRequest {
 // reserved for future-proof extensibility
 message PublishResponse {}
 
-message SubscribeRequest {
+message Subscription {
   // The topic desired to be subscribed
   string topic = 1;
   // Metadata related subscribe request.
   map<string, string> metadata = 2;
 }
 
-message SubscribeResponse {
-  // The unique subscription ID.
-  string subscription_id = 1;
-}
-
-message Message {
+message PullMessageResponse {
   // The message content.
   bytes data = 1;
   // The topic where the message come from.

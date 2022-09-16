@@ -19,8 +19,6 @@ import (
 
 	"github.com/dapr/components-contrib/pubsub"
 
-	"google.golang.org/grpc/metadata"
-
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
@@ -88,14 +86,14 @@ func (p *grpcPubSub) Publish(req *pubsub.PublishRequest) error {
 	return err
 }
 
-type messageHandler = func(*proto.Message)
+type messageHandler = func(*proto.PullMessageResponse)
 
 // adaptHandler returns a non-error function that handle the message with the given handler and ack when returns.
 //
 //nolint:nosnakecase
 func (p *grpcPubSub) adaptHandler(streamingPull proto.PubSub_PullMessagesClient, handler pubsub.Handler) messageHandler {
 	ctx := streamingPull.Context()
-	return func(msg *proto.Message) {
+	return func(msg *proto.PullMessageResponse) {
 		m := pubsub.NewMessage{
 			Data:        msg.Data,
 			ContentType: &msg.ContentType,
@@ -111,24 +109,31 @@ func (p *grpcPubSub) adaptHandler(streamingPull proto.PubSub_PullMessagesClient,
 			}
 		}
 
-		if err := streamingPull.Send(&proto.MessageAcknowledgement{
-			MessageId: msg.Id,
-			Error:     ackError,
+		if err := streamingPull.Send(&proto.PullMessagesRequest{
+			AckMessageId: msg.Id,
+			AckError:     ackError,
 		}); err != nil {
 			p.logger.Errorf("error when ack'ing message %s from topic %s", msg.Id, msg.Topic)
 		}
 	}
 }
 
-const metadataSubscriptionID = "subscription-id"
-
 // pullMessages pull messages of the given subscription and execute the handler for that messages.
-// it sends `subscription-id` as metadata in the first metadata request.
-func (p *grpcPubSub) pullMessages(ctx context.Context, subscriptionID string, handler pubsub.Handler) error {
+func (p *grpcPubSub) pullMessages(ctx context.Context, subscription *proto.Subscription, handler pubsub.Handler) error {
 	// first pull should be sync and subsequent connections can be made in background if necessary
-	pull, err := p.Client.PullMessages(metadata.AppendToOutgoingContext(ctx, metadataSubscriptionID, subscriptionID))
+	pull, err := p.Client.PullMessages(ctx)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "unable to subscribe")
+	}
+
+	err = pull.Send(&proto.PullMessagesRequest{
+		Subscription: subscription,
+	})
+	if err != nil {
+		if err := pull.CloseSend(); err != nil {
+			p.logger.Warnf("could not close pull stream %v", err)
+		}
+		return errors.Wrapf(err, "unable to subscribe")
 	}
 
 	handle := p.adaptHandler(pull, handler)
@@ -156,16 +161,11 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, subscriptionID string, ha
 
 // Subscribe subscribes to a given topic and callback the handler when a new message arrives.
 func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
-	protoReq := proto.SubscribeRequest{
+	subscription := &proto.Subscription{
 		Topic:    req.Topic,
 		Metadata: req.Metadata,
 	}
-	subscription, err := p.Client.Subscribe(ctx, &protoReq)
-	if err != nil {
-		return errors.Wrapf(err, "unable to subscribe")
-	}
-
-	return p.pullMessages(ctx, subscription.SubscriptionId, handler)
+	return p.pullMessages(ctx, subscription, handler)
 }
 
 func (p *grpcPubSub) Close() error {

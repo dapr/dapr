@@ -41,46 +41,31 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 var testLogger = logger.NewLogger("pubsub-pluggable-test")
 
 type server struct {
 	proto.UnimplementedPubSubServer
-	initCalled             atomic.Int64
-	onInitCalled           func(*proto.PubSubInitRequest)
-	initErr                error
-	featuresCalled         atomic.Int64
-	featuresErr            error
-	publishCalled          atomic.Int64
-	onPublishCalled        func(*proto.PublishRequest)
-	publishErr             error
-	subscribeCalled        atomic.Int64
-	onSubscribeCalled      func(*proto.SubscribeRequest)
-	subscribeErr           error
-	subscribeResp          *proto.SubscribeResponse
-	pullChan               chan *proto.Message
-	pingCalled             atomic.Int64
-	pingErr                error
-	onAckReceived          func(*proto.MessageAcknowledgement)
-	onPullMetadataReceived func(metadata.MD)
-	pullCalled             atomic.Int64
-	pullErr                error
+	initCalled      atomic.Int64
+	onInitCalled    func(*proto.PubSubInitRequest)
+	initErr         error
+	featuresCalled  atomic.Int64
+	featuresErr     error
+	publishCalled   atomic.Int64
+	onPublishCalled func(*proto.PublishRequest)
+	publishErr      error
+	pullChan        chan *proto.PullMessageResponse
+	pingCalled      atomic.Int64
+	pingErr         error
+	onAckReceived   func(*proto.PullMessagesRequest)
+	pullCalled      atomic.Int64
+	pullErr         error
 }
 
 //nolint:nosnakecase
 func (s *server) PullMessages(svc proto.PubSub_PullMessagesServer) error {
 	s.pullCalled.Add(1)
-
-	if s.onPullMetadataReceived != nil {
-		ctx := svc.Context()
-		md, ok := metadata.FromIncomingContext(ctx)
-		if !ok {
-			return errors.New("fail")
-		}
-		s.onPullMetadataReceived(md)
-	}
 
 	if s.onAckReceived != nil {
 		go func() {
@@ -128,15 +113,6 @@ func (s *server) Publish(_ context.Context, req *proto.PublishRequest) (*proto.P
 func (s *server) Ping(context.Context, *proto.PingRequest) (*proto.PingResponse, error) {
 	s.pingCalled.Add(1)
 	return &proto.PingResponse{}, s.pingErr
-}
-
-func (s *server) Subscribe(_ context.Context, req *proto.SubscribeRequest) (*proto.SubscribeResponse, error) {
-	s.subscribeCalled.Add(1)
-	if s.onSubscribeCalled != nil {
-		s.onSubscribeCalled(req)
-	}
-
-	return s.subscribeResp, s.subscribeErr
 }
 
 func TestPubSubPluggableCalls(t *testing.T) {
@@ -242,55 +218,25 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		assert.Equal(t, int64(1), svc.publishCalled.Load())
 	})
 
-	t.Run("subscribe should call subscribe grpc method", func(t *testing.T) {
-		const fakeTopic = "fakeTopic"
-		var subscribeCalledWg sync.WaitGroup
-		subscribeCalledWg.Add(1)
-
-		svc := &server{
-			onSubscribeCalled: func(req *proto.SubscribeRequest) {
-				subscribeCalledWg.Done()
-				assert.Equal(t, req.Topic, fakeTopic)
-			},
-			subscribeResp: &proto.SubscribeResponse{},
-		}
-		ps, cleanup, err := getPubSub(svc)
-		require.NoError(t, err)
-		defer cleanup()
-
-		err = ps.Subscribe(context.Background(), pubsub.SubscribeRequest{
-			Topic: fakeTopic,
-		}, func(context.Context, *pubsub.NewMessage) error {
-			assert.Fail(t, "handler should not be called")
-			return nil
-		})
-
-		subscribeCalledWg.Wait()
-
-		require.NoError(t, err)
-		assert.Equal(t, int64(1), svc.subscribeCalled.Load())
-	})
-
 	t.Run("subscribe should callback handler when new messages arrive", func(t *testing.T) {
 		const fakeTopic, fakeData1, fakeData2, fakeSubscriptionID = "fakeTopic", "fakeData1", "fakeData2", "fake-subscription-id"
 		var (
 			messagesAcked     sync.WaitGroup
 			subscribeCalled   sync.WaitGroup
 			messagesProcessed sync.WaitGroup
-			metadataReceived  atomic.Int64
 			totalAckErrors    atomic.Int64
 			handleCalled      atomic.Int64
 		)
 
 		messagesData := [][]byte{[]byte(fakeData1), []byte(fakeData2)}
-		messages := make([]*proto.Message, len(messagesData))
+		messages := make([]*proto.PullMessageResponse, len(messagesData))
 
 		messagesAcked.Add(len(messages))
 		messagesProcessed.Add(len(messages))
 		subscribeCalled.Add(1)
 
 		for idx, data := range messagesData {
-			messages[idx] = &proto.Message{
+			messages[idx] = &proto.PullMessageResponse{
 				Data:        data,
 				Topic:       fakeTopic,
 				Metadata:    map[string]string{},
@@ -298,7 +244,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			}
 		}
 
-		messageChan := make(chan *proto.Message, len(messages))
+		messageChan := make(chan *proto.PullMessageResponse, len(messages))
 		defer close(messageChan)
 
 		for _, message := range messages {
@@ -306,21 +252,15 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		}
 
 		svc := &server{
-			onSubscribeCalled: func(req *proto.SubscribeRequest) {
-				subscribeCalled.Done()
-				assert.Equal(t, req.Topic, fakeTopic)
-			},
-			subscribeResp: &proto.SubscribeResponse{
-				SubscriptionId: fakeSubscriptionID,
-			},
 			pullChan: messageChan,
-			onPullMetadataReceived: func(m metadata.MD) {
-				metadataReceived.Add(1)
-				assert.Equal(t, m.Get(metadataSubscriptionID)[0], fakeSubscriptionID)
-			},
-			onAckReceived: func(ma *proto.MessageAcknowledgement) {
-				messagesAcked.Done()
-				if ma.Error != nil {
+			onAckReceived: func(ma *proto.PullMessagesRequest) {
+				if ma.Subscription != nil {
+					subscribeCalled.Done()
+				}
+				if ma.Subscription == nil {
+					messagesAcked.Done()
+				}
+				if ma.AckError != nil {
 					totalAckErrors.Add(1)
 				}
 			},
@@ -348,9 +288,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		messagesProcessed.Wait()
 		messagesAcked.Wait()
 
-		assert.Equal(t, int64(1), svc.subscribeCalled.Load())
 		assert.Equal(t, int64(len(messages)), handleCalled.Load())
 		assert.Equal(t, int64(1), totalAckErrors.Load()) // at least one message should be an error
-		assert.Equal(t, int64(1), metadataReceived.Load())
 	})
 }
