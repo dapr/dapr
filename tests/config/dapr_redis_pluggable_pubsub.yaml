@@ -14,7 +14,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: PluggableComponent
 metadata:
-  name: redis-pluggable
+  name: redis-pubsub-pluggable
 spec:
   type: pubsub
   version: v1
@@ -24,7 +24,7 @@ kind: Component
 metadata:
   name: pluggable-messagebus
 spec:
-  type: pubsub.redis-pluggable
+  type: pubsub.redis-pubsub-pluggable
   initTimeout: 1m
   version: v1
   metadata:
