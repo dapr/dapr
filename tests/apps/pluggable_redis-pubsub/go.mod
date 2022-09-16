@@ -2,10 +2,10 @@ module github.com/dapr/dapr/tests/apps/pluggable_redis-pubsub
 
 go 1.19
 
-replace github.com/dapr/dapr => github.com/mcandeia/dapr v0.0.0-20220915194247-02e6753a9f34
+replace github.com/dapr/dapr => ../../../
 
 require (
-	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220916145653-f6328c98f5d4
+	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220916152846-122a74d99a9f
 	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220901165827-19341e5a0ff4
 	github.com/dapr/kit v0.0.2
 )
