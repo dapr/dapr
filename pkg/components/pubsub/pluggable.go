@@ -138,8 +138,8 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, subscription *proto.Subsc
 	})
 
 	cleanup := func() {
-		if err := pull.CloseSend(); err != nil {
-			p.logger.Warnf("could not close pull stream of topic %s: %v", subscription.Topic, err)
+		if closeErr := pull.CloseSend(); closeErr != nil {
+			p.logger.Warnf("could not close pull stream of topic %s: %v", subscription.Topic, closeErr)
 		}
 		cancel()
 	}

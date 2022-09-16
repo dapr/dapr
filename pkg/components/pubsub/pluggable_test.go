@@ -219,7 +219,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 	})
 
 	t.Run("subscribe should callback handler when new messages arrive", func(t *testing.T) {
-		const fakeTopic, fakeData1, fakeData2, fakeSubscriptionID = "fakeTopic", "fakeData1", "fakeData2", "fake-subscription-id"
+		const fakeTopic, fakeData1, fakeData2 = "fakeTopic", "fakeData1", "fakeData2"
 		var (
 			messagesAcked     sync.WaitGroup
 			subscribeCalled   sync.WaitGroup
