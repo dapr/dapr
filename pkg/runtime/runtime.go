@@ -329,7 +329,7 @@ func (a *DaprRuntime) loadPluggableComponents() ([]components.Pluggable, error) 
 	if a.runtimeConfig.Mode == modes.StandaloneMode {
 		return pluggable.LoadFromDisk(a.runtimeConfig.Standalone.ComponentsPath)
 	}
-	return pluggable.LoadFromKubernetes()
+	return pluggable.LoadFromKubernetes(a.namespace, a.podName, a.operatorClient)
 }
 
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
