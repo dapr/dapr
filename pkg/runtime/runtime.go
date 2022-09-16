@@ -1768,7 +1768,7 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+func (a *DaprRuntime) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 	ps, ok := a.pubSubs[req.PubsubName]
 	if !ok {
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
@@ -1779,7 +1779,7 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 	}
 
 	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
-		return bulkPublisher.BulkPublish(req)
+		return bulkPublisher.BulkPublish(ctx, req)
 	}
 	return pubsub.BulkPublishResponse{}, errors.Errorf("pubsub %s does not implement the BulkPublish method", req.PubsubName)
 }
@@ -1916,7 +1916,7 @@ func (a *DaprRuntime) initNameResolution() error {
 }
 
 func (a *DaprRuntime) sendBulkToDeadLetter(
-	name string, msg *pubsub.BulkMessage, deadLetterTopic string,
+	ctx context.Context, name string, msg *pubsub.BulkMessage, deadLetterTopic string,
 	entryIDIndexMap *map[string]int, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
 ) error {
 	data := make([]pubsub.BulkMessageEntry, len(msg.Entries))
@@ -1942,7 +1942,7 @@ func (a *DaprRuntime) sendBulkToDeadLetter(
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := a.BulkPublish(req)
+	_, err := a.BulkPublish(ctx, req)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 	}
@@ -1973,7 +1973,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
 			if route.deadLetterTopic != "" {
-				if dlqErr := a.sendBulkToDeadLetter(psName, msg, route.deadLetterTopic, nil, nil); dlqErr == nil {
+				if dlqErr := a.sendBulkToDeadLetter(ctx, psName, msg, route.deadLetterTopic, nil, nil); dlqErr == nil {
 					// dlq has been configured and whole bulk of messages is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 					return nil, nil
@@ -1990,7 +1990,8 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 		hasAnyError := false
 		for i, message := range msg.Entries {
 			if message.EntryID == "" {
-				log.Warnf("Invalid entry id %v received while processing bulk pub/sub event, won't be able to process it", message.EntryID)
+				log.Warn("Invalid blank entry id received while processing bulk pub/sub event, won't be able to process it")
+				bulkResponses[i].Error = errors.New("Blank entryID supplied - won't be able to process it")
 				continue
 			}
 			entryIDIndexMap[message.EntryID] = i
@@ -2160,7 +2161,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 						Topic:    msg.Topic,
 						Metadata: msg.Metadata,
 					}
-					if dlqErr := a.sendBulkToDeadLetter(psName, &bulkMsg, route.deadLetterTopic, &entryIDIndexMap, nil); dlqErr == nil {
+					if dlqErr := a.sendBulkToDeadLetter(ctx, psName, &bulkMsg, route.deadLetterTopic, &entryIDIndexMap, nil); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
 						diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 						for _, item := range psm.entries {
@@ -2196,7 +2197,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			if route.deadLetterTopic != "" {
-				if dlqErr := a.sendBulkToDeadLetter(psName, msg, route.deadLetterTopic, &entryIDIndexMap, &bulkResponses); dlqErr == nil {
+				if dlqErr := a.sendBulkToDeadLetter(ctx, psName, msg, route.deadLetterTopic, &entryIDIndexMap, &bulkResponses); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
 					diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msg.Topic, 0)
 					return nil, nil
@@ -2414,7 +2415,9 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscri
 
 func endSpans(spans []trace.Span) {
 	for _, span := range spans {
-		span.End()
+		if span != nil {
+			span.End()
+		}
 	}
 }
 
