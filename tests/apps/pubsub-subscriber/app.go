@@ -33,11 +33,7 @@ import (
 )
 
 const (
-	appPort      = 3000
-	PubSubEnvVar = "DAPR_TEST_PUBSUB_NAME"
-)
-
-var (
+	appPort          = 3000
 	pubsubA          = "pubsub-a-topic-http"
 	pubsubB          = "pubsub-b-topic-http"
 	pubsubC          = "pubsub-c-topic-http"
@@ -45,6 +41,7 @@ var (
 	pubsubRaw        = "pubsub-raw-topic-http"
 	pubsubDead       = "pubsub-dead-topic-http"
 	pubsubDeadLetter = "pubsub-deadletter-topic-http"
+	PubSubEnvVar     = "DAPR_TEST_PUBSUB_NAME"
 )
 
 var pubsubName = "messagebus"

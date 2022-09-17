@@ -384,10 +384,8 @@ endif
 # install redis to the cluster without password
 setup-test-env-redis:
 	$(HELM) install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
-	$(HELM) install dapr-redis-2 bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
 delete-test-env-redis:
 	${HELM} del dapr-redis --namespace ${DAPR_TEST_NAMESPACE}
-	${HELM} del dapr-redis-2 --namespace ${DAPR_TEST_NAMESPACE}
 
 # install kafka to the cluster
 setup-test-env-kafka:

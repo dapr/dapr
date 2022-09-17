@@ -226,7 +226,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
 	// set to respond with success
-	setDesiredResponse(t, "success", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	log.Printf("Test publish subscribe success flow\n")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
@@ -262,10 +262,10 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
 
 	log.Println("Initialize the sets for this scenario ...")
-	callInitialize(t, publisherExternalURL, protocol)
+	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 
 	// set to respond with specified subscriber response
-	setDesiredResponse(t, subscriberResponse, publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, subscriberResponse, publisherExternalURL, protocol)
 
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
@@ -274,14 +274,14 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		time.Sleep(10 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
 
-		callInitialize(t, publisherExternalURL, protocol)
+		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else {
 		// Sleep a few seconds to ensure there's time for all messages to be delivered at least once, so if they have to be sent to the DLQ, they can be before we change the desired response status
 		time.Sleep(5 * time.Second)
 	}
 
 	// set to respond with success
-	setDesiredResponse(t, "success", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
@@ -309,7 +309,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	return subscriberExternalURL
 }
 
-func callInitialize(t *testing.T, publisherExternalURL string, protocol string) {
+func callInitialize(t *testing.T, subscriberAppName, publisherExternalURL string, protocol string) {
 	req := callSubscriberMethodRequest{
 		ReqID:     "c-" + uuid.New().String(),
 		RemoteApp: subscriberAppName,
@@ -323,7 +323,7 @@ func callInitialize(t *testing.T, publisherExternalURL string, protocol string) 
 	require.Equal(t, http.StatusOK, code)
 }
 
-func setDesiredResponse(t *testing.T, subscriberResponse string, publisherExternalURL string, protocol string) {
+func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, publisherExternalURL, protocol string) {
 	// set to respond with specified subscriber response
 	req := callSubscriberMethodRequest{
 		ReqID:     "c-" + uuid.New().String(),

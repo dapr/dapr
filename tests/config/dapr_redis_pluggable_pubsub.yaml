@@ -29,9 +29,11 @@ spec:
   version: v1
   metadata:
     - name: redisHost
-      value: ""
+      secretKeyRef:
+        name: redissecret
+        key: host
     - name: redisPassword
-      value: "dapr-redis-2-master:6379"
+      value: ""
     - name: processingTimeout
       value: 1s
     - name: redeliverInterval
