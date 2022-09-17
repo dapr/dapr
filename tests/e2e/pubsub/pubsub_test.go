@@ -64,7 +64,10 @@ const (
 	PubSubPluggableName        = "pluggable-messagebus"
 )
 
-var offset int
+var (
+	offset     int
+	pubsubName string
+)
 
 // sent to the publisher app, which will publish data to dapr.
 type publishCommand struct {
@@ -174,26 +177,26 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 }
 
 func testPublish(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
-	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-topic", protocol, nil, "")
+	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, pubsubName+"-pubsub-dead-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
+	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, pubsubName+"-pubsub-a-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol, nil, "")
+	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, pubsubName+"-pubsub-b-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol, nil, "")
+	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, pubsubName+"-pubsub-c-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
 	metadata := map[string]string{
 		"rawPayload": "true",
 	}
-	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
+	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, pubsubName+"-pubsub-raw-topic", protocol, metadata, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
@@ -416,15 +419,18 @@ var apps []struct {
 	suite      string
 	publisher  string
 	subscriber string
+	pubsubName string
 } = []struct {
 	suite      string
 	publisher  string
 	subscriber string
+	pubsubName string
 }{
 	{
 		suite:      "built-in",
 		publisher:  publisherAppName,
 		subscriber: subscriberAppName,
+		pubsubName: "messagebus",
 	},
 }
 
@@ -501,10 +507,12 @@ func TestMain(m *testing.M) {
 			suite      string
 			publisher  string
 			subscriber string
+			pubsubName string
 		}{
 			suite:      "pluggable",
 			publisher:  publisherPluggableAppName,
 			subscriber: subscriberPluggableAppName,
+			pubsubName: PubSubPluggableName,
 		})
 	}
 
@@ -570,6 +578,7 @@ func TestPubSubHTTP(t *testing.T) {
 		require.NoError(t, err)
 
 		protocol := "http"
+		pubsubName = app.pubsubName
 		//nolint: gosec
 		offset = rand.Intn(randomOffsetMax) + 1
 		log.Printf("initial %s offset: %d", app.suite, offset)

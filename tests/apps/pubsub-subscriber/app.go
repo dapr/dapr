@@ -33,7 +33,11 @@ import (
 )
 
 const (
-	appPort          = 3000
+	appPort      = 3000
+	PubSubEnvVar = "DAPR_TEST_PUBSUB_NAME"
+)
+
+var (
 	pubsubA          = "pubsub-a-topic-http"
 	pubsubB          = "pubsub-b-topic-http"
 	pubsubC          = "pubsub-c-topic-http"
@@ -41,8 +45,20 @@ const (
 	pubsubRaw        = "pubsub-raw-topic-http"
 	pubsubDead       = "pubsub-dead-topic-http"
 	pubsubDeadLetter = "pubsub-deadletter-topic-http"
-	PubSubEnvVar     = "DAPR_TEST_PUBSUB_NAME"
 )
+
+var pubsubName = "messagebus"
+
+func init() {
+	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
+		pubsubName = psName
+	}
+
+	topics := []*string{&pubsubA, &pubsubB, &pubsubC, &pubsubJob, &pubsubRaw, &pubsubDead, &pubsubDeadLetter}
+	for _, topic := range topics {
+		*topic = pubsubName + "-" + *topic
+	}
+}
 
 type appResponse struct {
 	// Status field for proper handling of errors form pubsub
@@ -105,14 +121,6 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
-}
-
-var pubsubName = "messagebus"
-
-func init() {
-	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
-		pubsubName = psName
-	}
 }
 
 // this handles /dapr/subscribe, which is called from dapr into this app.
