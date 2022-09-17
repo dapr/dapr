@@ -5,6 +5,6 @@ metadata:
 spec:
   pubsubname: pluggable-messagebus
   topic: pluggable-messagebus-pubsub-c-topic-http
-  route: /pubsub-c-topic-http
+  route: /pluggable-messagebus-pubsub-c-topic-http
 scopes:
 - pubsub-subscriber-pluggable
