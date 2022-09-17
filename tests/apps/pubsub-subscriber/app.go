@@ -53,11 +53,6 @@ func init() {
 	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
 		pubsubName = psName
 	}
-
-	topics := []*string{&pubsubA, &pubsubB, &pubsubC, &pubsubJob, &pubsubRaw, &pubsubDead, &pubsubDeadLetter}
-	for _, topic := range topics {
-		*topic = pubsubName + "-" + *topic
-	}
 }
 
 type appResponse struct {
