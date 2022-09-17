@@ -48,6 +48,13 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 		Properties: metadata.Properties,
 	}
 
+	_, err := p.Client.Init(p.Context, &proto.PubSubInitRequest{
+		Metadata: protoMetadata,
+	})
+	if err != nil {
+		return err
+	}
+
 	// TODO Static data could be retrieved in another way, a necessary discussion should start soon.
 	// we need to call the method here because features could return an error and the features interface doesn't support errors
 	featureResponse, err := p.Client.Features(p.Context, &proto.FeaturesRequest{})
@@ -60,11 +67,7 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 		p.features[idx] = pubsub.Feature(f)
 	}
 
-	_, err = p.Client.Init(p.Context, &proto.PubSubInitRequest{
-		Metadata: protoMetadata,
-	})
-
-	return err
+	return nil
 }
 
 // Features lists all implemented features.
@@ -89,7 +92,7 @@ type messageHandler = func(*proto.PullMessageResponse)
 //
 //nolint:nosnakecase
 func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSub_PullMessagesClient, handler pubsub.Handler) messageHandler {
-	sendLock := &sync.Mutex{}
+	safeSend := &sync.Mutex{}
 	return func(msg *proto.PullMessageResponse) {
 		m := pubsub.NewMessage{
 			Data:        msg.Data,
@@ -112,14 +115,15 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 		// In other words, it's safe to have a goroutine calling SendMsg and another goroutine calling RecvMsg on the same stream at the same time.
 		// But it is not safe to call SendMsg on the same stream in different goroutines, or to call RecvMsg on the same stream in different goroutines.
 		// https://github.com/grpc/grpc-go/blob/master/Documentation/concurrency.md#streams
-		sendLock.Lock()
+		safeSend.Lock()
+		defer safeSend.Unlock()
+
 		if err := streamingPull.Send(&proto.PullMessagesRequest{
 			AckMessageId: msg.Id,
 			AckError:     ackError,
 		}); err != nil {
 			p.logger.Errorf("error when ack'ing message %s from topic %s", msg.Id, msg.Topic)
 		}
-		sendLock.Unlock()
 	}
 }
 
@@ -180,10 +184,6 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 		Metadata: req.Metadata,
 	}
 	return p.pullMessages(ctx, subscription, handler)
-}
-
-func (p *grpcPubSub) Close() error {
-	return p.GRPCConnector.Close()
 }
 
 // fromConnector creates a new GRPC pubsub using the given underlying connector.

@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-# TODO: Remove once PluggableComponents feature is finalized
+# TODO: Remove once PluggableComponents feature is GA released
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:

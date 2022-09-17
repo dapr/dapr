@@ -17,12 +17,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"os"
+	"runtime"
 	"sync/atomic"
 	"testing"
 
+	guuid "github.com/google/uuid"
+
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
@@ -30,8 +37,6 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,6 +45,8 @@ import (
 type server struct {
 	proto.UnimplementedStateStoreServer
 	proto.UnimplementedTransactionalStateStoreServer
+	initCalled         atomic.Int64
+	featuresCalled     atomic.Int64
 	deleteCalled       atomic.Int64
 	onDeleteCalled     func(*proto.DeleteRequest)
 	deleteErr          error
@@ -141,7 +148,13 @@ func (s *server) BulkSet(ctx context.Context, req *proto.BulkSetRequest) (*proto
 }
 
 func (s *server) Init(context.Context, *proto.InitRequest) (*proto.InitResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Init not implemented")
+	s.initCalled.Add(1)
+	return &proto.InitResponse{}, nil
+}
+
+func (s *server) Features(context.Context, *proto.FeaturesRequest) (*proto.FeaturesResponse, error) {
+	s.featuresCalled.Add(1)
+	return &proto.FeaturesResponse{}, nil
 }
 
 var testLogger = logger.NewLogger("state-pluggable-logger")
@@ -162,6 +175,48 @@ func TestComponentCalls(t *testing.T) {
 		stStore.Client = client
 		return stStore
 	})
+
+	if runtime.GOOS != "windows" {
+		t.Run("test init should populate features and call grpc init", func(t *testing.T) {
+			const (
+				fakeName          = "name"
+				fakeType          = "type"
+				fakeVersion       = "v1"
+				fakeComponentName = "component"
+				fakeSocketFolder  = "/tmp"
+			)
+
+			uniqueID := guuid.New().String()
+			socket := fmt.Sprintf("%s/%s.sock", fakeSocketFolder, uniqueID)
+			defer os.Remove(socket)
+
+			connector := pluggable.NewGRPCConnectorWithFactory(func(string) string {
+				return socket
+			}, newStateStoreClient)
+			defer connector.Close()
+
+			listener, err := net.Listen("unix", socket)
+			require.NoError(t, err)
+			defer listener.Close()
+			s := grpc.NewServer()
+			srv := &server{}
+			proto.RegisterStateStoreServer(s, srv)
+			go func() {
+				if serveErr := s.Serve(listener); serveErr != nil {
+					testLogger.Debugf("Server exited with error: %v", serveErr)
+				}
+			}()
+
+			ps := fromConnector(testLogger, connector)
+			err = ps.Init(state.Metadata{
+				Base: contribMetadata.Base{},
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, int64(1), srv.featuresCalled.Load())
+			assert.Equal(t, int64(1), srv.initCalled.Load())
+		})
+	}
 
 	t.Run("features should return the component features'", func(t *testing.T) {
 		stStore, cleanup, err := getStateStore(&server{})

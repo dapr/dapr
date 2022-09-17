@@ -432,10 +432,6 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("pubsub")
 	utils.InitHTTPClient(true)
 
-	//nolint: gosec
-	offset = rand.Intn(randomOffsetMax) + 1
-	log.Printf("initial offset: %d", offset)
-
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
@@ -574,6 +570,9 @@ func TestPubSubHTTP(t *testing.T) {
 		require.NoError(t, err)
 
 		protocol := "http"
+		//nolint: gosec
+		offset = rand.Intn(randomOffsetMax) + 1
+		log.Printf("initial %s offset: %d", app.suite, offset)
 		for _, tc := range pubsubTests {
 			t.Run(fmt.Sprintf("%s_%s_%s", app.suite, tc.name, protocol), func(t *testing.T) {
 				subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, app.subscriber, protocol)

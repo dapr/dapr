@@ -463,7 +463,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	# TODO: Remove once AppHealthCheck feature is finalized
 	$(KUBECTL) apply -f ./tests/config/app_healthcheck.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	# TODO: Remove once PluggableComponents feature is finalized
+	# TODO: Remove once PluggableComponents feature is GA released
 	$(KUBECTL) apply -f ./tests/config/app_pluggablecomponents.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
