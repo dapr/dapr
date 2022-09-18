@@ -794,6 +794,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 		}
 
 		err = policy(func(ctx context.Context) error {
+			var pubMessageErr error
 			psm := &pubsubSubscribedMessage{
 				cloudEvent: cloudEvent,
 				data:       data,
@@ -804,20 +805,20 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, top
 			}
 			switch a.runtimeConfig.ApplicationProtocol {
 			case HTTPProtocol:
-				return a.publishMessageHTTP(ctx, psm)
+				pubMessageErr = a.publishMessageHTTP(ctx, psm)
 			case GRPCProtocol:
-				return a.publishMessageGRPC(ctx, psm)
+				pubMessageErr = a.publishMessageGRPC(ctx, psm)
 			default:
-				return backoff.Permanent(errors.New("invalid application protocol"))
+				pubMessageErr = backoff.Permanent(errors.New("invalid application protocol"))
 			}
+			if errors.Is(pubMessageErr, ErrRetriable) {
+				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %s", msg.Topic, pubMessageErr)
+			} else {
+				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %s", msg.Topic, pubMessageErr)
+			}
+			return pubMessageErr
 		})
 		if err != nil && err != context.Canceled {
-			if errors.Is(err, ErrRetriable) {
-				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %s", msg.Topic, err)
-			} else {
-				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %s", msg.Topic, err)
-			}
-
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			if route.deadLetterTopic == "" {
