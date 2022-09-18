@@ -26,6 +26,7 @@ type redisPb struct {
 	pubsub.PubSub
 }
 
+// topicPrefix is used to avoid name clashing with other pubsub brokers when using the same underlying redis instance.
 const topicPrefix = "pluggable-"
 
 func (r *redisPb) Subscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
