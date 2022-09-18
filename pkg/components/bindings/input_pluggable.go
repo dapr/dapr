@@ -57,7 +57,7 @@ type readHandler = func(*proto.ReadResponse)
 // adaptHandler returns a non-error function that handle the message with the given handler and ack when returns.
 //
 //nolint:nosnakecase
-func (p *grpcInputBinding) adaptHandler(ctx context.Context, streamingPull proto.InputBinding_ReadClient, handler bindings.Handler) readHandler {
+func (b *grpcInputBinding) adaptHandler(ctx context.Context, streamingPull proto.InputBinding_ReadClient, handler bindings.Handler) readHandler {
 	safeSend := &sync.Mutex{}
 	return func(msg *proto.ReadResponse) {
 		var contentType *string
@@ -73,7 +73,7 @@ func (p *grpcInputBinding) adaptHandler(ctx context.Context, streamingPull proto
 		var respErr *proto.AckResponseError
 		bts, err := handler(ctx, &m)
 		if err != nil {
-			p.logger.Errorf("error when handling message for message: %s", msg.MessageId)
+			b.logger.Errorf("error when handling message for message: %s", msg.MessageId)
 			respErr = &proto.AckResponseError{
 				Message: err.Error(),
 			}
@@ -93,7 +93,7 @@ func (p *grpcInputBinding) adaptHandler(ctx context.Context, streamingPull proto
 			ResponseError: respErr,
 			MessageId:     msg.MessageId,
 		}); err != nil {
-			p.logger.Errorf("error when ack'ing message %s", msg.MessageId)
+			b.logger.Errorf("error when ack'ing message %s", msg.MessageId)
 		}
 	}
 }
