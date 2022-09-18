@@ -38,7 +38,6 @@ import (
 	"github.com/golang/mock/gomock"
 
 	"github.com/dapr/components-contrib/lock"
-
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
