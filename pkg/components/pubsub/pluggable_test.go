@@ -222,7 +222,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		const fakeTopic, fakeData1, fakeData2 = "fakeTopic", "fakeData1", "fakeData2"
 		var (
 			messagesAcked     sync.WaitGroup
-			subscribeCalled   sync.WaitGroup
+			topicSent         sync.WaitGroup
 			messagesProcessed sync.WaitGroup
 			totalAckErrors    atomic.Int64
 			handleCalled      atomic.Int64
@@ -233,12 +233,12 @@ func TestPubSubPluggableCalls(t *testing.T) {
 
 		messagesAcked.Add(len(messages))
 		messagesProcessed.Add(len(messages))
-		subscribeCalled.Add(1)
+		topicSent.Add(1)
 
 		for idx, data := range messagesData {
 			messages[idx] = &proto.PullMessageResponse{
 				Data:        data,
-				Topic:       fakeTopic,
+				TopicName:   fakeTopic,
 				Metadata:    map[string]string{},
 				ContentType: "",
 			}
@@ -254,10 +254,9 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		svc := &server{
 			pullChan: messageChan,
 			onAckReceived: func(ma *proto.PullMessagesRequest) {
-				if ma.Subscription != nil {
-					subscribeCalled.Done()
-				}
-				if ma.Subscription == nil {
+				if ma.Topic != nil {
+					topicSent.Done()
+				} else {
 					messagesAcked.Done()
 				}
 				if ma.AckError != nil {
@@ -284,7 +283,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		subscribeCalled.Wait()
+		topicSent.Wait()
 		messagesProcessed.Wait()
 		messagesAcked.Wait()
 

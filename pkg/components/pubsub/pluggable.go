@@ -97,13 +97,13 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 		m := pubsub.NewMessage{
 			Data:        msg.Data,
 			ContentType: &msg.ContentType,
-			Topic:       msg.Topic,
+			Topic:       msg.TopicName,
 			Metadata:    msg.Metadata,
 		}
 		var ackError *proto.AckMessageError
 
 		if err := handler(ctx, &m); err != nil {
-			p.logger.Errorf("error when handling message on topic %s", msg.Topic)
+			p.logger.Errorf("error when handling message on topic %s", msg.TopicName)
 			ackError = &proto.AckMessageError{
 				Message: err.Error(),
 			}
@@ -122,13 +122,13 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 			AckMessageId: msg.Id,
 			AckError:     ackError,
 		}); err != nil {
-			p.logger.Errorf("error when ack'ing message %s from topic %s", msg.Id, msg.Topic)
+			p.logger.Errorf("error when ack'ing message %s from topic %s", msg.Id, msg.TopicName)
 		}
 	}
 }
 
 // pullMessages pull messages of the given subscription and execute the handler for that messages.
-func (p *grpcPubSub) pullMessages(ctx context.Context, subscription *proto.Subscription, handler pubsub.Handler) error {
+func (p *grpcPubSub) pullMessages(ctx context.Context, topic *proto.Topic, handler pubsub.Handler) error {
 	// first pull should be sync and subsequent connections can be made in background if necessary
 	pull, err := p.Client.PullMessages(ctx)
 	if err != nil {
@@ -138,12 +138,12 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, subscription *proto.Subsc
 	streamCtx, cancel := context.WithCancel(pull.Context())
 
 	err = pull.Send(&proto.PullMessagesRequest{
-		Subscription: subscription,
+		Topic: topic,
 	})
 
 	cleanup := func() {
 		if closeErr := pull.CloseSend(); closeErr != nil {
-			p.logger.Warnf("could not close pull stream of topic %s: %v", subscription.Topic, closeErr)
+			p.logger.Warnf("could not close pull stream of topic %s: %v", topic.Name, closeErr)
 		}
 		cancel()
 	}
@@ -168,7 +168,7 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, subscription *proto.Subsc
 				return
 			}
 
-			p.logger.Debugf("received message from stream on topic %s", msg.Topic)
+			p.logger.Debugf("received message from stream on topic %s", msg.TopicName)
 
 			go handle(msg)
 		}
@@ -179,8 +179,8 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, subscription *proto.Subsc
 
 // Subscribe subscribes to a given topic and callback the handler when a new message arrives.
 func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
-	subscription := &proto.Subscription{
-		Topic:    req.Topic,
+	subscription := &proto.Topic{
+		Name:     req.Topic,
 		Metadata: req.Metadata,
 	}
 	return p.pullMessages(ctx, subscription, handler)

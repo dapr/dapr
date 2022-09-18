@@ -50,10 +50,10 @@ message AckMessageError {
 
 // Used for acknowledge a message.
 message PullMessagesRequest {
-  // Required. The subscription for which to initialize the new stream. This
+  // Required. The subscribed topic for which to initialize the new stream. This
   // must be provided in the first request on the stream, and must not be set in
   // subsequent requests from client to server.
-  Subscription subscription = 1;
+  Topic topic = 1;
   // The unique message ID.
   string ack_message_id = 2;
   // Optional, should not be fulfilled when the message was successfully
@@ -85,9 +85,9 @@ message PublishRequest {
 // reserved for future-proof extensibility
 message PublishResponse {}
 
-message Subscription {
-  // The topic desired to be subscribed
-  string topic = 1;
+message Topic {
+  // The topic name desired to be subscribed
+  string name = 1;
   // Metadata related subscribe request.
   map<string, string> metadata = 2;
 }
@@ -96,7 +96,7 @@ message PullMessageResponse {
   // The message content.
   bytes data = 1;
   // The topic where the message come from.
-  string topic = 2;
+  string topic_name = 2;
   // The message related metadata.
   map<string, string> metadata = 3;
   // The message content type.
