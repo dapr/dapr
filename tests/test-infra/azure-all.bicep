@@ -26,6 +26,9 @@ param location1 string
 @description('The location of the second set of resources')
 param location2 string
 
+@description('The location of the third set of resources')
+param location3 string
+
 @description('Optional value for the date tag for resource groups')
 param dateTag string = ''
 
@@ -34,6 +37,12 @@ param diagLogAnalyticsWorkspaceResourceId string = ''
 
 @description('If set, sends certain diagnostic logs to Azure Storage')
 param diagStorageResourceId string = ''
+
+@description('If set, sends certain Arm64 diagnostic logs to Log Analytics')
+param armDiagLogAnalyticsWorkspaceResourceId string = ''
+
+@description('If set, sends certain Arm64 diagnostic logs to Azure Storage')
+param armDiagStorageResourceId string = ''
 
 @description('If enabled, deploy Cosmos DB')
 param enableCosmosDB bool = true
@@ -56,6 +65,7 @@ module linuxCluster 'azure.bicep' = {
     namePrefix: '${namePrefix}l'
     location: location1
     enableWindows: false
+    enableArm : false
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
     diagStorageResourceId: diagStorageResourceId
     enableCosmosDB: enableCosmosDB
@@ -78,8 +88,32 @@ module windowsCluster 'azure.bicep' = {
     namePrefix: '${namePrefix}w'
     location: location2
     enableWindows: true
+    enableArm : false
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
     diagStorageResourceId: diagStorageResourceId
+    enableCosmosDB: enableCosmosDB
+    enableServiceBus: enableServiceBus
+  }
+}
+
+// Deploy the Arm cluster in the third location
+resource ArmResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
+  name: 'Dapr-E2E-${namePrefix}la'
+  location: location3
+  tags: dateTag != '' ? {
+    date: dateTag
+  } : {}
+}
+module armCluster 'azure.bicep' = {
+  name: 'armCluster'
+  scope: ArmResources
+  params: {
+    namePrefix: '${namePrefix}la'
+    location: location3
+    enableWindows: false
+    enableArm : true
+    diagLogAnalyticsWorkspaceResourceId: armDiagLogAnalyticsWorkspaceResourceId
+    diagStorageResourceId: armDiagStorageResourceId
     enableCosmosDB: enableCosmosDB
     enableServiceBus: enableServiceBus
   }
