@@ -3584,7 +3584,7 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Contains(t, string(reqs[1].Message().Data.Value), "event\":\"eyJvcmRlcklkIjoiMSJ9\"")
+		assert.Contains(t, string(reqs["orders"].Message().Data.Value), "event\":\"eyJvcmRlcklkIjoiMSJ9\"")
 	})
 
 	t.Run("bulk Subscribe Message for cloud event", func(t *testing.T) {
@@ -3629,7 +3629,7 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Contains(t, string(reqs[1].Message().Data.Value), "\"event\":"+order)
+		assert.Contains(t, string(reqs["orders"].Message().Data.Value), "\"event\":"+order)
 	})
 
 	t.Run("bulk Subscribe multiple Messages at once for cloud events", func(t *testing.T) {
@@ -3684,8 +3684,8 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Contains(t, string(reqs[1].Message().Data.Value), "\"event\":"+order1)
-		assert.Contains(t, string(reqs[1].Message().Data.Value), "\"event\":"+order2)
+		assert.Contains(t, string(reqs["orders"].Message().Data.Value), "\"event\":"+order1)
+		assert.Contains(t, string(reqs["orders"].Message().Data.Value), "\"event\":"+order2)
 	})
 
 	t.Run("bulk Subscribe events on different paths", func(t *testing.T) {
@@ -3756,10 +3756,10 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.Contains(t, string(reqs[1].Message().Data.Value), "\"event\":"+order1)
-		assert.NotContains(t, string(reqs[1].Message().Data.Value), "\"event\":"+order2)
-		assert.Contains(t, string(reqs[2].Message().Data.Value), "\"event\":"+order2)
-		assert.NotContains(t, string(reqs[2].Message().Data.Value), "\"event\":"+order1)
+		assert.Contains(t, string(reqs["orders1"].Message().Data.Value), "\"event\":"+order1)
+		assert.NotContains(t, string(reqs["orders1"].Message().Data.Value), "\"event\":"+order2)
+		assert.Contains(t, string(reqs["orders2"].Message().Data.Value), "\"event\":"+order2)
+		assert.NotContains(t, string(reqs["orders2"].Message().Data.Value), "\"event\":"+order1)
 	})
 
 	t.Run("verify Responses when bulk Subscribe events on different paths", func(t *testing.T) {
@@ -3865,13 +3865,13 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.True(t, verifyIfEventContainsStrings(reqs[1].Message().Data.Value, "\"event\":"+order1,
+		assert.True(t, verifyIfEventContainsStrings(reqs["orders1"].Message().Data.Value, "\"event\":"+order1,
 			"\"event\":"+order3, "\"event\":"+order5, "\"event\":"+order7, "\"event\":"+order8, "\"event\":"+order9))
-		assert.True(t, verifyIfEventNotContainsStrings(reqs[1].Message().Data.Value, "\"event\":"+order2,
+		assert.True(t, verifyIfEventNotContainsStrings(reqs["orders1"].Message().Data.Value, "\"event\":"+order2,
 			"\"event\":"+order4, "\"event\":"+order6, "\"event\":"+order10))
-		assert.True(t, verifyIfEventContainsStrings(reqs[2].Message().Data.Value, "\"event\":"+order2,
+		assert.True(t, verifyIfEventContainsStrings(reqs["orders2"].Message().Data.Value, "\"event\":"+order2,
 			"\"event\":"+order4, "\"event\":"+order6, "\"event\":"+order10))
-		assert.True(t, verifyIfEventNotContainsStrings(reqs[2].Message().Data.Value, "\"event\":"+order1,
+		assert.True(t, verifyIfEventNotContainsStrings(reqs["orders2"].Message().Data.Value, "\"event\":"+order1,
 			"\"event\":"+order3, "\"event\":"+order5, "\"event\":"+order7, "\"event\":"+order8, "\"event\":"+order9))
 
 		expectedResponse := BulkResponseExpectation{
@@ -3959,9 +3959,9 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.True(t, verifyIfEventContainsStrings(reqs[1].Message().Data.Value, "\"event\":"+order2,
+		assert.True(t, verifyIfEventContainsStrings(reqs["orders"].Message().Data.Value, "\"event\":"+order2,
 			"\"event\":"+order4))
-		assert.True(t, verifyIfEventNotContainsStrings(reqs[1].Message().Data.Value, "\"event\":"+order1,
+		assert.True(t, verifyIfEventNotContainsStrings(reqs["orders"].Message().Data.Value, "\"event\":"+order1,
 			"\"event\":"+order3))
 
 		expectedResponse := BulkResponseExpectation{
@@ -4047,7 +4047,7 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.True(t, verifyIfEventContainsStrings(reqs[1].Message().Data.Value, "\"event\":"+order1,
+		assert.True(t, verifyIfEventContainsStrings(reqs["orders"].Message().Data.Value, "\"event\":"+order1,
 			"\"event\":"+order2, "\"event\":"+order3, "\"event\":"+order4, "\"event\":"+order5))
 
 		expectedResponse := BulkResponseExpectation{
@@ -4134,7 +4134,7 @@ func TestBulkSubscribe(t *testing.T) {
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.True(t, verifyIfEventContainsStrings(reqs[1].Message().Data.Value, "\"event\":"+order1,
+		assert.True(t, verifyIfEventContainsStrings(reqs["orders"].Message().Data.Value, "\"event\":"+order1,
 			"\"event\":"+order2, "\"event\":"+order3, "\"event\":"+order4, "\"event\":"+order5))
 
 		expectedResponse := BulkResponseExpectation{
