@@ -204,6 +204,10 @@ func (m *MockKubernetesStateStore) Close() error {
 	return nil
 }
 
+func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
+	return []secretstores.Feature{}
+}
+
 func NewMockKubernetesStore() secretstores.SecretStore {
 	return &MockKubernetesStateStore{}
 }

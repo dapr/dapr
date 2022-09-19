@@ -53,6 +53,10 @@ func (c FakeSecretStore) Close() error {
 	return nil
 }
 
+func (c FakeSecretStore) Features() []secretstores.Feature {
+	return []secretstores.Feature{}
+}
+
 type FailingSecretStore struct {
 	Failure Failure
 }
@@ -86,4 +90,8 @@ func (c FailingSecretStore) Init(metadata secretstores.Metadata) error {
 
 func (c FailingSecretStore) Close() error {
 	return nil
+}
+
+func (c FailingSecretStore) Features() []secretstores.Feature {
+	return []secretstores.Feature{}
 }
