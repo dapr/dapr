@@ -614,7 +614,9 @@ func TestComponentCalls(t *testing.T) {
 		}
 		request := &state.QueryRequest{
 			Query: query.Query{
-				Filters: filters,
+				QueryFields: query.QueryFields{
+					Filters: filters,
+				},
 			},
 			Metadata: map[string]string{},
 		}
