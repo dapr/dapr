@@ -82,7 +82,9 @@ func (_m *MockAppChannel) Init() {
 
 // InvokeMethod provides a mock function with given fields: ctx, req
 func (_m *MockAppChannel) InvokeMethod(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
-	_m.requestsReceived[req.Message().Method] = req
+	if _m.requestsReceived != nil {
+		_m.requestsReceived[req.Message().Method] = req
+	}
 	ret := _m.Called(ctx, req)
 
 	var r0 *v1.InvokeMethodResponse
