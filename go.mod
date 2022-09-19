@@ -45,7 +45,7 @@ require (
 	go.uber.org/ratelimit v0.2.0
 	golang.org/x/net v0.0.0-20220630215102-69896b714898
 	google.golang.org/genproto v0.0.0-20220622171453-ea41d75dfa0f
-	google.golang.org/grpc v1.47.0
+	google.golang.org/grpc v1.48.0
 	google.golang.org/protobuf v1.28.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.23.0
@@ -115,7 +115,7 @@ require (
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
 	github.com/Shopify/sarama v1.30.0 // indirect
 	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
-	github.com/Workiva/go-datastructures v1.0.52 // indirect
+	github.com/Workiva/go-datastructures v1.0.53 // indirect
 	github.com/a8m/documentdb v1.3.1-0.20220405205223-5b41ba0aaeb1 // indirect
 	github.com/aerospike/aerospike-client-go v4.5.0+incompatible // indirect
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5 // indirect
@@ -286,7 +286,7 @@ require (
 	github.com/nats-io/nkeys v0.3.0 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/nats-io/stan.go v0.8.3 // indirect
-	github.com/open-policy-agent/opa v0.42.0 // indirect
+	github.com/open-policy-agent/opa v0.43.1 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/oracle/oci-go-sdk/v54 v54.0.0 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
@@ -319,7 +319,7 @@ require (
 	github.com/stoewer/go-strcase v1.2.0 // indirect
 	github.com/stretchr/objx v0.4.0 // indirect
 	github.com/supplyon/gremcos v0.1.0 // indirect
-	github.com/tetratelabs/wazero v0.0.0-20220425003459-ad61d9a6ff43 // indirect
+	github.com/tetratelabs/wazero v1.0.0-pre.1 // indirect
 	github.com/tidwall/gjson v1.14.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
@@ -327,8 +327,9 @@ require (
 	github.com/tklauser/go-sysconf v0.3.6 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/vektah/gqlparser/v2 v2.4.5 // indirect
+	github.com/vektah/gqlparser/v2 v2.4.6 // indirect
 	github.com/vmware/vmware-go-kcl v1.5.0 // indirect
+	github.com/wapc/wapc-go v0.5.2 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.0.2 // indirect
 	github.com/xdg-go/stringprep v1.0.2 // indirect

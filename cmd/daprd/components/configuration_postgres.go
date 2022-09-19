@@ -14,10 +14,10 @@ limitations under the License.
 package components
 
 import (
-	config_postgres "github.com/dapr/components-contrib/configuration/postgres"
+	configPostgres "github.com/dapr/components-contrib/configuration/postgres"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 )
 
 func init() {
-	configurationLoader.DefaultRegistry.RegisterComponent(config_postgres.NewPostgresConfigurationStore, "postgres")
+	configurationLoader.DefaultRegistry.RegisterComponent(configPostgres.NewPostgresConfigurationStore, "postgres")
 }
