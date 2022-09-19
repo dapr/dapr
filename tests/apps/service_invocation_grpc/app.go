@@ -180,3 +180,19 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	fmt.Println("Topic message arrived")
 	return &pb.TopicEventResponse{}, nil
 }
+
+// This method is fired whenever a bulk message has been published to a topic that has been subscribed.
+func (s *server) OnBulkTopicEvent(ctx context.Context, in *pb.TopicEventBulkRequest) (*pb.TopicEventBulkResponse, error) {
+	responseEntries := make([]*pb.TopicEventBulkResponseEntry, len(in.Entries))
+	for i, reqEntry := range in.Entries {
+		responseEntry := pb.TopicEventBulkResponseEntry{
+			Status:  0, // SUCCESS
+			EntryID: reqEntry.EntryID,
+		}
+		responseEntries[i] = &responseEntry
+	}
+
+	return &pb.TopicEventBulkResponse{
+		Statuses: responseEntries,
+	}, nil
+}

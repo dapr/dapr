@@ -169,6 +169,44 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	}, nil
 }
 
+// This method is fired whenever a bulk message has been published to a topic that has been subscribed.
+func (s *server) OnBulkTopicEvent(ctx context.Context, in *pb.TopicEventBulkRequest) (*pb.TopicEventBulkResponse, error) {
+	responseEntries := make([]*pb.TopicEventBulkResponseEntry, len(in.Entries))
+	for i, reqEntry := range in.Entries {
+		var message string
+		err := json.Unmarshal(reqEntry.Event, &message)
+		log.Printf("Got message: %s", message)
+		responseEntry := pb.TopicEventBulkResponseEntry{}
+		if err != nil {
+			log.Printf("error parsing test-topic input binding payload: %s", err)
+			responseEntry = pb.TopicEventBulkResponseEntry{
+				Status:  1, // RETRY
+				EntryID: reqEntry.EntryID,
+			}
+			continue
+		}
+		if fail := messages.fail(message); fail {
+			// simulate failure. fail only for the first time.
+			log.Print("failing message")
+			responseEntry = pb.TopicEventBulkResponseEntry{
+				Status:  1, // RETRY
+				EntryID: reqEntry.EntryID,
+			}
+			continue
+		}
+		responseEntry = pb.TopicEventBulkResponseEntry{
+			Status:  0, // SUCCESS
+			EntryID: reqEntry.EntryID,
+		}
+		responseEntries[i] = &responseEntry
+		messages.add(message)
+	}
+
+	return &pb.TopicEventBulkResponse{
+		Statuses: responseEntries,
+	}, nil
+}
+
 func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
 	log.Println("List Input Bindings called")
 	return &pb.ListInputBindingsResponse{
