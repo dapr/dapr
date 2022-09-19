@@ -59,7 +59,7 @@ func (m DiskManifestLoader[T]) Load() ([]T, error) {
 				log.Warnf("A non-YAML %s file %s was detected, it will not be loaded", m.kind, fileName)
 				continue
 			}
-			fileManifests := m.loadManifestsFromFile(filepath.Join(m.path, fileName))
+			fileManifests := m.LoadManifestsFromFile(filepath.Join(m.path, fileName))
 			manifests = append(manifests, fileManifests...)
 		}
 	}
@@ -67,7 +67,7 @@ func (m DiskManifestLoader[T]) Load() ([]T, error) {
 	return manifests, nil
 }
 
-func (m DiskManifestLoader[T]) loadManifestsFromFile(manifestPath string) []T {
+func (m DiskManifestLoader[T]) LoadManifestsFromFile(manifestPath string) []T {
 	var errors []error
 
 	manifests := make([]T, 0)

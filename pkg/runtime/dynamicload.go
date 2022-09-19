@@ -22,7 +22,7 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 			break
 		}
 		for _, file := range files {
-			err := a.loadDynamicComponents(file.Name())
+			err := a.loadDynamicComponents(filepath.Join(a.runtimeConfig.Standalone.DynamicComponentsPath, file.Name()))
 			if err != nil {
 				log.Errorf("failed to load components from file : %s", file.Name())
 			}
@@ -43,12 +43,12 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 				}
 				log.Debug("file event:", event)
 				if event.Op == fsnotify.Create || event.Op == fsnotify.Write {
-					err := a.loadDynamicComponents(filepath.Base(event.Name))
+					err := a.loadDynamicComponents(event.Name)
 					if err != nil {
 						log.Errorf("failed to load components from file : %s", event.Name)
 					}
 				} else if event.Op == fsnotify.Remove || event.Op == fsnotify.Rename {
-					err := a.unloadDynamicComponents(filepath.Base(event.Name))
+					err := a.unloadDynamicComponents(event.Name)
                     if err != nil {
                         log.Errorf("failed to unload components from file : %s", event.Name)
                     }
@@ -68,23 +68,22 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 	<-make(chan struct{})
 }
 
-func (a *DaprRuntime) loadDynamicComponents(filename string) error {
-	loader := components.NewStandaloneComponents(a.runtimeConfig.Standalone)
+func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
+	loader := components.NewDynamicStandaloneComponents(a.runtimeConfig.Standalone)
 	log.Info("loading dynamic components...")
-	fileComps := loader.LoadDynamicComponentsFromFile(filename)
-    componentsToLoad := []componentsV1alpha1.Component{}
+	fileComps := loader.LoadComponentsFromFile(manifestPath)
+  componentsToLoad := []componentsV1alpha1.Component{}
 
 	for _, comp := range fileComps {
-		log.Infof("found component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
-
-        if a.IsComponentLoaded(comp) {
-			log.Infof("component already loaded, skipping. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
-			continue
+		if a.IsComponentLoaded(comp) {
+		log.Infof("component already loaded, skipping. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+		continue
 		}
-        componentsToLoad = append(componentsToLoad, comp)
+		log.Infof("found component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+      componentsToLoad = append(componentsToLoad, comp)
 	}
 
-    a.dynamicComponents[DynamicComponentsFile(filename)] = componentsToLoad
+  a.dynamicComponents[DynamicComponentsManifest(manifestPath)] = componentsToLoad
 
 	authorizedComps := a.getAuthorizedComponents(componentsToLoad)
 	a.componentsLock.Lock()
@@ -98,8 +97,8 @@ func (a *DaprRuntime) loadDynamicComponents(filename string) error {
 	return nil
 }
 
-func (a *DaprRuntime) unloadDynamicComponents(filename string) error {
-    comps := a.dynamicComponents[DynamicComponentsFile(filename)]
+func (a *DaprRuntime) unloadDynamicComponents(manifestPath string) error {
+    comps := a.dynamicComponents[DynamicComponentsManifest(manifestPath)]
     if comps == nil {
         return nil
     }
@@ -109,7 +108,7 @@ func (a *DaprRuntime) unloadDynamicComponents(filename string) error {
         log.Infof("unloaded component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
     }
 
-    delete(a.dynamicComponents, DynamicComponentsFile(filename))
+    delete(a.dynamicComponents, DynamicComponentsManifest(manifestPath))
 
     return nil
 }

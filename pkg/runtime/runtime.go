@@ -154,8 +154,8 @@ type TopicRouteElem struct {
 // The function receives the component and must return true if the component is authorized.
 type ComponentAuthorizer func(component componentsV1alpha1.Component) bool
 
-// Name of file containing Dynamic Components
-type DynamicComponentsFile string
+// Path of file containing dynamic components manifest.
+type DynamicComponentsManifest string
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
@@ -166,7 +166,7 @@ type DaprRuntime struct {
 	accessControlList      *config.AccessControlList
 	componentsLock         *sync.RWMutex
 	components             []componentsV1alpha1.Component
-	dynamicComponents      map[DynamicComponentsFile][]componentsV1alpha1.Component
+	dynamicComponents      map[DynamicComponentsManifest][]componentsV1alpha1.Component
 	grpc                   *grpc.Manager
 	appChannel             channel.AppChannel
 	appConfig              config.ApplicationConfig
@@ -267,7 +267,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		accessControlList:          accessControlList,
 		componentsLock:             &sync.RWMutex{},
 		components:                 make([]componentsV1alpha1.Component, 0),
-		dynamicComponents:				  map[DynamicComponentsFile][]componentsV1alpha1.Component{},
+		dynamicComponents:				  map[DynamicComponentsManifest][]componentsV1alpha1.Component{},
 		actorStateStoreLock:        &sync.RWMutex{},
 		grpc:                       grpc.NewGRPCManager(runtimeConfig.Mode),
 		inputBindings:              map[string]bindings.InputBinding{},

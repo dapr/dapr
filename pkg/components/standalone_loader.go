@@ -49,3 +49,8 @@ func (s *StandaloneComponents) LoadComponents() ([]componentsV1alpha1.Component,
 	return s.componentsManifestLoader.Load()
 }
 
+// LoadComponentsFromFile loads dapr components from a file.
+func (s *StandaloneComponents) LoadComponentsFromFile(manifestPath string) ([]componentsV1alpha1.Component) {
+	return s.componentsManifestLoader.LoadManifestsFromFile(manifestPath)
+}
+
