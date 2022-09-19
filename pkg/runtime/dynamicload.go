@@ -92,9 +92,14 @@ func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
 	a.componentsLock.Unlock()
 
 	for _, comp := range authorizedComps {
-		a.pendingComponents <- comp
+		err := a.processComponentAndDependents(comp)
+		if err != nil {
+			if !comp.Spec.IgnoreErrors {
+				log.Warnf("error processing component %s, error: %s", comp.Name, err.Error())
+			}
+			log.Errorf(err.Error())
+		}
 	}
-
 	return nil
 }
 
