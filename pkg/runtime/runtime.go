@@ -1255,7 +1255,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			span.End()
 		}
 		// ::TODO report metrics for http, such as grpc
-		if resp.Status().Code != nethttp.StatusOK {
+		if resp.Status().Code < 200 || resp.Status().Code > 299 {
 			_, body := resp.RawData()
 			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}

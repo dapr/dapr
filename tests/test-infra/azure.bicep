@@ -23,6 +23,9 @@ param location string = resourceGroup().location
 @description('If enabled, add a Windows pool')
 param enableWindows bool = false
 
+@description('If enabled, add a ARM64 pool')
+param enableArm bool = false
+
 @description('If set, sends certain diagnostic logs to Log Analytics')
 param diagLogAnalyticsWorkspaceResourceId string = ''
 
@@ -42,6 +45,7 @@ module aksModule './azure-aks.bicep' = {
     namePrefix: namePrefix
     location: location
     enableWindows: enableWindows
+    enableArm: enableArm
     diagLogAnalyticsWorkspaceResourceId: diagLogAnalyticsWorkspaceResourceId
     diagStorageResourceId: diagStorageResourceId
   }
