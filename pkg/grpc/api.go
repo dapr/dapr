@@ -1704,6 +1704,12 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		apiServerLogger.Debug(err)
 		return err
 	}
+	if err := handler.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
+		Id: id,
+	}); err != nil {
+		apiServerLogger.Debug(err)
+		return err
+	}
 	stop := make(chan struct{})
 	a.configurationSubscribeLock.Lock()
 	a.configurationSubscribe[id] = stop
