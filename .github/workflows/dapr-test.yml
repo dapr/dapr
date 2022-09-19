@@ -325,7 +325,7 @@ jobs:
         if: env.TEST_PREFIX != ''
         run: |
           elapsed=0
-          until [ $elapsed -ge 1800 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
+          until [ $elapsed -ge 1200 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
           do
               echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
               sleep 20
