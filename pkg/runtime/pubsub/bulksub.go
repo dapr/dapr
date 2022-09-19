@@ -25,11 +25,11 @@ import (
 )
 
 const (
-	maxBulkCountKey     string = "maxBulkCount"
-	maxBulkLatencyMsKey string = "maxBulkLatencyMilliSeconds"
+	maxBulkCountKey           string = "maxBulkCount"
+	maxBulkAwaitDurationMsKey string = "maxBulkAwaitDurationMilliSeconds"
 
-	defaultMaxBulkCount     int = 100
-	defaultMaxBulkLatencyMs int = 1 * 1000
+	defaultMaxBulkCount           int = 100
+	defaultMaxBulkAwaitDurationMs int = 1 * 1000
 )
 
 // msgWithCallback is a wrapper around a message that includes a callback function
@@ -57,8 +57,8 @@ func NewDefaultBulkSubscriber(p contribPubsub.PubSub) *defaultBulkSubscriber {
 // when the buffer is full or max await duration is reached.
 func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPubsub.SubscribeRequest, handler contribPubsub.BulkHandler) error {
 	cfg := contribPubsub.BulkSubscribeConfig{
-		MaxBulkCount:               utils.GetIntOrDefault(req.Metadata, maxBulkCountKey, defaultMaxBulkCount),
-		MaxBulkLatencyMilliSeconds: utils.GetIntOrDefault(req.Metadata, maxBulkLatencyMsKey, defaultMaxBulkLatencyMs),
+		MaxBulkCount:                     utils.GetIntOrDefault(req.Metadata, maxBulkCountKey, defaultMaxBulkCount),
+		MaxBulkAwaitDurationMilliSeconds: utils.GetIntOrDefault(req.Metadata, maxBulkAwaitDurationMsKey, defaultMaxBulkAwaitDurationMs),
 	}
 
 	msgCbChan := make(chan msgWithCallback, cfg.MaxBulkCount)
@@ -104,7 +104,7 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 	messages := make([]contribPubsub.BulkMessageEntry, 0, cfg.MaxBulkCount)
 	msgCbMap := make(map[string]func(error))
 
-	ticker := time.NewTicker(time.Duration(cfg.MaxBulkLatencyMilliSeconds) * time.Millisecond)
+	ticker := time.NewTicker(time.Duration(cfg.MaxBulkAwaitDurationMilliSeconds) * time.Millisecond)
 	defer ticker.Stop()
 
 	for {

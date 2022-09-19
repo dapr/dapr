@@ -178,8 +178,6 @@ github.com/DataDog/datadog-go v2.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3
 github.com/DataDog/datadog-go v3.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3tL4fMGNddJ+vMq1mwgfaqoQ=
 github.com/DataDog/zstd v1.5.0 h1:+K/VEwIAaPcHiMtQvpLD4lqW7f0Gk3xdYZmI1hD+CXo=
 github.com/DataDog/zstd v1.5.0/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
-github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20220914073130-31a38e5aaabd h1:bJ6KqTqcqPUH9uR3U+44HNix4sjYAWYcw6C/F1BJ/Ic=
-github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20220914073130-31a38e5aaabd/go.mod h1:zllmwB5vkb108A+XU9437LhH48/OICqYcN4r+FQum2k=
 github.com/HdrHistogram/hdrhistogram-go v1.1.2/go.mod h1:yDgFjdqOqDEKOvasDdhWNXYg9BVp4O+o5f6V/ehm6Oo=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/Masterminds/semver/v3 v3.1.1 h1:hLg3sBzpNErnxhQtUy/mmLR2I9foDujNK030IGemrRc=
@@ -598,6 +596,8 @@ github.com/danieljoos/wincred v1.0.2/go.mod h1:SnuYRW9lp1oJrZX/dXJqr0cPK5gYXqx3E
 github.com/danieljoos/wincred v1.1.0/go.mod h1:XYlo+eRTsVA9aHGp7NGjFkPla4m+DCL7hqDjlFjiygg=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220915201717-3f9c42c4b8d9 h1:ObtVL/5RrmiEZUA8ge3Ux4U7JVoH9uBKxqbpvgO4Z1Q=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220915201717-3f9c42c4b8d9/go.mod h1:zllmwB5vkb108A+XU9437LhH48/OICqYcN4r+FQum2k=
 github.com/dapr/kit v0.0.2 h1:VNg6RWrBMOdtY0/ZLztyAa/RjyFLaskdO9wt2HIREwk=
 github.com/dapr/kit v0.0.2/go.mod h1:Q4TWm9+vcPZFGehaJUZt2hvA805wJm7FIuoArytWJ8o=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
