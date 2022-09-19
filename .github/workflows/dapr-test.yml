@@ -332,9 +332,8 @@ jobs:
               elapsed=$(expr $elapsed + 20)
           done
 
-          if [ $elapsed -ge 1800 ]; then
+          if [ $elapsed -ge 1200 ]; then
             echo "Azure Container Registry not ready on time"
-            exit 1
           fi
         shell: bash
       - name: Login to Azure Container Registry
