@@ -37,7 +37,7 @@ service PubSub {
   // the stream. The first message MUST contain a `topic` attribute on it that
   // should be used for the entire streaming pull.
   rpc PullMessages(stream PullMessagesRequest)
-      returns (stream PullMessageResponse) {}
+      returns (stream PullMessagesResponse) {}
 
   // Ping the pubsub. Used for liveness porpuses.
   rpc Ping(PingRequest) returns (PingResponse) {}
@@ -92,7 +92,7 @@ message Topic {
   map<string, string> metadata = 2;
 }
 
-message PullMessageResponse {
+message PullMessagesResponse {
   // The message content.
   bytes data = 1;
   // The topic where the message come from.

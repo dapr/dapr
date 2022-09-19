@@ -86,14 +86,14 @@ func (p *grpcPubSub) Publish(req *pubsub.PublishRequest) error {
 	return err
 }
 
-type messageHandler = func(*proto.PullMessageResponse)
+type messageHandler = func(*proto.PullMessagesResponse)
 
 // adaptHandler returns a non-error function that handle the message with the given handler and ack when returns.
 //
 //nolint:nosnakecase
 func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSub_PullMessagesClient, handler pubsub.Handler) messageHandler {
 	safeSend := &sync.Mutex{}
-	return func(msg *proto.PullMessageResponse) {
+	return func(msg *proto.PullMessagesResponse) {
 		m := pubsub.NewMessage{
 			Data:        msg.Data,
 			ContentType: &msg.ContentType,

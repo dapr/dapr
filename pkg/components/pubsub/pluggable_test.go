@@ -55,7 +55,7 @@ type server struct {
 	publishCalled   atomic.Int64
 	onPublishCalled func(*proto.PublishRequest)
 	publishErr      error
-	pullChan        chan *proto.PullMessageResponse
+	pullChan        chan *proto.PullMessagesResponse
 	pingCalled      atomic.Int64
 	pingErr         error
 	onAckReceived   func(*proto.PullMessagesRequest)
@@ -229,14 +229,14 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		)
 
 		messagesData := [][]byte{[]byte(fakeData1), []byte(fakeData2)}
-		messages := make([]*proto.PullMessageResponse, len(messagesData))
+		messages := make([]*proto.PullMessagesResponse, len(messagesData))
 
 		messagesAcked.Add(len(messages))
 		messagesProcessed.Add(len(messages))
 		topicSent.Add(1)
 
 		for idx, data := range messagesData {
-			messages[idx] = &proto.PullMessageResponse{
+			messages[idx] = &proto.PullMessagesResponse{
 				Data:        data,
 				TopicName:   fakeTopic,
 				Metadata:    map[string]string{},
@@ -244,7 +244,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			}
 		}
 
-		messageChan := make(chan *proto.PullMessageResponse, len(messages))
+		messageChan := make(chan *proto.PullMessagesResponse, len(messages))
 		defer close(messageChan)
 
 		for _, message := range messages {

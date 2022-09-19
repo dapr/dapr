@@ -216,6 +216,8 @@ func TestComponentCalls(t *testing.T) {
 			assert.Equal(t, int64(1), srv.featuresCalled.Load())
 			assert.Equal(t, int64(1), srv.initCalled.Load())
 		})
+	} else {
+		t.Logf("skipping pubsub pluggable component init test due to the lack of OS (%s) support", runtime.GOOS)
 	}
 
 	t.Run("features should return the component features'", func(t *testing.T) {
