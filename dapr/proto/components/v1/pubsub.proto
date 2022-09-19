@@ -30,12 +30,12 @@ service PubSub {
   // Publish publishes a new message for the given topic.
   rpc Publish(PublishRequest) returns (PublishResponse) {}
 
-  // Establishes a stream with the server, which sends messages down to the
-  // client. The client streams acknowledgements back to the server. The server
-  // will close the stream and return the status on any error. In case of closed
-  // connection, the client should re-establish the stream.
-  // The message MUST contain a `subscription` on it that should be used for the
-  // entire streaming pull.
+  // Establishes a stream with the server (PubSub component), which sends
+  // messages down to the client (daprd). The client streams acknowledgements
+  // back to the server. The server will close the stream and return the status
+  // on any error. In case of closed connection, the client should re-establish
+  // the stream. The first message MUST contain a `topic` attribute on it that
+  // should be used for the entire streaming pull.
   rpc PullMessages(stream PullMessagesRequest)
       returns (stream PullMessageResponse) {}
 

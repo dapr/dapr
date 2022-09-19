@@ -28,12 +28,12 @@ type PubSubClient interface {
 	Features(ctx context.Context, in *FeaturesRequest, opts ...grpc.CallOption) (*FeaturesResponse, error)
 	// Publish publishes a new message for the given topic.
 	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error)
-	// Establishes a stream with the server, which sends messages down to the
-	// client. The client streams acknowledgements back to the server. The server
-	// will close the stream and return the status on any error. In case of closed
-	// connection, the client should re-establish the stream.
-	// The message MUST contain a `subscription` on it that should be used for the
-	// entire streaming pull.
+	// Establishes a stream with the server (PubSub component), which sends
+	// messages down to the client (daprd). The client streams acknowledgements
+	// back to the server. The server will close the stream and return the status
+	// on any error. In case of closed connection, the client should re-establish
+	// the stream. The first message MUST contain a `topic` attribute on it that
+	// should be used for the entire streaming pull.
 	PullMessages(ctx context.Context, opts ...grpc.CallOption) (PubSub_PullMessagesClient, error)
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
@@ -124,12 +124,12 @@ type PubSubServer interface {
 	Features(context.Context, *FeaturesRequest) (*FeaturesResponse, error)
 	// Publish publishes a new message for the given topic.
 	Publish(context.Context, *PublishRequest) (*PublishResponse, error)
-	// Establishes a stream with the server, which sends messages down to the
-	// client. The client streams acknowledgements back to the server. The server
-	// will close the stream and return the status on any error. In case of closed
-	// connection, the client should re-establish the stream.
-	// The message MUST contain a `subscription` on it that should be used for the
-	// entire streaming pull.
+	// Establishes a stream with the server (PubSub component), which sends
+	// messages down to the client (daprd). The client streams acknowledgements
+	// back to the server. The server will close the stream and return the status
+	// on any error. In case of closed connection, the client should re-establish
+	// the stream. The first message MUST contain a `topic` attribute on it that
+	// should be used for the entire streaming pull.
 	PullMessages(PubSub_PullMessagesServer) error
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
