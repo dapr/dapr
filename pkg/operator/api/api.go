@@ -134,6 +134,29 @@ func (a *apiServer) OnComponentUpdated(component *componentsapi.Component) {
 	a.connLock.Unlock()
 }
 
+// ListPluggableComponents returns a list of Dapr Pluggable components.
+func (a *apiServer) ListPluggableComponents(ctx context.Context, in *operatorv1pb.ListPluggableComponentsRequest) (*operatorv1pb.ListPluggableComponentsResponse, error) {
+	var pluggableComponents componentsapi.PluggableComponentList
+	if err := a.Client.List(ctx, &pluggableComponents, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
+		return nil, errors.Wrap(err, "error getting pluggable components")
+	}
+	resp := &operatorv1pb.ListPluggableComponentsResponse{
+		PluggableComponents: [][]byte{},
+	}
+	for i := range pluggableComponents.Items {
+		c := pluggableComponents.Items[i] // Make a copy since we will refer to this as a reference in this loop.
+		b, err := json.Marshal(&c)
+		if err != nil {
+			log.Warnf("error marshalling pluggable component %s from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
+			continue
+		}
+		resp.PluggableComponents = append(resp.PluggableComponents, b)
+	}
+	return resp, nil
+}
+
 // GetConfiguration returns a Dapr configuration.
 func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
 	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}

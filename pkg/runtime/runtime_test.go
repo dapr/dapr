@@ -94,7 +94,7 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
-	"github.com/dapr/dapr/pkg/sentry/certs"
+	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -103,6 +103,7 @@ const (
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
 	TestLockName         = "testlock"
+	componentsDir        = "./components"
 	maxGRPCServerUptime  = 200 * time.Millisecond
 )
 
@@ -219,6 +220,18 @@ func TestNewRuntime(t *testing.T) {
 	assert.NotNil(t, r, "runtime must be initiated")
 }
 
+// writeComponentToDisk the given content into a file inside components directory.
+func writeComponentToDisk(content any, fileName string) (cleanup func(), error error) {
+	filePath := fmt.Sprintf("%s/%s", componentsDir, fileName)
+	b, err := yaml.Marshal(content)
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		os.Remove(filePath)
+	}, os.WriteFile(filePath, b, 0o600)
+}
+
 // helper to populate subscription array for 2 pubsubs.
 // 'topics' are the topics for the first pubsub.
 // 'topics2' are the topics for the second pubsub.
@@ -274,11 +287,6 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 			Pubsubname: "pubsub",
 		},
 	}
-}
-
-func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
-	b, _ := yaml.Marshal(subscription)
-	os.WriteFile(filePath, b, 0o600)
 }
 
 func TestProcessComponentsAndDependents(t *testing.T) {
@@ -434,7 +442,10 @@ func TestDoProcessComponent(t *testing.T) {
 			"mockPubSub",
 		)
 		expectedMetadata := pubsub.Metadata{
-			Base: mdata.Base{Properties: getFakeProperties()},
+			Base: mdata.Base{
+				Name:       TestPubsubName,
+				Properties: getFakeProperties(),
+			},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
@@ -730,6 +741,7 @@ func TestInitState(t *testing.T) {
 		)
 
 		expectedMetadata := state.Metadata{Base: mdata.Base{
+			Name: TestPubsubName,
 			Properties: map[string]string{
 				actorStateStore:        "true",
 				"primaryEncryptionKey": primaryKey,
@@ -804,6 +816,7 @@ func TestInitNameResolution(t *testing.T) {
 		)
 
 		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
+			Name: resolverName,
 			Properties: map[string]string{
 				nameresolution.DaprHTTPPort:        strconv.Itoa(rt.runtimeConfig.HTTPPort),
 				nameresolution.DaprPort:            strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
@@ -1296,6 +1309,104 @@ func TestConsumerID(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestPluggableComponents(t *testing.T) {
+	t.Run("load pluggable components", func(t *testing.T) {
+		rts := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rts)
+
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
+
+		const fakeType, fakeVersion, fakeName = "state", "v1", "mypluggable"
+		s := componentsV1alpha1.PluggableComponent{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: fakeName,
+			},
+			TypeMeta: metaV1.TypeMeta{
+				Kind: "PluggableComponent",
+			},
+			Spec: componentsV1alpha1.PluggableComponentSpec{
+				Type:    fakeType,
+				Version: fakeVersion,
+			},
+		}
+
+		cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
+		require.NoError(t, err)
+		defer cleanup()
+
+		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
+		pluggableComponents, err := rts.loadPluggableComponents()
+
+		require.NoError(t, err)
+		assert.Len(t, pluggableComponents, 1)
+		assert.Equal(t, fakeName, pluggableComponents[0].Name)
+		assert.Equal(t, fakeType, string(pluggableComponents[0].Type))
+		assert.Equal(t, fakeVersion, pluggableComponents[0].Version)
+	})
+
+	t.Run("init pluggable components call register", func(t *testing.T) {
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
+
+		const fakeType, fakeVersion, fakeName = "state", "v1", "mypluggable"
+		s := componentsV1alpha1.PluggableComponent{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: fakeName,
+			},
+			TypeMeta: metaV1.TypeMeta{
+				Kind: "PluggableComponent",
+			},
+			Spec: componentsV1alpha1.PluggableComponentSpec{
+				Type:    fakeType,
+				Version: fakeVersion,
+			},
+		}
+
+		t.Run("when flag is enabled", func(t *testing.T) {
+			rts := NewTestDaprRuntime(modes.StandaloneMode)
+			rts.globalConfig.Spec.Features = append(rts.globalConfig.Spec.Features, config.FeatureSpec{
+				Name:    config.PluggableComponents,
+				Enabled: true,
+			})
+
+			defer stopRuntime(t, rts)
+
+			cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
+			require.NoError(t, err)
+			defer cleanup()
+
+			rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
+			rts.initPluggableComponents()
+
+			_, err = stateLoader.DefaultRegistry.Create("state.mypluggable", "v1")
+			require.NoError(t, err)
+		})
+
+		t.Run("when flag is disabled", func(t *testing.T) {
+			rts := NewTestDaprRuntime(modes.StandaloneMode)
+			rts.globalConfig.Spec.Features = append(rts.globalConfig.Spec.Features, config.FeatureSpec{
+				Name:    config.PluggableComponents,
+				Enabled: false,
+			})
+
+			defer stopRuntime(t, rts)
+
+			s.Name = "my-pluggable-new"
+			cleanup, err := writeComponentToDisk(s, "pluggable-feature-enabled.yaml")
+			require.NoError(t, err)
+			defer cleanup()
+
+			rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
+			rts.initPluggableComponents()
+
+			require.NoError(t, err)
+			_, err = stateLoader.DefaultRegistry.Create("state.my-pluggable-new", "v1")
+			assert.NotNil(t, err)
+		})
+	})
+}
+
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
@@ -1335,7 +1446,10 @@ func TestInitPubSub(t *testing.T) {
 		}, "mockPubSub2")
 
 		expectedMetadata := pubsub.Metadata{
-			Base: mdata.Base{Properties: getFakeProperties()},
+			Base: mdata.Base{
+				Name:       TestPubsubName,
+				Properties: getFakeProperties(),
+			},
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(nil)
@@ -1344,7 +1458,13 @@ func TestInitPubSub(t *testing.T) {
 			mock.AnythingOfType("pubsub.SubscribeRequest"),
 			mock.AnythingOfType("pubsub.Handler")).Return(nil)
 
-		mockPubSub2.On("Init", expectedMetadata).Return(nil)
+		expectedSecondPubsubMetadata := pubsub.Metadata{
+			Base: mdata.Base{
+				Name:       TestSecondPubsubName,
+				Properties: getFakeProperties(),
+			},
+		}
+		mockPubSub2.On("Init", expectedSecondPubsubMetadata).Return(nil)
 		mockPubSub2.On(
 			"Subscribe",
 			mock.AnythingOfType("pubsub.SubscribeRequest"),
@@ -1481,20 +1601,19 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
-		dir := "./components"
-
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
-		defer os.RemoveAll(dir)
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
 
 		s := testDeclarativeSubscription()
 
-		filePath := "./components/sub.yaml"
-		writeSubscriptionToDisk(s, filePath)
+		cleanup, err := writeComponentToDisk(s, "sub.yaml")
+		assert.Nil(t, err)
+		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = dir
+		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1506,21 +1625,20 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("load declarative subscription, in scopes", func(t *testing.T) {
-		dir := "./components"
-
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
-		defer os.RemoveAll(dir)
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{TestRuntimeConfigID}
 
-		filePath := "./components/sub.yaml"
-		writeSubscriptionToDisk(s, filePath)
+		cleanup, err := writeComponentToDisk(s, "sub.yaml")
+		assert.Nil(t, err)
+		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = dir
+		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
 		subs := rts.getDeclarativeSubscriptions()
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -1533,21 +1651,20 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("load declarative subscription, not in scopes", func(t *testing.T) {
-		dir := "./components"
-
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
 
-		require.NoError(t, os.Mkdir(dir, 0o777))
-		defer os.RemoveAll(dir)
+		require.NoError(t, os.Mkdir(componentsDir, 0o777))
+		defer os.RemoveAll(componentsDir)
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{"scope1"}
 
-		filePath := "./components/sub.yaml"
-		writeSubscriptionToDisk(s, filePath)
+		cleanup, err := writeComponentToDisk(s, "sub.yaml")
+		assert.Nil(t, err)
+		defer cleanup()
 
-		rts.runtimeConfig.Standalone.ComponentsPath = dir
+		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
 		subs := rts.getDeclarativeSubscriptions()
 		assert.Len(t, subs, 0)
 	})
@@ -3751,9 +3868,9 @@ func TestMTLS(t *testing.T) {
 		rt.runtimeConfig.mtlsEnabled = true
 		rt.runtimeConfig.SentryServiceAddress = "1.1.1.1"
 
-		t.Setenv(certs.TrustAnchorsEnvVar, testCertRoot)
-		t.Setenv(certs.CertChainEnvVar, "a")
-		t.Setenv(certs.CertKeyEnvVar, "b")
+		t.Setenv(sentryConsts.TrustAnchorsEnvVar, testCertRoot)
+		t.Setenv(sentryConsts.CertChainEnvVar, "a")
+		t.Setenv(sentryConsts.CertKeyEnvVar, "b")
 
 		certChain, err := security.GetCertChain()
 		assert.Nil(t, err)
@@ -4338,9 +4455,23 @@ func TestBindingTracingHttp(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 
-	t.Run("traceparent passed through", func(t *testing.T) {
+	t.Run("traceparent passed through with response status code 200", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+		rt.appChannel = mockAppChannel
+
+		_, err := rt.sendBindingEventToApp("mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
+		assert.Nil(t, err)
+		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
+		assert.Len(t, mockAppChannel.Calls, 1)
+		req := mockAppChannel.Calls[0].Arguments.Get(1).(*invokev1.InvokeMethodRequest)
+		assert.Contains(t, req.Metadata(), "traceparent")
+		assert.Contains(t, req.Metadata()["traceparent"].Values, "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01")
+	})
+
+	t.Run("traceparent passed through with response status code 204", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(204, "OK", nil), nil)
 		rt.appChannel = mockAppChannel
 
 		_, err := rt.sendBindingEventToApp("mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
