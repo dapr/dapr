@@ -62,6 +62,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/utils"
 )
 
 const (
@@ -81,8 +82,8 @@ type API interface {
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
-	CheckAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckAllComponentsHealthRequest) (*runtimev1pb.CheckAllComponentsHealthResponse, error)
-	CheckHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error)
+	GetAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.AllComponentsHealthRequest) (*runtimev1pb.AllComponentsHealthResponse, error)
+	GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.ComponentHealthRequest) (*runtimev1pb.ComponentHealthResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
@@ -725,71 +726,81 @@ func (a *api) getComponent(componentKind string, componentName string) (componen
 	return
 }
 
-func (a *api) CheckAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckAllComponentsHealthRequest) (*runtimev1pb.CheckAllComponentsHealthResponse, error) {
+func (a *api) GetAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.AllComponentsHealthRequest) (*runtimev1pb.AllComponentsHealthResponse, error) {
 	i := 0
 	components := a.getComponentsFn()
-	hresp := &runtimev1pb.CheckAllComponentsHealthResponse{
-		Results: make([]*runtimev1pb.CheckAllComponentsHealthItem, len(components)),
+	hresp := &runtimev1pb.AllComponentsHealthResponse{
+		Results: make([]*runtimev1pb.ComponentHealthResponseItem, len(components)),
 	}
 	for _, comp := range components {
 		a.allComponentsHealthResponePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
 		i++
 	}
-	// b, _ := json.Marshal(hresp)
 	return hresp, nil
 }
 
-func (a *api) allComponentsHealthResponePopulator(componentType string, hresp *runtimev1pb.CheckAllComponentsHealthResponse, ind int, name string) {
-	status, err := a.CheckHealthUtil(componentType, name)
+func (a *api) allComponentsHealthResponePopulator(componentType string, hresp *runtimev1pb.AllComponentsHealthResponse, ind int, name string) {
+	status, errStr, message, _ := a.CheckHealthUtil(componentType, name)
 
-	hresp.Results[ind] = &runtimev1pb.CheckAllComponentsHealthItem{
+	hresp.Results[ind] = &runtimev1pb.ComponentHealthResponseItem{
 		ComponentName: name,
 		Type:          componentType,
 		Status:        status,
+		ErrorCode:     errStr,
+		Message:       message,
 	}
-	if err != nil {
-		hresp.Results[ind].Error = err.Error()
-	}
+	// if errStr != nil {
+	// 	hresp.Results[ind].ErrorCode = errStr
+	// }
 }
 
-func (a *api) CheckHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
+func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.ComponentHealthRequest) (*runtimev1pb.ComponentHealthResponse, error) {
 	componentName := in.ComponentName
 	components := a.getComponentsFn()
 	for _, comp := range components {
 		if componentName == comp.Name {
-			_, err := a.CheckHealthUtil(strings.Split(comp.Spec.Type, ".")[0], comp.Name)
-			return &emptypb.Empty{}, err
+			status, errStr, message, err := a.CheckHealthUtil(strings.Split(comp.Spec.Type, ".")[0], comp.Name)
+			return &runtimev1pb.ComponentHealthResponse{
+				Status:    status,
+				ErrorCode: errStr,
+				Message:   message,
+			}, err
 		}
 	}
-	err := status.Errorf(codes.InvalidArgument, messages.ErrComponentWitNameNotFound, in.ComponentName)
+	err := status.Errorf(codes.InvalidArgument, messages.ERR_COMPONENT_NOT_FOUND)
 	apiServerLogger.Debug(err)
 
-	return &emptypb.Empty{}, err
+	return &runtimev1pb.ComponentHealthResponse{
+		Status:    utils.Status_undefined,
+		ErrorCode: messages.ERR_COMPONENT_NOT_FOUND,
+	}, err
 }
 
-func (a *api) CheckHealthUtil(componentKind string, componentName string) (out string, err error) {
+func (a *api) CheckHealthUtil(componentKind string, componentName string) (
+	healthStatus string, errorCode string, message string, err error) {
 	component := a.getComponent(componentKind, componentName)
 
 	if component == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound, componentKind, componentName)
+		err := status.Errorf(codes.InvalidArgument, messages.ERR_COMPONENT_NOT_FOUND)
 		apiServerLogger.Debug(err)
 
-		return "undefined", err
+		return utils.Status_undefined, messages.ERR_COMPONENT_NOT_FOUND, "", err
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
-		err := pinger.Ping()
-		if err != nil {
-			apiServerLogger.Debug(err)
+		pingErr := pinger.Ping()
+		if pingErr != nil {
+			err := status.Errorf(codes.Unknown, messages.ERR_HEALTH_NOT_OK)
+			apiServerLogger.Debug(pingErr)
 
-			return "not_ok", err
+			return utils.Status_not_ok, messages.ERR_HEALTH_NOT_OK, pingErr.Error(), err
 		}
 	} else {
-		err := status.Errorf(codes.Unimplemented, messages.ErrComponentNotImplemented, componentName)
-		return "undefined", err
+		err := status.Errorf(codes.Unimplemented, messages.ERR_PING_NOT_IMPLEMENTED)
+		return utils.Status_undefined, messages.ERR_PING_NOT_IMPLEMENTED, "", err
 	}
 
-	return "ok", nil
+	return utils.Status_ok, "", "", nil
 }
 
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {

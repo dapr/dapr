@@ -87,7 +87,12 @@ const (
 	ErrLockStoreNotFound          = "lock store %s not found"
 	ErrStateHealthNotReady        = "state is not ready"
 	ErrComponentWitNameNotFound   = "Component With Name %s is not found"
-	ErrComponentHealthNotOK       = "%s is not ok"
+	ErrComponentHealthNotOK       = "health for %s is not ok: %s"
 	ErrComponentNotFound          = "%s %s is not found"
 	ErrComponentNotImplemented    = "Ping is not imeplemented by %s"
+
+	// Error Codes
+	ERR_COMPONENT_NOT_FOUND  = "ERR_COMPONENT_NOT_FOUND"
+	ERR_HEALTH_NOT_OK        = "ERR_HEALTH_NOT_OK"
+	ERR_PING_NOT_IMPLEMENTED = "ERR_PING_NOT_IMPLEMENTED"
 )

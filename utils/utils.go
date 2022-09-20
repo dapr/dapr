@@ -24,6 +24,13 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+const (
+	Status_ok                = "OK"
+	Status_not_ok            = "NOT OK"
+	Status_undefined         = "UNDEFINED"
+
+)
+
 var (
 	clientSet     *kubernetes.Clientset
 	kubeConfig    *rest.Config

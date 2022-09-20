@@ -48,7 +48,8 @@ type mockHealthResponse struct {
 	Component string `json:"componentName"`
 	Type      string `json:"type"`
 	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
+	ErrorCode string `json:"errorCode,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 type mockAllHealthResponse struct {
@@ -98,7 +99,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	cmd := mux.Vars(r)["command"]
 	switch cmd {
-	case "CheckAllComponentsHealthAlpha1":
+	case "GetAllComponentsHealthAlpha1":
 		healthResponse, err = getComponentsHealth("ALL")
 		if err != nil {
 			statusCode = http.StatusInternalServerError

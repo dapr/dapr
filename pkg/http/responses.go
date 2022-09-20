@@ -49,15 +49,37 @@ type QueryItem struct {
 	Error string          `json:"error,omitempty"`
 }
 
-type ComponentHealthResponse struct {
-	Results []ComponentHealth `json:"results"`
+type ComponentsHealthResponse struct {
+	Results []ComponentHealthItem `json:"results"`
 }
 
-type ComponentHealth struct {
+type ComponentHealthItem struct {
 	Component string `json:"componentName"`
 	Type      string `json:"type"`
 	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
+	ErrorCode string `json:"errorCode,omitempty"`
+	Message   string `json:"message,omitempty"`
+}
+
+type ComponentHealth struct {
+	Status    string `json:"status"`
+	ErrorCode string `json:"errorCode,omitempty"`
+	Message   string `json:"message,omitempty"`
+}
+
+// NewComponentHealth returns Single ComponentHealth with given status and error code, if any.
+func NewComponentHealth(status, errorCode, message string) ComponentHealth {
+	return ComponentHealth{
+		Status:    status,
+		ErrorCode: errorCode,
+		Message:   message,
+	}
+}
+
+// withHealthStatus sets error code and jsonized error message.
+func withHealthStatus(statusCode int, health ComponentHealth) option {
+	b, _ := json.Marshal(&health)
+	return withJSON(statusCode, b)
 }
 
 type option = func(ctx *fasthttp.RequestCtx)

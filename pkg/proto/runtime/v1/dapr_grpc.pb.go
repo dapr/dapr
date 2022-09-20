@@ -26,10 +26,10 @@ const _ = grpc.SupportPackageIsVersion7
 type DaprClient interface {
 	// Invokes a method on a remote Dapr app.
 	InvokeService(ctx context.Context, in *InvokeServiceRequest, opts ...grpc.CallOption) (*v1.InvokeResponse, error)
-	// Check health of a component
-	CheckHealthAlpha1(ctx context.Context, in *CheckHealthRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Check health of all registered components
-	CheckAllComponentsHealthAlpha1(ctx context.Context, in *CheckAllComponentsHealthRequest, opts ...grpc.CallOption) (*CheckAllComponentsHealthResponse, error)
+	// Get health of a component
+	GetComponentHealthAlpha1(ctx context.Context, in *ComponentHealthRequest, opts ...grpc.CallOption) (*ComponentHealthResponse, error)
+	// Get health of all registered components
+	GetAllComponentsHealthAlpha1(ctx context.Context, in *AllComponentsHealthRequest, opts ...grpc.CallOption) (*AllComponentsHealthResponse, error)
 	// Gets the state for a specific key.
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 	// Gets a bulk of state items for a list of keys
@@ -103,18 +103,18 @@ func (c *daprClient) InvokeService(ctx context.Context, in *InvokeServiceRequest
 	return out, nil
 }
 
-func (c *daprClient) CheckHealthAlpha1(ctx context.Context, in *CheckHealthRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/CheckHealthAlpha1", in, out, opts...)
+func (c *daprClient) GetComponentHealthAlpha1(ctx context.Context, in *ComponentHealthRequest, opts ...grpc.CallOption) (*ComponentHealthResponse, error) {
+	out := new(ComponentHealthResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetComponentHealthAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *daprClient) CheckAllComponentsHealthAlpha1(ctx context.Context, in *CheckAllComponentsHealthRequest, opts ...grpc.CallOption) (*CheckAllComponentsHealthResponse, error) {
-	out := new(CheckAllComponentsHealthResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/CheckAllComponentsHealthAlpha1", in, out, opts...)
+func (c *daprClient) GetAllComponentsHealthAlpha1(ctx context.Context, in *AllComponentsHealthRequest, opts ...grpc.CallOption) (*AllComponentsHealthResponse, error) {
+	out := new(AllComponentsHealthResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetAllComponentsHealthAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -393,10 +393,10 @@ func (c *daprClient) Shutdown(ctx context.Context, in *emptypb.Empty, opts ...gr
 type DaprServer interface {
 	// Invokes a method on a remote Dapr app.
 	InvokeService(context.Context, *InvokeServiceRequest) (*v1.InvokeResponse, error)
-	// Check health of a component
-	CheckHealthAlpha1(context.Context, *CheckHealthRequest) (*emptypb.Empty, error)
-	// Check health of all registered components
-	CheckAllComponentsHealthAlpha1(context.Context, *CheckAllComponentsHealthRequest) (*CheckAllComponentsHealthResponse, error)
+	// Get health of a component
+	GetComponentHealthAlpha1(context.Context, *ComponentHealthRequest) (*ComponentHealthResponse, error)
+	// Get health of all registered components
+	GetAllComponentsHealthAlpha1(context.Context, *AllComponentsHealthRequest) (*AllComponentsHealthResponse, error)
 	// Gets the state for a specific key.
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	// Gets a bulk of state items for a list of keys
@@ -460,11 +460,11 @@ type UnimplementedDaprServer struct {
 func (UnimplementedDaprServer) InvokeService(context.Context, *InvokeServiceRequest) (*v1.InvokeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeService not implemented")
 }
-func (UnimplementedDaprServer) CheckHealthAlpha1(context.Context, *CheckHealthRequest) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CheckHealthAlpha1 not implemented")
+func (UnimplementedDaprServer) GetComponentHealthAlpha1(context.Context, *ComponentHealthRequest) (*ComponentHealthResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetComponentHealthAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) CheckAllComponentsHealthAlpha1(context.Context, *CheckAllComponentsHealthRequest) (*CheckAllComponentsHealthResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CheckAllComponentsHealthAlpha1 not implemented")
+func (UnimplementedDaprServer) GetAllComponentsHealthAlpha1(context.Context, *AllComponentsHealthRequest) (*AllComponentsHealthResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAllComponentsHealthAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) GetState(context.Context, *GetStateRequest) (*GetStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetState not implemented")
@@ -577,38 +577,38 @@ func _Dapr_InvokeService_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_CheckHealthAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CheckHealthRequest)
+func _Dapr_GetComponentHealthAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ComponentHealthRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaprServer).CheckHealthAlpha1(ctx, in)
+		return srv.(DaprServer).GetComponentHealthAlpha1(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.Dapr/CheckHealthAlpha1",
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetComponentHealthAlpha1",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).CheckHealthAlpha1(ctx, req.(*CheckHealthRequest))
+		return srv.(DaprServer).GetComponentHealthAlpha1(ctx, req.(*ComponentHealthRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_CheckAllComponentsHealthAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CheckAllComponentsHealthRequest)
+func _Dapr_GetAllComponentsHealthAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AllComponentsHealthRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaprServer).CheckAllComponentsHealthAlpha1(ctx, in)
+		return srv.(DaprServer).GetAllComponentsHealthAlpha1(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.Dapr/CheckAllComponentsHealthAlpha1",
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetAllComponentsHealthAlpha1",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).CheckAllComponentsHealthAlpha1(ctx, req.(*CheckAllComponentsHealthRequest))
+		return srv.(DaprServer).GetAllComponentsHealthAlpha1(ctx, req.(*AllComponentsHealthRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1114,12 +1114,12 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_InvokeService_Handler,
 		},
 		{
-			MethodName: "CheckHealthAlpha1",
-			Handler:    _Dapr_CheckHealthAlpha1_Handler,
+			MethodName: "GetComponentHealthAlpha1",
+			Handler:    _Dapr_GetComponentHealthAlpha1_Handler,
 		},
 		{
-			MethodName: "CheckAllComponentsHealthAlpha1",
-			Handler:    _Dapr_CheckAllComponentsHealthAlpha1_Handler,
+			MethodName: "GetAllComponentsHealthAlpha1",
+			Handler:    _Dapr_GetAllComponentsHealthAlpha1_Handler,
 		},
 		{
 			MethodName: "GetState",

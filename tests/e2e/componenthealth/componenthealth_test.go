@@ -49,13 +49,6 @@ type mockAllHealthResponse struct {
 	Results []mockHealthResponse `json:"results"`
 }
 
-// represents each step in a test since it can make multiple calls.
-// type testCase struct {
-// 	testName         string
-// 	testSuffix       string
-// 	compHealthResult []componentStatus
-// }
-
 var testCases = []struct {
 	testName         string
 	urlSuffix        string
@@ -63,7 +56,7 @@ var testCases = []struct {
 }{
 	{
 		"all components",
-		"CheckAllComponentsHealthAlpha1",
+		"GetAllComponentsHealthAlpha1",
 		expectedAllComponentsHealthResult(),
 	},
 }
@@ -82,22 +75,22 @@ func expectedAllComponentsHealthResult() []componentStatus {
 			"querystatestore",
 			"state",
 			false,
-			"Ok",
+			"OK",
 			"", // no error
 		},
 		{
 			"dapr-resiliency-pubsub",
 			"pubsub",
 			false,
-			"Ok",
+			"OK",
 			"", // no error
 		},
 		{
 			"inmemorystate",
 			"state",
 			true,
-			"Undefined",
-			"ERR_PING_NOT_IMPLEMENTED_BY_state",
+			"UNDEFINED",
+			"ERR_PING_NOT_IMPLEMENTED",
 		},
 	}
 }
