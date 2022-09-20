@@ -733,13 +733,13 @@ func (a *api) GetAllComponentsHealthAlpha1(ctx context.Context, in *runtimev1pb.
 		Results: make([]*runtimev1pb.ComponentHealthResponseItem, len(components)),
 	}
 	for _, comp := range components {
-		a.allComponentsHealthResponePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
+		a.allComponentsHealthResponsePopulator(strings.Split(comp.Spec.Type, ".")[0], hresp, i, comp.Name)
 		i++
 	}
 	return hresp, nil
 }
 
-func (a *api) allComponentsHealthResponePopulator(componentType string, hresp *runtimev1pb.AllComponentsHealthResponse, ind int, name string) {
+func (a *api) allComponentsHealthResponsePopulator(componentType string, hresp *runtimev1pb.AllComponentsHealthResponse, ind int, name string) {
 	status, errStr, message, _ := a.CheckHealthUtil(componentType, name)
 
 	hresp.Results[ind] = &runtimev1pb.ComponentHealthResponseItem{
@@ -749,9 +749,6 @@ func (a *api) allComponentsHealthResponePopulator(componentType string, hresp *r
 		ErrorCode:     errStr,
 		Message:       message,
 	}
-	// if errStr != nil {
-	// 	hresp.Results[ind].ErrorCode = errStr
-	// }
 }
 
 func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.ComponentHealthRequest) (*runtimev1pb.ComponentHealthResponse, error) {

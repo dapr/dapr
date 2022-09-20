@@ -170,7 +170,7 @@ func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeB
 	return &runtimev1pb.InvokeBindingResponse{}, nil
 }
 
-func (m *mockGRPCAPI) CheckHealthAlpha1(ctx context.Context, in *runtimev1pb.CheckHealthRequest) (*emptypb.Empty, error) {
+func (m *mockGRPCAPI) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.ComponentHealthRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
 
@@ -1417,7 +1417,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 	}
 }
 
-func TestCheckStoreHealth(t *testing.T) {
+func TestGetComponentHealth(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeSecretStore := daprt.FakeSecretStore{}
 	fakeSecretStores := map[string]secretstores.SecretStore{
@@ -1451,19 +1451,19 @@ func TestCheckStoreHealth(t *testing.T) {
 				return &daprt.MockPubSub{}
 			},
 		},
-		getComponentsFn: func() []components_v1alpha.Component {
-			return []components_v1alpha.Component{
+		getComponentsFn: func() []componentsV1alpha.Component {
+			return []componentsV1alpha.Component{
 				{
 					ObjectMeta: meta_v1.ObjectMeta{
 						Name: "store1",
 					},
-					Spec: components_v1alpha.ComponentSpec{
+					Spec: componentsV1alpha.ComponentSpec{
 						Type:    "state.mockType1",
 						Version: "v1.0",
-						Metadata: []components_v1alpha.MetadataItem{
+						Metadata: []componentsV1alpha.MetadataItem{
 							{
 								Name: "actorMockComponent1",
-								Value: components_v1alpha.DynamicValue{
+								Value: componentsV1alpha.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -1474,13 +1474,13 @@ func TestCheckStoreHealth(t *testing.T) {
 					ObjectMeta: meta_v1.ObjectMeta{
 						Name: "pubsubname",
 					},
-					Spec: components_v1alpha.ComponentSpec{
+					Spec: componentsV1alpha.ComponentSpec{
 						Type:    "pubsub.mockType2",
 						Version: "v1.0",
-						Metadata: []components_v1alpha.MetadataItem{
+						Metadata: []componentsV1alpha.MetadataItem{
 							{
 								Name: "actorMockComponent2",
-								Value: components_v1alpha.DynamicValue{
+								Value: componentsV1alpha.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -1491,13 +1491,13 @@ func TestCheckStoreHealth(t *testing.T) {
 					ObjectMeta: meta_v1.ObjectMeta{
 						Name: "secretstore1",
 					},
-					Spec: components_v1alpha.ComponentSpec{
+					Spec: componentsV1alpha.ComponentSpec{
 						Type:    "secretstores.mockType3",
 						Version: "v1.0",
-						Metadata: []components_v1alpha.MetadataItem{
+						Metadata: []componentsV1alpha.MetadataItem{
 							{
 								Name: "actorMockComponent2",
-								Value: components_v1alpha.DynamicValue{
+								Value: componentsV1alpha.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -1551,11 +1551,11 @@ func TestCheckStoreHealth(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
-			req := &runtimev1pb.CheckHealthRequest{
+			req := &runtimev1pb.ComponentHealthRequest{
 				ComponentName: tt.componentName,
 			}
 
-			_, err := client.CheckHealthAlpha1(context.Background(), req)
+			_, err := client.GetComponentHealthAlpha1(context.Background(), req)
 
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")

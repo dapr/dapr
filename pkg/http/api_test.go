@@ -3942,19 +3942,19 @@ func TestV1HealthzEndpoint(t *testing.T) {
 				return nil
 			},
 		},
-		getComponentsFn: func() []components_v1alpha1.Component {
-			return []components_v1alpha1.Component{
+		getComponentsFn: func() []componentsV1alpha1.Component {
+			return []componentsV1alpha1.Component{
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "store1",
 					},
-					Spec: components_v1alpha1.ComponentSpec{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    "state.mockType1",
 						Version: "v1.0",
-						Metadata: []components_v1alpha1.MetadataItem{
+						Metadata: []componentsV1alpha1.MetadataItem{
 							{
 								Name: "actorMockComponent1",
-								Value: components_v1alpha1.DynamicValue{
+								Value: componentsV1alpha1.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -3962,16 +3962,16 @@ func TestV1HealthzEndpoint(t *testing.T) {
 					},
 				},
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "pubsubname",
 					},
-					Spec: components_v1alpha1.ComponentSpec{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    "pubsub.mockType2",
 						Version: "v1.0",
-						Metadata: []components_v1alpha1.MetadataItem{
+						Metadata: []componentsV1alpha1.MetadataItem{
 							{
 								Name: "actorMockComponent2",
-								Value: components_v1alpha1.DynamicValue{
+								Value: componentsV1alpha1.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -3979,16 +3979,16 @@ func TestV1HealthzEndpoint(t *testing.T) {
 					},
 				},
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "secretstore1",
 					},
-					Spec: components_v1alpha1.ComponentSpec{
+					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    "secretstores.mockType3",
 						Version: "v1.0",
-						Metadata: []components_v1alpha1.MetadataItem{
+						Metadata: []componentsV1alpha1.MetadataItem{
 							{
 								Name: "actorMockComponent3",
-								Value: components_v1alpha1.DynamicValue{
+								Value: componentsV1alpha1.DynamicValue{
 									JSON: v1.JSON{Raw: []byte("true")},
 								},
 							},
@@ -4020,7 +4020,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0-alpha1/healthz/components/%s", storeName)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
-		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("StateStore healthz - 400 Not Found", func(t *testing.T) {
@@ -4042,7 +4042,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		apiPath := "v1.0-alpha1/healthz/components/pubsubname"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
-		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("Pubsub healthz - 400 Not Found", func(t *testing.T) {
@@ -4056,7 +4056,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		apiPath := "v1.0-alpha1/healthz/components/secretstore1"
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
-		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("SecretStore healthz - 400 Not Found", func(t *testing.T) {
