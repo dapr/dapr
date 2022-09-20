@@ -59,6 +59,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/utils"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -138,9 +139,6 @@ const (
 	tracestateHeader         = "tracestate"
 	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
-	status_ok                = "OK"
-	status_not_ok            = "NOT OK"
-	status_undefined         = "UNDEFINED"
 )
 
 // NewAPI returns a new API.
@@ -2139,7 +2137,7 @@ func (a *api) onGetComponentHealthz(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 	if !found {
-		msg := NewComponentHealth(status_undefined, messages.ERR_COMPONENT_NOT_FOUND, "")
+		msg := NewComponentHealth(utils.Status_undefined, messages.ERR_COMPONENT_NOT_FOUND, "")
 		if reqCtx != nil {
 			respond(reqCtx, withHealthStatus(fasthttp.StatusBadRequest, msg))
 		}
@@ -2152,36 +2150,36 @@ func (a *api) onGetComponentHealthzUtil(reqCtx *fasthttp.RequestCtx, componentKi
 	component := a.getComponent(componentKind, componentName)
 
 	if component == nil {
-		msg := NewComponentHealth(status_undefined, messages.ERR_COMPONENT_NOT_FOUND, "")
+		msg := NewComponentHealth(utils.Status_undefined, messages.ERR_COMPONENT_NOT_FOUND, "")
 		if reqCtx != nil {
 			respond(reqCtx, withHealthStatus(fasthttp.StatusBadRequest, msg))
 		}
 		log.Debug(msg)
-		return status_undefined, messages.ERR_COMPONENT_NOT_FOUND, ""
+		return utils.Status_undefined, messages.ERR_COMPONENT_NOT_FOUND, ""
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
 		err := pinger.Ping()
 		if err != nil {
-			msg := NewComponentHealth(status_not_ok, messages.ERR_HEALTH_NOT_OK, err.Error())
+			msg := NewComponentHealth(utils.Status_not_ok, messages.ERR_HEALTH_NOT_OK, err.Error())
 			if reqCtx != nil {
 				respond(reqCtx, withHealthStatus(fasthttp.StatusInternalServerError, msg))
 			}
 			log.Debug(msg)
-			return status_not_ok, messages.ERR_HEALTH_NOT_OK, err.Error()
+			return utils.Status_not_ok, messages.ERR_HEALTH_NOT_OK, err.Error()
 		}
-		msg := NewComponentHealth(status_ok, "", "")
+		msg := NewComponentHealth(utils.Status_ok, "", "")
 		if reqCtx != nil {
 			respond(reqCtx, withHealthStatus(fasthttp.StatusOK, msg))
 		}
-		return status_ok, "", ""
+		return utils.Status_ok, "", ""
 	}
-	msg := NewComponentHealth(status_undefined, messages.ERR_PING_NOT_IMPLEMENTED, "")
+	msg := NewComponentHealth(utils.Status_undefined, messages.ERR_PING_NOT_IMPLEMENTED, "")
 	if reqCtx != nil {
 		respond(reqCtx, withHealthStatus(fasthttp.StatusMethodNotAllowed, msg))
 	}
 	log.Debug(msg)
-	return status_undefined, messages.ERR_PING_NOT_IMPLEMENTED, ""
+	return utils.Status_undefined, messages.ERR_PING_NOT_IMPLEMENTED, ""
 }
 
 func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {

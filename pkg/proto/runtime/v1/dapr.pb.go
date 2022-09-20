@@ -221,7 +221,7 @@ func (x *GetStateRequest) GetMetadata() map[string]string {
 	return nil
 }
 
-// GetAllComponentsHealthRequest is the message to get health of all components.
+// AllComponentsHealthRequest is the message to get health of all components.
 type AllComponentsHealthRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -260,6 +260,8 @@ func (*AllComponentsHealthRequest) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{2}
 }
 
+// ComponentHealthResponseItem represents health of a single component item when enquired about
+// health of all components.
 type ComponentHealthResponseItem struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -269,7 +271,7 @@ type ComponentHealthResponseItem struct {
 	ComponentName string `protobuf:"bytes,1,opt,name=componentName,proto3" json:"componentName,omitempty"`
 	// Type of component
 	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	// Status of component, OK or NOT_OK or UNDEFINED
+	// Status of component, OK or NOT OK or UNDEFINED
 	Status string `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
 	// error that is returned in case of health check failure
 	ErrorCode string `protobuf:"bytes,4,opt,name=errorCode,proto3" json:"errorCode,omitempty"`
@@ -344,7 +346,7 @@ func (x *ComponentHealthResponseItem) GetMessage() string {
 	return ""
 }
 
-// Final response that would comprise of HealthItems per component basis
+// AllComponentsHealthResponse is the response that would comprise of HealthItems per component basis
 type AllComponentsHealthResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -441,12 +443,13 @@ func (x *ComponentHealthRequest) GetComponentName() string {
 	return ""
 }
 
+// ComponentHealthResponse is the response for health enquiry of a single component.
 type ComponentHealthResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Status of component, OK or NOT_OK or UNDEFINED
+	// Status of component, OK or NOT OK or UNDEFINED
 	Status string `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 	// error that is returned in case of health check failure
 	ErrorCode string `protobuf:"bytes,2,opt,name=errorCode,proto3" json:"errorCode,omitempty"`
