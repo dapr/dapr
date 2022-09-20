@@ -768,7 +768,7 @@ func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.Comp
 	apiServerLogger.Debug(err)
 
 	return &runtimev1pb.ComponentHealthResponse{
-		Status:    utils.Status_undefined,
+		Status:    utils.STATUS_UNDEFINED,
 		ErrorCode: messages.ERR_COMPONENT_NOT_FOUND,
 	}, err
 }
@@ -781,7 +781,7 @@ func (a *api) CheckHealthUtil(componentKind string, componentName string) (
 		err := status.Errorf(codes.InvalidArgument, messages.ERR_COMPONENT_NOT_FOUND)
 		apiServerLogger.Debug(err)
 
-		return utils.Status_undefined, messages.ERR_COMPONENT_NOT_FOUND, "", err
+		return utils.STATUS_UNDEFINED, messages.ERR_COMPONENT_NOT_FOUND, "", err
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
@@ -790,14 +790,14 @@ func (a *api) CheckHealthUtil(componentKind string, componentName string) (
 			err := status.Errorf(codes.Unknown, messages.ERR_HEALTH_NOT_OK)
 			apiServerLogger.Debug(pingErr)
 
-			return utils.Status_not_ok, messages.ERR_HEALTH_NOT_OK, pingErr.Error(), err
+			return utils.STATUS_NOT_OK, messages.ERR_HEALTH_NOT_OK, pingErr.Error(), err
 		}
 	} else {
 		err := status.Errorf(codes.Unimplemented, messages.ERR_PING_NOT_IMPLEMENTED)
-		return utils.Status_undefined, messages.ERR_PING_NOT_IMPLEMENTED, "", err
+		return utils.STATUS_UNDEFINED, messages.ERR_PING_NOT_IMPLEMENTED, "", err
 	}
 
-	return utils.Status_ok, "", "", nil
+	return utils.STATUS_OK, "", "", nil
 }
 
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {

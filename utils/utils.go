@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	Status_ok                = "OK"
-	Status_not_ok            = "NOT OK"
-	Status_undefined         = "UNDEFINED"
+	STATUS_OK                = "OK"
+	STATUS_NOT_OK            = "NOT OK"
+	STATUS_UNDEFINED         = "UNDEFINED"
 
 )
 
