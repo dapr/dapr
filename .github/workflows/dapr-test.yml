@@ -325,16 +325,15 @@ jobs:
         if: env.TEST_PREFIX != ''
         run: |
           elapsed=0
-          until [ $elapsed -ge 1800 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
+          until [ $elapsed -ge 1200 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
           do
               echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
               sleep 20
               elapsed=$(expr $elapsed + 20)
           done
 
-          if [ $elapsed -ge 1800 ]; then
+          if [ $elapsed -ge 1200 ]; then
             echo "Azure Container Registry not ready on time"
-            exit 1
           fi
         shell: bash
       - name: Login to Azure Container Registry

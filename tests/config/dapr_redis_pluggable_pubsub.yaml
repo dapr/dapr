@@ -14,19 +14,19 @@
 apiVersion: dapr.io/v1alpha1
 kind: PluggableComponent
 metadata:
-  name: redis-pluggable
+  name: redis-pubsub-pluggable
 spec:
-  type: state
+  type: pubsub
   version: v1
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: pluggable-statestore
+  name: pluggable-messagebus
 spec:
-  type: state.redis-pluggable
+  type: pubsub.redis-pubsub-pluggable
+  initTimeout: 1m
   version: v1
-  initTimeout: 20s
   metadata:
     - name: redisHost
       secretKeyRef:
@@ -34,5 +34,14 @@ spec:
         key: host
     - name: redisPassword
       value: ""
+    - name: processingTimeout
+      value: 1s
+    - name: redeliverInterval
+      value: 1s
+    - name: idleCheckFrequency
+      value: 1s
+    - name: readTimeout
+      value: 1s
 scopes:
-  - stateapp-pluggable
+  - pubsub-publisher-pluggable
+  - pubsub-subscriber-pluggable

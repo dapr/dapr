@@ -36,8 +36,12 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/components-contrib/lock"
+	"github.com/dapr/components-contrib/middleware"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
@@ -2018,6 +2022,82 @@ func TestInitSecretStores(t *testing.T) {
 
 		s := rt.getSecretStore("kubernetesMock")
 		assert.NotNil(t, s)
+	})
+}
+
+func TestMiddlewareBuildPipeline(t *testing.T) {
+	t.Run("build when no global config are set", func(t *testing.T) {
+		rt := &DaprRuntime{}
+
+		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{}, "test")
+		require.NoError(t, err)
+		assert.Empty(t, pipeline.Handlers)
+	})
+	t.Run("build when component does not exists", func(t *testing.T) {
+		rt := &DaprRuntime{
+			globalConfig:   &config.Configuration{},
+			componentsLock: &sync.RWMutex{},
+		}
+
+		_, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
+			Handlers: []config.HandlerSpec{
+				{
+					Name:         "not_exists",
+					Type:         "not_exists",
+					Version:      "not_exists",
+					SelectorSpec: config.SelectorSpec{},
+				},
+			},
+		}, "test")
+		require.NotNil(t, err)
+	})
+	t.Run("build when component exists", func(t *testing.T) {
+		const name = "fake"
+		typ := fmt.Sprintf("middleware.http.%s", name)
+		rt := &DaprRuntime{
+			globalConfig:           &config.Configuration{},
+			componentsLock:         &sync.RWMutex{},
+			httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
+			components: []componentsV1alpha1.Component{
+				{
+					TypeMeta: metaV1.TypeMeta{},
+					ObjectMeta: metaV1.ObjectMeta{
+						Name: name,
+					},
+					Spec: componentsV1alpha1.ComponentSpec{
+						Type:    typ,
+						Version: "v1",
+					},
+					Auth:   componentsV1alpha1.Auth{},
+					Scopes: []string{},
+				},
+			},
+		}
+		called := 0
+		rt.httpMiddlewareRegistry.RegisterComponent(
+			func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
+				called++
+				return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+					return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+						return func(ctx *fasthttp.RequestCtx) {}
+					}, nil
+				}
+			},
+			name,
+		)
+
+		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
+			Handlers: []config.HandlerSpec{
+				{
+					Name:         name,
+					Type:         typ,
+					Version:      "v1",
+					SelectorSpec: config.SelectorSpec{},
+				},
+			},
+		}, "test")
+		require.NoError(t, err)
+		assert.Len(t, pipeline.Handlers, 1)
 	})
 }
 

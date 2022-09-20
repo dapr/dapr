@@ -617,12 +617,12 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (httpMiddleware.Pipeline, error) {
 	var handlers []httpMiddleware.Middleware
 
 	if a.globalConfig != nil {
-		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
-			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
+		for i := 0; i < len(spec.Handlers); i++ {
+			middlewareSpec := spec.Handlers[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
 				return httpMiddleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
@@ -635,7 +635,7 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 			if err != nil {
 				return httpMiddleware.Pipeline{}, err
 			}
-			log.Infof("enabled %s/%s http middleware", middlewareSpec.Type, middlewareSpec.Version)
+			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
 			handlers = append(handlers, handler)
 		}
 	}
@@ -649,6 +649,14 @@ func (a *DaprRuntime) initPluggableComponents() {
 			log.Warnf("failed to register pluggable components: %s", err)
 		}
 	}
+}
+
+func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
+}
+
+func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
 }
 
 // registerPluggableComponents loads and register the loaded pluggable components.
@@ -2631,7 +2639,11 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 			return err
 		}
 	case HTTPProtocol:
-		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		pipeline, err := a.buildAppHTTPPipeline()
+		if err != nil {
+			return err
+		}
+		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, pipeline, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 		if err != nil {
 			return err
 		}
