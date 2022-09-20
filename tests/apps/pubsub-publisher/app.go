@@ -22,6 +22,7 @@ import (
 	"log"
 	"net/http"
 	netUrl "net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -37,8 +38,16 @@ const (
 	appPort      = 3000
 	daprPortHTTP = 3500
 	daprPortGRPC = 50001
-	pubsubName   = "messagebus"
+	PubSubEnvVar = "DAPR_TEST_PUBSUB_NAME"
 )
+
+var pubsubName = "messagebus"
+
+func init() {
+	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
+		pubsubName = psName
+	}
+}
 
 type publishCommand struct {
 	ReqID       string            `json:"reqID"`
