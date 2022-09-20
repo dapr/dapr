@@ -1,3 +1,4 @@
+//nolint:nosnakecase
 package runtime
 
 import (
@@ -626,7 +627,6 @@ func TestBulkSubscribe(t *testing.T) {
 }
 
 func TestBulkSubscribeGRPC(t *testing.T) {
-
 	testBulkSubscribePubsub := "bulkSubscribePubSub"
 	pubsubComponent := componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
@@ -684,7 +684,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders"] = &responses
 		// create mock application server first
 		mockServer := &channelt.MockServer{
-			ListTopicSubscriptionsResponse: subscriptionItems,
+			ListTopicSubscriptionsResponse: &subscriptionItems,
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		}
@@ -797,7 +797,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders2"] = &responses2
 		// create mock application server first
 		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-			ListTopicSubscriptionsResponse: subscriptionItems,
+			ListTopicSubscriptionsResponse: &subscriptionItems,
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		})
@@ -879,7 +879,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders"] = &responses
 		// create mock application server first
 		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-			ListTopicSubscriptionsResponse: subscriptionItems,
+			ListTopicSubscriptionsResponse: &subscriptionItems,
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		})
@@ -911,7 +911,6 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
-
 	})
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back out of order entryIDs", func(t *testing.T) {
@@ -967,7 +966,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders"] = &responses
 		// create mock application server first
 		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-			ListTopicSubscriptionsResponse: subscriptionItems,
+			ListTopicSubscriptionsResponse: &subscriptionItems,
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		})
@@ -1049,7 +1048,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders"] = &responses
 		// create mock application server first
 		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-			ListTopicSubscriptionsResponse: subscriptionItems,
+			ListTopicSubscriptionsResponse: &subscriptionItems,
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		})

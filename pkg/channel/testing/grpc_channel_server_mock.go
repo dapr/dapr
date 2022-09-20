@@ -35,7 +35,7 @@ type MockServer struct {
 	Bindings                       []string
 	BindingEventResponse           runtimev1pb.BindingEventResponse
 	TopicEventResponseStatus       runtimev1pb.TopicEventResponse_TopicEventResponseStatus
-	ListTopicSubscriptionsResponse runtimev1pb.ListTopicSubscriptionsResponse
+	ListTopicSubscriptionsResponse *runtimev1pb.ListTopicSubscriptionsResponse
 	RequestsReceived               map[string]*runtimev1pb.TopicEventBulkRequest
 	BulkResponsePerPath            map[string]*runtimev1pb.TopicEventBulkResponse
 	initialized                    bool
@@ -65,7 +65,7 @@ func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest)
 
 func (m *MockServer) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 	if m.ListTopicSubscriptionsResponse.Subscriptions != nil {
-		return &m.ListTopicSubscriptionsResponse, m.Error
+		return m.ListTopicSubscriptionsResponse, m.Error
 	}
 	return &runtimev1pb.ListTopicSubscriptionsResponse{
 		Subscriptions: m.Subscriptions,
