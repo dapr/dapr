@@ -42,7 +42,8 @@ type mockHealthResponse struct {
 	Component string `json:"componentName"`
 	Type      string `json:"type"`
 	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
+	ErrorCode string `json:"errorCode,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 type mockAllHealthResponse struct {
@@ -113,7 +114,7 @@ func testGetComponentHealth(t *testing.T, compHealthAppExternalURL string) {
 					if !expectedComponentResult.errorExpected {
 						require.Equal(t, expectedComponentResult.status, health.Status, "Expected Status to be equal")
 					} else {
-						require.Contains(t, string(health.Error), expectedComponentResult.errorString, "Expected error string to be contained")
+						require.Contains(t, string(health.ErrorCode), expectedComponentResult.errorString, "Expected error string to be contained")
 					}
 				}
 			}
