@@ -2859,139 +2859,6 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	})
 }
 
-func TestOnNewPublishedMessageGRPC(t *testing.T) {
-	topic := "topic1"
-
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
-		TestSecondPubsubName, "", []byte("Test Message"), "", "")
-	b, err := json.Marshal(envelope)
-	assert.Nil(t, err)
-
-	testPubSubMessage := &pubsubSubscribedMessage{
-		cloudEvent: envelope,
-		topic:      topic,
-		data:       b,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
-		path:       "topic1",
-	}
-
-	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
-		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "")
-	base64, err := json.Marshal(envelope)
-	assert.Nil(t, err)
-
-	testPubSubMessageBase64 := &pubsubSubscribedMessage{
-		cloudEvent: envelope,
-		topic:      topic,
-		data:       base64,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
-		path:       "topic1",
-	}
-
-	testCases := []struct {
-		name             string
-		message          *pubsubSubscribedMessage
-		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
-		errorExpected    bool
-		noResponseStatus bool
-		responseError    error
-	}{
-		{
-			name:             "failed to publish message to user app with unimplemented error",
-			message:          testPubSubMessage,
-			noResponseStatus: true,
-			responseError:    status.Errorf(codes.Unimplemented, "unimplemented method"),
-			errorExpected:    false, // should be dropped with no error
-		},
-		{
-			name:             "failed to publish message to user app with response error",
-			message:          testPubSubMessage,
-			noResponseStatus: true,
-			responseError:    assert.AnError,
-			errorExpected:    true,
-		},
-		{
-			name:             "succeeded to publish message to user app with empty response",
-			message:          testPubSubMessage,
-			noResponseStatus: true,
-		},
-		{
-			name:           "succeeded to publish message to user app with success response",
-			message:        testPubSubMessage,
-			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
-		},
-		{
-			name:           "succeeded to publish message to user app with base64 encoded cloud event",
-			message:        testPubSubMessageBase64,
-			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
-		},
-		{
-			name:           "succeeded to publish message to user app with retry",
-			message:        testPubSubMessage,
-			responseStatus: runtimev1pb.TopicEventResponse_RETRY,
-			errorExpected:  true,
-		},
-		{
-			name:           "succeeded to publish message to user app with drop",
-			message:        testPubSubMessage,
-			responseStatus: runtimev1pb.TopicEventResponse_DROP,
-		},
-		{
-			name:           "succeeded to publish message to user app with invalid response",
-			message:        testPubSubMessage,
-			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
-			errorExpected:  true,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// setup
-			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
-			port, _ := freeport.GetFreePort()
-			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
-			rt.topicRoutes = map[string]TopicRoutes{}
-			rt.topicRoutes[TestPubsubName] = TopicRoutes{
-				topic: TopicRouteElem{
-					rules: []*runtimePubsub.Rule{{Path: topic}},
-				},
-			}
-			var grpcServer *grpc.Server
-
-			// create mock application server first
-			if !tc.noResponseStatus {
-				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-					TopicEventResponseStatus: tc.responseStatus,
-					Error:                    tc.responseError,
-				})
-			} else {
-				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-					Error: tc.responseError,
-				})
-			}
-			if grpcServer != nil {
-				// properly stop the gRPC server
-				defer grpcServer.Stop()
-			}
-
-			// create a new AppChannel and gRPC client for every test
-			rt.createAppChannel()
-			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
-
-			// act
-			err = rt.publishMessageGRPC(context.Background(), tc.message)
-
-			// assert
-			if tc.errorExpected {
-				assert.Error(t, err, "expected an error")
-			} else {
-				assert.Nil(t, err, "expected no error")
-			}
-		})
-	}
-}
-
 func TestPubsubLifecycle(t *testing.T) {
 	rt := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	rt.pubSubRegistry = pubsubLoader.NewRegistry()
@@ -3509,6 +3376,139 @@ func (m *mockSubscribePubSub) BulkPublish(ctx context.Context, req *pubsub.BulkP
 		m.bulkReponse.Error = err
 	}
 	return pubsub.BulkPublishResponse{}, nil
+}
+
+func TestOnNewPublishedMessageGRPC(t *testing.T) {
+	topic := "topic1"
+
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
+		TestSecondPubsubName, "", []byte("Test Message"), "", "")
+	b, err := json.Marshal(envelope)
+	assert.Nil(t, err)
+
+	testPubSubMessage := &pubsubSubscribedMessage{
+		cloudEvent: envelope,
+		topic:      topic,
+		data:       b,
+		metadata:   map[string]string{pubsubName: TestPubsubName},
+		path:       "topic1",
+	}
+
+	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
+		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "")
+	base64, err := json.Marshal(envelope)
+	assert.Nil(t, err)
+
+	testPubSubMessageBase64 := &pubsubSubscribedMessage{
+		cloudEvent: envelope,
+		topic:      topic,
+		data:       base64,
+		metadata:   map[string]string{pubsubName: TestPubsubName},
+		path:       "topic1",
+	}
+
+	testCases := []struct {
+		name             string
+		message          *pubsubSubscribedMessage
+		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+		errorExpected    bool
+		noResponseStatus bool
+		responseError    error
+	}{
+		{
+			name:             "failed to publish message to user app with unimplemented error",
+			message:          testPubSubMessage,
+			noResponseStatus: true,
+			responseError:    status.Errorf(codes.Unimplemented, "unimplemented method"),
+			errorExpected:    false, // should be dropped with no error
+		},
+		{
+			name:             "failed to publish message to user app with response error",
+			message:          testPubSubMessage,
+			noResponseStatus: true,
+			responseError:    assert.AnError,
+			errorExpected:    true,
+		},
+		{
+			name:             "succeeded to publish message to user app with empty response",
+			message:          testPubSubMessage,
+			noResponseStatus: true,
+		},
+		{
+			name:           "succeeded to publish message to user app with success response",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+		},
+		{
+			name:           "succeeded to publish message to user app with base64 encoded cloud event",
+			message:        testPubSubMessageBase64,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+		},
+		{
+			name:           "succeeded to publish message to user app with retry",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_RETRY,
+			errorExpected:  true,
+		},
+		{
+			name:           "succeeded to publish message to user app with drop",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_DROP,
+		},
+		{
+			name:           "succeeded to publish message to user app with invalid response",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
+			errorExpected:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// setup
+			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
+			port, _ := freeport.GetFreePort()
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+			rt.topicRoutes = map[string]TopicRoutes{}
+			rt.topicRoutes[TestPubsubName] = TopicRoutes{
+				topic: TopicRouteElem{
+					rules: []*runtimePubsub.Rule{{Path: topic}},
+				},
+			}
+			var grpcServer *grpc.Server
+
+			// create mock application server first
+			if !tc.noResponseStatus {
+				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+					TopicEventResponseStatus: tc.responseStatus,
+					Error:                    tc.responseError,
+				})
+			} else {
+				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+					Error: tc.responseError,
+				})
+			}
+			if grpcServer != nil {
+				// properly stop the gRPC server
+				defer grpcServer.Stop()
+			}
+
+			// create a new AppChannel and gRPC client for every test
+			rt.createAppChannel()
+			// properly close the app channel created
+			defer rt.grpc.AppClient.Close()
+
+			// act
+			err = rt.publishMessageGRPC(context.Background(), tc.message)
+
+			// assert
+			if tc.errorExpected {
+				assert.Error(t, err, "expected an error")
+			} else {
+				assert.Nil(t, err, "expected no error")
+			}
+		})
+	}
 }
 
 func TestPubSubDeadLetter(t *testing.T) {

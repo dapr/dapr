@@ -12,8 +12,11 @@ import (
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	commonV1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/kit/logger"
+	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -619,6 +622,475 @@ func TestBulkSubscribe(t *testing.T) {
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
+}
+
+func TestBulkSubscribeGRPC(t *testing.T) {
+
+	testBulkSubscribePubsub := "bulkSubscribePubSub"
+	pubsubComponent := componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: testBulkSubscribePubsub,
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	t.Run("GRPC - bulk Subscribe Message for raw payload", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		defer stopRuntime(t, rt)
+
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			},
+			"mockPubSub",
+		)
+
+		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
+			Subscriptions: []*commonV1.TopicSubscription{
+				{
+					PubsubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Routes: &commonV1.TopicRoutes{
+						Default: "orders",
+					},
+					Metadata: map[string]string{"bulkSubscribe": "true", "rawPayload": "true"},
+				},
+			},
+		}
+
+		nbei1 := pubsub.BulkMessageEntry{EntryID: "1111111a", Event: []byte(`{"orderId":"1"}`)}
+		nbei2 := pubsub.BulkMessageEntry{EntryID: "2222222b", Event: []byte(`{"orderId":"2"}`)}
+		msgArr := []pubsub.BulkMessageEntry{nbei1, nbei2}
+		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 2)
+		for k, msg := range msgArr {
+			responseEntries[k] = &runtimev1pb.TopicEventBulkResponseEntry{
+				EntryID: msg.EntryID,
+			}
+		}
+		responseEntries = setBulkResponseStatus(responseEntries,
+			runtimev1pb.TopicEventResponse_DROP,
+			runtimev1pb.TopicEventResponse_SUCCESS)
+
+		responses := runtimev1pb.TopicEventBulkResponse{
+			Statuses: responseEntries,
+		}
+		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
+		mapResp["orders"] = &responses
+		// create mock application server first
+		mockServer := &channelt.MockServer{
+			ListTopicSubscriptionsResponse: subscriptionItems,
+			BulkResponsePerPath:            mapResp,
+			Error:                          nil,
+		}
+		grpcServer := startTestAppCallbackGRPCServer(t, port, mockServer)
+		if grpcServer != nil {
+			// properly stop the gRPC server
+			defer grpcServer.Stop()
+		}
+
+		// create a new AppChannel and gRPC client for every test
+		rt.createAppChannel()
+		// properly close the app channel created
+		defer rt.grpc.AppClient.Close()
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscriptions()
+
+		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+
+		expectedResponse := BulkResponseExpectation{
+			Responses: []BulkResponseEntryExpectation{
+				{EntryID: "1111111a", IsError: false},
+				{EntryID: "2222222b", IsError: false},
+			},
+		}
+		assert.Contains(t, string((mockServer.RequestsReceived["orders"].GetEntries()[0].GetEvent())), `{"orderId":"1"}`)
+		assert.Contains(t, string((mockServer.RequestsReceived["orders"].GetEntries()[1].GetEvent())), `{"orderId":"2"}`)
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+	})
+
+	t.Run("GRPC - bulk Subscribe cloud event Message on different paths and verify response", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		defer stopRuntime(t, rt)
+
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			},
+			"mockPubSub",
+		)
+
+		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
+			Subscriptions: []*commonV1.TopicSubscription{
+				{
+					PubsubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Routes: &commonV1.TopicRoutes{
+						Rules: []*commonV1.TopicRule{
+							{
+								Path:  "orders1",
+								Match: `event.type == "type1"`,
+							},
+							{
+								Path:  "orders2",
+								Match: `event.type == "type2"`,
+							},
+						},
+					},
+					Metadata: map[string]string{"bulkSubscribe": "true"},
+				},
+			},
+		}
+		msgArr := getBulkMessageEntries(10)
+		responseEntries1 := make([]*runtimev1pb.TopicEventBulkResponseEntry, 6)
+		responseEntries2 := make([]*runtimev1pb.TopicEventBulkResponseEntry, 4)
+		i := 0
+		j := 0
+		for k, msg := range msgArr {
+			if strings.Contains(string(msgArr[k].Event), "type1") {
+				responseEntries1[i] = &runtimev1pb.TopicEventBulkResponseEntry{
+					EntryID: msg.EntryID,
+				}
+				i++
+			} else if strings.Contains(string(msgArr[k].Event), "type2") {
+				responseEntries2[j] = &runtimev1pb.TopicEventBulkResponseEntry{
+					EntryID: msg.EntryID,
+				}
+				j++
+			}
+		}
+		responseEntries1 = setBulkResponseStatus(responseEntries1,
+			runtimev1pb.TopicEventResponse_DROP,
+			runtimev1pb.TopicEventResponse_RETRY,
+			runtimev1pb.TopicEventResponse_DROP,
+			runtimev1pb.TopicEventResponse_RETRY,
+			runtimev1pb.TopicEventResponse_SUCCESS,
+			runtimev1pb.TopicEventResponse_DROP)
+
+		responseEntries2 = setBulkResponseStatus(responseEntries2,
+			runtimev1pb.TopicEventResponse_RETRY,
+			runtimev1pb.TopicEventResponse_DROP,
+			runtimev1pb.TopicEventResponse_RETRY,
+			runtimev1pb.TopicEventResponse_SUCCESS)
+
+		responses1 := runtimev1pb.TopicEventBulkResponse{
+			Statuses: responseEntries1,
+		}
+		responses2 := runtimev1pb.TopicEventBulkResponse{
+			Statuses: responseEntries2,
+		}
+		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
+		mapResp["orders1"] = &responses1
+		mapResp["orders2"] = &responses2
+		// create mock application server first
+		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+			ListTopicSubscriptionsResponse: subscriptionItems,
+			BulkResponsePerPath:            mapResp,
+			Error:                          nil,
+		})
+		if grpcServer != nil {
+			defer grpcServer.Stop()
+		}
+
+		rt.createAppChannel()
+		defer rt.grpc.AppClient.Close()
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscriptions()
+
+		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+
+		expectedResponse := BulkResponseExpectation{
+			Responses: []BulkResponseEntryExpectation{
+				{EntryID: "1111111a", IsError: false},
+				{EntryID: "2222222b", IsError: true},
+				{EntryID: "333333c", IsError: true},
+				{EntryID: "4444444d", IsError: false},
+				{EntryID: "5555555e", IsError: false},
+				{EntryID: "66666666f", IsError: true},
+				{EntryID: "7777777g", IsError: true},
+				{EntryID: "8888888h", IsError: false},
+				{EntryID: "9999999i", IsError: false},
+				{EntryID: "10101010j", IsError: false},
+			},
+		}
+
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+	})
+
+	t.Run("GRPC - verify Responses when entryID supplied blank while sending messages", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		defer stopRuntime(t, rt)
+
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			},
+			"mockPubSub",
+		)
+
+		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
+			Subscriptions: []*commonV1.TopicSubscription{
+				{
+					PubsubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Routes: &commonV1.TopicRoutes{
+						Default: "orders",
+					},
+					Metadata: map[string]string{"bulkSubscribe": "true"},
+				},
+			},
+		}
+		msgArr := getBulkMessageEntries(4)
+		msgArr[0].EntryID = ""
+		msgArr[2].EntryID = ""
+		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 4)
+		for k, msg := range msgArr {
+			responseEntries[k] = &runtimev1pb.TopicEventBulkResponseEntry{
+				EntryID: msg.EntryID,
+			}
+		}
+		responseEntries[1].Status = runtimev1pb.TopicEventResponse_SUCCESS
+		responseEntries[3].Status = runtimev1pb.TopicEventResponse_SUCCESS
+		responses := runtimev1pb.TopicEventBulkResponse{
+			Statuses: responseEntries,
+		}
+		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
+		mapResp["orders"] = &responses
+		// create mock application server first
+		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+			ListTopicSubscriptionsResponse: subscriptionItems,
+			BulkResponsePerPath:            mapResp,
+			Error:                          nil,
+		})
+		if grpcServer != nil {
+			defer grpcServer.Stop()
+		}
+
+		rt.createAppChannel()
+		defer rt.grpc.AppClient.Close()
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscriptions()
+
+		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+
+		expectedResponse := BulkResponseExpectation{
+			Responses: []BulkResponseEntryExpectation{
+				{EntryID: "", IsError: true},
+				{EntryID: "2222222b", IsError: false},
+				{EntryID: "", IsError: true},
+				{EntryID: "4444444d", IsError: false},
+			},
+		}
+
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+
+	})
+
+	t.Run("GRPC - verify bulk Subscribe Responses when App sends back out of order entryIDs", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		defer stopRuntime(t, rt)
+
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			},
+			"mockPubSub",
+		)
+
+		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
+			Subscriptions: []*commonV1.TopicSubscription{
+				{
+					PubsubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Routes: &commonV1.TopicRoutes{
+						Default: "orders",
+					},
+					Metadata: map[string]string{"bulkSubscribe": "true"},
+				},
+			},
+		}
+		msgArr := getBulkMessageEntries(5)
+		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
+		responseEntries[0] = &runtimev1pb.TopicEventBulkResponseEntry{
+			EntryID: msgArr[1].EntryID,
+			Status:  runtimev1pb.TopicEventResponse_RETRY,
+		}
+		responseEntries[1] = &runtimev1pb.TopicEventBulkResponseEntry{
+			EntryID: msgArr[2].EntryID,
+			Status:  runtimev1pb.TopicEventResponse_SUCCESS,
+		}
+		responseEntries[2] = &runtimev1pb.TopicEventBulkResponseEntry{
+			EntryID: msgArr[4].EntryID,
+			Status:  runtimev1pb.TopicEventResponse_RETRY,
+		}
+		responseEntries[3] = &runtimev1pb.TopicEventBulkResponseEntry{
+			EntryID: msgArr[0].EntryID,
+			Status:  runtimev1pb.TopicEventResponse_SUCCESS,
+		}
+		responseEntries[4] = &runtimev1pb.TopicEventBulkResponseEntry{
+			EntryID: msgArr[3].EntryID,
+			Status:  runtimev1pb.TopicEventResponse_SUCCESS,
+		}
+		responses := runtimev1pb.TopicEventBulkResponse{
+			Statuses: responseEntries,
+		}
+		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
+		mapResp["orders"] = &responses
+		// create mock application server first
+		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+			ListTopicSubscriptionsResponse: subscriptionItems,
+			BulkResponsePerPath:            mapResp,
+			Error:                          nil,
+		})
+		if grpcServer != nil {
+			defer grpcServer.Stop()
+		}
+
+		rt.createAppChannel()
+		defer rt.grpc.AppClient.Close()
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscriptions()
+
+		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+
+		expectedResponse := BulkResponseExpectation{
+			Responses: []BulkResponseEntryExpectation{
+				{EntryID: "1111111a", IsError: false},
+				{EntryID: "2222222b", IsError: true},
+				{EntryID: "333333c", IsError: false},
+				{EntryID: "4444444d", IsError: false},
+				{EntryID: "5555555e", IsError: true},
+			},
+		}
+
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+	})
+
+	t.Run("GRPC - verify bulk Subscribe Responses when App sends back wrong entryIDs", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		defer stopRuntime(t, rt)
+
+		rt.pubSubRegistry.RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return &mockSubscribePubSub{}
+			},
+			"mockPubSub",
+		)
+
+		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
+			Subscriptions: []*commonV1.TopicSubscription{
+				{
+					PubsubName: testBulkSubscribePubsub,
+					Topic:      "topic0",
+					Routes: &commonV1.TopicRoutes{
+						Default: "orders",
+					},
+					Metadata: map[string]string{"bulkSubscribe": "true"},
+				},
+			},
+		}
+		msgArr := getBulkMessageEntries(5)
+		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
+		for k, msg := range msgArr {
+			responseEntries[k] = &runtimev1pb.TopicEventBulkResponseEntry{
+				EntryID: msg.EntryID,
+			}
+		}
+		responseEntries[0].EntryID = "wrongId1"
+		responseEntries[3].EntryID = "wrongId2"
+		responseEntries = setBulkResponseStatus(responseEntries,
+			runtimev1pb.TopicEventResponse_SUCCESS,
+			runtimev1pb.TopicEventResponse_RETRY,
+			runtimev1pb.TopicEventResponse_SUCCESS,
+			runtimev1pb.TopicEventResponse_SUCCESS,
+			runtimev1pb.TopicEventResponse_RETRY)
+
+		responses := runtimev1pb.TopicEventBulkResponse{
+			Statuses: responseEntries,
+		}
+		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
+		mapResp["orders"] = &responses
+		// create mock application server first
+		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+			ListTopicSubscriptionsResponse: subscriptionItems,
+			BulkResponsePerPath:            mapResp,
+			Error:                          nil,
+		})
+		if grpcServer != nil {
+			defer grpcServer.Stop()
+		}
+
+		rt.createAppChannel()
+		defer rt.grpc.AppClient.Close()
+
+		require.NoError(t, rt.initPubSub(pubsubComponent))
+		rt.startSubscriptions()
+
+		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+		assert.Nil(t, err)
+		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
+
+		expectedResponse := BulkResponseExpectation{
+			Responses: []BulkResponseEntryExpectation{
+				{EntryID: "1111111a", IsError: true},
+				{EntryID: "2222222b", IsError: true},
+				{EntryID: "333333c", IsError: false},
+				{EntryID: "4444444d", IsError: true},
+				{EntryID: "5555555e", IsError: true},
+			},
+		}
+
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
+	})
+}
+
+func setBulkResponseStatus(responses []*runtimev1pb.TopicEventBulkResponseEntry,
+	status ...runtimev1pb.TopicEventResponse_TopicEventResponseStatus,
+) []*runtimev1pb.TopicEventBulkResponseEntry {
+	for i, s := range status {
+		responses[i].Status = s
+	}
+	return responses
 }
 
 type BulkResponseEntryExpectation struct {

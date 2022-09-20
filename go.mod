@@ -393,8 +393,9 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-//replace github.com/dapr/components-contrib => ../components-contrib
-replace github.com/dapr/components-contrib => github.com/dapr/components-contrib v1.8.0-rc.1.0.20220915201717-3f9c42c4b8d9
+replace github.com/dapr/components-contrib => ../components-contrib_2
+
+// replace github.com/dapr/components-contrib => github.com/dapr/components-contrib v1.8.0-rc.1.0.20220915201717-3f9c42c4b8d9
 
 //
 // Then, run `make modtidy` in this repository.

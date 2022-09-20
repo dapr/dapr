@@ -30,11 +30,20 @@ import (
 //
 //nolint:nosnakecase
 type MockServer struct {
-	Error                    error
-	Subscriptions            []*commonv1pb.TopicSubscription
-	Bindings                 []string
-	BindingEventResponse     runtimev1pb.BindingEventResponse
-	TopicEventResponseStatus runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+	Error                          error
+	Subscriptions                  []*commonv1pb.TopicSubscription
+	Bindings                       []string
+	BindingEventResponse           runtimev1pb.BindingEventResponse
+	TopicEventResponseStatus       runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+	ListTopicSubscriptionsResponse runtimev1pb.ListTopicSubscriptionsResponse
+	RequestsReceived               map[string]*runtimev1pb.TopicEventBulkRequest
+	BulkResponsePerPath            map[string]*runtimev1pb.TopicEventBulkResponse
+	initialized                    bool
+}
+
+func (m *MockServer) Init() {
+	m.initialized = true
+	m.RequestsReceived = make(map[string]*runtimev1pb.TopicEventBulkRequest)
 }
 
 func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
@@ -55,6 +64,9 @@ func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest)
 }
 
 func (m *MockServer) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+	if m.ListTopicSubscriptionsResponse.Subscriptions != nil {
+		return &m.ListTopicSubscriptionsResponse, m.Error
+	}
 	return &runtimev1pb.ListTopicSubscriptionsResponse{
 		Subscriptions: m.Subscriptions,
 	}, m.Error
@@ -77,18 +89,14 @@ func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 }
 
 func (m *MockServer) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
-	responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, len(in.Entries))
-	for i, reqEntry := range in.Entries {
-		responseEntry := runtimev1pb.TopicEventBulkResponseEntry{
-			Status:  m.TopicEventResponseStatus,
-			EntryID: reqEntry.EntryID,
-		}
-		responseEntries[i] = &responseEntry
+	if m.initialized != true {
+		m.Init()
 	}
-
-	return &runtimev1pb.TopicEventBulkResponse{
-		Statuses: responseEntries,
-	}, m.Error
+	m.RequestsReceived[in.Path] = in
+	if m.BulkResponsePerPath != nil {
+		return m.BulkResponsePerPath[in.Path], m.Error
+	}
+	return nil, m.Error
 }
 
 func (m *MockServer) HealthCheck(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.HealthCheckResponse, error) {
