@@ -4801,6 +4801,10 @@ func (s *mockSecretStore) Close() error {
 	return s.closeErr
 }
 
+func (s *mockSecretStore) Features() []secretstores.Feature {
+	return nil
+}
+
 type mockNameResolver struct {
 	nameresolution.Resolver
 	closeErr error
