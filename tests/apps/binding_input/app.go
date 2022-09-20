@@ -15,8 +15,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/gorilla/mux"
@@ -24,7 +26,18 @@ import (
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 
-const appPort = 3000
+const (
+	appPort             = 3000
+	DaprTestTopicEnvVar = "DAPR_TEST_TOPIC_NAME"
+)
+
+var topicName = "test-topic"
+
+func init() {
+	if envTopicName := os.Getenv(DaprTestTopicEnvVar); len(envTopicName) != 0 {
+		topicName = envTopicName
+	}
+}
 
 type messageBuffer struct {
 	lock            *sync.RWMutex
@@ -178,7 +191,7 @@ func appRouter() *mux.Router {
 	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/test-topic", testTopicHandler).Methods("POST", "OPTIONS")
+	router.HandleFunc(fmt.Sprintf("/%s", topicName), testTopicHandler).Methods("POST", "OPTIONS")
 	router.HandleFunc("/custom-path", testRoutedTopicHandler).Methods("POST", "OPTIONS")
 	router.HandleFunc("/tests/get_received_topics", testHandler).Methods("POST")
 

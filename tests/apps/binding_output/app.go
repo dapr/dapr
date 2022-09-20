@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -30,11 +31,21 @@ import (
 )
 
 const (
-	appPort  = 3000
-	daprPort = 3500
+	appPort             = 3000
+	daprPort            = 3500
+	DaprTestTopicEnvVar = "DAPR_TEST_TOPIC_NAME"
 )
 
-var daprClient runtimev1pb.DaprClient
+var (
+	daprClient runtimev1pb.DaprClient
+	topicName  = "test-topic"
+)
+
+func init() {
+	if envTopicName := os.Getenv(DaprTestTopicEnvVar); len(envTopicName) != 0 {
+		topicName = envTopicName
+	}
+}
 
 type testCommandRequest struct {
 	Messages []struct {
@@ -66,7 +77,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := fmt.Sprintf("http://localhost:%d/v1.0/bindings/test-topic", daprPort)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/bindings/%s", daprPort, topicName)
 
 	for _, message := range requestBody.Messages {
 		body, err := json.Marshal(&message)

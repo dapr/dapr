@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 
 	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
 )
 
 type testSendRequest struct {
@@ -63,7 +64,16 @@ const (
 	// Number of times to call the endpoint to check for health.
 	numHealthChecks = 60
 	// Number of seconds to wait for binding travelling throughout the cluster.
-	bindingPropagationDelay = 10
+	inputBindingAppName                  = "bindinginput"
+	outputBindingAppName                 = "bindingoutput"
+	e2eInputBindingImage                 = "e2e-binding_input"
+	e2eOutputBindingImage                = "e2e-binding_output"
+	inputBindingPluggableAppName         = "pluggable-bindinginput"
+	outputbindingPluggableAppName        = "pluggable-bindingoutput"
+	pluggableComponentsAppConfig         = "pluggablecomponentsconfig"
+	kafkaBindingsPluggableComponentImage = "e2e-pluggable_kafka-bindings"
+	DaprTestTopicEnvVar                  = "DAPR_TEST_TOPIC_NAME"
+	bindingPropagationDelay              = 10
 )
 
 var tr *runner.TestRunner
@@ -76,17 +86,17 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "bindinginput",
+			AppName:        inputBindingAppName,
 			DaprEnabled:    true,
-			ImageName:      "e2e-binding_input",
+			ImageName:      e2eInputBindingImage,
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
 		},
 		{
-			AppName:        "bindingoutput",
+			AppName:        outputBindingAppName,
 			DaprEnabled:    true,
-			ImageName:      "e2e-binding_output",
+			ImageName:      e2eOutputBindingImage,
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
@@ -100,6 +110,42 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
+	}
+
+	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
+		pluggableComponents := map[string]apiv1.Container{
+			"dapr-bindings.kafka-pluggable-v1-pluggable-test-topic.sock": {
+				Name:  "kafka-pluggable",
+				Image: runner.BuildTestImageName(kafkaBindingsPluggableComponentImage),
+			},
+		}
+		appEnv := map[string]string{
+			DaprTestTopicEnvVar: "pluggable-test-topic",
+		}
+		testApps = append(testApps, []kube.AppDescription{
+			{
+				AppName:             inputBindingPluggableAppName,
+				DaprEnabled:         true,
+				ImageName:           e2eInputBindingImage,
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				Config:              pluggableComponentsAppConfig,
+				PluggableComponents: pluggableComponents,
+				AppEnv:              appEnv,
+			},
+			{
+				AppName:             outputbindingPluggableAppName,
+				DaprEnabled:         true,
+				ImageName:           e2eOutputBindingImage,
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				Config:              pluggableComponentsAppConfig,
+				PluggableComponents: pluggableComponents,
+				AppEnv:              appEnv,
+			},
+		}...)
 	}
 
 	tr = runner.NewTestRunner("bindings", testApps, nil, nil)

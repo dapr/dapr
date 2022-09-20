@@ -73,6 +73,9 @@ type PluggableComponentList struct {
 type PluggableComponentSpec struct {
 	Type    string `json:"type"`
 	Version string `json:"version"`
+	// Name is the component name if not specified metadata.Name will be used.
+	//+optional
+	Name string `json:"name"`
 }
 
 // ComponentSpec is the spec for a component.
