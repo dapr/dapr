@@ -12,27 +12,12 @@
 #
 
 apiVersion: dapr.io/v1alpha1
-kind: PluggableComponent
+kind: Subscription
 metadata:
-  name: redis-pluggable
+  name: pluggable-c-topic-subscription
 spec:
-  type: state
-  version: v1
----
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: pluggable-statestore
-spec:
-  type: state.redis-pluggable
-  version: v1
-  initTimeout: 20s
-  metadata:
-    - name: redisHost
-      secretKeyRef:
-        name: redissecret
-        key: host
-    - name: redisPassword
-      value: ""
+  pubsubname: pluggable-messagebus
+  topic: pubsub-c-topic-http
+  route: /pubsub-c-topic-http
 scopes:
-  - stateapp-pluggable
+  - pubsub-subscriber-pluggable
