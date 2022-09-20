@@ -14,6 +14,7 @@ limitations under the License.
 package runner
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -22,12 +23,11 @@ import (
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	defaultImageRegistry        = "docker.io/dapriotest"
-	defaultImageTag             = "latest"
 	disableTelemetryConfig      = "disable-telemetry"
 	defaultSidecarCPULimit      = "1.0"
 	defaultSidecarMemoryLimit   = "256Mi"
@@ -103,17 +103,17 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 
 	for _, app := range apps {
 		if app.RegistryName == "" {
-			app.RegistryName = c.imageRegistry()
+			app.RegistryName = getTestImageRegistry()
 		}
 
 		if app.ImageSecret == "" {
-			app.ImageSecret = c.imageSecret()
+			app.ImageSecret = getTestImageSecret()
 		}
 
 		if app.ImageName == "" {
 			return fmt.Errorf("%s app doesn't have imagename property", app.AppName)
 		}
-		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, c.imageTag())
+		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, getTestImageTag())
 
 		if dt {
 			app.Config = disableTelemetryConfig
@@ -156,30 +156,6 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 	log.Printf("Apps are installed.")
 
 	return nil
-}
-
-func (c *KubeTestPlatform) imageRegistry() string {
-	reg := os.Getenv("DAPR_TEST_REGISTRY")
-	if reg == "" {
-		return defaultImageRegistry
-	}
-	return reg
-}
-
-func (c *KubeTestPlatform) imageSecret() string {
-	secret := os.Getenv("DAPR_TEST_REGISTRY_SECRET")
-	if secret == "" {
-		return ""
-	}
-	return secret
-}
-
-func (c *KubeTestPlatform) imageTag() string {
-	tag := os.Getenv("DAPR_TEST_TAG")
-	if tag == "" {
-		return defaultImageTag
-	}
-	return tag
 }
 
 func (c *KubeTestPlatform) disableTelemetry() bool {
@@ -393,4 +369,9 @@ func getNamespaceOrDefault(namespace *string) string {
 func (c *KubeTestPlatform) GetConfiguration(name string) (*configurationv1alpha1.Configuration, error) {
 	client := c.KubeClient.DaprClientSet.ConfigurationV1alpha1().Configurations(kube.DaprTestNamespace)
 	return client.Get(name, metav1.GetOptions{})
+}
+
+func (c *KubeTestPlatform) GetService(name string) (*corev1.Service, error) {
+	client := c.KubeClient.Services(kube.DaprTestNamespace)
+	return client.Get(context.Background(), name, metav1.GetOptions{})
 }

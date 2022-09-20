@@ -49,6 +49,8 @@ else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
 	TARGET_ARCH_LOCAL=arm
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),arm64)
 	TARGET_ARCH_LOCAL=arm64
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 7),aarch64)
+	TARGET_ARCH_LOCAL=arm64
 else
 	TARGET_ARCH_LOCAL=amd64
 endif
@@ -71,7 +73,18 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_NAME+= "v1.28.0"
+PROTOC_GEN_GO_VERSION = v1.28.0
+PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
+
+ifeq ($(TARGET_OS_LOCAL),windows)
+	BUILD_TOOLS_BIN ?= build-tools.exe
+	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
+	RUN_BUILD_TOOLS ?= cd .build-tools; go.exe run .
+else
+	BUILD_TOOLS_BIN ?= build-tools
+	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
+	RUN_BUILD_TOOLS ?= cd .build-tools; go run .
+endif
 
 ifeq ($(TARGET_OS_LOCAL),windows)
 	BUILD_TOOLS_BIN ?= build-tools.exe
@@ -270,8 +283,8 @@ test: test-deps
 # Target: lint                                                                 #
 ################################################################################
 # Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
-# Please use golangci-lint version v1.45.2 , otherwise you might encounter errors.
-# You can download version v1.45.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.45.2
+# Please use golangci-lint version v1.48.0 , otherwise you might encounter errors.
+# You can download version v1.48.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.48.0
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
@@ -284,7 +297,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); go mod tidy -compat=1.18; cd -
+	cd $(shell dirname $(1)); go mod tidy -compat=1.19; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
@@ -323,13 +336,13 @@ check: format test lint
 ################################################################################
 .PHONY: init-proto
 init-proto:
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2.0
 
 ################################################################################
 # Target: gen-proto                                                            #
 ################################################################################
-GRPC_PROTOS:=common internals operator placement runtime sentry
+GRPC_PROTOS:=common internals operator placement runtime sentry components
 PROTO_PREFIX:=github.com/dapr/dapr
 
 # Generate archive files for each binary

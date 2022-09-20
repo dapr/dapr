@@ -19,58 +19,42 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/secretstores"
-
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/kit/logger"
 )
 
-type (
-	// SecretStore is a secret store component definition.
-	SecretStore struct {
-		Names         []string
-		FactoryMethod func() secretstores.SecretStore
-	}
+// Name of the built-in Kubernetes secret store component.
+const BuiltinKubernetesSecretStore = "kubernetes"
 
-	// Registry is used to get registered secret store implementations.
-	Registry interface {
-		Register(components ...SecretStore)
-		Create(name, version string) (secretstores.SecretStore, error)
-	}
+// Registry is used to get registered secret store implementations.
+type Registry struct {
+	Logger       logger.Logger
+	secretStores map[string]func(logger.Logger) secretstores.SecretStore
+}
 
-	secretStoreRegistry struct {
-		secretStores map[string]func() secretstores.SecretStore
-	}
-)
+// DefaultRegistry is the singleton with the registry.
+var DefaultRegistry *Registry
 
-// New creates a SecretStore.
-func New(name string, factoryMethod func() secretstores.SecretStore, aliases ...string) SecretStore {
-	names := []string{name}
-	if len(aliases) > 0 {
-		names = append(names, aliases...)
-	}
-	return SecretStore{
-		Names:         names,
-		FactoryMethod: factoryMethod,
-	}
+func init() {
+	DefaultRegistry = NewRegistry()
 }
 
 // NewRegistry returns a new secret store registry.
-func NewRegistry() Registry {
-	return &secretStoreRegistry{
-		secretStores: map[string]func() secretstores.SecretStore{},
+func NewRegistry() *Registry {
+	return &Registry{
+		secretStores: map[string]func(logger.Logger) secretstores.SecretStore{},
 	}
 }
 
-// Register adds one or many new secret stores to the registry.
-func (s *secretStoreRegistry) Register(components ...SecretStore) {
-	for _, component := range components {
-		for _, name := range component.Names {
-			s.secretStores[createFullName(name)] = component.FactoryMethod
-		}
+// RegisterComponent adds a new secret store to the registry.
+func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) secretstores.SecretStore, names ...string) {
+	for _, name := range names {
+		s.secretStores[createFullName(name)] = componentFactory
 	}
 }
 
 // Create instantiates a secret store based on `name`.
-func (s *secretStoreRegistry) Create(name, version string) (secretstores.SecretStore, error) {
+func (s *Registry) Create(name, version string) (secretstores.SecretStore, error) {
 	if method, ok := s.getSecretStore(name, version); ok {
 		return method(), nil
 	}
@@ -78,17 +62,26 @@ func (s *secretStoreRegistry) Create(name, version string) (secretstores.SecretS
 	return nil, errors.Errorf("couldn't find secret store %s/%s", name, version)
 }
 
-func (s *secretStoreRegistry) getSecretStore(name, version string) (func() secretstores.SecretStore, bool) {
+func (s *Registry) getSecretStore(name, version string) (func() secretstores.SecretStore, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	secretStoreFn, ok := s.secretStores[nameLower+"/"+versionLower]
 	if ok {
-		return secretStoreFn, true
+		return s.wrapFn(secretStoreFn), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		secretStoreFn, ok = s.secretStores[nameLower]
+		if ok {
+			return s.wrapFn(secretStoreFn), true
+		}
 	}
-	return secretStoreFn, ok
+	return nil, false
+}
+
+func (s *Registry) wrapFn(componentFactory func(logger.Logger) secretstores.SecretStore) func() secretstores.SecretStore {
+	return func() secretstores.SecretStore {
+		return componentFactory(s.Logger)
+	}
 }
 
 func createFullName(name string) string {

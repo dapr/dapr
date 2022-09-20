@@ -16,10 +16,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -29,10 +31,15 @@ import (
 
 const (
 	appPort         = 3000
+	securedAppPort  = 3001
 	secretKey       = "secret-key"
 	secretStoreName = "local-secret-store"
+	bindingName     = "secured-binding"
 	/* #nosec */
-	secretURL = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
+	secretURL     = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
+	bindingURL    = "http://localhost:3500/v1.0/bindings/%s"
+	tlsCertEnvKey = "DAPR_TESTS_TLS_CERT"
+	tlsKeyEnvKey  = "DAPR_TESTS_TLS_KEY"
 )
 
 type appResponse struct {
@@ -67,7 +74,7 @@ func volumeMountTest() (int, appResponse) {
 	defer resp.Body.Close()
 
 	// parse the secret value
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return http.StatusInternalServerError, appResponse{Message: fmt.Sprintf("Failed to read secret: %v", err)}
 	}
@@ -87,6 +94,30 @@ func volumeMountTest() (int, appResponse) {
 	return http.StatusOK, appResponse{Message: state[secretKey]}
 }
 
+func bindingTest() (int, appResponse) {
+	log.Printf("bindingTest is called")
+
+	url, err := url.Parse(fmt.Sprintf(bindingURL, bindingName))
+	if err != nil {
+		return http.StatusInternalServerError, appResponse{Message: fmt.Sprintf("Failed to parse binding url: %v", err)}
+	}
+
+	// invoke the binding endpoint
+	reqBody := "{\"operation\": \"get\"}"
+	resp, err := http.Post(url.String(), "application/json", strings.NewReader(reqBody))
+	if err != nil {
+		return http.StatusInternalServerError, appResponse{Message: fmt.Sprintf("Failed to get binding: %v", err)}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Non 200 StatusCode: %d\n", resp.StatusCode)
+		return resp.StatusCode, appResponse{Message: fmt.Sprintf("Got error response for URL %s from Dapr, status code: %v", url.String(), resp.StatusCode)}
+	}
+
+	return http.StatusOK, appResponse{Message: "OK"}
+}
+
 // commandHandler is the handler for end-to-end test entry point
 // test driver code call this endpoint to trigger the test
 func commandHandler(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +131,8 @@ func commandHandler(w http.ResponseWriter, r *http.Request) {
 	switch testCommand {
 	case "testVolumeMount":
 		statusCode, res = volumeMountTest()
+	case "testBinding":
+		statusCode, res = bindingTest()
 	}
 	res.StartTime = startTime
 	res.EndTime = epoch()
@@ -128,7 +161,28 @@ func appRouter() *mux.Router {
 	return router
 }
 
+func securedAppRouter() *mux.Router {
+	router := mux.NewRouter().StrictSlash(true)
+
+	// Log requests and their processing time
+	router.Use(utils.LoggerMiddleware)
+
+	router.HandleFunc("/", indexHandler).Methods("GET")
+
+	router.Use(mux.CORSMethodMiddleware(router))
+
+	return router
+}
+
 func main() {
 	log.Printf("Injector App - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+
+	// start a secured app (with TLS) on an alternate port
+	go func() {
+		os.Setenv(tlsCertEnvKey, "/tmp/testdata/certs/cert.pem")
+		os.Setenv(tlsKeyEnvKey, "/tmp/testdata/certs/key.pem")
+		utils.StartServer(securedAppPort, securedAppRouter, true, true)
+	}()
+
+	utils.StartServer(appPort, appRouter, true, false)
 }

@@ -38,7 +38,7 @@ func SetupLogs(testName string) {
 
 		date := time.Now().Format("20060102_150405")
 		target := filepath.Join(logPath, testName+"_"+date+".log")
-		logFile, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0666)
+		logFile, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0o666)
 		if err != nil {
 			log.Printf("Failed to open log file '%s' Error was: '%s'", target, err)
 			return

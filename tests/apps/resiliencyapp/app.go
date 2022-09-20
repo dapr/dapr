@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -42,6 +42,7 @@ type FailureMessage struct {
 	ID              string         `json:"id"`
 	MaxFailureCount *int           `json:"maxFailureCount,omitempty"`
 	Timeout         *time.Duration `json:"timeout,omitempty"`
+	ResponseCode    *int           `json:"responseCode,omitempty"`
 }
 
 type CallRecord struct {
@@ -159,7 +160,7 @@ func resiliencyPubsubHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(PubsubResponse{
@@ -217,6 +218,10 @@ func resiliencyServiceInvocationHandler(w http.ResponseWriter, r *http.Request) 
 	log.Printf("Seen %s %d times.", message.ID, callCount)
 
 	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+	if message.ResponseCode != nil {
+		w.WriteHeader(*message.ResponseCode)
+		return
+	}
 	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
 		if message.Timeout != nil {
 			// This request can still succeed if the resiliency policy timeout is longer than this sleep.
@@ -264,7 +269,7 @@ func initGRPCClient() {
 	var grpcConn *grpc.ClientConn
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		grpcConn, err = grpc.Dial(url, grpc.WithInsecure())
+		grpcConn, err = grpc.Dial(url, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err == nil {
 			break
 		}
@@ -320,7 +325,7 @@ func main() {
 	initGRPCClient()
 
 	log.Printf("Resiliency App - listening on http://localhost:%d", appPort)
-	utils.StartServer(appPort, appRouter, true)
+	utils.StartServer(appPort, appRouter, true, false)
 }
 
 // Test Functions.
@@ -419,8 +424,17 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 	protocol := mux.Vars(r)["protocol"]
 	log.Printf("Invoking resiliency service with %s", protocol)
 
+	targetApp := r.URL.Query().Get("target_app")
+	targetMethod := r.URL.Query().Get("target_method")
+
 	if protocol == "http" {
-		url := "http://localhost:3500/v1.0/invoke/resiliencyapp/method/resiliencyInvocation"
+		if targetApp == "" {
+			targetApp = "resiliencyapp"
+		}
+		if targetMethod == "" {
+			targetMethod = "resiliencyInvocation"
+		}
+		url := fmt.Sprintf("http://localhost:3500/v1.0/invoke/%s/method/%s", targetApp, targetMethod)
 
 		req, _ := http.NewRequest("POST", url, r.Body)
 		defer r.Body.Close()
@@ -438,6 +452,13 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 			w.Write(b)
 		}
 	} else if protocol == "grpc" {
+		if targetApp == "" {
+			targetApp = "resiliencyappgrpc"
+		}
+		if targetMethod == "" {
+			targetMethod = "grpcInvoke"
+		}
+
 		var message FailureMessage
 		err := json.NewDecoder(r.Body).Decode(&message)
 		if err != nil {
@@ -448,9 +469,9 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		b, _ := json.Marshal(message)
 
 		req := &runtimev1pb.InvokeServiceRequest{
-			Id: "resiliencyappgrpc",
+			Id: targetApp,
 			Message: &commonv1pb.InvokeRequest{
-				Method: "grpcInvoke",
+				Method: targetMethod,
 				Data: &anypb.Any{
 					Value: b,
 				},
@@ -475,7 +496,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Proxying message: %+v", message)
 		b, _ := json.Marshal(message)
 
-		conn, err := grpc.Dial("localhost:50001", grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.Dial("localhost:50001", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 		if err != nil {
 			log.Fatalf("did not connect: %v", err)
 		}

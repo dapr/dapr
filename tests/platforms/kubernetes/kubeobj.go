@@ -89,7 +89,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
 		}
 		if !appDesc.IsJob {
-			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)
+			annotationObject["dapr.io/app-port"] = strconv.Itoa(appDesc.AppPort)
 		}
 	}
 	if appDesc.AppProtocol != "" {
@@ -104,7 +104,27 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.DaprVolumeMounts != "" {
 		annotationObject["dapr.io/volume-mounts"] = appDesc.DaprVolumeMounts
 	}
-
+	if appDesc.DaprEnv != "" {
+		annotationObject["dapr.io/env"] = appDesc.DaprEnv
+	}
+	if appDesc.UnixDomainSocketPath != "" {
+		annotationObject["dapr.io/unix-domain-socket-path"] = appDesc.UnixDomainSocketPath
+	}
+	if appDesc.EnableAppHealthCheck {
+		annotationObject["dapr.io/enable-app-health-check"] = "true"
+	}
+	if appDesc.AppHealthCheckPath != "" {
+		annotationObject["dapr.io/app-health-check-path"] = appDesc.AppHealthCheckPath
+	}
+	if appDesc.AppHealthProbeInterval != 0 {
+		annotationObject["dapr.io/app-health-probe-interval"] = strconv.Itoa(appDesc.AppHealthProbeInterval)
+	}
+	if appDesc.AppHealthProbeTimeout != 0 {
+		annotationObject["dapr.io/app-health-probe-timeout"] = strconv.Itoa(appDesc.AppHealthProbeTimeout)
+	}
+	if appDesc.AppHealthThreshold != 0 {
+		annotationObject["dapr.io/app-health-threshold"] = strconv.Itoa(appDesc.AppHealthThreshold)
+	}
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}
@@ -143,6 +163,25 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		}
 	}
 
+	containers := []apiv1.Container{{
+		Name:            appDesc.AppName,
+		Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
+		ImagePullPolicy: apiv1.PullAlways,
+		Ports: []apiv1.ContainerPort{
+			{
+				Name:          "http",
+				Protocol:      apiv1.ProtocolTCP,
+				ContainerPort: DefaultContainerPort,
+			},
+		},
+		Env:          appEnv,
+		VolumeMounts: appDesc.AppVolumeMounts,
+	}}
+
+	if len(appDesc.PluggableComponents) != 0 {
+		containers = append(containers, adaptAndBuildPluggableComponents(&appDesc)...)
+	}
+
 	return apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      labels,
@@ -150,21 +189,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		},
 		Spec: apiv1.PodSpec{
 			InitContainers: appDesc.InitContainers,
-			Containers: []apiv1.Container{
-				{
-					Name:            appDesc.AppName,
-					Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
-					ImagePullPolicy: apiv1.PullAlways,
-					Ports: []apiv1.ContainerPort{
-						{
-							Name:          "http",
-							Protocol:      apiv1.ProtocolTCP,
-							ContainerPort: DefaultContainerPort,
-						},
-					},
-					Env: appEnv,
-				},
-			},
+			Containers:     containers,
 			Affinity: &apiv1.Affinity{
 				NodeAffinity: &apiv1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
@@ -243,12 +268,14 @@ func buildJobObject(namespace string, appDesc AppDescription) *batchv1.Job {
 func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service {
 	serviceType := apiv1.ServiceTypeClusterIP
 
-	if appDesc.IngressEnabled {
+	if appDesc.ShouldBeExposed() {
 		serviceType = apiv1.ServiceTypeLoadBalancer
 	}
 
 	targetPort := DefaultContainerPort
-	if appDesc.AppPort > 0 {
+	if appDesc.IngressPort > 0 {
+		targetPort = appDesc.IngressPort
+	} else if appDesc.AppPort > 0 {
 		targetPort = appDesc.AppPort
 	}
 

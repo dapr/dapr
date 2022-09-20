@@ -30,7 +30,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
@@ -263,6 +263,60 @@ func TestComponentUpdate(t *testing.T) {
 }
 
 func TestListsNamespaced(t *testing.T) {
+	t.Run("list pluggable components should be namespaced", func(t *testing.T) {
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = componentsapi.AddToScheme(s)
+		assert.NoError(t, err)
+
+		av, kind := componentsapi.SchemeGroupVersion.WithKind("PluggableComponent").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{
+			Kind:       kind,
+			APIVersion: av,
+		}
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&componentsapi.PluggableComponent{
+				TypeMeta: typeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "obj1",
+					Namespace: "namespace-a",
+				},
+			}, &componentsapi.PluggableComponent{
+				TypeMeta: typeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "obj2",
+					Namespace: "namespace-b",
+				},
+			}).
+			Build()
+
+		api := NewAPIServer(client).(*apiServer)
+
+		res, err := api.ListPluggableComponents(context.TODO(), &operatorv1pb.ListPluggableComponentsRequest{
+			PodName:   "foo",
+			Namespace: "namespace-a",
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(res.GetPluggableComponents()))
+
+		var sub componentsapi.PluggableComponent
+		err = yaml.Unmarshal(res.GetPluggableComponents()[0], &sub)
+		assert.Nil(t, err)
+
+		assert.Equal(t, "obj1", sub.Name)
+		assert.Equal(t, "namespace-a", sub.Namespace)
+
+		res, err = api.ListPluggableComponents(context.TODO(), &operatorv1pb.ListPluggableComponentsRequest{
+			PodName:   "foo",
+			Namespace: "namespace-c",
+		})
+		assert.Nil(t, err)
+		assert.Equal(t, 0, len(res.GetPluggableComponents()))
+	})
 	t.Run("list components namespace scoping", func(t *testing.T) {
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
@@ -322,23 +376,23 @@ func TestListsNamespaced(t *testing.T) {
 		err := scheme.AddToScheme(s)
 		assert.NoError(t, err)
 
-		err = subscriptionsapi_v2alpha1.AddToScheme(s)
+		err = subscriptionsapiV2alpha1.AddToScheme(s)
 		assert.NoError(t, err)
 
-		av, kind := subscriptionsapi_v2alpha1.SchemeGroupVersion.WithKind("Subscription").ToAPIVersionAndKind()
+		av, kind := subscriptionsapiV2alpha1.SchemeGroupVersion.WithKind("Subscription").ToAPIVersionAndKind()
 		typeMeta := metav1.TypeMeta{
 			Kind:       kind,
 			APIVersion: av,
 		}
 		client := fake.NewClientBuilder().
 			WithScheme(s).
-			WithObjects(&subscriptionsapi_v2alpha1.Subscription{
+			WithObjects(&subscriptionsapiV2alpha1.Subscription{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "sub1",
 					Namespace: "namespace-a",
 				},
-			}, &subscriptionsapi_v2alpha1.Subscription{
+			}, &subscriptionsapiV2alpha1.Subscription{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "sub2",
@@ -357,7 +411,7 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, 1, len(res.GetSubscriptions()))
 
-		var sub subscriptionsapi_v2alpha1.Subscription
+		var sub subscriptionsapiV2alpha1.Subscription
 		err = yaml.Unmarshal(res.GetSubscriptions()[0], &sub)
 		assert.Nil(t, err)
 

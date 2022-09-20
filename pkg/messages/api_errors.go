@@ -37,6 +37,9 @@ const (
 	ErrInternalInvokeRequest = "parsing InternalInvokeRequest error: %s"
 	ErrChannelInvoke         = "error invoking app channel: %s"
 
+	// AppHealth.
+	ErrAppUnhealthy = "app is not in a healthy state"
+
 	// Actor.
 	ErrActorRuntimeNotFound      = "the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: \"true\" in your state store component file?"
 	ErrActorInstanceMissing      = "actor instance is missing"

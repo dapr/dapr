@@ -36,6 +36,8 @@ type Configuration struct {
 // ConfigurationSpec is the spec for an configuration.
 type ConfigurationSpec struct {
 	// +optional
+	AppHTTPPipelineSpec PipelineSpec `json:"appHttpPipeline,omitempty"`
+	// +optional
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
@@ -53,6 +55,8 @@ type ConfigurationSpec struct {
 	Features []FeatureSpec `json:"features,omitempty"`
 	// +optional
 	APISpec APISpec `json:"api,omitempty"`
+	// +optional
+	ComponentsSpec ComponentsSpec `json:"components,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -62,8 +66,9 @@ type APISpec struct {
 
 // APIAccessRule describes an access rule for allowing a Dapr API to be enabled and accessible by an app.
 type APIAccessRule struct {
-	Name     string `json:"name"`
-	Version  string `json:"version"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// +optional
 	Protocol string `json:"protocol"`
 }
 
@@ -124,8 +129,20 @@ type SelectorField struct {
 
 // TracingSpec defines distributed tracing configuration.
 type TracingSpec struct {
-	SamplingRate string     `json:"samplingRate"`
-	Zipkin       ZipkinSpec `json:"zipkin"`
+	SamplingRate string `json:"samplingRate"`
+	// +optional
+	Stdout bool `json:"stdout"`
+	// +optional
+	Zipkin ZipkinSpec `json:"zipkin"`
+	// +optional
+	Otel OtelSpec `json:"otel"`
+}
+
+// OtelSpec defines Otel exporter configurations.
+type OtelSpec struct {
+	Protocol        string `json:"protocol" yaml:"protocol"`
+	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
+	IsSecure        bool   `json:"isSecure" yaml:"isSecure"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.
@@ -173,6 +190,13 @@ type AccessControlSpec struct {
 type FeatureSpec struct {
 	Name    string `json:"name" yaml:"name"`
 	Enabled bool   `json:"enabled" yaml:"enabled"`
+}
+
+// ComponentsSpec describes the configuration for Dapr components
+type ComponentsSpec struct {
+	// Denylist of component types that cannot be instantiated
+	// +optional
+	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
 }
 
 // +kubebuilder:object:root=true

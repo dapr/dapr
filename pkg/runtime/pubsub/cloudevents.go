@@ -16,8 +16,8 @@ package pubsub
 import (
 	"github.com/google/uuid"
 
-	contrib_contenttype "github.com/dapr/components-contrib/contenttype"
-	contrib_pubsub "github.com/dapr/components-contrib/pubsub"
+	contribContenttype "github.com/dapr/components-contrib/contenttype"
+	contribPubsub "github.com/dapr/components-contrib/pubsub"
 )
 
 // CloudEvent is a request object to create a Dapr compliant cloudevent.
@@ -33,9 +33,9 @@ type CloudEvent struct {
 
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
 func NewCloudEvent(req *CloudEvent) (map[string]interface{}, error) {
-	if contrib_contenttype.IsCloudEventContentType(req.DataContentType) {
-		return contrib_pubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
+	if contribContenttype.IsCloudEventContentType(req.DataContentType) {
+		return contribPubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
 	}
-	return contrib_pubsub.NewCloudEventsEnvelope(uuid.New().String(), req.ID, contrib_pubsub.DefaultCloudEventType,
+	return contribPubsub.NewCloudEventsEnvelope(uuid.New().String(), req.ID, contribPubsub.DefaultCloudEventType,
 		"", req.Topic, req.Pubsub, req.DataContentType, req.Data, req.TraceID, req.TraceState), nil
 }

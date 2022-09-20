@@ -1,6 +1,6 @@
-module app
+module github.com/dapr/dapr/tests/apps/service_invocation_grpc_proxy_server
 
-go 1.18
+go 1.19
 
 require (
 	google.golang.org/grpc v1.38.0

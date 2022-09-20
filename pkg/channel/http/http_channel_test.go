@@ -19,35 +19,34 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
+	"go.uber.org/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 )
 
+// testConcurrencyHandler is used for testing max concurrency.
 type testConcurrencyHandler struct {
-	maxCalls     int
-	currentCalls int
+	maxCalls     int32
+	currentCalls *atomic.Int32
 	testFailed   bool
-	lock         sync.Mutex
 }
 
 func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	t.lock.Lock()
-	t.currentCalls++
-	t.lock.Unlock()
+	cur := t.currentCalls.Inc()
 
-	if t.currentCalls > t.maxCalls {
+	if cur > t.maxCalls {
 		t.testFailed = true
 	}
 
-	t.lock.Lock()
-	t.currentCalls--
-	t.lock.Unlock()
+	t.currentCalls.Dec()
 	io.WriteString(w, r.URL.RawQuery)
 }
 
@@ -78,6 +77,93 @@ type testHTTPHandler struct {
 func (th *testHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	assert.Equal(th.t, th.serverURL, r.Host)
 	io.WriteString(w, r.URL.RawQuery)
+}
+
+// testStatusCodeHandler is used to send responses with a given status code.
+type testStatusCodeHandler struct {
+	Code int
+}
+
+func (t *testStatusCodeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	code, err := strconv.Atoi(r.Header.Get("x-response-status"))
+	if err != nil || code == 0 {
+		code = t.Code
+		if code == 0 {
+			code = 200
+		}
+	}
+	w.WriteHeader(code)
+	w.Write([]byte(strconv.Itoa(code)))
+}
+
+func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
+	defaultStatusCode := http.StatusOK
+	th := &testStatusCodeHandler{Code: defaultStatusCode}
+	server := httptest.NewServer(th)
+	ctx := context.Background()
+
+	t.Run("pipeline should be called when handlers are not empty", func(t *testing.T) {
+		called := 0
+		middleware := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+			return func(ctx *fasthttp.RequestCtx) {
+				called++
+				h(ctx)
+			}
+		})
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				middleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method")
+		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, 1, called)
+		assert.Equal(t, int32(defaultStatusCode), resp.Status().Code)
+	})
+
+	t.Run("request can be short-circuited by middleware pipeline", func(t *testing.T) {
+		called := 0
+		shortcircuitStatusCode := http.StatusBadGateway
+		middleware := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+			return func(ctx *fasthttp.RequestCtx) {
+				called++
+				ctx.Response.SetStatusCode(shortcircuitStatusCode)
+			}
+		})
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				middleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method")
+		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, 1, called)
+		assert.Equal(t, int32(shortcircuitStatusCode), resp.Status().Code)
+	})
+
+	server.Close()
 }
 
 func TestInvokeMethod(t *testing.T) {
@@ -134,22 +220,27 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 	ctx := context.Background()
 	t.Run("single concurrency", func(t *testing.T) {
 		handler := testConcurrencyHandler{
-			maxCalls: 1,
-			lock:     sync.Mutex{},
+			maxCalls:     1,
+			currentCalls: atomic.NewInt32(0),
 		}
 		server := httptest.NewServer(&handler)
-		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
-		c.ch = make(chan int, 1)
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			ch:          make(chan struct{}, 1),
+		}
 
 		// act
 		var wg sync.WaitGroup
 		wg.Add(5)
 		for i := 0; i < 5; i++ {
 			go func() {
-				request2 := invokev1.NewInvokeMethodRequest("method")
-				request2.WithRawData(nil, "")
-
-				c.InvokeMethod(ctx, request2)
+				req := invokev1.
+					NewInvokeMethodRequest("method").
+					WithHTTPExtension("GET", "").
+					WithRawData(nil, "")
+				_, err := c.InvokeMethod(ctx, req)
+				assert.NoError(t, err)
 				wg.Done()
 			}()
 		}
@@ -162,25 +253,66 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 
 	t.Run("10 concurrent calls", func(t *testing.T) {
 		handler := testConcurrencyHandler{
-			maxCalls: 10,
-			lock:     sync.Mutex{},
+			maxCalls:     10,
+			currentCalls: atomic.NewInt32(0),
 		}
 		server := httptest.NewServer(&handler)
-		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
-		c.ch = make(chan int, 1)
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			ch:          make(chan struct{}, 1),
+		}
 
 		// act
 		var wg sync.WaitGroup
 		wg.Add(20)
 		for i := 0; i < 20; i++ {
 			go func() {
-				request2 := invokev1.NewInvokeMethodRequest("method")
-				request2.WithRawData(nil, "")
-				c.InvokeMethod(ctx, request2)
+				req := invokev1.
+					NewInvokeMethodRequest("method").
+					WithHTTPExtension("GET", "").
+					WithRawData(nil, "")
+				_, err := c.InvokeMethod(ctx, req)
+				assert.NoError(t, err)
 				wg.Done()
 			}()
 		}
 		wg.Wait()
+
+		// assert
+		assert.False(t, handler.testFailed)
+		server.Close()
+	})
+
+	t.Run("introduce failures", func(t *testing.T) {
+		handler := testConcurrencyHandler{
+			maxCalls:     5,
+			currentCalls: atomic.NewInt32(0),
+		}
+		server := httptest.NewServer(&handler)
+		c := Channel{
+			// False address to make first calls fail
+			baseAddress: "http://0.0.0.0:0",
+			client:      &fasthttp.Client{},
+			ch:          make(chan struct{}, 1),
+		}
+
+		// act
+		for i := 0; i < 20; i++ {
+			if i == 10 {
+				c.baseAddress = server.URL
+			}
+			req := invokev1.
+				NewInvokeMethodRequest("method").
+				WithHTTPExtension("GET", "").
+				WithRawData(nil, "")
+			_, err := c.InvokeMethod(ctx, req)
+			if i < 10 {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		}
 
 		// assert
 		assert.False(t, handler.testFailed)
@@ -356,7 +488,7 @@ func TestAppToken(t *testing.T) {
 
 func TestCreateChannel(t *testing.T) {
 	t.Run("ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, true, 4, 4)
+		ch, err := CreateLocalChannel(3000, 0, httpMiddleware.Pipeline{}, config.TracingSpec{}, true, 4, 4)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()
@@ -364,10 +496,40 @@ func TestCreateChannel(t *testing.T) {
 	})
 
 	t.Run("non-ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, false, 4, 4)
+		ch, err := CreateLocalChannel(3000, 0, httpMiddleware.Pipeline{}, config.TracingSpec{}, false, 4, 4)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()
 		assert.Equal(t, b, "http://127.0.0.1:3000")
 	})
+}
+
+func TestHealthProbe(t *testing.T) {
+	ctx := context.Background()
+	h := &testStatusCodeHandler{}
+	testServer := httptest.NewServer(h)
+	c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+
+	var (
+		success bool
+		err     error
+	)
+
+	// OK response
+	success, err = c.HealthProbe(ctx)
+	assert.NoError(t, err)
+	assert.True(t, success)
+
+	// Non-2xx status code
+	h.Code = 500
+	success, err = c.HealthProbe(ctx)
+	assert.NoError(t, err)
+	assert.False(t, success)
+
+	// Stopped server
+	// Should still return no error, but a failed probe
+	testServer.Close()
+	success, err = c.HealthProbe(ctx)
+	assert.NoError(t, err)
+	assert.False(t, success)
 }

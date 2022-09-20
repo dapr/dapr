@@ -8,7 +8,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 var (
@@ -57,7 +57,7 @@ func CertSignSucceed() {
 func CertSignFailed(reason string) {
 	stats.RecordWithTags(
 		context.Background(),
-		diag_utils.WithTags(failedReasonKey, reason),
+		diagUtils.WithTags(failedReasonKey, reason),
 		certSignFailedTotal.M(1))
 }
 
@@ -79,11 +79,11 @@ func IssuerCertChanged() {
 // InitMetrics initializes metrics.
 func InitMetrics() error {
 	return view.Register(
-		diag_utils.NewMeasureView(csrReceivedTotal, noKeys, view.Count()),
-		diag_utils.NewMeasureView(certSignSuccessTotal, noKeys, view.Count()),
-		diag_utils.NewMeasureView(certSignFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
-		diag_utils.NewMeasureView(serverTLSCertIssueFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
-		diag_utils.NewMeasureView(issuerCertChangedTotal, noKeys, view.Count()),
-		diag_utils.NewMeasureView(issuerCertExpiryTimestamp, noKeys, view.LastValue()),
+		diagUtils.NewMeasureView(csrReceivedTotal, noKeys, view.Count()),
+		diagUtils.NewMeasureView(certSignSuccessTotal, noKeys, view.Count()),
+		diagUtils.NewMeasureView(certSignFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
+		diagUtils.NewMeasureView(serverTLSCertIssueFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
+		diagUtils.NewMeasureView(issuerCertChangedTotal, noKeys, view.Count()),
+		diagUtils.NewMeasureView(issuerCertExpiryTimestamp, noKeys, view.LastValue()),
 	)
 }

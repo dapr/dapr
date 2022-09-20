@@ -30,11 +30,12 @@ import (
 	"github.com/valyala/fasthttp/pprofhandler"
 
 	"github.com/dapr/dapr/pkg/config"
-	cors_dapr "github.com/dapr/dapr/pkg/cors"
+	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/kit/logger"
 )
 
@@ -55,23 +56,33 @@ type server struct {
 	config             ServerConfig
 	tracingSpec        config.TracingSpec
 	metricSpec         config.MetricSpec
-	pipeline           http_middleware.Pipeline
+	pipeline           httpMiddleware.Pipeline
 	api                API
 	apiSpec            config.APISpec
 	servers            []*fasthttp.Server
 	profilingListeners []net.Listener
 }
 
+// NewServerOpts are the options for NewServer.
+type NewServerOpts struct {
+	API         API
+	Config      ServerConfig
+	TracingSpec config.TracingSpec
+	MetricSpec  config.MetricSpec
+	Pipeline    httpMiddleware.Pipeline
+	APISpec     config.APISpec
+}
+
 // NewServer returns a new HTTP server.
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline, apiSpec config.APISpec) Server {
+func NewServer(opts NewServerOpts) Server {
 	infoLog.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
-		api:         api,
-		config:      config,
-		tracingSpec: tracingSpec,
-		metricSpec:  metricSpec,
-		pipeline:    pipeline,
-		apiSpec:     apiSpec,
+		api:         opts.API,
+		config:      opts.Config,
+		tracingSpec: opts.TracingSpec,
+		metricSpec:  opts.MetricSpec,
+		pipeline:    opts.Pipeline,
+		apiSpec:     opts.APISpec,
 	}
 }
 
@@ -120,7 +131,6 @@ func (s *server) StartNonBlocking() error {
 			Handler:            handler,
 			MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
 			ReadBufferSize:     s.config.ReadBufferSize * 1024,
-			StreamRequestBody:  s.config.StreamRequestBody,
 		}
 		s.servers = append(s.servers, customServer)
 
@@ -199,7 +209,7 @@ func (s *server) Close() error {
 }
 
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
+	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
 		log.Infof("enabled tracing http middleware")
 		return diag.HTTPTraceMiddleware(next, s.config.AppID, s.tracingSpec)
 	}
@@ -242,7 +252,7 @@ func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHan
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	if s.config.AllowedOrigins == cors_dapr.DefaultAllowedOrigins {
+	if s.config.AllowedOrigins == corsDapr.DefaultAllowedOrigins {
 		return next
 	}
 
@@ -260,9 +270,9 @@ func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 	log.Info("enabled token authentication on http server")
 
 	return func(ctx *fasthttp.RequestCtx) {
-		v := ctx.Request.Header.Peek(auth.APITokenHeader)
+		v := ctx.Request.Header.Peek(authConsts.APITokenHeader)
 		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || string(v) == token {
-			ctx.Request.Header.Del(auth.APITokenHeader)
+			ctx.Request.Header.Del(authConsts.APITokenHeader)
 			next(ctx)
 		} else {
 			ctx.Error("invalid api token", http.StatusUnauthorized)

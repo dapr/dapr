@@ -14,6 +14,7 @@ limitations under the License.
 package diagnostics
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/textproto"
@@ -23,55 +24,59 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
-	"go.opencensus.io/trace"
+
+	"go.opentelemetry.io/otel"
+	otelcodes "go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 func TestSpanContextFromRequest(t *testing.T) {
 	tests := []struct {
 		name   string
 		header string
-		wantSc trace.SpanContext
+		wantSc trace.SpanContextConfig
 		wantOk bool
 	}{
 		{
 			name:   "future version",
 			header: "02-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-			wantSc: trace.SpanContext{
-				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-				TraceOptions: trace.TraceOptions(1),
+			wantSc: trace.SpanContextConfig{
+				TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+				SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceFlags: trace.TraceFlags(1),
 			},
 			wantOk: true,
 		},
 		{
 			name:   "zero trace ID and span ID",
 			header: "00-00000000000000000000000000000000-0000000000000000-01",
-			wantSc: trace.SpanContext{},
+			wantSc: trace.SpanContextConfig{},
 			wantOk: false,
 		},
 		{
 			name:   "valid header",
 			header: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-			wantSc: trace.SpanContext{
-				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-				TraceOptions: trace.TraceOptions(1),
+			wantSc: trace.SpanContextConfig{
+				TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+				SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceFlags: trace.TraceFlags(1),
 			},
 			wantOk: true,
 		},
 		{
 			name:   "missing options",
 			header: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
-			wantSc: trace.SpanContext{},
+			wantSc: trace.SpanContextConfig{},
 			wantOk: false,
 		},
 		{
 			name:   "empty options",
 			header: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-",
-			wantSc: trace.SpanContext{},
+			wantSc: trace.SpanContextConfig{},
 			wantOk: false,
 		},
 	}
@@ -82,7 +87,8 @@ func TestSpanContextFromRequest(t *testing.T) {
 			req.Header.Add("traceparent", tt.header)
 
 			gotSc, _ := SpanContextFromRequest(req)
-			assert.Equalf(t, gotSc, tt.wantSc, "SpanContextFromRequest gotSc = %v, want %v", gotSc, tt.wantSc)
+			wantSc := trace.NewSpanContext(tt.wantSc)
+			assert.Equalf(t, gotSc, wantSc, "SpanContextFromRequest gotSc = %v, want %v", gotSc, wantSc)
 		})
 	}
 }
@@ -102,24 +108,25 @@ func TestUserDefinedHTTPHeaders(t *testing.T) {
 
 func TestSpanContextToHTTPHeaders(t *testing.T) {
 	tests := []struct {
-		sc trace.SpanContext
+		sc trace.SpanContextConfig
 	}{
 		{
-			sc: trace.SpanContext{
-				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-				TraceOptions: trace.TraceOptions(1),
+			sc: trace.SpanContextConfig{
+				TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+				SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceFlags: trace.TraceFlags(1),
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run("SpanContextToHTTPHeaders", func(t *testing.T) {
 			req := &fasthttp.Request{}
-			SpanContextToHTTPHeaders(tt.sc, req.Header.Set)
+			wantSc := trace.NewSpanContext(tt.sc)
+			SpanContextToHTTPHeaders(wantSc, req.Header.Set)
 
 			got, _ := SpanContextFromRequest(req)
 
-			assert.Equalf(t, got, tt.sc, "SpanContextToHTTPHeaders() got = %v, want %v", got, tt.sc)
+			assert.Equalf(t, got, wantSc, "SpanContextToHTTPHeaders() got = %v, want %v", got, wantSc)
 		})
 	}
 
@@ -128,7 +135,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 		sc := trace.SpanContext{}
 		SpanContextToHTTPHeaders(sc, req.Header.Set)
 
-		assert.Nil(t, req.Header.Peek(traceparentHeader))
+		assert.Nil(t, req.Header.Peek(TraceparentHeader))
 	})
 }
 
@@ -264,25 +271,26 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 
 func TestSpanContextToResponse(t *testing.T) {
 	tests := []struct {
-		sc trace.SpanContext
+		scConfig trace.SpanContextConfig
 	}{
 		{
-			sc: trace.SpanContext{
-				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-				TraceOptions: trace.TraceOptions(1),
+			scConfig: trace.SpanContextConfig{
+				TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+				SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceFlags: trace.TraceFlags(1),
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run("SpanContextToResponse", func(t *testing.T) {
 			resp := &fasthttp.Response{}
-			SpanContextToHTTPHeaders(tt.sc, resp.Header.Set)
+			wantSc := trace.NewSpanContext(tt.scConfig)
+			SpanContextToHTTPHeaders(wantSc, resp.Header.Set)
 
 			h := string(resp.Header.Peek(textproto.CanonicalMIMEHeaderKey("traceparent")))
 			got, _ := SpanContextFromW3CString(h)
 
-			assert.Equalf(t, got, tt.sc, "SpanContextToResponse() got = %v, want %v", got, tt.sc)
+			assert.Equalf(t, got, wantSc, "SpanContextToResponse() got = %v, want %v", got, wantSc)
 		})
 	}
 }
@@ -300,12 +308,12 @@ func getTestHTTPRequest() *fasthttp.Request {
 		sid = trace.SpanID{1, 2, 4, 8, 16, 32, 64, 128}
 	)
 
-	sc := trace.SpanContext{
-		TraceID:      tid,
-		SpanID:       sid,
-		TraceOptions: 0x0,
+	scConfig := trace.SpanContextConfig{
+		TraceID:    tid,
+		SpanID:     sid,
+		TraceFlags: 0x0,
 	}
-
+	sc := trace.NewSpanContext(scConfig)
 	SpanContextToHTTPHeaders(sc, req.Header.Set)
 	return req
 }
@@ -322,6 +330,14 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 	rate := config.TracingSpec{SamplingRate: "1"}
 	handler := HTTPTraceMiddleware(fakeHandler, "fakeAppID", rate)
 
+	exp := newOtelFakeExporter()
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+	)
+	defer func() { _ = tp.Shutdown(context.Background()) }()
+	otel.SetTracerProvider(tp)
+
 	t.Run("traceparent is given in request and sampling is enabled", func(t *testing.T) {
 		testRequestCtx := newTraceFastHTTPRequestCtx(
 			requestBody, "/v1.0/state/statestore",
@@ -331,10 +347,12 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			map[string]string{},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", sc.TraceID[:]))
-		assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", sc.SpanID[:]))
+		traceID := sc.TraceID()
+		spanID := sc.SpanID()
+		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
+		assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
 	})
 
 	t.Run("traceparent is not given in request", func(t *testing.T) {
@@ -346,10 +364,12 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			map[string]string{},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
-		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
+		traceID := sc.TraceID()
+		spanID := sc.SpanID()
+		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
+		assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
 	})
 
 	t.Run("traceparent not given in response", func(t *testing.T) {
@@ -361,9 +381,9 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			map[string]string{},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.Equal(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
+		assert.Equal(t, testRequestCtx.Response.Header.Peek(TraceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
 
 	t.Run("traceparent given in response", func(t *testing.T) {
@@ -373,14 +393,14 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 				"dapr-userdefined": "value",
 			},
 			map[string]string{
-				traceparentHeader: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-				tracestateHeader:  "xyz=t61pCWkhMzZ",
+				TraceparentHeader: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+				TracestateHeader:  "xyz=t61pCWkhMzZ",
 			},
 		)
 		handler(testRequestCtx)
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.NotEqual(t, testRequestCtx.Response.Header.Peek(traceparentHeader), []byte(SpanContextToW3CString(sc)))
+		assert.NotEqual(t, testRequestCtx.Response.Header.Peek(TraceparentHeader), []byte(SpanContextToW3CString(sc)))
 	})
 
 	t.Run("path is /v1.0/invoke/*", func(t *testing.T) {
@@ -396,12 +416,46 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler(testRequestCtx)
 
 		// assert
-		span := diag_utils.SpanFromContext(testRequestCtx)
+		span := diagUtils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.True(t, strings.Contains(span.String(), "CallLocal/callee/method1"))
-		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
-		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
+		spanString := fmt.Sprintf("%v", span)
+		assert.True(t, strings.Contains(spanString, "CallLocal/callee/method1"))
+		traceID := sc.TraceID()
+		spanID := sc.SpanID()
+		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
+		assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
 	})
+}
+
+func TestTraceStatusFromHTTPCode(t *testing.T) {
+	tests := []struct {
+		httpCode                int
+		wantOtelCode            otelcodes.Code
+		wantOtelCodeDescription string
+	}{
+		{
+			httpCode:                200,
+			wantOtelCode:            otelcodes.Unset,
+			wantOtelCodeDescription: "",
+		},
+		{
+			httpCode:                401,
+			wantOtelCode:            otelcodes.Error,
+			wantOtelCodeDescription: "Code(401): Unauthorized",
+		},
+		{
+			httpCode:                488,
+			wantOtelCode:            otelcodes.Error,
+			wantOtelCodeDescription: "Code(488): Unknown",
+		},
+	}
+	for _, tt := range tests {
+		t.Run("traceStatusFromHTTPCode", func(t *testing.T) {
+			gotOtelCode, gotOtelCodeDescription := traceStatusFromHTTPCode(tt.httpCode)
+			assert.Equalf(t, gotOtelCode, tt.wantOtelCode, "traceStatusFromHTTPCode(%v) got = %v, want %v", tt.httpCode, gotOtelCode, tt.wantOtelCode)
+			assert.Equalf(t, gotOtelCodeDescription, tt.wantOtelCodeDescription, "traceStatusFromHTTPCode(%v) got = %v, want %v", tt.httpCode, gotOtelCodeDescription, tt.wantOtelCodeDescription)
+		})
+	}
 }
 
 func newTraceFastHTTPRequestCtx(expectedBody, expectedRequestURI string, expectedRequestHeader map[string]string, expectedResponseHeader map[string]string) *fasthttp.RequestCtx {
@@ -418,7 +472,7 @@ func newTraceFastHTTPRequestCtx(expectedBody, expectedRequestURI string, expecte
 	req.Header.SetHost(expectedHost)
 	req.Header.Add(fasthttp.HeaderTransferEncoding, expectedTransferEncoding)
 	req.Header.SetContentLength(len([]byte(expectedBody)))
-	req.BodyWriter().Write([]byte(expectedBody)) // nolint:errcheck
+	req.BodyWriter().Write([]byte(expectedBody)) //nolint:errcheck
 
 	for k, v := range expectedRequestHeader {
 		req.Header.Set(k, v)

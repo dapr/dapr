@@ -41,8 +41,8 @@ import (
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	subscriptionsapi_v2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -58,7 +58,7 @@ var log = logger.NewLogger("dapr.operator.api")
 
 // Server runs the Dapr API server for components and configurations.
 type Server interface {
-	Run(ctx context.Context, certChain *dapr_credentials.CertChain, onReady func())
+	Run(ctx context.Context, certChain *daprCredentials.CertChain, onReady func())
 	OnComponentUpdated(component *componentsapi.Component)
 }
 
@@ -79,10 +79,10 @@ func NewAPIServer(client client.Client) Server {
 }
 
 // Run starts a new gRPC server.
-func (a *apiServer) Run(ctx context.Context, certChain *dapr_credentials.CertChain, onReady func()) {
+func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChain, onReady func()) {
 	log.Infof("starting gRPC server on port %d", serverPort)
 
-	opts, err := dapr_credentials.GetServerOptions(certChain)
+	opts, err := daprCredentials.GetServerOptions(certChain)
 	if err != nil {
 		log.Fatalf("error creating gRPC options: %v", err)
 	}
@@ -132,6 +132,29 @@ func (a *apiServer) OnComponentUpdated(component *componentsapi.Component) {
 		connUpdateChan <- component
 	}
 	a.connLock.Unlock()
+}
+
+// ListPluggableComponents returns a list of Dapr Pluggable components.
+func (a *apiServer) ListPluggableComponents(ctx context.Context, in *operatorv1pb.ListPluggableComponentsRequest) (*operatorv1pb.ListPluggableComponentsResponse, error) {
+	var pluggableComponents componentsapi.PluggableComponentList
+	if err := a.Client.List(ctx, &pluggableComponents, &client.ListOptions{
+		Namespace: in.Namespace,
+	}); err != nil {
+		return nil, errors.Wrap(err, "error getting pluggable components")
+	}
+	resp := &operatorv1pb.ListPluggableComponentsResponse{
+		PluggableComponents: [][]byte{},
+	}
+	for i := range pluggableComponents.Items {
+		c := pluggableComponents.Items[i] // Make a copy since we will refer to this as a reference in this loop.
+		b, err := json.Marshal(&c)
+		if err != nil {
+			log.Warnf("error marshalling pluggable component %s from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
+			continue
+		}
+		resp.PluggableComponents = append(resp.PluggableComponents, b)
+	}
+	return resp, nil
 }
 
 // GetConfiguration returns a Dapr configuration.
@@ -229,7 +252,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 	}
 
 	// Only the latest/storage version needs to be returned.
-	var subsV2alpha1 subscriptionsapi_v2alpha1.SubscriptionList
+	var subsV2alpha1 subscriptionsapiV2alpha1.SubscriptionList
 	if err := a.Client.List(ctx, &subsV2alpha1, &client.ListOptions{
 		Namespace: in.Namespace,
 	}); err != nil {
@@ -283,7 +306,7 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 	for _, item := range resiliencies.Items {
 		b, err := json.Marshal(item)
 		if err != nil {
-			log.Warnf("Error unmarshalling resilienc: %s", err)
+			log.Warnf("Error unmarshalling resiliency: %s", err)
 			continue
 		}
 		resp.Resiliencies = append(resp.Resiliencies, b)
@@ -293,7 +316,7 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 }
 
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified.
-func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error {
+func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
 	log.Info("sidecar connected for component updates")
 	key := uuid.New().String()
 	a.connLock.Lock()

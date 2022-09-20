@@ -20,70 +20,59 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/kit/logger"
 )
 
-type State struct {
-	Names         []string
-	FactoryMethod func() state.Store
-}
-
-// New creates a new State.
-func New(name string, factoryMethod func() state.Store, aliases ...string) State {
-	names := []string{name}
-	if len(aliases) > 0 {
-		names = append(names, aliases...)
-	}
-	return State{
-		Names:         names,
-		FactoryMethod: factoryMethod,
-	}
-}
-
 // Registry is an interface for a component that returns registered state store implementations.
-type Registry interface {
-	Register(components ...State)
-	Create(name, version string) (state.Store, error)
+type Registry struct {
+	Logger      logger.Logger
+	stateStores map[string]func(logger.Logger) state.Store
 }
 
-type stateStoreRegistry struct {
-	stateStores map[string]func() state.Store
-}
+// DefaultRegistry is the singleton with the registry.
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry is used to create state store registry.
-func NewRegistry() Registry {
-	return &stateStoreRegistry{
-		stateStores: map[string]func() state.Store{},
+func NewRegistry() *Registry {
+	return &Registry{
+		stateStores: map[string]func(logger.Logger) state.Store{},
 	}
 }
 
-// // Register registers a new factory method that creates an instance of a StateStore.
-// // The key is the name of the state store, eg. redis.
-func (s *stateStoreRegistry) Register(components ...State) {
-	for _, component := range components {
-		for _, name := range component.Names {
-			s.stateStores[createFullName(name)] = component.FactoryMethod
-		}
+// RegisterComponent adds a new state store to the registry.
+func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) state.Store, names ...string) {
+	for _, name := range names {
+		s.stateStores[createFullName(name)] = componentFactory
 	}
 }
 
-func (s *stateStoreRegistry) Create(name, version string) (state.Store, error) {
+func (s *Registry) Create(name, version string) (state.Store, error) {
 	if method, ok := s.getStateStore(name, version); ok {
 		return method(), nil
 	}
 	return nil, errors.Errorf("couldn't find state store %s/%s", name, version)
 }
 
-func (s *stateStoreRegistry) getStateStore(name, version string) (func() state.Store, bool) {
+func (s *Registry) getStateStore(name, version string) (func() state.Store, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	stateStoreFn, ok := s.stateStores[nameLower+"/"+versionLower]
 	if ok {
-		return stateStoreFn, true
+		return s.wrapFn(stateStoreFn), true
 	}
 	if components.IsInitialVersion(versionLower) {
 		stateStoreFn, ok = s.stateStores[nameLower]
+		if ok {
+			return s.wrapFn(stateStoreFn), true
+		}
 	}
-	return stateStoreFn, ok
+	return nil, false
+}
+
+func (s *Registry) wrapFn(componentFactory func(logger.Logger) state.Store) func() state.Store {
+	return func() state.Store {
+		return componentFactory(s.Logger)
+	}
 }
 
 func createFullName(name string) string {

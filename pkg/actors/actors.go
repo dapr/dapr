@@ -43,9 +43,9 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/concurrency"
 	configuration "github.com/dapr/dapr/pkg/config"
-	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
@@ -101,7 +101,7 @@ type actorsRuntime struct {
 	evaluationBusy         bool
 	evaluationChan         chan bool
 	appHealthy             *atomic.Bool
-	certChain              *dapr_credentials.CertChain
+	certChain              *daprCredentials.CertChain
 	tracingSpec            configuration.TracingSpec
 	resiliency             resiliency.Provider
 	storeName              string
@@ -145,7 +145,7 @@ func NewActors(
 	appChannel channel.AppChannel,
 	grpcConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error),
 	config Config,
-	certChain *dapr_credentials.CertChain,
+	certChain *daprCredentials.CertChain,
 	tracingSpec configuration.TracingSpec,
 	features []configuration.FeatureSpec,
 	resiliency resiliency.Provider,
@@ -369,7 +369,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 ) (*invokev1.InvokeMethodResponse, error) {
 	// TODO: Once resiliency is out of preview, we can have this be the only path.
 	if a.isResiliencyEnabled {
-		if !a.resiliency.PolicyDefined(req.Actor().ActorType, resiliency.Actor) {
+		if a.resiliency.GetPolicy(req.Actor().ActorType, &resiliency.ActorPolicy{}) == nil {
 			retriesExhaustedPath := false // Used to track final error state.
 			nullifyResponsePath := false  // Used to track final response state.
 			policy := a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorRetries)
@@ -479,7 +479,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	if req.Message().GetHttpExtension() == nil {
 		req.WithHTTPExtension(nethttp.MethodPut, "")
 	} else {
-		req.Message().HttpExtension.Verb = commonv1pb.HTTPExtension_PUT
+		req.Message().HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
 	}
 
 	policy := a.resiliency.ActorPostLockPolicy(ctx, act.actorType, act.actorID)
@@ -517,7 +517,7 @@ func (a *actorsRuntime) callRemoteActor(
 		return nil, err
 	}
 
-	span := diag_utils.SpanFromContext(ctx)
+	span := diagUtils.SpanFromContext(ctx)
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	client := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := client.CallActor(ctx, req.Proto())
@@ -553,7 +553,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	var resp *state.GetResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.store.Get(&state.GetRequest{
@@ -616,7 +616,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		}
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.transactionalStore.Multi(&state.TransactionalStateRequest{
 			Operations: operations,
@@ -796,7 +796,7 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName, resiliency.Statestore)
 	var resp *state.GetResponse
 	err := policy(func(ctx context.Context) (rErr error) {
 		resp, rErr = a.store.Get(&state.GetRequest{
@@ -812,10 +812,11 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		RepetitionLeft: -1,
 	}
 	json.Unmarshal(resp.Data, &track)
+	track.Etag = resp.ETag
 	return &track, nil
 }
 
-func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int, lastInvokeTime time.Time) error {
+func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int, lastInvokeTime time.Time, etag *string) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -825,11 +826,15 @@ func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition in
 		RepetitionLeft: repetition,
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Set(&state.SetRequest{
 			Key:   constructCompositeKey(actorKey, name),
 			Value: track,
+			ETag:  etag,
+			Options: state.SetStateOption{
+				Concurrency: state.FirstWrite,
+			},
 		})
 	})
 }
@@ -843,6 +848,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		period                   time.Duration
 		years, months, days      int
 		repeats, repetitionsLeft int
+		eTag                     *string
 	)
 
 	registeredTime, err := time.Parse(time.RFC3339, reminder.RegisteredTime)
@@ -879,8 +885,9 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		repetitionsLeft = repeats
 		nextTime = registeredTime
 	}
+	eTag = track.Etag
 
-	go func(reminder *Reminder, years int, months int, days int, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, stop chan bool) {
+	go func(reminder *Reminder, years int, months int, days int, period time.Duration, nextTime, ttl time.Time, repetitionsLeft int, eTag *string, stop chan bool) {
 		var (
 			ttlTimer, nextTimer *time.Timer
 			ttlTimerC           <-chan time.Time
@@ -931,9 +938,23 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			if repetitionsLeft > 0 {
 				repetitionsLeft--
 			}
-			if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime); err != nil {
-				log.Errorf("error updating reminder track: %v", err)
+
+			_, exists = a.activeReminders.Load(reminderKey)
+			if exists {
+				if err = a.updateReminderTrack(actorKey, reminder.Name, repetitionsLeft, nextTime, eTag); err != nil {
+					log.Errorf("error updating reminder track: %v", err)
+				}
+				track, gErr := a.getReminderTrack(actorKey, reminder.Name)
+				if gErr != nil {
+					log.Errorf("error retrieving reminder: %v", gErr)
+				} else {
+					eTag = track.Etag
+				}
+			} else {
+				log.Errorf("could not find active reminder with key: %s", reminderKey)
+				return
 			}
+
 			// if reminder is not repetitive, proceed with reminder deletion
 			if years == 0 && months == 0 && days == 0 && period == 0 {
 				break L
@@ -952,7 +973,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		if err != nil {
 			log.Errorf("error deleting reminder: %s", err)
 		}
-	}(reminder, years, months, days, period, nextTime, ttl, repetitionsLeft, stopChannel)
+	}(reminder, years, months, days, period, nextTime, ttl, repetitionsLeft, eTag, stopChannel)
 
 	return nil
 }
@@ -1343,7 +1364,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 
 func (a *actorsRuntime) saveActorTypeMetadata(actorType string, actorMetadata *ActorMetadata) error {
 	metadataKey := constructCompositeKey("actors", actorType, "metadata")
-	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Set(&state.SetRequest{
 			Key:   metadataKey,
@@ -1374,7 +1395,7 @@ func (a *actorsRuntime) getActorTypeMetadata(actorType string, migrate bool) (*A
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if !a.resiliency.PolicyDefined(a.storeName, resiliency.Component) {
+		if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(context.Background(), resiliency.BuiltInActorReminderRetries)
 		} else {
@@ -1533,7 +1554,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string, migrate bool)
 		return nil, nil, fmt.Errorf("could not read actor type metadata: %w", merr)
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(context.Background(), a.storeName, resiliency.Statestore)
 
 	log.Debugf(
 		"starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
@@ -1683,7 +1704,7 @@ func (a *actorsRuntime) saveRemindersInPartition(ctx context.Context, stateKey s
 	// Even when data is not partitioned, the save operation is the same.
 	// The only difference is stateKey.
 	log.Debugf("saving %d reminders in %s ...", len(reminders), stateKey)
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Set(&state.SetRequest{
 			Key:      stateKey,
@@ -1725,7 +1746,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if !a.resiliency.PolicyDefined(a.storeName, resiliency.Component) {
+		if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {
@@ -1814,7 +1835,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		return err
 	}
 
-	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName)
+	policy := a.resiliency.ComponentOutboundPolicy(ctx, a.storeName, resiliency.Statestore)
 	return policy(func(ctx context.Context) error {
 		return a.store.Delete(&state.DeleteRequest{
 			Key: reminderKey,
@@ -1822,7 +1843,11 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	})
 }
 
+// Deprecated: Currently RenameReminder renames by deleting-then-inserting-again.
+// This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder
 func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
+	log.Warn("[DEPRECATION NOTICE] Currently RenameReminder renames by deleting-then-inserting-again. This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder")
+
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -1886,7 +1911,7 @@ func (a *actorsRuntime) storeReminder(ctx context.Context, reminder Reminder, st
 	// TODO: Once Resiliency is no longer a preview feature, remove this check and just use resiliency.
 	if a.isResiliencyEnabled {
 		var policy resiliency.Runner
-		if !a.resiliency.PolicyDefined(a.storeName, resiliency.Component) {
+		if a.resiliency.GetPolicy(a.storeName, &resiliency.ComponentOutboundPolicy) == nil {
 			// If there is no policy defined, wrap the whole logic in the built-in.
 			policy = a.resiliency.BuiltInPolicy(ctx, resiliency.BuiltInActorReminderRetries)
 		} else {

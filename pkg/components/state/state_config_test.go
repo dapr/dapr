@@ -1,7 +1,9 @@
 package state
 
 import (
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -159,4 +161,47 @@ func TestPrefix_StoreNotInitial(t *testing.T) {
 
 	originalStateKey := GetOriginalStateKey(modifiedStateKey)
 	require.Equal(t, key, originalStateKey)
+}
+
+func TestStateConfigRace(t *testing.T) {
+	t.Run("data race between SaveStateConfiguration and GetModifiedStateKey", func(t *testing.T) {
+		var wg sync.WaitGroup
+		const iterations = 500
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				err := SaveStateConfiguration(fmt.Sprintf("store%d", i), map[string]string{strategyKey: strategyNone})
+				require.Nil(t, err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				_, err := GetModifiedStateKey(key, fmt.Sprintf("store%d", i), "appid")
+				require.Nil(t, err)
+			}
+		}()
+		wg.Wait()
+	})
+	t.Run("data race between two GetModifiedStateKey", func(t *testing.T) {
+		var wg sync.WaitGroup
+		const iterations = 500
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				_, err := GetModifiedStateKey(key, fmt.Sprintf("store%d", i), "appid")
+				require.Nil(t, err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				_, err := GetModifiedStateKey(key, fmt.Sprintf("store%d", i), "appid")
+				require.Nil(t, err)
+			}
+		}()
+		wg.Wait()
+	})
 }

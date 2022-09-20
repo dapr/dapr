@@ -21,24 +21,29 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
 	client             *grpc.ClientConn
 	baseAddress        string
-	ch                 chan int
+	ch                 chan struct{}
 	tracingSpec        config.TracingSpec
 	appMetadataToken   string
 	maxRequestBodySize int
 	readBufferSize     int
+	appHealth          *apphealth.AppHealth
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
@@ -52,7 +57,7 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 		readBufferSize:     readBufferSize,
 	}
 	if maxConcurrency > 0 {
-		c.ch = make(chan int, maxConcurrency)
+		c.ch = make(chan struct{}, maxConcurrency)
 	}
 	return c
 }
@@ -69,11 +74,15 @@ func (g *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 
 // InvokeMethod invokes user code via gRPC.
 func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
+	}
+
 	var rsp *invokev1.InvokeMethodResponse
 	var err error
 
 	switch req.APIVersion() {
-	case internalv1pb.APIVersion_V1:
+	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
 		rsp, err = g.invokeMethodV1(ctx, req)
 
 	default:
@@ -88,14 +97,14 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 // invokeMethodV1 calls user applications using daprclient v1.
 func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if g.ch != nil {
-		g.ch <- 1
+		g.ch <- struct{}{}
 	}
 
 	clientV1 := runtimev1pb.NewAppCallbackClient(g.client)
 	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
 
 	if g.appMetadataToken != "" {
-		grpcMetadata.Set(auth.APITokenHeader, g.appMetadataToken)
+		grpcMetadata.Set(authConsts.APITokenHeader, g.appMetadataToken)
 	}
 
 	// Prepare gRPC Metadata
@@ -126,4 +135,19 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	rsp.WithHeaders(header).WithTrailers(trailer)
 
 	return rsp.WithMessage(resp), nil
+}
+
+// HealthProbe performs a health probe.
+func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
+	clientV1 := runtimev1pb.NewAppCallbackHealthCheckClient(g.client)
+	_, err := clientV1.HealthCheck(ctx, &emptypb.Empty{})
+
+	// Errors here are network-level errors, so we are not returning them as errors
+	// Instead, we just return a failed probe
+	return err == nil, nil
+}
+
+// SetAppHealth sets the apphealth.AppHealth object.
+func (g *Channel) SetAppHealth(ah *apphealth.AppHealth) {
+	g.appHealth = ah
 }
