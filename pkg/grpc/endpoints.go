@@ -76,6 +76,10 @@ var endpoints = map[string][]string{
 	"shutdown.v1": {
 		"/dapr.proto.runtime.v1.Dapr/Shutdown",
 	},
+	"healthz.v1": {
+		"/dapr.proto.runtime.v1.Dapr/GetAllComponentsHealthAlpha1",
+		"/dapr.proto.runtime.v1.Dapr/GetComponentHealthAlpha1",
+	},
 }
 
 const protocol = "grpc"
