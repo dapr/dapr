@@ -182,7 +182,7 @@ func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
 	return nil
 }
 
-func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (m *MockKubernetesStateStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"key1":   "value1",
@@ -192,7 +192,7 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 	}, nil
 }
 
-func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+func (m *MockKubernetesStateStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
 	response := map[string]map[string]string{}
 	response["k8s-secret"] = map[string]string{
 		"key1":   "value1",
@@ -210,6 +210,10 @@ func (m *MockKubernetesStateStore) Close() error {
 
 func (m *MockKubernetesStateStore) Ping() error {
 	return nil
+}
+
+func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
+	return []secretstores.Feature{}
 }
 
 func NewMockKubernetesStore() secretstores.SecretStore {
@@ -4787,7 +4791,7 @@ type mockSecretStore struct {
 	closeErr error
 }
 
-func (s *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (s *mockSecretStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"key1":   "value1",

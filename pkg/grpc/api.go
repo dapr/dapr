@@ -1117,7 +1117,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.GetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(req)
+		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1160,7 +1160,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.BulkGetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(req)
+		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
