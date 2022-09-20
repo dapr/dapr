@@ -25,10 +25,9 @@ import (
 )
 
 const (
-	STATUS_OK                = "OK"
-	STATUS_NOT_OK            = "NOT OK"
-	STATUS_UNDEFINED         = "UNDEFINED"
-
+	StatusOk        = "OK"
+	StatusNotOk     = "NOT OK"
+	StatusUndefined = "UNDEFINED"
 )
 
 var (

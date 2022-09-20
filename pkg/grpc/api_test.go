@@ -26,7 +26,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/lock"
 
@@ -1454,7 +1454,7 @@ func TestGetComponentHealth(t *testing.T) {
 		getComponentsFn: func() []componentsV1alpha.Component {
 			return []componentsV1alpha.Component{
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "store1",
 					},
 					Spec: componentsV1alpha.ComponentSpec{
@@ -1471,7 +1471,7 @@ func TestGetComponentHealth(t *testing.T) {
 					},
 				},
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "pubsubname",
 					},
 					Spec: componentsV1alpha.ComponentSpec{
@@ -1488,7 +1488,7 @@ func TestGetComponentHealth(t *testing.T) {
 					},
 				},
 				{
-					ObjectMeta: meta_v1.ObjectMeta{
+					ObjectMeta: metaV1.ObjectMeta{
 						Name: "secretstore1",
 					},
 					Spec: componentsV1alpha.ComponentSpec{

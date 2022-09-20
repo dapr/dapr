@@ -764,40 +764,41 @@ func (a *api) GetComponentHealthAlpha1(ctx context.Context, in *runtimev1pb.Comp
 			}, err
 		}
 	}
-	err := status.Errorf(codes.InvalidArgument, messages.ERR_COMPONENT_NOT_FOUND)
+	err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound)
 	apiServerLogger.Debug(err)
 
 	return &runtimev1pb.ComponentHealthResponse{
-		Status:    utils.STATUS_UNDEFINED,
-		ErrorCode: messages.ERR_COMPONENT_NOT_FOUND,
+		Status:    utils.StatusUndefined,
+		ErrorCode: messages.ErrComponentNotFound,
 	}, err
 }
 
 func (a *api) CheckHealthUtil(componentKind string, componentName string) (
-	healthStatus string, errorCode string, message string, err error) {
+	healthStatus string, errorCode string, message string, err error,
+) {
 	component := a.getComponent(componentKind, componentName)
 
 	if component == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ERR_COMPONENT_NOT_FOUND)
+		err := status.Errorf(codes.InvalidArgument, messages.ErrComponentNotFound)
 		apiServerLogger.Debug(err)
 
-		return utils.STATUS_UNDEFINED, messages.ERR_COMPONENT_NOT_FOUND, "", err
+		return utils.StatusUndefined, messages.ErrComponentNotFound, "", err
 	}
 
 	if pinger, ok := component.(health.Pinger); ok {
 		pingErr := pinger.Ping()
 		if pingErr != nil {
-			err := status.Errorf(codes.Unknown, messages.ERR_HEALTH_NOT_OK)
+			err := status.Errorf(codes.Unknown, messages.ErrHealthNotOk)
 			apiServerLogger.Debug(pingErr)
 
-			return utils.STATUS_NOT_OK, messages.ERR_HEALTH_NOT_OK, pingErr.Error(), err
+			return utils.StatusNotOk, messages.ErrHealthNotOk, pingErr.Error(), err
 		}
 	} else {
-		err := status.Errorf(codes.Unimplemented, messages.ERR_PING_NOT_IMPLEMENTED)
-		return utils.STATUS_UNDEFINED, messages.ERR_PING_NOT_IMPLEMENTED, "", err
+		err := status.Errorf(codes.Unimplemented, messages.ErrPingNotImplemented)
+		return utils.StatusUndefined, messages.ErrPingNotImplemented, "", err
 	}
 
-	return utils.STATUS_OK, "", "", nil
+	return utils.StatusOk, "", "", nil
 }
 
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
