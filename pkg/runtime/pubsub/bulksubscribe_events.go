@@ -50,8 +50,9 @@ func NewBulkSubscribeEnvelope(req *BulkSubscribeEnvelope) map[string]interface{}
 		reqID, err := uuid.NewRandom()
 		if err != nil {
 			bulkPSLogger.Warn("Unable to generate uuid for bulk subscribe request")
+		} else {
+			id = reqID.String()
 		}
-		id = reqID.String()
 	}
 	eventType := req.EventType
 	if eventType == "" {

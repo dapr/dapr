@@ -18,10 +18,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/dapr/dapr/utils"
+	"golang.org/x/exp/maps"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/utils"
 )
 
 const (
@@ -66,9 +66,6 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 
 	// Subscribe to the topic and listen for messages.
 	return p.p.Subscribe(ctx, req, func(ctx context.Context, msg *contribPubsub.NewMessage) error {
-		var err error
-		done := make(chan struct{})
-
 		entryID, err := uuid.NewRandom()
 		if err != nil {
 			return err
@@ -84,11 +81,12 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 			bulkMsg.ContentType = *msg.ContentType
 		}
 
+		done := make(chan struct{})
 		msgCbChan <- msgWithCallback{
 			msg: bulkMsg,
 			cb: func(ierr error) {
 				err = ierr
-				done <- struct{}{}
+				close(done)
 			},
 		}
 
@@ -101,61 +99,65 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 // processBulkMessages reads messages from msgChan and publishes them to a BulkHandler.
 // It buffers messages in memory and publishes them in bulk.
 func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msgWithCallback, cfg contribPubsub.BulkSubscribeConfig, handler contribPubsub.BulkHandler) {
-	messages := make([]contribPubsub.BulkMessageEntry, 0, cfg.MaxBulkCount)
-	msgCbMap := make(map[string]func(error))
+	messages := make([]contribPubsub.BulkMessageEntry, cfg.MaxBulkCount)
+	msgCbMap := make(map[string]func(error), cfg.MaxBulkCount)
 
 	ticker := time.NewTicker(time.Duration(cfg.MaxBulkAwaitDurationMilliSeconds) * time.Millisecond)
 	defer ticker.Stop()
 
+	n := 0
 	for {
 		select {
 		case <-ctx.Done():
-			flushMessages(ctx, topic, messages, msgCbMap, handler)
+			flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 			return
 		case msgCb := <-msgCbChan:
-			messages = append(messages, msgCb.msg)
+			messages[n] = msgCb.msg
+			n++
 			msgCbMap[msgCb.msg.EntryID] = msgCb.cb
-			if len(messages) >= cfg.MaxBulkCount {
-				messages, msgCbMap = flushMessages(ctx, topic, messages, msgCbMap, handler)
+			if n >= cfg.MaxBulkCount {
+				flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
+				n = 0
+				maps.Clear(msgCbMap)
 			}
 		case <-ticker.C:
-			messages, msgCbMap = flushMessages(ctx, topic, messages, msgCbMap, handler)
+			flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
+			n = 0
+			maps.Clear(msgCbMap)
 		}
 	}
 }
 
 // flushMessages writes messages to a BulkHandler and clears the messages slice.
-func flushMessages(ctx context.Context, topic string, messages []contribPubsub.BulkMessageEntry, msgCbMap map[string]func(error), handler contribPubsub.BulkHandler) (
-	[]contribPubsub.BulkMessageEntry, map[string]func(error),
-) {
-	if len(messages) > 0 {
-		responses, err := handler(ctx, &contribPubsub.BulkMessage{
-			Topic:    topic,
-			Metadata: map[string]string{},
-			Entries:  messages,
-		})
+func flushMessages(ctx context.Context, topic string, messages []contribPubsub.BulkMessageEntry, msgCbMap map[string]func(error), handler contribPubsub.BulkHandler) {
+	if len(messages) == 0 {
+		return
+	}
 
-		if err != nil {
-			if responses != nil {
-				// invoke callbacks for each message
-				for _, r := range responses {
-					if cb, ok := (msgCbMap)[r.EntryID]; ok {
-						cb(r.Error)
-					}
-				}
-			} else {
-				// all messages failed
-				for _, cb := range msgCbMap {
-					cb(err)
+	responses, err := handler(ctx, &contribPubsub.BulkMessage{
+		Topic:    topic,
+		Metadata: map[string]string{},
+		Entries:  messages,
+	})
+
+	if err != nil {
+		if responses != nil {
+			// invoke callbacks for each message
+			for _, r := range responses {
+				if cb, ok := msgCbMap[r.EntryID]; ok {
+					cb(r.Error)
 				}
 			}
 		} else {
-			// no error has occurred
+			// all messages failed
 			for _, cb := range msgCbMap {
-				cb(nil)
+				cb(err)
 			}
 		}
+	} else {
+		// no error has occurred
+		for _, cb := range msgCbMap {
+			cb(nil)
+		}
 	}
-
-	return messages[:0], make(map[string]func(error))
 }

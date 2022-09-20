@@ -3466,8 +3466,7 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 			EntryID: "0",
 			Event:   req.Data,
 		}
-		msgArr := make([]pubsub.BulkMessageEntry, 0)
-		msgArr = append(msgArr, nbei)
+		msgArr := []pubsub.BulkMessageEntry{nbei}
 		nbm := &pubsub.BulkMessage{
 			Entries: msgArr,
 			Topic:   req.Topic,

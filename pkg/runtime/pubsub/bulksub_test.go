@@ -30,54 +30,10 @@ func TestFlushMessages(t *testing.T) {
 		{EntryID: "2"},
 	}
 
-	emptyMsgCbMap := map[string]func(error){}
 	sampleMsgCbMap := map[string]func(error){
 		"1": func(err error) {},
 		"2": func(err error) {},
 	}
-
-	t.Run("flushMessages should clear messages and msgCbMap", func(t *testing.T) {
-		emptyHandler := func(ctx context.Context, msg *contribPubsub.BulkMessage) (
-			[]contribPubsub.BulkSubscribeResponseEntry, error,
-		) {
-			return nil, nil
-		}
-
-		tests := []struct {
-			name     string
-			messages []contribPubsub.BulkMessageEntry
-			msgCbMap map[string]func(error)
-		}{
-			{
-				name:     "both messages and msgCbMap are already empty",
-				messages: emptyMessages,
-				msgCbMap: emptyMsgCbMap,
-			},
-			{
-				name:     "messages is empty and msgCbMap is not empty",
-				messages: emptyMessages,
-				msgCbMap: sampleMsgCbMap,
-			},
-			{
-				name:     "messages is not empty and msgCbMap is empty",
-				messages: sampleMessages,
-				msgCbMap: emptyMsgCbMap,
-			},
-			{
-				name:     "both messages and msgCbMap are not empty",
-				messages: sampleMessages,
-				msgCbMap: sampleMsgCbMap,
-			},
-		}
-
-		for _, tc := range tests {
-			t.Run(tc.name, func(t *testing.T) {
-				messages, msgCbMap := flushMessages(context.Background(), "topic", tc.messages, tc.msgCbMap, emptyHandler)
-				assert.Equal(t, 0, len(messages))
-				assert.Equal(t, 0, len(msgCbMap))
-			})
-		}
-	})
 
 	t.Run("flushMessages should call handler with messages", func(t *testing.T) {
 		tests := []struct {
