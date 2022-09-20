@@ -53,3 +53,33 @@ spec:
       value: "false"
     - name: initialOffset
       value: oldest
+scopes:
+  - pluggable-bindinginput
+  - pluggable-bindingoutput
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pluggable-test-topic-grpc
+spec:
+  type: bindings.kafka-pluggable
+  initTimeout: 1m
+  version: v1
+  metadata:
+    # Kafka broker connection setting
+    - name: brokers
+      value: dapr-kafka:9092
+    # consumer configuration: topic and consumer group
+    - name: topics
+      value: dapr-test-grpc-pluggable
+    - name: consumerGroup
+      value: group1
+    # publisher configuration: topic
+    - name: publishTopic
+      value: dapr-test-grpc-pluggable
+    - name: authRequired
+      value: "false"
+    - name: initialOffset
+      value: oldest
+scopes:
+  - pluggable-bindinginputgrpc
