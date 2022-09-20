@@ -578,6 +578,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.appHealthChanged(apphealth.AppStatusHealthy)
 	}
 
+	// Enable dynamic loading in standalone mode if dynamic components directory is provided
 	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.DynamicComponentsPath != "" {
 	dir, err := os.Stat(a.runtimeConfig.Standalone.DynamicComponentsPath)
 	if err != nil {
@@ -2170,6 +2171,8 @@ func (a *DaprRuntime) isComponentAuthorized(component componentsV1alpha1.Compone
 }
 
 func (a *DaprRuntime) IsComponentLoaded(component componentsV1alpha1.Component) bool {
+	a.componentsLock.RLock()
+	defer a.componentsLock.RUnlock()
 	for _, loadedComp := range a.components {
 		if strings.Compare(component.ObjectMeta.Name, loadedComp.ObjectMeta.Name) == 0 {
 			if strings.Compare(component.Spec.Type, loadedComp.Spec.Type) == 0 {
@@ -2254,18 +2257,6 @@ func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Com
 
 	if !replaced {
 		a.components = append(a.components, component)
-	}
-}
-
-func (a *DaprRuntime) unloadComponent(component componentsV1alpha1.Component) {
-	a.componentsLock.Lock()
-	defer a.componentsLock.Unlock()
-
-	for i, c := range a.components {
-		if c.Spec.Type == component.Spec.Type && c.ObjectMeta.Name == component.Name {
-			a.components = append(a.components[:i], a.components[i+1:]...)
-			break
-		}
 	}
 }
 

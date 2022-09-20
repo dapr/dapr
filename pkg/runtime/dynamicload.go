@@ -99,6 +99,22 @@ func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
 			}
 			log.Errorf(err.Error())
 		}
+		err = a.initDynamicComponent(comp)
+		if err != nil {
+			log.Errorf("error initializing component %s, error: %s", comp.Name, err.Error())
+		}
+	}
+	return nil
+}
+
+func (a *DaprRuntime) initDynamicComponent(comp componentsV1alpha1.Component) error {
+	cat := a.extractComponentCategory(comp)
+	if cat == pubsubComponent {
+		a.beginPubSub(comp.Name)
+	} else if cat == bindingsComponent {
+		if a.bindingsRegistry.HasInputBinding(comp.Spec.Type, comp.Spec.Version) {
+			a.readFromBinding(a.inputBindingsCtx, comp.Name, a.inputBindings[comp.Name])
+		}
 	}
 	return nil
 }
@@ -117,4 +133,16 @@ func (a *DaprRuntime) unloadDynamicComponents(manifestPath string) error {
 	delete(a.dynamicComponents, DynamicComponentsManifest(manifestPath))
 
 	return nil
+}
+
+func (a *DaprRuntime) unloadComponent(component componentsV1alpha1.Component) {
+	a.componentsLock.Lock()
+	defer a.componentsLock.Unlock()
+
+	for i, c := range a.components {
+		if c.Spec.Type == component.Spec.Type && c.ObjectMeta.Name == component.Name {
+			a.components = append(a.components[:i], a.components[i+1:]...)
+			break
+		}
+	}
 }
