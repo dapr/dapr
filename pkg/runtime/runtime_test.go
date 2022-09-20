@@ -5121,13 +5121,29 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	cout.ObjectMeta.Name = "testOutputBinding"
 	cout.Spec.Type = "bindings.testOutputBinding"
 
+	mockSecretStoreName := "mockSecretStore"
+	mockSecretStore := new(daprt.FakeSecretStore)
+	mockSecretStore.On("Features").Return([]secretstores.Feature{secretstores.FeatureMultipleKeyValuesPerSecret})
+	rt.secretStoresRegistry.RegisterComponent(
+		func(_ logger.Logger) secretstores.SecretStore {
+			return mockSecretStore
+		},
+		mockSecretStoreName,
+	)
+	cSecretStore := componentsV1alpha1.Component{}
+	cSecretStore.ObjectMeta.Name = mockSecretStoreName
+	cSecretStore.Spec.Type = "secretstores.mockSecretStore"
+
 	require.NoError(t, rt.initInputBinding(cin))
 	require.NoError(t, rt.initOutputBinding(cout))
 	require.NoError(t, rt.initPubSub(cPubSub))
 	require.NoError(t, rt.initState(cStateStore))
+	require.NoError(t, rt.initSecretStore(cSecretStore))
 
 	capabilities := rt.getComponentsCapabilitesMap()
-	assert.Equal(t, 3, len(capabilities))
+	assert.Equal(t, 4, len(capabilities))
+	assert.Equal(t, 0, len(capabilities["mockPubSub"]), "mockPubSub does not advertise any capability")
+	assert.Equal(t, 1, len(capabilities[mockSecretStoreName]), "mockSecretStore feature should be present")
 }
 
 func runGRPCApp(port int) (func(), error) {

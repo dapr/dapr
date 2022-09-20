@@ -2739,6 +2739,10 @@ func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 			capabilities[key] = []string{"OUTPUT_BINDING"}
 		}
 	}
+	for key, store := range a.secretStores {
+		features := store.Features()
+		capabilities[key] = featureTypeToString(features)
+	}
 	return capabilities
 }
 
