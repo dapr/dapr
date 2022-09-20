@@ -88,7 +88,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 		}
 		routePathBulkMessageMap := make(map[string]pubsubBulkSubscribedMessage)
 		bulkResponses := make([]pubsub.BulkSubscribeResponseEntry, len(msg.Entries))
-		entryIDIndexMap := make(map[string]int)
+		entryIDIndexMap := make(map[string]int, len(msg.Entries))
 		hasAnyError := false
 		for i, message := range msg.Entries {
 			if entryIDErr := validateEntryID(message.EntryID, i); entryIDErr != nil {
@@ -226,12 +226,16 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 	msg *pubsub.BulkMessage, route TopicRouteElem, bulkResponses *[]pubsub.BulkSubscribeResponseEntry,
 	entryIDIndexMap *map[string]int, path string, policy resiliency.Runner,
 ) error {
-	id, _ := uuid.NewRandom()
+	var id string
+	idObj, err := uuid.NewRandom()
+	if err != nil {
+		id = idObj.String()
+	}
 	psm.cloudEvents = psm.cloudEvents[:psm.length]
 	psm.rawData = psm.rawData[:psm.length]
 	psm.entries = psm.entries[:psm.length]
 	envelope := runtimePubsub.NewBulkSubscribeEnvelope(&runtimePubsub.BulkSubscribeEnvelope{
-		ID:       id.String(),
+		ID:       id,
 		Topic:    topic,
 		Entries:  psm.rawData,
 		Pubsub:   psName,
@@ -271,17 +275,14 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 	}
 	psm.data = da
 	psm.path = path
-	err := policy(func(ctx context.Context) error {
+	return policy(func(ctx context.Context) error {
 		switch a.runtimeConfig.ApplicationProtocol {
 		case HTTPProtocol:
-			psm := psm
-			errPub := a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIDIndexMap)
-			return errPub
+			return a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIDIndexMap)
 		default:
 			return backoff.Permanent(errors.New("invalid application protocol"))
 		}
 	})
-	return err
 }
 
 // publishBulkMessageHTTP publishes bulk message to a subscriber using HTTP and takes care of corresponding response.
@@ -295,16 +296,19 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 	req.WithRawData(msg.data, contenttype.CloudEventContentType)
 	req.WithCustomHTTPMetadata(msg.metadata)
 
-	for i, cloudEvent := range msg.cloudEvents {
+	n := 0
+	for _, cloudEvent := range msg.cloudEvents {
 		if cloudEvent[pubsub.TraceIDField] != nil {
 			traceID := cloudEvent[pubsub.TraceIDField].(string)
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
 			var span trace.Span
 			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-			spans[i] = span
+			spans[n] = span
+			n++
 		}
 	}
+	spans = spans[:n]
 	defer endSpans(spans)
 	start := time.Now()
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
