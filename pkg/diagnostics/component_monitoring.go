@@ -32,12 +32,13 @@ const (
 
 // componentMetrics holds dapr runtime metrics for components.
 type componentMetrics struct {
-	pubsubIngressCount      *stats.Int64Measure
-	pubsubIngressLatency    *stats.Float64Measure
-	bulkPubsubEgressCount   *stats.Int64Measure
-	bulkPubsubEgressLatency *stats.Float64Measure
-	pubsubEgressCount       *stats.Int64Measure
-	pubsubEgressLatency     *stats.Float64Measure
+	pubsubIngressCount         *stats.Int64Measure
+	pubsubIngressLatency       *stats.Float64Measure
+	bulkPubsubEgressCount      *stats.Int64Measure
+	bulkPubsubEventEgressCount *stats.Int64Measure
+	bulkPubsubEgressLatency    *stats.Float64Measure
+	pubsubEgressCount          *stats.Int64Measure
+	pubsubEgressLatency        *stats.Float64Measure
 
 	inputBindingCount    *stats.Int64Measure
 	inputBindingLatency  *stats.Float64Measure
@@ -78,12 +79,16 @@ func newComponentMetrics() *componentMetrics {
 			"The latency of the response from the pub/sub component.",
 			stats.UnitMilliseconds),
 		bulkPubsubEgressCount: stats.Int64(
-			"component/pubsub_egress/count",
+			"component/pubsub_egress/bulk/count",
 			"The number of bulk publish calls to the pub/sub component.",
 			stats.UnitDimensionless),
+		bulkPubsubEventEgressCount: stats.Int64(
+			"component/pubsub_egress/bulk/count",
+			"The number of outgoing messages to the pub/sub component published through bulk publish API.",
+			stats.UnitDimensionless),
 		bulkPubsubEgressLatency: stats.Float64(
-			"component/pubsub_egress/latencies",
-			"The latency of the response for bulk publish from the pub/sub component.",
+			"component/pubsub_egress/bulk/latencies",
+			"The latency of the response for the bulk publish call from the pub/sub component.",
 			stats.UnitMilliseconds),
 		inputBindingCount: stats.Int64(
 			"component/input_binding/count",
@@ -170,13 +175,20 @@ func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, pr
 }
 
 // BulkPubsubEgressEvent records the metris for a pub/sub egress event.
-func (c *componentMetrics) BulkPubsubEgressEvent(ctx context.Context, component, topic string, success bool, elapsed float64) {
+// eventCount if greater than zero implies successful publish of few/all events in the bulk publish call
+func (c *componentMetrics) BulkPubsubEgressEvent(ctx context.Context, component, topic string, success bool, eventCount int64, elapsed float64) {
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, fmt.Sprintf("%v", success), topicKey, topic),
 			c.bulkPubsubEgressCount.M(1))
-
+		if eventCount > 0 {
+			// There is at leaset one success in the bulk publish call even if overall success of the call might be a failure
+			stats.RecordWithTags(
+				ctx,
+				diagUtils.WithTags(appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, true, topicKey, topic),
+				c.bulkPubsubEventEgressCount.M(eventCount))
+		}
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,

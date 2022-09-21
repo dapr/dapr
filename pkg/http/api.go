@@ -1901,37 +1901,10 @@ func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
-	if a.pubsubAdapter == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
-	if pubsubName == "" {
-		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
-	if thepubsub == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	topic := reqCtx.UserValue(topicParam).(string)
-	if topic == "" {
-		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
+	thepubsub, pubsubName, topic, sc, msg := a.validateAndGetPubsubAndTopic(reqCtx)
+	if msg != nil {
+		respond(reqCtx, withError(sc, *msg))
+		log.Debug(*msg)
 
 		return
 	}
@@ -2033,37 +2006,10 @@ type bulkPublishMessageEntry struct {
 }
 
 func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
-	if a.pubsubAdapter == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
-		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
-	if pubsubName == "" {
-		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
-	if thepubsub == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
-
-		return
-	}
-
-	topic := reqCtx.UserValue(topicParam).(string)
-	if topic == "" {
-		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
-		respond(reqCtx, withError(fasthttp.StatusNotFound, msg))
-		log.Debug(msg)
+	thepubsub, pubsubName, topic, sc, msg := a.validateAndGetPubsubAndTopic(reqCtx)
+	if msg != nil {
+		respond(reqCtx, withError(sc, *msg))
+		log.Debug(*msg)
 
 		return
 	}
@@ -2098,7 +2044,6 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	entries := make([]pubsub.BulkMessageEntry, len(incomingEntries))
 
 	for i, entry := range incomingEntries {
-		log.Debugf("Incoming event:  %v\n", entry)
 		var dBytes []byte
 
 		dBytes, cErr := convertEventToBytes(entry.Event, entry.ContentType)
@@ -2192,21 +2137,22 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	res, err := a.pubsubAdapter.BulkPublish(&req)
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
-
 	bulkRes := BulkPublishResponse{}
-
+	var eventsPublished int64 = 0
 	if len(res.Statuses) != 0 {
 		bulkRes.Statuses = make([]BulkPublishResponseEntry, len(res.Statuses))
 		for i, r := range res.Statuses {
 			bulkRes.Statuses[i].EntryID = r.EntryID
 			if r.Error != nil {
 				bulkRes.Statuses[i].Error = r.Error.Error()
+			} else {
+				// Only count the events that have been successfully published to the pub/sub component
+				eventsPublished++
 			}
 			bulkRes.Statuses[i].Status = string(r.Status)
 		}
 	}
-
+	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
 	if err != nil {
 		status := fasthttp.StatusInternalServerError
 		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
@@ -2235,6 +2181,36 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		resData, _ := json.Marshal(bulkRes)
 		respond(reqCtx, withJSON(fasthttp.StatusOK, resData), closeChildSpans)
 	}
+}
+
+func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, int, *ErrorResponse) {
+	if a.pubsubAdapter == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
+
+		return nil, "", "", fasthttp.StatusBadRequest, &msg
+	}
+
+	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
+	if pubsubName == "" {
+		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
+
+		return nil, "", "", fasthttp.StatusNotFound, &msg
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
+
+		return nil, "", "", fasthttp.StatusNotFound, &msg
+	}
+
+	topic := reqCtx.UserValue(topicParam).(string)
+	if topic == "" {
+		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
+
+		return nil, "", "", fasthttp.StatusNotFound, &msg
+	}
+	return thepubsub, pubsubName, topic, fasthttp.StatusOK, nil
 }
 
 // GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.
