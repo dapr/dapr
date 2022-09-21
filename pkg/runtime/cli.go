@@ -255,7 +255,7 @@ func FromFlags() (*DaprRuntime, error) {
 		AllowedOrigins:               *allowedOrigins,
 		GlobalConfig:                 *config,
 		ComponentsPath:               *componentsPath,
-		EnableDynamicLoading:				*enableDynamicLoading,
+		EnableDynamicLoading:         *enableDynamicLoading,
 		AppProtocol:                  appPrtcl,
 		Mode:                         *mode,
 		HTTPPort:                     daprHTTP,

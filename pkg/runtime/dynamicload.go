@@ -10,7 +10,6 @@ import (
 )
 
 func (a *DaprRuntime) watchPathForDynamicLoading() {
-
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)

@@ -36,13 +36,13 @@ func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneC
 		componentsManifestLoader: NewDiskManifestLoader(configuration.ComponentsPath, newComponent),
 	}
 }
+
 // LoadComponents loads dapr components from a given directory.
 func (s *StandaloneComponents) LoadComponents() ([]componentsV1alpha1.Component, error) {
 	return s.componentsManifestLoader.Load()
 }
 
 // LoadComponentsFromFile loads dapr components from a file.
-func (s *StandaloneComponents) LoadComponentsFromFile(manifestPath string) ([]componentsV1alpha1.Component) {
+func (s *StandaloneComponents) LoadComponentsFromFile(manifestPath string) []componentsV1alpha1.Component {
 	return s.componentsManifestLoader.LoadManifestsFromFile(manifestPath)
 }
-

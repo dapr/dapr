@@ -267,7 +267,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		accessControlList:          accessControlList,
 		componentsLock:             &sync.RWMutex{},
 		components:                 make([]componentsV1alpha1.Component, 0),
-		dynamicComponents:				  map[DynamicComponentsManifest][]componentsV1alpha1.Component{},
+		dynamicComponents:          map[DynamicComponentsManifest][]componentsV1alpha1.Component{},
 		actorStateStoreLock:        &sync.RWMutex{},
 		grpc:                       grpc.NewGRPCManager(runtimeConfig.Mode),
 		inputBindings:              map[string]bindings.InputBinding{},
@@ -580,14 +580,14 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// Enable dynamic loading in standalone mode if dynamic components directory is provided
 	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.EnableDynamicLoading == true {
-	dir, err := os.Stat(a.runtimeConfig.Standalone.ComponentsPath)
-	if err != nil {
-		log.Fatalf("failed to get components directory: %s", err)
-	} else if !dir.IsDir() {
-		log.Fatalf("components path is not a directory: %s", a.runtimeConfig.Standalone.ComponentsPath)
-	} else {
-		a.watchPathForDynamicLoading()
-	}
+		dir, err := os.Stat(a.runtimeConfig.Standalone.ComponentsPath)
+		if err != nil {
+			log.Fatalf("failed to get components directory: %s", err)
+		} else if !dir.IsDir() {
+			log.Fatalf("components path is not a directory: %s", a.runtimeConfig.Standalone.ComponentsPath)
+		} else {
+			a.watchPathForDynamicLoading()
+		}
 	}
 	return nil
 }
