@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -377,7 +376,7 @@ func parseRoutingRulesYAML(routes subscriptionsapiV2alpha1.Routes) ([]*Rule, err
 	return r[:n], nil
 }
 
-func parseRoutingRulesGRPC(routes *commonv1pb.TopicRoutes) ([]*Rule, error) {
+func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 	if routes == nil {
 		return []*Rule{{
 			Path: "",
