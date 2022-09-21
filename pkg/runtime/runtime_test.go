@@ -40,14 +40,15 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/middleware"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 
+	"github.com/dapr/dapr/pkg/components"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
