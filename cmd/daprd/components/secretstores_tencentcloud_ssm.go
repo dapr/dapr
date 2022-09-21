@@ -11,22 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package components
 
 import (
-	"github.com/valyala/fasthttp"
+	"github.com/dapr/components-contrib/secretstores/tencentcloud/ssm"
+	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 )
 
-type Middleware func(h fasthttp.RequestHandler) fasthttp.RequestHandler
-
-// HTTPPipeline defines the middleware pipeline to be plugged into Dapr sidecar.
-type Pipeline struct {
-	Handlers []Middleware
-}
-
-func (p Pipeline) Apply(handler fasthttp.RequestHandler) fasthttp.RequestHandler {
-	for i := len(p.Handlers) - 1; i >= 0; i-- {
-		handler = p.Handlers[i](handler)
-	}
-	return handler
+func init() {
+	secretstoresLoader.DefaultRegistry.RegisterComponent(ssm.NewSSM, "tencentcloud.ssm")
 }

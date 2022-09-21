@@ -36,8 +36,12 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/components-contrib/lock"
+	"github.com/dapr/components-contrib/middleware"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
@@ -178,7 +182,7 @@ func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
 	return nil
 }
 
-func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (m *MockKubernetesStateStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"key1":   "value1",
@@ -188,7 +192,7 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 	}, nil
 }
 
-func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+func (m *MockKubernetesStateStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
 	response := map[string]map[string]string{}
 	response["k8s-secret"] = map[string]string{
 		"key1":   "value1",
@@ -202,6 +206,10 @@ func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretR
 
 func (m *MockKubernetesStateStore) Close() error {
 	return nil
+}
+
+func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
+	return []secretstores.Feature{}
 }
 
 func NewMockKubernetesStore() secretstores.SecretStore {
@@ -2018,6 +2026,82 @@ func TestInitSecretStores(t *testing.T) {
 
 		s := rt.getSecretStore("kubernetesMock")
 		assert.NotNil(t, s)
+	})
+}
+
+func TestMiddlewareBuildPipeline(t *testing.T) {
+	t.Run("build when no global config are set", func(t *testing.T) {
+		rt := &DaprRuntime{}
+
+		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{}, "test")
+		require.NoError(t, err)
+		assert.Empty(t, pipeline.Handlers)
+	})
+	t.Run("build when component does not exists", func(t *testing.T) {
+		rt := &DaprRuntime{
+			globalConfig:   &config.Configuration{},
+			componentsLock: &sync.RWMutex{},
+		}
+
+		_, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
+			Handlers: []config.HandlerSpec{
+				{
+					Name:         "not_exists",
+					Type:         "not_exists",
+					Version:      "not_exists",
+					SelectorSpec: config.SelectorSpec{},
+				},
+			},
+		}, "test")
+		require.NotNil(t, err)
+	})
+	t.Run("build when component exists", func(t *testing.T) {
+		const name = "fake"
+		typ := fmt.Sprintf("middleware.http.%s", name)
+		rt := &DaprRuntime{
+			globalConfig:           &config.Configuration{},
+			componentsLock:         &sync.RWMutex{},
+			httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
+			components: []componentsV1alpha1.Component{
+				{
+					TypeMeta: metaV1.TypeMeta{},
+					ObjectMeta: metaV1.ObjectMeta{
+						Name: name,
+					},
+					Spec: componentsV1alpha1.ComponentSpec{
+						Type:    typ,
+						Version: "v1",
+					},
+					Auth:   componentsV1alpha1.Auth{},
+					Scopes: []string{},
+				},
+			},
+		}
+		called := 0
+		rt.httpMiddlewareRegistry.RegisterComponent(
+			func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
+				called++
+				return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+					return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+						return func(ctx *fasthttp.RequestCtx) {}
+					}, nil
+				}
+			},
+			name,
+		)
+
+		pipeline, err := rt.buildHTTPPipelineForSpec(config.PipelineSpec{
+			Handlers: []config.HandlerSpec{
+				{
+					Name:         name,
+					Type:         typ,
+					Version:      "v1",
+					SelectorSpec: config.SelectorSpec{},
+				},
+			},
+		}, "test")
+		require.NoError(t, err)
+		assert.Len(t, pipeline.Handlers, 1)
 	})
 }
 
@@ -4455,9 +4539,23 @@ func TestBindingTracingHttp(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 
-	t.Run("traceparent passed through", func(t *testing.T) {
+	t.Run("traceparent passed through with response status code 200", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+		rt.appChannel = mockAppChannel
+
+		_, err := rt.sendBindingEventToApp("mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
+		assert.Nil(t, err)
+		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
+		assert.Len(t, mockAppChannel.Calls, 1)
+		req := mockAppChannel.Calls[0].Arguments.Get(1).(*invokev1.InvokeMethodRequest)
+		assert.Contains(t, req.Metadata(), "traceparent")
+		assert.Contains(t, req.Metadata()["traceparent"].Values, "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01")
+	})
+
+	t.Run("traceparent passed through with response status code 204", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(204, "OK", nil), nil)
 		rt.appChannel = mockAppChannel
 
 		_, err := rt.sendBindingEventToApp("mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
@@ -4685,7 +4783,7 @@ type mockSecretStore struct {
 	closeErr error
 }
 
-func (s *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (s *mockSecretStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"key1":   "value1",

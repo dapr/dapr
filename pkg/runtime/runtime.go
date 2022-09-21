@@ -605,12 +605,12 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (httpMiddleware.Pipeline, error) {
 	var handlers []httpMiddleware.Middleware
 
 	if a.globalConfig != nil {
-		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
-			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
+		for i := 0; i < len(spec.Handlers); i++ {
+			middlewareSpec := spec.Handlers[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
 				return httpMiddleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
@@ -623,7 +623,7 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 			if err != nil {
 				return httpMiddleware.Pipeline{}, err
 			}
-			log.Infof("enabled %s/%s http middleware", middlewareSpec.Type, middlewareSpec.Version)
+			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
 			handlers = append(handlers, handler)
 		}
 	}
@@ -637,6 +637,14 @@ func (a *DaprRuntime) initPluggableComponents() {
 			log.Warnf("failed to register pluggable components: %s", err)
 		}
 	}
+}
+
+func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
+}
+
+func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
 }
 
 // registerPluggableComponents loads and register the loaded pluggable components.
@@ -1266,7 +1274,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			span.End()
 		}
 		// ::TODO report metrics for http, such as grpc
-		if resp.Status().Code != nethttp.StatusOK {
+		if resp.Status().Code < 200 || resp.Status().Code > 299 {
 			_, body := resp.RawData()
 			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
@@ -2505,7 +2513,8 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 		resp, ok := cache[m.SecretKeyRef.Name]
 		if !ok {
-			r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
+			// TODO: cascade context.
+			r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
 				Name: m.SecretKeyRef.Name,
 				Metadata: map[string]string{
 					"namespace": component.ObjectMeta.Namespace,
@@ -2605,7 +2614,11 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 			return err
 		}
 	case HTTPProtocol:
-		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		pipeline, err := a.buildAppHTTPPipeline()
+		if err != nil {
+			return err
+		}
+		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, pipeline, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 		if err != nil {
 			return err
 		}
