@@ -168,14 +168,19 @@ func TestMain(m *testing.M) {
 				AppEnv:              appEnv,
 			},
 			{
-				AppName:             inputBindingGRPCPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           e2eInputBindingGRPCImage,
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				Config:              pluggableComponentsAppConfig,
-				PluggableComponents: pluggableComponents,
+				AppName:        inputBindingGRPCPluggableAppName,
+				DaprEnabled:    true,
+				ImageName:      e2eInputBindingGRPCImage,
+				Replicas:       1,
+				IngressEnabled: true,
+				MetricsEnabled: true,
+				Config:         pluggableComponentsAppConfig,
+				PluggableComponents: map[string]apiv1.Container{
+					"dapr-bindings.kafka-pluggable-v1-pluggable-test-topic-grpc.sock": {
+						Name:  "kafka-pluggable",
+						Image: runner.BuildTestImageName(kafkaBindingsPluggableComponentImage),
+					},
+				},
 				AppEnv: map[string]string{
 					DaprTestTopicEnvVar: "pluggable-test-topic-grpc",
 				},

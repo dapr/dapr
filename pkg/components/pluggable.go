@@ -41,6 +41,18 @@ var WellKnownTypes = [9]PluggableType{
 	NameResolution,
 }
 
+var pluggableToCategory = map[PluggableType]Category{
+	State:          CategoryStateStore,
+	PubSub:         CategoryPubSub,
+	InputBinding:   CategoryBindings,
+	OutputBinding:  CategoryBindings,
+	HTTPMiddleware: CategoryMiddleware,
+	Configuration:  CategoryConfiguration,
+	Secret:         CategorySecretStore,
+	Lock:           CategoryLock,
+	NameResolution: CategoryNameResolution,
+}
+
 // Pluggable represents a pluggable component specification.
 type Pluggable struct {
 	// Name is the pluggable component name.
@@ -49,4 +61,8 @@ type Pluggable struct {
 	Type PluggableType
 	// Version is the pluggable component version.
 	Version string
+}
+
+func (p Pluggable) Category() Category {
+	return pluggableToCategory[p.Type]
 }
