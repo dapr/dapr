@@ -73,7 +73,7 @@ spec:
     - name: topics
       value: dapr-test-grpc-pluggable
     - name: consumerGroup
-      value: group1
+      value: group1-pluggable
     # publisher configuration: topic
     - name: publishTopic
       value: dapr-test-grpc-pluggable
@@ -83,3 +83,34 @@ spec:
       value: oldest
 scopes:
   - pluggable-bindinginputgrpc
+
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: test-topic-custom-route-pluggable
+spec:
+  type: bindings.kafka-pluggable
+  initTimeout: 1m
+  version: v1
+  metadata:
+  # Kafka broker connection setting
+  - name: brokers
+    value: dapr-kafka:9092
+  # consumer configuration: topic and consumer group
+  - name: topics
+    value: dapr-test-pluggable
+  - name: consumerGroup
+    value: group2-pluggable
+  # publisher configuration: topic
+  - name: publishTopic
+    value: dapr-test-pluggable
+  - name: authRequired
+    value: "false"
+    # set specify route
+  - name: route
+    value: /custom-path
+  - name: initialOffset
+    value: oldest
+scopes:
+  - pluggable-bindinginput

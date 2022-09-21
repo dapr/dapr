@@ -136,11 +136,14 @@ func TestMain(m *testing.M) {
 	}
 
 	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
-		pluggableComponents := map[string]apiv1.Container{
-			"dapr-bindings.kafka-pluggable-v1-pluggable-test-topic.sock": {
-				Name:  "kafka-pluggable",
-				Image: runner.BuildTestImageName(kafkaBindingsPluggableComponentImage),
-			},
+		const (
+			pluggableTestTopicSocket            = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic.sock"
+			pluggableTestGRPCTopicSocket        = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic-grpc.sock"
+			pluggableTestCustomRouteTopicSocket = "dapr-bindings.kafka-pluggable-v1-test-topic-custom-route-pluggable.sock"
+		)
+		pluggableComponentContainer := apiv1.Container{
+			Name:  "kafka-pluggable",
+			Image: runner.BuildTestImageName(kafkaBindingsPluggableComponentImage),
 		}
 		appEnv := map[string]string{
 			DaprTestGRPCTopicEnvVar: "pluggable-test-topic-grpc",
@@ -148,26 +151,31 @@ func TestMain(m *testing.M) {
 		}
 		testApps = append(testApps, []kube.AppDescription{
 			{
-				AppName:             inputBindingPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           e2eInputBindingImage,
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				Config:              pluggableComponentsAppConfig,
-				PluggableComponents: pluggableComponents,
-				AppEnv:              appEnv,
+				AppName:        inputBindingPluggableAppName,
+				DaprEnabled:    true,
+				ImageName:      e2eInputBindingImage,
+				Replicas:       1,
+				IngressEnabled: true,
+				MetricsEnabled: true,
+				Config:         pluggableComponentsAppConfig,
+				PluggableComponents: map[string]apiv1.Container{
+					pluggableTestTopicSocket:            pluggableComponentContainer,
+					pluggableTestCustomRouteTopicSocket: pluggableComponentContainer,
+				},
+				AppEnv: appEnv,
 			},
 			{
-				AppName:             outputbindingPluggableAppName,
-				DaprEnabled:         true,
-				ImageName:           e2eOutputBindingImage,
-				Replicas:            1,
-				IngressEnabled:      true,
-				MetricsEnabled:      true,
-				Config:              pluggableComponentsAppConfig,
-				PluggableComponents: pluggableComponents,
-				AppEnv:              appEnv,
+				AppName:        outputbindingPluggableAppName,
+				DaprEnabled:    true,
+				ImageName:      e2eOutputBindingImage,
+				Replicas:       1,
+				IngressEnabled: true,
+				MetricsEnabled: true,
+				Config:         pluggableComponentsAppConfig,
+				PluggableComponents: map[string]apiv1.Container{
+					pluggableTestTopicSocket: pluggableComponentContainer,
+				},
+				AppEnv: appEnv,
 			},
 			{
 				AppName:        inputBindingGRPCPluggableAppName,
@@ -179,10 +187,7 @@ func TestMain(m *testing.M) {
 				Config:         pluggableComponentsAppConfig,
 				AppProtocol:    "grpc",
 				PluggableComponents: map[string]apiv1.Container{
-					"dapr-bindings.kafka-pluggable-v1-pluggable-test-topic-grpc.sock": {
-						Name:  "kafka-pluggable",
-						Image: runner.BuildTestImageName(kafkaBindingsPluggableComponentImage),
-					},
+					pluggableTestGRPCTopicSocket: pluggableComponentContainer,
 				},
 				AppEnv: appEnv,
 			},
