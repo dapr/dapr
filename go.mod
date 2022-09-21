@@ -321,6 +321,8 @@ require (
 	github.com/stoewer/go-strcase v1.2.0 // indirect
 	github.com/stretchr/objx v0.4.0 // indirect
 	github.com/supplyon/gremcos v0.1.0 // indirect
+	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.476 // indirect
+	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.0.476 // indirect
 	github.com/tetratelabs/wazero v1.0.0-pre.1 // indirect
 	github.com/tidwall/gjson v1.14.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
@@ -401,5 +403,3 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
 // TEMP ONLY
-
-replace github.com/dapr/components-contrib => ../components-contrib

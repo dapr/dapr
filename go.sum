@@ -597,6 +597,8 @@ github.com/danieljoos/wincred v1.0.2/go.mod h1:SnuYRW9lp1oJrZX/dXJqr0cPK5gYXqx3E
 github.com/danieljoos/wincred v1.1.0/go.mod h1:XYlo+eRTsVA9aHGp7NGjFkPla4m+DCL7hqDjlFjiygg=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220914221812-57b5acc1cb19 h1:49zXC8q7WCC4ty0Qw7XV9wXirTvPR31Sqt4R+mmwQBM=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220914221812-57b5acc1cb19/go.mod h1:IensTBKq+AZhWyunq7zuByYDVRyjaQF0G9H1jqIUyvs=
 github.com/dapr/kit v0.0.2 h1:VNg6RWrBMOdtY0/ZLztyAa/RjyFLaskdO9wt2HIREwk=
 github.com/dapr/kit v0.0.2/go.mod h1:Q4TWm9+vcPZFGehaJUZt2hvA805wJm7FIuoArytWJ8o=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -1865,6 +1867,10 @@ github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2/go.mod h1:hkRG
 github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=
 github.com/tchap/go-patricia v2.2.6+incompatible/go.mod h1:bmLyhP68RS6kStMGxByiQ23RP/odRBOTVjwp2cDyi6I=
 github.com/tebeka/strftime v0.1.3/go.mod h1:7wJm3dZlpr4l/oVK0t1HYIc4rMzQ2XJlOMIUJUJH6XQ=
+github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.476 h1:2VOnCo8XYky0o8dEmBUyjyC6pnXM2Xu0hgvVfOQspv8=
+github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.476/go.mod h1:7sCQWVkxcsR38nffDW057DRGk8mUjK1Ing/EFOK8s8Y=
+github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.0.476 h1:KjkP84yJW8tweRzJlUnJdeAncxdcaajrFkUgVEmnN4k=
+github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.0.476/go.mod h1:huGvjX9BMaK26Pbfk+0g89VrFxWxokvC3OFrHpZbkWs=
 github.com/tetratelabs/wazero v1.0.0-pre.1 h1:bUZ4vf21c36RmgA3enNOlLgPElEVDYoRJJ9+McRGF6Q=
 github.com/tetratelabs/wazero v1.0.0-pre.1/go.mod h1:M8UDNECGm/HVjOfq0EOe4QfCY9Les1eq54IChMLETbc=
 github.com/tevid/gohamcrest v1.1.1/go.mod h1:3UvtWlqm8j5JbwYZh80D/PVBt0mJ1eJiYgZMibh0H/k=
@@ -2125,6 +2131,7 @@ golang.org/x/crypto v0.0.0-20210920023735-84f357641f63/go.mod h1:GvvjBRRGRdwPK5y
 golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
 golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
 golang.org/x/crypto v0.0.0-20220214200702-86341886e292/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
+golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e h1:T8NU3HyQ8ClP4SEE+KbFlg6n0NhuTsN4MyznaarGsZM=
 golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
 golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
 golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 h1:Y/gsMcFOcR+6S6f3YeMKl5g+dZMEWqcz5Czj/GWYbkM=
