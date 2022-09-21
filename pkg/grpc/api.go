@@ -23,11 +23,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/version"
-
-	"github.com/dapr/components-contrib/configuration"
+	otelTrace "go.opentelemetry.io/otel/trace"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -77,6 +77,7 @@ type API interface {
 
 	// Dapr Service methods
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
+	BulkPublishEventAlpha1(ctx context.Context, req *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
@@ -532,6 +533,175 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, respError
 	}
 	return resp.Message(), respError
+}
+
+func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
+	if a.pubsubAdapter == nil {
+		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.BulkPublishResponse{}, err
+	}
+
+	pubsubName := in.PubsubName
+	if pubsubName == "" {
+		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.BulkPublishResponse{}, err
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.BulkPublishResponse{}, err
+	}
+
+	topic := in.Topic
+	if topic == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.BulkPublishResponse{}, err
+	}
+
+	rawPayload, metaErr := contribMetadata.IsRawPayload(in.Metadata)
+	if metaErr != nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.BulkPublishResponse{}, err
+	}
+
+	span := diagUtils.SpanFromContext(ctx)
+	// Populate W3C tracestate to cloudevent envelope
+	traceState := diag.TraceStateToW3CString(span.SpanContext())
+
+	entries := make([]pubsub.BulkMessageEntry, len(in.Entries))
+
+	for i, entry := range in.Entries {
+		if len(entry.EntryID) == 0 {
+			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "missing entryID")
+			apiServerLogger.Debug(err)
+			return &runtimev1pb.BulkPublishResponse{}, err
+		}
+		entries[i].EntryID = entry.EntryID
+		entries[i].ContentType = entry.ContentType
+		entries[i].Event = entry.Event
+		// Populate entry metadata with request level metadata. Entry level metadata keys
+		// override request level metadata.
+		if entry.Metadata != nil {
+			entries[i].Metadata = populateMetadataForBulkPublishEntry(in.Metadata, entry.Metadata)
+		}
+	}
+
+	spanMap := map[int]otelTrace.Span{}
+	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
+	closeChildSpans := func(ctx context.Context, err error) {
+		for _, span := range spanMap {
+			diag.UpdateSpanStatusFromGRPCError(span, err)
+			span.End()
+		}
+	}
+	if !rawPayload {
+		for i := range entries {
+			// For multiple events in a single bulk call traceParent is different for each event.
+			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span)
+			// Populate W3C traceparent to cloudevent envelope
+			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
+			spanMap[i] = childSpan
+
+			var envelope map[string]interface{}
+
+			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
+				ID:              a.id,
+				Topic:           topic,
+				DataContentType: entries[i].ContentType,
+				Data:            entries[i].Event,
+				TraceID:         corID,
+				TraceState:      traceState,
+				Pubsub:          pubsubName,
+			})
+			if err != nil {
+				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+				apiServerLogger.Debug(err)
+				closeChildSpans(ctx, err)
+				return &runtimev1pb.BulkPublishResponse{}, err
+			}
+
+			features := thepubsub.Features()
+
+			pubsub.ApplyMetadata(envelope, features, entries[i].Metadata)
+
+			entries[i].Event, err = json.Marshal(envelope)
+			if err != nil {
+				err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+				apiServerLogger.Debug(err)
+				closeChildSpans(ctx, err)
+				return &runtimev1pb.BulkPublishResponse{}, err
+			}
+		}
+	}
+
+	req := pubsub.BulkPublishRequest{
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Entries:    entries,
+		Metadata:   in.Metadata,
+	}
+
+	start := time.Now()
+	res, err := a.pubsubAdapter.BulkPublish(&req)
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
+
+	bulkRes := runtimev1pb.BulkPublishResponse{}
+
+	if len(res.Statuses) != 0 {
+		for _, r := range res.Statuses {
+			resEntry := runtimev1pb.BulkPublishResponseEntry{}
+			resEntry.EntryID = r.EntryID
+			if r.Error != nil {
+				resEntry.Error = r.Error.Error()
+			}
+			if r.Status == pubsub.PublishSucceeded {
+				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_SUCCESS //nolint:nosnakecase
+			} else {
+				resEntry.Status = runtimev1pb.BulkPublishResponseEntry_FAILED //nolint:nosnakecase
+			}
+			bulkRes.Statuses = append(bulkRes.Statuses, &resEntry)
+		}
+	}
+
+	if err != nil {
+		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
+			nerr = status.Errorf(codes.PermissionDenied, err.Error())
+		}
+
+		if errors.As(err, &runtimePubsub.NotFoundError{}) {
+			nerr = status.Errorf(codes.NotFound, err.Error())
+		}
+		apiServerLogger.Debug(nerr)
+		closeChildSpans(ctx, nerr)
+		return &bulkRes, nerr
+	}
+
+	closeChildSpans(ctx, nil)
+	return &bulkRes, nil
+}
+
+func populateMetadataForBulkPublishEntry(reqMeta, entryMeta map[string]string) map[string]string {
+	resMeta := map[string]string{}
+	for k, v := range entryMeta {
+		resMeta[k] = v
+	}
+	for k, v := range reqMeta {
+		if _, ok := resMeta[k]; !ok {
+			// Populate only metadata key that is already not present in the entry level metadata map
+			resMeta[k] = v
+		}
+	}
+
+	return resMeta
 }
 
 func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
