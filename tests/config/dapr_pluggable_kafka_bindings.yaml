@@ -45,7 +45,7 @@ spec:
     - name: topics
       value: dapr-test-pluggable
     - name: consumerGroup
-      value: group1
+      value: group1-pluggable
     # publisher configuration: topic
     - name: publishTopic
       value: dapr-test-pluggable
