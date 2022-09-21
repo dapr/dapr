@@ -175,6 +175,7 @@ func TestMain(m *testing.M) {
 				IngressEnabled: true,
 				MetricsEnabled: true,
 				Config:         pluggableComponentsAppConfig,
+				AppProtocol:    "grpc",
 				PluggableComponents: map[string]apiv1.Container{
 					"dapr-bindings.kafka-pluggable-v1-pluggable-test-topic-grpc.sock": {
 						Name:  "kafka-pluggable",
