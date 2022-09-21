@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"os"
 	"path/filepath"
 
 	"github.com/dapr/dapr/pkg/components"
@@ -11,23 +10,6 @@ import (
 )
 
 func (a *DaprRuntime) watchPathForDynamicLoading() {
-	//Load components from any existing manifest files in directory
-	dir, err := os.Open(a.runtimeConfig.Standalone.DynamicComponentsPath)
-	if err != nil {
-		log.Fatalf("failed to open dynamic components directory: %s", err)
-	}
-	for {
-		files, err := dir.ReadDir(1)
-		if err != nil {
-			break
-		}
-		for _, file := range files {
-			err := a.loadDynamicComponents(filepath.Join(a.runtimeConfig.Standalone.DynamicComponentsPath, file.Name()))
-			if err != nil {
-				log.Errorf("failed to load components from file : %s", file.Name())
-			}
-		}
-	}
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -51,9 +33,9 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 				} else if event.Op == fsnotify.Remove || event.Op == fsnotify.Rename {
 					log.Warnf("manifest file: %s removed from components directory.", filepath.Base(event.Name))
 					for _, comp := range a.dynamicComponents[DynamicComponentsManifest(event.Name)] {
-						log.Warnf("manifest for component: %s  of type: %s removed.", comp.Name, comp.Spec.Type)
+						log.Warnf("manifest for dynamic loaded component: %s of type: %s removed.", comp.Name, comp.Spec.Type)
 					}
-					log.Warnf("to unload components from Dapr, please restart Dapr.")
+					log.Warnf("to unload components from dapr, please restart dapr.")
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
@@ -63,7 +45,7 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 			}
 		}
 	}()
-	err = watcher.Add(a.runtimeConfig.Standalone.DynamicComponentsPath)
+	err = watcher.Add(a.runtimeConfig.Standalone.ComponentsPath)
 	if err != nil {
 		log.Error(err)
 	}
@@ -71,7 +53,7 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 }
 
 func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
-	loader := components.NewDynamicStandaloneComponents(a.runtimeConfig.Standalone)
+	loader := components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	log.Info("loading dynamic components...")
 	fileComps := loader.LoadComponentsFromFile(manifestPath)
 	componentsToLoad := []componentsV1alpha1.Component{}

@@ -55,7 +55,7 @@ func FromFlags() (*DaprRuntime, error) {
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
-	dynamicComponentsPath := flag.String("dynamic-components-path", "", "Path of components directory from where components are loaded dynamically. If empty, dynamic loading of components will be disabled. Self-hosted mode")
+	enableDynamicLoading := flag.Bool("enable-dynamic-loading", false, "Enable dynamic loading of components. Self-hosted mode only")
 	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
@@ -255,7 +255,7 @@ func FromFlags() (*DaprRuntime, error) {
 		AllowedOrigins:               *allowedOrigins,
 		GlobalConfig:                 *config,
 		ComponentsPath:               *componentsPath,
-		DynamicComponentsPath:				*dynamicComponentsPath,
+		EnableDynamicLoading:				*enableDynamicLoading,
 		AppProtocol:                  appPrtcl,
 		Mode:                         *mode,
 		HTTPPort:                     daprHTTP,

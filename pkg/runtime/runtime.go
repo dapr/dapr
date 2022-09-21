@@ -579,12 +579,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	// Enable dynamic loading in standalone mode if dynamic components directory is provided
-	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.DynamicComponentsPath != "" {
-	dir, err := os.Stat(a.runtimeConfig.Standalone.DynamicComponentsPath)
+	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.EnableDynamicLoading == true {
+	dir, err := os.Stat(a.runtimeConfig.Standalone.ComponentsPath)
 	if err != nil {
-		log.Fatalf("failed to get dynamic components directory: %s", err)
+		log.Fatalf("failed to get components directory: %s", err)
 	} else if !dir.IsDir() {
-		log.Fatalf("dynamic components path is not a directory: %s", a.runtimeConfig.Standalone.DynamicComponentsPath)
+		log.Fatalf("components path is not a directory: %s", a.runtimeConfig.Standalone.ComponentsPath)
 	} else {
 		a.watchPathForDynamicLoading()
 	}

@@ -36,14 +36,6 @@ func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneC
 		componentsManifestLoader: NewDiskManifestLoader(configuration.ComponentsPath, newComponent),
 	}
 }
-
-// NewDynamicStandaloneComponents returns a new standalone loader for dynamic components.
-func NewDynamicStandaloneComponents(configuration config.StandaloneConfig) *StandaloneComponents {
-	return &StandaloneComponents{
-		componentsManifestLoader: NewDiskManifestLoader(configuration.DynamicComponentsPath, newComponent),
-	}
-}
-
 // LoadComponents loads dapr components from a given directory.
 func (s *StandaloneComponents) LoadComponents() ([]componentsV1alpha1.Component, error) {
 	return s.componentsManifestLoader.Load()
