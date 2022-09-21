@@ -46,13 +46,14 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 				if event.Op == fsnotify.Create || event.Op == fsnotify.Write {
 					err := a.loadDynamicComponents(event.Name)
 					if err != nil {
-						log.Errorf("failed to load components from file : %s", event.Name)
+						log.Errorf("failed to load components from file: %s", event.Name)
 					}
 				} else if event.Op == fsnotify.Remove || event.Op == fsnotify.Rename {
-					err := a.unloadDynamicComponents(event.Name)
-					if err != nil {
-						log.Errorf("failed to unload components from file : %s", event.Name)
+					log.Warnf("manifest file: %s removed from components directory.", filepath.Base(event.Name))
+					for _, comp := range a.dynamicComponents[DynamicComponentsManifest(event.Name)] {
+						log.Warnf("manifest for component: %s  of type: %s removed.", comp.Name, comp.Spec.Type)
 					}
+					log.Warnf("to unload components from Dapr, please restart Dapr.")
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
@@ -117,32 +118,4 @@ func (a *DaprRuntime) initDynamicComponent(comp componentsV1alpha1.Component) er
 		}
 	}
 	return nil
-}
-
-func (a *DaprRuntime) unloadDynamicComponents(manifestPath string) error {
-	comps := a.dynamicComponents[DynamicComponentsManifest(manifestPath)]
-	if comps == nil {
-		return nil
-	}
-
-	for _, comp := range comps {
-		a.unloadComponent(comp)
-		log.Infof("unloaded component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
-	}
-
-	delete(a.dynamicComponents, DynamicComponentsManifest(manifestPath))
-
-	return nil
-}
-
-func (a *DaprRuntime) unloadComponent(component componentsV1alpha1.Component) {
-	a.componentsLock.Lock()
-	defer a.componentsLock.Unlock()
-
-	for i, c := range a.components {
-		if c.Spec.Type == component.Spec.Type && c.ObjectMeta.Name == component.Name {
-			a.components = append(a.components[:i], a.components[i+1:]...)
-			break
-		}
-	}
 }
