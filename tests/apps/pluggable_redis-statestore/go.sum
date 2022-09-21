@@ -17,14 +17,10 @@ github.com/cncf/udpa/go v0.0.0-20210930031921-04548b0d99d4/go.mod h1:6pvJx4me5XP
 github.com/cncf/xds/go v0.0.0-20210922020428-25de7278fc84/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/cncf/xds/go v0.0.0-20211001041855-01bcc9b48dfe/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
-github.com/dapr-sandbox/components-go-sdk v0.0.0-20220912162439-c8fd51054b88 h1:coC9T6sSmgI4T3FubjlBbHYlRjZFNCf/aVJPF7dFpFE=
-github.com/dapr-sandbox/components-go-sdk v0.0.0-20220912162439-c8fd51054b88/go.mod h1:YW84xHuuF7Bl9hBOPye/aFSTmMI0pXXRrFJ/w+pEl6s=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20220913223951-edf6740c94e8 h1:xoZqv0HLNrEH4bLNAHcbX5iuawiRO+T8G/3SnLhllvc=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20220913223951-edf6740c94e8/go.mod h1:YW84xHuuF7Bl9hBOPye/aFSTmMI0pXXRrFJ/w+pEl6s=
-github.com/dapr/components-contrib v1.8.0-rc.1.0.20220901165827-19341e5a0ff4 h1:dtp6v5a9viHQSQfrfSaumAoSBMAbsqPrHdoHIxcPAJ4=
-github.com/dapr/components-contrib v1.8.0-rc.1.0.20220901165827-19341e5a0ff4/go.mod h1:zllmwB5vkb108A+XU9437LhH48/OICqYcN4r+FQum2k=
-github.com/dapr/dapr v1.8.4-0.20220909163359-efaca389cc32 h1:GEwxdaIwu97SFANaxXP4AfIFMLfJF+4wY7cea1mmqRk=
-github.com/dapr/dapr v1.8.4-0.20220909163359-efaca389cc32/go.mod h1:id6jlg9wW4fuvsCnJMqPKllBZFpb6Baqn0CbnDrEbPg=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220921204352-7b787d491072 h1:vOgLJebLu+Fo86+so5eqvBE97XcMpBgFFBhWfWn/ejw=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220921204352-7b787d491072/go.mod h1:JoDn1BfZqkrEeykCQCl5j/iJLCFvn9mqRpLW/uP6k3c=
 github.com/dapr/kit v0.0.2 h1:VNg6RWrBMOdtY0/ZLztyAa/RjyFLaskdO9wt2HIREwk=
 github.com/dapr/kit v0.0.2/go.mod h1:Q4TWm9+vcPZFGehaJUZt2hvA805wJm7FIuoArytWJ8o=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -157,8 +153,9 @@ google.golang.org/grpc v1.25.1/go.mod h1:c3i+UQWmh7LiEpx4sFZnkU36qjEYZ0imhYfXVyQ
 google.golang.org/grpc v1.27.0/go.mod h1:qbnxyOmOxrQa7FizSgH+ReBfzJrCY1pSN7KXBS8abTk=
 google.golang.org/grpc v1.33.1/go.mod h1:fr5YgcSWrqhRRxogOsw7RzIpsmvOZ6IcH4kBYTpR3n0=
 google.golang.org/grpc v1.36.0/go.mod h1:qjiiYl8FncCW8feJPdyg3v6XW24KsRHe+dy9BAGRRjU=
-google.golang.org/grpc v1.47.0 h1:9n77onPX5F3qfFCqjy9dhn8PbNQsIKeVU04J9G7umt8=
 google.golang.org/grpc v1.47.0/go.mod h1:vN9eftEi1UMyUsIF80+uQXhHjbXYbm0uXoFCACuMGWk=
+google.golang.org/grpc v1.48.0 h1:rQOsyJ/8+ufEDJd/Gdsz7HG220Mh9HAhFHRGnIjda0w=
+google.golang.org/grpc v1.48.0/go.mod h1:vN9eftEi1UMyUsIF80+uQXhHjbXYbm0uXoFCACuMGWk=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
 google.golang.org/protobuf v0.0.0-20200228230310-ab0ca4ff8a60/go.mod h1:cfTl7dwQJ+fmap5saPgwCLgHXTUD7jkjRqWcaiX5VyM=
