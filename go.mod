@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220826012745-bcea284c7b0c
+	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220914221812-57b5acc1cb19
 	github.com/dapr/kit v0.0.2
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.4
@@ -243,7 +243,9 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b // indirect
 	github.com/jackc/pgtype v1.12.0 // indirect
 	github.com/jackc/pgx/v4 v4.17.0 // indirect
+	github.com/jackc/pgx/v5 v5.0.0 // indirect
 	github.com/jackc/puddle v1.2.1 // indirect
+	github.com/jackc/puddle/v2 v2.0.0 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
 	github.com/jcmturner/gofork v1.0.0 // indirect
@@ -345,7 +347,7 @@ require (
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
-	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa // indirect
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a // indirect
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f // indirect
@@ -398,4 +400,6 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
+// TEMP ONLY
 
+replace github.com/dapr/components-contrib => ../components-contrib
