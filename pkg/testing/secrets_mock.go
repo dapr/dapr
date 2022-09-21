@@ -17,14 +17,10 @@ import (
 	"context"
 	"errors"
 
-	mock "github.com/stretchr/testify/mock"
-
 	"github.com/dapr/components-contrib/secretstores"
 )
 
-type FakeSecretStore struct {
-	mock.Mock
-}
+type FakeSecretStore struct{}
 
 func (c FakeSecretStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	if req.Name == "good-key" {
@@ -58,8 +54,7 @@ func (c FakeSecretStore) Close() error {
 }
 
 func (c FakeSecretStore) Features() []secretstores.Feature {
-	args := c.Called()
-	return args.Get(0).([]secretstores.Feature)
+	return []secretstores.Feature{secretstores.FeatureMultipleKeyValuesPerSecret}
 }
 
 type FailingSecretStore struct {
