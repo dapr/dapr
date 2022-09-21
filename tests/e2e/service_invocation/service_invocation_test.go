@@ -24,6 +24,8 @@ import (
 	"strings"
 	"testing"
 
+	guuid "github.com/google/uuid"
+
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,9 +37,10 @@ import (
 )
 
 type testCommandRequest struct {
-	RemoteApp        string `json:"remoteApp,omitempty"`
-	Method           string `json:"method,omitempty"`
-	RemoteAppTracing string `json:"remoteAppTracing"`
+	RemoteApp        string  `json:"remoteApp,omitempty"`
+	Method           string  `json:"method,omitempty"`
+	RemoteAppTracing string  `json:"remoteAppTracing"`
+	Message          *string `json:"message"`
 }
 
 type appResponse struct {
@@ -95,6 +98,15 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: false,
 			MetricsEnabled: true,
+		},
+		{
+			AppName:        "serviceinvocation-callee-2",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation",
+			Replicas:       1,
+			IngressEnabled: false,
+			MetricsEnabled: true,
+			Config:         "app-channel-pipeline",
 		},
 		{
 			AppName:        "grpcapp",
@@ -856,6 +868,39 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 	assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
 	assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
 	assert.NotNil(t, responseHeaders["Traceparent"][0])
+}
+
+func TestUppercaseMiddlewareServiceInvocation(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Run("uppercase middleware should be applied", func(t *testing.T) {
+		testMessage := guuid.New().String()
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp: "serviceinvocation-callee-2",
+			Method:    "httptohttptest",
+			Message:   &testMessage,
+		})
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPPost(
+			fmt.Sprintf("%s/httptohttptest", externalURL), body)
+		t.Log("checking err...")
+		require.NoError(t, err)
+
+		var appResp appResponse
+		t.Logf("unmarshalling..%s\n", string(resp))
+		err = json.Unmarshal(resp, &appResp)
+		require.NoError(t, err)
+
+		uppercaseMsg := strings.ToUpper(testMessage)
+		require.Contains(t, appResp.Message, uppercaseMsg)
+	})
 }
 
 func TestNegativeCases(t *testing.T) {
