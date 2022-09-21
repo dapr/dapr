@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220920185707-388d2bce2eee
+	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220921204352-7b787d491072
 	github.com/dapr/kit v0.0.2
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.4
@@ -89,7 +89,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.7.1 // indirect
@@ -116,7 +116,6 @@ require (
 	github.com/Shopify/sarama v1.30.0 // indirect
 	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
 	github.com/Workiva/go-datastructures v1.0.53 // indirect
-	github.com/a8m/documentdb v1.3.1-0.20220405205223-5b41ba0aaeb1 // indirect
 	github.com/aerospike/aerospike-client-go v4.5.0+incompatible // indirect
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5 // indirect
 	github.com/agnivade/levenshtein v1.0.1 // indirect
