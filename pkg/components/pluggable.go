@@ -63,6 +63,7 @@ type Pluggable struct {
 	Version string
 }
 
+// Category returns the component category based on its pluggable type.
 func (p Pluggable) Category() Category {
 	return pluggableToCategory[p.Type]
 }
