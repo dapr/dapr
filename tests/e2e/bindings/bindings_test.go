@@ -162,7 +162,7 @@ func TestMain(m *testing.M) {
 				Config:         pluggableComponentsAppConfig,
 				PluggableComponents: map[string]apiv1.Container{
 					pluggableTestTopicSocket:            kafkaComponentWithName("kafka-pluggable"),
-					pluggableTestCustomRouteTopicSocket: kafkaComponentWithName("kafka-pluggable-grpc"),
+					pluggableTestCustomRouteTopicSocket: kafkaComponentWithName("kafka-pluggable-custom-route"),
 				},
 				AppEnv: appEnv,
 			},
@@ -175,7 +175,8 @@ func TestMain(m *testing.M) {
 				MetricsEnabled: true,
 				Config:         pluggableComponentsAppConfig,
 				PluggableComponents: map[string]apiv1.Container{
-					pluggableTestTopicSocket: kafkaComponentWithName("kafka-pluggable"),
+					pluggableTestTopicSocket:     kafkaComponentWithName("kafka-pluggable"),
+					pluggableTestGRPCTopicSocket: kafkaComponentWithName("kafka-pluggable-grpc"),
 				},
 				AppEnv: appEnv,
 			},

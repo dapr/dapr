@@ -83,6 +83,7 @@ spec:
       value: oldest
 scopes:
   - pluggable-bindinginputgrpc
+  - pluggable-bindingoutput
 
 ---
 apiVersion: dapr.io/v1alpha1
