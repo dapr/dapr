@@ -32,14 +32,14 @@ import (
 )
 
 const (
-	appPort             = "3000"
-	DaprTestTopicEnvVar = "DAPR_TEST_TOPIC_NAME"
+	appPort                 = "3000"
+	DaprTestGRPCTopicEnvVar = "DAPR_TEST_GRPC_TOPIC_NAME"
 )
 
 var topicName = "test-topic-grpc"
 
 func init() {
-	if envTopicName := os.Getenv(DaprTestTopicEnvVar); len(envTopicName) != 0 {
+	if envTopicName := os.Getenv(DaprTestGRPCTopicEnvVar); len(envTopicName) != 0 {
 		topicName = envTopicName
 	}
 }

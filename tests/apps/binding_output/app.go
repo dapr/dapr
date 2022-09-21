@@ -31,19 +31,25 @@ import (
 )
 
 const (
-	appPort             = 3000
-	daprPort            = 3500
-	DaprTestTopicEnvVar = "DAPR_TEST_TOPIC_NAME"
+	appPort                 = 3000
+	daprPort                = 3500
+	DaprTestTopicEnvVar     = "DAPR_TEST_TOPIC_NAME"
+	DaprTestGRPCTopicEnvVar = "DAPR_TEST_GRPC_TOPIC_NAME"
 )
 
 var (
-	daprClient runtimev1pb.DaprClient
-	topicName  = "test-topic"
+	daprClient    runtimev1pb.DaprClient
+	topicName     = "test-topic"
+	topicNameGrpc = "test-topic-grpc"
 )
 
 func init() {
 	if envTopicName := os.Getenv(DaprTestTopicEnvVar); len(envTopicName) != 0 {
 		topicName = envTopicName
+	}
+
+	if envTopicName := os.Getenv(DaprTestGRPCTopicEnvVar); len(envTopicName) != 0 {
+		topicNameGrpc = envTopicName
 	}
 }
 
@@ -121,7 +127,7 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("Sending message: %s", body)
 		req := runtimev1pb.InvokeBindingRequest{
-			Name:      "test-topic-grpc",
+			Name:      topicNameGrpc,
 			Data:      body,
 			Operation: "create",
 		}

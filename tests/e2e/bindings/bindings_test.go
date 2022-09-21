@@ -76,6 +76,7 @@ const (
 	pluggableComponentsAppConfig         = "pluggablecomponentsconfig"
 	kafkaBindingsPluggableComponentImage = "e2e-pluggable_kafka-bindings"
 	DaprTestTopicEnvVar                  = "DAPR_TEST_TOPIC_NAME"
+	DaprTestGRPCTopicEnvVar              = "DAPR_TEST_GRPC_TOPIC_NAME"
 	bindingPropagationDelay              = 10
 )
 
@@ -142,7 +143,8 @@ func TestMain(m *testing.M) {
 			},
 		}
 		appEnv := map[string]string{
-			DaprTestTopicEnvVar: "pluggable-test-topic",
+			DaprTestGRPCTopicEnvVar: "pluggable-test-topic-grpc",
+			DaprTestTopicEnvVar:     "pluggable-test-topic",
 		}
 		testApps = append(testApps, []kube.AppDescription{
 			{
@@ -182,9 +184,7 @@ func TestMain(m *testing.M) {
 						Image: runner.BuildTestImageName(kafkaBindingsPluggableComponentImage),
 					},
 				},
-				AppEnv: map[string]string{
-					DaprTestTopicEnvVar: "pluggable-test-topic-grpc",
-				},
+				AppEnv: appEnv,
 			},
 		}...)
 		bindingsApps = append(bindingsApps, struct {
