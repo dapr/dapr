@@ -141,9 +141,11 @@ func TestMain(m *testing.M) {
 			pluggableTestGRPCTopicSocket        = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic-grpc.sock"
 			pluggableTestCustomRouteTopicSocket = "dapr-bindings.kafka-pluggable-v1-test-topic-custom-route-pluggable.sock"
 		)
-		pluggableComponentContainer := apiv1.Container{
-			Name:  "kafka-pluggable",
-			Image: runner.BuildTestImageName(kafkaBindingsPluggableComponentImage),
+		kafkaComponentWithName := func(name string) apiv1.Container {
+			return apiv1.Container{
+				Name:  name,
+				Image: runner.BuildTestImageName(kafkaBindingsPluggableComponentImage),
+			}
 		}
 		appEnv := map[string]string{
 			DaprTestGRPCTopicEnvVar: "pluggable-test-topic-grpc",
@@ -159,8 +161,8 @@ func TestMain(m *testing.M) {
 				MetricsEnabled: true,
 				Config:         pluggableComponentsAppConfig,
 				PluggableComponents: map[string]apiv1.Container{
-					pluggableTestTopicSocket:            pluggableComponentContainer,
-					pluggableTestCustomRouteTopicSocket: pluggableComponentContainer,
+					pluggableTestTopicSocket:            kafkaComponentWithName("kafka-pluggable"),
+					pluggableTestCustomRouteTopicSocket: kafkaComponentWithName("kafka-pluggable-grpc"),
 				},
 				AppEnv: appEnv,
 			},
@@ -173,7 +175,7 @@ func TestMain(m *testing.M) {
 				MetricsEnabled: true,
 				Config:         pluggableComponentsAppConfig,
 				PluggableComponents: map[string]apiv1.Container{
-					pluggableTestTopicSocket: pluggableComponentContainer,
+					pluggableTestTopicSocket: kafkaComponentWithName("kafka-pluggable"),
 				},
 				AppEnv: appEnv,
 			},
@@ -187,7 +189,7 @@ func TestMain(m *testing.M) {
 				Config:         pluggableComponentsAppConfig,
 				AppProtocol:    "grpc",
 				PluggableComponents: map[string]apiv1.Container{
-					pluggableTestGRPCTopicSocket: pluggableComponentContainer,
+					pluggableTestGRPCTopicSocket: kafkaComponentWithName("kafka-pluggable"),
 				},
 				AppEnv: appEnv,
 			},
