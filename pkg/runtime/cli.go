@@ -181,6 +181,10 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, fmt.Errorf("the 'dapr-grpc-port' argument value %d conflicts with 'app-port'", daprAPIGRPC)
 	}
 
+	if *componentsPath == "" && *enableDynamicLoading {
+		return nil, errors.New("components path must be specified if dynamic loading is enabled")
+	}
+
 	var maxRequestBodySize int
 	if *daprHTTPMaxRequestSize != -1 {
 		maxRequestBodySize = *daprHTTPMaxRequestSize
