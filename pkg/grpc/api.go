@@ -546,7 +546,8 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
-			req.Metadata[key] = val[0]
+			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
+			req.Metadata[sanitizedKey] = val[0]
 		}
 	}
 
@@ -1437,6 +1438,11 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	req := invokev1.NewInvokeMethodRequest(in.Method)
 	req.WithActor(in.ActorType, in.ActorId)
 	req.WithRawData(in.Data, "")
+	reqMetadata := map[string][]string{}
+	for k, v := range in.Metadata {
+		reqMetadata[k] = []string{v}
+	}
+	req.WithMetadata(reqMetadata)
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
