@@ -136,7 +136,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	if false && utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
+	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
 		const (
 			pluggableTestTopicSocket            = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic.sock"
 			pluggableTestGRPCTopicSocket        = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic-grpc.sock"
@@ -214,70 +214,78 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
+func testBindingsForApp(app struct {
+	suite        string
+	inputApp     string
+	inputGRPCApp string
+	outputApp    string
+}) func(t *testing.T) {
+	return func(t *testing.T) {
+		// setup
+		outputExternalURL := tr.Platform.AcquireAppExternalURL(app.outputApp)
+		require.NotEmpty(t, outputExternalURL, "bindingoutput external URL must not be empty!")
+		inputExternalURL := tr.Platform.AcquireAppExternalURL(app.inputApp)
+		require.NotEmpty(t, inputExternalURL, "bindinginput external URL must not be empty!")
+		inputGRPCExternalURL := tr.Platform.AcquireAppExternalURL(app.inputGRPCApp)
+		require.NotEmpty(t, inputGRPCExternalURL, "bindinginput external URL must not be empty!")
+		// This initial probe makes the test wait a little bit longer when needed,
+		// making this test less flaky due to delays in the deployment.
+		_, err := utils.HTTPGetNTimes(outputExternalURL, numHealthChecks)
+		require.NoError(t, err)
+		_, err = utils.HTTPGetNTimes(inputExternalURL, numHealthChecks)
+		require.NoError(t, err)
+
+		var req testSendRequest
+		for _, mes := range testMessages {
+			req.Messages = append(req.Messages, messageData{Data: mes, Operation: "create"})
+		}
+		body, err := json.Marshal(req)
+		require.NoError(t, err)
+
+		// act for http
+		httpPostWithAssert(t, fmt.Sprintf("%s/tests/send", outputExternalURL), body, http.StatusOK)
+
+		// This delay allows all the messages to reach corresponding input bindings.
+		time.Sleep(bindingPropagationDelay * time.Second)
+
+		// assert for HTTP
+		resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil, http.StatusOK)
+
+		var decodedResponse receivedTopicsResponse
+		err = json.Unmarshal(resp, &decodedResponse)
+		require.NoError(t, err)
+
+		// Only the first message fails, all other messages are successfully consumed.
+		// nine messages succeed.
+		require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
+		// one message fails.
+		require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
+		// routed binding will receive all messages
+		require.Equal(t, testMessages[0:], decodedResponse.RoutedMessages)
+
+		// act for gRPC
+		httpPostWithAssert(t, fmt.Sprintf("%s/tests/sendGRPC", outputExternalURL), body, http.StatusOK)
+
+		// This delay allows all the messages to reach corresponding input bindings.
+		time.Sleep(bindingPropagationDelay * time.Second)
+
+		// assert for gRPC
+		resp = httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics_grpc", outputExternalURL), nil, http.StatusOK)
+
+		// assert for gRPC
+		err = json.Unmarshal(resp, &decodedResponse)
+		require.NoError(t, err)
+
+		// Only the first message fails, all other messages are successfully consumed.
+		// nine messages succeed.
+		require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
+		// one message fails.
+		require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
+	}
+}
 func TestBindings(t *testing.T) {
 	for _, app := range bindingsApps {
-		t.Run(app.suite, func(t *testing.T) {
-			// setup
-			outputExternalURL := tr.Platform.AcquireAppExternalURL(app.outputApp)
-			require.NotEmpty(t, outputExternalURL, "bindingoutput external URL must not be empty!")
-			inputExternalURL := tr.Platform.AcquireAppExternalURL(app.inputApp)
-			require.NotEmpty(t, inputExternalURL, "bindinginput external URL must not be empty!")
-			inputGRPCExternalURL := tr.Platform.AcquireAppExternalURL(app.inputGRPCApp)
-			require.NotEmpty(t, inputGRPCExternalURL, "bindinginput external URL must not be empty!")
-			// This initial probe makes the test wait a little bit longer when needed,
-			// making this test less flaky due to delays in the deployment.
-			_, err := utils.HTTPGetNTimes(outputExternalURL, numHealthChecks)
-			require.NoError(t, err)
-			_, err = utils.HTTPGetNTimes(inputExternalURL, numHealthChecks)
-			require.NoError(t, err)
-
-			var req testSendRequest
-			for _, mes := range testMessages {
-				req.Messages = append(req.Messages, messageData{Data: mes, Operation: "create"})
-			}
-			body, err := json.Marshal(req)
-			require.NoError(t, err)
-
-			// act for http
-			httpPostWithAssert(t, fmt.Sprintf("%s/tests/send", outputExternalURL), body, http.StatusOK)
-
-			// This delay allows all the messages to reach corresponding input bindings.
-			time.Sleep(bindingPropagationDelay * time.Second)
-
-			// assert for HTTP
-			resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil, http.StatusOK)
-
-			var decodedResponse receivedTopicsResponse
-			err = json.Unmarshal(resp, &decodedResponse)
-			require.NoError(t, err)
-
-			// Only the first message fails, all other messages are successfully consumed.
-			// nine messages succeed.
-			require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
-			// one message fails.
-			require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
-			// routed binding will receive all messages
-			require.Equal(t, testMessages[0:], decodedResponse.RoutedMessages)
-
-			// act for gRPC
-			httpPostWithAssert(t, fmt.Sprintf("%s/tests/sendGRPC", outputExternalURL), body, http.StatusOK)
-
-			// This delay allows all the messages to reach corresponding input bindings.
-			time.Sleep(bindingPropagationDelay * time.Second)
-
-			// assert for gRPC
-			resp = httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics_grpc", outputExternalURL), nil, http.StatusOK)
-
-			// assert for gRPC
-			err = json.Unmarshal(resp, &decodedResponse)
-			require.NoError(t, err)
-
-			// Only the first message fails, all other messages are successfully consumed.
-			// nine messages succeed.
-			require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
-			// one message fails.
-			require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
-		})
+		t.Run(app.suite, testBindingsForApp(app))
 	}
 }
 
