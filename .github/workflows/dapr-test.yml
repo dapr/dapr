@@ -283,8 +283,13 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Login to cache registry
-        if: env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+      - name: Login to cache registry for Windows
+        if: runner.os == 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+        run: |
+          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken)
+          docker login ${{ env.DAPR_CACHE_REGISTRY }}.azurecr.io -u 00000000-0000-0000-0000-000000000000 -p $accessToken
+      - name: Login to cache registry for Linux or Mac
+        if: runner.os != 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
         run: |
           az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
         shell: bash
@@ -336,8 +341,13 @@ jobs:
             echo "Azure Container Registry not ready on time"
           fi
         shell: bash
-      - name: Login to Azure Container Registry
-        if: env.TEST_PREFIX != ''
+      - name: Login to Azure Container Registry for Windows
+        if: runner.os == 'Windows' && env.TEST_PREFIX != ''
+        run: |
+          $accessToken = (az acr login  -n ${{ env.TEST_PREFIX }}acr --expose-token --query accessToken)
+          docker login ${{ env.TEST_PREFIX }}acr.azurecr.io -u 00000000-0000-0000-0000-000000000000 -p $accessToken
+      - name: Login to Azure Container Registry for Linux or Mac
+        if: runner.os != 'Windows' && env.TEST_PREFIX != ''
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash
