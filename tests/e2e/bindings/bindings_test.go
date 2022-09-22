@@ -136,7 +136,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
+	if false && utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
 		const (
 			pluggableTestTopicSocket            = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic.sock"
 			pluggableTestGRPCTopicSocket        = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic-grpc.sock"
