@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220921204352-7b787d491072
+	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220922070409-9772c103c22c
 	github.com/dapr/kit v0.0.2
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.4
@@ -86,15 +86,15 @@ require (
 	github.com/Azure/azure-event-hubs-go/v3 v3.3.18 // indirect
 	github.com/Azure/azure-pipeline-go v0.2.3 // indirect
 	github.com/Azure/azure-sdk-for-go v65.0.0+incompatible // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.3 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.1-0.20220914204640-4d445978fe75 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.7.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.5.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.0.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azsecrets v0.10.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.1.0 // indirect
 	github.com/Azure/azure-storage-blob-go v0.10.0 // indirect
 	github.com/Azure/azure-storage-queue-go v0.0.0-20191125232315-636801874cdd // indirect
 	github.com/Azure/go-amqp v0.17.4 // indirect
