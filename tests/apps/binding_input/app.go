@@ -27,15 +27,23 @@ import (
 )
 
 const (
-	appPort             = 3000
-	DaprTestTopicEnvVar = "DAPR_TEST_TOPIC_NAME"
+	appPort                       = 3000
+	DaprTestTopicEnvVar           = "DAPR_TEST_TOPIC_NAME"
+	DaprTestCustomPathRouteEnvVar = "DAPR_TEST_CUSTOM_PATH_ROUTE"
 )
 
-var topicName = "test-topic"
+var (
+	topicName       = "test-topic"
+	topicCustomPath = "custom-path"
+)
 
 func init() {
 	if envTopicName := os.Getenv(DaprTestTopicEnvVar); len(envTopicName) != 0 {
 		topicName = envTopicName
+	}
+
+	if envCustomPath := os.Getenv(DaprTestCustomPathRouteEnvVar); len(envCustomPath) != 0 {
+		topicCustomPath = envCustomPath
 	}
 }
 
@@ -192,7 +200,7 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc(fmt.Sprintf("/%s", topicName), testTopicHandler).Methods("POST", "OPTIONS")
-	router.HandleFunc("/custom-path", testRoutedTopicHandler).Methods("POST", "OPTIONS")
+	router.HandleFunc(fmt.Sprintf("/%s", topicCustomPath), testRoutedTopicHandler).Methods("POST", "OPTIONS")
 	router.HandleFunc("/tests/get_received_topics", testHandler).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))

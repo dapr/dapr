@@ -95,23 +95,23 @@ spec:
   initTimeout: 1m
   version: v1
   metadata:
-  # Kafka broker connection setting
-  - name: brokers
-    value: dapr-kafka:9092
-  # consumer configuration: topic and consumer group
-  - name: topics
-    value: dapr-test-pluggable
-  - name: consumerGroup
-    value: group2-pluggable
-  # publisher configuration: topic
-  - name: publishTopic
-    value: dapr-test-pluggable
-  - name: authRequired
-    value: "false"
-    # set specify route
-  - name: route
-    value: /custom-path
-  - name: initialOffset
-    value: oldest
+    # Kafka broker connection setting
+    - name: brokers
+      value: dapr-kafka:9092
+    # consumer configuration: topic and consumer group
+    - name: topics
+      value: dapr-test-pluggable
+    - name: consumerGroup
+      value: group2-pluggable
+    # publisher configuration: topic
+    - name: publishTopic
+      value: dapr-test-pluggable
+    - name: authRequired
+      value: "false"
+      # set specify route
+    - name: route
+      value: /pluggable-custom-path
+    - name: initialOffset
+      value: oldest
 scopes:
   - pluggable-bindinginput
