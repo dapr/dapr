@@ -1901,10 +1901,10 @@ func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
-	thepubsub, pubsubName, topic, sc, msg := a.validateAndGetPubsubAndTopic(reqCtx)
-	if msg != nil {
-		respond(reqCtx, withError(sc, *msg))
-		log.Debug(*msg)
+	thepubsub, pubsubName, topic, sc, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
+	if errRes != nil {
+		respond(reqCtx, withError(sc, *errRes))
+		log.Debug(*errRes)
 
 		return
 	}
@@ -2006,10 +2006,10 @@ type bulkPublishMessageEntry struct {
 }
 
 func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
-	thepubsub, pubsubName, topic, sc, msg := a.validateAndGetPubsubAndTopic(reqCtx)
-	if msg != nil {
-		respond(reqCtx, withError(sc, *msg))
-		log.Debug(*msg)
+	thepubsub, pubsubName, topic, sc, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
+	if errRes != nil {
+		respond(reqCtx, withError(sc, *errRes))
+		log.Debug(*errRes)
 
 		return
 	}

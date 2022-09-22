@@ -400,4 +400,4 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // This ensures that go.mod and go.sum are up-to-date.
 
 // This is the feature/pubsub-batching branch in components-contrib, will be removed before merging into master branch of dapr
-replace github.com/dapr/components-contrib => github.com/dapr/components-contrib v1.8.0-rc.1.0.20220920200252-e9e750bce615
+replace github.com/dapr/components-contrib => github.com/dapr/components-contrib v1.8.0-rc.1.0.20220922190411-1652f48a3850

@@ -83,7 +83,7 @@ func newComponentMetrics() *componentMetrics {
 			"The number of bulk publish calls to the pub/sub component.",
 			stats.UnitDimensionless),
 		bulkPubsubEventEgressCount: stats.Int64(
-			"component/pubsub_egress/bulk/count",
+			"component/pubsub_egress/bulk/event_count",
 			"The number of outgoing messages to the pub/sub component published through bulk publish API.",
 			stats.UnitDimensionless),
 		bulkPubsubEgressLatency: stats.Float64(
