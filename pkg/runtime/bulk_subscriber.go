@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
-	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -303,7 +302,7 @@ func (a *DaprRuntime) createEnvelopeAndInvokeSubscriber(ctx context.Context, psm
 		case HTTPProtocol:
 			return a.publishBulkMessageHTTP(ctx, &psm, bulkResponses, *entryIDIndexMap, bulkSubDiag)
 		case GRPCProtocol:
-			return a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIDIndexMap)
+			return a.publishBulkMessageGRPC(ctx, &psm, bulkResponses, *entryIDIndexMap, bulkSubDiag)
 		default:
 			return backoff.Permanent(errors.New("invalid application protocol"))
 		}
@@ -440,7 +439,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
 func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBulkSubscribedMessage,
-	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap map[string]int,
+	bulkResponses *[]pubsub.BulkSubscribeResponseEntry, entryIDIndexMap map[string]int, bulkSubDiag *bulkSubIngressDiagnostics,
 ) error {
 	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(msg.entries))
 	for i, entry := range msg.entries {
@@ -462,7 +461,8 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 		Path:       msg.path,
 	}
 
-	spans := make([]trace.Span, 0)
+	spans := make([]trace.Span, len(msg.entries))
+	n := 0
 	for _, cloudEvent := range msg.cloudEvents {
 		if iTraceID, ok := cloudEvent[pubsub.TraceIDField]; ok {
 			if traceID, ok := iTraceID.(string); ok {
@@ -473,12 +473,14 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 				var span trace.Span
 				ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-				spans = append(spans, span)
+				spans[n] = span
+				n++
 			} else {
 				log.Warnf("ignored non-string traceid value: %v", iTraceID)
 			}
 		}
 	}
+	spans = spans[:n]
 	defer endSpans(spans)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
@@ -501,14 +503,16 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
 			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
+			bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(msg.entries))
+			bulkSubDiag.elapsed = elapsed
 			populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIDIndexMap, nil)
 			return nil
 		}
 
 		err = errors.Errorf("error returned from app while processing bulk pub/sub event: %s", err)
 		log.Debug(err)
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
+		bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(msg.entries))
+		bulkSubDiag.elapsed = elapsed
 		populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIDIndexMap, err)
 		// on error from application, return error for redelivery of event
 		return nil
@@ -521,22 +525,22 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 			case runtimev1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 				// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 				// success from protobuf definition
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
+				bulkSubDiag.statusWiseDiag[string(pubsub.Success)] += 1
 				(*bulkResponses)[entryID].EntryID = response.EntryID
 				(*bulkResponses)[entryID].Error = nil
 			case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
+				bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
 				(*bulkResponses)[entryID].EntryID = response.EntryID
 				(*bulkResponses)[entryID].Error = errors.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", response.EntryID)
 				hasAnyError = true
 			case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", response.EntryID)
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
+				bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += 1
 				(*bulkResponses)[entryID].EntryID = response.EntryID
 				(*bulkResponses)[entryID].Error = nil
 			default:
 				// Consider unknown status field as error and retry
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
+				bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
 				(*bulkResponses)[entryID].EntryID = response.EntryID
 				(*bulkResponses)[entryID].Error = errors.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", response.EntryID, response.GetStatus())
 				hasAnyError = true
@@ -551,8 +555,11 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 		if (*bulkResponses)[ind].EntryID == "" {
 			(*bulkResponses)[ind].EntryID = item.EntryID
 			(*bulkResponses)[ind].Error = errors.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryID)
+			hasAnyError = true
+			bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += 1
 		}
 	}
+	bulkSubDiag.elapsed = elapsed
 	if hasAnyError {
 		return errors.New("Few message(s) have failed during bulk subscribe operation")
 	} else {
