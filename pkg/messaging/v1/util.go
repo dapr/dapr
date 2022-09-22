@@ -195,7 +195,7 @@ func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
 	return strings.HasPrefix(originContentType, GRPCContentType)
 }
 
-func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
+func ReservedGRPCMetadataToDaprPrefixHeader(key string) string {
 	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 	if key == ":method" || key == ":scheme" || key == ":path" || key == ":authority" {
 		return DaprHeaderPrefix + key[1:]
@@ -230,7 +230,7 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		if len(listVal.Values) == 0 || strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader {
 			continue
 		}
-		setHeader(reservedGRPCMetadataToDaprPrefixHeader(keyName), listVal.Values[0])
+		setHeader(ReservedGRPCMetadataToDaprPrefixHeader(keyName), listVal.Values[0])
 	}
 	if IsGRPCProtocol(internalMD) {
 		// if grpcProtocol, then get grpc-trace-bin value, and attach it in HTTP traceparent and HTTP tracestate header
