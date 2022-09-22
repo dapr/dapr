@@ -29,7 +29,7 @@ service InputBinding {
   // connection, the client should re-establish the stream.
   rpc Read(stream ReadRequest) returns (stream ReadResponse) {}
 
-  // Ping the pubsub. Used for liveness porpuses.
+  // Ping the InputBinding. Used for liveness porpuses.
   rpc Ping(PingRequest) returns (PingResponse) {}
 }
 
@@ -43,7 +43,7 @@ service OutputBinding {
   // ListOperations list system supported operations.
   rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse) {}
 
-  // Ping the pubsub. Used for liveness porpuses.
+  // Ping the OutputBinding. Used for liveness porpuses.
   rpc Ping(PingRequest) returns (PingResponse) {}
 }
 // reserved for future-proof extensibility
