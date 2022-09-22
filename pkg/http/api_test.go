@@ -449,7 +449,43 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
-			assert.Contains(t, resp.ErrorBody["message"], "error: entryID is not present for entry")
+			assert.Contains(t, resp.ErrorBody["message"], "error: entryID is duplicated or not present for entry")
+		}
+	})
+
+	t.Run("Bulk Publish with duplicate entryID - 400", func(t *testing.T) {
+		reqWithoutEntryID := []bulkPublishMessageEntry{
+			{
+				EntryID: "1",
+				Event: map[string]string{
+					"key":   "first",
+					"value": "first value",
+				},
+				ContentType: "application/json",
+			},
+			{
+				EntryID: "1",
+				Event: map[string]string{
+					"key":   "second",
+					"value": "second value",
+				},
+				ContentType: "application/json",
+				Metadata: map[string]string{
+					"md1": "mdVal1",
+					"md2": "mdVal2",
+				},
+			},
+		}
+		reqBytesWithoutEntryID, _ := json.Marshal(reqWithoutEntryID)
+		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryID, nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Contains(t, resp.ErrorBody["message"], "error: entryID is duplicated or not present for entry")
 		}
 	})
 

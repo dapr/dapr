@@ -2043,6 +2043,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 	entries := make([]pubsub.BulkMessageEntry, len(incomingEntries))
 
+	entryIDSet := map[string]struct{}{}
+
 	for i, entry := range incomingEntries {
 		var dBytes []byte
 
@@ -2063,14 +2065,15 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			// override request level metadata.
 			entries[i].Metadata = populateMetadataForBulkPublishEntry(metadata, entry.Metadata)
 		}
-		if entry.EntryID == "" {
+		if _, ok := entryIDSet[entry.EntryID]; ok || entry.EntryID == "" {
 			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: entryID is not present for entry"))
+				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: entryID is duplicated or not present for entry"))
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 			log.Debug(msg)
 
 			return
 		}
+		entryIDSet[entry.EntryID] = struct{}{}
 		entries[i].EntryID = entry.EntryID
 	}
 
