@@ -578,8 +578,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		a.appHealthChanged(apphealth.AppStatusHealthy)
 	}
 
-	// Enable dynamic loading in standalone mode if dynamic components directory is provided
-	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.EnableDynamicLoading == true {
+	// Enable dynamic loading in standalone mode if enable dynamic loading flag is true and components path is provided
+	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.EnableDynamicLoading {
 		dir, err := os.Stat(a.runtimeConfig.Standalone.ComponentsPath)
 		if err != nil {
 			log.Fatalf("failed to get components directory: %s", err)
@@ -2182,17 +2182,7 @@ func (a *DaprRuntime) IsComponentLoaded(component componentsV1alpha1.Component) 
 	a.componentsLock.RLock()
 	defer a.componentsLock.RUnlock()
 	for _, loadedComp := range a.components {
-		if strings.Compare(component.ObjectMeta.Name, loadedComp.ObjectMeta.Name) == 0 {
-			if strings.Compare(component.Spec.Type, loadedComp.Spec.Type) == 0 {
-				if strings.Compare(component.Spec.Version, loadedComp.Spec.Version) == 0 {
-					log.Warnf("Cannot load multiple instances of same component with dynamic loading. Component name already in use - name: %s type: %s/%s. Skipping dynamic loading.", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
-					return true
-				} else {
-					log.Warnf("Component with different version already loaded. Cannot load multiple instances with same name. Component name in use - name: %s type: %s/%s. Skipping dynamic loading.", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
-					return true
-				}
-			}
-			log.Infof("Component name already in use - name: %s type: %s/%s. Skipping dynamic loading.", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+		if reflect.DeepEqual(loadedComp, component) {
 			return true
 		}
 	}

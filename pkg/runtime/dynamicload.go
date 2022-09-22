@@ -12,7 +12,7 @@ import (
 func (a *DaprRuntime) watchPathForDynamicLoading() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatal(err)
+		log.Errorf("unable to create watcher for dynamic components, dynamic loading will not be supported: %s", err)
 	}
 	defer watcher.Close()
 
@@ -23,24 +23,22 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 				if !ok {
 					return
 				}
-				log.Debug("file event:", event)
+				log.Debug("observed a file event in components directory:", event)
 				if event.Op == fsnotify.Create || event.Op == fsnotify.Write {
 					err := a.loadDynamicComponents(event.Name)
 					if err != nil {
-						log.Errorf("failed to load components from file: %s", event.Name)
+						log.Errorf("failed to load components from file: %s err: %s", event.Name, err)
 					}
 				} else if event.Op == fsnotify.Remove || event.Op == fsnotify.Rename {
-					log.Warnf("manifest file: %s removed from components directory.", filepath.Base(event.Name))
 					for _, comp := range a.dynamicComponents[DynamicComponentsManifest(event.Name)] {
-						log.Warnf("manifest for dynamic loaded component: %s of type: %s removed.", comp.Name, comp.Spec.Type)
+						log.Warnf("file: %s deleted, component: %s will not be loaded on sidecar restart.", filepath.Base(event.Name), comp.Name)
 					}
-					log.Warnf("to unload components from dapr, please restart dapr.")
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return
 				}
-				log.Error(err)
+				log.Errorf("error while watching components directory for file events: %s", err)
 			}
 		}
 	}()
@@ -53,13 +51,13 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 
 func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
 	loader := components.NewStandaloneComponents(a.runtimeConfig.Standalone)
-	log.Info("loading dynamic components...")
+	log.Info("found new file in components directory, loading components from file: %s", manifestPath)
 	fileComps := loader.LoadComponentsFromFile(manifestPath)
 	componentsToLoad := []componentsV1alpha1.Component{}
 
 	for _, comp := range fileComps {
 		if a.IsComponentLoaded(comp) {
-			log.Infof("component already loaded, skipping. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+			log.Infof("component is already loaded, skipping. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
 			continue
 		}
 		log.Infof("found component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
@@ -98,5 +96,6 @@ func (a *DaprRuntime) initDynamicComponent(comp componentsV1alpha1.Component) er
 			a.readFromBinding(a.inputBindingsCtx, comp.Name, a.inputBindings[comp.Name])
 		}
 	}
+	// No separate initialization is required for other component categories.
 	return nil
 }
