@@ -15,38 +15,34 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 		log.Errorf("unable to create watcher for dynamic components, dynamic loading will not be supported: %s", err)
 	}
 	defer watcher.Close()
-
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-				log.Debug("observed a file event in components directory:", event)
-				if event.Op == fsnotify.Create || event.Op == fsnotify.Write {
-					err := a.loadDynamicComponents(event.Name)
-					if err != nil {
-						log.Errorf("failed to load components from file: %s err: %s", event.Name, err)
-					}
-				} else if event.Op == fsnotify.Remove || event.Op == fsnotify.Rename {
-					for _, comp := range a.dynamicComponents[DynamicComponentsManifest(event.Name)] {
-						log.Warnf("file: %s deleted, component: %s will not be loaded on sidecar restart.", filepath.Base(event.Name), comp.Name)
-					}
-				}
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				log.Errorf("error while watching components directory for file events: %s", err)
-			}
-		}
-	}()
 	err = watcher.Add(a.runtimeConfig.Standalone.ComponentsPath)
 	if err != nil {
 		log.Error(err)
 	}
-	<-make(chan struct{})
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			log.Debug("observed a file event in components directory:", event)
+			if event.Op == fsnotify.Create || event.Op == fsnotify.Write {
+				err := a.loadDynamicComponents(event.Name)
+				if err != nil {
+					log.Errorf("failed to load components from file: %s err: %s", event.Name, err)
+				}
+			} else if event.Op == fsnotify.Remove || event.Op == fsnotify.Rename {
+				for _, comp := range a.dynamicComponents[DynamicComponentsManifest(event.Name)] {
+					log.Warnf("file: %s deleted, component: %s will not be loaded on sidecar restart.", filepath.Base(event.Name), comp.Name)
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Errorf("error while watching components directory for file events: %s", err)
+		}
+	}
 }
 
 func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {

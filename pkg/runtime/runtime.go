@@ -470,6 +470,18 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to load components: %s", err)
 	}
 
+	// Enable dynamic loading in standalone mode if enable dynamic loading flag is true and components path is provided
+	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.EnableDynamicLoading {
+		dir, err := os.Stat(a.runtimeConfig.Standalone.ComponentsPath)
+		if err != nil {
+			log.Fatalf("failed to get components directory: %s", err)
+		} else if !dir.IsDir() {
+			log.Fatalf("components path is not a directory: %s", a.runtimeConfig.Standalone.ComponentsPath)
+		} else {
+			go a.watchPathForDynamicLoading()
+		}
+	}
+
 	a.flushOutstandingComponents()
 
 	pipeline, err := a.buildHTTPPipeline()
@@ -576,18 +588,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	} else {
 		// If there's no health check, mark the app as healthy right away so subscriptions can start
 		a.appHealthChanged(apphealth.AppStatusHealthy)
-	}
-
-	// Enable dynamic loading in standalone mode if enable dynamic loading flag is true and components path is provided
-	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.EnableDynamicLoading {
-		dir, err := os.Stat(a.runtimeConfig.Standalone.ComponentsPath)
-		if err != nil {
-			log.Fatalf("failed to get components directory: %s", err)
-		} else if !dir.IsDir() {
-			log.Fatalf("components path is not a directory: %s", a.runtimeConfig.Standalone.ComponentsPath)
-		} else {
-			a.watchPathForDynamicLoading()
-		}
 	}
 	return nil
 }
