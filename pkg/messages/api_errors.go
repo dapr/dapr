@@ -68,6 +68,7 @@ const (
 
 	// Metadata.
 	ErrMetadataGet = "failed deserializing metadata: %s"
+	ErrMetadataSet = "failed setting metadata: %s"
 
 	// Healthz.
 	ErrHealthNotReady = "dapr is not ready"

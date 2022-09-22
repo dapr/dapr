@@ -1870,7 +1870,12 @@ func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 	key := fmt.Sprintf("%v", reqCtx.UserValue("key"))
 	body := reqCtx.PostBody()
-	_ = a.extendedMetadata.MetadataSet(key, string(body))
+	err := a.extendedMetadata.MetadataSet(key, string(body))
+	if err != nil {
+		msg := NewErrorResponse("ERR_METADATA_SET", fmt.Sprintf(messages.ErrMetadataSet, err.Error()))
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+	}
 	respond(reqCtx, withEmpty())
 }
 
