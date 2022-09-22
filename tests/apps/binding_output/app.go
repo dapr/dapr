@@ -31,16 +31,18 @@ import (
 )
 
 const (
-	appPort                 = 3000
-	daprPort                = 3500
-	DaprTestTopicEnvVar     = "DAPR_TEST_TOPIC_NAME"
-	DaprTestGRPCTopicEnvVar = "DAPR_TEST_GRPC_TOPIC_NAME"
+	appPort                          = 3000
+	daprPort                         = 3500
+	DaprTestTopicEnvVar              = "DAPR_TEST_TOPIC_NAME"
+	DaprTestGRPCTopicEnvVar          = "DAPR_TEST_GRPC_TOPIC_NAME"
+	DaprTestInputBindingServiceEnVar = "DAPR_TEST_INPUT_BINDING_SVC"
 )
 
 var (
-	daprClient    runtimev1pb.DaprClient
-	topicName     = "test-topic"
-	topicNameGrpc = "test-topic-grpc"
+	daprClient      runtimev1pb.DaprClient
+	topicName       = "test-topic"
+	topicNameGrpc   = "test-topic-grpc"
+	inputbindingSvc = "bindinginputgrpc"
 )
 
 func init() {
@@ -48,8 +50,12 @@ func init() {
 		topicName = envTopicName
 	}
 
-	if envTopicName := os.Getenv(DaprTestGRPCTopicEnvVar); len(envTopicName) != 0 {
-		topicNameGrpc = envTopicName
+	if envGrpcTopic := os.Getenv(DaprTestGRPCTopicEnvVar); len(envGrpcTopic) != 0 {
+		topicNameGrpc = envGrpcTopic
+	}
+
+	if envinputBinding := os.Getenv(DaprTestInputBindingServiceEnVar); len(envinputBinding) != 0 {
+		inputbindingSvc = envinputBinding
 	}
 }
 
@@ -146,7 +152,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Entered getReceivedTopicsGRPC")
 
 	req := runtimev1pb.InvokeServiceRequest{
-		Id: "bindinginputgrpc",
+		Id: inputbindingSvc,
 		Message: &commonv1pb.InvokeRequest{
 			Method: "GetReceivedTopics",
 			Data:   &anypb.Any{},
