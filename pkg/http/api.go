@@ -1164,7 +1164,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
 	var resp secretstores.GetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = store.GetSecret(req)
+		resp, rErr = store.GetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1205,7 +1205,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
 	var resp secretstores.BulkGetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = store.BulkGetSecret(req)
+		resp, rErr = store.BulkGetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
