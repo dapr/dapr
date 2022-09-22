@@ -284,7 +284,8 @@ func testBindingsForApp(app struct {
 	}
 }
 func TestBindings(t *testing.T) {
-	for _, app := range bindingsApps {
+	for idx := range bindingsApps {
+		app := bindingsApps[idx]
 		t.Run(app.suite, testBindingsForApp(app))
 	}
 }
