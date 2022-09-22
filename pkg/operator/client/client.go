@@ -16,6 +16,10 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
+const (
+	dialTimeout = 30 * time.Second
+)
+
 // GetOperatorClient returns a new k8s operator client and the underlying connection.
 // If a cert chain is given, a TLS connection will be established.
 func GetOperatorClient(address, serverName string, certChain *daprCredentials.CertChain) (operatorv1pb.OperatorClient, *grpc.ClientConn, error) {
@@ -47,7 +51,7 @@ func GetOperatorClient(address, serverName string, certChain *daprCredentials.Ce
 	// block for connection
 	opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)), grpc.WithBlock())
 
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), dialTimeout)
 	defer cancelFunc()
 	conn, err := grpc.DialContext(ctx, address, opts...)
 	if err != nil {
