@@ -1792,6 +1792,22 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	})
 }
 
+func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	ps, ok := a.pubSubs[req.PubsubName]
+	if !ok {
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
+	}
+
+	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
+	}
+	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
+		return bulkPublisher.BulkPublish(context.TODO(), req)
+	}
+
+	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(context.TODO(), req)
+}
+
 // Subscribe is used by APIs to start a subscription to a topic.
 func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]TopicRouteElem) (err error) {
 	_, ok := a.pubSubs[name]

@@ -102,6 +102,14 @@ func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName st
 	return ctx, span
 }
 
+func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace.Span) trace.Span {
+	path := string(ctx.Request.URI().Path())
+	netCtx := trace.ContextWithRemoteSpanContext(ctx, parentSpan.SpanContext())
+	kindOption := trace.WithSpanKind(trace.SpanKindProducer)
+	_, span := tracer.Start(netCtx, path, kindOption)
+	return span
+}
+
 // SpanContextFromRequest extracts a span context from incoming requests.
 func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok bool) {
 	h, ok := getRequestHeader(req, TraceparentHeader)
