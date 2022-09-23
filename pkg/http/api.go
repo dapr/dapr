@@ -2048,7 +2048,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	for i, entry := range incomingEntries {
 		var dBytes []byte
 
-		dBytes, cErr := convertEventToBytes(entry.Event, entry.ContentType)
+		dBytes, cErr := ConvertEventToBytes(entry.Event, entry.ContentType)
 		if cErr != nil {
 			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
 				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, cErr.Error()))

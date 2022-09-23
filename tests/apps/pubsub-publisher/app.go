@@ -41,8 +41,9 @@ const (
 	daprPortHTTP = 3500
 	daprPortGRPC = 50001
 
-	metadataPrefix = "metadata."
-	PubSubEnvVar   = "DAPR_TEST_PUBSUB_NAME"
+	metadataPrefix    = "metadata."
+	PubSubEnvVar      = "DAPR_TEST_PUBSUB_NAME"
+	bulkPubsubMetaKey = "bulkPublishPubsubName"
 )
 
 type bulkPublishMessageEntry struct {
@@ -52,7 +53,10 @@ type bulkPublishMessageEntry struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-var pubsubName = "messagebus"
+var (
+	pubsubName  = "messagebus"
+	pubsubKafka = "kafka-messagebus"
+)
 
 func init() {
 	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
@@ -107,13 +111,22 @@ func getBulkRequetMetadata(r *http.Request) map[string]string {
 	return metadata
 }
 
+func getBulkPublishPubsubOrDefault(reqMeta map[string]string) string {
+	if v, ok := reqMeta[bulkPubsubMetaKey]; ok {
+		delete(reqMeta, bulkPubsubMetaKey)
+		return v
+	}
+	return pubsubName
+}
+
 // when called by the test, this function publishes to dapr
 func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	reqID := "s-" + uuid.New().String()
 
 	reqMetadata := getBulkRequetMetadata(r)
-
+	pubsubToPublish := getBulkPublishPubsubOrDefault(reqMetadata)
+	log.Printf("publishing to pubsub %s", pubsubToPublish)
 	var commands []publishCommand
 	err := json.NewDecoder(r.Body).Decode(&commands)
 	r.Body.Close()
@@ -200,21 +213,86 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// publish to dapr
-	var status int
+	if protocol == "http" {
 
-	bulkRes, status, err := performBulkPublishHTTP(reqID, topic, jsonValue, reqMetadata)
-	if err != nil {
-		log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
-		log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes.ErrorCode)
-		for _, stat := range bulkRes.Statuses {
-			log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryID, stat.Status, stat.Error)
+		bulkRes, status, err := performBulkPublishHTTP(reqID, pubsubToPublish, topic, jsonValue, reqMetadata)
+		if err != nil {
+			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
+			log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes.ErrorCode)
+			for _, stat := range bulkRes.Statuses {
+				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryID, stat.Status, stat.Error)
+			}
+
+			w.WriteHeader(status)
+			json.NewEncoder(w).Encode(bulkRes)
+			return
+		}
+		// pass on status code to the calling application
+		w.WriteHeader(status)
+
+		endTime := time.Now()
+		duration := endTime.Sub(startTime)
+		if status == http.StatusOK || status == http.StatusNoContent {
+			log.Printf("(%s) BulkPublish succeeded in %v", reqID, formatDuration(duration))
+		} else {
+			log.Printf("(%s) BulkPublish failed in %v", reqID, formatDuration(duration))
 		}
 
-		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(bulkRes)
 		return
-	}
 
+	} else if protocol == "grpc" {
+		// Build runtimev1pb.BulkPublishRequestEntry objects
+
+		entries := make([]*runtimev1pb.BulkPublishRequestEntry, 0, len(bulkPublishMessage))
+		for _, entry := range bulkPublishMessage {
+			e := &runtimev1pb.BulkPublishRequestEntry{
+				EntryID:     entry.EntryID,
+				ContentType: entry.ContentType,
+				Metadata:    entry.Metadata,
+			}
+			// All data coming into gRPC must be in bytes only
+			data, err := daprhttp.ConvertEventToBytes(entry.Event, entry.ContentType)
+			if err != nil {
+				log.Printf("(%s) Error Marshaling: %v", reqID, err)
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(appResponse{
+					Message: err.Error(),
+				})
+				return
+			}
+			e.Event = data
+			entries = append(entries, e)
+		}
+
+		bulkRes, status, err := performBulkPublishGRPC(reqID, pubsubToPublish, topic, entries, reqMetadata)
+		log.Printf("status code %d", status)
+		if err != nil {
+			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
+			log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes)
+			for _, stat := range bulkRes.Statuses {
+				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryID, stat.Status, stat.Error)
+			}
+
+			w.WriteHeader(status)
+			json.NewEncoder(w).Encode(bulkRes)
+			return
+		}
+		// pass on status code to the calling application
+		w.WriteHeader(status)
+
+		endTime := time.Now()
+		duration := endTime.Sub(startTime)
+		if status == http.StatusOK || status == http.StatusNoContent {
+			log.Printf("(%s) BulkPublish succeeded in %v", reqID, formatDuration(duration))
+		} else {
+			log.Printf("(%s) BulkPublish failed in %v", reqID, formatDuration(duration))
+		}
+
+		json.NewEncoder(w).Encode("Done")
+		return
+	}
+	status := http.StatusBadRequest
 	// pass on status code to the calling application
 	w.WriteHeader(status)
 
@@ -226,11 +304,35 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 		log.Printf("(%s) BulkPublish failed in %v", reqID, formatDuration(duration))
 	}
 
-	json.NewEncoder(w).Encode(bulkRes)
+	json.NewEncoder(w).Encode("Done")
 }
 
-func performBulkPublishHTTP(reqID string, topic string, jsonValue []byte, reqMeta map[string]string) (daprhttp.BulkPublishResponse, int, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/%s", daprPortHTTP, pubsubName, topic)
+func performBulkPublishGRPC(reqID string, pubsubToPublish, topic string, entries []*runtimev1pb.BulkPublishRequestEntry, reqMeta map[string]string) (*runtimev1pb.BulkPublishResponse, int, error) {
+	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
+	log.Printf("Connecting to dapr using url %s", url)
+
+	// change from default pubsub
+	req := &runtimev1pb.BulkPublishRequest{
+		PubsubName: pubsubToPublish,
+		Topic:      topic,
+		Metadata:   reqMeta,
+		Entries:    entries,
+	}
+	log.Printf("Pubsub to publish to is %s", req.PubsubName)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	res, err := grpcClient.BulkPublishEventAlpha1(ctx, req)
+	cancel()
+	log.Printf("Error is there? %v", err != nil)
+	if err != nil {
+		log.Printf("(%s) Publish failed with response : %v", reqID, res)
+		log.Printf("(%s) Publish failed: %v", reqID, err)
+		return res, http.StatusInternalServerError, err
+	}
+	return res, http.StatusOK, nil
+}
+
+func performBulkPublishHTTP(reqID string, pubsubToPublish, topic string, jsonValue []byte, reqMeta map[string]string) (daprhttp.BulkPublishResponse, int, error) {
+	url := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/%s", daprPortHTTP, pubsubToPublish, topic)
 	if len(reqMeta) > 0 {
 		params := netUrl.Values{}
 		for k, v := range reqMeta {

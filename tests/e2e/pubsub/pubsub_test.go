@@ -63,6 +63,8 @@ const (
 	redisPubSubPluggableApp    = "e2e-pluggable_redis-pubsub"
 	PubSubEnvVar               = "DAPR_TEST_PUBSUB_NAME"
 	PubSubPluggableName        = "pluggable-messagebus"
+	pubsubKafka                = "kafka-messagebus"
+	bulkPubsubMetaKey          = "bulkPublishPubsubName"
 )
 
 var (
@@ -95,6 +97,7 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicBulk       []string `json:"pubsub-bulk-topic"`
 	ReceivedByTopicRawBulk    []string `json:"pubsub-raw-bulk-topic"`
 	ReceivedByTopicCEBulk     []string `json:"pubsub-ce-bulk-topic"`
+	ReceivedByTopicDefBulk    []string `json:"pubsub-def-bulk-topic"`
 	ReceivedByTopicRaw        []string `json:"pubsub-raw-topic"`
 	ReceivedByTopicDead       []string `json:"pubsub-dead-topic"`
 	ReceivedByTopicDeadLetter []string `json:"pubsub-deadletter-topic"`
@@ -245,21 +248,31 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 }
 
 func testPublishBulk(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
-	sentTopicBulkMessages, err := sendToPublisherBulk(t, publisherExternalURL, "pubsub-bulk-topic", protocol, nil, "")
-	require.NoError(t, err)
 	meta := map[string]string{
-		"rawPayload": "true",
+		bulkPubsubMetaKey: pubsubKafka,
+	}
+	sentTopicBulkMessages, err := sendToPublisherBulk(t, publisherExternalURL, "pubsub-bulk-topic", protocol, meta, "")
+	require.NoError(t, err)
+
+	sentTopicBulkCEMessages, err := sendToPublisherBulk(t, publisherExternalURL, "pubsub-ce-bulk-topic", protocol, meta, "myevent.CE")
+	require.NoError(t, err)
+
+	meta = map[string]string{
+		bulkPubsubMetaKey: pubsubKafka,
+		"rawPayload":      "true",
 	}
 	sentTopicBulkRawMessages, err := sendToPublisherBulk(t, publisherExternalURL, "pubsub-raw-bulk-topic", protocol, meta, "")
 	require.NoError(t, err)
 
-	sentTopicBulkCEMessages, err := sendToPublisherBulk(t, publisherExternalURL, "pubsub-ce-bulk-topic", protocol, nil, "myevent.CE")
+	// empty pubsub will default to existing pubsub via redis
+	sentTopicBulkDefMessages, err := sendToPublisherBulk(t, publisherExternalURL, "pubsub-def-bulk-topic", protocol, nil, "myevent.CE")
 	require.NoError(t, err)
 
 	return receivedMessagesResponse{
 		ReceivedByTopicBulk:    sentTopicBulkMessages,
 		ReceivedByTopicRawBulk: sentTopicBulkRawMessages,
 		ReceivedByTopicCEBulk:  sentTopicBulkCEMessages,
+		ReceivedByTopicDefBulk: sentTopicBulkDefMessages,
 	}
 }
 
@@ -472,15 +485,17 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 
 		log.Printf(
 			"subscriber received %d/%d messages on pubsub-bulk-topic, %d/%d messages on pubsub-raw-bulk-topic "+
-				"and %d/%d messages on pubsub-ce-bulk-topic",
+				", %d/%d messages on pubsub-ce-bulk-topic and %d/%d messages on pubsub-def-bulk-topic",
 			len(appResp.ReceivedByTopicBulk), len(sentMessages.ReceivedByTopicBulk),
 			len(appResp.ReceivedByTopicRawBulk), len(sentMessages.ReceivedByTopicRawBulk),
 			len(appResp.ReceivedByTopicCEBulk), len(sentMessages.ReceivedByTopicCEBulk),
+			len(appResp.ReceivedByTopicDefBulk), len(sentMessages.ReceivedByTopicDefBulk),
 		)
 
 		if len(appResp.ReceivedByTopicBulk) != len(sentMessages.ReceivedByTopicBulk) ||
 			len(appResp.ReceivedByTopicRawBulk) != len(sentMessages.ReceivedByTopicRawBulk) ||
-			len(appResp.ReceivedByTopicCEBulk) != len(sentMessages.ReceivedByTopicCEBulk) {
+			len(appResp.ReceivedByTopicCEBulk) != len(sentMessages.ReceivedByTopicCEBulk) ||
+			len(appResp.ReceivedByTopicDefBulk) != len(sentMessages.ReceivedByTopicDefBulk) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(10 * time.Second)
 		} else {
@@ -496,10 +511,13 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 	sort.Strings(appResp.ReceivedByTopicRawBulk)
 	sort.Strings(sentMessages.ReceivedByTopicCEBulk)
 	sort.Strings(appResp.ReceivedByTopicCEBulk)
+	sort.Strings(sentMessages.ReceivedByTopicDefBulk)
+	sort.Strings(appResp.ReceivedByTopicDefBulk)
 
 	assert.Equal(t, sentMessages.ReceivedByTopicBulk, appResp.ReceivedByTopicBulk, "different messages received in Topic Bulk")
 	assert.Equal(t, sentMessages.ReceivedByTopicRawBulk, appResp.ReceivedByTopicRawBulk, "different messages received in Topic Raw Bulk")
 	assert.Equal(t, sentMessages.ReceivedByTopicCEBulk, appResp.ReceivedByTopicCEBulk, "different messages received in Topic CE Bulk")
+	assert.Equal(t, sentMessages.ReceivedByTopicDefBulk, appResp.ReceivedByTopicDefBulk, "different messages received in Topic Def Bulk impl redis")
 }
 
 func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, validateDeadLetter bool, sentMessages receivedMessagesResponse) {
