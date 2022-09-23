@@ -21,6 +21,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
@@ -159,6 +160,34 @@ func (g *grpcMetrics) ServerRequestSent(ctx context.Context, method, status stri
 	}
 }
 
+func (g *grpcMetrics) StreamServerRequestSent(ctx context.Context, method, status string, start time.Time) {
+	if g.enabled {
+		elapsed := float64(time.Since(start) / time.Millisecond)
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
+			g.serverCompletedRpcs.M(1))
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
+			g.serverLatency.M(elapsed))
+	}
+}
+
+func (g *grpcMetrics) StreamClientRequestSent(ctx context.Context, method, status string, start time.Time) {
+	if g.enabled {
+		elapsed := float64(time.Since(start) / time.Millisecond)
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
+			g.clientCompletedRpcs.M(1))
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
+			g.clientRoundtripLatency.M(elapsed))
+	}
+}
+
 func (g *grpcMetrics) ClientRequestSent(ctx context.Context, method string, contentSize int64) time.Time {
 	if g.enabled {
 		stats.RecordWithTags(
@@ -253,6 +282,41 @@ func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method 
 		} else {
 			g.ClientRequestReceived(ctx, method, status.Code(err).String(), int64(size), start)
 		}
+
+		return err
+	}
+}
+
+// StreamingServerInterceptor is a stream interceptor for gRPC proxying calls that arrive from the application to Dapr
+func (g *grpcMetrics) StreamingServerInterceptor() grpc.StreamServerInterceptor {
+	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		md, _ := metadata.FromIncomingContext(ss.Context())
+		vals := md.Get(GRPCProxyAppIDKey)
+		if len(vals) == 0 {
+			return handler(srv, ss)
+		}
+
+		now := time.Now()
+		err := handler(srv, ss)
+		g.StreamServerRequestSent(ss.Context(), info.FullMethod, status.Code(err).String(), now)
+
+		return err
+	}
+}
+
+// StreamingClientInterceptor is a stream interceptor for gRPC proxying calls that arrive from a remote Dapr sidecar
+func (g *grpcMetrics) StreamingClientInterceptor() grpc.StreamServerInterceptor {
+	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		md, _ := metadata.FromIncomingContext(ss.Context())
+
+		vals := md.Get(GRPCProxyAppIDKey)
+		if len(vals) == 0 {
+			return handler(srv, ss)
+		}
+
+		now := time.Now()
+		err := handler(srv, ss)
+		g.StreamClientRequestSent(ss.Context(), info.FullMethod, status.Code(err).String(), now)
 
 		return err
 	}

@@ -38,7 +38,8 @@ func (m *MockPubSub) Close() error {
 }
 
 func (m *MockPubSub) Features() []pubsub.Feature {
-	return nil
+	args := m.Called()
+	return args.Get(0).([]pubsub.Feature)
 }
 
 func (m *MockPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {

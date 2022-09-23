@@ -32,7 +32,7 @@ import (
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 var appPort = 3000
@@ -62,7 +62,7 @@ func main() {
 
 	/* #nosec */
 	s := grpc.NewServer()
-	pb.RegisterAppCallbackServer(s, &server{})
+	runtimev1pb.RegisterAppCallbackServer(s, &server{})
 
 	fmt.Println("Client starting...")
 
@@ -149,9 +149,9 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 
 // ListTopicSubscriptions Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
 // To subscribe to a topic named TopicA
-func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
-	return &pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*commonv1pb.TopicSubscription{
+func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+	return &runtimev1pb.ListTopicSubscriptionsResponse{
+		Subscriptions: []*runtimev1pb.TopicSubscription{
 			{
 				Topic: "TopicA",
 			},
@@ -161,22 +161,22 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 
 // ListInputBindings Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
 // To invoke our app with a binding named storage
-func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
-	return &pb.ListInputBindingsResponse{
+func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
+	return &runtimev1pb.ListInputBindingsResponse{
 		Bindings: []string{"storage"},
 	}, nil
 }
 
 // OnBindingEvent This method gets invoked every time a new event is fired from a registered binding.
 // The message carries the binding name, a payload and optional metadata
-func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
+func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
 	fmt.Println("Invoked from binding")
-	return &pb.BindingEventResponse{}, nil
+	return &runtimev1pb.BindingEventResponse{}, nil
 }
 
 // OnTopicEvent This method is fired whenever a message has been published to a topic that has been subscribed.
 // Dapr sends published messages in a CloudEvents 1.0 envelope.
-func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*pb.TopicEventResponse, error) {
+func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
 	fmt.Println("Topic message arrived")
-	return &pb.TopicEventResponse{}, nil
+	return &runtimev1pb.TopicEventResponse{}, nil
 }
