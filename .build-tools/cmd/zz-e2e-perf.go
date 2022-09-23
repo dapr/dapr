@@ -242,7 +242,7 @@ func (c *cmdE2EPerf) getCachedImage() (string, error) {
 	}
 
 	// If cache is enable, try pulling from cache first
-	cachedImage := fmt.Sprintf("%s/%s-%s:%s-%s", c.flags.CacheRegistry, c.cmdType, c.flags.Name, c.flags.TargetOS, hashDir)
+	cachedImage := fmt.Sprintf("%s/%s-%s:%s-%s-%s", c.flags.CacheRegistry, c.cmdType, c.flags.Name, c.flags.TargetOS, c.flags.TargetArch, hashDir)
 	return cachedImage, nil
 }
 
@@ -305,12 +305,22 @@ func (c *cmdE2EPerf) buildDockerImage(cachedImage string) error {
 
 	// Build the Docker image
 	fmt.Printf("Building Docker image: %s\n", destImage)
-	e := exec.Command("docker",
+	args := []string{
 		"build",
 		"-f", dockerfile,
 		"-t", destImage,
 		filepath.Join(appDir, c.flags.Name, "."),
-	)
+	}
+	switch c.flags.TargetArch {
+	case "arm64":
+		args = append(args, "--platform", c.flags.TargetOS+"/arm64/v8")
+	case "amd64":
+		args = append(args, "--platform", c.flags.TargetOS+"/amd64")
+	default:
+		args = append(args, "--platform", c.flags.TargetOS+"/amd64")
+	}
+	e := exec.Command("docker", args...)
+
 	e.Stdout = os.Stdout
 	e.Stderr = os.Stderr
 	err = e.Run()

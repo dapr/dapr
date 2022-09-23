@@ -193,9 +193,8 @@ func UpdateSpanStatusFromGRPCError(span trace.Span, err error) {
 		return
 	}
 
-	_, ok := status.FromError(err)
-	if ok {
-		span.SetStatus(otelcodes.Ok, "")
+	if e, ok := status.FromError(err); ok {
+		span.SetStatus(otelcodes.Error, e.Message())
 	} else {
 		span.SetStatus(otelcodes.Error, err.Error())
 	}

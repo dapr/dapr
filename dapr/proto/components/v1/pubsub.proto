@@ -1,0 +1,106 @@
+/*
+Copyright 2022 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.components.v1;
+
+import "dapr/proto/components/v1/common.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/components/v1;components";
+
+// PubSub service provides a gRPC interface for pubsub components.
+service PubSub {
+  // Initializes the pubsub component with the given metadata.
+  rpc Init(PubSubInitRequest) returns (PubSubInitResponse) {}
+
+  // Returns a list of implemented pubsub features.
+  rpc Features(FeaturesRequest) returns (FeaturesResponse) {}
+
+  // Publish publishes a new message for the given topic.
+  rpc Publish(PublishRequest) returns (PublishResponse) {}
+
+  // Establishes a stream with the server (PubSub component), which sends
+  // messages down to the client (daprd). The client streams acknowledgements
+  // back to the server. The server will close the stream and return the status
+  // on any error. In case of closed connection, the client should re-establish
+  // the stream. The first message MUST contain a `topic` attribute on it that
+  // should be used for the entire streaming pull.
+  rpc PullMessages(stream PullMessagesRequest)
+      returns (stream PullMessagesResponse) {}
+
+  // Ping the pubsub. Used for liveness porpuses.
+  rpc Ping(PingRequest) returns (PingResponse) {}
+}
+
+// Used for describing errors when ack'ing messages.
+message AckMessageError {
+  string message = 1;
+}
+
+// Used for acknowledge a message.
+message PullMessagesRequest {
+  // Required. The subscribed topic for which to initialize the new stream. This
+  // must be provided in the first request on the stream, and must not be set in
+  // subsequent requests from client to server.
+  Topic topic = 1;
+  // The unique message ID.
+  string ack_message_id = 2;
+  // Optional, should not be fulfilled when the message was successfully
+  // handled.
+  AckMessageError ack_error = 3;
+}
+
+// PubSubInitRequest is the request for initializing the pubsub component.
+message PubSubInitRequest {
+  // The metadata request.
+  MetadataRequest metadata = 1;
+}
+
+// reserved for future-proof extensibility
+message PubSubInitResponse {}
+
+message PublishRequest {
+  bytes data = 1;
+  // The pubsub name.
+  string pubsub_name = 2;
+  // The publishing topic.
+  string topic = 3;
+  // Message metadata.
+  map<string, string> metadata = 4;
+  // The data content type.
+  string content_type = 5;
+}
+
+// reserved for future-proof extensibility
+message PublishResponse {}
+
+message Topic {
+  // The topic name desired to be subscribed
+  string name = 1;
+  // Metadata related subscribe request.
+  map<string, string> metadata = 2;
+}
+
+message PullMessagesResponse {
+  // The message content.
+  bytes data = 1;
+  // The topic where the message come from.
+  string topic_name = 2;
+  // The message related metadata.
+  map<string, string> metadata = 3;
+  // The message content type.
+  string content_type = 4;
+  // The message {transient} ID. Its used for ack'ing it later.
+  string id = 5;
+}

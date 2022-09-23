@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -43,7 +44,16 @@ const (
 	pubsubBulkTopic    = "pubsub-bulk-topic-http"
 	pubsubRawBulkTopic = "pubsub-raw-bulk-topic-http"
 	pubsubCEBulkTopic  = "pubsub-ce-bulk-topic-http"
+	PubSubEnvVar       = "DAPR_TEST_PUBSUB_NAME"
 )
+
+var pubsubName = "messagebus"
+
+func init() {
+	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
+		pubsubName = psName
+	}
+}
 
 type appResponse struct {
 	// Status field for proper handling of errors form pubsub
@@ -117,8 +127,6 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 // this handles /dapr/subscribe, which is called from dapr into this app.
 // this returns the list of topics the app is subscribed to.
 func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
-	pubsubName := "messagebus"
-
 	t := []subscription{
 		{
 			PubsubName: pubsubName,

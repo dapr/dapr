@@ -50,7 +50,8 @@ func (m *MockPubSub) Close() error {
 }
 
 func (m *MockPubSub) Features() []pubsub.Feature {
-	return nil
+	args := m.Called()
+	return args.Get(0).([]pubsub.Feature)
 }
 
 // FailingPubsub is a mock pubsub component object that simulates failures.
