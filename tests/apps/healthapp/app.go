@@ -381,7 +381,7 @@ func (s *grpcServer) OnInvoke(_ context.Context, in *commonv1pb.InvokeRequest) (
 
 func (s *grpcServer) ListTopicSubscriptions(_ context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 	return &runtimev1pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*commonv1pb.TopicSubscription{
+		Subscriptions: []*runtimev1pb.TopicSubscription{
 			{
 				PubsubName: "inmemorypubsub",
 				Topic:      "mytopic",
