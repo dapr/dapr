@@ -124,7 +124,6 @@ func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
 	if ok && t.send != nil {
 		send = t.send
 	}
-	m.lock.Unlock()
 
 	if send != nil {
 		send <- &pubsub.NewMessage{
@@ -134,7 +133,7 @@ func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
 			ContentType: req.ContentType,
 		}
 	}
-
+	m.lock.Unlock()
 	return nil
 }
 
