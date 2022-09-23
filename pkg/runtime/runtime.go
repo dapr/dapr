@@ -1805,7 +1805,6 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 		return bulkPublisher.BulkPublish(context.TODO(), req)
 	}
 
-	log.Warnf("pubsub %s does not implment the bulkPublish API, defaulting to normal publish", req.PubsubName)
 	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(context.TODO(), req)
 }
 
