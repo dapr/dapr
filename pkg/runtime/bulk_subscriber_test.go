@@ -23,7 +23,6 @@ import (
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	commonV1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/kit/logger"
@@ -656,11 +655,11 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		)
 
 		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*commonV1.TopicSubscription{
+			Subscriptions: []*runtimev1pb.TopicSubscription{
 				{
 					PubsubName: testBulkSubscribePubsub,
 					Topic:      "topic0",
-					Routes: &commonV1.TopicRoutes{
+					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
 					Metadata: map[string]string{"bulkSubscribe": "true", "rawPayload": "true"},
@@ -738,12 +737,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		)
 
 		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*commonV1.TopicSubscription{
+			Subscriptions: []*runtimev1pb.TopicSubscription{
 				{
 					PubsubName: testBulkSubscribePubsub,
 					Topic:      "topic0",
-					Routes: &commonV1.TopicRoutes{
-						Rules: []*commonV1.TopicRule{
+					Routes: &runtimev1pb.TopicRoutes{
+						Rules: []*runtimev1pb.TopicRule{
 							{
 								Path:  "orders1",
 								Match: `event.type == "type1"`,
@@ -856,11 +855,11 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		)
 
 		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*commonV1.TopicSubscription{
+			Subscriptions: []*runtimev1pb.TopicSubscription{
 				{
 					PubsubName: testBulkSubscribePubsub,
 					Topic:      "topic0",
-					Routes: &commonV1.TopicRoutes{
+					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
 					Metadata: map[string]string{"bulkSubscribe": "true"},
@@ -934,11 +933,11 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		)
 
 		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*commonV1.TopicSubscription{
+			Subscriptions: []*runtimev1pb.TopicSubscription{
 				{
 					PubsubName: testBulkSubscribePubsub,
 					Topic:      "topic0",
-					Routes: &commonV1.TopicRoutes{
+					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
 					Metadata: map[string]string{"bulkSubscribe": "true"},
@@ -1024,11 +1023,11 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		)
 
 		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*commonV1.TopicSubscription{
+			Subscriptions: []*runtimev1pb.TopicSubscription{
 				{
 					PubsubName: testBulkSubscribePubsub,
 					Topic:      "topic0",
-					Routes: &commonV1.TopicRoutes{
+					Routes: &runtimev1pb.TopicRoutes{
 						Default: "orders",
 					},
 					Metadata: map[string]string{"bulkSubscribe": "true"},
