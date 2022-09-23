@@ -1424,7 +1424,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
-	if len(a.pubSubs) == 0 {
+	if len(a.pubSubs) == 0 && !a.runtimeConfig.Standalone.EnableDynamicLoading {
 		return nil
 	}
 
