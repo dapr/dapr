@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
+	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
 
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 
@@ -36,8 +37,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 )
 
 type outputBindingServer struct {
@@ -83,34 +82,15 @@ func (b *outputBindingServer) Ping(context.Context, *proto.PingRequest) (*proto.
 	return &proto.PingResponse{}, nil
 }
 
-// getOutputBinding returns a outputbinding connected to the given server
-func getOutputBinding(srv *outputBindingServer) (outputBinding *grpcOutputBinding, cleanup func(), err error) {
-	lis := bufconn.Listen(bufSize)
-	s := grpc.NewServer()
-	proto.RegisterOutputBindingServer(s, srv)
-	go func() {
-		if serveErr := s.Serve(lis); serveErr != nil {
-			testLogger.Debugf("Server exited with error: %v", serveErr)
-		}
-	}()
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
-		return lis.Dial()
-	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	client := proto.NewOutputBindingClient(conn)
-	outputBinding = outputFromConnector(testLogger, pluggable.NewGRPCConnector(components.Pluggable{}, proto.NewOutputBindingClient))
-	outputBinding.Client = client
-	return outputBinding, func() {
-		lis.Close()
-		conn.Close()
-	}, nil
-}
-
 func TestOutputBindingCalls(t *testing.T) {
+	getOutputBinding := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *outputBindingServer) {
+		proto.RegisterOutputBindingServer(s, svc)
+	}, func(cci grpc.ClientConnInterface) *grpcOutputBinding {
+		client := proto.NewOutputBindingClient(cci)
+		outbinding := outputFromConnector(testLogger, pluggable.NewGRPCConnector(components.Pluggable{}, proto.NewOutputBindingClient))
+		outbinding.Client = client
+		return outbinding
+	})
 	if runtime.GOOS != "windows" {
 		t.Run("test init should populate features and call grpc init", func(t *testing.T) {
 			const (
