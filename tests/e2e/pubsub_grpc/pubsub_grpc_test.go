@@ -25,15 +25,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
-	"github.com/google/uuid"
-	"go.uber.org/ratelimit"
-
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+
+	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/ratelimit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -160,7 +160,7 @@ func sendToPublisherBulk(t *testing.T, publisherExternalURL string, topic string
 		individualMessages = append(individualMessages, messageID)
 	}
 
-	jsonValue, err := json.Marshal(commands)
+	jsonValue, _ := json.Marshal(commands)
 
 	// this is the publish app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/bulkpublish", publisherExternalURL)
@@ -361,8 +361,10 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 
 //nolint:staticcheck
 func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
+	var err error
+	var code int
 	log.Printf("Validating publisher health...\n")
-	_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
+	_, err = utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
@@ -385,7 +387,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			time.Sleep(10 * time.Second)
 		}
 		lastRetryError = nil
-		_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+		_, code, err = utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
 		if err != nil {
 			lastRetryError = err
 			continue

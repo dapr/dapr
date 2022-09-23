@@ -53,10 +53,7 @@ type bulkPublishMessageEntry struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-var (
-	pubsubName  = "messagebus"
-	pubsubKafka = "kafka-messagebus"
-)
+var pubsubName = "messagebus"
 
 func init() {
 	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
@@ -214,7 +211,6 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 	}
 	// publish to dapr
 	if protocol == "http" {
-
 		bulkRes, status, err := performBulkPublishHTTP(reqID, pubsubToPublish, topic, jsonValue, reqMetadata)
 		if err != nil {
 			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
@@ -240,10 +236,8 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 
 		json.NewEncoder(w).Encode(bulkRes)
 		return
-
 	} else if protocol == "grpc" {
 		// Build runtimev1pb.BulkPublishRequestEntry objects
-
 		entries := make([]*runtimev1pb.BulkPublishRequestEntry, 0, len(bulkPublishMessage))
 		for _, entry := range bulkPublishMessage {
 			e := &runtimev1pb.BulkPublishRequestEntry{
