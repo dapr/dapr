@@ -5,6 +5,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/fsnotify/fsnotify"
+	"github.com/pkg/errors"
 
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
@@ -74,12 +75,14 @@ func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
 		if err != nil {
 			if !comp.Spec.IgnoreErrors {
 				log.Warnf("error processing component %s, error: %s", comp.Name, err.Error())
+				return err
 			}
 			log.Errorf(err.Error())
 		}
 		err = a.initDynamicComponent(comp)
 		if err != nil {
 			log.Errorf("error initializing component %s, error: %s", comp.Name, err.Error())
+			return err
 		}
 	}
 	return nil
@@ -87,13 +90,21 @@ func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
 
 func (a *DaprRuntime) initDynamicComponent(comp componentsV1alpha1.Component) error {
 	cat := a.extractComponentCategory(comp)
-	if cat == pubsubComponent {
+	switch cat {
+	case pubsubComponent:
 		err := a.beginPubSub(comp.Name)
 		if err != nil {
 			return err
 		}
-	} else if cat == bindingsComponent {
+	case bindingsComponent:
 		if a.bindingsRegistry.HasInputBinding(comp.Spec.Type, comp.Spec.Version) {
+			if a.appChannel == nil {
+				return errors.New("app channel not initialized")
+			}
+			if !a.isAppSubscribedToBinding(comp.Name) {
+				log.Infof("app has not subscribed to binding %s.", comp.Name)
+				return nil
+			}
 			err := a.readFromBinding(a.inputBindingsCtx, comp.Name, a.inputBindings[comp.Name])
 			if err != nil {
 				return err
