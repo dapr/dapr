@@ -16,7 +16,7 @@ kind: PluggableComponent
 metadata:
   name: kafka-output
 spec:
-  name: kafka-pluggable
+  componentName: kafka-pluggable
   type: outputbinding
   version: v1
 ---
@@ -25,7 +25,7 @@ kind: PluggableComponent
 metadata:
   name: kafka-input
 spec:
-  name: kafka-pluggable
+  componentName: kafka-pluggable
   type: inputbinding
   version: v1
 ---
