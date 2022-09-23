@@ -13,11 +13,13 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Errorf("unable to create watcher for dynamic components, dynamic loading will not be supported: %s", err)
+		return
 	}
 	defer watcher.Close()
 	err = watcher.Add(a.runtimeConfig.Standalone.ComponentsPath)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("unable to watch components directory: %s , err: %s , dynamic loading will not be supported", a.runtimeConfig.Standalone.ComponentsPath, err)
+		return
 	}
 	for {
 		select {
@@ -86,10 +88,16 @@ func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
 func (a *DaprRuntime) initDynamicComponent(comp componentsV1alpha1.Component) error {
 	cat := a.extractComponentCategory(comp)
 	if cat == pubsubComponent {
-		a.beginPubSub(comp.Name)
+		err := a.beginPubSub(comp.Name)
+		if err != nil {
+			return err
+		}
 	} else if cat == bindingsComponent {
 		if a.bindingsRegistry.HasInputBinding(comp.Spec.Type, comp.Spec.Version) {
-			a.readFromBinding(a.inputBindingsCtx, comp.Name, a.inputBindings[comp.Name])
+			err := a.readFromBinding(a.inputBindingsCtx, comp.Name, a.inputBindings[comp.Name])
+			if err != nil {
+				return err
+			}
 		}
 	}
 	// No separate initialization is required for other component categories.

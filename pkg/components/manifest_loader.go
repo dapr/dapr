@@ -21,5 +21,6 @@ type kubernetesManifest interface {
 type ManifestLoader[T kubernetesManifest] interface {
 	// Load loads all manifests.
 	Load() ([]T, error)
+	// LoadManifestsFromFile loads manifests contained in a file.
 	LoadManifestsFromFile(manifestPath string) []T
 }
