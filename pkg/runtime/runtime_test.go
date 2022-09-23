@@ -182,7 +182,7 @@ func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
 	return nil
 }
 
-func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (m *MockKubernetesStateStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"key1":   "value1",
@@ -192,7 +192,7 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 	}, nil
 }
 
-func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+func (m *MockKubernetesStateStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
 	response := map[string]map[string]string{}
 	response["k8s-secret"] = map[string]string{
 		"key1":   "value1",
@@ -206,6 +206,10 @@ func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretR
 
 func (m *MockKubernetesStateStore) Close() error {
 	return nil
+}
+
+func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
+	return []secretstores.Feature{}
 }
 
 func NewMockKubernetesStore() secretstores.SecretStore {
@@ -4779,7 +4783,7 @@ type mockSecretStore struct {
 	closeErr error
 }
 
-func (s *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (s *mockSecretStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"key1":   "value1",
@@ -5066,14 +5070,6 @@ func TestGRPCProxy(t *testing.T) {
 }
 
 func TestGetComponentsCapabilitiesMap(t *testing.T) {
-	cPubSub := componentsV1alpha1.Component{}
-	cPubSub.ObjectMeta.Name = "mockPubSub"
-	cPubSub.Spec.Type = "pubsub.mockPubSub"
-
-	cStateStore := componentsV1alpha1.Component{}
-	cStateStore.ObjectMeta.Name = "testStateStoreName"
-	cStateStore.Spec.Type = "state.mockState"
-
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	defer stopRuntime(t, rt)
 
@@ -5084,8 +5080,10 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 		},
 		"mockState",
 	)
-
 	mockStateStore.On("Init", mock.Anything).Return(nil)
+	cStateStore := componentsV1alpha1.Component{}
+	cStateStore.ObjectMeta.Name = "testStateStoreName"
+	cStateStore.Spec.Type = "state.mockState"
 
 	mockPubSub := new(daprt.MockPubSub)
 	rt.pubSubRegistry.RegisterComponent(
@@ -5094,8 +5092,11 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 		},
 		"mockPubSub",
 	)
-
 	mockPubSub.On("Init", mock.Anything).Return(nil)
+	mockPubSub.On("Features").Return([]pubsub.Feature{pubsub.FeatureMessageTTL, pubsub.FeatureSubscribeWildcards})
+	cPubSub := componentsV1alpha1.Component{}
+	cPubSub.ObjectMeta.Name = "mockPubSub"
+	cPubSub.Spec.Type = "pubsub.mockPubSub"
 
 	rt.bindingsRegistry.RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
@@ -5117,13 +5118,35 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	cout.ObjectMeta.Name = "testOutputBinding"
 	cout.Spec.Type = "bindings.testOutputBinding"
 
+	mockSecretStoreName := "mockSecretStore"
+	mockSecretStore := new(daprt.FakeSecretStore)
+	rt.secretStoresRegistry.RegisterComponent(
+		func(_ logger.Logger) secretstores.SecretStore {
+			return mockSecretStore
+		},
+		mockSecretStoreName,
+	)
+	cSecretStore := componentsV1alpha1.Component{}
+	cSecretStore.ObjectMeta.Name = mockSecretStoreName
+	cSecretStore.Spec.Type = "secretstores.mockSecretStore"
+
 	require.NoError(t, rt.initInputBinding(cin))
 	require.NoError(t, rt.initOutputBinding(cout))
 	require.NoError(t, rt.initPubSub(cPubSub))
 	require.NoError(t, rt.initState(cStateStore))
+	require.NoError(t, rt.initSecretStore(cSecretStore))
 
 	capabilities := rt.getComponentsCapabilitesMap()
-	assert.Equal(t, 3, len(capabilities))
+	assert.Equal(t, 5, len(capabilities),
+		"All 5 registered components have are present in capabilities (stateStore pubSub input output secretStore)")
+	assert.Equal(t, 2, len(capabilities["mockPubSub"]),
+		"mockPubSub has 2 features because we mocked it so")
+	assert.Equal(t, 1, len(capabilities["testInputBinding"]),
+		"Input bindings always have INPUT_BINDING added to their capabilities")
+	assert.Equal(t, 1, len(capabilities["testOutputBinding"]),
+		"Output bindings always have OUTPUT_BINDING added to their capabilities")
+	assert.Equal(t, 1, len(capabilities[mockSecretStoreName]),
+		"mockSecretStore has a single feature and it should be present")
 }
 
 func runGRPCApp(port int) (func(), error) {

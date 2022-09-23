@@ -14,6 +14,7 @@ limitations under the License.
 package encryption
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"testing"
@@ -44,7 +45,7 @@ func (m *mockSecretStore) Init(metadata secretstores.Metadata) error {
 	return nil
 }
 
-func (m *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (m *mockSecretStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"primaryKey":   m.primaryKey,
@@ -53,7 +54,7 @@ func (m *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretst
 	}, nil
 }
 
-func (m *mockSecretStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+func (m *mockSecretStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
 	return secretstores.BulkGetSecretResponse{}, nil
 }
 

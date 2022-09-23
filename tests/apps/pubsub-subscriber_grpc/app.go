@@ -34,7 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 const (
@@ -88,7 +88,7 @@ func main() {
 
 	/* #nosec */
 	s := grpc.NewServer()
-	pb.RegisterAppCallbackServer(s, &server{})
+	runtimev1pb.RegisterAppCallbackServer(s, &server{})
 
 	log.Println("Client starting...")
 
@@ -185,10 +185,10 @@ func (s *server) setRespondWithInvalidStatus() {
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
 // to subscribe to a topic named TopicA.
-func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
+func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
-	return &pb.ListTopicSubscriptionsResponse{
-		Subscriptions: []*commonv1pb.TopicSubscription{
+	return &runtimev1pb.ListTopicSubscriptionsResponse{
+		Subscriptions: []*runtimev1pb.TopicSubscription{
 			{
 				PubsubName: "messagebus",
 				Topic:      pubsubA,
@@ -212,7 +212,7 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 
 // This method is fired whenever a message has been published to a topic that has been subscribed.
 // Dapr sends published messages in a CloudEvents 1.0 envelope.
-func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*pb.TopicEventResponse, error) {
+func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -221,8 +221,8 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 
 	if respondWithRetry {
 		log.Printf("(%s) Responding with RETRY", reqID)
-		return &pb.TopicEventResponse{
-			Status: pb.TopicEventResponse_RETRY, //nolint:nosnakecase
+		return &runtimev1pb.TopicEventResponse{
+			Status: runtimev1pb.TopicEventResponse_RETRY, //nolint:nosnakecase
 		}, nil
 	} else if respondWithError {
 		log.Printf("(%s) Responding with ERROR", reqID)
@@ -231,7 +231,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	} else if respondWithInvalidStatus {
 		log.Printf("(%s) Responding with INVALID", reqID)
 		// do not store received messages, respond with success but an invalid status
-		return &pb.TopicEventResponse{
+		return &runtimev1pb.TopicEventResponse{
 			Status: 4,
 		}, nil
 	}
@@ -239,8 +239,8 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	if in.Data == nil {
 		log.Printf("(%s) Responding with DROP. in.Data is nil", reqID)
 		// Return success with DROP status to drop message
-		return &pb.TopicEventResponse{
-			Status: pb.TopicEventResponse_DROP, //nolint:nosnakecase
+		return &runtimev1pb.TopicEventResponse{
+			Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 		}, nil
 	}
 
@@ -249,8 +249,8 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	if err != nil {
 		log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
 		// Return success with DROP status to drop message
-		return &pb.TopicEventResponse{
-			Status: pb.TopicEventResponse_DROP, //nolint:nosnakecase
+		return &runtimev1pb.TopicEventResponse{
+			Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 		}, err
 	}
 
@@ -280,24 +280,24 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 
 	if respondWithEmptyJSON {
 		log.Printf("(%s) Responding with {}", reqID)
-		return &pb.TopicEventResponse{}, nil
+		return &runtimev1pb.TopicEventResponse{}, nil
 	}
 
 	log.Printf("(%s) Responding with SUCCESS", reqID)
-	return &pb.TopicEventResponse{
-		Status: pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
+	return &runtimev1pb.TopicEventResponse{
+		Status: runtimev1pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 	}, nil
 }
 
 // Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
 // To invoke our app with a binding named storage.
-func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
+func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
 	log.Println("List Input Bindings called")
-	return &pb.ListInputBindingsResponse{}, nil
+	return &runtimev1pb.ListInputBindingsResponse{}, nil
 }
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
-func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
+func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
 	log.Printf("Invoked from binding: %s", in.Name)
-	return &pb.BindingEventResponse{}, nil
+	return &runtimev1pb.BindingEventResponse{}, nil
 }
