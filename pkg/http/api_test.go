@@ -298,7 +298,8 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	testAPI := &api{
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-				if req.PubsubName == "errorpubsub" {
+				switch req.PubsubName {
+				case "errorpubsub":
 					err := fmt.Errorf("Error from pubsub %s", req.PubsubName)
 					res := pubsub.BulkPublishResponse{}
 					for _, entry := range req.Entries {
@@ -309,24 +310,20 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 						})
 					}
 					return pubsub.BulkPublishResponse{}, err
-				}
-
-				if req.PubsubName == "errnotfound" {
+				case "errnotfound":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
-				}
-
-				if req.PubsubName == "errnotallowed" {
+				case "errnotallowed":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				default:
+					res := pubsub.BulkPublishResponse{}
+					for _, entry := range req.Entries {
+						res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+							EntryID: entry.EntryID,
+							Status:  pubsub.PublishSucceeded,
+						})
+					}
+					return res, nil
 				}
-
-				res := pubsub.BulkPublishResponse{}
-				for _, entry := range req.Entries {
-					res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-						EntryID: entry.EntryID,
-						Status:  pubsub.PublishSucceeded,
-					})
-				}
-				return res, nil
 			},
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
 				return &daprt.MockPubSub{}

@@ -1802,18 +1802,16 @@ func TestPublishTopic(t *testing.T) {
 				return &daprt.MockPubSub{}
 			},
 			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-				if req.Topic == "error-topic" {
+				switch req.Topic {
+				case "error-topic":
 					return pubsub.BulkPublishResponse{}, errors.New("error when publish")
-				}
 
-				if req.Topic == "err-not-found" {
+				case "err-not-found":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
-				}
 
-				if req.Topic == "err-not-allowed" {
+				case "err-not-allowed":
 					return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				}
-
 				return pubsub.BulkPublishResponse{}, nil
 			},
 		},

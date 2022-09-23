@@ -2156,8 +2156,9 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
+	status := fasthttp.StatusOK
 	if err != nil {
-		status := fasthttp.StatusInternalServerError
+		status = fasthttp.StatusInternalServerError
 		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
 
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
@@ -2177,13 +2178,9 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 			return
 		}
-
-		resData, _ := json.Marshal(bulkRes)
-		respond(reqCtx, withJSON(status, resData), closeChildSpans)
-	} else {
-		resData, _ := json.Marshal(bulkRes)
-		respond(reqCtx, withJSON(fasthttp.StatusOK, resData), closeChildSpans)
 	}
+	resData, _ := json.Marshal(bulkRes)
+	respond(reqCtx, withJSON(status, resData), closeChildSpans)
 }
 
 func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, int, *ErrorResponse) {
