@@ -18,6 +18,7 @@ package dapr.proto.runtime.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "dapr/proto/common/v1/common.proto";
+import "dapr/proto/runtime/v1/appcallback.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -54,7 +55,7 @@ service Dapr {
   rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
 
   // Subscribes to the specific topic.
-  rpc SubscribeTopic(common.v1.TopicSubscription) returns (SubscribeTopicResponse) {}
+  rpc SubscribeTopic(TopicSubscription) returns (SubscribeTopicResponse) {}
 
   // ListActiveTopicSubscriptions returns the list of currently-active topic subscriptions.
   rpc ListActiveTopicSubscriptions(google.protobuf.Empty) returns (ListActiveTopicSubscriptionsResponse) {}
@@ -299,19 +300,19 @@ message PublishEventRequest {
 // SubscribeTopicResponse is the response from SubscribeTopic.
 message SubscribeTopicResponse {
   // The list of topics.
-  repeated common.v1.TopicSubscription subscriptions = 1;
+  repeated TopicSubscription subscriptions = 1;
 }
 
 // ListActiveTopicSubscriptionsResponse is the message containing the list of active topic subscriptions.
 message ListActiveTopicSubscriptionsResponse {
   // The list of topics.
-  repeated common.v1.TopicSubscription subscriptions = 1;
+  repeated TopicSubscription subscriptions = 1;
 }
 
 // UnsubscribeTopicResponse is the response from UnsubscribeTopic.
 message UnsubscribeTopicResponse {
   // The list of topics.
-  repeated common.v1.TopicSubscription subscriptions = 1;
+  repeated TopicSubscription subscriptions = 1;
 }
 
 // ActiveTopicSubscription identifies an active subscription to a topic.
@@ -491,6 +492,7 @@ message InvokeActorRequest {
   string actor_id = 2;
   string method = 3;
   bytes  data = 4;
+  map<string, string> metadata = 5;
 }
 
 // InvokeActorResponse is the method that returns an actor invocation response.

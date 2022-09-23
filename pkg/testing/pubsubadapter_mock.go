@@ -20,7 +20,7 @@ import (
 	"sync"
 
 	"github.com/dapr/components-contrib/pubsub"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -66,7 +66,7 @@ func (a *MockPubSubAdapter) GetPubSub(pubsubName string) pubsub.PubSub {
 	return nil
 }
 
-func (a *MockPubSubAdapter) Subscribe(subscription *runtime_pubsub.Subscription) (list []*commonv1pb.TopicSubscription, err error) {
+func (a *MockPubSubAdapter) Subscribe(subscription *runtime_pubsub.Subscription) (list []*runtimev1pb.TopicSubscription, err error) {
 	if a.subscriptions == nil {
 		panic("object not instantiated")
 	}
@@ -93,7 +93,7 @@ func (a *MockPubSubAdapter) Subscribe(subscription *runtime_pubsub.Subscription)
 	return a.ListSubscriptions()
 }
 
-func (a *MockPubSubAdapter) Unsubscribe(name string, topic string) (list []*commonv1pb.TopicSubscription, err error) {
+func (a *MockPubSubAdapter) Unsubscribe(name string, topic string) (list []*runtimev1pb.TopicSubscription, err error) {
 	if a.subscriptions == nil {
 		panic("object not instantiated")
 	}
@@ -128,12 +128,12 @@ func (a *MockPubSubAdapter) Unsubscribe(name string, topic string) (list []*comm
 	return a.ListSubscriptions()
 }
 
-func (a *MockPubSubAdapter) ListSubscriptions() ([]*commonv1pb.TopicSubscription, error) {
+func (a *MockPubSubAdapter) ListSubscriptions() ([]*runtimev1pb.TopicSubscription, error) {
 	if a.subscriptions == nil {
 		panic("object not instantiated")
 	}
 
-	res := make([]*commonv1pb.TopicSubscription, len(a.subscriptions))
+	res := make([]*runtimev1pb.TopicSubscription, len(a.subscriptions))
 	for i, v := range a.subscriptions {
 		res[i] = v.ToProto()
 	}

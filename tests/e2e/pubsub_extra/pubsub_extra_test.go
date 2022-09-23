@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	testutils "github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -442,7 +441,7 @@ func getDeliveredMessages(u string) (map[string][]string, error) {
 	return messages, nil
 }
 
-func parseSubscriptionList(data []byte) ([]*commonv1pb.TopicSubscription, []string, error) {
+func parseSubscriptionList(data []byte) ([]*runtimev1pb.TopicSubscription, []string, error) {
 	root := struct {
 		Subscriptions []json.RawMessage
 	}{}
@@ -451,10 +450,10 @@ func parseSubscriptionList(data []byte) ([]*commonv1pb.TopicSubscription, []stri
 		return nil, nil, err
 	}
 
-	list := make([]*commonv1pb.TopicSubscription, len(root.Subscriptions))
+	list := make([]*runtimev1pb.TopicSubscription, len(root.Subscriptions))
 	listRaw := make([]string, len(root.Subscriptions))
 	for i, raw := range root.Subscriptions {
-		el := &commonv1pb.TopicSubscription{}
+		el := &runtimev1pb.TopicSubscription{}
 		err = protojson.Unmarshal(raw, el)
 		if err != nil {
 			return nil, nil, err

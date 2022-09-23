@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -104,7 +103,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 		}
 		subscriptions = make([]Subscription, len(subscriptionItems))
 		for i, si := range subscriptionItems {
-			routes := &commonv1pb.TopicRoutes{}
+			routes := &runtimev1pb.TopicRoutes{}
 			if len(si.Routes) > 0 && !bytes.Equal(si.Routes, []byte("null")) {
 				err = protojson.Unmarshal(si.Routes, routes)
 				if err != nil {
@@ -360,7 +359,7 @@ func parseRoutingRulesYAML(routes subscriptionsapiV2alpha1.Routes) ([]*Rule, err
 
 // ParseRoutingRule parses a routing rule.
 // fallbackRoute should be set for HTTP only. gRPC automatically specifies a default route if none are returned.
-func ParseRoutingRule(routes *commonv1pb.TopicRoutes, fallbackRoute string) ([]*Rule, error) {
+func ParseRoutingRule(routes *runtimev1pb.TopicRoutes, fallbackRoute string) ([]*Rule, error) {
 	if routes == nil {
 		return []*Rule{{
 			Path: "",

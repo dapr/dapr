@@ -36,7 +36,7 @@ var (
 	daprHTTPPort string
 	daprGRPCPort string
 
-	currentSubscriptions []*commonv1pb.TopicSubscription
+	currentSubscriptions []*runtimev1pb.TopicSubscription
 	messages             = newMessageTracker()
 	subsLock             = &sync.Mutex{}
 
@@ -70,7 +70,7 @@ func main() {
 	go startControlServer()
 
 	if appProtocol == "grpc" {
-		currentSubscriptions = []*commonv1pb.TopicSubscription{
+		currentSubscriptions = []*runtimev1pb.TopicSubscription{
 			{
 				PubsubName: "inmemorypubsub",
 				Topic:      "mytopic",
@@ -84,11 +84,11 @@ func main() {
 
 		daprClientConn.Close()
 	} else {
-		currentSubscriptions = []*commonv1pb.TopicSubscription{
+		currentSubscriptions = []*runtimev1pb.TopicSubscription{
 			{
 				PubsubName: "inmemorypubsub",
 				Topic:      "mytopic",
-				Routes: &commonv1pb.TopicRoutes{
+				Routes: &runtimev1pb.TopicRoutes{
 					Default: "/message/mytopic",
 				},
 			},
@@ -246,7 +246,7 @@ func startControlServer() {
 					return
 				}
 
-				var req commonv1pb.TopicSubscription
+				var req runtimev1pb.TopicSubscription
 				err = protojson.Unmarshal(b, &req)
 				if err != nil {
 					w.WriteHeader(http.StatusBadRequest)
@@ -348,7 +348,7 @@ func startControlServer() {
 
 				var pb interface {
 					protoreflect.ProtoMessage
-					GetSubscriptions() []*commonv1pb.TopicSubscription
+					GetSubscriptions() []*runtimev1pb.TopicSubscription
 				}
 				switch r.Method {
 				case "GET":

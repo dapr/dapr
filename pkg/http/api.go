@@ -56,7 +56,6 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
@@ -1193,7 +1192,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
 	var resp secretstores.GetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = store.GetSecret(req)
+		resp, rErr = store.GetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1234,7 +1233,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 	policy := a.resiliency.ComponentOutboundPolicy(reqCtx, secretStoreName, resiliency.Secretstore)
 	var resp secretstores.BulkGetSecretResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = store.BulkGetSecret(req)
+		resp, rErr = store.BulkGetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -2079,7 +2078,7 @@ func (a *api) onSubscribe(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	body := reqCtx.PostBody()
-	in := commonv1pb.TopicSubscription{}
+	in := runtimev1pb.TopicSubscription{}
 	err := protojson.Unmarshal(body, &in)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))

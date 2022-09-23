@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 type Subscription struct {
@@ -18,24 +18,24 @@ type Subscription struct {
 }
 
 // ToProto returns the *commonv1pb.TopicSubscription object that matches this Subscription.
-func (r Subscription) ToProto() *commonv1pb.TopicSubscription {
-	rules := make([]*commonv1pb.TopicRule, len(r.Rules))
+func (r Subscription) ToProto() *runtimev1pb.TopicSubscription {
+	rules := make([]*runtimev1pb.TopicRule, len(r.Rules))
 	for i, v := range r.Rules {
 		rules[i] = v.ToProto()
 	}
-	return &commonv1pb.TopicSubscription{
+	return &runtimev1pb.TopicSubscription{
 		PubsubName:      r.PubsubName,
 		Topic:           r.Topic,
 		DeadLetterTopic: r.DeadLetterTopic,
 		Metadata:        r.Metadata,
-		Routes: &commonv1pb.TopicRoutes{
+		Routes: &runtimev1pb.TopicRoutes{
 			Rules: rules,
 		},
 	}
 }
 
 // NewSubscriptionFromProto returns a new Subscription from a proto object.
-func NewSubscriptionFromProto(p *commonv1pb.TopicSubscription, fallbackRoute string) (*Subscription, error) {
+func NewSubscriptionFromProto(p *runtimev1pb.TopicSubscription, fallbackRoute string) (*Subscription, error) {
 	if p == nil {
 		return nil, errors.New("parameter is nil")
 	}
@@ -60,12 +60,12 @@ type Rule struct {
 }
 
 // ToProto returns the *commonv1pb.TopicRule object that matches this Rule.
-func (r Rule) ToProto() *commonv1pb.TopicRule {
+func (r Rule) ToProto() *runtimev1pb.TopicRule {
 	var match string
 	if r.Match != nil {
 		match = r.Match.String()
 	}
-	return &commonv1pb.TopicRule{
+	return &runtimev1pb.TopicRule{
 		Match: match,
 		Path:  r.Path,
 	}

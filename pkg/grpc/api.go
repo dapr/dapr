@@ -83,7 +83,7 @@ type API interface {
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
-	SubscribeTopic(ctx context.Context, in *commonv1pb.TopicSubscription) (*runtimev1pb.SubscribeTopicResponse, error)
+	SubscribeTopic(ctx context.Context, in *runtimev1pb.TopicSubscription) (*runtimev1pb.SubscribeTopicResponse, error)
 	ListActiveTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListActiveTopicSubscriptionsResponse, error)
 	UnsubscribeTopic(ctx context.Context, in *runtimev1pb.ActiveTopicSubscription) (*runtimev1pb.UnsubscribeTopicResponse, error)
 	GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
@@ -547,7 +547,8 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
-			req.Metadata[key] = val[0]
+			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
+			req.Metadata[sanitizedKey] = val[0]
 		}
 	}
 
@@ -1009,7 +1010,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.GetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(req)
+		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1052,7 +1053,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.BulkGetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(req)
+		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1084,7 +1085,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	return response, nil
 }
 
-func (a *api) SubscribeTopic(ctx context.Context, in *commonv1pb.TopicSubscription) (res *runtimev1pb.SubscribeTopicResponse, err error) {
+func (a *api) SubscribeTopic(ctx context.Context, in *runtimev1pb.TopicSubscription) (res *runtimev1pb.SubscribeTopicResponse, err error) {
 	res = &runtimev1pb.SubscribeTopicResponse{}
 
 	if a.pubsubAdapter == nil {
@@ -1539,6 +1540,11 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	req := invokev1.NewInvokeMethodRequest(in.Method)
 	req.WithActor(in.ActorType, in.ActorId)
 	req.WithRawData(in.Data, "")
+	reqMetadata := map[string][]string{}
+	for k, v := range in.Metadata {
+		reqMetadata[k] = []string{v}
+	}
+	req.WithMetadata(reqMetadata)
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1803,6 +1809,12 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return err
+	}
+	if err := handler.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
+		Id: id,
+	}); err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}

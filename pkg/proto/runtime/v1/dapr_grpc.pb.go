@@ -43,7 +43,7 @@ type DaprClient interface {
 	// Publishes events to the specific topic.
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Subscribes to the specific topic.
-	SubscribeTopic(ctx context.Context, in *v1.TopicSubscription, opts ...grpc.CallOption) (*SubscribeTopicResponse, error)
+	SubscribeTopic(ctx context.Context, in *TopicSubscription, opts ...grpc.CallOption) (*SubscribeTopicResponse, error)
 	// ListActiveTopicSubscriptions returns the list of currently-active topic subscriptions.
 	ListActiveTopicSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListActiveTopicSubscriptionsResponse, error)
 	// Unsubscribes from the specific topic.
@@ -177,7 +177,7 @@ func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, 
 	return out, nil
 }
 
-func (c *daprClient) SubscribeTopic(ctx context.Context, in *v1.TopicSubscription, opts ...grpc.CallOption) (*SubscribeTopicResponse, error) {
+func (c *daprClient) SubscribeTopic(ctx context.Context, in *TopicSubscription, opts ...grpc.CallOption) (*SubscribeTopicResponse, error) {
 	out := new(SubscribeTopicResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SubscribeTopic", in, out, opts...)
 	if err != nil {
@@ -421,7 +421,7 @@ type DaprServer interface {
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
 	// Subscribes to the specific topic.
-	SubscribeTopic(context.Context, *v1.TopicSubscription) (*SubscribeTopicResponse, error)
+	SubscribeTopic(context.Context, *TopicSubscription) (*SubscribeTopicResponse, error)
 	// ListActiveTopicSubscriptions returns the list of currently-active topic subscriptions.
 	ListActiveTopicSubscriptions(context.Context, *emptypb.Empty) (*ListActiveTopicSubscriptionsResponse, error)
 	// Unsubscribes from the specific topic.
@@ -497,7 +497,7 @@ func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *Execute
 func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
 }
-func (UnimplementedDaprServer) SubscribeTopic(context.Context, *v1.TopicSubscription) (*SubscribeTopicResponse, error) {
+func (UnimplementedDaprServer) SubscribeTopic(context.Context, *TopicSubscription) (*SubscribeTopicResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SubscribeTopic not implemented")
 }
 func (UnimplementedDaprServer) ListActiveTopicSubscriptions(context.Context, *emptypb.Empty) (*ListActiveTopicSubscriptionsResponse, error) {
@@ -738,7 +738,7 @@ func _Dapr_PublishEvent_Handler(srv interface{}, ctx context.Context, dec func(i
 }
 
 func _Dapr_SubscribeTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.TopicSubscription)
+	in := new(TopicSubscription)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -750,7 +750,7 @@ func _Dapr_SubscribeTopic_Handler(srv interface{}, ctx context.Context, dec func
 		FullMethod: "/dapr.proto.runtime.v1.Dapr/SubscribeTopic",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).SubscribeTopic(ctx, req.(*v1.TopicSubscription))
+		return srv.(DaprServer).SubscribeTopic(ctx, req.(*TopicSubscription))
 	}
 	return interceptor(ctx, in, info, handler)
 }

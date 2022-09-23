@@ -72,7 +72,6 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
@@ -322,7 +321,7 @@ func (a *DaprRuntime) loadPluggableComponents() ([]components.Pluggable, error) 
 	if a.runtimeConfig.Mode == modes.StandaloneMode {
 		return pluggable.LoadFromDisk(a.runtimeConfig.Standalone.ComponentsPath)
 	}
-	return pluggable.LoadFromKubernetes()
+	return pluggable.LoadFromKubernetes(a.namespace, a.podName, a.operatorClient)
 }
 
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
@@ -440,9 +439,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
 
-	if err = a.registerPluggableComponents(); err != nil {
-		log.Warnf("failed to register pluggable components: %s", err)
-	}
+	a.initPluggableComponents()
 
 	go a.processComponents()
 
@@ -596,12 +593,12 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (httpMiddleware.Pipeline, error) {
 	var handlers []httpMiddleware.Middleware
 
 	if a.globalConfig != nil {
-		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
-			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
+		for i := 0; i < len(spec.Handlers); i++ {
+			middlewareSpec := spec.Handlers[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
 				return httpMiddleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
@@ -614,11 +611,28 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 			if err != nil {
 				return httpMiddleware.Pipeline{}, err
 			}
-			log.Infof("enabled %s/%s http middleware", middlewareSpec.Type, middlewareSpec.Version)
+			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
 			handlers = append(handlers, handler)
 		}
 	}
 	return httpMiddleware.Pipeline{Handlers: handlers}, nil
+}
+
+// initPluggableComponents register the pluggable components if the featureflag is enabled and execute the required bootstrap.
+func (a *DaprRuntime) initPluggableComponents() {
+	if config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PluggableComponents) {
+		if err := a.registerPluggableComponents(); err != nil {
+			log.Warnf("failed to register pluggable components: %s", err)
+		}
+	}
+}
+
+func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
+}
+
+func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
 }
 
 // registerPluggableComponents loads and register the loaded pluggable components.
@@ -816,7 +830,7 @@ func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, subscription *ru
 	return nil
 }
 
-func (a *DaprRuntime) Unsubscribe(name string, topic string) ([]*commonv1pb.TopicSubscription, error) {
+func (a *DaprRuntime) Unsubscribe(name string, topic string) ([]*runtimev1pb.TopicSubscription, error) {
 	a.topicsLock.Lock()
 	defer a.topicsLock.Unlock()
 
@@ -841,7 +855,7 @@ func (a *DaprRuntime) Unsubscribe(name string, topic string) ([]*commonv1pb.Topi
 	return a.doListSubscriptions(), nil
 }
 
-func (a *DaprRuntime) ListSubscriptions() ([]*commonv1pb.TopicSubscription, error) {
+func (a *DaprRuntime) ListSubscriptions() ([]*runtimev1pb.TopicSubscription, error) {
 	a.topicsLock.Lock()
 	defer a.topicsLock.Unlock()
 
@@ -853,8 +867,8 @@ func (a *DaprRuntime) ListSubscriptions() ([]*commonv1pb.TopicSubscription, erro
 	return a.doListSubscriptions(), nil
 }
 
-func (a *DaprRuntime) doListSubscriptions() []*commonv1pb.TopicSubscription {
-	res := make([]*commonv1pb.TopicSubscription, len(a.topicRoutes))
+func (a *DaprRuntime) doListSubscriptions() []*runtimev1pb.TopicSubscription {
+	res := make([]*runtimev1pb.TopicSubscription, len(a.topicRoutes))
 	var i int
 	for _, sub := range a.topicRoutes {
 		res[i] = sub.ToProto()
@@ -1270,7 +1284,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			span.End()
 		}
 		// ::TODO report metrics for http, such as grpc
-		if resp.Status().Code != nethttp.StatusOK {
+		if resp.Status().Code < 200 || resp.Status().Code > 299 {
 			_, body := resp.RawData()
 			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
@@ -1786,14 +1800,14 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	})
 }
 
-func (a *DaprRuntime) Subscribe(subscription *runtimePubsub.Subscription) ([]*commonv1pb.TopicSubscription, error) {
+func (a *DaprRuntime) Subscribe(subscription *runtimePubsub.Subscription) ([]*runtimev1pb.TopicSubscription, error) {
 	a.topicsLock.Lock()
 	defer a.topicsLock.Unlock()
 
 	return a.doSubscribe(subscription)
 }
 
-func (a *DaprRuntime) doSubscribe(subscription *runtimePubsub.Subscription) ([]*commonv1pb.TopicSubscription, error) {
+func (a *DaprRuntime) doSubscribe(subscription *runtimePubsub.Subscription) ([]*runtimev1pb.TopicSubscription, error) {
 	_, ok := a.pubSubs[subscription.PubsubName]
 	if !ok {
 		return nil, runtimePubsub.NotFoundError{PubsubName: subscription.PubsubName}
@@ -2500,7 +2514,8 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 		resp, ok := cache[m.SecretKeyRef.Name]
 		if !ok {
-			r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
+			// TODO: cascade context.
+			r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
 				Name: m.SecretKeyRef.Name,
 				Metadata: map[string]string{
 					"namespace": component.ObjectMeta.Namespace,
@@ -2600,7 +2615,11 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 			return err
 		}
 	case HTTPProtocol:
-		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		pipeline, err := a.buildAppHTTPPipeline()
+		if err != nil {
+			return err
+		}
+		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, pipeline, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 		if err != nil {
 			return err
 		}
@@ -2722,6 +2741,10 @@ func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 		}
 		capabilities[key] = stateStoreCapabilities
 	}
+	for key, pubSubItem := range a.pubSubs {
+		features := pubSubItem.component.Features()
+		capabilities[key] = featureTypeToString(features)
+	}
 	for key := range a.inputBindings {
 		capabilities[key] = []string{"INPUT_BINDING"}
 	}
@@ -2731,6 +2754,10 @@ func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 		} else {
 			capabilities[key] = []string{"OUTPUT_BINDING"}
 		}
+	}
+	for key, store := range a.secretStores {
+		features := store.Features()
+		capabilities[key] = featureTypeToString(features)
 	}
 	return capabilities
 }

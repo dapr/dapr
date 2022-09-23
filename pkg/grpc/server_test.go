@@ -48,7 +48,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 1, len(serverOption))
+		assert.Equal(t, 2, len(serverOption))
 	})
 
 	t.Run("should not disable middleware even when SamplingRate is 0", func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 1, len(serverOption))
+		assert.Equal(t, 2, len(serverOption))
 	})
 
 	t.Run("should have api access rules middleware", func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 1, len(serverOption))
+		assert.Equal(t, 2, len(serverOption))
 	})
 }
 

@@ -1559,7 +1559,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				rsp, recvErr := resp.Recv()
 				assert.NotNil(t, rsp)
 				assert.Nil(t, recvErr)
-				assert.Equal(t, tt.expectedResponse, rsp.Items)
+				if rsp.Items != nil {
+					assert.Equal(t, tt.expectedResponse, rsp.Items)
+				} else {
+					assert.Equal(t, mockSubscribeID, rsp.Id)
+				}
 				subscribeID = rsp.Id
 			}
 			assert.Nil(t, err, "Error should be nil")
@@ -1581,6 +1585,66 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				_, err = resp.Recv()
 			}
 			assert.Error(t, err, "Unsubscribed channel should returns EOF")
+		})
+	}
+}
+
+func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
+	fakeConfigurationStore := &daprt.MockConfigurationStore{}
+	fakeConfigurationStore.On("Unsubscribe",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
+			return req.ID == mockSubscribeID
+		})).Return(nil)
+
+	fakeAPI := &api{
+		configurationSubscribe: make(map[string]chan struct{}),
+		id:                     "fakeAPI",
+		configurationStores:    map[string]configuration.Store{"store1": fakeConfigurationStore},
+		resiliency:             resiliency.New(nil),
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	testCases := []struct {
+		testName         string
+		storeName        string
+		id               string
+		expectedResponse bool
+		expectedError    bool
+	}{
+		{
+			testName:         "Test unsubscribe",
+			storeName:        "store1",
+			id:               "",
+			expectedResponse: true,
+			expectedError:    false,
+		},
+		{
+			testName:         "Test unsubscribe with incorrect store name",
+			storeName:        "no-store",
+			id:               mockSubscribeID,
+			expectedResponse: false,
+			expectedError:    true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.UnsubscribeConfigurationRequest{
+				StoreName: tt.storeName,
+				Id:        tt.id,
+			}
+
+			resp, err := client.UnsubscribeConfigurationAlpha1(context.Background(), req)
+			assert.Equal(t, tt.expectedResponse, resp != nil)
+			assert.Equal(t, tt.expectedError, err != nil)
 		})
 	}
 }
@@ -1795,7 +1859,9 @@ func TestPublishTopic(t *testing.T) {
 				return nil
 			},
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				return &daprt.MockPubSub{}
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
 			},
 		},
 	}
