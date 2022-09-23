@@ -152,6 +152,8 @@ func TestGetIntOrDefault(t *testing.T) {
 			}
 		})
 	}
+}
+
 func TestEnvOrElse(t *testing.T) {
 	t.Run("envOrElse should return else value when env var is not present", func(t *testing.T) {
 		const elseValue, fakeEnVar = "fakeValue", "envVarThatDoesntExists"
