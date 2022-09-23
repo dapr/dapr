@@ -2795,7 +2795,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
 	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
-		TestSecondPubsubName, "", []byte("Test Message"), "", "")
+		TestSecondPubsubName, "", []byte("Test Message"), "", "",
+		"2021-08-02T09:00:00Z")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -2848,7 +2849,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// Generate a new envelope to avoid affecting other tests by modifying shared `envelope`
 		envelopeNoTraceID := pubsub.NewCloudEventsEnvelope(
 			"", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "",
-			[]byte("Test Message"), "", "")
+			[]byte("Test Message"), "", "", "2021-08-02T09:00:00Z")
 		delete(envelopeNoTraceID, pubsub.TraceIDField)
 		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
 		assert.Nil(t, err)
@@ -3064,7 +3065,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
 	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
-		TestSecondPubsubName, "", []byte("Test Message"), "", "")
+		TestSecondPubsubName, "", []byte("Test Message"), "", "",
+		"2021-08-02T09:00:00Z")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -3077,7 +3079,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	}
 
 	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic,
-		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "")
+		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "",
+		"2021-08-02T09:00:00Z")
 	base64, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 

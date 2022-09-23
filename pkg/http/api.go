@@ -134,6 +134,8 @@ const (
 	tracestateHeader         = "tracestate"
 	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
+	timeKey                  = "time"
+	customCloudEvent         = "application/cloudevents+json"
 )
 
 // NewAPI returns a new API.
@@ -1953,6 +1955,32 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	data := body
 
+	var cloudEventInterface interface{}
+	var publishTime string
+
+	if contentType == customCloudEvent {
+		unmarshalError := json.Unmarshal(body, &cloudEventInterface)
+
+		if unmarshalError != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, unmarshalError.Error()))
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+
+		cloudEventMap := cloudEventInterface.(map[string]interface{})
+
+		if val, ok := cloudEventMap[timeKey].(string); ok {
+			publishTime = val
+		} else {
+			publishTime = time.Now().Format(time.RFC3339)
+		}
+
+	} else {
+		publishTime = time.Now().Format(time.RFC3339)
+	}
+
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			ID:              a.id,
@@ -1962,6 +1990,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			TraceID:         corID,
 			TraceState:      traceState,
 			Pubsub:          pubsubName,
+			Time:            publishTime,
 		})
 		if err != nil {
 			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",

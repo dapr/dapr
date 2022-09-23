@@ -65,6 +65,8 @@ import (
 const (
 	daprHTTPStatusHeader  = "dapr-http-status"
 	daprRuntimeVersionKey = "daprRuntimeVersion"
+	timeKey               = "time"
+	customCloudEvent      = "application/cloudevents+json"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -424,6 +426,30 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	data := body
 
+	var cloudEventInterface interface{}
+	var publishTime string
+
+	if in.DataContentType == customCloudEvent {
+		unmarshalError := json.Unmarshal(body, &cloudEventInterface)
+
+		if unmarshalError != nil {
+			unmarshalError = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, unmarshalError.Error())
+			apiServerLogger.Debug(unmarshalError)
+			return &emptypb.Empty{}, unmarshalError
+		}
+
+		cloudEventMap := cloudEventInterface.(map[string]interface{})
+
+		if val, ok := cloudEventMap[timeKey].(string); ok {
+			publishTime = val
+		} else {
+			publishTime = time.Now().Format(time.RFC3339)
+		}
+
+	} else {
+		publishTime = time.Now().Format(time.RFC3339)
+	}
+
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			ID:              a.id,
@@ -431,6 +457,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			DataContentType: in.DataContentType,
 			Data:            body,
 			TraceID:         corID,
+			Time:            publishTime,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
 		})

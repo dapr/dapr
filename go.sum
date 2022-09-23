@@ -594,8 +594,6 @@ github.com/danieljoos/wincred v1.0.2/go.mod h1:SnuYRW9lp1oJrZX/dXJqr0cPK5gYXqx3E
 github.com/danieljoos/wincred v1.1.0/go.mod h1:XYlo+eRTsVA9aHGp7NGjFkPla4m+DCL7hqDjlFjiygg=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.8.0-rc.1.0.20220923213414-da5a2fd03a4d h1:aikcGVRm+7uU1Jx3O9Qy/BsrVP1egNZJ2oytSom9jBM=
-github.com/dapr/components-contrib v1.8.0-rc.1.0.20220923213414-da5a2fd03a4d/go.mod h1:z/210gfq/Wb6R8Fbe8aliiC7UO3oYO3u2isnfurRx8o=
 github.com/dapr/kit v0.0.2 h1:VNg6RWrBMOdtY0/ZLztyAa/RjyFLaskdO9wt2HIREwk=
 github.com/dapr/kit v0.0.2/go.mod h1:Q4TWm9+vcPZFGehaJUZt2hvA805wJm7FIuoArytWJ8o=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -1946,6 +1944,8 @@ github.com/xlab/treeprint v0.0.0-20181112141820-a009c3971eca h1:1CFlNzQhALwjS9mB
 github.com/xlab/treeprint v0.0.0-20181112141820-a009c3971eca/go.mod h1:ce1O1j6UtZfjr22oyGxGLbauSBp2YVXpARAosm7dHBg=
 github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77/go.mod h1:aYKd//L2LvnjZzWKhF00oedf4jCCReLcmhLdhm1A27Q=
 github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0 h1:6fRhSjgLCkTD3JnJxvaJ4Sj+TYblw757bqYgZaOq5ZY=
+github.com/yash-nisar/components-contrib v0.0.0-20220924004408-3316d75c8261 h1:EHdewSJp2GMJ0+T75lo/zkU2c0LffQjJb8oPQvqntNs=
+github.com/yash-nisar/components-contrib v0.0.0-20220924004408-3316d75c8261/go.mod h1:z/210gfq/Wb6R8Fbe8aliiC7UO3oYO3u2isnfurRx8o=
 github.com/yashtewari/glob-intersection v0.1.0 h1:6gJvMYQlTDOL3dMsPF6J0+26vwX9MB8/1q3uAdhmTrg=
 github.com/yashtewari/glob-intersection v0.1.0/go.mod h1:LK7pIC3piUjovexikBbJ26Yml7g8xa5bsjfx2v1fwok=
 github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d h1:splanxYIlg+5LfHAM6xpdFEAYOk8iySO56hMFq6uLyA=

@@ -395,7 +395,8 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-// replace github.com/dapr/components-contrib => ../components-contrib
+replace github.com/dapr/components-contrib => github.com/yash-nisar/components-contrib v0.0.0-20220924004408-3316d75c8261
+
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
