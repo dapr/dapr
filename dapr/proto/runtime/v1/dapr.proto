@@ -287,6 +287,7 @@ message PublishEventRequest {
   map<string, string> metadata = 5;
 }
 
+
 // InvokeBindingRequest is the message to send data to output bindings
 message InvokeBindingRequest {
   // The name of the output binding to invoke.

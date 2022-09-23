@@ -1805,6 +1805,117 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
+	t.Run("test bulk publish, topic allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic0",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryID:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(res.Statuses))
+		assert.Equal(t, "1", res.Statuses[0].EntryID)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+
+		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic1",
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryID:     "1",
+					Event:       []byte("test"),
+					ContentType: "text/plain",
+				},
+				{
+					EntryID:     "2",
+					Event:       []byte("test 2"),
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 2, len(res.Statuses))
+		expectedIds := []string{"1", "2"}
+		assert.Contains(t, expectedIds, res.Statuses[0].EntryID)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
+		assert.Contains(t, expectedIds, res.Statuses[1].EntryID)
+		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[1].Status)
+	})
+
+	t.Run("test bulk publish, topic not allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			require.Nil(t, err)
+		}
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
+
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic5",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryID:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+
+		rt.pubSubs[TestPubsubName] = pubsubItem{
+			component:     &mockPublishPubSub{},
+			allowedTopics: []string{"topic1"},
+		}
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic5",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryID:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+	})
+
 	t.Run("test publish, topic allowed", func(t *testing.T) {
 		initMockPubSubForRuntime(rt)
 
@@ -3677,6 +3788,32 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 	return nil
 }
 
+// BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
+func (m *mockSubscribePubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	res := pubsub.BulkPublishResponse{}
+	if handler, ok := m.handlers[req.Topic]; ok {
+		for _, entry := range req.Entries {
+			m.pubCount[req.Topic]++
+			// TODO this needs to be modified as part of BulkSubscribe deadletter test
+			pubsubMsg := &pubsub.NewMessage{
+				Data:  entry.Event,
+				Topic: req.Topic,
+			}
+			handler(context.Background(), pubsubMsg)
+			res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
+				EntryID: entry.EntryID,
+				Status:  pubsub.PublishSucceeded,
+			})
+		}
+	}
+
+	return res, nil
+}
+
+func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
+	return pubsub.BulkSubscribeResponse{}, nil
+}
+
 // Subscribe is a mock subscribe method.
 func (m *mockSubscribePubSub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	m.handlers[req.Topic] = handler
@@ -4434,6 +4571,25 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 // Publish is a mock publish method.
 func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 	return nil
+}
+
+// BulkPublish is a mock bulk publish method returning a success all the time.
+func (m *mockPublishPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	res := pubsub.BulkPublishResponse{}
+
+	for _, entry := range req.Entries {
+		e := pubsub.BulkPublishResponseEntry{
+			EntryID: entry.EntryID,
+			Status:  pubsub.PublishSucceeded,
+			Error:   nil,
+		}
+		res.Statuses = append(res.Statuses, e)
+	}
+	return res, nil
+}
+
+func (m *mockPublishPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
+	return pubsub.BulkSubscribeResponse{}, nil
 }
 
 // Subscribe is a mock subscribe method.
