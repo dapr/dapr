@@ -178,5 +178,5 @@ func TestAppHealth_ratelimitReports(t *testing.T) {
 
 	passed = totalPassed.Load()
 	assert.GreaterOrEqual(t, passed, int64(9))
-	assert.LessOrEqual(t, passed, int64(11))
+	assert.LessOrEqual(t, passed, int64(12))
 }
