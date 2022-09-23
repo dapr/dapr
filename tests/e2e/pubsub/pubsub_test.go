@@ -313,7 +313,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 
 func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
 	// set to respond with success
-	setDesiredResponse(t, "success", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	log.Printf("Test bulkPublish and normal subscribe success flow\n")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
