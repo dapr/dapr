@@ -464,7 +464,7 @@ func (a *DaprRuntime) sendBulkToDeadLetter(
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := a.BulkPublish(ctx, req)
+	_, err := a.BulkPublish(req)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 	}

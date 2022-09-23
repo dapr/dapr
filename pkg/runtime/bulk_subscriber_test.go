@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -183,7 +182,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr := getBulkMessageEntries(2)
 
-		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -246,7 +245,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr := getBulkMessageEntries(2)
 
-		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -342,7 +341,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
 			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders2" })).Return(respInvoke2, nil)
 
-		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -432,7 +431,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
 			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders" })).Return(respInvoke1, nil)
 
-		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -513,7 +512,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
 			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders" })).Return(respInvoke1, nil)
 
-		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -593,7 +592,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.MatchedBy(
 			func(req *invokev1.InvokeMethodRequest) bool { return req.Message().Method == "orders" })).Return(respInvoke1, nil)
 
-		_, err := rt.BulkPublish(context.TODO(), &pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
