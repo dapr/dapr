@@ -411,7 +411,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
+	if false && utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
 		testApps = append(testApps, kube.AppDescription{
 			AppName:        appNamePluggable,
 			DaprEnabled:    true,
