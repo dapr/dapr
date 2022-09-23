@@ -15,8 +15,6 @@ package http
 
 import (
 	"github.com/valyala/fasthttp"
-
-	"github.com/dapr/dapr/pkg/config"
 )
 
 type Middleware func(h fasthttp.RequestHandler) fasthttp.RequestHandler
@@ -24,10 +22,6 @@ type Middleware func(h fasthttp.RequestHandler) fasthttp.RequestHandler
 // HTTPPipeline defines the middleware pipeline to be plugged into Dapr sidecar.
 type Pipeline struct {
 	Handlers []Middleware
-}
-
-func BuildHTTPPipeline(spec config.PipelineSpec) (Pipeline, error) {
-	return Pipeline{}, nil
 }
 
 func (p Pipeline) Apply(handler fasthttp.RequestHandler) fasthttp.RequestHandler {

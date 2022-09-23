@@ -22,6 +22,7 @@ import (
 	"log"
 	"net/http"
 	netUrl "net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -36,11 +37,12 @@ import (
 )
 
 const (
-	appPort        = 3000
-	daprPortHTTP   = 3500
-	daprPortGRPC   = 50001
-	pubsubName     = "messagebus"
+	appPort      = 3000
+	daprPortHTTP = 3500
+	daprPortGRPC = 50001
+
 	metadataPrefix = "metadata."
+	PubSubEnvVar   = "DAPR_TEST_PUBSUB_NAME"
 )
 
 type bulkPublishMessageEntry struct {
@@ -48,6 +50,14 @@ type bulkPublishMessageEntry struct {
 	Event       interface{}       `json:"event"`
 	ContentType string            `json:"ContentType"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+var pubsubName = "messagebus"
+
+func init() {
+	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
+		pubsubName = psName
+	}
 }
 
 type publishCommand struct {

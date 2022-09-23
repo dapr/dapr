@@ -36,6 +36,8 @@ type Configuration struct {
 // ConfigurationSpec is the spec for an configuration.
 type ConfigurationSpec struct {
 	// +optional
+	AppHTTPPipelineSpec PipelineSpec `json:"appHttpPipeline,omitempty"`
+	// +optional
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
