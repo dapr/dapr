@@ -29,7 +29,7 @@ type InputBindingClient interface {
 	// will close the stream and return the status on any error. In case of closed
 	// connection, the client should re-establish the stream.
 	Read(ctx context.Context, opts ...grpc.CallOption) (InputBinding_ReadClient, error)
-	// Ping the pubsub. Used for liveness porpuses.
+	// Ping the InputBinding. Used for liveness porpuses.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 }
 
@@ -101,7 +101,7 @@ type InputBindingServer interface {
 	// will close the stream and return the status on any error. In case of closed
 	// connection, the client should re-establish the stream.
 	Read(InputBinding_ReadServer) error
-	// Ping the pubsub. Used for liveness porpuses.
+	// Ping the InputBinding. Used for liveness porpuses.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
 }
 
@@ -229,7 +229,7 @@ type OutputBindingClient interface {
 	Invoke(ctx context.Context, in *InvokeRequest, opts ...grpc.CallOption) (*InvokeResponse, error)
 	// ListOperations list system supported operations.
 	ListOperations(ctx context.Context, in *ListOperationsRequest, opts ...grpc.CallOption) (*ListOperationsResponse, error)
-	// Ping the pubsub. Used for liveness porpuses.
+	// Ping the OutputBinding. Used for liveness porpuses.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 }
 
@@ -287,7 +287,7 @@ type OutputBindingServer interface {
 	Invoke(context.Context, *InvokeRequest) (*InvokeResponse, error)
 	// ListOperations list system supported operations.
 	ListOperations(context.Context, *ListOperationsRequest) (*ListOperationsResponse, error)
-	// Ping the pubsub. Used for liveness porpuses.
+	// Ping the OutputBinding. Used for liveness porpuses.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
 }
 
