@@ -4,14 +4,18 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/pubsub"
@@ -688,7 +692,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		}
-		grpcServer := startTestAppCallbackGRPCServer(t, port, mockServer)
+		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
 			// properly stop the gRPC server
 			defer grpcServer.Stop()
@@ -796,12 +800,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders1"] = &responses1
 		mapResp["orders2"] = &responses2
 		// create mock application server first
-		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+		mockServer := &channelt.MockServer{
 			ListTopicSubscriptionsResponse: &subscriptionItems,
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
-		})
+		}
+		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
+			// properly stop the gRPC server
 			defer grpcServer.Stop()
 		}
 
@@ -878,12 +884,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
 		mapResp["orders"] = &responses
 		// create mock application server first
-		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+		mockServer := &channelt.MockServer{
 			ListTopicSubscriptionsResponse: &subscriptionItems,
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
-		})
+		}
+		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
+			// properly stop the gRPC server
 			defer grpcServer.Stop()
 		}
 
@@ -965,12 +973,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
 		mapResp["orders"] = &responses
 		// create mock application server first
-		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+		mockServer := &channelt.MockServer{
 			ListTopicSubscriptionsResponse: &subscriptionItems,
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
-		})
+		}
+		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
+			// properly stop the gRPC server
 			defer grpcServer.Stop()
 		}
 
@@ -1047,12 +1057,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp := make(map[string]*runtimev1pb.TopicEventBulkResponse)
 		mapResp["orders"] = &responses
 		// create mock application server first
-		grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+		mockServer := &channelt.MockServer{
 			ListTopicSubscriptionsResponse: &subscriptionItems,
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
-		})
+		}
+		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
+			// properly stop the gRPC server
 			defer grpcServer.Stop()
 		}
 
@@ -1082,6 +1094,23 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse))
 	})
+}
+
+func startTestAppCallbackBulkSubscribeGRPCServer(t *testing.T, port int, mockServer *channelt.MockServer) *grpc.Server {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	assert.NoError(t, err)
+	grpcServer := grpc.NewServer()
+	go func() {
+		runtimev1pb.RegisterAppCallbackServer(grpcServer, mockServer)
+		runtimev1pb.RegisterAppCallbackBulkSubscribeServer(grpcServer, mockServer)
+		if err := grpcServer.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+	// wait until server starts
+	time.Sleep(maxGRPCServerUptime)
+
+	return grpcServer
 }
 
 func setBulkResponseStatus(responses []*runtimev1pb.TopicEventBulkResponseEntry,

@@ -88,7 +88,7 @@ func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 	}, m.Error
 }
 
-func (m *MockServer) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+func (m *MockServer) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
 	if m.initialized != true {
 		m.Init()
 	}

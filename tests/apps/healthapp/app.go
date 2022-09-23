@@ -400,17 +400,6 @@ func (s *grpcServer) OnTopicEvent(_ context.Context, in *runtimev1pb.TopicEventR
 	return nil, errors.New("unexpected topic event: " + in.Topic)
 }
 
-// This method is fired whenever a bulk message has been published to a topic that has been subscribed.
-func (s *grpcServer) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
-	if in.Topic == "mytopic" {
-		log.Println("Received topic event: " + in.Topic)
-		lastTopicMessage.Record()
-		return &runtimev1pb.TopicEventBulkResponse{}, nil
-	}
-
-	return nil, errors.New("unexpected topic event: " + in.Topic)
-}
-
 func (s *grpcServer) ListInputBindings(_ context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
 	return &runtimev1pb.ListInputBindingsResponse{
 		Bindings: []string{"schedule"},

@@ -36,9 +36,6 @@ service AppCallback {
   // Subscribes events from Pubsub
   rpc OnTopicEvent(TopicEventRequest) returns (TopicEventResponse) {}
 
-  // Subscribes events from Pubsub
-  rpc OnBulkTopicEvent(TopicEventBulkRequest) returns (TopicEventBulkResponse) {}
-
   // Lists all input bindings subscribed by this app.
   rpc ListInputBindings(google.protobuf.Empty) returns (ListInputBindingsResponse) {}
 
@@ -54,6 +51,13 @@ service AppCallback {
 service AppCallbackHealthCheck {
   // Health check.
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse) {}
+}
+
+// AppCallbackBulkSubscribe V1 is an optional extension to AppCallback V1 to opt
+// for Bulk Subscription.
+service AppCallbackBulkSubscribe {
+    // Subscribes bulk events from Pubsub
+  rpc OnBulkTopicEventAlpha1(TopicEventBulkRequest) returns (TopicEventBulkResponse) {}
 }
 
 // TopicEventRequest message is compatible with CloudEvent spec v1.0

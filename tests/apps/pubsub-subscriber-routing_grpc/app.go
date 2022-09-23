@@ -226,22 +226,6 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 	}, nil
 }
 
-// This method is fired whenever a bulk message has been published to a topic that has been subscribed.
-func (s *server) OnBulkTopicEvent(ctx context.Context, in *pb.TopicEventBulkRequest) (*pb.TopicEventBulkResponse, error) {
-	responseEntries := make([]*pb.TopicEventBulkResponseEntry, len(in.Entries))
-	for i, reqEntry := range in.Entries {
-		responseEntry := pb.TopicEventBulkResponseEntry{
-			Status:  0, // SUCCESS
-			EntryID: reqEntry.EntryID,
-		}
-		responseEntries[i] = &responseEntry
-	}
-
-	return &pb.TopicEventBulkResponse{
-		Statuses: responseEntries,
-	}, nil
-}
-
 // Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr.
 // To invoke our app with a binding named storage.
 func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
