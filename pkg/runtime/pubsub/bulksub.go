@@ -57,11 +57,11 @@ func NewDefaultBulkSubscriber(p contribPubsub.PubSub) *defaultBulkSubscriber {
 // when the buffer is full or max await duration is reached.
 func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPubsub.SubscribeRequest, handler contribPubsub.BulkHandler) error {
 	cfg := contribPubsub.BulkSubscribeConfig{
-		MaxBulkCount:                     utils.GetIntOrDefault(req.Metadata, maxBulkCountKey, defaultMaxBulkCount),
+		MaxBulkSubCount:                  utils.GetIntOrDefault(req.Metadata, maxBulkCountKey, defaultMaxBulkCount),
 		MaxBulkAwaitDurationMilliSeconds: utils.GetIntOrDefault(req.Metadata, maxBulkAwaitDurationMsKey, defaultMaxBulkAwaitDurationMs),
 	}
 
-	msgCbChan := make(chan msgWithCallback, cfg.MaxBulkCount)
+	msgCbChan := make(chan msgWithCallback, cfg.MaxBulkSubCount)
 	go processBulkMessages(ctx, req.Topic, msgCbChan, cfg, handler)
 
 	// Subscribe to the topic and listen for messages.
@@ -99,8 +99,8 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 // processBulkMessages reads messages from msgChan and publishes them to a BulkHandler.
 // It buffers messages in memory and publishes them in bulk.
 func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msgWithCallback, cfg contribPubsub.BulkSubscribeConfig, handler contribPubsub.BulkHandler) {
-	messages := make([]contribPubsub.BulkMessageEntry, cfg.MaxBulkCount)
-	msgCbMap := make(map[string]func(error), cfg.MaxBulkCount)
+	messages := make([]contribPubsub.BulkMessageEntry, cfg.MaxBulkSubCount)
+	msgCbMap := make(map[string]func(error), cfg.MaxBulkSubCount)
 
 	ticker := time.NewTicker(time.Duration(cfg.MaxBulkAwaitDurationMilliSeconds) * time.Millisecond)
 	defer ticker.Stop()
@@ -115,7 +115,7 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 			messages[n] = msgCb.msg
 			n++
 			msgCbMap[msgCb.msg.EntryID] = msgCb.cb
-			if n >= cfg.MaxBulkCount {
+			if n >= cfg.MaxBulkSubCount {
 				flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 				n = 0
 				maps.Clear(msgCbMap)

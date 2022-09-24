@@ -3789,7 +3789,8 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 }
 
 // BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
-func (m *mockSubscribePubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	m.bulkPubCount[req.Topic]++
 	res := pubsub.BulkPublishResponse{}
 	if handler, ok := m.handlers[req.Topic]; ok {
 		for _, entry := range req.Entries {
@@ -3805,13 +3806,17 @@ func (m *mockSubscribePubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsu
 				Status:  pubsub.PublishSucceeded,
 			})
 		}
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		nbm := &pubsub.BulkMessage{
+			Entries: req.Entries,
+			Topic:   req.Topic,
+		}
+		bulkResponses, err := bulkHandler(context.Background(), nbm)
+		m.bulkReponse.Statuses = bulkResponses
+		m.bulkReponse.Error = err
 	}
 
 	return res, nil
-}
-
-func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
-	return pubsub.BulkSubscribeResponse{}, nil
 }
 
 // Subscribe is a mock subscribe method.
@@ -3832,20 +3837,6 @@ func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.Subs
 	m.isBulkSubscribe = true
 	m.bulkHandlers[req.Topic] = handler
 	return nil
-}
-
-func (m *mockSubscribePubSub) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	m.bulkPubCount[req.Topic]++
-	if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
-		nbm := &pubsub.BulkMessage{
-			Entries: req.Entries,
-			Topic:   req.Topic,
-		}
-		bulkResponses, err := bulkHandler(context.Background(), nbm)
-		m.bulkReponse.Statuses = bulkResponses
-		m.bulkReponse.Error = err
-	}
-	return pubsub.BulkPublishResponse{}, nil
 }
 
 func TestPubSubDeadLetter(t *testing.T) {
@@ -4603,14 +4594,6 @@ func (m *mockPublishPubSub) Close() error {
 
 func (m *mockPublishPubSub) Features() []pubsub.Feature {
 	return nil
-}
-
-func (m *mockPublishPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
-	return nil
-}
-
-func (m *mockPublishPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	return pubsub.BulkPublishResponse{}, nil
 }
 
 func TestInitActors(t *testing.T) {

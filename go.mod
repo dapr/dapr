@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220922070409-9772c103c22c
+	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220923185752-d9086ca41be3
 	github.com/dapr/kit v0.0.2
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.4
@@ -68,7 +68,7 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.7.0
 	go.opentelemetry.io/otel/sdk v1.7.0
 	go.opentelemetry.io/otel/trace v1.7.0
-	golang.org/x/exp v0.0.0-20220921164117-439092de6870
+	golang.org/x/exp v0.0.0-20220916125017-b168a2c6b86b
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 )
 
@@ -401,6 +401,3 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-
-// This is the feature/pubsub-batching branch in components-contrib, will be removed before merging into master branch of dapr
-replace github.com/dapr/components-contrib => github.com/dapr/components-contrib v1.8.0-rc.1.0.20220923041529-e1d9a3bf9816

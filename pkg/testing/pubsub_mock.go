@@ -54,14 +54,6 @@ func (m *MockPubSub) Features() []pubsub.Feature {
 	return args.Get(0).([]pubsub.Feature)
 }
 
-func (m *MockPubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
-	return nil
-}
-
-func (m *MockPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	return pubsub.BulkPublishResponse{}, nil
-}
-
 // FailingPubsub is a mock pubsub component object that simulates failures.
 type FailingPubsub struct {
 	Failure Failure
@@ -107,14 +99,6 @@ func (f *FailingPubsub) Features() []pubsub.Feature {
 	return nil
 }
 
-func (f *FailingPubsub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
-	return nil
-}
-
-func (f *FailingPubsub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	return pubsub.BulkPublishResponse{}, nil
-}
-
 // InMemoryPubsub is a mock pub-sub component object that works with in-memory handlers
 type InMemoryPubsub struct {
 	mock.Mock
@@ -147,8 +131,6 @@ func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
 	if ok && t.send != nil {
 		send = t.send
 	}
-	m.lock.Unlock()
-
 	if send != nil {
 		send <- &pubsub.NewMessage{
 			Data:        req.Data,
@@ -157,7 +139,7 @@ func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
 			ContentType: req.ContentType,
 		}
 	}
-
+	m.lock.Unlock()
 	return nil
 }
 
@@ -300,12 +282,4 @@ func (m *InMemoryPubsub) onSubscribedTopicsChanged() {
 		}
 		m.topicsCb(topics)
 	}
-}
-
-func (m *InMemoryPubsub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	return pubsub.BulkPublishResponse{}, nil
-}
-
-func (m *InMemoryPubsub) BulkSubscribe(parentCtx context.Context, req pubsub.SubscribeRequest, bulkHandler pubsub.BulkHandler) error {
-	return nil
 }
