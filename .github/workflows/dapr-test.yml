@@ -283,8 +283,13 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Login to cache registry
-        if: env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+      - name: Login to cache registry for Windows
+        if: runner.os == 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+        run: |
+          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken)
+          docker login ${{ env.DAPR_CACHE_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
+      - name: Login to cache registry for Linux or Mac
+        if: runner.os != 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
         run: |
           az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
         shell: bash
@@ -325,20 +330,24 @@ jobs:
         if: env.TEST_PREFIX != ''
         run: |
           elapsed=0
-          until [ $elapsed -ge 1800 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
+          until [ $elapsed -ge 1200 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
           do
               echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
               sleep 20
               elapsed=$(expr $elapsed + 20)
           done
 
-          if [ $elapsed -ge 1800 ]; then
+          if [ $elapsed -ge 1200 ]; then
             echo "Azure Container Registry not ready on time"
-            exit 1
           fi
         shell: bash
-      - name: Login to Azure Container Registry
-        if: env.TEST_PREFIX != ''
+      - name: Login to Azure Container Registry for Windows
+        if: runner.os == 'Windows' && env.TEST_PREFIX != ''
+        run: |
+          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken)
+          docker login ${{ env.DAPR_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
+      - name: Login to Azure Container Registry for Linux or Mac
+        if: runner.os != 'Windows' && env.TEST_PREFIX != ''
         run: |
           az acr login --name ${{ env.TEST_PREFIX }}acr
         shell: bash

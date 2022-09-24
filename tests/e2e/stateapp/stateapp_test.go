@@ -33,11 +33,11 @@ import (
 )
 
 const (
-	appName              = "stateapp"            // App name in Dapr.
-	appNamePluggable     = "stateapp-pluggable"  // App name with pluggable components in Dapr.
-	redisPluggableApp    = "e2e-pluggable_redis" // The name of the pluggable component app.
-	numHealthChecks      = 60                    // Number of get calls before starting tests.
-	testManyEntriesCount = 5                     // Anything between 1 and the number above (inclusive).
+	appName              = "stateapp"                       // App name in Dapr.
+	appNamePluggable     = "stateapp-pluggable"             // App name with pluggable components in Dapr.
+	redisPluggableApp    = "e2e-pluggable_redis-statestore" // The name of the pluggable component app.
+	numHealthChecks      = 60                               // Number of get calls before starting tests.
+	testManyEntriesCount = 5                                // Anything between 1 and the number above (inclusive).
 )
 
 type testCommandRequest struct {
