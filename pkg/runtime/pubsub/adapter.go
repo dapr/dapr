@@ -21,4 +21,5 @@ import (
 type Adapter interface {
 	GetPubSub(pubsubName string) contribPubsub.PubSub
 	Publish(req *contribPubsub.PublishRequest) error
+	BulkPublish(req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error)
 }

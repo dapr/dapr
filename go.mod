@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220922070409-9772c103c22c
+	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220923185752-d9086ca41be3
 	github.com/dapr/kit v0.0.2
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.5.4
@@ -69,6 +69,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.7.0
 	go.opentelemetry.io/otel/trace v1.7.0
 	golang.org/x/exp v0.0.0-20220916125017-b168a2c6b86b
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 )
 
 require (
@@ -350,7 +351,6 @@ require (
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a // indirect
-	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
@@ -397,9 +397,7 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
-replace github.com/dapr/components-contrib => github.com/dapr/components-contrib v1.8.0-rc.1.0.20220923041529-e1d9a3bf9816
 
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-// TEMP ONLY

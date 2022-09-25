@@ -422,7 +422,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
 		// https://cloud.google.com/apis/design/errors#handling_errors
-		log.Errorf("non-retriable error returned from app while processing bulk pub/sub event: %s. status code returned: %v", body, statusCode)
+		log.Errorf("non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
 		bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(msg.entries))
 		bulkSubDiag.elapsed = elapsed
 		populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIDIndexMap, nil)
@@ -430,11 +430,11 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, msg *pubsubBul
 	}
 
 	// Every error from now on is a retriable error.
-	log.Warnf("retriable error returned from app while processing bulk pub/sub event, topic: %v, body: %s. status code returned: %v", msg.topic, body, statusCode)
+	log.Warnf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", msg.topic, statusCode)
 	bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(msg.entries))
 	bulkSubDiag.elapsed = elapsed
-	populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIDIndexMap, errors.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v, body: %s. status code returned: %v", msg.topic, body, statusCode))
-	return errors.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v, body: %s. status code returned: %v", msg.topic, body, statusCode)
+	populateBulkSubscribeResponsesWithError(msg.entries, bulkResponses, &entryIDIndexMap, errors.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", msg.topic, statusCode))
+	return errors.Errorf("retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", msg.topic, statusCode)
 }
 
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
@@ -599,7 +599,7 @@ func (a *DaprRuntime) sendBulkToDeadLetter(
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := a.BulkPublish(ctx, req)
+	_, err := a.BulkPublish(req)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 	}

@@ -1782,22 +1782,6 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	ps, ok := a.pubSubs[req.PubsubName]
-	if !ok {
-		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
-	}
-
-	if !a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings) {
-		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
-	}
-
-	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
-		return bulkPublisher.BulkPublish(ctx, req)
-	}
-	return pubsub.BulkPublishResponse{}, errors.Errorf("pubsub %s does not implement the BulkPublish method", req.PubsubName)
-}
-
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
@@ -1815,6 +1799,22 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	return policy(func(ctx context.Context) (err error) {
 		return ps.component.Publish(req)
 	})
+}
+
+func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	ps, ok := a.pubSubs[req.PubsubName]
+	if !ok {
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
+	}
+
+	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.scopedPublishings); !allowed {
+		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
+	}
+	if bulkPublisher, ok := ps.component.(pubsub.BulkPublisher); ok {
+		return bulkPublisher.BulkPublish(context.TODO(), req)
+	}
+
+	return runtimePubsub.NewDefaultBulkPublisher(ps.component).BulkPublish(context.TODO(), req)
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.
