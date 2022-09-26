@@ -54,8 +54,10 @@ type bulkPublishMessageEntry struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-var pubsubName = "messagebus"
-var pubsubKafka = "kafka-messagebus"
+var (
+	pubsubName  = "messagebus"
+	pubsubKafka = "kafka-messagebus"
+)
 
 func init() {
 	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {

@@ -261,7 +261,6 @@ func readBulkMessageBody(reqID string, r *http.Request) (msgs []AppBulkMessageEn
 		if err != nil {
 			return nil, fmt.Errorf("error from extractBulkMessage: %w", err)
 		}
-
 	} else {
 		msgs, err = extractBulkMessage(reqID, body, false)
 		if err != nil {
@@ -370,7 +369,7 @@ func bulkSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 			// This case is triggered when there is multiple redelivery of same message or a message
 			// is thre for an unknown URL path
 
-			errorMessage := fmt.Sprintf("Unexpected/Multiple redelivery of message during bulk susbcribe from %s", r.URL.String())
+			errorMessage := fmt.Sprintf("Unexpected/Multiple redelivery of message during bulk subscribe from %s", r.URL.String())
 			log.Printf("(%s) Responding with DROP during bulk subscribe. %s", reqID, errorMessage)
 			entryResponse.Status = "DROP"
 		}
@@ -456,7 +455,6 @@ func extractBulkMessage(reqID string, body []byte, isRawPayload bool) ([]AppBulk
 	finalMsgs := make([]AppBulkMessageEntry, len(bulkMsg.Entries))
 	for i, entry := range bulkMsg.Entries {
 		entryData, err := base64.StdEncoding.DecodeString(entry.Event)
-
 		if err != nil {
 			log.Printf("(%s) Could not base64 decode in bulk entry: %v", reqID, err)
 			continue
