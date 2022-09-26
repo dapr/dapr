@@ -49,7 +49,7 @@ func TestGRPCConnector(t *testing.T) {
 	}
 	const (
 		fakeName          = "name"
-		fakeType          = "type"
+		fakeType          = "state"
 		fakeVersion       = "v1"
 		fakeComponentName = "component"
 	)
