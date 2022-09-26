@@ -35,10 +35,9 @@ import (
 type Feature string
 
 const (
-	Resiliency           Feature = "Resiliency"
-	NoDefaultContentType Feature = "ServiceInvocation.NoDefaultContentType"
-	AppHealthCheck       Feature = "AppHealthCheck"
-	PluggableComponents  Feature = "PluggableComponents"
+	Resiliency          Feature = "Resiliency"
+	AppHealthCheck      Feature = "AppHealthCheck"
+	PluggableComponents Feature = "PluggableComponents"
 )
 
 // end feature flags section
@@ -56,8 +55,6 @@ const (
 	HTTPProtocol        = "http"
 	GRPCProtocol        = "grpc"
 )
-
-var noDefaultContentTypeValue = false
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
@@ -273,8 +270,6 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 		return nil, string(b), err
 	}
 
-	noDefaultContentTypeValue = IsFeatureEnabled(conf.Spec.Features, NoDefaultContentType)
-
 	return conf, string(b), nil
 }
 
@@ -301,8 +296,6 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 	if err != nil {
 		return nil, err
 	}
-
-	noDefaultContentTypeValue = IsFeatureEnabled(conf.Spec.Features, NoDefaultContentType)
 
 	return conf, nil
 }
@@ -369,16 +362,4 @@ func IsFeatureEnabled(features []FeatureSpec, target Feature) bool {
 		}
 	}
 	return false
-}
-
-// GetNoDefaultContentType returns the value of the noDefaultContentType flag.
-// It requires the configuration to be loaded, otherwise it returns false.
-func GetNoDefaultContentType() bool {
-	return noDefaultContentTypeValue
-}
-
-// SetNoDefaultContentType sets the value of noDefaultContentTypeValue.
-// This should only be used for testing.
-func SetNoDefaultContentType(val bool) {
-	noDefaultContentTypeValue = val
 }

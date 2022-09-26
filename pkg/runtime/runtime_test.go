@@ -40,14 +40,15 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/middleware"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 
+	"github.com/dapr/dapr/pkg/components"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
@@ -358,7 +359,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -381,7 +382,7 @@ func TestDoProcessComponent(t *testing.T) {
 		lockComponentV3.Spec.Version = "v3"
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentV3)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentV3)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -411,7 +412,7 @@ func TestDoProcessComponent(t *testing.T) {
 			},
 		}
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentWithWrongStrategy)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentWithWrongStrategy)
 		// assert
 		assert.Error(t, err)
 	})
@@ -430,7 +431,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
 		// assert
 		assert.Nil(t, err, "unexpected error")
 		// get modified key
@@ -459,7 +460,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("pubsub"), pubsubComponent)
+		err := rt.doProcessOneComponent(components.CategoryPubSub, pubsubComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -468,7 +469,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 	t.Run("test invalid category component", func(t *testing.T) {
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("invalid"), pubsubComponent)
+		err := rt.doProcessOneComponent(components.Category("invalid"), pubsubComponent)
 
 		// assert
 		assert.NoError(t, err, "no error expected")

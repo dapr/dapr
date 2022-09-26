@@ -110,30 +110,18 @@ const (
 	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 
 	componentFormat = "%s (%s/%s)"
-)
-
-type ComponentCategory string
-
-const (
-	bindingsComponent      ComponentCategory = "bindings"
-	pubsubComponent        ComponentCategory = "pubsub"
-	secretStoreComponent   ComponentCategory = "secretstores"
-	stateComponent         ComponentCategory = "state"
-	middlewareComponent    ComponentCategory = "middleware"
-	configurationComponent ComponentCategory = "configuration"
-	lockComponent          ComponentCategory = "lock"
 
 	defaultComponentInitTimeout = time.Second * 5
 )
 
-var componentCategoriesNeedProcess = []ComponentCategory{
-	bindingsComponent,
-	pubsubComponent,
-	secretStoreComponent,
-	stateComponent,
-	middlewareComponent,
-	configurationComponent,
-	lockComponent,
+var componentCategoriesNeedProcess = []components.Category{
+	components.CategoryBindings,
+	components.CategoryPubSub,
+	components.CategorySecretStore,
+	components.CategoryStateStore,
+	components.CategoryMiddleware,
+	components.CategoryConfiguration,
+	components.CategoryLock,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -2262,7 +2250,7 @@ func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Com
 	}
 }
 
-func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) ComponentCategory {
+func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) components.Category {
 	for _, category := range componentCategoriesNeedProcess {
 		if strings.HasPrefix(component.Spec.Type, fmt.Sprintf("%s.", category)) {
 			return category
@@ -2352,19 +2340,19 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 	return nil
 }
 
-func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp componentsV1alpha1.Component) error {
+func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp componentsV1alpha1.Component) error {
 	switch category {
-	case bindingsComponent:
+	case components.CategoryBindings:
 		return a.initBinding(comp)
-	case pubsubComponent:
+	case components.CategoryPubSub:
 		return a.initPubSub(comp)
-	case secretStoreComponent:
+	case components.CategorySecretStore:
 		return a.initSecretStore(comp)
-	case stateComponent:
+	case components.CategoryStateStore:
 		return a.initState(comp)
-	case configurationComponent:
+	case components.CategoryConfiguration:
 		return a.initConfiguration(comp)
-	case lockComponent:
+	case components.CategoryLock:
 		return a.initLock(comp)
 	}
 	return nil
@@ -2375,7 +2363,7 @@ func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component)
 	*comp, unreadySecretsStore = a.processComponentSecrets(*comp)
 	if unreadySecretsStore != "" {
 		return componentPreprocessRes{
-			unreadyDependency: componentDependency(secretStoreComponent, unreadySecretsStore),
+			unreadyDependency: componentDependency(components.CategorySecretStore, unreadySecretsStore),
 		}
 	}
 	return componentPreprocessRes{}
@@ -2651,11 +2639,6 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
 	}
 
-	// TODO: Remove once feature is finalized
-	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol && !config.GetNoDefaultContentType() {
-		log.Warn("[DEPRECATION NOTICE] Adding a default content type to incoming service invocation requests is deprecated and will be removed in the future. See https://docs.dapr.io/operations/support/support-preview-features/ for more details. You can opt into the new behavior today by setting the configuration option `ServiceInvocation.NoDefaultContentType` to true.")
-	}
-
 	a.appChannel = ch
 
 	return nil
@@ -2817,7 +2800,7 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	return nil
 }
 
-func componentDependency(compCategory ComponentCategory, name string) string {
+func componentDependency(compCategory components.Category, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
 
