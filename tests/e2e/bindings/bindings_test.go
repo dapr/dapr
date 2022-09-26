@@ -141,7 +141,7 @@ func TestMain(m *testing.M) {
 		const (
 			pluggableTestTopicSocket            = "dapr-bindings.kafka-pluggable-test-topic-v1.sock"
 			pluggableTestGRPCTopicSocket        = "dapr-bindings.kafka-pluggable-test-topic-grpc-v1.sock"
-			pluggableTestCustomRouteTopicSocket = "dapr-bindings.kafka-test-topic-custom-route-pluggable-v1.sock"
+			pluggableTestCustomRouteTopicSocket = "dapr-bindings.kafka-pluggable-test-topic-custom-route-pluggable-v1.sock"
 		)
 		kafkaComponentWithName := func(name string) apiv1.Container {
 			return apiv1.Container{
