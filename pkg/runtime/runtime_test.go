@@ -3744,14 +3744,22 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 // mockSubscribePubSub is an in-memory pubsub component.
 type mockSubscribePubSub struct {
-	handlers map[string]pubsub.Handler
-	pubCount map[string]int
+	bulkHandlers    map[string]pubsub.BulkHandler
+	handlers        map[string]pubsub.Handler
+	pubCount        map[string]int
+	bulkPubCount    map[string]int
+	isBulkSubscribe bool
+	bulkReponse     pubsub.BulkSubscribeResponse
 }
+
+// type BulkSubscribeResponse struct {
 
 // Init is a mock initialization method.
 func (m *mockSubscribePubSub) Init(metadata pubsub.Metadata) error {
+	m.bulkHandlers = make(map[string]pubsub.BulkHandler)
 	m.handlers = make(map[string]pubsub.Handler)
 	m.pubCount = make(map[string]int)
+	m.bulkPubCount = make(map[string]int)
 	return nil
 }
 
@@ -3764,13 +3772,25 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 			Topic: req.Topic,
 		}
 		handler(context.Background(), pubsubMsg)
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		m.bulkPubCount[req.Topic]++
+		nbei := pubsub.BulkMessageEntry{
+			EntryID: "0",
+			Event:   req.Data,
+		}
+		msgArr := []pubsub.BulkMessageEntry{nbei}
+		nbm := &pubsub.BulkMessage{
+			Entries: msgArr,
+			Topic:   req.Topic,
+		}
+		bulkHandler(context.Background(), nbm)
 	}
-
 	return nil
 }
 
 // BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
-func (m *mockSubscribePubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	m.bulkPubCount[req.Topic]++
 	res := pubsub.BulkPublishResponse{}
 	if handler, ok := m.handlers[req.Topic]; ok {
 		for _, entry := range req.Entries {
@@ -3786,13 +3806,17 @@ func (m *mockSubscribePubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsu
 				Status:  pubsub.PublishSucceeded,
 			})
 		}
+	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
+		nbm := &pubsub.BulkMessage{
+			Entries: req.Entries,
+			Topic:   req.Topic,
+		}
+		bulkResponses, err := bulkHandler(context.Background(), nbm)
+		m.bulkReponse.Statuses = bulkResponses
+		m.bulkReponse.Error = err
 	}
 
 	return res, nil
-}
-
-func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) (pubsub.BulkSubscribeResponse, error) {
-	return pubsub.BulkSubscribeResponse{}, nil
 }
 
 // Subscribe is a mock subscribe method.
@@ -3806,6 +3830,12 @@ func (m *mockSubscribePubSub) Close() error {
 }
 
 func (m *mockSubscribePubSub) Features() []pubsub.Feature {
+	return nil
+}
+
+func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {
+	m.isBulkSubscribe = true
+	m.bulkHandlers[req.Topic] = handler
 	return nil
 }
 
