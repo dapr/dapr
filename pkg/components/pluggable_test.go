@@ -24,18 +24,18 @@ func TestPluggableComponent(t *testing.T) {
 	t.Run("get socket path should use /var/run when variable is not set", func(t *testing.T) {
 		const fakeName, fakeVersion = "fake", "v1"
 
-		assert.Equal(t, SocketPathForPluggableComponent(fakeName, fakeVersion), "/var/run/dapr-state.fake-v1.sock")
+		assert.Equal(t, SocketPathForPluggableComponent(fakeName, fakeVersion), "/var/run/dapr-fake-v1.sock")
 	})
 	t.Run("get socket path should use env var when variable is set", func(t *testing.T) {
 		const fakeDir = "/tmp"
 		t.Setenv(DaprPluggableComponentsSocketFolderEnvVar, fakeDir)
 		const fakeName, fakeVersion = "fake", "v1"
 
-		assert.Equal(t, SocketPathForPluggableComponent(fakeName, fakeVersion), fmt.Sprintf("%s/dapr-state.fake-v1.sock", fakeDir))
+		assert.Equal(t, SocketPathForPluggableComponent(fakeName, fakeVersion), fmt.Sprintf("%s/dapr-fake-v1.sock", fakeDir))
 	})
 	t.Run("get socket path should not use version when its empty", func(t *testing.T) {
-		const fakeName, fakeVersion = "fake", "v1"
+		const fakeName, fakeVersion = "fake", ""
 
-		assert.Equal(t, SocketPathForPluggableComponent(fakeName, fakeVersion), "/var/run/dapr-state.fake.sock")
+		assert.Equal(t, SocketPathForPluggableComponent(fakeName, fakeVersion), "/var/run/dapr-fake.sock")
 	})
 }
