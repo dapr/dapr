@@ -381,7 +381,7 @@ var pubsubTests = []struct {
 
 func TestBulkPubSubHTTP(t *testing.T) {
 	for _, app := range apps {
-		t.Log("Enter TestPubSubHTTP")
+		t.Log("Enter TestBulkPubSubHTTP")
 		publisherExternalURL := tr.Platform.AcquireAppExternalURL(app.publisher)
 		require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 

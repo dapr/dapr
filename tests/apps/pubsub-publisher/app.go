@@ -451,7 +451,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 
 func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
 	psName := pubsubName
-	if strings.Contains(topic, "sub-topic") {
+	if strings.Contains(topic, bulkSubTopicIdentity) {
 		psName = pubsubKafka
 	}
 	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, psName, topic)
