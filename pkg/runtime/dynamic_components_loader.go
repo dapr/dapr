@@ -104,12 +104,12 @@ func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
 func (a *DaprRuntime) initDynamicComponent(comp componentsV1alpha1.Component) error {
 	cat := a.extractComponentCategory(comp)
 	switch cat {
-	case pubsubComponent:
+	case components.CategoryPubSub:
 		err := a.beginPubSub(comp.Name)
 		if err != nil {
 			return err
 		}
-	case bindingsComponent:
+	case components.CategoryBindings:
 		if a.bindingsRegistry.HasInputBinding(comp.Spec.Type, comp.Spec.Version) {
 			if a.appChannel == nil {
 				return errors.New("app channel not initialized")
