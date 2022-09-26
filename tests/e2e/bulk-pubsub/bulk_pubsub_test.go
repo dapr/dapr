@@ -53,7 +53,7 @@ const (
 
 	receiveMessageRetries = 5
 
-	publisherAppName      = "pubsub-publisher"
+	publisherAppName      = "pubsub-publisher-bulk-subscribe"
 	bulkSubscriberAppName = "pubsub-bulk-subscriber"
 	PubSubEnvVar          = "DAPR_TEST_PUBSUB_NAME"
 )
@@ -379,7 +379,7 @@ var pubsubTests = []struct {
 	},
 }
 
-func TestPubSubHTTP(t *testing.T) {
+func TestBulkPubSubHTTP(t *testing.T) {
 	for _, app := range apps {
 		t.Log("Enter TestPubSubHTTP")
 		publisherExternalURL := tr.Platform.AcquireAppExternalURL(app.publisher)
