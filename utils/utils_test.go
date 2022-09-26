@@ -14,7 +14,6 @@ limitations under the License.
 package utils
 
 import (
-	"io/ioutil"
 	"net"
 	"os"
 	"testing"
@@ -137,7 +136,7 @@ func TestSocketExists(t *testing.T) {
 	})
 
 	t.Run("socket exists should return false if file exists but it's not a socket", func(t *testing.T) {
-		file, err := ioutil.TempFile("/tmp", "prefix")
+		file, err := os.CreateTemp("/tmp", "prefix")
 		require.NoError(t, err)
 		defer os.Remove(file.Name())
 
@@ -151,6 +150,6 @@ func TestSocketExists(t *testing.T) {
 		require.NoError(t, err)
 		defer listener.Close()
 
-		assert.False(t, SocketExists(fileName))
+		assert.True(t, SocketExists(fileName))
 	})
 }

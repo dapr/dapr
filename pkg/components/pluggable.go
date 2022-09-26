@@ -31,9 +31,9 @@ func GetPluggableComponentsSocketFolderPath() string {
 
 // SocketPathForPluggableComponent returns the desired socket path for the given pluggable component.
 func SocketPathForPluggableComponent(name, version string) string {
-	versionSuffix := fmt.Sprintf("-%s", version)
-	if version == "" {
-		versionSuffix = ""
+	versionSuffix := ""
+	if len(version) != 0 {
+		versionSuffix = fmt.Sprintf("-%s", version)
 	}
 	return fmt.Sprintf("%s/dapr-%s%s.sock", GetPluggableComponentsSocketFolderPath(), name, versionSuffix)
 }
