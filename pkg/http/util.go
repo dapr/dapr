@@ -24,7 +24,7 @@ import (
 
 var errContentTypeMismatch = errors.New("error: mismatch between contentType and event")
 
-func convertEventToBytes(event interface{}, contentType string) ([]byte, error) {
+func ConvertEventToBytes(event interface{}, contentType string) ([]byte, error) {
 	if contribContentType.IsBinaryContentType(contentType) {
 		// Here the expectation is that for a JSON request, the binary data will be base64 encoded.
 		// When content type is given as binary, try to decode base64 as []byte.

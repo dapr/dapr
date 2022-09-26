@@ -131,7 +131,6 @@ func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
 	if ok && t.send != nil {
 		send = t.send
 	}
-
 	if send != nil {
 		send <- &pubsub.NewMessage{
 			Data:        req.Data,
