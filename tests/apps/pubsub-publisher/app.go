@@ -41,9 +41,10 @@ const (
 	daprPortHTTP = 3500
 	daprPortGRPC = 50001
 
-	metadataPrefix    = "metadata."
-	PubSubEnvVar      = "DAPR_TEST_PUBSUB_NAME"
-	bulkPubsubMetaKey = "bulkPublishPubsubName"
+	metadataPrefix       = "metadata."
+	PubSubEnvVar         = "DAPR_TEST_PUBSUB_NAME"
+	bulkPubsubMetaKey    = "bulkPublishPubsubName"
+	bulkSubTopicIdentity = "sub-topic"
 )
 
 type bulkPublishMessageEntry struct {
@@ -53,7 +54,10 @@ type bulkPublishMessageEntry struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-var pubsubName = "messagebus"
+var (
+	pubsubName  = "messagebus"
+	pubsubKafka = "kafka-messagebus"
+)
 
 func init() {
 	if psName := os.Getenv(PubSubEnvVar); len(psName) != 0 {
@@ -446,7 +450,11 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 }
 
 func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, pubsubName, topic)
+	psName := pubsubName
+	if strings.Contains(topic, bulkSubTopicIdentity) {
+		psName = pubsubKafka
+	}
+	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, psName, topic)
 	if len(metadata) > 0 {
 		params := netUrl.Values{}
 		for k, v := range metadata {
@@ -477,11 +485,15 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 }
 
 func performPublishGRPC(reqID string, topic string, jsonValue []byte, contentType string, metadata map[string]string) (int, error) {
+	psName := pubsubName
+	if strings.Contains(topic, bulkSubTopicIdentity) {
+		psName = pubsubKafka
+	}
 	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
 	log.Printf("Connecting to dapr using url %s", url)
 
 	req := &runtimev1pb.PublishEventRequest{
-		PubsubName:      pubsubName,
+		PubsubName:      psName,
 		Topic:           topic,
 		Data:            jsonValue,
 		DataContentType: contentType,

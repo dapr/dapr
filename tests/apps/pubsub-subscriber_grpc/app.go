@@ -38,17 +38,21 @@ import (
 )
 
 const (
-	appPort            = "3000"
-	pubsubA            = "pubsub-a-topic-grpc"
-	pubsubB            = "pubsub-b-topic-grpc"
-	pubsubC            = "pubsub-c-topic-grpc"
-	pubsubRaw          = "pubsub-raw-topic-grpc"
-	pubsubBulkTopic    = "pubsub-bulk-topic-grpc"
-	pubsubRawBulkTopic = "pubsub-raw-bulk-topic-grpc"
-	pubsubCEBulkTopic  = "pubsub-ce-bulk-topic-grpc"
-	pubsubDefBulkTopic = "pubsub-def-bulk-topic-grpc"
-	pubsubName         = "messagebus"
-	pubsubKafka        = "kafka-messagebus"
+	appPort               = "3000"
+	pubsubA               = "pubsub-a-topic-grpc"
+	pubsubB               = "pubsub-b-topic-grpc"
+	pubsubC               = "pubsub-c-topic-grpc"
+	pubsubRaw             = "pubsub-raw-topic-grpc"
+	pubsubBulkTopic       = "pubsub-bulk-topic-grpc"
+	pubsubRawBulkTopic    = "pubsub-raw-bulk-topic-grpc"
+	pubsubCEBulkTopic     = "pubsub-ce-bulk-topic-grpc"
+	pubsubDefBulkTopic    = "pubsub-def-bulk-topic-grpc"
+	pubsubRawSubTopic     = "pubsub-raw-sub-topic-grpc"
+	pubsubCESubTopic      = "pubsub-ce-sub-topic-grpc"
+	pubsubRawBulkSubTopic = "pubsub-raw-bulk-sub-topic-grpc"
+	pubsubCEBulkSubTopic  = "pubsub-ce-bulk-sub-topic-grpc"
+	pubsubName            = "messagebus"
+	pubsubKafka           = "kafka-messagebus"
 )
 
 var (
@@ -61,6 +65,10 @@ var (
 	receivedMessagesRawBulkTopic sets.String
 	receivedMessagesCEBulkTopic  sets.String
 	receivedMessagesDefBulkTopic sets.String
+	receivedMessagesSubRaw       sets.String
+	receivedMessagesSubCE        sets.String
+	receivedMessagesRawBulkSub   sets.String
+	receivedMessagesCEBulkSub    sets.String
 
 	// boolean variable to respond with empty json message if set.
 	respondWithEmptyJSON bool
@@ -74,14 +82,18 @@ var (
 )
 
 type receivedMessagesResponse struct {
-	ReceivedByTopicA       []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB       []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC       []string `json:"pubsub-c-topic"`
-	ReceivedByTopicRaw     []string `json:"pubsub-raw-topic"`
-	ReceivedByTopicBulk    []string `json:"pubsub-bulk-topic"`
-	ReceivedByTopicRawBulk []string `json:"pubsub-raw-bulk-topic"`
-	ReceivedByTopicCEBulk  []string `json:"pubsub-ce-bulk-topic"`
-	ReceivedByTopicDefBulk []string `json:"pubsub-def-bulk-topic"`
+	ReceivedByTopicA          []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB          []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC          []string `json:"pubsub-c-topic"`
+	ReceivedByTopicRaw        []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicBulk       []string `json:"pubsub-bulk-topic"`
+	ReceivedByTopicRawBulk    []string `json:"pubsub-raw-bulk-topic"`
+	ReceivedByTopicCEBulk     []string `json:"pubsub-ce-bulk-topic"`
+	ReceivedByTopicDefBulk    []string `json:"pubsub-def-bulk-topic"`
+	ReceivedByTopicRawSub     []string `json:"pubsub-raw-sub-topic"`
+	ReceivedByTopicCESub      []string `json:"pubsub-ce-sub-topic"`
+	ReceivedByTopicRawBulkSub []string `json:"pubsub-raw-bulk-sub-topic"`
+	ReceivedByTopicCEBulkSub  []string `json:"pubsub-ce-bulk-sub-topic"`
 }
 
 // server is our user app.
@@ -103,6 +115,7 @@ func main() {
 	/* #nosec */
 	s := grpc.NewServer()
 	runtimev1pb.RegisterAppCallbackServer(s, &server{})
+	runtimev1pb.RegisterAppCallbackAlphaServer(s, &server{})
 
 	log.Println("Client starting...")
 
@@ -131,6 +144,10 @@ func initializeSets() {
 	receivedMessagesRawBulkTopic = sets.NewString()
 	receivedMessagesCEBulkTopic = sets.NewString()
 	receivedMessagesDefBulkTopic = sets.NewString()
+	receivedMessagesSubRaw = sets.NewString()
+	receivedMessagesSubCE = sets.NewString()
+	receivedMessagesRawBulkSub = sets.NewString()
+	receivedMessagesCEBulkSub = sets.NewString()
 }
 
 // This method gets invoked when a remote service has called the app through Dapr
@@ -170,14 +187,18 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 
 func (s *server) getMessages(reqID string) []byte {
 	resp := receivedMessagesResponse{
-		ReceivedByTopicA:       receivedMessagesA.List(),
-		ReceivedByTopicB:       receivedMessagesB.List(),
-		ReceivedByTopicC:       receivedMessagesC.List(),
-		ReceivedByTopicRaw:     receivedMessagesRaw.List(),
-		ReceivedByTopicBulk:    receivedMessagesBulkTopic.List(),
-		ReceivedByTopicRawBulk: receivedMessagesRawBulkTopic.List(),
-		ReceivedByTopicCEBulk:  receivedMessagesCEBulkTopic.List(),
-		ReceivedByTopicDefBulk: receivedMessagesDefBulkTopic.List(),
+		ReceivedByTopicA:          receivedMessagesA.List(),
+		ReceivedByTopicB:          receivedMessagesB.List(),
+		ReceivedByTopicC:          receivedMessagesC.List(),
+		ReceivedByTopicRaw:        receivedMessagesRaw.List(),
+		ReceivedByTopicBulk:       receivedMessagesBulkTopic.List(),
+		ReceivedByTopicRawBulk:    receivedMessagesRawBulkTopic.List(),
+		ReceivedByTopicCEBulk:     receivedMessagesCEBulkTopic.List(),
+		ReceivedByTopicDefBulk:    receivedMessagesDefBulkTopic.List(),
+		ReceivedByTopicRawSub:     receivedMessagesSubRaw.List(),
+		ReceivedByTopicCESub:      receivedMessagesSubCE.List(),
+		ReceivedByTopicRawBulkSub: receivedMessagesRawBulkSub.List(),
+		ReceivedByTopicCEBulkSub:  receivedMessagesCEBulkSub.List(),
 	}
 
 	rawResp, _ := json.Marshal(resp)
@@ -248,6 +269,48 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 			{
 				PubsubName: pubsubName,
 				Topic:      pubsubDefBulkTopic,
+			},
+			{
+				PubsubName: pubsubKafka,
+				Topic:      pubsubRawSubTopic,
+				Routes: &runtimev1pb.TopicRoutes{
+					Default: pubsubRawSubTopic,
+				},
+				Metadata: map[string]string{
+					"rawPayload": "true",
+				},
+			},
+			{
+				PubsubName: pubsubKafka,
+				Topic:      pubsubCESubTopic,
+				Routes: &runtimev1pb.TopicRoutes{
+					Default: pubsubCESubTopic,
+				},
+			},
+			{
+				PubsubName: pubsubKafka,
+				Topic:      pubsubRawBulkSubTopic,
+				Routes: &runtimev1pb.TopicRoutes{
+					Default: pubsubRawBulkSubTopic,
+				},
+				Metadata: map[string]string{
+					"rawPayload":                       "true",
+					"bulkSubscribe":                    "true",
+					"maxBulkSubCount":                  "60",
+					"maxBulkAwaitDurationMilliSeconds": "1000",
+				},
+			},
+			{
+				PubsubName: pubsubKafka,
+				Topic:      pubsubCEBulkSubTopic,
+				Routes: &runtimev1pb.TopicRoutes{
+					Default: pubsubCEBulkSubTopic,
+				},
+				Metadata: map[string]string{
+					"bulkSubscribe":                    "true",
+					"maxBulkSubCount":                  "60",
+					"maxBulkAwaitDurationMilliSeconds": "1000",
+				},
 			},
 		},
 	}
@@ -353,6 +416,10 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 		receivedMessagesCEBulkTopic.Insert(msg)
 	} else if strings.HasSuffix(in.Topic, pubsubDefBulkTopic) && !receivedMessagesDefBulkTopic.Has(msg) {
 		receivedMessagesDefBulkTopic.Insert(msg)
+	} else if strings.HasPrefix(in.Topic, pubsubRawSubTopic) && !receivedMessagesSubRaw.Has(msg) {
+		receivedMessagesSubRaw.Insert(msg)
+	} else if strings.HasPrefix(in.Topic, pubsubCESubTopic) && !receivedMessagesSubCE.Has(msg) {
+		receivedMessagesSubCE.Insert(msg)
 	} else {
 		log.Printf("(%s) Received duplicate message: %s - %s", reqID, in.Topic, msg)
 	}
@@ -365,6 +432,72 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	log.Printf("(%s) Responding with SUCCESS", reqID)
 	return &runtimev1pb.TopicEventResponse{
 		Status: runtimev1pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
+	}, nil
+}
+
+func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	reqID := uuid.New().String()
+	log.Printf("(%s) Entered in OnBulkTopicEventAlpha1 in Bulk Subscribe - Topic: %s", reqID, in.Topic)
+	lock.Lock()
+	defer lock.Unlock()
+
+	bulkResponses := make([]*runtimev1pb.TopicEventBulkResponseEntry, len(in.Entries))
+
+	for i, entry := range in.Entries {
+		log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.Topic, string(entry.Event))
+
+		if entry.Event == nil {
+			log.Printf("(%s) Responding with DROP in bulk subscribe for entryID: %s. entry.Event is nil", reqID, entry.EntryID)
+			// Return success with DROP status to drop message
+			bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
+				EntryID: entry.EntryID,
+				Status:  runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
+			}
+		}
+		var msg string
+		if strings.HasPrefix(in.Topic, pubsubCEBulkSubTopic) {
+			var ceMsg map[string]interface{}
+			err := json.Unmarshal(entry.Event, &ceMsg)
+			if err != nil {
+				log.Printf("(%s) Error extracing ce event in bulk subscribe for entryID: %s: %v", reqID, entry.EntryID, err)
+				bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
+					EntryID: entry.EntryID,
+					Status:  runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
+				}
+				continue
+			}
+			msg = ceMsg["data"].(string)
+			log.Printf("(%s) Value of ce event in bulk subscribe for entryID: %s: %s", reqID, entry.EntryID, msg)
+		} else {
+			// var rawMsg
+			err := json.Unmarshal(entry.Event, &msg)
+			if err != nil {
+				log.Printf("(%s) Error extracing raw event in bulk subscribe for entryID: %s: %v", reqID, entry.EntryID, err)
+				// Return success with DROP status to drop message
+				bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
+					EntryID: entry.EntryID,
+					Status:  runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
+				}
+				continue
+			}
+			log.Printf("(%s) Value of raw event in bulk subscribe for entryID: %s: %s", reqID, entry.EntryID, msg)
+		}
+
+		bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
+			EntryID: entry.EntryID,
+			Status:  runtimev1pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
+		}
+		if strings.HasPrefix(in.Topic, pubsubRawBulkSubTopic) && !receivedMessagesRawBulkSub.Has(msg) {
+			receivedMessagesRawBulkSub.Insert(msg)
+		} else if strings.HasPrefix(in.Topic, pubsubCEBulkSubTopic) && !receivedMessagesCEBulkSub.Has(msg) {
+			receivedMessagesCEBulkSub.Insert(msg)
+		} else {
+			log.Printf("(%s) Received duplicate message in bulk subscribe: %s - %s", reqID, in.Topic, msg)
+		}
+	}
+	log.Printf("(%s) Responding with SUCCESS for bulk subscribe", reqID)
+	return &runtimev1pb.TopicEventBulkResponse{
+		Statuses: bulkResponses,
 	}, nil
 }
 

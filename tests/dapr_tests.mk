@@ -30,6 +30,7 @@ binding_input_grpc \
 binding_output \
 pubsub-publisher \
 pubsub-subscriber \
+pubsub-bulk-subscriber \
 pubsub-subscriber_grpc \
 pubsub-subscriber-routing \
 pubsub-subscriber-routing_grpc \
