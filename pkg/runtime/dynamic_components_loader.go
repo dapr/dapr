@@ -1,3 +1,16 @@
+/*
+Copyright 2022 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package runtime
 
 import (
@@ -13,13 +26,13 @@ import (
 func (a *DaprRuntime) watchPathForDynamicLoading() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Errorf("unable to create watcher for dynamic components, dynamic loading will not be supported: %s", err)
+		log.Errorf("unable to create watcher for dynamic components, dynamic loading of components will not be supported: %w", err)
 		return
 	}
 	defer watcher.Close()
 	err = watcher.Add(a.runtimeConfig.Standalone.ComponentsPath)
 	if err != nil {
-		log.Errorf("unable to watch components directory: %s , err: %s , dynamic loading will not be supported", a.runtimeConfig.Standalone.ComponentsPath, err)
+		log.Errorf("unable to watch components directory: %s , err: %w , dynamic loading of components will not be supported", a.runtimeConfig.Standalone.ComponentsPath, err)
 		return
 	}
 	for {
@@ -32,7 +45,7 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 			if event.Op == fsnotify.Create || event.Op == fsnotify.Write {
 				err := a.loadDynamicComponents(event.Name)
 				if err != nil {
-					log.Errorf("failed to load components from file: %s err: %s", event.Name, err)
+					log.Errorf("failed to load components from file: %s err: %w", event.Name, err)
 				}
 			} else if event.Op == fsnotify.Remove || event.Op == fsnotify.Rename {
 				for _, comp := range a.dynamicComponents[DynamicComponentsManifest(event.Name)] {
@@ -43,7 +56,7 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 			if !ok {
 				return
 			}
-			log.Errorf("error while watching components directory for file events: %s", err)
+			log.Errorf("error while watching components directory for file events: %w", err)
 		}
 	}
 }
@@ -74,14 +87,14 @@ func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
 		err := a.processComponentAndDependents(comp)
 		if err != nil {
 			if !comp.Spec.IgnoreErrors {
-				log.Warnf("error processing component %s, error: %s", comp.Name, err.Error())
+				log.Warnf("error processing component %s, error: %w", comp.Name, err.Error())
 				return err
 			}
 			log.Errorf(err.Error())
 		}
 		err = a.initDynamicComponent(comp)
 		if err != nil {
-			log.Errorf("error initializing component %s, error: %s", comp.Name, err.Error())
+			log.Errorf("error initializing component %s, error: %w", comp.Name, err.Error())
 			return err
 		}
 	}

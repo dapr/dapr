@@ -1424,7 +1424,11 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
-	if len(a.pubSubs) == 0 && !a.runtimeConfig.Standalone.EnableDynamicLoading {
+	// Return the adapter even if no pubsub component is currently loaded to allow future dynamically loaded pubsub components to be used by the API
+	if a.runtimeConfig.Standalone.EnableDynamicLoading {
+		return a
+	}
+	if len(a.pubSubs) == 0 {
 		return nil
 	}
 
