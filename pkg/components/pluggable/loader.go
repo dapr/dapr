@@ -29,8 +29,12 @@ import (
 
 // toPluggable converts the pluggable component manifest to a pluggable component businessmodel struct.
 func toPluggable(comp componentsV1alpha1.PluggableComponent) components.Pluggable {
+	name := comp.GetObjectMeta().GetName()
+	if len(comp.Spec.ComponentName) != 0 {
+		name = comp.Spec.ComponentName
+	}
 	return components.Pluggable{
-		Name:    comp.GetObjectMeta().GetName(),
+		Name:    name,
 		Type:    components.PluggableType(comp.Spec.Type),
 		Version: comp.Spec.Version,
 	}
