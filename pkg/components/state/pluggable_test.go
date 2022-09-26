@@ -171,7 +171,7 @@ func TestComponentCalls(t *testing.T) {
 		proto.RegisterQueriableStateStoreServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcStateStore {
 		client := newStateStoreClient(cci)
-		stStore := NewGRPCStateStore(testLogger, components.Pluggable{}.SocketPath())
+		stStore := NewGRPCStateStore(testLogger, components.SocketPathForPluggableComponent("name", "v1"))
 		stStore.Client = client
 		return stStore
 	})

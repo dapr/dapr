@@ -98,13 +98,7 @@ func (b *Registry) getInputBinding(name, version string) (func() bindings.InputB
 		}
 	}
 
-	pluggableComponent := components.Pluggable{
-		Name:    name,
-		Type:    components.InputBinding,
-		Version: version,
-	}
-
-	if socket := pluggableComponent.SocketPath(); utils.SocketExists(socket) {
+	if socket := components.SocketPathForPluggableComponent(name, version); utils.SocketExists(socket) {
 		return b.wrapInputBindingFn(newGRPCInputBinding(socket)), true
 	}
 	return nil, false
@@ -124,13 +118,7 @@ func (b *Registry) getOutputBinding(name, version string) (func() bindings.Outpu
 		}
 	}
 
-	pluggableComponent := components.Pluggable{
-		Name:    name,
-		Type:    components.OutputBinding,
-		Version: version,
-	}
-
-	if socket := pluggableComponent.SocketPath(); utils.SocketExists(socket) {
+	if socket := components.SocketPathForPluggableComponent(name, version); utils.SocketExists(socket) {
 		return b.wrapOutputBindingFn(newGRPCOutputBinding(socket)), true
 	}
 	return nil, false

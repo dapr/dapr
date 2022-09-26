@@ -68,13 +68,7 @@ func (s *Registry) getStateStore(name, version string) (func() state.Store, bool
 		}
 	}
 
-	pluggableComponent := components.Pluggable{
-		Name:    name,
-		Type:    components.State,
-		Version: version,
-	}
-
-	if socket := pluggableComponent.SocketPath(); utils.SocketExists(socket) {
+	if socket := components.SocketPathForPluggableComponent(name, version); utils.SocketExists(socket) {
 		return s.wrapFn(newGRPCStateStore(socket)), true
 	}
 	return nil, false

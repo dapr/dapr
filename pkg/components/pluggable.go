@@ -29,66 +29,11 @@ func GetPluggableComponentsSocketFolderPath() string {
 	return utils.GetEnvOrElse(DaprPluggableComponentsSocketFolderEnvVar, defaultSocketFolder)
 }
 
-// PluggableType is the component type.
-type PluggableType string
-
-const (
-	State          PluggableType = "state"
-	PubSub         PluggableType = "pubsub"
-	InputBinding   PluggableType = "inputbinding"
-	OutputBinding  PluggableType = "outputbinding"
-	HTTPMiddleware PluggableType = "middleware.http"
-	Configuration  PluggableType = "configuration"
-	Secret         PluggableType = "secret"
-	Lock           PluggableType = "lock"
-	NameResolution PluggableType = "nameresolution"
-)
-
-// WellKnownTypes is used as a handy way to iterate over all possibles component type.
-var WellKnownTypes = [9]PluggableType{
-	State,
-	PubSub,
-	InputBinding,
-	OutputBinding,
-	HTTPMiddleware,
-	Configuration,
-	Secret,
-	Lock,
-	NameResolution,
-}
-
-var pluggableToCategory = map[PluggableType]Category{
-	State:          CategoryStateStore,
-	PubSub:         CategoryPubSub,
-	InputBinding:   CategoryBindings,
-	OutputBinding:  CategoryBindings,
-	HTTPMiddleware: CategoryMiddleware,
-	Configuration:  CategoryConfiguration,
-	Secret:         CategorySecretStore,
-	Lock:           CategoryLock,
-	NameResolution: CategoryNameResolution,
-}
-
-// Pluggable represents a pluggable component specification.
-type Pluggable struct {
-	// Name is the pluggable component name.
-	Name string
-	// Type is the component type.
-	Type PluggableType
-	// Version is the pluggable component version.
-	Version string
-}
-
-// Category returns the component category based on its pluggable type.
-func (pc Pluggable) Category() Category {
-	return pluggableToCategory[pc.Type]
-}
-
-// SocketPath returns the desired socket path for the given pluggable component.
-func (pc Pluggable) SocketPath() string {
-	versionSuffix := fmt.Sprintf("-%s", pc.Version)
-	if pc.Version == "" {
+// SocketPathForPluggableComponent returns the desired socket path for the given pluggable component.
+func SocketPathForPluggableComponent(name, version string) string {
+	versionSuffix := fmt.Sprintf("-%s", version)
+	if version == "" {
 		versionSuffix = ""
 	}
-	return fmt.Sprintf("%s/dapr-%s.%s%s.sock", GetPluggableComponentsSocketFolderPath(), pc.Category(), pc.Name, versionSuffix)
+	return fmt.Sprintf("%s/dapr-%s%s.sock", GetPluggableComponentsSocketFolderPath(), name, versionSuffix)
 }

@@ -68,13 +68,7 @@ func (p *Registry) getPubSub(name, version string) (func() pubsub.PubSub, bool) 
 		}
 	}
 
-	pluggableComponent := components.Pluggable{
-		Name:    name,
-		Type:    components.PubSub,
-		Version: version,
-	}
-
-	if socket := pluggableComponent.SocketPath(); utils.SocketExists(socket) {
+	if socket := components.SocketPathForPluggableComponent(name, version); utils.SocketExists(socket) {
 		return p.wrapFn(newGRPCPubSub(socket)), true
 	}
 
