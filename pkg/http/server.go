@@ -233,7 +233,7 @@ func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHa
 			userAgent = "unknown"
 		}
 
-		infoLog.Infof("HTTP API Called: %s %s Source: %s", ctx.Method(), ctx.Path(), userAgent)
+		infoLog.Infof("HTTP API Called: %s %s UserAgent: %s", ctx.Method(), ctx.Path(), userAgent)
 		next(ctx)
 	}
 }

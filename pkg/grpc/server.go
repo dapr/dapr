@@ -326,7 +326,7 @@ func (s *server) getGRPCAPILoggingInfo() grpcGo.UnaryServerInterceptor {
 			}
 		}
 		if s.infoLogger != nil && info != nil {
-			s.infoLogger.Infof("gRPC API Called: %s Source: %s", info.FullMethod, userAgent)
+			s.infoLogger.Infof("gRPC API Called: %s UserAgent: %s", info.FullMethod, userAgent)
 		}
 		return handler(ctx, req)
 	}
