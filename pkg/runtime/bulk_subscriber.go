@@ -484,7 +484,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 	defer endSpans(spans)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
-	clientV1 := runtimev1pb.NewAppCallbackBulkSubscribeClient(a.grpc.AppClient)
+	clientV1 := runtimev1pb.NewAppCallbackAlphaClient(a.grpc.AppClient)
 
 	start := time.Now()
 	res, err := clientV1.OnBulkTopicEventAlpha1(ctx, envelope)

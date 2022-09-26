@@ -115,7 +115,7 @@ func main() {
 	/* #nosec */
 	s := grpc.NewServer()
 	runtimev1pb.RegisterAppCallbackServer(s, &server{})
-	runtimev1pb.RegisterAppCallbackBulkSubscribeServer(s, &server{})
+	runtimev1pb.RegisterAppCallbackAlphaServer(s, &server{})
 
 	log.Println("Client starting...")
 

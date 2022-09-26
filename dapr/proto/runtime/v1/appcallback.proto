@@ -53,9 +53,9 @@ service AppCallbackHealthCheck {
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse) {}
 }
 
-// AppCallbackBulkSubscribe V1 is an optional extension to AppCallback V1 to opt
-// for Bulk Subscription.
-service AppCallbackBulkSubscribe {
+// AppCallbackAlpha V1 is an optional extension to AppCallback V1 to opt
+// for Alpha RPCs.
+service AppCallbackAlpha {
     // Subscribes bulk events from Pubsub
   rpc OnBulkTopicEventAlpha1(TopicEventBulkRequest) returns (TopicEventBulkResponse) {}
 }

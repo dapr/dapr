@@ -690,7 +690,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		}
-		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
+		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
 			// properly stop the gRPC server
 			defer grpcServer.Stop()
@@ -803,7 +803,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		}
-		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
+		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
 			// properly stop the gRPC server
 			defer grpcServer.Stop()
@@ -887,7 +887,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		}
-		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
+		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
 			// properly stop the gRPC server
 			defer grpcServer.Stop()
@@ -976,7 +976,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		}
-		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
+		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
 			// properly stop the gRPC server
 			defer grpcServer.Stop()
@@ -1060,7 +1060,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			BulkResponsePerPath:            mapResp,
 			Error:                          nil,
 		}
-		grpcServer := startTestAppCallbackBulkSubscribeGRPCServer(t, port, mockServer)
+		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
 			// properly stop the gRPC server
 			defer grpcServer.Stop()
@@ -1094,13 +1094,13 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 	})
 }
 
-func startTestAppCallbackBulkSubscribeGRPCServer(t *testing.T, port int, mockServer *channelt.MockServer) *grpc.Server {
+func startTestAppCallbackAlphaGRPCServer(t *testing.T, port int, mockServer *channelt.MockServer) *grpc.Server {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	assert.NoError(t, err)
 	grpcServer := grpc.NewServer()
 	go func() {
 		runtimev1pb.RegisterAppCallbackServer(grpcServer, mockServer)
-		runtimev1pb.RegisterAppCallbackBulkSubscribeServer(grpcServer, mockServer)
+		runtimev1pb.RegisterAppCallbackAlphaServer(grpcServer, mockServer)
 		if err := grpcServer.Serve(lis); err != nil {
 			panic(err)
 		}

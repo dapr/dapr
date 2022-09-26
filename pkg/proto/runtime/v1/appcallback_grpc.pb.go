@@ -350,86 +350,86 @@ var AppCallbackHealthCheck_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "dapr/proto/runtime/v1/appcallback.proto",
 }
 
-// AppCallbackBulkSubscribeClient is the client API for AppCallbackBulkSubscribe service.
+// AppCallbackAlphaClient is the client API for AppCallbackAlpha service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type AppCallbackBulkSubscribeClient interface {
+type AppCallbackAlphaClient interface {
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEventAlpha1(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error)
 }
 
-type appCallbackBulkSubscribeClient struct {
+type appCallbackAlphaClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewAppCallbackBulkSubscribeClient(cc grpc.ClientConnInterface) AppCallbackBulkSubscribeClient {
-	return &appCallbackBulkSubscribeClient{cc}
+func NewAppCallbackAlphaClient(cc grpc.ClientConnInterface) AppCallbackAlphaClient {
+	return &appCallbackAlphaClient{cc}
 }
 
-func (c *appCallbackBulkSubscribeClient) OnBulkTopicEventAlpha1(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error) {
+func (c *appCallbackAlphaClient) OnBulkTopicEventAlpha1(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error) {
 	out := new(TopicEventBulkResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackBulkSubscribe/OnBulkTopicEventAlpha1", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackAlpha/OnBulkTopicEventAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// AppCallbackBulkSubscribeServer is the server API for AppCallbackBulkSubscribe service.
-// All implementations should embed UnimplementedAppCallbackBulkSubscribeServer
+// AppCallbackAlphaServer is the server API for AppCallbackAlpha service.
+// All implementations should embed UnimplementedAppCallbackAlphaServer
 // for forward compatibility
-type AppCallbackBulkSubscribeServer interface {
+type AppCallbackAlphaServer interface {
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEventAlpha1(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error)
 }
 
-// UnimplementedAppCallbackBulkSubscribeServer should be embedded to have forward compatible implementations.
-type UnimplementedAppCallbackBulkSubscribeServer struct {
+// UnimplementedAppCallbackAlphaServer should be embedded to have forward compatible implementations.
+type UnimplementedAppCallbackAlphaServer struct {
 }
 
-func (UnimplementedAppCallbackBulkSubscribeServer) OnBulkTopicEventAlpha1(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error) {
+func (UnimplementedAppCallbackAlphaServer) OnBulkTopicEventAlpha1(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBulkTopicEventAlpha1 not implemented")
 }
 
-// UnsafeAppCallbackBulkSubscribeServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to AppCallbackBulkSubscribeServer will
+// UnsafeAppCallbackAlphaServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AppCallbackAlphaServer will
 // result in compilation errors.
-type UnsafeAppCallbackBulkSubscribeServer interface {
-	mustEmbedUnimplementedAppCallbackBulkSubscribeServer()
+type UnsafeAppCallbackAlphaServer interface {
+	mustEmbedUnimplementedAppCallbackAlphaServer()
 }
 
-func RegisterAppCallbackBulkSubscribeServer(s grpc.ServiceRegistrar, srv AppCallbackBulkSubscribeServer) {
-	s.RegisterService(&AppCallbackBulkSubscribe_ServiceDesc, srv)
+func RegisterAppCallbackAlphaServer(s grpc.ServiceRegistrar, srv AppCallbackAlphaServer) {
+	s.RegisterService(&AppCallbackAlpha_ServiceDesc, srv)
 }
 
-func _AppCallbackBulkSubscribe_OnBulkTopicEventAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _AppCallbackAlpha_OnBulkTopicEventAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TopicEventBulkRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AppCallbackBulkSubscribeServer).OnBulkTopicEventAlpha1(ctx, in)
+		return srv.(AppCallbackAlphaServer).OnBulkTopicEventAlpha1(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.AppCallbackBulkSubscribe/OnBulkTopicEventAlpha1",
+		FullMethod: "/dapr.proto.runtime.v1.AppCallbackAlpha/OnBulkTopicEventAlpha1",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppCallbackBulkSubscribeServer).OnBulkTopicEventAlpha1(ctx, req.(*TopicEventBulkRequest))
+		return srv.(AppCallbackAlphaServer).OnBulkTopicEventAlpha1(ctx, req.(*TopicEventBulkRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// AppCallbackBulkSubscribe_ServiceDesc is the grpc.ServiceDesc for AppCallbackBulkSubscribe service.
+// AppCallbackAlpha_ServiceDesc is the grpc.ServiceDesc for AppCallbackAlpha service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var AppCallbackBulkSubscribe_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "dapr.proto.runtime.v1.AppCallbackBulkSubscribe",
-	HandlerType: (*AppCallbackBulkSubscribeServer)(nil),
+var AppCallbackAlpha_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "dapr.proto.runtime.v1.AppCallbackAlpha",
+	HandlerType: (*AppCallbackAlphaServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "OnBulkTopicEventAlpha1",
-			Handler:    _AppCallbackBulkSubscribe_OnBulkTopicEventAlpha1_Handler,
+			Handler:    _AppCallbackAlpha_OnBulkTopicEventAlpha1_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
