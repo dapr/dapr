@@ -421,7 +421,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 			Config:         "pluggablecomponentsconfig",
 			PluggableComponents: map[string]apiv1.Container{
-				"dapr-state.redis-pluggable-v1-pluggable-statestore.sock": {
+				"dapr-state.redis-pluggable-v1.sock": {
 					Name:  "redis-pluggable", // e2e-pluggable_redis
 					Image: runner.BuildTestImageName(redisPluggableApp),
 				},

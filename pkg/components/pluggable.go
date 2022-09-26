@@ -13,6 +13,22 @@ limitations under the License.
 
 package components
 
+import (
+	"fmt"
+
+	"github.com/dapr/dapr/utils"
+)
+
+const (
+	DaprPluggableComponentsSocketFolderEnvVar = "DAPR_PLUGGABLE_COMPONENTS_SOCKETS_FOLDER"
+	defaultSocketFolder                       = "/var/run"
+)
+
+// GetPluggableComponentsSocketFolderPath returns the shared unix domain socket folder path
+func GetPluggableComponentsSocketFolderPath() string {
+	return utils.GetEnvOrElse(DaprPluggableComponentsSocketFolderEnvVar, defaultSocketFolder)
+}
+
 // PluggableType is the component type.
 type PluggableType string
 
@@ -64,6 +80,15 @@ type Pluggable struct {
 }
 
 // Category returns the component category based on its pluggable type.
-func (p Pluggable) Category() Category {
-	return pluggableToCategory[p.Type]
+func (pc Pluggable) Category() Category {
+	return pluggableToCategory[pc.Type]
+}
+
+// SocketPath returns the desired socket path for the given pluggable component.
+func (pc Pluggable) SocketPath() string {
+	versionSuffix := fmt.Sprintf("-%s", pc.Version)
+	if pc.Version == "" {
+		versionSuffix = ""
+	}
+	return fmt.Sprintf("%s/dapr-%s.%s%s.sock", GetPluggableComponentsSocketFolderPath(), pc.Category(), pc.Name, versionSuffix)
 }

@@ -139,9 +139,9 @@ func TestMain(m *testing.M) {
 
 	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
 		const (
-			pluggableTestTopicSocket            = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic.sock"
-			pluggableTestGRPCTopicSocket        = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic-grpc.sock"
-			pluggableTestCustomRouteTopicSocket = "dapr-bindings.kafka-pluggable-v1-test-topic-custom-route-pluggable.sock"
+			pluggableTestTopicSocket            = "dapr-bindings.kafka-pluggable-test-topic-v1.sock"
+			pluggableTestGRPCTopicSocket        = "dapr-bindings.kafka-pluggable-test-topic-grpc-v1.sock"
+			pluggableTestCustomRouteTopicSocket = "dapr-bindings.kafka-test-topic-custom-route-pluggable-v1.sock"
 		)
 		kafkaComponentWithName := func(name string) apiv1.Container {
 			return apiv1.Container{

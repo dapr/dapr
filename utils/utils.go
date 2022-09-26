@@ -14,6 +14,7 @@ limitations under the License.
 package utils
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,6 +118,14 @@ func IsYaml(fileName string) bool {
 	extension := strings.ToLower(filepath.Ext(fileName))
 	if extension == ".yaml" || extension == ".yml" {
 		return true
+	}
+	return false
+}
+
+// SocketExists returns true if the file in that path is a unix socket.
+func SocketExists(socketPath string) bool {
+	if s, err := os.Stat(socketPath); err == nil {
+		return s.Mode() == fs.ModeSocket
 	}
 	return false
 }

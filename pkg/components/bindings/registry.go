@@ -20,6 +20,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -96,6 +97,16 @@ func (b *Registry) getInputBinding(name, version string) (func() bindings.InputB
 			return b.wrapInputBindingFn(bindingFn), true
 		}
 	}
+
+	pluggableComponent := components.Pluggable{
+		Name:    name,
+		Type:    components.InputBinding,
+		Version: version,
+	}
+
+	if socket := pluggableComponent.SocketPath(); utils.SocketExists(socket) {
+		return b.wrapInputBindingFn(newGRPCInputBinding(socket)), true
+	}
 	return nil, false
 }
 
@@ -111,6 +122,16 @@ func (b *Registry) getOutputBinding(name, version string) (func() bindings.Outpu
 		if ok {
 			return b.wrapOutputBindingFn(bindingFn), true
 		}
+	}
+
+	pluggableComponent := components.Pluggable{
+		Name:    name,
+		Type:    components.OutputBinding,
+		Version: version,
+	}
+
+	if socket := pluggableComponent.SocketPath(); utils.SocketExists(socket) {
+		return b.wrapOutputBindingFn(newGRPCOutputBinding(socket)), true
 	}
 	return nil, false
 }

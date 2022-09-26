@@ -30,7 +30,6 @@ import (
 
 	"go.uber.org/atomic"
 
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
@@ -120,7 +119,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		proto.RegisterPubSubServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcPubSub {
 		client := proto.NewPubSubClient(cci)
-		pubsub := fromConnector(testLogger, pluggable.NewGRPCConnector(components.Pluggable{}, proto.NewPubSubClient))
+		pubsub := fromConnector(testLogger, pluggable.NewGRPCConnector("/tmp/socket.sock", proto.NewPubSubClient))
 		pubsub.Client = client
 		return pubsub
 	})
@@ -139,9 +138,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			socket := fmt.Sprintf("%s/%s.sock", fakeSocketFolder, uniqueID)
 			defer os.Remove(socket)
 
-			connector := pluggable.NewGRPCConnectorWithFactory(func(string) string {
-				return socket
-			}, proto.NewPubSubClient)
+			connector := pluggable.NewGRPCConnector(socket, proto.NewPubSubClient)
 			defer connector.Close()
 
 			listener, err := net.Listen("unix", socket)
