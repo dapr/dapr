@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"sync"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -31,8 +32,17 @@ import (
 )
 
 const (
-	appPort = "3000"
+	appPort                 = "3000"
+	DaprTestGRPCTopicEnvVar = "DAPR_TEST_GRPC_TOPIC_NAME"
 )
+
+var topicName = "test-topic-grpc"
+
+func init() {
+	if envTopicName := os.Getenv(DaprTestGRPCTopicEnvVar); len(envTopicName) != 0 {
+		topicName = envTopicName
+	}
+}
 
 // server is our user app.
 type server struct{}
@@ -173,7 +183,7 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*run
 	log.Println("List Input Bindings called")
 	return &runtimev1pb.ListInputBindingsResponse{
 		Bindings: []string{
-			"test-topic-grpc",
+			topicName,
 		},
 	}, nil
 }

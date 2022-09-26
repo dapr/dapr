@@ -59,7 +59,7 @@ func GetSocketFolderPath() string {
 
 // socketFactoryFor returns a socket factory that returns the socket that will be used for the given pluggable component.
 func socketFactoryFor(pc components.Pluggable) func(string) string {
-	socketPrefix := fmt.Sprintf("%s/dapr-%s.%s-%s", GetSocketFolderPath(), pc.Type, pc.Name, pc.Version)
+	socketPrefix := fmt.Sprintf("%s/dapr-%s.%s-%s", GetSocketFolderPath(), pc.Category(), pc.Name, pc.Version)
 	return func(componentName string) string {
 		return fmt.Sprintf("%s-%s.sock", socketPrefix, componentName)
 	}
