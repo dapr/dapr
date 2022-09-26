@@ -15,12 +15,17 @@ package components
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPluggableComponent(t *testing.T) {
+	// gRPC Pluggable component requires Unix Domain Socket to work, I'm skipping this test when running on windows.
+	if runtime.GOOS == "windows" {
+		return
+	}
 	t.Run("get socket path should use /var/run when variable is not set", func(t *testing.T) {
 		const fakeName, fakeVersion = "fake", "v1"
 
