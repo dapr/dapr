@@ -16,6 +16,6 @@
 # Allows skipping some E2E test runs on Azure based on OS and arch.
 # This is useful when we are still working to stabilize some targets.
 # This script allows the stabilization to take place prior to merging into master.
-if [ -n "$GITHUB_ENV" ] && [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
+if [ -n "$GITHUB_ENV" ] && [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" = "arm64" ]; then
   echo "SKIP_E2E=true" >> $GITHUB_ENV
 fi
