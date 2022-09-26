@@ -27,6 +27,7 @@ import (
 	grpcGo "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/kit/logger"
 
@@ -318,8 +319,14 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 
 func (s *server) getGRPCAPILoggingInfo() grpcGo.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (interface{}, error) {
+		userAgent := "unknown"
+		if meta, ok := metadata.FromIncomingContext(ctx); ok {
+			if val, ok := meta["user-agent"]; ok {
+				userAgent = val[0]
+			}
+		}
 		if s.infoLogger != nil && info != nil {
-			s.infoLogger.Info("gRPC API Called: ", info.FullMethod)
+			s.infoLogger.Infof("gRPC API Called: %s Source: %s", info.FullMethod, userAgent)
 		}
 		return handler(ctx, req)
 	}
