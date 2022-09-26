@@ -38,19 +38,29 @@ import (
 )
 
 const (
-	appPort   = "3000"
-	pubsubA   = "pubsub-a-topic-grpc"
-	pubsubB   = "pubsub-b-topic-grpc"
-	pubsubC   = "pubsub-c-topic-grpc"
-	pubsubRaw = "pubsub-raw-topic-grpc"
+	appPort            = "3000"
+	pubsubA            = "pubsub-a-topic-grpc"
+	pubsubB            = "pubsub-b-topic-grpc"
+	pubsubC            = "pubsub-c-topic-grpc"
+	pubsubRaw          = "pubsub-raw-topic-grpc"
+	pubsubBulkTopic    = "pubsub-bulk-topic-grpc"
+	pubsubRawBulkTopic = "pubsub-raw-bulk-topic-grpc"
+	pubsubCEBulkTopic  = "pubsub-ce-bulk-topic-grpc"
+	pubsubDefBulkTopic = "pubsub-def-bulk-topic-grpc"
+	pubsubName         = "messagebus"
+	pubsubKafka        = "kafka-messagebus"
 )
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message.
-	receivedMessagesA   sets.String
-	receivedMessagesB   sets.String
-	receivedMessagesC   sets.String
-	receivedMessagesRaw sets.String
+	receivedMessagesA            sets.String
+	receivedMessagesB            sets.String
+	receivedMessagesC            sets.String
+	receivedMessagesRaw          sets.String
+	receivedMessagesBulkTopic    sets.String
+	receivedMessagesRawBulkTopic sets.String
+	receivedMessagesCEBulkTopic  sets.String
+	receivedMessagesDefBulkTopic sets.String
 
 	// boolean variable to respond with empty json message if set.
 	respondWithEmptyJSON bool
@@ -64,10 +74,14 @@ var (
 )
 
 type receivedMessagesResponse struct {
-	ReceivedByTopicA   []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
-	ReceivedByTopicRaw []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicA       []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB       []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC       []string `json:"pubsub-c-topic"`
+	ReceivedByTopicRaw     []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicBulk    []string `json:"pubsub-bulk-topic"`
+	ReceivedByTopicRawBulk []string `json:"pubsub-raw-bulk-topic"`
+	ReceivedByTopicCEBulk  []string `json:"pubsub-ce-bulk-topic"`
+	ReceivedByTopicDefBulk []string `json:"pubsub-def-bulk-topic"`
 }
 
 // server is our user app.
@@ -113,6 +127,10 @@ func initializeSets() {
 	receivedMessagesB = sets.NewString()
 	receivedMessagesC = sets.NewString()
 	receivedMessagesRaw = sets.NewString()
+	receivedMessagesBulkTopic = sets.NewString()
+	receivedMessagesRawBulkTopic = sets.NewString()
+	receivedMessagesCEBulkTopic = sets.NewString()
+	receivedMessagesDefBulkTopic = sets.NewString()
 }
 
 // This method gets invoked when a remote service has called the app through Dapr
@@ -152,10 +170,14 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 
 func (s *server) getMessages(reqID string) []byte {
 	resp := receivedMessagesResponse{
-		ReceivedByTopicA:   receivedMessagesA.List(),
-		ReceivedByTopicB:   receivedMessagesB.List(),
-		ReceivedByTopicC:   receivedMessagesC.List(),
-		ReceivedByTopicRaw: receivedMessagesRaw.List(),
+		ReceivedByTopicA:       receivedMessagesA.List(),
+		ReceivedByTopicB:       receivedMessagesB.List(),
+		ReceivedByTopicC:       receivedMessagesC.List(),
+		ReceivedByTopicRaw:     receivedMessagesRaw.List(),
+		ReceivedByTopicBulk:    receivedMessagesBulkTopic.List(),
+		ReceivedByTopicRawBulk: receivedMessagesRawBulkTopic.List(),
+		ReceivedByTopicCEBulk:  receivedMessagesCEBulkTopic.List(),
+		ReceivedByTopicDefBulk: receivedMessagesDefBulkTopic.List(),
 	}
 
 	rawResp, _ := json.Marshal(resp)
@@ -187,27 +209,50 @@ func (s *server) setRespondWithInvalidStatus() {
 // to subscribe to a topic named TopicA.
 func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
-	return &runtimev1pb.ListTopicSubscriptionsResponse{
+	resp := &runtimev1pb.ListTopicSubscriptionsResponse{
 		Subscriptions: []*runtimev1pb.TopicSubscription{
 			{
-				PubsubName: "messagebus",
+				PubsubName: pubsubName,
 				Topic:      pubsubA,
 			},
 			{
-				PubsubName: "messagebus",
+				PubsubName: pubsubName,
 				Topic:      pubsubB,
 			},
 			// pubsub-c-topic-grpc is loaded from the YAML/CRD
 			// tests/config/app_topic_subscription_pubsub_grpc.yaml.
 			{
-				PubsubName: "messagebus",
+				PubsubName: pubsubName,
 				Topic:      pubsubRaw,
 				Metadata: map[string]string{
 					"rawPayload": "true",
 				},
 			},
+			// all bulk topics are passed through Kafka which has the bulk publish implemented
+			{
+				PubsubName: pubsubKafka,
+				Topic:      pubsubBulkTopic,
+			},
+			{
+				PubsubName: pubsubKafka,
+				Topic:      pubsubRawBulkTopic,
+				Metadata: map[string]string{
+					"rawPayload": "true",
+				},
+			},
+			{
+				PubsubName: pubsubKafka,
+				Topic:      pubsubCEBulkTopic,
+			},
+			// bulk publish default impl goes to redis as that does not have bulk publish implemented
+			{
+				PubsubName: pubsubName,
+				Topic:      pubsubDefBulkTopic,
+			},
 		},
-	}, nil
+	}
+	log.Printf("Returning topic subscriptions as %v", resp)
+	return resp, nil
 }
 
 // This method is fired whenever a message has been published to a topic that has been subscribed.
@@ -243,28 +288,54 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 			Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 		}, nil
 	}
-
+	log.Printf("(%s) data %s and the content type (%s)", reqID, in.Data, in.DataContentType)
 	var msg string
-	err := json.Unmarshal(in.Data, &msg)
-	if err != nil {
-		log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
-		// Return success with DROP status to drop message
-		return &runtimev1pb.TopicEventResponse{
-			Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
-		}, err
-	}
-
-	// Raw data does not have content-type, so it is handled as-is.
-	// Because the publisher encodes to JSON before publishing, we need to decode here.
-	if strings.HasPrefix(in.Topic, pubsubRaw) {
-		var actualMsg string
-		err = json.Unmarshal([]byte(msg), &actualMsg)
+	var err error
+	if !strings.Contains(in.Topic, "bulk") {
+		// This is the old flow where always the content type is application/json
+		// and data is always json serialized
+		err = json.Unmarshal(in.Data, &msg)
 		if err != nil {
-			log.Printf("(%s) Error extracing JSON from raw event: %v", reqID, err)
-		} else {
-			msg = actualMsg
+			log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
+			// Return success with DROP status to drop message
+			return &runtimev1pb.TopicEventResponse{
+				Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
+			}, err
+		}
+		if strings.HasPrefix(in.Topic, pubsubRaw) {
+			var actualMsg string
+			err = json.Unmarshal([]byte(msg), &actualMsg)
+			if err != nil {
+				log.Printf("(%s) Error extracing JSON from raw event: %v", reqID, err)
+			} else {
+				msg = actualMsg
+			}
+		}
+	} else if strings.Contains(in.Topic, "bulk") {
+		// In bulk publish data and data content type match is important and
+		// enforced/expected
+		if in.DataContentType == "application/json" || in.DataContentType == "application/cloudevents+json" {
+			err = json.Unmarshal(in.Data, &msg)
+			if err != nil {
+				log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
+				// Return success with DROP status to drop message
+				return &runtimev1pb.TopicEventResponse{
+					Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
+				}, err
+			}
+		} else if strings.HasPrefix(in.DataContentType, "text/") {
+			msg = (string)(in.Data)
+		} else if strings.Contains(in.Topic, "raw") {
+			// All raw payload topics are assumed to have "raw" in the name
+			// this is for the bulk case
+			// This is simply for E2E only ....
+			// we are assuming raw payload is also a string here .... In general msg should be []byte only and compared as []byte
+			// raw payload for bulk is set from a string so this scenario holds true
+			msg = string(in.Data)
 		}
 	}
+
+	log.Printf("(%s) Received message: %s - %s", reqID, in.Topic, msg)
 
 	if strings.HasPrefix(in.Topic, pubsubA) && !receivedMessagesA.Has(msg) {
 		receivedMessagesA.Insert(msg)
@@ -274,6 +345,14 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 		receivedMessagesC.Insert(msg)
 	} else if strings.HasPrefix(in.Topic, pubsubRaw) && !receivedMessagesRaw.Has(msg) {
 		receivedMessagesRaw.Insert(msg)
+	} else if strings.HasSuffix(in.Topic, pubsubBulkTopic) && !receivedMessagesBulkTopic.Has(msg) {
+		receivedMessagesBulkTopic.Insert(msg)
+	} else if strings.HasSuffix(in.Topic, pubsubRawBulkTopic) && !receivedMessagesRawBulkTopic.Has(msg) {
+		receivedMessagesRawBulkTopic.Insert(msg)
+	} else if strings.HasSuffix(in.Topic, pubsubCEBulkTopic) && !receivedMessagesCEBulkTopic.Has(msg) {
+		receivedMessagesCEBulkTopic.Insert(msg)
+	} else if strings.HasSuffix(in.Topic, pubsubDefBulkTopic) && !receivedMessagesDefBulkTopic.Has(msg) {
+		receivedMessagesDefBulkTopic.Insert(msg)
 	} else {
 		log.Printf("(%s) Received duplicate message: %s - %s", reqID, in.Topic, msg)
 	}
