@@ -13,6 +13,8 @@ limitations under the License.
 
 package components
 
+import "fmt"
+
 // PluggableType is the component type.
 type PluggableType string
 
@@ -66,4 +68,15 @@ type Pluggable struct {
 // Category returns the component category based on its pluggable type.
 func (p Pluggable) Category() Category {
 	return pluggableToCategory[p.Type]
+}
+
+// FullName returns the full component name including its version.
+// i.e for `name: custom-store`, `version: v1` its full name will be `custom-store/v1`.
+// when version not specified only the component name will be used.
+func (p Pluggable) FullName() string {
+	// when version is not specified so the component name will be returned.
+	if p.Version == "" {
+		return p.Name
+	}
+	return fmt.Sprintf("%s/%s", p.Name, p.Version)
 }

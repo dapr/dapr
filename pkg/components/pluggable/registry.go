@@ -29,7 +29,7 @@ func AddRegistryFor[T any](cmpType components.PluggableType, regFunc func(compon
 	registries[cmpType] = func(pc components.Pluggable) {
 		regFunc(func(l logger.Logger) T {
 			return factory(l, pc)
-		}, pc.Name)
+		}, pc.FullName())
 	}
 }
 

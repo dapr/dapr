@@ -60,20 +60,24 @@ func TestRegisterFunc(t *testing.T) {
 	})
 
 	t.Run("register func should call register func for the given pluggable component type", func(t *testing.T) {
+		const fakeName, fakeVersion = "fakeName", "v2"
 		fakeLog := &fakeLogger{}
 		revert := setLogger(fakeLog)
 		defer revert()
 		registries = make(map[components.PluggableType]func(components.Pluggable))
 
 		mapCalled, registerCalled := 0, 0
-		AddRegistryFor(components.State, func(func(logger.Logger) state.Store, ...string) {
+		AddRegistryFor(components.State, func(_ func(logger.Logger) state.Store, names ...string) {
+			assert.Len(t, names, 1)
 			registerCalled++
+			firstName := names[0]
+			assert.Equal(t, "fakeName/v2", firstName)
 		}, func(logger.Logger, components.Pluggable) state.Store {
 			mapCalled++
 			var fake any
 			return fake.(state.Store)
 		})
-		assert.Equal(t, 1, Register(components.Pluggable{Type: components.State}))
+		assert.Equal(t, 1, Register(components.Pluggable{Name: fakeName, Version: fakeVersion, Type: components.State}))
 
 		assert.Zero(t, fakeLog.warnFCalled.Load())
 		assert.Equal(t, int64(1), fakeLog.infoFCalled.Load())
