@@ -37,6 +37,19 @@ func (f *fakeReflectService) ListServices() ([]string, error) {
 	return f.listServicesResp, f.listServicesErr
 }
 
+func TestServiceCallback(t *testing.T) {
+	t.Run("callback should be called when service ref is registered", func(t *testing.T) {
+		const fakeComponentName, fakeServiceName = "fake-comp", "fake-svc"
+		called := 0
+		AddServiceV1DiscoveryCallback(fakeServiceName, func(name string, _ GRPCConnectionDialer) {
+			called++
+			assert.Equal(t, name, fakeComponentName)
+		})
+		callback([]service{{protoRef: withV1(fakeServiceName), componentName: fakeComponentName}})
+		assert.Equal(t, 1, called)
+	})
+}
+
 func TestComponentDiscovery(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return

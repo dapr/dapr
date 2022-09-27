@@ -94,6 +94,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, *
 		return services, nil
 	}
 
+	log.Debugf("loading pluggable components under path %s", componentsSocketPath)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +142,20 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, *
 			})
 		}
 	}
+	log.Debugf("found %d pluggable component services", len(services)-1) // reflection api doesn't count.
 	return services, nil
+}
+
+// callback invoke callback function for each given service
+func callback(services []service) {
+	for _, service := range services {
+		callback, ok := onServiceDiscovered[service.protoRef]
+		if !ok { // ignoring unknown service
+			continue
+		}
+		callback(service.componentName, service.dialer)
+		log.Infof("pluggable component '%s' was successfully registered for '%s'", service.componentName, service.protoRef)
+	}
 }
 
 // Discover discover the pluggable components and callback the service discovery with the given component name and grpc dialer.
@@ -156,12 +170,7 @@ func Discover(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, service := range services {
-		callback, ok := onServiceDiscovered[service.protoRef]
-		if !ok { // ignoring unknown service
-			continue
-		}
-		callback(service.componentName, service.dialer)
-	}
+
+	callback(services)
 	return nil
 }
