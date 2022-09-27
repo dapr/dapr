@@ -35,9 +35,8 @@ import (
 type Feature string
 
 const (
-	Resiliency          Feature = "Resiliency"
-	AppHealthCheck      Feature = "AppHealthCheck"
-	PluggableComponents Feature = "PluggableComponents"
+	Resiliency     Feature = "Resiliency"
+	AppHealthCheck Feature = "AppHealthCheck"
 )
 
 // end feature flags section

@@ -16,6 +16,7 @@ package utils
 import (
 	"net"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -131,6 +132,10 @@ func TestEnvOrElse(t *testing.T) {
 }
 
 func TestSocketExists(t *testing.T) {
+	// Unix Domain Socket does not work on windows.
+	if runtime.GOOS == "windows" {
+		return
+	}
 	t.Run("socket exists should return false if file does not exists", func(t *testing.T) {
 		assert.False(t, SocketExists("/fake/path"))
 	})

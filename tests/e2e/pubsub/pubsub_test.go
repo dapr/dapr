@@ -477,7 +477,6 @@ func TestMain(m *testing.M) {
 				MetricsEnabled:      true,
 				AppMemoryLimit:      "200Mi",
 				AppMemoryRequest:    "100Mi",
-				Config:              "pluggablecomponentsconfig",
 				PluggableComponents: redisPubsubPluggableComponent,
 				AppEnv: map[string]string{
 					PubSubEnvVar: PubSubPluggableName,
@@ -492,7 +491,6 @@ func TestMain(m *testing.M) {
 				MetricsEnabled:      true,
 				AppMemoryLimit:      "200Mi",
 				AppMemoryRequest:    "100Mi",
-				Config:              "pluggablecomponentsconfig",
 				PluggableComponents: redisPubsubPluggableComponent,
 				AppEnv: map[string]string{
 					PubSubEnvVar: PubSubPluggableName,

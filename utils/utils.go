@@ -122,7 +122,7 @@ func IsYaml(fileName string) bool {
 	return false
 }
 
-// SocketExists returns true if the file in that path is a unix socket.
+// SocketExists returns true if the file in that path is an unix socket.
 func SocketExists(socketPath string) bool {
 	if s, err := os.Stat(socketPath); err == nil {
 		return s.Mode()&fs.ModeSocket != 0
