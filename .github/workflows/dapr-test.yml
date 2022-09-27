@@ -86,7 +86,7 @@ jobs:
             }
       - name: Create PR comment
         if: env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -164,7 +164,7 @@ jobs:
         shell: bash
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -180,7 +180,7 @@ jobs:
             | Linux_arm64 | `Dapr-E2E-${{ env.TEST_PREFIX }}la` | ${{ env.REGION3 }} |
       - name: Update PR comment for failure
         if: failure() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -357,7 +357,7 @@ jobs:
         shell: bash
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -370,7 +370,7 @@ jobs:
             - Test image tag: `${{ env.DAPR_TEST_TAG }}`
       - name: Update PR comment for failure
         if: failure() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -584,7 +584,7 @@ jobs:
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != '' && env.SKIP_E2E != 'true'
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -597,20 +597,20 @@ jobs:
             - Test image tag: `${{ env.DAPR_TEST_TAG }}`
       - name: Update PR comment for skipped test run
         if: success() && env.PR_NUMBER != '' && env.SKIP_E2E = 'true'
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
           append: true
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
-            ## 😕 Tests skipped on ${{ matrix.target_os }}/${{ matrix.target_arch }}
+            ## ⚠️ Tests skipped on ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
             - Image tag: `${{ env.DAPR_TAG }}`
             - Test image tag: `${{ env.DAPR_TEST_TAG }}`
       - name: Update PR comment for failure
         if: failure() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
@@ -622,7 +622,7 @@ jobs:
             Please check the logs for details on the error.
       - name: Update PR comment for cancellation
         if: cancelled() && env.PR_NUMBER != ''
-        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
           number: ${{ env.PR_NUMBER }}
