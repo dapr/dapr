@@ -287,7 +287,7 @@ jobs:
         if: runner.os == 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
         run: |
           $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken)
-          docker login ${{ env.DAPR_CACHE_REGISTRY }}.azurecr.io -u 00000000-0000-0000-0000-000000000000 -p $accessToken
+          docker login ${{ env.DAPR_CACHE_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to cache registry for Linux or Mac
         if: runner.os != 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
         run: |
@@ -344,8 +344,8 @@ jobs:
       - name: Login to Azure Container Registry for Windows
         if: runner.os == 'Windows' && env.TEST_PREFIX != ''
         run: |
-          $accessToken = (az acr login  -n ${{ env.TEST_PREFIX }}acr --expose-token --query accessToken)
-          docker login ${{ env.TEST_PREFIX }}acr.azurecr.io -u 00000000-0000-0000-0000-000000000000 -p $accessToken
+          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken)
+          docker login ${{ env.DAPR_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to Azure Container Registry for Linux or Mac
         if: runner.os != 'Windows' && env.TEST_PREFIX != ''
         run: |
@@ -533,8 +533,12 @@ jobs:
       - name: Show dapr configurations
         if: env.TEST_PREFIX != ''
         run: kubectl get configurations daprsystem -n ${{ env.DAPR_NAMESPACE }} -o yaml
+      - name: Determine if E2E tests should run
+        if: env.TEST_PREFIX != '' && env.TEST_CLOUD_ENV != ''
+        run: ./tests/test-infra/skip_${{ env.TEST_CLOUD_ENV }}.sh
+        shell: bash
       - name: Run E2E tests
-        if: env.TEST_PREFIX != ''
+        if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
         run: make test-e2e-all
       - name: Save control plane K8s resources
         if: always() && env.TEST_PREFIX != ''
