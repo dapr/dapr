@@ -328,18 +328,7 @@ jobs:
       - name: Wait for Azure Container Registry deployment
         timeout-minutes: 30
         if: env.TEST_PREFIX != ''
-        run: |
-          elapsed=0
-          until [ $elapsed -ge 1200 ] || az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
-          do
-              echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
-              sleep 20
-              elapsed=$(expr $elapsed + 20)
-          done
-
-          if [ $elapsed -ge 1200 ]; then
-            echo "Azure Container Registry not ready on time"
-          fi
+        run: ./tests/test-infra/wait_${{ env.TEST_CLOUD_ENV }}_registry.sh ${{ env.TEST_PREFIX }}acr
         shell: bash
       - name: Login to Azure Container Registry for Windows
         if: runner.os == 'Windows' && env.TEST_PREFIX != ''
