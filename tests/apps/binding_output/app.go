@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -30,11 +31,33 @@ import (
 )
 
 const (
-	appPort  = 3000
-	daprPort = 3500
+	appPort                          = 3000
+	daprPort                         = 3500
+	DaprTestTopicEnvVar              = "DAPR_TEST_TOPIC_NAME"
+	DaprTestGRPCTopicEnvVar          = "DAPR_TEST_GRPC_TOPIC_NAME"
+	DaprTestInputBindingServiceEnVar = "DAPR_TEST_INPUT_BINDING_SVC"
 )
 
-var daprClient runtimev1pb.DaprClient
+var (
+	daprClient      runtimev1pb.DaprClient
+	topicName       = "test-topic"
+	topicNameGrpc   = "test-topic-grpc"
+	inputbindingSvc = "bindinginputgrpc"
+)
+
+func init() {
+	if envTopicName := os.Getenv(DaprTestTopicEnvVar); len(envTopicName) != 0 {
+		topicName = envTopicName
+	}
+
+	if envGrpcTopic := os.Getenv(DaprTestGRPCTopicEnvVar); len(envGrpcTopic) != 0 {
+		topicNameGrpc = envGrpcTopic
+	}
+
+	if envinputBinding := os.Getenv(DaprTestInputBindingServiceEnVar); len(envinputBinding) != 0 {
+		inputbindingSvc = envinputBinding
+	}
+}
 
 type testCommandRequest struct {
 	Messages []struct {
@@ -66,7 +89,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := fmt.Sprintf("http://localhost:%d/v1.0/bindings/test-topic", daprPort)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/bindings/%s", daprPort, topicName)
 
 	for _, message := range requestBody.Messages {
 		body, err := json.Marshal(&message)
@@ -110,7 +133,7 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("Sending message: %s", body)
 		req := runtimev1pb.InvokeBindingRequest{
-			Name:      "test-topic-grpc",
+			Name:      topicNameGrpc,
 			Data:      body,
 			Operation: "create",
 		}
@@ -129,7 +152,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Entered getReceivedTopicsGRPC")
 
 	req := runtimev1pb.InvokeServiceRequest{
-		Id: "bindinginputgrpc",
+		Id: inputbindingSvc,
 		Message: &commonv1pb.InvokeRequest{
 			Method: "GetReceivedTopics",
 			Data:   &anypb.Any{},
