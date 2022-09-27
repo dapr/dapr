@@ -452,8 +452,14 @@ func NewGRPCStateStore(l logger.Logger, socket string) *grpcStateStore {
 }
 
 // newGRPCStateStore creates a new state store for the given pluggable component.
-func newGRPCStateStore(socket string) func(l logger.Logger) state.Store {
+func newGRPCStateStore(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) state.Store {
 	return func(l logger.Logger) state.Store {
-		return NewGRPCStateStore(l, socket)
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, newStateStoreClient))
 	}
+}
+
+func init() {
+	pluggable.AddServiceV1DiscoveryCallback("StateStore", func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterComponent(newGRPCStateStore(dialer), name)
+	})
 }

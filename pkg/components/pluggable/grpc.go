@@ -35,6 +35,8 @@ type GRPCClient interface {
 	Ping(ctx context.Context, in *proto.PingRequest, opts ...grpc.CallOption) (*proto.PingResponse, error)
 }
 
+type GRPCConnectionDialer = func() (*grpc.ClientConn, error)
+
 // GRPCConnector is a connector that uses underlying gRPC protocol for common operations.
 type GRPCConnector[TClient GRPCClient] struct {
 	// Context is the component shared context
@@ -43,21 +45,36 @@ type GRPCConnector[TClient GRPCClient] struct {
 	Cancel context.CancelFunc
 	// Client is the proto client.
 	Client        TClient
-	socket        string
+	dialer        GRPCConnectionDialer
 	conn          *grpc.ClientConn
 	clientFactory func(grpc.ClientConnInterface) TClient
 }
 
-// Dial opens a grpcConnection and creates a new client instance.
-func (g *GRPCConnector[TClient]) Dial(additionalOpts ...grpc.DialOption) error {
-	udsSocket := fmt.Sprintf("unix://%s", g.socket)
+// socketDialer creates a dialer for the given socket.
+func socketDialer(socket string, additionalOpts ...grpc.DialOption) GRPCConnectionDialer {
+	return func() (*grpc.ClientConn, error) {
+		return SocketDial(socket, additionalOpts...)
+	}
+}
+
+// SocketDial creates a grpc connection using the given socket.
+func SocketDial(socket string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	udsSocket := fmt.Sprintf("unix://%s", socket)
 	log.Debugf("using socket defined at '%s'", udsSocket)
-	// TODO Add Observability middlewares monitoring/tracing
 	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	grpcConn, err := grpc.Dial(udsSocket, additionalOpts...)
 	if err != nil {
-		return errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", udsSocket)
+		return nil, errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", udsSocket)
+	}
+	return grpcConn, nil
+}
+
+// Dial opens a grpcConnection and creates a new client instance.
+func (g *GRPCConnector[TClient]) Dial() error {
+	grpcConn, err := g.dialer()
+	if err != nil {
+		return errors.Wrapf(err, "unable to open GRPC connection using the dialer")
 	}
 	g.conn = grpcConn
 
@@ -80,14 +97,19 @@ func (g *GRPCConnector[TClient]) Close() error {
 	return g.conn.Close()
 }
 
-// NewGRPCConnector creates a new grpc connector for the given client factory and socket.
-func NewGRPCConnector[TClient GRPCClient](socket string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
+// NewGRPCConnectorWithDialer creates a new grpc connector for the given client factory and dialer.
+func NewGRPCConnectorWithDialer[TClient GRPCClient](dialer GRPCConnectionDialer, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &GRPCConnector[TClient]{
 		Context:       ctx,
 		Cancel:        cancel,
-		socket:        socket,
+		dialer:        dialer,
 		clientFactory: factory,
 	}
+}
+
+// NewGRPCConnector creates a new grpc connector for the given client factory and socket.
+func NewGRPCConnector[TClient GRPCClient](socket string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
+	return NewGRPCConnectorWithDialer(socketDialer(socket), factory)
 }

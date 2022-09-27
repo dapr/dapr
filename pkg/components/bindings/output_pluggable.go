@@ -103,8 +103,14 @@ func NewGRPCOutputBinding(l logger.Logger, socket string) *grpcOutputBinding {
 }
 
 // newGRPCOutputBinding creates a new output binding for the given pluggable component.
-func newGRPCOutputBinding(socket string) func(l logger.Logger) bindings.OutputBinding {
+func newGRPCOutputBinding(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) bindings.OutputBinding {
 	return func(l logger.Logger) bindings.OutputBinding {
-		return outputFromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewOutputBindingClient))
+		return outputFromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, proto.NewOutputBindingClient))
 	}
+}
+
+func init() {
+	pluggable.AddServiceV1DiscoveryCallback("OutputBinding", func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterOutputBinding(newGRPCOutputBinding(dialer), name)
+	})
 }

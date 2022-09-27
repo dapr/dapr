@@ -79,6 +79,7 @@ import (
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -427,6 +428,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
 
+	a.initPluggableComponents()
+
 	go a.processComponents()
 
 	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
@@ -552,6 +555,13 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	return nil
+}
+
+// initPluggableComponents discover pluggable components and initialize with their respective registries.
+func (a *DaprRuntime) initPluggableComponents() {
+	if err := pluggable.Discover(context.TODO()); err != nil {
+		log.Errorf("could not initialize pluggable components %v", err)
+	}
 }
 
 // Sets the status of the app to healthy or un-healthy

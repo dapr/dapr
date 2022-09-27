@@ -73,11 +73,10 @@ func TestGRPCConnector(t *testing.T) {
 			return clientFake
 		}
 
-		connector := NewGRPCConnector("/tmp/socket.sock", fakeFactory)
+		const fakeSocketPath = "/tmp/socket.sock"
+		connector := NewGRPCConnector(fakeSocketPath, fakeFactory)
 
-		socket := connector.socket
-
-		listener, err := net.Listen("unix", socket)
+		listener, err := net.Listen("unix", fakeSocketPath)
 		require.NoError(t, err)
 		defer listener.Close()
 

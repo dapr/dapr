@@ -200,8 +200,14 @@ func NewGRPCPubSub(l logger.Logger, socket string) *grpcPubSub {
 }
 
 // newGRPCPubSub creates a new grpc pubsub for the given pluggable component.
-func newGRPCPubSub(socket string) func(l logger.Logger) pubsub.PubSub {
+func newGRPCPubSub(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) pubsub.PubSub {
 	return func(l logger.Logger) pubsub.PubSub {
-		return fromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewPubSubClient))
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, proto.NewPubSubClient))
 	}
+}
+
+func init() {
+	pluggable.AddServiceV1DiscoveryCallback("PubSub", func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterComponent(newGRPCPubSub(dialer), name)
+	})
 }
