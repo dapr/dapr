@@ -448,7 +448,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to load components: %s", err)
 	}
 
-	// Enable dynamic loading in standalone mode if enable dynamic loading flag is true and components path is provided
+	// Enable dynamic loading in standalone mode if dynamic loading preview feature is enabled and components path is provided
 	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.EnableDynamicLoading {
 		dir, err := os.Stat(a.runtimeConfig.Standalone.ComponentsPath)
 		if err != nil {

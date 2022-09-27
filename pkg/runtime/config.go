@@ -93,7 +93,6 @@ type NewRuntimeConfigOpts struct {
 	AllowedOrigins               string
 	GlobalConfig                 string
 	ComponentsPath               string
-	EnableDynamicLoading         bool
 	AppProtocol                  string
 	Mode                         string
 	HTTPPort                     int
@@ -148,8 +147,7 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		GlobalConfig:        opts.GlobalConfig,
 		AllowedOrigins:      opts.AllowedOrigins,
 		Standalone: config.StandaloneConfig{
-			ComponentsPath:       opts.ComponentsPath,
-			EnableDynamicLoading: opts.EnableDynamicLoading,
+			ComponentsPath: opts.ComponentsPath,
 		},
 		Kubernetes: config.KubernetesConfig{
 			ControlPlaneAddress: opts.controlPlaneAddress,

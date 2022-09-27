@@ -55,7 +55,6 @@ func FromFlags() (*DaprRuntime, error) {
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
-	enableDynamicLoading := flag.Bool("enable-dynamic-loading", false, "Allow dynamic loading of components. This option is supported in self-hosted mode only")
 	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
@@ -181,10 +180,6 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, fmt.Errorf("the 'dapr-grpc-port' argument value %d conflicts with 'app-port'", daprAPIGRPC)
 	}
 
-	if *componentsPath == "" && *enableDynamicLoading {
-		return nil, errors.New("components path must be specified if dynamic loading is enabled")
-	}
-
 	var maxRequestBodySize int
 	if *daprHTTPMaxRequestSize != -1 {
 		maxRequestBodySize = *daprHTTPMaxRequestSize
@@ -259,7 +254,6 @@ func FromFlags() (*DaprRuntime, error) {
 		AllowedOrigins:               *allowedOrigins,
 		GlobalConfig:                 *config,
 		ComponentsPath:               *componentsPath,
-		EnableDynamicLoading:         *enableDynamicLoading,
 		AppProtocol:                  appPrtcl,
 		Mode:                         *mode,
 		HTTPPort:                     daprHTTP,
@@ -358,6 +352,13 @@ func FromFlags() (*DaprRuntime, error) {
 	if !daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
 		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.AppHealthCheck)
 		runtimeConfig.AppHealthCheck = nil
+	}
+
+	if daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.DynamicLoading) {
+		if *componentsPath == "" {
+			log.Fatalf("components-path must be provided when dynamic loading is enabled")
+		}
+		runtimeConfig.Standalone.EnableDynamicLoading = true
 	}
 
 	resiliencyEnabled := daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.Resiliency)

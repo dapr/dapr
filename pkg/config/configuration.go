@@ -37,6 +37,7 @@ type Feature string
 const (
 	Resiliency     Feature = "Resiliency"
 	AppHealthCheck Feature = "AppHealthCheck"
+	DynamicLoading Feature = "DynamicLoading"
 )
 
 // end feature flags section
