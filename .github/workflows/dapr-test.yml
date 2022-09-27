@@ -596,7 +596,7 @@ jobs:
             - Image tag: `${{ env.DAPR_TAG }}`
             - Test image tag: `${{ env.DAPR_TEST_TAG }}`
       - name: Update PR comment for skipped test run
-        if: success() && env.PR_NUMBER != '' && env.SKIP_E2E = 'true'
+        if: success() && env.PR_NUMBER != '' && env.SKIP_E2E == 'true'
         uses: artursouza/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
