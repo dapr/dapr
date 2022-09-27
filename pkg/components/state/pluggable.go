@@ -20,7 +20,6 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
 	"github.com/dapr/components-contrib/state/utils"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
@@ -46,7 +45,7 @@ type grpcStateStore struct {
 // Init initializes the grpc state passing out the metadata to the grpc component.
 // It also fetches and set the current components features.
 func (ss *grpcStateStore) Init(metadata state.Metadata) error {
-	if err := ss.Dial(metadata.Name); err != nil {
+	if err := ss.Dial(); err != nil {
 		return err
 	}
 
@@ -448,21 +447,14 @@ func fromConnector(_ logger.Logger, connector *pluggable.GRPCConnector[stateStor
 	}
 }
 
-// fromPluggable creates a new state store for the given pluggable component.
-func fromPluggable(l logger.Logger, pc components.Pluggable) *grpcStateStore {
-	return fromConnector(l, pluggable.NewGRPCConnector(pc, newStateStoreClient))
-}
-
 // NewGRPCStateStore creates a new grpc state store using the given socket factory.
-func NewGRPCStateStore(l logger.Logger, socketFactory func(string) string) *grpcStateStore {
-	return fromConnector(l, pluggable.NewGRPCConnectorWithFactory(socketFactory, newStateStoreClient))
+func NewGRPCStateStore(l logger.Logger, socket string) *grpcStateStore {
+	return fromConnector(l, pluggable.NewGRPCConnector(socket, newStateStoreClient))
 }
 
 // newGRPCStateStore creates a new state store for the given pluggable component.
-func newGRPCStateStore(l logger.Logger, pc components.Pluggable) state.Store {
-	return fromPluggable(l, pc)
-}
-
-func init() {
-	pluggable.AddRegistryFor(components.State, DefaultRegistry.RegisterComponent, newGRPCStateStore)
+func newGRPCStateStore(socket string) func(l logger.Logger) state.Store {
+	return func(l logger.Logger) state.Store {
+		return NewGRPCStateStore(l, socket)
+	}
 }

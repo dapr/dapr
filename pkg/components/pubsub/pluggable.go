@@ -20,7 +20,6 @@ import (
 
 	"github.com/dapr/components-contrib/pubsub"
 
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 
@@ -40,7 +39,7 @@ type grpcPubSub struct {
 // Init initializes the grpc pubsub passing out the metadata to the grpc component.
 // It also fetches and set the component features.
 func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
-	if err := p.Dial(metadata.Name); err != nil {
+	if err := p.Dial(); err != nil {
 		return err
 	}
 
@@ -196,15 +195,13 @@ func fromConnector(l logger.Logger, connector *pluggable.GRPCConnector[proto.Pub
 }
 
 // NewGRPCPubSub creates a new grpc pubsub using the given socket factory.
-func NewGRPCPubSub(l logger.Logger, socketFactory func(string) string) *grpcPubSub {
-	return fromConnector(l, pluggable.NewGRPCConnectorWithFactory(socketFactory, proto.NewPubSubClient))
+func NewGRPCPubSub(l logger.Logger, socket string) *grpcPubSub {
+	return fromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewPubSubClient))
 }
 
 // newGRPCPubSub creates a new grpc pubsub for the given pluggable component.
-func newGRPCPubSub(l logger.Logger, pc components.Pluggable) pubsub.PubSub {
-	return fromConnector(l, pluggable.NewGRPCConnector(pc, proto.NewPubSubClient))
-}
-
-func init() {
-	pluggable.AddRegistryFor(components.PubSub, DefaultRegistry.RegisterComponent, newGRPCPubSub)
+func newGRPCPubSub(socket string) func(l logger.Logger) pubsub.PubSub {
+	return func(l logger.Logger) pubsub.PubSub {
+		return fromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewPubSubClient))
+	}
 }

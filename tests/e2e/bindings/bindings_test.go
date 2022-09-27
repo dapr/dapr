@@ -73,7 +73,6 @@ const (
 	inputBindingPluggableAppName         = "pluggable-bindinginput"
 	outputbindingPluggableAppName        = "pluggable-bindingoutput"
 	inputBindingGRPCPluggableAppName     = "pluggable-bindinginputgrpc"
-	pluggableComponentsAppConfig         = "pluggablecomponentsconfig"
 	kafkaBindingsPluggableComponentImage = "e2e-pluggable_kafka-bindings"
 	DaprTestTopicEnvVar                  = "DAPR_TEST_TOPIC_NAME"
 	DaprTestGRPCTopicEnvVar              = "DAPR_TEST_GRPC_TOPIC_NAME"
@@ -139,9 +138,9 @@ func TestMain(m *testing.M) {
 
 	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
 		const (
-			pluggableTestTopicSocket            = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic.sock"
-			pluggableTestGRPCTopicSocket        = "dapr-bindings.kafka-pluggable-v1-pluggable-test-topic-grpc.sock"
-			pluggableTestCustomRouteTopicSocket = "dapr-bindings.kafka-pluggable-v1-test-topic-custom-route-pluggable.sock"
+			pluggableTestTopicSocket            = "dapr-bindings.kafka-pluggable-test-topic-v1.sock"
+			pluggableTestGRPCTopicSocket        = "dapr-bindings.kafka-pluggable-test-topic-grpc-v1.sock"
+			pluggableTestCustomRouteTopicSocket = "dapr-bindings.kafka-pluggable-test-topic-custom-route-pluggable-v1.sock"
 		)
 		kafkaComponentWithName := func(name string) apiv1.Container {
 			return apiv1.Container{
@@ -163,7 +162,6 @@ func TestMain(m *testing.M) {
 				Replicas:       1,
 				IngressEnabled: true,
 				MetricsEnabled: true,
-				Config:         pluggableComponentsAppConfig,
 				PluggableComponents: map[string]apiv1.Container{
 					pluggableTestTopicSocket:            kafkaComponentWithName("kafka-pluggable"),
 					pluggableTestCustomRouteTopicSocket: kafkaComponentWithName("kafka-pluggable-custom-route"),
@@ -177,7 +175,6 @@ func TestMain(m *testing.M) {
 				Replicas:       1,
 				IngressEnabled: true,
 				MetricsEnabled: true,
-				Config:         pluggableComponentsAppConfig,
 				PluggableComponents: map[string]apiv1.Container{
 					pluggableTestTopicSocket:     kafkaComponentWithName("kafka-pluggable"),
 					pluggableTestGRPCTopicSocket: kafkaComponentWithName("kafka-pluggable-grpc"),
@@ -191,7 +188,6 @@ func TestMain(m *testing.M) {
 				Replicas:       1,
 				IngressEnabled: true,
 				MetricsEnabled: true,
-				Config:         pluggableComponentsAppConfig,
 				AppProtocol:    "grpc",
 				PluggableComponents: map[string]apiv1.Container{
 					pluggableTestGRPCTopicSocket: kafkaComponentWithName("kafka-pluggable"),
