@@ -109,6 +109,9 @@ const (
 	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 
 	componentFormat = "%s (%s/%s)"
+
+	defaultComponentInitTimeout = time.Second * 5
+
 	// Metadata needed to call bulk subscribe
 	BulkSubscribe = "bulkSubscribe"
 )
