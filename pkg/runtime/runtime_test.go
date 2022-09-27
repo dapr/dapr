@@ -40,14 +40,15 @@ import (
 
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/middleware"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 
+	"github.com/dapr/dapr/pkg/components"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
@@ -358,7 +359,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -381,7 +382,7 @@ func TestDoProcessComponent(t *testing.T) {
 		lockComponentV3.Spec.Version = "v3"
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentV3)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentV3)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -411,7 +412,7 @@ func TestDoProcessComponent(t *testing.T) {
 			},
 		}
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponentWithWrongStrategy)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentWithWrongStrategy)
 		// assert
 		assert.Error(t, err)
 	})
@@ -430,7 +431,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("lock"), lockComponent)
+		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
 		// assert
 		assert.Nil(t, err, "unexpected error")
 		// get modified key
@@ -459,7 +460,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
 
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("pubsub"), pubsubComponent)
+		err := rt.doProcessOneComponent(components.CategoryPubSub, pubsubComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -468,7 +469,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 	t.Run("test invalid category component", func(t *testing.T) {
 		// act
-		err := rt.doProcessOneComponent(ComponentCategory("invalid"), pubsubComponent)
+		err := rt.doProcessOneComponent(components.Category("invalid"), pubsubComponent)
 
 		// assert
 		assert.NoError(t, err, "no error expected")
@@ -1315,104 +1316,6 @@ func TestConsumerID(t *testing.T) {
 
 	err := rt.processComponentAndDependents(pubsubComponent)
 	assert.Nil(t, err)
-}
-
-func TestPluggableComponents(t *testing.T) {
-	t.Run("load pluggable components", func(t *testing.T) {
-		rts := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rts)
-
-		require.NoError(t, os.Mkdir(componentsDir, 0o777))
-		defer os.RemoveAll(componentsDir)
-
-		const fakeType, fakeVersion, fakeName = "state", "v1", "mypluggable"
-		s := componentsV1alpha1.PluggableComponent{
-			ObjectMeta: metaV1.ObjectMeta{
-				Name: fakeName,
-			},
-			TypeMeta: metaV1.TypeMeta{
-				Kind: "PluggableComponent",
-			},
-			Spec: componentsV1alpha1.PluggableComponentSpec{
-				Type:    fakeType,
-				Version: fakeVersion,
-			},
-		}
-
-		cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
-		require.NoError(t, err)
-		defer cleanup()
-
-		rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
-		pluggableComponents, err := rts.loadPluggableComponents()
-
-		require.NoError(t, err)
-		assert.Len(t, pluggableComponents, 1)
-		assert.Equal(t, fakeName, pluggableComponents[0].Name)
-		assert.Equal(t, fakeType, string(pluggableComponents[0].Type))
-		assert.Equal(t, fakeVersion, pluggableComponents[0].Version)
-	})
-
-	t.Run("init pluggable components call register", func(t *testing.T) {
-		require.NoError(t, os.Mkdir(componentsDir, 0o777))
-		defer os.RemoveAll(componentsDir)
-
-		const fakeType, fakeVersion, fakeName = "state", "v1", "mypluggable"
-		s := componentsV1alpha1.PluggableComponent{
-			ObjectMeta: metaV1.ObjectMeta{
-				Name: fakeName,
-			},
-			TypeMeta: metaV1.TypeMeta{
-				Kind: "PluggableComponent",
-			},
-			Spec: componentsV1alpha1.PluggableComponentSpec{
-				Type:    fakeType,
-				Version: fakeVersion,
-			},
-		}
-
-		t.Run("when flag is enabled", func(t *testing.T) {
-			rts := NewTestDaprRuntime(modes.StandaloneMode)
-			rts.globalConfig.Spec.Features = append(rts.globalConfig.Spec.Features, config.FeatureSpec{
-				Name:    config.PluggableComponents,
-				Enabled: true,
-			})
-
-			defer stopRuntime(t, rts)
-
-			cleanup, err := writeComponentToDisk(s, "pluggable.yaml")
-			require.NoError(t, err)
-			defer cleanup()
-
-			rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
-			rts.initPluggableComponents()
-
-			_, err = stateLoader.DefaultRegistry.Create("state.mypluggable", "v1")
-			require.NoError(t, err)
-		})
-
-		t.Run("when flag is disabled", func(t *testing.T) {
-			rts := NewTestDaprRuntime(modes.StandaloneMode)
-			rts.globalConfig.Spec.Features = append(rts.globalConfig.Spec.Features, config.FeatureSpec{
-				Name:    config.PluggableComponents,
-				Enabled: false,
-			})
-
-			defer stopRuntime(t, rts)
-
-			s.Name = "my-pluggable-new"
-			cleanup, err := writeComponentToDisk(s, "pluggable-feature-enabled.yaml")
-			require.NoError(t, err)
-			defer cleanup()
-
-			rts.runtimeConfig.Standalone.ComponentsPath = componentsDir
-			rts.initPluggableComponents()
-
-			require.NoError(t, err)
-			_, err = stateLoader.DefaultRegistry.Create("state.my-pluggable-new", "v1")
-			assert.NotNil(t, err)
-		})
-	})
 }
 
 func TestInitPubSub(t *testing.T) {

@@ -20,6 +20,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -31,11 +32,7 @@ type Registry struct {
 }
 
 // DefaultRegistry is the singleton with the registry.
-var DefaultRegistry *Registry
-
-func init() {
-	DefaultRegistry = NewRegistry()
-}
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry is used to create new bindings.
 func NewRegistry() *Registry {
@@ -100,6 +97,10 @@ func (b *Registry) getInputBinding(name, version string) (func() bindings.InputB
 			return b.wrapInputBindingFn(bindingFn), true
 		}
 	}
+
+	if socket := components.SocketPathForPluggableComponent(name, version); utils.SocketExists(socket) {
+		return b.wrapInputBindingFn(newGRPCInputBinding(socket)), true
+	}
 	return nil, false
 }
 
@@ -115,6 +116,10 @@ func (b *Registry) getOutputBinding(name, version string) (func() bindings.Outpu
 		if ok {
 			return b.wrapOutputBindingFn(bindingFn), true
 		}
+	}
+
+	if socket := components.SocketPathForPluggableComponent(name, version); utils.SocketExists(socket) {
+		return b.wrapOutputBindingFn(newGRPCOutputBinding(socket)), true
 	}
 	return nil, false
 }
