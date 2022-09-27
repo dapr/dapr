@@ -16,7 +16,7 @@ package kubernetes
 import (
 	"fmt"
 
-	"github.com/dapr/dapr/pkg/components/pluggable"
+	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -62,10 +62,10 @@ func adaptAndBuildPluggableComponents(appDesc *AppDescription) []apiv1.Container
 
 	// specify unix domain socket path
 	if appDesc.UnixDomainSocketPath == "" {
-		appDesc.UnixDomainSocketPath = pluggable.GetSocketFolderPath()
+		appDesc.UnixDomainSocketPath = components.GetPluggableComponentsSocketFolderPath()
 	} else {
 		// if specified so the env var should be set.
-		sidecarSocketFolderEnvVar := fmt.Sprintf("%s=%s", pluggable.DaprSocketFolderEnvVar, appDesc.UnixDomainSocketPath)
+		sidecarSocketFolderEnvVar := fmt.Sprintf("%s=%s", components.DaprPluggableComponentsSocketFolderEnvVar, appDesc.UnixDomainSocketPath)
 		if appDesc.DaprEnv == "" {
 			appDesc.DaprEnv = sidecarSocketFolderEnvVar
 		} else {
