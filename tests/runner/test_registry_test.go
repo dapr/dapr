@@ -15,23 +15,24 @@ package runner
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestBuildImageName(t *testing.T) {
 	t.Run("build image name should use default values when none was set", func(t *testing.T) {
+		t.Setenv("DAPR_TEST_REGISTRY", "")
+		t.Setenv("DAPR_TEST_TAG", "")
+
 		const fakeApp = "fake"
 		image := BuildTestImageName(fakeApp)
 		assert.Equal(t, image, fmt.Sprintf("%s/%s:%s", defaultImageRegistry, fakeApp, defaultImageTag))
 	})
 	t.Run("build image name should use test image registry when set", func(t *testing.T) {
 		const fakeRegistry = "fake-registry"
-		defer os.Clearenv()
-		require.NoError(t, os.Setenv("DAPR_TEST_REGISTRY", fakeRegistry))
+		t.Setenv("DAPR_TEST_REGISTRY", fakeRegistry)
+		t.Setenv("DAPR_TEST_TAG", "")
 
 		const fakeApp = "fake"
 		image := BuildTestImageName(fakeApp)
@@ -39,8 +40,8 @@ func TestBuildImageName(t *testing.T) {
 	})
 	t.Run("build image name should use test tag when set", func(t *testing.T) {
 		const fakeTag = "fake-tag"
-		defer os.Clearenv()
-		require.NoError(t, os.Setenv("DAPR_TEST_TAG", fakeTag))
+		t.Setenv("DAPR_TEST_REGISTRY", "")
+		t.Setenv("DAPR_TEST_TAG", fakeTag)
 
 		const fakeApp = "fake"
 		image := BuildTestImageName(fakeApp)
