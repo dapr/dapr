@@ -2174,8 +2174,12 @@ func (a *DaprRuntime) IsComponentLoaded(component componentsV1alpha1.Component) 
 	a.componentsLock.RLock()
 	defer a.componentsLock.RUnlock()
 	for _, loadedComp := range a.components {
-		if reflect.DeepEqual(loadedComp, component) {
-			return true
+		if loadedComp.Spec.Type == component.Spec.Type && loadedComp.ObjectMeta.Name == component.ObjectMeta.Name {
+			if loadedComp.Spec.Version == component.Spec.Version && loadedComp.TypeMeta == component.TypeMeta {
+				if reflect.DeepEqual(loadedComp.Spec.Metadata, component.Spec.Metadata) {
+					return true
+				}
+			}
 		}
 	}
 	return false

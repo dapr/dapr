@@ -26,13 +26,13 @@ import (
 func (a *DaprRuntime) watchPathForDynamicLoading() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Errorf("unable to create watcher for dynamic components, dynamic loading of components will not be supported: %w", err)
+		log.Errorf("unable to create watcher for dynamic components, dynamic loading of components will not be supported: %s", err)
 		return
 	}
 	defer watcher.Close()
 	err = watcher.Add(a.runtimeConfig.Standalone.ComponentsPath)
 	if err != nil {
-		log.Errorf("unable to watch components directory: %s , err: %w , dynamic loading of components will not be supported", a.runtimeConfig.Standalone.ComponentsPath, err)
+		log.Errorf("unable to watch components directory: %s , err: %s , dynamic loading of components will not be supported", a.runtimeConfig.Standalone.ComponentsPath, err)
 		return
 	}
 	for {
@@ -45,18 +45,18 @@ func (a *DaprRuntime) watchPathForDynamicLoading() {
 			if event.Op == fsnotify.Create || event.Op == fsnotify.Write {
 				err := a.loadDynamicComponents(event.Name)
 				if err != nil {
-					log.Errorf("failed to load components from file: %s err: %w", event.Name, err)
+					log.Errorf("failed to load components from file: %s err: %s", event.Name, err)
 				}
 			} else if event.Op == fsnotify.Remove || event.Op == fsnotify.Rename {
 				for _, comp := range a.dynamicComponents[DynamicComponentsManifest(event.Name)] {
-					log.Warnf("file: %s deleted, component: %s will not be loaded on sidecar restart.", filepath.Base(event.Name), comp.Name)
+					log.Warnf("file: %s deleted, component: %s will not be loaded when daprd is restarted", filepath.Base(event.Name), comp.Name)
 				}
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return
 			}
-			log.Errorf("error while watching components directory for file events: %w", err)
+			log.Errorf("error while watching components directory for file events: %s", err)
 		}
 	}
 }
@@ -87,14 +87,14 @@ func (a *DaprRuntime) loadDynamicComponents(manifestPath string) error {
 		err := a.processComponentAndDependents(comp)
 		if err != nil {
 			if !comp.Spec.IgnoreErrors {
-				log.Warnf("error processing component %s, error: %w", comp.Name, err.Error())
+				log.Warnf("error processing component %s, error: %s", comp.Name, err.Error())
 				return err
 			}
 			log.Errorf(err.Error())
 		}
 		err = a.initDynamicComponent(comp)
 		if err != nil {
-			log.Errorf("error initializing component %s, error: %w", comp.Name, err.Error())
+			log.Errorf("error initializing component %s, error: %s", comp.Name, err.Error())
 			return err
 		}
 	}
