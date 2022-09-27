@@ -25,7 +25,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/config"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -174,35 +173,7 @@ func TestData(t *testing.T) {
 		assert.Equal(t, "test", string(bData))
 	})
 
-	t.Run("contenttype is unset", func(t *testing.T) {
-		req := NewInvokeMethodRequest("test_method")
-		defer req.Close()
-
-		tData := []byte("test")
-		req.WithRawDataBytes(tData, "")
-		contentType := req.ContentType()
-		bData, err := io.ReadAll(req.RawData())
-		assert.NoError(t, err)
-		assert.Equal(t, "application/json", req.r.Message.ContentType)
-		assert.Equal(t, "application/json", contentType)
-		assert.Equal(t, tData, bData)
-
-		// Force the ContentType to be empty to test setting it in RawData
-		req.WithRawDataBytes(tData, "")
-		req.r.Message.ContentType = ""
-		contentType = req.ContentType()
-		bData, err = io.ReadAll(req.RawData())
-		assert.NoError(t, err)
-		assert.Equal(t, "", req.r.Message.ContentType)
-		assert.Equal(t, "application/json", contentType)
-		assert.Equal(t, tData, bData)
-	})
-
-	// TODO: Remove once feature is finalized
-	t.Run("contenttype is unset, with NoDefaultContentType", func(t *testing.T) {
-		config.SetNoDefaultContentType(true)
-		defer config.SetNoDefaultContentType(false)
-
+	t.Run("contenttype is unset,", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method")
 		defer req.Close()
 

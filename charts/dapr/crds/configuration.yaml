@@ -1,3 +1,4 @@
+
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -97,6 +98,45 @@ spec:
                       - version
                       type: object
                     type: array
+                type: object
+              appHttpPipeline:
+                description: PipelineSpec defines the middleware pipeline.
+                properties:
+                  handlers:
+                    items:
+                      description: HandlerSpec defines a request handlers.
+                      properties:
+                        name:
+                          type: string
+                        selector:
+                          description: SelectorSpec selects target services to which
+                            the handler is to be applied.
+                          properties:
+                            fields:
+                              items:
+                                description: SelectorField defines a selector fields.
+                                properties:
+                                  field:
+                                    type: string
+                                  value:
+                                    type: string
+                                required:
+                                - field
+                                - value
+                                type: object
+                              type: array
+                          required:
+                          - fields
+                          type: object
+                        type:
+                          type: string
+                      required:
+                      - name
+                      - type
+                      type: object
+                    type: array
+                required:
+                - handlers
                 type: object
               components:
                 description: ComponentsSpec describes the configuration for Dapr components

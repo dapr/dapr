@@ -34,6 +34,7 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
@@ -60,18 +61,20 @@ type Channel struct {
 	maxResponseBodySize int
 	appHealthCheckPath  string
 	appHealth           *apphealth.AppHealth
+	pipeline            httpMiddleware.Pipeline
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
 //
 //nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize, readBufferSize int) (channel.AppChannel, error) {
 	scheme := httpScheme
 	if sslEnabled {
 		scheme = httpsScheme
 	}
 
 	c := &Channel{
+		pipeline: pipeline,
 		// We cannot use fasthttp here because of lack of streaming support
 		client: &http.Client{
 			Transport: &http.Transport{
@@ -239,19 +242,22 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	// Send request to user application
 	resp, err := h.client.Do(channelReq)
 
+	// TODO: need to support pipelines per https://github.com/dapr/dapr/pull/5262
+
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
-	var contentLength int
+	var contentLength int64
 	if resp != nil && resp.Header != nil {
-		contentLength, _ = strconv.Atoi(resp.Header.Get("content-length"))
+		contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
 	}
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), int64(contentLength), elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
 	rsp := h.parseChannelResponse(req, resp)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), contentLength, elapsedMs)
 
 	return rsp, nil
 }
@@ -300,10 +306,6 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channe
 	var contentType string
 
 	contentType = channelResp.Header.Get("content-type")
-	// TODO: Remove entire block when feature is finalized
-	if contentType == "" && !config.GetNoDefaultContentType() {
-		contentType = "text/plain; charset=utf-8"
-	}
 
 	// Limit response body if needed
 	var body io.ReadCloser

@@ -24,7 +24,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/config"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -72,11 +71,6 @@ func (imr *InvokeMethodResponse) WithRawData(data io.ReadCloser, contentType str
 		// We are panicking here because we can't return errors
 		// This is just to catch issues during development however, and will never happen at runtime
 		panic("WithRawData cannot be invoked after replaying has been enabled")
-	}
-
-	// TODO: Remove the entire block once feature is finalized
-	if contentType == "" && !config.GetNoDefaultContentType() {
-		contentType = JSONContentType
 	}
 
 	imr.r.Message.ContentType = contentType
@@ -203,15 +197,6 @@ func (imr *InvokeMethodResponse) ContentType() string {
 
 	contentType := m.GetContentType()
 	dataTypeURL := m.GetData().GetTypeUrl()
-
-	// TODO: Remove once feature is finalized
-	if !config.GetNoDefaultContentType() {
-		// set content_type to application/json only if typeurl is unset and data is given
-		hasData := imr.data != nil && !imr.HasMessageData()
-		if contentType == "" && (dataTypeURL == "" && hasData) {
-			contentType = JSONContentType
-		}
-	}
 
 	if dataTypeURL != "" {
 		contentType = ProtobufContentType

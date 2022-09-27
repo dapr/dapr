@@ -516,7 +516,8 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
-			req.Metadata[key] = val[0]
+			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
+			req.Metadata[sanitizedKey] = val[0]
 		}
 	}
 
@@ -978,7 +979,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.GetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(req)
+		getResponse, rErr = a.secretStores[secretStoreName].GetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1021,7 +1022,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	policy := a.resiliency.ComponentOutboundPolicy(ctx, secretStoreName, resiliency.Secretstore)
 	var getResponse secretstores.BulkGetSecretResponse
 	err := policy(func(ctx context.Context) (rErr error) {
-		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(req)
+		getResponse, rErr = a.secretStores[secretStoreName].BulkGetSecret(ctx, req)
 		return rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -1409,6 +1410,12 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		WithActor(in.ActorType, in.ActorId).
 		WithRawDataBytes(in.Data, "")
 	defer req.Close()
+
+	reqMetadata := map[string][]string{}
+	for k, v := range in.Metadata {
+		reqMetadata[k] = []string{v}
+	}
+	req.WithMetadata(reqMetadata)
 
 	// If the request can be retried, we need to enable replaying
 	pd := a.resiliency.GetPolicy(in.ActorType, &resiliency.ActorPolicy{})

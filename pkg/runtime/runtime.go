@@ -53,7 +53,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -110,30 +109,18 @@ const (
 	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 
 	componentFormat = "%s (%s/%s)"
-)
-
-type ComponentCategory string
-
-const (
-	bindingsComponent      ComponentCategory = "bindings"
-	pubsubComponent        ComponentCategory = "pubsub"
-	secretStoreComponent   ComponentCategory = "secretstores"
-	stateComponent         ComponentCategory = "state"
-	middlewareComponent    ComponentCategory = "middleware"
-	configurationComponent ComponentCategory = "configuration"
-	lockComponent          ComponentCategory = "lock"
 
 	defaultComponentInitTimeout = time.Second * 5
 )
 
-var componentCategoriesNeedProcess = []ComponentCategory{
-	bindingsComponent,
-	pubsubComponent,
-	secretStoreComponent,
-	stateComponent,
-	middlewareComponent,
-	configurationComponent,
-	lockComponent,
+var componentCategoriesNeedProcess = []components.Category{
+	components.CategoryBindings,
+	components.CategoryPubSub,
+	components.CategorySecretStore,
+	components.CategoryStateStore,
+	components.CategoryMiddleware,
+	components.CategoryConfiguration,
+	components.CategoryLock,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -325,13 +312,6 @@ func (a *DaprRuntime) getPodName() string {
 	return os.Getenv("POD_NAME")
 }
 
-func (a *DaprRuntime) loadPluggableComponents() ([]components.Pluggable, error) {
-	if a.runtimeConfig.Mode == modes.StandaloneMode {
-		return pluggable.LoadFromDisk(a.runtimeConfig.Standalone.ComponentsPath)
-	}
-	return pluggable.LoadFromKubernetes(a.namespace, a.podName, a.operatorClient)
-}
-
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
@@ -446,8 +426,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry = opts.bindingRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
-
-	a.initPluggableComponents()
 
 	go a.processComponents()
 
@@ -601,12 +579,12 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (httpMiddleware.Pipeline, error) {
 	var handlers []httpMiddleware.Middleware
 
 	if a.globalConfig != nil {
-		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
-			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
+		for i := 0; i < len(spec.Handlers); i++ {
+			middlewareSpec := spec.Handlers[i]
 			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
 				return httpMiddleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
@@ -619,32 +597,19 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 			if err != nil {
 				return httpMiddleware.Pipeline{}, err
 			}
-			log.Infof("enabled %s/%s http middleware", middlewareSpec.Type, middlewareSpec.Version)
+			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
 			handlers = append(handlers, handler)
 		}
 	}
 	return httpMiddleware.Pipeline{Handlers: handlers}, nil
 }
 
-// initPluggableComponents register the pluggable components if the featureflag is enabled and execute the required bootstrap.
-func (a *DaprRuntime) initPluggableComponents() {
-	if config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PluggableComponents) {
-		if err := a.registerPluggableComponents(); err != nil {
-			log.Warnf("failed to register pluggable components: %s", err)
-		}
-	}
+func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
 }
 
-// registerPluggableComponents loads and register the loaded pluggable components.
-func (a *DaprRuntime) registerPluggableComponents() error {
-	pluggables, err := a.loadPluggableComponents()
-	if err != nil {
-		return err
-	}
-	log.Infof("found %d pluggable components", len(pluggables))
-	log.Infof("%d pluggable components were registered", pluggable.Register(pluggables...))
-
-	return nil
+func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
+	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
 }
 
 func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
@@ -1267,7 +1232,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			span.End()
 		}
 		// ::TODO report metrics for http, such as grpc
-		if resp.Status().Code != nethttp.StatusOK {
+		if resp.Status().Code < 200 || resp.Status().Code > 299 {
 			body, _ := io.ReadAll(resp.RawData())
 			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(body))
 		}
@@ -2271,7 +2236,7 @@ func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Com
 	}
 }
 
-func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) ComponentCategory {
+func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) components.Category {
 	for _, category := range componentCategoriesNeedProcess {
 		if strings.HasPrefix(component.Spec.Type, fmt.Sprintf("%s.", category)) {
 			return category
@@ -2361,19 +2326,19 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 	return nil
 }
 
-func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp componentsV1alpha1.Component) error {
+func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp componentsV1alpha1.Component) error {
 	switch category {
-	case bindingsComponent:
+	case components.CategoryBindings:
 		return a.initBinding(comp)
-	case pubsubComponent:
+	case components.CategoryPubSub:
 		return a.initPubSub(comp)
-	case secretStoreComponent:
+	case components.CategorySecretStore:
 		return a.initSecretStore(comp)
-	case stateComponent:
+	case components.CategoryStateStore:
 		return a.initState(comp)
-	case configurationComponent:
+	case components.CategoryConfiguration:
 		return a.initConfiguration(comp)
-	case lockComponent:
+	case components.CategoryLock:
 		return a.initLock(comp)
 	}
 	return nil
@@ -2384,7 +2349,7 @@ func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component)
 	*comp, unreadySecretsStore = a.processComponentSecrets(*comp)
 	if unreadySecretsStore != "" {
 		return componentPreprocessRes{
-			unreadyDependency: componentDependency(secretStoreComponent, unreadySecretsStore),
+			unreadyDependency: componentDependency(components.CategorySecretStore, unreadySecretsStore),
 		}
 	}
 	return componentPreprocessRes{}
@@ -2542,7 +2507,8 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 		resp, ok := cache[m.SecretKeyRef.Name]
 		if !ok {
-			r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
+			// TODO: cascade context.
+			r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
 				Name: m.SecretKeyRef.Name,
 				Metadata: map[string]string{
 					"namespace": component.ObjectMeta.Namespace,
@@ -2643,7 +2609,11 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 			return err
 		}
 	case HTTPProtocol:
-		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
+		pipeline, err := a.buildAppHTTPPipeline()
+		if err != nil {
+			return err
+		}
+		ch, err = httpChannel.CreateLocalChannel(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, pipeline, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.ReadBufferSize)
 		if err != nil {
 			return err
 		}
@@ -2654,11 +2624,6 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 
 	if a.runtimeConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
-	}
-
-	// TODO: Remove once feature is finalized
-	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol && !config.GetNoDefaultContentType() {
-		log.Warn("[DEPRECATION NOTICE] Adding a default content type to incoming service invocation requests is deprecated and will be removed in the future. See https://docs.dapr.io/operations/support/support-preview-features/ for more details. You can opt into the new behavior today by setting the configuration option `ServiceInvocation.NoDefaultContentType` to true.")
 	}
 
 	a.appChannel = ch
@@ -2765,6 +2730,10 @@ func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 		}
 		capabilities[key] = stateStoreCapabilities
 	}
+	for key, pubSubItem := range a.pubSubs {
+		features := pubSubItem.component.Features()
+		capabilities[key] = featureTypeToString(features)
+	}
 	for key := range a.inputBindings {
 		capabilities[key] = []string{"INPUT_BINDING"}
 	}
@@ -2774,6 +2743,10 @@ func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 		} else {
 			capabilities[key] = []string{"OUTPUT_BINDING"}
 		}
+	}
+	for key, store := range a.secretStores {
+		features := store.Features()
+		capabilities[key] = featureTypeToString(features)
 	}
 	return capabilities
 }
@@ -2814,7 +2787,7 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	return nil
 }
 
-func componentDependency(compCategory ComponentCategory, name string) string {
+func componentDependency(compCategory components.Category, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
 

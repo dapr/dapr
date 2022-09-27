@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/config"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -112,34 +111,6 @@ func TestResponseData(t *testing.T) {
 	})
 
 	t.Run("contenttype is unset", func(t *testing.T) {
-		resp := NewInvokeMethodResponse(0, "OK", nil)
-		defer resp.Close()
-
-		tData := []byte("test")
-		resp.WithRawDataBytes(tData, "")
-		contentType := resp.ContentType()
-		bData, err := io.ReadAll(resp.RawData())
-		assert.NoError(t, err)
-		assert.Equal(t, "application/json", resp.r.Message.ContentType)
-		assert.Equal(t, "application/json", contentType)
-		assert.Equal(t, tData, bData)
-
-		// Force the ContentType to be empty to test setting it in RawData
-		resp.WithRawDataBytes(tData, "")
-		resp.r.Message.ContentType = ""
-		contentType = resp.ContentType()
-		bData, err = io.ReadAll(resp.RawData())
-		assert.NoError(t, err)
-		assert.Equal(t, "", resp.r.Message.ContentType)
-		assert.Equal(t, "application/json", contentType)
-		assert.Equal(t, tData, bData)
-	})
-
-	// TODO: Remove once feature is finalized
-	t.Run("contenttype is unset, with NoDefaultContentType", func(t *testing.T) {
-		config.SetNoDefaultContentType(true)
-		defer config.SetNoDefaultContentType(false)
-
 		resp := NewInvokeMethodResponse(0, "OK", nil)
 		defer resp.Close()
 
