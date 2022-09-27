@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
@@ -97,7 +96,7 @@ func TestInputBindingCalls(t *testing.T) {
 		proto.RegisterInputBindingServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcInputBinding {
 		client := proto.NewInputBindingClient(cci)
-		inbinding := inputFromConnector(testLogger, pluggable.NewGRPCConnector(components.Pluggable{}, proto.NewInputBindingClient))
+		inbinding := inputFromConnector(testLogger, pluggable.NewGRPCConnector("/tmp/socket.sock", proto.NewInputBindingClient))
 		inbinding.Client = client
 		return inbinding
 	})
@@ -115,9 +114,7 @@ func TestInputBindingCalls(t *testing.T) {
 			socket := fmt.Sprintf("%s/%s.sock", fakeSocketFolder, uniqueID)
 			defer os.Remove(socket)
 
-			connector := pluggable.NewGRPCConnectorWithFactory(func(string) string {
-				return socket
-			}, proto.NewInputBindingClient)
+			connector := pluggable.NewGRPCConnector(socket, proto.NewInputBindingClient)
 			defer connector.Close()
 
 			listener, err := net.Listen("unix", socket)
