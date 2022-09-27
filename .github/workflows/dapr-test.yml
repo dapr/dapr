@@ -583,7 +583,7 @@ jobs:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
       - name: Update PR comment for success
-        if: success() && env.PR_NUMBER != ''
+        if: success() && env.PR_NUMBER != '' && env.SKIP_E2E != 'true'
         uses: marocchino/sticky-pull-request-comment@v2.2.0
         with:
           header: ${{ github.run_id }}
@@ -592,6 +592,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
             ## ✅ Tests succeeded on ${{ matrix.target_os }}/${{ matrix.target_arch }}
+
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for skipped test run
+        if: success() && env.PR_NUMBER != '' && env.SKIP_E2E = 'true'
+        uses: marocchino/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## 😕 Tests skipped on ${{ matrix.target_os }}/${{ matrix.target_arch }}
 
             - Image tag: `${{ env.DAPR_TAG }}`
             - Test image tag: `${{ env.DAPR_TEST_TAG }}`
