@@ -171,7 +171,7 @@ func TestComponentCalls(t *testing.T) {
 		proto.RegisterQueriableStateStoreServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcStateStore {
 		client := newStateStoreClient(cci)
-		stStore := fromPluggable(testLogger, components.Pluggable{})
+		stStore := NewGRPCStateStore(testLogger, components.SocketPathForPluggableComponent("name", "v1"))
 		stStore.Client = client
 		return stStore
 	})
@@ -190,9 +190,7 @@ func TestComponentCalls(t *testing.T) {
 			socket := fmt.Sprintf("%s/%s.sock", fakeSocketFolder, uniqueID)
 			defer os.Remove(socket)
 
-			connector := pluggable.NewGRPCConnectorWithFactory(func(string) string {
-				return socket
-			}, newStateStoreClient)
+			connector := pluggable.NewGRPCConnector(socket, newStateStoreClient)
 			defer connector.Close()
 
 			listener, err := net.Listen("unix", socket)
