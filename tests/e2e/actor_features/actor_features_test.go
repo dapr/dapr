@@ -538,6 +538,51 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err, "failed to reset reminder")
 	})
 
+	t.Run("Actor reminder delete self.", func(t *testing.T) {
+		// Each test needs to have a different actorID
+		actorID := "1001e"
+
+		// Reset reminder
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		if err != nil {
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+		}
+		require.NoError(t, err, "failed to reset reminder")
+
+		// Set reminder
+		req := actorReminderOrTimer{
+			Data:    "reminderdata",
+			DueTime: "1s",
+			Period:  "1s",
+		}
+		var reqBody []byte
+		reqBody, err = json.Marshal(req)
+		require.NoError(t, err, "failed to marshal JSON")
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		if err != nil {
+			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
+		}
+		require.NoError(t, err, "failed to set reminder")
+
+		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
+
+		// get reminder
+		res, err = httpGet(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		if err != nil {
+			log.Printf("failed to get reminder. Error='%v' Response='%s'", err, string(res))
+		}
+		require.NoError(t, err, "failed to get reminder")
+		require.True(t, len(res) == 0, "Reminder %s exist", reminderName)
+
+		res, err = httpGet(logsURL)
+		if err != nil {
+			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+		}
+		require.NoError(t, err, "failed to get logs")
+		count := countActorAction(res, actorID, reminderName)
+		require.True(t, count == 1, "condition failed: %d not == 1. Response='%s'", count, string(res))
+	})
+
 	t.Run("Actor timer.", func(t *testing.T) {
 		// Each test needs to have a different actorID
 		actorID := "1002"
@@ -654,7 +699,12 @@ func TestActorFeatures(t *testing.T) {
 		require.NotNil(t, logTwo)
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
-		require.True(t, (logOne.StartTimestamp >= logTwo.EndTimestamp) || (logTwo.StartTimestamp >= logOne.EndTimestamp))
+		startEndTimeCheck := (logOne.StartTimestamp >= logTwo.EndTimestamp) || (logTwo.StartTimestamp >= logOne.EndTimestamp)
+		if !startEndTimeCheck {
+			log.Printf("failed for start/end time check: logOne.StartTimestamp='%d' logOne.EndTimestamp='%d' logTwo.StartTimestamp='%d' logTwo.EndTimestamp='%d'",
+				logOne.StartTimestamp, logOne.EndTimestamp, logTwo.StartTimestamp, logTwo.EndTimestamp)
+		}
+		require.True(t, startEndTimeCheck)
 	})
 
 	t.Run("Actor concurrency different actor ids.", func(t *testing.T) {
@@ -692,7 +742,12 @@ func TestActorFeatures(t *testing.T) {
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
 		// Both methods run in parallel, with the sleep time both should start before the other ends.
-		require.True(t, (logOne.StartTimestamp <= logTwo.EndTimestamp) && (logTwo.StartTimestamp <= logOne.EndTimestamp))
+		startEndTimeCheck := (logOne.StartTimestamp <= logTwo.EndTimestamp) && (logTwo.StartTimestamp <= logOne.EndTimestamp)
+		if !startEndTimeCheck {
+			log.Printf("failed for start/end time check: logOne.StartTimestamp='%d' logOne.EndTimestamp='%d' logTwo.StartTimestamp='%d' logTwo.EndTimestamp='%d'",
+				logOne.StartTimestamp, logOne.EndTimestamp, logTwo.StartTimestamp, logTwo.EndTimestamp)
+		}
+		require.True(t, startEndTimeCheck)
 	})
 
 	t.Run("Actor fails over to another hostname.", func(t *testing.T) {

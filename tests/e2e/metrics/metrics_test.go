@@ -284,7 +284,7 @@ func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
 	// This test will loop through each of the metrics and look for a specifc
 	// metric `dapr_grpc_io_server_completed_rpcs`. This metric will exist for
 	// multiple `grpc_server_method` labels, therefore, we loop through the labels
-	// to find the the instance that has `grpc_server_method="SaveState". Once we
+	// to find the instance that has `grpc_server_method="SaveState". Once we
 	// find the desired metric entry, we check the metric's value is as expected.`
 	var foundMetric bool
 	var foundMethod bool

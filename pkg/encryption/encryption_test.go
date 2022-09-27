@@ -14,10 +14,12 @@ limitations under the License.
 package encryption
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"testing"
 
+	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 
@@ -43,7 +45,7 @@ func (m *mockSecretStore) Init(metadata secretstores.Metadata) error {
 	return nil
 }
 
-func (m *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+func (m *mockSecretStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"primaryKey":   m.primaryKey,
@@ -52,7 +54,7 @@ func (m *mockSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretst
 	}, nil
 }
 
-func (m *mockSecretStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+func (m *mockSecretStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
 	return secretstores.BulkGetSecretResponse{}, nil
 }
 
@@ -90,12 +92,12 @@ func TestComponentEncryptionKey(t *testing.T) {
 		secondaryKey := hex.EncodeToString(bytes[:16]) // 128-bit key
 
 		secretStore := &mockSecretStore{}
-		secretStore.Init(secretstores.Metadata{
+		secretStore.Init(secretstores.Metadata{Base: metadata.Base{
 			Properties: map[string]string{
 				"primaryKey":   primaryKey,
 				"secondaryKey": secondaryKey,
 			},
-		})
+		}})
 
 		keys, err := ComponentEncryptionKey(component, secretStore)
 		assert.NoError(t, err)
@@ -154,12 +156,12 @@ func TestComponentEncryptionKey(t *testing.T) {
 func TestTryGetEncryptionKeyFromMetadataItem(t *testing.T) {
 	t.Run("no secretRef on valid item", func(t *testing.T) {
 		secretStore := &mockSecretStore{}
-		secretStore.Init(secretstores.Metadata{
+		secretStore.Init(secretstores.Metadata{Base: metadata.Base{
 			Properties: map[string]string{
 				"primaryKey":   "123",
 				"secondaryKey": "456",
 			},
-		})
+		}})
 
 		_, err := tryGetEncryptionKeyFromMetadataItem("", v1alpha1.MetadataItem{}, secretStore)
 		assert.Error(t, err)

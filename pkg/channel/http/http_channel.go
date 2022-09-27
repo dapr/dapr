@@ -28,14 +28,18 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 const (
@@ -55,18 +59,22 @@ type Channel struct {
 	tracingSpec         config.TracingSpec
 	appHeaderToken      string
 	maxResponseBodySize int
+	appHealthCheckPath  string
+	appHealth           *apphealth.AppHealth
+	pipeline            httpMiddleware.Pipeline
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
 //
 //nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize, readBufferSize int) (channel.AppChannel, error) {
 	scheme := httpScheme
 	if sslEnabled {
 		scheme = httpsScheme
 	}
 
 	c := &Channel{
+		pipeline: pipeline,
 		client: &fasthttp.Client{
 			MaxConnsPerHost:           1000000,
 			MaxIdemponentCallAttempts: 0,
@@ -140,6 +148,10 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 
 // InvokeMethod invokes user code via HTTP.
 func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
+	}
+
 	// Check if HTTP Extension is given. Otherwise, it will return error.
 	httpExt := req.Message().GetHttpExtension()
 	if httpExt == nil {
@@ -163,6 +175,52 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	return rsp, err
 }
 
+// SetAppHealthCheckPath sets the path where to send requests for health probes.
+func (h *Channel) SetAppHealthCheckPath(path string) {
+	h.appHealthCheckPath = "/" + strings.TrimPrefix(path, "/")
+}
+
+// SetAppHealth sets the apphealth.AppHealth object.
+func (h *Channel) SetAppHealth(ah *apphealth.AppHealth) {
+	h.appHealth = ah
+}
+
+// HealthProbe performs a health probe.
+func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
+	channelReq := fasthttp.AcquireRequest()
+	channelResp := fasthttp.AcquireResponse()
+
+	defer func() {
+		fasthttp.ReleaseRequest(channelReq)
+		fasthttp.ReleaseResponse(channelResp)
+	}()
+
+	channelReq.URI().Update(h.baseAddress + h.appHealthCheckPath)
+	channelReq.URI().DisablePathNormalizing = true
+	channelReq.Header.SetMethod(fasthttp.MethodGet)
+
+	diag.DefaultHTTPMonitoring.AppHealthProbeStarted(ctx)
+	startRequest := time.Now()
+
+	err := h.client.Do(channelReq, channelResp)
+
+	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
+
+	if err != nil {
+		// Errors here are network-level errors, so we are not returning them as errors
+		// Instead, we just return a failed probe
+		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(nethttp.StatusInternalServerError), elapsedMs)
+		//nolint:nilerr
+		return false, nil
+	}
+
+	code := channelResp.StatusCode()
+	status := code >= 200 && code < 300
+	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(code), elapsedMs)
+
+	return status, nil
+}
+
 func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	channelReq := h.constructRequest(ctx, req)
 
@@ -180,24 +238,48 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, verb, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
-	// Send request to user application
-	resp := fasthttp.AcquireResponse()
+	var (
+		response *fasthttp.Response
+		err      error
+	)
 
-	err := h.client.Do(channelReq, resp)
-	defer func() {
-		fasthttp.ReleaseRequest(channelReq)
-		fasthttp.ReleaseResponse(resp)
-	}()
+	// FIXME as fasthttp requestctx does not support using a response from response pool (i.e fasthttp.AcquireResponse())
+	// this check avoid using it when no handlers are specified, hence improving memory consumption by using response pool.
+	if len(h.pipeline.Handlers) == 0 {
+		// Send request to user application
+		response = fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseResponse(response)
+		err = h.client.Do(channelReq, response)
+	} else { // exec pipeline only if at least one handler is specified
+		c := fasthttp.RequestCtx{}
+		c.Init(channelReq, nil, nil)
+
+		defer func() {
+			c.Response.Reset()
+			c.ResetUserValues()
+		}()
+
+		doReq := func(ctx *fasthttp.RequestCtx) {
+			err = h.client.Do(&ctx.Request, &ctx.Response)
+		}
+
+		execPipeline := h.pipeline.Apply(doReq)
+
+		execPipeline(&c)
+		response = &c.Response
+	}
+
+	defer fasthttp.ReleaseRequest(channelReq)
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(resp.Header.ContentLength()), elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(response.Header.ContentLength()), elapsedMs)
 		return nil, err
 	}
 
-	rsp := h.parseChannelResponse(req, resp)
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(resp.Header.ContentLength()), elapsedMs)
+	rsp := h.parseChannelResponse(req, response)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(response.Header.ContentLength()), elapsedMs)
 
 	return rsp, nil
 }
@@ -231,7 +313,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	}
 
 	if h.appHeaderToken != "" {
-		channelReq.Header.Set(auth.APITokenHeader, h.appHeaderToken)
+		channelReq.Header.Set(authConsts.APITokenHeader, h.appHeaderToken)
 	}
 
 	// Set Content body and types
@@ -249,10 +331,7 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *
 
 	statusCode = resp.StatusCode()
 
-	// TODO: Remove entire block when feature is finalized
-	if config.GetNoDefaultContentType() {
-		resp.Header.SetNoDefaultContentType(true)
-	}
+	resp.Header.SetNoDefaultContentType(true)
 	contentType = (string)(resp.Header.ContentType())
 	body = resp.Body()
 

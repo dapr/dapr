@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	b "github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/components/bindings"
 )
@@ -50,12 +51,12 @@ func TestRegistry(t *testing.T) {
 		mockInputV2 := &mockInputBinding{}
 
 		// act
-		testRegistry.RegisterInputBindings(bindings.NewInput(inputBindingName, func() b.InputBinding {
+		testRegistry.RegisterInputBinding(func(_ logger.Logger) b.InputBinding {
 			return mockInput
-		}))
-		testRegistry.RegisterInputBindings(bindings.NewInput(inputBindingNameV2, func() b.InputBinding {
+		}, inputBindingName)
+		testRegistry.RegisterInputBinding(func(_ logger.Logger) b.InputBinding {
 			return mockInputV2
-		}))
+		}, inputBindingNameV2)
 
 		// assert v0 and v1
 		assert.True(t, testRegistry.HasInputBinding(componentName, "v0"))
@@ -108,12 +109,12 @@ func TestRegistry(t *testing.T) {
 		mockOutputV2 := &mockOutputBinding{}
 
 		// act
-		testRegistry.RegisterOutputBindings(bindings.NewOutput(outputBindingName, func() b.OutputBinding {
+		testRegistry.RegisterOutputBinding(func(_ logger.Logger) b.OutputBinding {
 			return mockOutput
-		}))
-		testRegistry.RegisterOutputBindings(bindings.NewOutput(outputBindingNameV2, func() b.OutputBinding {
+		}, outputBindingName)
+		testRegistry.RegisterOutputBinding(func(_ logger.Logger) b.OutputBinding {
 			return mockOutputV2
-		}))
+		}, outputBindingNameV2)
 
 		// assert v0 and v1
 		assert.True(t, testRegistry.HasOutputBinding(componentName, "v0"))

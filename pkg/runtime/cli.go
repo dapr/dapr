@@ -28,6 +28,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/acl"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	"github.com/dapr/dapr/pkg/apphealth"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/dapr/pkg/cors"
@@ -45,13 +46,13 @@ import (
 // FromFlags parses command flags and returns DaprRuntime instance.
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
-	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
+	daprHTTPPort := flag.String("dapr-http-port", strconv.Itoa(DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
 	daprPublicPort := flag.String("dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
-	daprAPIGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
+	daprAPIGRPCPort := flag.String("dapr-grpc-port", strconv.Itoa(DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
-	profilePort := flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
+	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
 	resourcesPath := flag.String("resources-path", "", "Path for resources directory. If empty, resources will not be loaded. Self-hosted mode only")
@@ -65,16 +66,20 @@ func FromFlags() (*DaprRuntime, error) {
 	runtimeVersion := flag.Bool("version", false, "Prints the runtime version")
 	buildInfo := flag.Bool("build-info", false, "Prints the build info")
 	waitCommand := flag.Bool("wait", false, "wait for Dapr outbound ready")
-	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
+	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code; set to -1 for no limits")
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
-	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
+	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", DefaultMaxRequestBodySize, "Increasing max size of request body in MB to handle uploading of big files")
 	unixDomainSocket := flag.String("unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
-	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", -1, "Increasing max size of read buffer in KB to handle sending multi-KB headers. By default 4 KB.")
-	daprHTTPStreamRequestBody := flag.Bool("dapr-http-stream-request-body", false, "Enables request body streaming on http server")
-	daprGracefulShutdownSeconds := flag.Int("dapr-graceful-shutdown-seconds", -1, "Graceful shutdown time in seconds.")
+	daprHTTPReadBufferSize := flag.Int("dapr-http-read-buffer-size", DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers")
+	daprGracefulShutdownSeconds := flag.Int("dapr-graceful-shutdown-seconds", int(DefaultGracefulShutdownDuration/time.Second), "Graceful shutdown time in seconds")
 	enableAPILogging := flag.Bool("enable-api-logging", false, "Enable API logging for API calls")
-	disableBuiltinK8sSecretStore := flag.Bool("disable-builtin-k8s-secret-store", false, "Disable Builtin Kubernetes Secret Store")
+	disableBuiltinK8sSecretStore := flag.Bool("disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")
+	enableAppHealthCheck := flag.Bool("enable-app-health-check", false, "Enable health checks for the application using the protocol defined with app-protocol")
+	appHealthCheckPath := flag.String("app-health-check-path", DefaultAppHealthCheckPath, "Path used for health checks; HTTP only")
+	appHealthProbeInterval := flag.Int("app-health-probe-interval", int(apphealth.DefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
+	appHealthProbeTimeout := flag.Int("app-health-probe-timeout", int(apphealth.DefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
+	appHealthThreshold := flag.Int("app-health-threshold", int(apphealth.DefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -138,7 +143,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	var daprInternalGRPC int
-	if *daprInternalGRPCPort != "" {
+	if *daprInternalGRPCPort != "" && *daprInternalGRPCPort != "0" {
 		daprInternalGRPC, err = strconv.Atoi(*daprInternalGRPCPort)
 		if err != nil {
 			return nil, errors.Wrap(err, "error parsing dapr-internal-grpc-port")
@@ -168,11 +173,11 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if applicationPort == daprHTTP {
-		return nil, errors.Errorf("The '--dapr-http-port' argument value %q conflicts with '--app-port'", daprHTTP)
+		return nil, fmt.Errorf("the 'dapr-http-port' argument value %d conflicts with 'app-port'", daprHTTP)
 	}
 
 	if applicationPort == daprAPIGRPC {
-		return nil, errors.Errorf("The '--dapr-grpc-port' argument value %q conflicts with '--app-port'", daprAPIGRPC)
+		return nil, fmt.Errorf("the 'dapr-grpc-port' argument value %d conflicts with 'app-port'", daprAPIGRPC)
 	}
 
 	var maxRequestBodySize int
@@ -190,8 +195,8 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	var gracefulShutdownDuration time.Duration
-	if *daprGracefulShutdownSeconds == -1 {
-		gracefulShutdownDuration = defaultGracefulShutdownDuration
+	if *daprGracefulShutdownSeconds < 0 {
+		gracefulShutdownDuration = DefaultGracefulShutdownDuration
 	} else {
 		gracefulShutdownDuration = time.Duration(*daprGracefulShutdownSeconds) * time.Second
 	}
@@ -215,10 +220,66 @@ func FromFlags() (*DaprRuntime, error) {
 	if len(daprAPIListenAddressList) == 0 {
 		daprAPIListenAddressList = []string{DefaultAPIListenAddress}
 	}
-	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins,
-		*config, *componentsPath, appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, daprAPIListenAddressList,
-		publicPort, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize,
-		*unixDomainSocket, readBufferSize, *daprHTTPStreamRequestBody, gracefulShutdownDuration, *enableAPILogging, *disableBuiltinK8sSecretStore)
+
+	var healthProbeInterval time.Duration
+	if *appHealthProbeInterval <= 0 {
+		healthProbeInterval = apphealth.DefaultProbeInterval
+	} else {
+		healthProbeInterval = time.Duration(*appHealthProbeInterval) * time.Second
+	}
+
+	var healthProbeTimeout time.Duration
+	if *appHealthProbeTimeout <= 0 {
+		healthProbeTimeout = apphealth.DefaultProbeTimeout
+	} else {
+		healthProbeTimeout = time.Duration(*appHealthProbeTimeout) * time.Millisecond
+	}
+
+	if healthProbeTimeout > healthProbeInterval {
+		return nil, errors.New("value for 'health-probe-timeout' must be smaller than 'health-probe-interval'")
+	}
+
+	// Also check to ensure no overflow with int32
+	var healthThreshold int32
+	if *appHealthThreshold < 1 || int32(*appHealthThreshold+1) < 0 {
+		healthThreshold = apphealth.DefaultThreshold
+	} else {
+		healthThreshold = int32(*appHealthThreshold)
+	}
+
+	runtimeConfig := NewRuntimeConfig(NewRuntimeConfigOpts{
+		ID:                           *appID,
+		PlacementAddresses:           placementAddresses,
+		controlPlaneAddress:          *controlPlaneAddress,
+		AllowedOrigins:               *allowedOrigins,
+		GlobalConfig:                 *config,
+		ComponentsPath:               *componentsPath,
+		AppProtocol:                  appPrtcl,
+		Mode:                         *mode,
+		HTTPPort:                     daprHTTP,
+		InternalGRPCPort:             daprInternalGRPC,
+		APIGRPCPort:                  daprAPIGRPC,
+		APIListenAddresses:           daprAPIListenAddressList,
+		PublicPort:                   publicPort,
+		AppPort:                      applicationPort,
+		ProfilePort:                  profPort,
+		EnableProfiling:              *enableProfiling,
+		MaxConcurrency:               concurrency,
+		MTLSEnabled:                  *enableMTLS,
+		SentryAddress:                *sentryAddress,
+		AppSSL:                       *appSSL,
+		MaxRequestBodySize:           maxRequestBodySize,
+		UnixDomainSocket:             *unixDomainSocket,
+		ReadBufferSize:               readBufferSize,
+		GracefulShutdownDuration:     gracefulShutdownDuration,
+		EnableAPILogging:             *enableAPILogging,
+		DisableBuiltinK8sSecretStore: *disableBuiltinK8sSecretStore,
+		EnableAppHealthCheck:         *enableAppHealthCheck,
+		AppHealthCheckPath:           *appHealthCheckPath,
+		AppHealthProbeInterval:       healthProbeInterval,
+		AppHealthProbeTimeout:        healthProbeTimeout,
+		AppHealthThreshold:           healthThreshold,
+	})
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package
@@ -287,9 +348,13 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
 	}
 
-	features := globalConfig.Spec.Features
-	resiliencyEnabled := daprGlobalConfig.IsFeatureEnabled(features, daprGlobalConfig.Resiliency)
+	// TODO: Remove once AppHealthCheck feature is finalized
+	if !daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.AppHealthCheck) && *enableAppHealthCheck {
+		log.Warnf("App health checks are a preview feature and require the %s feature flag to be enabled. See https://docs.dapr.io/operations/configuration/preview-features/ on how to enable preview features.", daprGlobalConfig.AppHealthCheck)
+		runtimeConfig.AppHealthCheck = nil
+	}
 
+	resiliencyEnabled := daprGlobalConfig.IsFeatureEnabled(globalConfig.Spec.Features, daprGlobalConfig.Resiliency)
 	var resiliencyProvider resiliencyConfig.Provider
 
 	if resiliencyEnabled {

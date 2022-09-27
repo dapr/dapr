@@ -11,11 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package injector
+package components
 
-// PatchOperation represents a discreet change to be applied to a Kubernetes resource.
-type PatchOperation struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
+import (
+	"github.com/dapr/components-contrib/secretstores/local/env"
+	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+)
+
+func init() {
+	secretstoresLoader.DefaultRegistry.RegisterComponent(env.NewEnvSecretStore, "local.env")
 }
