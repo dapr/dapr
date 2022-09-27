@@ -645,7 +645,7 @@ func TestMain(m *testing.M) {
 
 	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
 		redisPubsubPluggableComponent := map[string]apiv1.Container{
-			"dapr-pubsub.redis-pubsub-pluggable-v1-pluggable-messagebus.sock": {
+			"dapr-pubsub.redis-pubsub-pluggable-v1.sock": {
 				Name:  "redis-pubsub-pluggable",
 				Image: runner.BuildTestImageName(redisPubSubPluggableApp),
 			},
@@ -660,7 +660,6 @@ func TestMain(m *testing.M) {
 				MetricsEnabled:      true,
 				AppMemoryLimit:      "200Mi",
 				AppMemoryRequest:    "100Mi",
-				Config:              "pluggablecomponentsconfig",
 				PluggableComponents: redisPubsubPluggableComponent,
 				AppEnv: map[string]string{
 					PubSubEnvVar: PubSubPluggableName,
@@ -675,7 +674,6 @@ func TestMain(m *testing.M) {
 				MetricsEnabled:      true,
 				AppMemoryLimit:      "200Mi",
 				AppMemoryRequest:    "100Mi",
-				Config:              "pluggablecomponentsconfig",
 				PluggableComponents: redisPubsubPluggableComponent,
 				AppEnv: map[string]string{
 					PubSubEnvVar: PubSubPluggableName,
