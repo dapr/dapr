@@ -19,8 +19,12 @@ github.com/cncf/xds/go v0.0.0-20211001041855-01bcc9b48dfe/go.mod h1:eXthEFrGJvWH
 github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20220913223951-edf6740c94e8 h1:xoZqv0HLNrEH4bLNAHcbX5iuawiRO+T8G/3SnLhllvc=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20220913223951-edf6740c94e8/go.mod h1:YW84xHuuF7Bl9hBOPye/aFSTmMI0pXXRrFJ/w+pEl6s=
+github.com/dapr-sandbox/components-go-sdk v0.0.0-20220927122731-2b7bb2459d40 h1:yCGDY3Iw3EtZ/loNlTeit0NI/iPjClK2k6DiFCB/tCk=
+github.com/dapr-sandbox/components-go-sdk v0.0.0-20220927122731-2b7bb2459d40/go.mod h1:j80LdNE6fv8MxUep/t8gqGMP02cKbyf0nDXAPc7i3Y4=
 github.com/dapr/components-contrib v1.8.0-rc.1.0.20220923213414-da5a2fd03a4d h1:aikcGVRm+7uU1Jx3O9Qy/BsrVP1egNZJ2oytSom9jBM=
 github.com/dapr/components-contrib v1.8.0-rc.1.0.20220923213414-da5a2fd03a4d/go.mod h1:z/210gfq/Wb6R8Fbe8aliiC7UO3oYO3u2isnfurRx8o=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220924063709-b0d267317d47 h1:t/Qkm5HvxsxWGJImUOOLEsiljrBwdceYULbI9eOouS0=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220924063709-b0d267317d47/go.mod h1:z/210gfq/Wb6R8Fbe8aliiC7UO3oYO3u2isnfurRx8o=
 github.com/dapr/kit v0.0.2 h1:VNg6RWrBMOdtY0/ZLztyAa/RjyFLaskdO9wt2HIREwk=
 github.com/dapr/kit v0.0.2/go.mod h1:Q4TWm9+vcPZFGehaJUZt2hvA805wJm7FIuoArytWJ8o=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -64,6 +68,8 @@ github.com/google/go-cmp v0.5.6/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/
 github.com/google/go-cmp v0.5.8 h1:e6P7q2lk1O+qJJb4BtCQXlK8vWEO8V1ZeuEdJNOqZyg=
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/uuid v1.1.2/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
+github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
