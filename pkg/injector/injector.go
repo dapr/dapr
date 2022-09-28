@@ -239,7 +239,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		} else if ar.Request.Kind.Kind != "Pod" {
 			log.Errorf("invalid kind for review: %s", ar.Kind)
 		} else {
-			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.config.SidecarImagePullPolicy, i.kubeClient, i.daprClient)
+			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.kubeClient, i.daprClient)
 			if err == nil {
 				patchedSuccessfully = true
 			}

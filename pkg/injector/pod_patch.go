@@ -36,7 +36,7 @@ const (
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
-	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
+	namespace, image string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
 ) (patchOps []sidecar.PatchOperation, err error) {
 	req := ar.Request
 	var pod corev1.Pod
