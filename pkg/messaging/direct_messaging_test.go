@@ -37,6 +37,15 @@ func TestDestinationHeaders(t *testing.T) {
 		md := req.Metadata()[invokev1.DestinationIDHeader]
 		assert.Equal(t, appID, md.Values[0])
 	})
+
+	t.Run("destination header empty", func(t *testing.T) {
+		appID := "test1"
+		req := invokev1.NewInvokeMethodRequest("GET")
+
+		dm := newDirectMessaging()
+		dm.addDestinationAppIDHeaderToMetadata(appID, req)
+		assert.Nil(t, req.Metadata())
+	})
 }
 
 func TestForwardedHeaders(t *testing.T) {
@@ -58,6 +67,16 @@ func TestForwardedHeaders(t *testing.T) {
 
 		md = req.Metadata()[fasthttp.HeaderForwarded]
 		assert.Equal(t, "for=1;by=1;host=2", md.Values[0])
+	})
+
+	t.Run("forwarded headers empty", func(t *testing.T) {
+		req := invokev1.NewInvokeMethodRequest("GET")
+
+		dm := newDirectMessaging()
+
+		dm.addForwardedHeadersToMetadata(req)
+
+		assert.Nil(t, req.Metadata())
 	})
 
 	t.Run("forwarded headers get appended", func(t *testing.T) {

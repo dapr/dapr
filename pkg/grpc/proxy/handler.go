@@ -4,11 +4,11 @@
 package proxy
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"sync"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -118,6 +118,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		}
 
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
+		defer clientCancel()
 
 		// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
 		clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
@@ -143,7 +144,6 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 					// however, we may have gotten a receive error (stream disconnected, a read error etc) in which case we need
 					// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 					// exit with an error to the stack
-					clientCancel()
 					return status.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 				}
 			case c2sErr := <-c2sErrChan:

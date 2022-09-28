@@ -261,13 +261,20 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
-	req.Metadata()[invokev1.DestinationIDHeader] = &internalv1pb.ListStringValue{
+	metadata := req.Metadata()
+	if metadata == nil {
+		return
+	}
+	metadata[invokev1.DestinationIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{appID},
 	}
 }
 
 func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMethodRequest) {
 	metadata := req.Metadata()
+	if metadata == nil {
+		return
+	}
 
 	var forwardedHeaderValue string
 
