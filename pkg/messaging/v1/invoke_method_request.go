@@ -20,7 +20,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/config"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -92,10 +91,6 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 
 // WithRawData sets message data and content_type.
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
-	// TODO: Remove the entire block once feature is finalized
-	if contentType == "" && !config.GetNoDefaultContentType() {
-		contentType = JSONContentType
-	}
 	imr.r.Message.ContentType = contentType
 	imr.r.Message.Data = &anypb.Any{Value: data}
 	return imr
@@ -177,15 +172,6 @@ func (imr *InvokeMethodRequest) RawData() (string, []byte) {
 
 	contentType := m.GetContentType()
 	dataValue := m.GetData().GetValue()
-
-	// TODO: Remove once feature is finalized
-	if !config.GetNoDefaultContentType() {
-		dataTypeURL := m.GetData().GetTypeUrl()
-		// set content_type to application/json only if typeurl is unset and data is given
-		if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
-			contentType = JSONContentType
-		}
-	}
 
 	return contentType, dataValue
 }

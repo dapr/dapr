@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #
 # Copyright 2022 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,12 +13,9 @@
 # limitations under the License.
 #
 
-# TODO: Remove once PluggableComponents feature is GA released
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: pluggablecomponentsconfig
-spec:
-  features:
-    - name: PluggableComponents
-      enabled: true
+# Allows skipping some E2E test runs on Azure based on OS and arch.
+# This is useful when we are still working to stabilize some targets.
+# This script allows the stabilization to take place prior to merging into master.
+if [ -n "$GITHUB_ENV" ] && [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" = "arm64" ]; then
+  echo "SKIP_E2E=true" >> $GITHUB_ENV
+fi

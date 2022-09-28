@@ -37,6 +37,11 @@ spec:
             spec:
               description: PluggableComponentSpec is the spec for a pluggable component.
               properties:
+                componentName:
+                  description:
+                    ComponentName is the component name. if not specified,
+                    metadata.Name will be used.
+                  type: string
                 type:
                   type: string
                 version:
