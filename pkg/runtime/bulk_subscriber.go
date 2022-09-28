@@ -567,6 +567,14 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, msg *pubsubBul
 	}
 }
 
+func endSpans(spans []trace.Span) {
+	for _, span := range spans {
+		if span != nil {
+			span.End()
+		}
+	}
+}
+
 // sendBulkToDeadLetter sends the bulk message to deadletter topic.
 func (a *DaprRuntime) sendBulkToDeadLetter(
 	ctx context.Context, name string, msg *pubsub.BulkMessage, deadLetterTopic string,

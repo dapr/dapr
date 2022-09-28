@@ -263,7 +263,6 @@ func (m *InMemoryPubsub) SetHandler(h func(topic string, msg *pubsub.NewMessage)
 	m.handler = h
 }
 
-// TODO to be used in subscribe
 func (m *InMemoryPubsub) SetBulkHandler(h func(topic string, msg *pubsub.BulkMessage)) {
 	m.bulkHandler = h
 }
