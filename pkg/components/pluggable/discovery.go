@@ -49,7 +49,7 @@ func removeExt(fileName string) string {
 }
 
 const (
-	SocketFolderEnvVar  = "DAPR_PLUGGABLE_COMPONENTS_SOCKETS_FOLDER"
+	SocketFolderEnvVar  = "DAPR_COMPONENTS_SOCKETS_FOLDER"
 	defaultSocketFolder = "/tmp/dapr-components-sockets"
 )
 
