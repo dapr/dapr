@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	nethttp "net/http"
 	"os"
@@ -450,7 +451,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// Enable dynamic loading in standalone mode if dynamic loading preview feature is enabled and components path is provided
 	if a.runtimeConfig.Mode == modes.StandaloneMode && a.runtimeConfig.Standalone.EnableDynamicLoading {
-		dir, err := os.Stat(a.runtimeConfig.Standalone.ComponentsPath)
+		var dir fs.FileInfo
+		dir, err = os.Stat(a.runtimeConfig.Standalone.ComponentsPath)
 		if err != nil {
 			log.Fatalf("failed to get components directory: %s", err)
 		} else if !dir.IsDir() {
