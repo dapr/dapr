@@ -103,7 +103,6 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	}
 
 	// proxy to a remote daprd
-	// connection is recreated because its certification may have already been expired
 	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 	outCtx = p.telemetryFn(outCtx)
 
