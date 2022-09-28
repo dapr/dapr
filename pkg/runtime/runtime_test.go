@@ -172,6 +172,7 @@ var testResiliency = &v1alpha1.Resiliency{
 	},
 }
 
+// MockKubernetesStateStore is a mock state store for testing
 type MockKubernetesStateStore struct {
 	callback func()
 }
