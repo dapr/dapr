@@ -50,7 +50,7 @@ func removeExt(fileName string) string {
 
 const (
 	SocketFolderEnvVar  = "DAPR_PLUGGABLE_COMPONENTS_SOCKETS_FOLDER"
-	defaultSocketFolder = "/dapr-components-sockets"
+	defaultSocketFolder = "/tmp/dapr-components-sockets"
 )
 
 // GetSocketFolderPath returns the shared unix domain socket folder path
