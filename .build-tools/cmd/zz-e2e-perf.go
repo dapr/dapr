@@ -487,6 +487,9 @@ func (c *cmdE2EPerf) getHashDir() (string, error) {
 				continue
 			}
 			for _, match := range matches {
+				if match == "" {
+					continue
+				}
 				info, err := os.Stat(match)
 				if err != nil {
 					continue
