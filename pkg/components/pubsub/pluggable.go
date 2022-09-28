@@ -61,8 +61,8 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 		return err
 	}
 
-	p.features = make([]pubsub.Feature, len(featureResponse.Feature))
-	for idx, f := range featureResponse.Feature {
+	p.features = make([]pubsub.Feature, len(featureResponse.Features))
+	for idx, f := range featureResponse.Features {
 		p.features[idx] = pubsub.Feature(f)
 	}
 
