@@ -15,7 +15,6 @@ package pluggable
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -67,7 +66,7 @@ const (
 
 // withV1 adds the service name using the v1 package.
 func withV1(serviceName string) string {
-	return fmt.Sprintf("%s.%s", protoPackage, serviceName)
+	return protoPackage + "." + serviceName
 }
 
 type service struct {
@@ -114,7 +113,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, *
 			return nil, err
 		}
 
-		absPath := fmt.Sprintf("%s/%s", componentsSocketPath, f.Name())
+		absPath := filepath.Join(componentsSocketPath, f.Name())
 		if !utils.IsSocket(f) {
 			discoveryLog.Warnf("could not use socket for file %s", absPath)
 			continue
