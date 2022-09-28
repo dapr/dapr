@@ -66,8 +66,8 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 		return err
 	}
 
-	ss.features = make([]state.Feature, len(featureResponse.Feature))
-	for idx, f := range featureResponse.Feature {
+	ss.features = make([]state.Feature, len(featureResponse.Features))
+	for idx, f := range featureResponse.Features {
 		ss.features[idx] = state.Feature(f)
 	}
 

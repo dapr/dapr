@@ -5,7 +5,7 @@ go 1.19
 replace github.com/dapr/dapr => ../../../
 
 require (
-	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220927185000-8d47e9bd6e69
+	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220928114348-32097c6273eb
 	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220928041101-518f5a7abf9c
 	github.com/dapr/kit v0.0.2
 )
@@ -37,7 +37,11 @@ require (
 	github.com/xdg-go/scram v1.0.2 // indirect
 	github.com/xdg-go/stringprep v1.0.2 // indirect
 	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
+<<<<<<< HEAD
 	golang.org/x/net v0.0.0-20220722155237-a158d28d115b // indirect
+=======
+	golang.org/x/net v0.0.0-20220630215102-69896b714898 // indirect
+>>>>>>> 6a52d590a39d7331804745cd4a7a2421bf8f56e9
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a // indirect
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
 	golang.org/x/text v0.3.7 // indirect
