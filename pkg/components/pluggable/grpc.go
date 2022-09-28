@@ -15,7 +15,6 @@ package pluggable
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/dapr/kit/logger"
 
@@ -53,17 +52,17 @@ type GRPCConnector[TClient GRPCClient] struct {
 // socketDialer creates a dialer for the given socket.
 func socketDialer(socket string, additionalOpts ...grpc.DialOption) GRPCConnectionDialer {
 	return func() (*grpc.ClientConn, error) {
-		return SocketDial(socket, additionalOpts...)
+		return SocketDial(context.Background(), socket, additionalOpts...) // background context here is ok since we rely on component `initTimeout``
 	}
 }
 
 // SocketDial creates a grpc connection using the given socket.
-func SocketDial(socket string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	udsSocket := fmt.Sprintf("unix://%s", socket)
+func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	udsSocket := "unix://" + socket
 	log.Debugf("using socket defined at '%s'", udsSocket)
 	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-	grpcConn, err := grpc.Dial(udsSocket, additionalOpts...)
+	grpcConn, err := grpc.DialContext(ctx, udsSocket, additionalOpts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to open GRPC connection using socket '%s'", udsSocket)
 	}

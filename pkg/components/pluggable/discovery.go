@@ -161,7 +161,7 @@ func callback(services []service) {
 // Discover discover the pluggable components and callback the service discovery with the given component name and grpc dialer.
 func Discover(ctx context.Context) error {
 	services, err := serviceDiscovery(func(socket string) (reflectServiceClient, *grpc.ClientConn, error) {
-		conn, err := SocketDial(socket, grpc.WithBlock())
+		conn, err := SocketDial(ctx, socket, grpc.WithBlock())
 		if err != nil {
 			return nil, nil, err
 		}

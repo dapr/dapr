@@ -23,6 +23,7 @@ import (
 	nethttp "net/http"
 	"os"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -559,7 +560,11 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
 func (a *DaprRuntime) initPluggableComponents() {
-	if err := pluggable.Discover(context.TODO()); err != nil {
+	if runtime.GOOS == "windows" {
+		log.Debugf("the current OS does not support pluggable components feature, skipping initialization")
+		return
+	}
+	if err := pluggable.Discover(a.ctx); err != nil {
 		log.Errorf("could not initialize pluggable components %v", err)
 	}
 }
