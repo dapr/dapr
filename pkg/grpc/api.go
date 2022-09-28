@@ -1811,6 +1811,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		Id:    e.ID,
 	}); err != nil {
 		apiServerLogger.Debug(err)
+		return err
 	}
 	return nil
 }
