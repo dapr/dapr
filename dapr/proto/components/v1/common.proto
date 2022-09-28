@@ -29,7 +29,7 @@ message MetadataRequest {
 message FeaturesRequest {}
 
 message FeaturesResponse {
-  repeated string feature = 1;
+  repeated string features = 1;
 }
 
 // reserved for future-proof extensibility
