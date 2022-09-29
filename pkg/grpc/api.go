@@ -578,7 +578,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	entries := make([]pubsub.BulkMessageEntry, len(in.Entries))
 
 	for i, entry := range in.Entries {
-		if len(entry.EntryId) == 0 {
+		if entry.EntryId == "" {
 			err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubMarshal, in.Topic, in.PubsubName, "missing entryId")
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.BulkPublishResponse{}, err
