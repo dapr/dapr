@@ -18,13 +18,14 @@
 # This script allows the stabilization to take place prior to merging into master.
 registry_name=$1
 elapsed=0
-until [ $elapsed -ge 1200 ] || az acr show --name $registry_name --query "id"
+timeout=300
+until [ $elapsed -ge $timeout ] || az acr show --name $registry_name --query "id"
 do
   echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
   sleep 20
   elapsed=$(expr $elapsed + 20)
 done
 
-if [ $elapsed -ge 1200 ]; then
+if [ $elapsed -ge $timeout ]; then
   echo "Azure Container Registry not ready on time, pushing images might fail in next steps."
 fi
