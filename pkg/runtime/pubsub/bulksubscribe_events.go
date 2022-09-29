@@ -29,7 +29,7 @@ const (
 var bulkPSLogger = logger.NewLogger("bulk.subscribe")
 
 type BulkSubscribeMessageItem struct {
-	EntryID     string            `json:"entryID"`
+	EntryId     string            `json:"entryId"` //nolint:stylecheck
 	Event       interface{}       `json:"event"`
 	Metadata    map[string]string `json:"metadata"`
 	ContentType string            `json:"contentType,omitempty"`

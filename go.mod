@@ -90,7 +90,7 @@ require (
 	github.com/Azure/azure-sdk-for-go v65.0.0+incompatible // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.3 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.1-0.20220914204640-4d445978fe75 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
@@ -397,7 +397,9 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
+replace github.com/dapr/components-contrib => github.com/DeepanshuA/components-contrib v1.6.0-rc.2.0.20220929101945-f74b4d648def
 
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
+// TEMP ONLY

@@ -36,7 +36,7 @@ type BulkGetResponse struct {
 
 // BulkPublishResponseEntry is an object representing a single entry in bulk publish response
 type BulkPublishResponseEntry struct {
-	EntryID string `json:"entryID"`
+	EntryId string `json:"entryId"` //nolint:stylecheck
 	Status  string `json:"status"`
 	Error   string `json:"error,omitempty"`
 }

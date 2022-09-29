@@ -1726,7 +1726,7 @@ func TestInitPubSub(t *testing.T) {
 			Metadata:   md,
 			Entries: []pubsub.BulkMessageEntry{
 				{
-					EntryID:     "1",
+					EntryId:     "1",
 					Event:       []byte("test"),
 					Metadata:    md,
 					ContentType: "text/plain",
@@ -1736,7 +1736,7 @@ func TestInitPubSub(t *testing.T) {
 
 		assert.Nil(t, err)
 		assert.Equal(t, 1, len(res.Statuses))
-		assert.Equal(t, "1", res.Statuses[0].EntryID)
+		assert.Equal(t, "1", res.Statuses[0].EntryId)
 		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
 
 		rt.pubSubs[TestSecondPubsubName] = pubsubItem{component: &mockPublishPubSub{}}
@@ -1745,12 +1745,12 @@ func TestInitPubSub(t *testing.T) {
 			Topic:      "topic1",
 			Entries: []pubsub.BulkMessageEntry{
 				{
-					EntryID:     "1",
+					EntryId:     "1",
 					Event:       []byte("test"),
 					ContentType: "text/plain",
 				},
 				{
-					EntryID:     "2",
+					EntryId:     "2",
 					Event:       []byte("test 2"),
 					ContentType: "text/plain",
 				},
@@ -1760,9 +1760,9 @@ func TestInitPubSub(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, 2, len(res.Statuses))
 		expectedIds := []string{"1", "2"}
-		assert.Contains(t, expectedIds, res.Statuses[0].EntryID)
+		assert.Contains(t, expectedIds, res.Statuses[0].EntryId)
 		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[0].Status)
-		assert.Contains(t, expectedIds, res.Statuses[1].EntryID)
+		assert.Contains(t, expectedIds, res.Statuses[1].EntryId)
 		assert.Equal(t, pubsub.PublishSucceeded, res.Statuses[1].Status)
 	})
 
@@ -1788,7 +1788,7 @@ func TestInitPubSub(t *testing.T) {
 			Metadata:   md,
 			Entries: []pubsub.BulkMessageEntry{
 				{
-					EntryID:     "1",
+					EntryId:     "1",
 					Event:       []byte("test"),
 					Metadata:    md,
 					ContentType: "text/plain",
@@ -1808,7 +1808,7 @@ func TestInitPubSub(t *testing.T) {
 			Metadata:   md,
 			Entries: []pubsub.BulkMessageEntry{
 				{
-					EntryID:     "1",
+					EntryId:     "1",
 					Event:       []byte("test"),
 					Metadata:    md,
 					ContentType: "text/plain",
@@ -3678,7 +3678,7 @@ func (m *mockSubscribePubSub) Publish(req *pubsub.PublishRequest) error {
 	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
 		m.bulkPubCount[req.Topic]++
 		nbei := pubsub.BulkMessageEntry{
-			EntryID: "0",
+			EntryId: "0",
 			Event:   req.Data,
 		}
 		msgArr := []pubsub.BulkMessageEntry{nbei}
@@ -3705,7 +3705,7 @@ func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *pubsub.BulkPub
 			}
 			handler(context.Background(), pubsubMsg)
 			res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-				EntryID: entry.EntryID,
+				EntryId: entry.EntryId,
 				Status:  pubsub.PublishSucceeded,
 			})
 		}
@@ -4473,7 +4473,7 @@ func (m *mockPublishPubSub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.
 
 	for _, entry := range req.Entries {
 		e := pubsub.BulkPublishResponseEntry{
-			EntryID: entry.EntryID,
+			EntryId: entry.EntryId,
 			Status:  pubsub.PublishSucceeded,
 			Error:   nil,
 		}

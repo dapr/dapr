@@ -119,14 +119,14 @@ func (p *defaultBulkPublisher) bulkPublishSingleEntry(pubsubName, topic string, 
 
 	if err := p.p.Publish(&pr); err != nil {
 		return contribPubsub.BulkPublishResponseEntry{
-			EntryID: entry.EntryID,
+			EntryId: entry.EntryId,
 			Status:  contribPubsub.PublishFailed,
 			Error:   err,
 		}
 	}
 
 	return contribPubsub.BulkPublishResponseEntry{
-		EntryID: entry.EntryID,
+		EntryId: entry.EntryId,
 		Status:  contribPubsub.PublishSucceeded,
 	}
 }

@@ -447,10 +447,10 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 		log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.Topic, string(entry.Event))
 
 		if entry.Event == nil {
-			log.Printf("(%s) Responding with DROP in bulk subscribe for entryID: %s. entry.Event is nil", reqID, entry.EntryID)
+			log.Printf("(%s) Responding with DROP in bulk subscribe for entryId: %s. entry.Event is nil", reqID, entry.EntryId)
 			// Return success with DROP status to drop message
 			bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
-				EntryID: entry.EntryID,
+				EntryId: entry.EntryId,
 				Status:  runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 			}
 		}
@@ -459,32 +459,32 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 			var ceMsg map[string]interface{}
 			err := json.Unmarshal(entry.Event, &ceMsg)
 			if err != nil {
-				log.Printf("(%s) Error extracing ce event in bulk subscribe for entryID: %s: %v", reqID, entry.EntryID, err)
+				log.Printf("(%s) Error extracing ce event in bulk subscribe for entryId: %s: %v", reqID, entry.EntryId, err)
 				bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
-					EntryID: entry.EntryID,
+					EntryId: entry.EntryId,
 					Status:  runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 				}
 				continue
 			}
 			msg = ceMsg["data"].(string)
-			log.Printf("(%s) Value of ce event in bulk subscribe for entryID: %s: %s", reqID, entry.EntryID, msg)
+			log.Printf("(%s) Value of ce event in bulk subscribe for entryId: %s: %s", reqID, entry.EntryId, msg)
 		} else {
 			// var rawMsg
 			err := json.Unmarshal(entry.Event, &msg)
 			if err != nil {
-				log.Printf("(%s) Error extracing raw event in bulk subscribe for entryID: %s: %v", reqID, entry.EntryID, err)
+				log.Printf("(%s) Error extracing raw event in bulk subscribe for entryId: %s: %v", reqID, entry.EntryId, err)
 				// Return success with DROP status to drop message
 				bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
-					EntryID: entry.EntryID,
+					EntryId: entry.EntryId,
 					Status:  runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 				}
 				continue
 			}
-			log.Printf("(%s) Value of raw event in bulk subscribe for entryID: %s: %s", reqID, entry.EntryID, msg)
+			log.Printf("(%s) Value of raw event in bulk subscribe for entryId: %s: %s", reqID, entry.EntryId, msg)
 		}
 
 		bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
-			EntryID: entry.EntryID,
+			EntryId: entry.EntryId,
 			Status:  runtimev1pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 		}
 		if strings.HasPrefix(in.Topic, pubsubRawBulkSubTopic) && !receivedMessagesRawBulkSub.Has(msg) {

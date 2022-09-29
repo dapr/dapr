@@ -2009,7 +2009,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 }
 
 type bulkPublishMessageEntry struct {
-	EntryID     string            `json:"entryID,omitempty"`
+	EntryId     string            `json:"entryId,omitempty"` //nolint:stylecheck
 	Event       interface{}       `json:"event"`
 	ContentType string            `json:"contentType"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
@@ -2053,7 +2053,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 	entries := make([]pubsub.BulkMessageEntry, len(incomingEntries))
 
-	entryIDSet := map[string]struct{}{}
+	entryIdSet := map[string]struct{}{} //nolint:stylecheck
 
 	for i, entry := range incomingEntries {
 		var dBytes []byte
@@ -2075,16 +2075,16 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			// override request level metadata.
 			entries[i].Metadata = populateMetadataForBulkPublishEntry(metadata, entry.Metadata)
 		}
-		if _, ok := entryIDSet[entry.EntryID]; ok || entry.EntryID == "" {
+		if _, ok := entryIdSet[entry.EntryId]; ok || entry.EntryId == "" {
 			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: entryID is duplicated or not present for entry"))
+				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: entryId is duplicated or not present for entry"))
 			respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
 			log.Debug(msg)
 
 			return
 		}
-		entryIDSet[entry.EntryID] = struct{}{}
-		entries[i].EntryID = entry.EntryID
+		entryIdSet[entry.EntryId] = struct{}{}
+		entries[i].EntryId = entry.EntryId
 	}
 
 	spanMap := map[int]trace.Span{}
@@ -2155,7 +2155,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	if len(res.Statuses) != 0 {
 		bulkRes.Statuses = make([]BulkPublishResponseEntry, len(res.Statuses))
 		for i, r := range res.Statuses {
-			bulkRes.Statuses[i].EntryID = r.EntryID
+			bulkRes.Statuses[i].EntryId = r.EntryId
 			if r.Error != nil {
 				bulkRes.Statuses[i].Error = r.Error.Error()
 			} else {

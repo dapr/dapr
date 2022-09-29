@@ -306,7 +306,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					res := pubsub.BulkPublishResponse{}
 					for _, entry := range req.Entries {
 						res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-							EntryID: entry.EntryID,
+							EntryId: entry.EntryId,
 							Status:  pubsub.PublishFailed,
 							Error:   err,
 						})
@@ -320,7 +320,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					res := pubsub.BulkPublishResponse{}
 					for _, entry := range req.Entries {
 						res.Statuses = append(res.Statuses, pubsub.BulkPublishResponseEntry{
-							EntryID: entry.EntryID,
+							EntryId: entry.EntryId,
 							Status:  pubsub.PublishSucceeded,
 						})
 					}
@@ -338,7 +338,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 	bulkRequest := []bulkPublishMessageEntry{
 		{
-			EntryID: "1",
+			EntryId: "1",
 			Event: map[string]string{
 				"key":   "first",
 				"value": "first value",
@@ -346,7 +346,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			ContentType: "application/json",
 		},
 		{
-			EntryID: "2",
+			EntryId: "2",
 			Event: map[string]string{
 				"key":   "second",
 				"value": "second value",
@@ -361,11 +361,11 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	bulkRes := BulkPublishResponse{
 		Statuses: []BulkPublishResponseEntry{
 			{
-				EntryID: "1",
+				EntryId: "1",
 				Status:  "SUCCESS",
 			},
 			{
-				EntryID: "2",
+				EntryId: "2",
 				Status:  "SUCCESS",
 			},
 		},
@@ -420,8 +420,8 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Bulk Publish without entryID - 400", func(t *testing.T) {
-		reqWithoutEntryID := []bulkPublishMessageEntry{
+	t.Run("Bulk Publish without entryId - 400", func(t *testing.T) {
+		reqWithoutEntryId := []bulkPublishMessageEntry{ //nolint:stylecheck
 			{
 				Event: map[string]string{
 					"key":   "first",
@@ -441,23 +441,23 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				},
 			},
 		}
-		reqBytesWithoutEntryID, _ := json.Marshal(reqWithoutEntryID)
+		reqBytesWithoutEntryId, _ := json.Marshal(reqWithoutEntryId) //nolint:stylecheck
 		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryID, nil)
+			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryId, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
-			assert.Contains(t, resp.ErrorBody["message"], "error: entryID is duplicated or not present for entry")
+			assert.Contains(t, resp.ErrorBody["message"], "error: entryId is duplicated or not present for entry")
 		}
 	})
 
-	t.Run("Bulk Publish with duplicate entryID - 400", func(t *testing.T) {
-		reqWithoutEntryID := []bulkPublishMessageEntry{
+	t.Run("Bulk Publish with duplicate entryId - 400", func(t *testing.T) {
+		reqWithoutEntryId := []bulkPublishMessageEntry{ //nolint:stylecheck
 			{
-				EntryID: "1",
+				EntryId: "1",
 				Event: map[string]string{
 					"key":   "first",
 					"value": "first value",
@@ -465,7 +465,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				ContentType: "application/json",
 			},
 			{
-				EntryID: "1",
+				EntryId: "1",
 				Event: map[string]string{
 					"key":   "second",
 					"value": "second value",
@@ -477,16 +477,16 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				},
 			},
 		}
-		reqBytesWithoutEntryID, _ := json.Marshal(reqWithoutEntryID)
+		reqBytesWithoutEntryId, _ := json.Marshal(reqWithoutEntryId) //nolint:stylecheck
 		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryID, nil)
+			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryId, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
-			assert.Contains(t, resp.ErrorBody["message"], "error: entryID is duplicated or not present for entry")
+			assert.Contains(t, resp.ErrorBody["message"], "error: entryId is duplicated or not present for entry")
 		}
 	})
 
@@ -506,7 +506,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	t.Run("Bulk Publish dataContentType mismatch - 400", func(t *testing.T) {
 		dCTMismatch := []bulkPublishMessageEntry{
 			{
-				EntryID: "1",
+				EntryId: "1",
 				Event: map[string]string{
 					"key":   "first",
 					"value": "first value",
@@ -514,7 +514,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				ContentType: "application/json",
 			},
 			{
-				EntryID: "2",
+				EntryId: "2",
 				Event: map[string]string{
 					"key":   "second",
 					"value": "second value",

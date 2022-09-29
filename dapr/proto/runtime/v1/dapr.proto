@@ -307,18 +307,17 @@ message BulkPublishRequest {
 
 // BulkPublishRequestEntry is the message containing the event to be bulk published
 message BulkPublishRequestEntry {
+  // The request scoped unique ID referring to this message. Used to map status in response
+  string entry_id = 1;
 
   // The event which will be pulished to the topic
-  bytes event = 1;
+  bytes event = 2;
 
   // The content type for the event
-  string content_type = 2;
+  string content_type = 3;
 
   // The event level metadata passing to the pubsub component
-  map<string, string> metadata = 3;
-
-  // The request scoped unique ID referring to this message. Used to map status in response
-  string entryID = 4;
+  map<string, string> metadata = 4;
 }
 
 // BulkPublishResponse is the message returned from a BulkPublishEvent call
@@ -336,7 +335,8 @@ message BulkPublishResponseEntry {
   }
 
   // The response scoped unique ID referring to this message
-  string entryID = 1;
+  
+  string entry_id = 1;
 
   // The status of event publish
   Status status  = 2;

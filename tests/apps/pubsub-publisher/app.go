@@ -48,7 +48,7 @@ const (
 )
 
 type bulkPublishMessageEntry struct {
-	EntryID     string            `json:"entryID,omitempty"`
+	EntryId     string            `json:"entryId,omitempty"` //nolint:stylecheck
 	Event       interface{}       `json:"event"`
 	ContentType string            `json:"ContentType"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
@@ -173,7 +173,7 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		bulkPublishMessage[i].EntryID = strconv.Itoa(i)
+		bulkPublishMessage[i].EntryId = strconv.Itoa(i)
 
 		if command.ReqID != "" {
 			reqID = command.ReqID
@@ -220,7 +220,7 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
 			log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes.ErrorCode)
 			for _, stat := range bulkRes.Statuses {
-				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryID, stat.Status, stat.Error)
+				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryId, stat.Status, stat.Error)
 			}
 
 			w.WriteHeader(status)
@@ -245,7 +245,7 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 		entries := make([]*runtimev1pb.BulkPublishRequestEntry, 0, len(bulkPublishMessage))
 		for _, entry := range bulkPublishMessage {
 			e := &runtimev1pb.BulkPublishRequestEntry{
-				EntryID:     entry.EntryID,
+				EntryId:     entry.EntryId,
 				ContentType: entry.ContentType,
 				Metadata:    entry.Metadata,
 			}
@@ -269,7 +269,7 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
 			log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes)
 			for _, stat := range bulkRes.Statuses {
-				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryID, stat.Status, stat.Error)
+				log.Printf("Status of entry ID (%s) is %s and error %s", stat.EntryId, stat.Status, stat.Error)
 			}
 
 			w.WriteHeader(status)

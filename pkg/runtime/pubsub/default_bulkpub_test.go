@@ -30,13 +30,13 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 	req := &contribPubsub.BulkPublishRequest{
 		Entries: []contribPubsub.BulkMessageEntry{
 			{
-				EntryID:     "78a48b5c-ff5a-4275-9bef-4a3bb8eefc3b",
+				EntryId:     "78a48b5c-ff5a-4275-9bef-4a3bb8eefc3b",
 				Event:       []byte("event1"),
 				ContentType: "text/plain",
 				Metadata:    map[string]string{},
 			},
 			{
-				EntryID:     "d64669e2-fab6-4452-a933-8de44e26ca02",
+				EntryId:     "d64669e2-fab6-4452-a933-8de44e26ca02",
 				Event:       []byte("event2"),
 				ContentType: "text/plain",
 				Metadata:    map[string]string{},
@@ -137,12 +137,12 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 
 			var responseEntryIds []string
 			for _, status := range res.Statuses {
-				responseEntryIds = append(responseEntryIds, status.EntryID)
+				responseEntryIds = append(responseEntryIds, status.EntryId)
 			}
 
 			// Assert that response contains all entry IDs from the request.
 			for _, entry := range req.Entries {
-				assert.Contains(t, responseEntryIds, entry.EntryID)
+				assert.Contains(t, responseEntryIds, entry.EntryId)
 			}
 		})
 	}
