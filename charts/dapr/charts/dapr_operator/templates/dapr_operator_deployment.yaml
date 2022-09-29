@@ -90,6 +90,9 @@ spec:
         args:
         - "--log-level"
         - {{ .Values.logLevel }}
+{{- if eq .Values.disableLeaderElection true }}
+        - "--disable-leader-election=true"
+{{- end }}        
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}

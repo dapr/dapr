@@ -1,6 +1,6 @@
 replicaCount: 1
 logLevel: info
-
+disableLeaderElection: true
 image:
   name: dapr
 
