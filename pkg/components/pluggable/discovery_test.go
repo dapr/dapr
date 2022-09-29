@@ -23,7 +23,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 type fakeReflectService struct {
@@ -59,8 +58,8 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.NotEmpty(t, onServiceDiscovered)
 	})
 	t.Run("serviceDiscovery should return empty services if directory not exists", func(t *testing.T) {
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, *grpc.ClientConn, error) {
-			return &fakeReflectService{}, nil, nil
+		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+			return &fakeReflectService{}, func() {}, nil
 		})
 		require.NoError(t, err)
 		assert.Empty(t, services)
@@ -74,8 +73,8 @@ func TestComponentDiscovery(t *testing.T) {
 		_, err = os.CreateTemp(fakeSocketFolder, pattern)
 		require.NoError(t, err)
 
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, *grpc.ClientConn, error) {
-			return &fakeReflectService{}, nil, nil
+		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+			return &fakeReflectService{}, func() {}, nil
 		})
 		require.NoError(t, err)
 		assert.Empty(t, services)
@@ -94,7 +93,7 @@ func TestComponentDiscovery(t *testing.T) {
 
 		reflectService := &fakeReflectService{}
 
-		_, err = serviceDiscovery(func(string) (reflectServiceClient, *grpc.ClientConn, error) {
+		_, err = serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
 			return nil, nil, errors.New("fake-err")
 		})
 		assert.NotNil(t, err)
@@ -116,8 +115,8 @@ func TestComponentDiscovery(t *testing.T) {
 			listServicesErr: errors.New("fake-err"),
 		}
 
-		_, err = serviceDiscovery(func(string) (reflectServiceClient, *grpc.ClientConn, error) {
-			return reflectService, nil, nil
+		_, err = serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+			return reflectService, func() {}, nil
 		})
 		assert.NotNil(t, err)
 		assert.Equal(t, int64(1), reflectService.listServicesCalled.Load())
@@ -144,8 +143,8 @@ func TestComponentDiscovery(t *testing.T) {
 			listServicesResp: svcList,
 		}
 
-		services, err := serviceDiscovery(func(string) (reflectServiceClient, *grpc.ClientConn, error) {
-			return reflectService, nil, nil
+		services, err := serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
+			return reflectService, func() {}, nil
 		})
 		require.NoError(t, err)
 		assert.Len(t, services, len(svcList))

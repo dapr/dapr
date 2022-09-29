@@ -37,7 +37,7 @@ type grpcInputBinding struct {
 
 // Init initializes the grpc inputbinding passing out the metadata to the grpc component.
 func (b *grpcInputBinding) Init(metadata bindings.Metadata) error {
-	if err := b.Dial(); err != nil {
+	if err := b.Dial(metadata.Name); err != nil {
 		return err
 	}
 

@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220924063709-b0d267317d47
+	github.com/dapr/components-contrib v1.8.0-rc.1.0.20220928230130-b4d68ed28add
 	github.com/dapr/kit v0.0.2
 	github.com/fasthttp/router v1.4.12
 	github.com/fsnotify/fsnotify v1.5.4
@@ -88,7 +88,7 @@ require (
 	github.com/Azure/azure-sdk-for-go v65.0.0+incompatible // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.3 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.1-0.20220914204640-4d445978fe75 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.4.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect

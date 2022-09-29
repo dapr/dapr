@@ -24,6 +24,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 var log = logger.NewLogger("pluggable-components-grpc-connector")
@@ -34,7 +35,7 @@ type GRPCClient interface {
 	Ping(ctx context.Context, in *proto.PingRequest, opts ...grpc.CallOption) (*proto.PingResponse, error)
 }
 
-type GRPCConnectionDialer = func() (*grpc.ClientConn, error)
+type GRPCConnectionDialer = func(ctx context.Context, name string) (*grpc.ClientConn, error)
 
 // GRPCConnector is a connector that uses underlying gRPC protocol for common operations.
 type GRPCConnector[TClient GRPCClient] struct {
@@ -49,10 +50,30 @@ type GRPCConnector[TClient GRPCClient] struct {
 	clientFactory func(grpc.ClientConnInterface) TClient
 }
 
+// metadataInstanceID is used to differentiate between multiples instance of the same component.
+const metadataInstanceID = "x-component-instance"
+
+// instanceIDStreamInterceptor returns a grpc client unary interceptor that adds the instanceID on outgoing metadata.
+// instanceID is used for multiplexing connection if the component supports it.
+func instanceIDUnaryInterceptor(instanceID string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		return invoker(metadata.AppendToOutgoingContext(ctx, metadataInstanceID, instanceID), method, req, reply, cc, opts...)
+	}
+}
+
+// instanceIDStreamInterceptor returns a grpc client stream interceptor that adds the instanceID on outgoing metadata.
+// instanceID is used for multiplexing connection if the component supports it.
+func instanceIDStreamInterceptor(instanceID string) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		return streamer(metadata.AppendToOutgoingContext(ctx, metadataInstanceID, instanceID), desc, cc, method, opts...)
+	}
+}
+
 // socketDialer creates a dialer for the given socket.
 func socketDialer(socket string, additionalOpts ...grpc.DialOption) GRPCConnectionDialer {
-	return func() (*grpc.ClientConn, error) {
-		return SocketDial(context.Background(), socket, additionalOpts...) // background context here is ok since we rely on component `initTimeout``
+	return func(ctx context.Context, name string) (*grpc.ClientConn, error) {
+		additionalOpts = append(additionalOpts, grpc.WithStreamInterceptor(instanceIDStreamInterceptor(name)), grpc.WithUnaryInterceptor(instanceIDUnaryInterceptor(name)))
+		return SocketDial(ctx, socket, additionalOpts...)
 	}
 }
 
@@ -70,8 +91,8 @@ func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialO
 }
 
 // Dial opens a grpcConnection and creates a new client instance.
-func (g *GRPCConnector[TClient]) Dial() error {
-	grpcConn, err := g.dialer()
+func (g *GRPCConnector[TClient]) Dial(name string) error {
+	grpcConn, err := g.dialer(g.Context, name)
 	if err != nil {
 		return errors.Wrapf(err, "unable to open GRPC connection using the dialer")
 	}

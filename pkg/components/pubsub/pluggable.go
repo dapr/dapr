@@ -39,7 +39,7 @@ type grpcPubSub struct {
 // Init initializes the grpc pubsub passing out the metadata to the grpc component.
 // It also fetches and set the component features.
 func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
-	if err := p.Dial(); err != nil {
+	if err := p.Dial(metadata.Name); err != nil {
 		return err
 	}
 

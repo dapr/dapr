@@ -44,7 +44,7 @@ type grpcStateStore struct {
 // Init initializes the grpc state passing out the metadata to the grpc component.
 // It also fetches and set the current components features.
 func (ss *grpcStateStore) Init(metadata state.Metadata) error {
-	if err := ss.Dial(); err != nil {
+	if err := ss.Dial(metadata.Name); err != nil {
 		return err
 	}
 
