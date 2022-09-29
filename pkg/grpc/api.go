@@ -546,7 +546,8 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
-			req.Metadata[key] = val[0]
+			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
+			req.Metadata[sanitizedKey] = val[0]
 		}
 	}
 
@@ -1637,6 +1638,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		Id:    e.ID,
 	}); err != nil {
 		apiServerLogger.Debug(err)
+		return err
 	}
 	return nil
 }

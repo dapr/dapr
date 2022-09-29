@@ -17,8 +17,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 
 	"github.com/pkg/errors"
 
@@ -27,6 +26,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+var log = logger.NewLogger("pluggable-components-grpc-connector")
 
 // GRPCClient is any client that supports common pluggable grpc operations.
 type GRPCClient interface {
@@ -42,39 +43,15 @@ type GRPCConnector[TClient GRPCClient] struct {
 	Cancel context.CancelFunc
 	// Client is the proto client.
 	Client        TClient
-	socketFactory func(string) string
+	socket        string
 	conn          *grpc.ClientConn
 	clientFactory func(grpc.ClientConnInterface) TClient
 }
 
-const (
-	DaprSocketFolderEnvVar = "DAPR_PLUGGABLE_COMPONENTS_SOCKETS_FOLDER"
-	defaultSocketFolder    = "/var/run"
-)
-
-// GetSocketFolderPath returns the shared unix domain socket folder path
-func GetSocketFolderPath() string {
-	return utils.GetEnvOrElse(DaprSocketFolderEnvVar, defaultSocketFolder)
-}
-
-// socketFactoryFor returns a socket factory that returns the socket that will be used for the given pluggable component.
-func socketFactoryFor(pc components.Pluggable) func(string) string {
-	socketPrefix := fmt.Sprintf("%s/dapr-%s.%s-%s", GetSocketFolderPath(), pc.Type, pc.Name, pc.Version)
-	return func(componentName string) string {
-		return fmt.Sprintf("%s-%s.sock", socketPrefix, componentName)
-	}
-}
-
-// socketPathFor returns a unique socket for the given component.
-// the socket path will be composed by the pluggable component, name, version and type plus the component name.
-func (g *GRPCConnector[TClient]) socketPathFor(componentName string) string {
-	return g.socketFactory(componentName)
-}
-
 // Dial opens a grpcConnection and creates a new client instance.
-func (g *GRPCConnector[TClient]) Dial(componentName string, additionalOpts ...grpc.DialOption) error {
-	udsSocket := fmt.Sprintf("unix://%s", g.socketPathFor(componentName))
-	log.Debugf("using socket defined at '%s' for the component '%s'", udsSocket, componentName)
+func (g *GRPCConnector[TClient]) Dial(additionalOpts ...grpc.DialOption) error {
+	udsSocket := fmt.Sprintf("unix://%s", g.socket)
+	log.Debugf("using socket defined at '%s'", udsSocket)
 	// TODO Add Observability middlewares monitoring/tracing
 	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
@@ -103,19 +80,14 @@ func (g *GRPCConnector[TClient]) Close() error {
 	return g.conn.Close()
 }
 
-// NewGRPCConnectorWithFactory creates a new grpc connector for the given client factory and socket factory.
-func NewGRPCConnectorWithFactory[TClient GRPCClient](socketFactory func(string) string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
+// NewGRPCConnector creates a new grpc connector for the given client factory and socket.
+func NewGRPCConnector[TClient GRPCClient](socket string, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &GRPCConnector[TClient]{
 		Context:       ctx,
 		Cancel:        cancel,
-		socketFactory: socketFactory,
+		socket:        socket,
 		clientFactory: factory,
 	}
-}
-
-// NewGRPCConnector creates a new grpc connector for the given client.
-func NewGRPCConnector[TClient GRPCClient](pc components.Pluggable, factory func(grpc.ClientConnInterface) TClient) *GRPCConnector[TClient] {
-	return NewGRPCConnectorWithFactory(socketFactoryFor(pc), factory)
 }

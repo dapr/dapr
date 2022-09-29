@@ -54,7 +54,7 @@ func (c FakeSecretStore) Close() error {
 }
 
 func (c FakeSecretStore) Features() []secretstores.Feature {
-	return []secretstores.Feature{}
+	return []secretstores.Feature{secretstores.FeatureMultipleKeyValuesPerSecret}
 }
 
 type FailingSecretStore struct {

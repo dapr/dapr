@@ -1859,7 +1859,9 @@ func TestPublishTopic(t *testing.T) {
 				return nil
 			},
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				return &daprt.MockPubSub{}
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
 			},
 		},
 	}
