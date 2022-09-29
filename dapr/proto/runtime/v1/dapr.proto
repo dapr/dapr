@@ -335,7 +335,6 @@ message BulkPublishResponseEntry {
   }
 
   // The response scoped unique ID referring to this message
-  
   string entry_id = 1;
 
   // The status of event publish
