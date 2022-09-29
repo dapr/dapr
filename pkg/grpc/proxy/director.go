@@ -21,4 +21,14 @@ import (
 // are invoked. So decisions around authorization, monitoring etc. are better to be handled there.
 //
 // See the rather rich example.
-type StreamDirector func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, func(), error)
+type StreamDirector func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, *ProxyTarget, func(), error)
+
+// ProxyTarget is an object that describes the network and service identification of a remote Dapr process
+type ProxyTarget struct {
+	ID        string
+	Address   string
+	Namespace string
+}
+
+// DirectorConnectionFactory is a method signature for a gRPC connection establisher method used for client/server streams
+type DirectorConnectionFactory func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
