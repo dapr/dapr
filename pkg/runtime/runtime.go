@@ -365,7 +365,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
 		}
-		otelExporter, err := otlptrace.New(context.Background(), client)
+		otelExporter, err := otlptrace.New(a.ctx, client)
 		if err != nil {
 			return err
 		}
@@ -2418,11 +2418,17 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 			log.Warnf("error closing API: %v", err)
 		}
 	}
-	if a.tracerProvider != nil {
-		a.tracerProvider.Shutdown(context.Background())
-	}
+
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	go func() {
+		if a.tracerProvider != nil {
+			a.tracerProvider.Shutdown(shutdownCtx)
+		}
+	}()
+
 	log.Infof("Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
+	shutdownCancel()
 	a.shutdownOutputComponents()
 	a.shutdownC <- nil
 }
