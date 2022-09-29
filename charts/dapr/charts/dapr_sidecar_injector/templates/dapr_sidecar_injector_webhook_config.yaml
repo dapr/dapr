@@ -13,6 +13,9 @@ metadata:
   name: dapr-sidecar-injector-cert
   labels:
     app: dapr-sidecar-injector
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 data:
   {{ if $existingSecret }}tls.crt: {{ index $existingSecret.data "tls.crt" }}
   {{ else }}tls.crt: {{ b64enc $cert.Cert }}
@@ -28,6 +31,9 @@ metadata:
   name: dapr-sidecar-injector
   labels:
     app: dapr-sidecar-injector
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 webhooks:
 - name: sidecar-injector.dapr.io
   clientConfig:
