@@ -5157,17 +5157,17 @@ func TestDynamicLoading(t *testing.T) {
 
 		// assert
 		assert.NoError(t, err, "error writing component to disk")
-		timeout := time.After(10 * time.Second)
-		ticker := time.Tick(500 * time.Millisecond)
-		for {
+		for timeout := time.After(10 * time.Second); ; {
 			select {
 			case <-timeout:
 				assert.Fail(t, "dynamic component not loaded")
-			case <-ticker:
+				return
+			default:
 				_, ok := rt.stateStores["dynamic-statestore"]
 				if ok {
 					return
 				}
+				time.Sleep(500 * time.Millisecond)
 			}
 		}
 	})
