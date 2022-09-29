@@ -459,7 +459,8 @@ func newGRPCStateStore(dialer pluggable.GRPCConnectionDialer) func(l logger.Logg
 }
 
 func init() {
-	pluggable.AddServiceV1DiscoveryCallback("StateStore", func(name string, dialer pluggable.GRPCConnectionDialer) {
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.StateStore_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
 		DefaultRegistry.RegisterComponent(newGRPCStateStore(dialer), name)
 	})
 }

@@ -41,11 +41,11 @@ func TestServiceCallback(t *testing.T) {
 	t.Run("callback should be called when service ref is registered", func(t *testing.T) {
 		const fakeComponentName, fakeServiceName = "fake-comp", "fake-svc"
 		called := 0
-		AddServiceV1DiscoveryCallback(fakeServiceName, func(name string, _ GRPCConnectionDialer) {
+		AddServiceDiscoveryCallback(fakeServiceName, func(name string, _ GRPCConnectionDialer) {
 			called++
 			assert.Equal(t, name, fakeComponentName)
 		})
-		callback([]service{{protoRef: withV1(fakeServiceName), componentName: fakeComponentName}})
+		callback([]service{{protoRef: fakeServiceName, componentName: fakeComponentName}})
 		assert.Equal(t, 1, called)
 	})
 }
@@ -55,7 +55,7 @@ func TestComponentDiscovery(t *testing.T) {
 		return
 	}
 	t.Run("add service callback should add a new entry when called", func(t *testing.T) {
-		AddServiceV1DiscoveryCallback("fake", func(string, GRPCConnectionDialer) {})
+		AddServiceDiscoveryCallback("fake", func(string, GRPCConnectionDialer) {})
 		assert.NotEmpty(t, onServiceDiscovered)
 	})
 	t.Run("serviceDiscovery should return empty services if directory not exists", func(t *testing.T) {

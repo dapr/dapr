@@ -38,9 +38,9 @@ func init() {
 	onServiceDiscovered = make(map[string]func(name string, dialer GRPCConnectionDialer))
 }
 
-// AddServiceV1DiscoveryCallback adds a callback function that should be called when the given service was discovered.
-func AddServiceV1DiscoveryCallback(serviceName string, callbackFunc func(name string, dialer GRPCConnectionDialer)) {
-	onServiceDiscovered[withV1(serviceName)] = callbackFunc
+// AddServiceDiscoveryCallback adds a callback function that should be called when the given service was discovered.
+func AddServiceDiscoveryCallback(serviceName string, callbackFunc func(name string, dialer GRPCConnectionDialer)) {
+	onServiceDiscovered[serviceName] = callbackFunc
 }
 
 // removeExt removes file extension
@@ -56,17 +56,6 @@ const (
 // GetSocketFolderPath returns the shared unix domain socket folder path
 func GetSocketFolderPath() string {
 	return utils.GetEnvOrElse(SocketFolderEnvVar, defaultSocketFolder)
-}
-
-const (
-	// the current components proto version
-	protoV1      = "v1"
-	protoPackage = "dapr.proto.components." + protoV1
-)
-
-// withV1 adds the service name using the v1 package.
-func withV1(serviceName string) string {
-	return protoPackage + "." + serviceName
 }
 
 type service struct {

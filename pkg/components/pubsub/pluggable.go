@@ -207,7 +207,8 @@ func newGRPCPubSub(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) 
 }
 
 func init() {
-	pluggable.AddServiceV1DiscoveryCallback("PubSub", func(name string, dialer pluggable.GRPCConnectionDialer) {
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.PubSub_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
 		DefaultRegistry.RegisterComponent(newGRPCPubSub(dialer), name)
 	})
 }

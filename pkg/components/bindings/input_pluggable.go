@@ -148,7 +148,8 @@ func newGRPCInputBinding(dialer pluggable.GRPCConnectionDialer) func(l logger.Lo
 }
 
 func init() {
-	pluggable.AddServiceV1DiscoveryCallback("InputBinding", func(name string, dialer pluggable.GRPCConnectionDialer) {
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.InputBinding_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
 		DefaultRegistry.RegisterInputBinding(newGRPCInputBinding(dialer), name)
 	})
 }

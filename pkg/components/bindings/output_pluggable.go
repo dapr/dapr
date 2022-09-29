@@ -110,7 +110,8 @@ func newGRPCOutputBinding(dialer pluggable.GRPCConnectionDialer) func(l logger.L
 }
 
 func init() {
-	pluggable.AddServiceV1DiscoveryCallback("OutputBinding", func(name string, dialer pluggable.GRPCConnectionDialer) {
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.OutputBinding_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
 		DefaultRegistry.RegisterOutputBinding(newGRPCOutputBinding(dialer), name)
 	})
 }
