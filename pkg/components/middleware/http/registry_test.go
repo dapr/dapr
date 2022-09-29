@@ -15,12 +15,12 @@ package http_test
 
 import (
 	"fmt"
+	nethttp "net/http"
 	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/valyala/fasthttp"
 
 	h "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/kit/logger"
@@ -40,10 +40,10 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// Initiate mock object
-		mock := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+		mock := httpMiddleware.Middleware(func(next nethttp.Handler) nethttp.Handler {
 			return nil
 		})
-		mockV2 := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+		mockV2 := httpMiddleware.Middleware(func(next nethttp.Handler) nethttp.Handler {
 			return nil
 		})
 		metadata := h.Metadata{}

@@ -62,6 +62,7 @@ require (
 require (
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
+	github.com/tidwall/transform v0.0.0-20201103190739-32f242e2dbde
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.7.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.7.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.7.0
@@ -395,8 +396,7 @@ replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.g
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => ../components-contrib
-
+// replace github.com/dapr/components-contrib => ../components-contrib
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.

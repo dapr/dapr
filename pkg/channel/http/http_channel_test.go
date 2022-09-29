@@ -104,11 +104,11 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 
 	t.Run("pipeline should be called when handlers are not empty", func(t *testing.T) {
 		called := 0
-		middleware := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-			return func(ctx *fasthttp.RequestCtx) {
+		middleware := httpMiddleware.Middleware(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				called++
-				h(ctx)
-			}
+				next.ServeHTTP(w, r)
+			})
 		})
 		pipeline := httpMiddleware.Pipeline{
 			Handlers: []httpMiddleware.Middleware{
@@ -135,11 +135,11 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 	t.Run("request can be short-circuited by middleware pipeline", func(t *testing.T) {
 		called := 0
 		shortcircuitStatusCode := http.StatusBadGateway
-		middleware := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-			return func(ctx *fasthttp.RequestCtx) {
+		middleware := httpMiddleware.Middleware(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				called++
-				ctx.Response.SetStatusCode(shortcircuitStatusCode)
-			}
+				w.WriteHeader(shortcircuitStatusCode)
+			})
 		})
 		pipeline := httpMiddleware.Pipeline{
 			Handlers: []httpMiddleware.Middleware{
