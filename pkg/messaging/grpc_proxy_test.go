@@ -112,7 +112,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewOutgoingContext(context.TODO(), metadata.MD{"a": []string{"b"}})
 		proxy := p.(*proxy)
-		_, conn, teardown, err := proxy.intercept(ctx, "/test")
+		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown()
 
 		assert.Error(t, err)
@@ -133,7 +133,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
-		_, _, _, err := proxy.intercept(ctx, "/test")
+		_, _, _, _, err := proxy.intercept(ctx, "/test")
 
 		assert.NoError(t, err)
 	})
@@ -152,7 +152,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
-		_, conn, teardown, err := proxy.intercept(ctx, "/test")
+		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown()
 
 		assert.NoError(t, err)
@@ -175,7 +175,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
-		ctx, conn, teardown, err := proxy.intercept(ctx, "/test")
+		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown()
 
 		assert.NoError(t, err)
@@ -207,7 +207,7 @@ func TestIntercept(t *testing.T) {
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 
-		_, conn, teardown, err := proxy.intercept(ctx, "/test")
+		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown()
 
 		assert.Error(t, err)
@@ -222,7 +222,7 @@ func TestIntercept(t *testing.T) {
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
-		_, conn, teardown, err := proxy.intercept(ctx, "/test")
+		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown()
 
 		assert.Error(t, err)
