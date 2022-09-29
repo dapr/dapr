@@ -477,40 +477,40 @@ func (c *cmdE2EPerf) getHashDir() (string, error) {
 	}
 
 	// Include other files or folders as needed
-	if len(includes) > 0 {
-		for _, pattern := range includes {
-			if !filepath.IsAbs(pattern) {
-				pattern = filepath.Join(basePath, pattern)
-			}
-			matches, err := filepath.Glob(pattern)
-			if err != nil || len(matches) == 0 {
+	for _, pattern := range includes {
+		if !filepath.IsAbs(pattern) {
+			pattern = filepath.Join(basePath, pattern)
+		}
+		matches, err := filepath.Glob(pattern)
+		if err != nil || len(matches) == 0 {
+			continue
+		}
+		for _, match := range matches {
+			if match == "" {
 				continue
 			}
-			for _, match := range matches {
-				if match == "" {
+			info, err := os.Stat(match)
+			if err != nil {
+				continue
+			}
+			if info.IsDir() {
+				// Note: we are not passing "ignores" here because .gitignore files are usually specific for the folder they live in, while "match" is often outside of the app's folder.
+				// Best is to make sure that include paths are specific, such as ending with `*.go` or `*.proto`, rather than including the entire folder.
+				addFiles, err := hashFilesInDir(match, nil)
+				if err != nil || len(addFiles) == 0 {
 					continue
 				}
-				info, err := os.Stat(match)
+				files = append(files, addFiles...)
+			} else {
+				relPath, err := filepath.Rel(basePath, match)
 				if err != nil {
 					continue
 				}
-				if info.IsDir() {
-					addFiles, err := hashFilesInDir(match, nil)
-					if err != nil || len(addFiles) == 0 {
-						continue
-					}
-					files = append(files, addFiles...)
-				} else {
-					relPath, err := filepath.Rel(basePath, match)
-					if err != nil {
-						continue
-					}
-					checksum, err := hashEntryForFile(match, relPath)
-					if err != nil {
-						continue
-					}
-					files = append(files, checksum)
+				checksum, err := hashEntryForFile(match, relPath)
+				if err != nil {
+					continue
 				}
+				files = append(files, checksum)
 			}
 		}
 	}
