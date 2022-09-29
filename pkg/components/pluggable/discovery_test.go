@@ -80,6 +80,26 @@ func TestComponentDiscovery(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, services)
 	})
+	t.Run("serviceDiscovery should return an error when reflect client factory returns an error", func(t *testing.T) {
+		const fakeSocketFolder = "/tmp/test"
+		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
+		defer os.RemoveAll(fakeSocketFolder)
+		require.NoError(t, err)
+		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
+
+		const fileName = fakeSocketFolder + "/socket1234.sock"
+		listener, err := net.Listen("unix", fileName)
+		require.NoError(t, err)
+		defer listener.Close()
+
+		reflectService := &fakeReflectService{}
+
+		_, err = serviceDiscovery(func(string) (reflectServiceClient, *grpc.ClientConn, error) {
+			return nil, nil, errors.New("fake-err")
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, int64(0), reflectService.listServicesCalled.Load())
+	})
 	t.Run("serviceDiscovery should return an error when list services return an error", func(t *testing.T) {
 		const fakeSocketFolder = "/tmp/test"
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
@@ -108,6 +128,11 @@ func TestComponentDiscovery(t *testing.T) {
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
 		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
+
+		subFolder := fakeSocketFolder + "/subfolder"
+		err = os.MkdirAll(subFolder, os.ModePerm) // should skip subfolders
+		defer os.RemoveAll(subFolder)
+		require.NoError(t, err)
 
 		const fileName = fakeSocketFolder + "/socket1234.sock"
 		listener, err := net.Listen("unix", fileName)

@@ -21,11 +21,14 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
+	"github.com/google/uuid"
+
 	"github.com/pkg/errors"
 
 	"github.com/jhump/protoreflect/grpcreflect"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	reflectpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 )
 
@@ -146,10 +149,37 @@ func callback(services []service) {
 	}
 }
 
+// metadataInstanceID is used to differentiate between multiples instance of the same component.
+const metadataInstanceID = "x-component-instance"
+
+// instanceIDStreamInterceptor returns a grpc client unary interceptor that adds the instanceID on outgoing metadata.
+// instanceID is used for multiplexing connection if the component supports it.
+func instanceIDUnaryInterceptor(instanceID string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		return invoker(metadata.AppendToOutgoingContext(ctx, metadataInstanceID, instanceID), method, req, reply, cc, opts...)
+	}
+}
+
+// instanceIDStreamInterceptor returns a grpc client stream interceptor that adds the instanceID on outgoing metadata.
+// instanceID is used for multiplexing connection if the component supports it.
+func instanceIDStreamInterceptor(instanceID string) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		return streamer(metadata.AppendToOutgoingContext(ctx, metadataInstanceID, instanceID), desc, cc, method, opts...)
+	}
+}
+
 // Discover discover the pluggable components and callback the service discovery with the given component name and grpc dialer.
 func Discover(ctx context.Context) error {
 	services, err := serviceDiscovery(func(socket string) (reflectServiceClient, *grpc.ClientConn, error) {
-		conn, err := SocketDial(ctx, socket, grpc.WithBlock())
+		instanceID := socket + uuid.New().String()
+
+		conn, err := SocketDial(
+			ctx,
+			socket,
+			grpc.WithBlock(),
+			grpc.WithUnaryInterceptor(instanceIDUnaryInterceptor(instanceID)),
+			grpc.WithStreamInterceptor(instanceIDStreamInterceptor(instanceID)),
+		)
 		if err != nil {
 			return nil, nil, err
 		}
