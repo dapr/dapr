@@ -56,8 +56,8 @@ github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d/go.mod h1:ma
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20220928114348-32097c6273eb h1:N35TA4ra10ZTCk66IiP2jCUcH8HKnN78MGyuO/64Gn0=
 github.com/dapr-sandbox/components-go-sdk v0.0.0-20220928114348-32097c6273eb/go.mod h1:ybLpIBlVHbHt17ovO+19PyC4iIHGbuSstX1XPvHRYLo=
-github.com/dapr/components-contrib v1.8.0-rc.1.0.20220924063709-b0d267317d47 h1:t/Qkm5HvxsxWGJImUOOLEsiljrBwdceYULbI9eOouS0=
-github.com/dapr/components-contrib v1.8.0-rc.1.0.20220924063709-b0d267317d47/go.mod h1:z/210gfq/Wb6R8Fbe8aliiC7UO3oYO3u2isnfurRx8o=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220928230130-b4d68ed28add h1:pAHnLq2cWE/gCR3ZppaG04+lspf8sP9MhCnZJo67yxA=
+github.com/dapr/components-contrib v1.8.0-rc.1.0.20220928230130-b4d68ed28add/go.mod h1:ftVthBjl0e5G61J5XKkZKEjU/TGE0gNT9fJCNAdUjU8=
 github.com/dapr/kit v0.0.2 h1:VNg6RWrBMOdtY0/ZLztyAa/RjyFLaskdO9wt2HIREwk=
 github.com/dapr/kit v0.0.2/go.mod h1:Q4TWm9+vcPZFGehaJUZt2hvA805wJm7FIuoArytWJ8o=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
