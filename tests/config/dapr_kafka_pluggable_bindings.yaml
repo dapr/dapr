@@ -12,29 +12,11 @@
 #
 
 apiVersion: dapr.io/v1alpha1
-kind: PluggableComponent
-metadata:
-  name: kafka-output
-spec:
-  componentName: kafka-pluggable
-  type: outputbinding
-  version: v1
----
-apiVersion: dapr.io/v1alpha1
-kind: PluggableComponent
-metadata:
-  name: kafka-input
-spec:
-  componentName: kafka-pluggable
-  type: inputbinding
-  version: v1
----
-apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: pluggable-test-topic
 spec:
-  type: bindings.kafka-pluggable
+  type: bindings.kafka-pluggable-test-topic
   initTimeout: 1m
   version: v1
   metadata:
@@ -62,7 +44,7 @@ kind: Component
 metadata:
   name: pluggable-test-topic-grpc
 spec:
-  type: bindings.kafka-pluggable
+  type: bindings.kafka-pluggable-test-topic-grpc
   initTimeout: 1m
   version: v1
   metadata:
@@ -91,7 +73,7 @@ kind: Component
 metadata:
   name: test-topic-custom-route-pluggable
 spec:
-  type: bindings.kafka-pluggable
+  type: bindings.kafka-pluggable-test-topic-custom-route-pluggable
   initTimeout: 1m
   version: v1
   metadata:

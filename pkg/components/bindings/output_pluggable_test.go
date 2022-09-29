@@ -26,7 +26,6 @@ import (
 	guuid "github.com/google/uuid"
 
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
@@ -87,7 +86,7 @@ func TestOutputBindingCalls(t *testing.T) {
 		proto.RegisterOutputBindingServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcOutputBinding {
 		client := proto.NewOutputBindingClient(cci)
-		outbinding := outputFromConnector(testLogger, pluggable.NewGRPCConnector(components.Pluggable{}, proto.NewOutputBindingClient))
+		outbinding := outputFromConnector(testLogger, pluggable.NewGRPCConnector("/tmp/socket.sock", proto.NewOutputBindingClient))
 		outbinding.Client = client
 		return outbinding
 	})
@@ -108,9 +107,7 @@ func TestOutputBindingCalls(t *testing.T) {
 			socket := fmt.Sprintf("%s/%s.sock", fakeSocketFolder, uniqueID)
 			defer os.Remove(socket)
 
-			connector := pluggable.NewGRPCConnectorWithFactory(func(string) string {
-				return socket
-			}, proto.NewOutputBindingClient)
+			connector := pluggable.NewGRPCConnector(socket, proto.NewOutputBindingClient)
 			defer connector.Close()
 
 			listener, err := net.Listen("unix", socket)

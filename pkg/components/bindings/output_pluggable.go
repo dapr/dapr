@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/kit/logger"
@@ -32,7 +31,7 @@ type grpcOutputBinding struct {
 
 // Init initializes the grpc outputbinding passing out the metadata to the grpc component.
 func (b *grpcOutputBinding) Init(metadata bindings.Metadata) error {
-	if err := b.Dial(metadata.Name); err != nil {
+	if err := b.Dial(); err != nil {
 		return err
 	}
 
@@ -99,15 +98,13 @@ func outputFromConnector(_ logger.Logger, connector *pluggable.GRPCConnector[pro
 }
 
 // NewGRPCOutputBinding creates a new grpc outputbinding using the given socket factory.
-func NewGRPCOutputBinding(l logger.Logger, socketFactory func(string) string) *grpcOutputBinding {
-	return outputFromConnector(l, pluggable.NewGRPCConnectorWithFactory(socketFactory, proto.NewOutputBindingClient))
+func NewGRPCOutputBinding(l logger.Logger, socket string) *grpcOutputBinding {
+	return outputFromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewOutputBindingClient))
 }
 
 // newGRPCOutputBinding creates a new output binding for the given pluggable component.
-func newGRPCOutputBinding(l logger.Logger, pc components.Pluggable) bindings.OutputBinding {
-	return outputFromConnector(l, pluggable.NewGRPCConnector(pc, proto.NewOutputBindingClient))
-}
-
-func init() {
-	pluggable.AddRegistryFor(components.OutputBinding, DefaultRegistry.RegisterOutputBinding, newGRPCOutputBinding)
+func newGRPCOutputBinding(socket string) func(l logger.Logger) bindings.OutputBinding {
+	return func(l logger.Logger) bindings.OutputBinding {
+		return outputFromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewOutputBindingClient))
+	}
 }
