@@ -76,6 +76,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	inmemoryStateStore "github.com/dapr/components-contrib/state/in-memory"
 
 	"github.com/dapr/kit/logger"
 
@@ -5111,4 +5112,54 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
+}
+
+func TestDynamicLoading(t *testing.T) {
+	cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, "http", -1)
+	cfg.Standalone.EnableDynamicLoading = true
+	cfg.Standalone.ComponentsPath = componentsDir
+	if _, err := os.Stat(componentsDir); os.IsNotExist(err) {
+		os.Mkdir(componentsDir, 0o755)
+		defer os.RemoveAll(componentsDir)
+	}
+
+	t.Run("load dynamic component", func(t *testing.T) {
+		// setup
+		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		rt.stateStoreRegistry = stateLoader.NewRegistry()
+		rt.stateStoreRegistry.RegisterComponent(inmemoryStateStore.NewInMemoryStateStore, "in-memory")
+		err := rt.Run(WithStates(rt.stateStoreRegistry), WithNameResolutions(nrLoader.NewRegistry()))
+		defer stopRuntime(t, rt)
+		defer rt.Shutdown(0)
+		assert.Nil(t, err, "unable to start runtime")
+
+		statestore := componentsV1alpha1.Component{
+			TypeMeta: metaV1.TypeMeta{
+				Kind:       "Component",
+				APIVersion: "dapr.io/v1alpha1",
+			},
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: "dynamic-statestore",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:    "state.in-memory",
+				Version: "v1",
+			},
+		}
+
+		_, ok := rt.stateStores["dynamic-statestore"]
+		assert.False(t, ok, "statestore should not be loaded yet")
+
+		// act
+		var cleanup func()
+		cleanup, err = writeComponentToDisk(statestore, "statestore.yaml")
+		defer cleanup()
+
+		time.Sleep(1 * time.Second)
+		_, ok = rt.stateStores["dynamic-statestore"]
+
+		// assert
+		assert.NoError(t, err, "error writing component to disk")
+		assert.True(t, ok, "dynamic component not loaded")
+	})
 }

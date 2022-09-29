@@ -59,6 +59,9 @@ spec:
 		components, err := request.LoadComponents()
 		assert.Nil(t, err)
 		assert.Len(t, components, 1)
+
+		components = request.LoadComponentsFromFile(filename)
+		assert.Len(t, components, 1)
 	})
 
 	t.Run("invalid yaml head", func(t *testing.T) {
@@ -79,6 +82,9 @@ name: statestore`
 		components, err := request.LoadComponents()
 		assert.Nil(t, err)
 		assert.Len(t, components, 0)
+
+		components = request.LoadComponentsFromFile(filename)
+		assert.Len(t, components, 0)
 	})
 
 	t.Run("load components file not exist", func(t *testing.T) {
@@ -88,6 +94,9 @@ name: statestore`
 
 		components, err := request.LoadComponents()
 		assert.NotNil(t, err)
+		assert.Len(t, components, 0)
+
+		components = request.LoadComponentsFromFile("non-existing-file.yaml")
 		assert.Len(t, components, 0)
 	})
 }
