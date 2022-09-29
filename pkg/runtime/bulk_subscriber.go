@@ -114,7 +114,8 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 					hasAnyError = true
 					continue
 				}
-				if rPath == "" {
+				// For grpc, we can still send the entry even if path is blank, App can take a decision
+				if rPath == "" && a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
@@ -155,7 +156,8 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policy resiliency.
 					hasAnyError = true
 					continue
 				}
-				if rPath == "" {
+				// For grpc, we can still send the entry even if path is blank, App can take a decision
+				if rPath == "" && a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 					continue
 				}
 				populateBulkSubcribedMessage(&(msg.Entries[i]), cloudEvent, &routePathBulkMessageMap, rPath, i, msg, true, psName, message.ContentType)
