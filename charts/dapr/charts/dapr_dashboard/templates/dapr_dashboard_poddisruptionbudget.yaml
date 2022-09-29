@@ -10,6 +10,9 @@ metadata:
   name: dapr-dashboard-disruption-budget
   labels:
     app: dapr-dashboard
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
 {{- if .Values.global.ha.disruption.minimumAvailable }}
   minAvailable: {{ .Values.global.ha.disruption.minimumAvailable }}
