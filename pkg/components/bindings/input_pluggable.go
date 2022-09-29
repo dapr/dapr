@@ -18,7 +18,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 
@@ -38,7 +37,7 @@ type grpcInputBinding struct {
 
 // Init initializes the grpc inputbinding passing out the metadata to the grpc component.
 func (b *grpcInputBinding) Init(metadata bindings.Metadata) error {
-	if err := b.Dial(metadata.Name); err != nil {
+	if err := b.Dial(); err != nil {
 		return err
 	}
 
@@ -137,15 +136,13 @@ func inputFromConnector(l logger.Logger, connector *pluggable.GRPCConnector[prot
 }
 
 // NewGRPCInputBinding creates a new grpc inputbindingusing the given socket factory.
-func NewGRPCInputBinding(l logger.Logger, socketFactory func(string) string) *grpcInputBinding {
-	return inputFromConnector(l, pluggable.NewGRPCConnectorWithFactory(socketFactory, proto.NewInputBindingClient))
+func NewGRPCInputBinding(l logger.Logger, socket string) *grpcInputBinding {
+	return inputFromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewInputBindingClient))
 }
 
 // newGRPCInputBinding creates a new input binding for the given pluggable component.
-func newGRPCInputBinding(l logger.Logger, pc components.Pluggable) bindings.InputBinding {
-	return inputFromConnector(l, pluggable.NewGRPCConnector(pc, proto.NewInputBindingClient))
-}
-
-func init() {
-	pluggable.AddRegistryFor(components.InputBinding, DefaultRegistry.RegisterInputBinding, newGRPCInputBinding)
+func newGRPCInputBinding(socket string) func(l logger.Logger) bindings.InputBinding {
+	return func(l logger.Logger) bindings.InputBinding {
+		return inputFromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewInputBindingClient))
+	}
 }

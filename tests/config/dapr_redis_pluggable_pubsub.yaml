@@ -12,14 +12,6 @@
 #
 
 apiVersion: dapr.io/v1alpha1
-kind: PluggableComponent
-metadata:
-  name: redis-pubsub-pluggable
-spec:
-  type: pubsub
-  version: v1
----
-apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: pluggable-messagebus
