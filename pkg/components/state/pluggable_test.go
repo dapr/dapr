@@ -28,7 +28,6 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
@@ -170,7 +169,7 @@ func TestComponentCalls(t *testing.T) {
 		proto.RegisterQueriableStateStoreServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcStateStore {
 		client := newStateStoreClient(cci)
-		stStore := NewGRPCStateStore(testLogger, components.SocketPathForPluggableComponent("name", "v1"))
+		stStore := NewGRPCStateStore(testLogger, "/tmp/socket.sock")
 		stStore.Client = client
 		return stStore
 	})
