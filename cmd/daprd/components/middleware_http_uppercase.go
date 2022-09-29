@@ -14,25 +14,24 @@ limitations under the License.
 package components
 
 import (
-	"strings"
-
-	"github.com/valyala/fasthttp"
+	"io"
+	"net/http"
 
 	"github.com/dapr/components-contrib/middleware"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/logger"
 )
 
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-				return func(ctx *fasthttp.RequestCtx) {
-					body := string(ctx.PostBody())
-					ctx.Request.SetBody([]byte(strings.ToUpper(body)))
-					h(ctx)
-				}
+			return func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					r.Body = io.NopCloser(streams.UppercaseTransformer(r.Body))
+					next.ServeHTTP(w, r)
+				})
 			}, nil
 		}
 	}, "uppercase")
