@@ -25,6 +25,7 @@ import (
 	nethttp "net/http"
 
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -40,6 +41,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/utils/nethttpadaptor"
 )
 
 const (
@@ -259,11 +261,13 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 			c.ResetUserValues()
 		}()
 
-		doReq := func(ctx *fasthttp.RequestCtx) {
-			err = h.client.Do(&ctx.Request, &ctx.Response)
-		}
-
-		execPipeline := h.pipeline.Apply(doReq)
+		execPipeline := fasthttpadaptor.NewFastHTTPHandler(
+			h.pipeline.Apply(
+				nethttpadaptor.NewNetHTTPHandlerFunc(func(ctx *fasthttp.RequestCtx) {
+					err = h.client.Do(&ctx.Request, &ctx.Response)
+				}),
+			),
+		)
 
 		execPipeline(&c)
 		response = &c.Response
