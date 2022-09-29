@@ -6,6 +6,8 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.6.0
   creationTimestamp: null
   name: pluggablecomponents.dapr.io
+  labels:
+    app.kubernetes.io/part-of: "dapr"
 spec:
   group: dapr.io
   names:
