@@ -298,11 +298,13 @@ func TestPubSubEndpoints(t *testing.T) {
 func TestShutdownEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	shutdownCh := make(chan struct{})
 	m := mock.Mock{}
 	m.On("shutdown", mock.Anything).Return()
 	testAPI := &api{
 		shutdown: func() {
 			m.MethodCalled("shutdown")
+			close(shutdownCh)
 		},
 	}
 
@@ -312,8 +314,11 @@ func TestShutdownEndpoints(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
-		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
-			<-time.After(200 * time.Millisecond)
+		select {
+		case <-time.After(time.Second):
+			t.Fatal("Did not shut down within 1 second")
+		case <-shutdownCh:
+			// All good
 		}
 		m.AssertCalled(t, "shutdown")
 	})

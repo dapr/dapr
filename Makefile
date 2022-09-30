@@ -298,6 +298,19 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
 ./pkg/fswatcher/... \
+./pkg/grpc/... \
+./pkg/health/... \
+./pkg/http/... \
+./pkg/injector/... \
+./pkg/messages/... \
+./pkg/messaging/... \
+./pkg/metrics/... \
+./pkg/middleware/... \
+./pkg/modes/... \
+./pkg/operator/... \
+./pkg/placement/... \
+./pkg/proto/... \
+./pkg/resiliency/... \
 ./pkg/runtime/...
 
 .PHONY: test-race
