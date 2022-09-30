@@ -27,9 +27,8 @@ import (
 	"testing"
 	"time"
 
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	routing "github.com/fasthttp/router"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -40,6 +39,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -152,7 +152,9 @@ func TestPubSubEndpoints(t *testing.T) {
 				return nil
 			},
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				return &daprt.MockPubSub{}
+				mock := daprt.MockPubSub{}
+				mock.On("Features").Return([]pubsub.Feature{})
+				return &mock
 			},
 		},
 	}
@@ -2282,12 +2284,14 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	t.Run("subscribe and unsubscribe configurations", func(t *testing.T) {
 		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
 		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
-		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
+		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when app channel is empty")
 
 		rspMap1 := resp1.JSONBody
-		assert.NotNil(t, rspMap1)
+		assert.Nil(t, rspMap1)
 
-		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, rspMap1.(map[string]interface{})["id"].(string))
+		uuid, err := uuid.NewRandom()
+		assert.Nil(t, err, "unable to generate id")
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 		assert.Equal(t, 200, resp2.StatusCode, "unsubscribe configuration store,should return 200")
@@ -2297,12 +2301,13 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	t.Run("error in unsubscribe configurations", func(t *testing.T) {
 		apiPath1 := fmt.Sprintf("v1.0-alpha1/configuration/%s/subscribe", storeName)
 		resp1 := fakeServer.DoRequest("GET", apiPath1, nil, nil)
-		assert.Equal(t, 200, resp1.StatusCode, "subscribe configuration store, should return 200")
-
+		assert.Equal(t, 500, resp1.StatusCode, "subscribe configuration store, should return 500 when appchannel is not initialized")
 		rspMap1 := resp1.JSONBody
-		assert.NotNil(t, rspMap1)
+		assert.Nil(t, rspMap1)
 
-		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", rspMap1.(map[string]interface{})["id"].(string))
+		uuid, err := uuid.NewRandom()
+		assert.Nil(t, err, "unable to generate id")
+		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 

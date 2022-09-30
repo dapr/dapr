@@ -1,5 +1,7 @@
+enabled: true
 replicaCount: 1
 logLevel: info
+component: dashboard
 
 image:
   registry: docker.io/daprio

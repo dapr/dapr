@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -30,11 +30,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/dapr/kit/logger"
-
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
+	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -92,7 +92,7 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
 		log.Warnf("could not unmarshal raw object: %v", err)
 	} else {
-		appID = getAppID(pod)
+		appID = sidecar.GetAppID(pod.ObjectMeta)
 	}
 
 	return appID
@@ -226,7 +226,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var patchOps []PatchOperation
+	var patchOps []sidecar.PatchOperation
 	patchedSuccessfully := false
 
 	ar := v1.AdmissionReview{}

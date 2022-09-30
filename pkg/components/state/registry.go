@@ -30,11 +30,7 @@ type Registry struct {
 }
 
 // DefaultRegistry is the singleton with the registry.
-var DefaultRegistry *Registry
-
-func init() {
-	DefaultRegistry = NewRegistry()
-}
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry is used to create state store registry.
 func NewRegistry() *Registry {
@@ -70,6 +66,7 @@ func (s *Registry) getStateStore(name, version string) (func() state.Store, bool
 			return s.wrapFn(stateStoreFn), true
 		}
 	}
+
 	return nil, false
 }
 

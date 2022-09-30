@@ -21,6 +21,7 @@ var (
 	policyActionKey   = tag.MustNewKey("policyAction")
 	resiliencyNameKey = tag.MustNewKey("name")
 	policyKey         = tag.MustNewKey("policy")
+	componentNameKey  = tag.MustNewKey("componentName")
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
@@ -152,7 +153,7 @@ func (s *serviceMetrics) Init(appID string) error {
 	return view.Register(
 		diagUtils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
-		diagUtils.NewMeasureView(s.componentInitFailed, []tag.Key{appIDKey, componentKey, failReasonKey}, view.Count()),
+		diagUtils.NewMeasureView(s.componentInitFailed, []tag.Key{appIDKey, componentKey, failReasonKey, componentNameKey}, view.Count()),
 
 		diagUtils.NewMeasureView(s.mtlsInitCompleted, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(s.mtlsInitFailed, []tag.Key{appIDKey, failReasonKey}, view.Count()),
@@ -192,11 +193,11 @@ func (s *serviceMetrics) ComponentInitialized(component string) {
 }
 
 // ComponentInitFailed records metric when component initialization is failed.
-func (s *serviceMetrics) ComponentInitFailed(component string, reason string) {
+func (s *serviceMetrics) ComponentInitFailed(component string, reason string, name string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diagUtils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason),
+			diagUtils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason, componentNameKey, name),
 			s.componentInitFailed.M(1))
 	}
 }
