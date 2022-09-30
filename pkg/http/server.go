@@ -228,12 +228,13 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 
 func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		userAgent := string(ctx.Request.Header.Peek("User-Agent"))
-		infoLog.
-			WithFields(map[string]any{
+		log := infoLog
+		if userAgent := string(ctx.Request.Header.Peek("User-Agent")); userAgent != "" {
+			log = log.WithFields(map[string]any{
 				"useragent": userAgent,
-			}).
-			Info("HTTP API Called: " + string(ctx.Method()) + " " + string(ctx.Path()))
+			})
+		}
+		log.Info("HTTP API Called: " + string(ctx.Method()) + " " + string(ctx.Path()))
 		next(ctx)
 	}
 }
