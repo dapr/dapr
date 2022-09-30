@@ -19,33 +19,45 @@ import (
 	"time"
 )
 
+func NewFailure(fails map[string]int, timeouts map[string]time.Duration, callCount map[string]int) Failure {
+	return Failure{
+		fails:     fails,
+		timeouts:  timeouts,
+		callCount: callCount,
+		lock:      &sync.RWMutex{},
+	}
+}
+
 type Failure struct {
-	Fails     map[string]int
-	Timeouts  map[string]time.Duration
-	CallCount map[string]int
-	lock      *sync.Mutex
+	fails     map[string]int
+	timeouts  map[string]time.Duration
+	callCount map[string]int
+	lock      *sync.RWMutex
 }
 
 func (f *Failure) PerformFailure(key string) error {
-	if f.lock == nil {
-		f.lock = &sync.Mutex{}
-	}
 	f.lock.Lock()
-	f.CallCount[key]++
+	f.callCount[key]++
 	f.lock.Unlock()
-	if val, ok := f.Fails[key]; ok {
+	if val, ok := f.fails[key]; ok {
 		if val > 0 {
 			f.lock.Lock()
-			f.Fails[key]--
+			f.fails[key]--
 			f.lock.Unlock()
 			return errors.New("forced failure")
 		}
-		delete(f.Fails, key)
+		delete(f.fails, key)
 		return nil
 	}
 
-	if val, ok := f.Timeouts[key]; ok {
+	if val, ok := f.timeouts[key]; ok {
 		time.Sleep(val)
 	}
 	return nil
+}
+
+func (f *Failure) CallCount(key string) int {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+	return f.callCount[key]
 }
