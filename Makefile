@@ -280,9 +280,24 @@ test: test-deps
 		go test ./tests/...
 
 ################################################################################
+# Target: test-race                                                            #
+################################################################################
+# Note that we are expliciting maintaing an allow-list of packages that should be tested
+# with "-race", as many packags aren't passing those tests yet.
+# Eventually, the goal is to be able to have all packages pass tests with "-race"
+# Note: CGO is required for tests with "-race"
+TEST_WITH_RACE=./pkg/actors \
+./pkg/apphealth \
+./pkg/runtime
+
+.PHONY: test-race
+test-race:
+	echo "$(TEST_WITH_RACE)" | xargs \
+		go test -race
+
+################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
 # Please use golangci-lint version v1.48.0 , otherwise you might encounter errors.
 # You can download version v1.48.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.48.0
 .PHONY: lint
