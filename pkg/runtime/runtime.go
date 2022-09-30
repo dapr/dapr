@@ -1749,9 +1749,9 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	a.topicsLock.RLock()
-	defer a.topicsLock.RUnlock()
-
 	ps, ok := a.pubSubs[req.PubsubName]
+	a.topicsLock.RUnlock()
+
 	if !ok {
 		return runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
