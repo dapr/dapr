@@ -29,7 +29,7 @@ type fakeReflectService struct {
 	listServicesCalled atomic.Int64
 	listServicesResp   []string
 	listServicesErr    error
-	resetCalled        atomic.Int64
+	onResetCalled      func()
 }
 
 func (f *fakeReflectService) ListServices() ([]string, error) {
@@ -38,16 +38,16 @@ func (f *fakeReflectService) ListServices() ([]string, error) {
 }
 
 func (f *fakeReflectService) Reset() {
-	f.resetCalled.Add(1)
+	f.onResetCalled()
 }
 
 type fakeGrpcCloser struct {
 	grpcConnectionCloser
-	closeCalled atomic.Int64
+	onCloseCalled func()
 }
 
 func (f *fakeGrpcCloser) Close() error {
-	f.closeCalled.Add(1)
+	f.onCloseCalled()
 	return nil
 }
 
@@ -66,14 +66,25 @@ func TestServiceCallback(t *testing.T) {
 
 func TestConnectionCloser(t *testing.T) {
 	t.Run("connection closer should call grpc close and client reset", func(t *testing.T) {
-		fakeCloser := &fakeGrpcCloser{}
-		fakeService := &fakeReflectService{}
+		const close, reset = "close", "reset"
+		callOrder := []string{}
+		fakeCloser := &fakeGrpcCloser{
+			onCloseCalled: func() {
+				callOrder = append(callOrder, close)
+			},
+		}
+		fakeService := &fakeReflectService{
+			onResetCalled: func() {
+				callOrder = append(callOrder, reset)
+			},
+		}
 		closer := reflectServiceConnectionCloser(fakeCloser, fakeService)
 		closer()
-		assert.Equal(t, int64(1), fakeCloser.closeCalled.Load())
-		assert.Equal(t, int64(1), fakeService.resetCalled.Load())
+		assert.Len(t, callOrder, 2)
+		assert.Equal(t, callOrder, []string{reset, close})
 	})
 }
+
 func TestComponentDiscovery(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return
