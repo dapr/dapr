@@ -29,11 +29,26 @@ type fakeReflectService struct {
 	listServicesCalled atomic.Int64
 	listServicesResp   []string
 	listServicesErr    error
+	resetCalled        atomic.Int64
 }
 
 func (f *fakeReflectService) ListServices() ([]string, error) {
 	f.listServicesCalled.Add(1)
 	return f.listServicesResp, f.listServicesErr
+}
+
+func (f *fakeReflectService) Reset() {
+	f.resetCalled.Add(1)
+}
+
+type fakeGrpcCloser struct {
+	grpcConnectionCloser
+	closeCalled atomic.Int64
+}
+
+func (f *fakeGrpcCloser) Close() error {
+	f.closeCalled.Add(1)
+	return nil
 }
 
 func TestServiceCallback(t *testing.T) {
@@ -49,6 +64,16 @@ func TestServiceCallback(t *testing.T) {
 	})
 }
 
+func TestConnectionCloser(t *testing.T) {
+	t.Run("connection closer should call grpc close and client reset", func(t *testing.T) {
+		fakeCloser := &fakeGrpcCloser{}
+		fakeService := &fakeReflectService{}
+		closer := reflectServiceConnectionCloser(fakeCloser, fakeService)
+		closer()
+		assert.Equal(t, int64(1), fakeCloser.closeCalled.Load())
+		assert.Equal(t, int64(1), fakeService.resetCalled.Load())
+	})
+}
 func TestComponentDiscovery(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return
