@@ -948,7 +948,9 @@ func reminderRepeats(ctx context.Context, t *testing.T, dueTime, period, ttl str
 		return
 	}
 	assert.NoError(t, err)
+	testActorsRuntime.remindersLock.RLock()
 	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+	testActorsRuntime.remindersLock.RUnlock()
 
 	cnt := 0
 	var (
