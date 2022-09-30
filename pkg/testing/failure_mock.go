@@ -39,16 +39,19 @@ func (f *Failure) PerformFailure(key string) error {
 	f.lock.Lock()
 	f.callCount[key]++
 	f.lock.Unlock()
-	if _, ok := f.fails[key]; ok {
-		f.lock.Lock()
-		defer f.lock.Unlock()
-		if f.fails[key] > 0 {
+
+	f.lock.Lock()
+	if v, ok := f.fails[key]; ok {
+		if v > 0 {
 			f.fails[key]--
+			f.lock.Unlock()
 			return errors.New("forced failure")
 		}
 		delete(f.fails, key)
+		f.lock.Unlock()
 		return nil
 	}
+	f.lock.Unlock()
 
 	if val, ok := f.timeouts[key]; ok {
 		time.Sleep(val)
