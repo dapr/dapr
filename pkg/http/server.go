@@ -229,11 +229,11 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 func (s *server) apiLoggingInfo(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		userAgent := string(ctx.Request.Header.Peek("User-Agent"))
-		if userAgent == "" {
-			userAgent = "unknown"
-		}
-
-		infoLog.Infof("HTTP API Called: %s %s UserAgent: %s", ctx.Method(), ctx.Path(), userAgent)
+		infoLog.
+			WithFields(map[string]any{
+				"useragent": userAgent,
+			}).
+			Info("HTTP API Called: " + string(ctx.Method()) + " " + string(ctx.Path()))
 		next(ctx)
 	}
 }

@@ -319,14 +319,18 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 
 func (s *server) getGRPCAPILoggingInfo() grpcGo.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (interface{}, error) {
-		userAgent := "unknown"
+		userAgent := ""
 		if meta, ok := metadata.FromIncomingContext(ctx); ok {
 			if val, ok := meta["user-agent"]; ok {
 				userAgent = val[0]
 			}
 		}
 		if s.infoLogger != nil && info != nil {
-			s.infoLogger.Infof("gRPC API Called: %s UserAgent: %s", info.FullMethod, userAgent)
+			s.infoLogger.
+				WithFields(map[string]any{
+					"useragent": userAgent,
+				}).
+				Info("gRPC API Called: ", info.FullMethod)
 		}
 		return handler(ctx, req)
 	}
