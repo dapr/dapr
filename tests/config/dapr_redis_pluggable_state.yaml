@@ -12,14 +12,6 @@
 #
 
 apiVersion: dapr.io/v1alpha1
-kind: PluggableComponent
-metadata:
-  name: redis-pluggable
-spec:
-  type: state
-  version: v1
----
-apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: pluggable-statestore
@@ -36,13 +28,3 @@ spec:
       value: ""
 scopes:
   - stateapp-pluggable
----
-# TODO: Remove once PluggableComponents feature is finalized
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: pluggablecomponentsconfig
-spec:
-  features:
-    - name: PluggableComponents
-      enabled: true

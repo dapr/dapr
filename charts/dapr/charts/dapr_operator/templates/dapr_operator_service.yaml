@@ -2,6 +2,10 @@ kind: Service
 apiVersion: v1
 metadata:
   name: dapr-api
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
   selector:
     app: dapr-operator
@@ -14,6 +18,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dapr-webhook
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
   ports:
   - port: 443

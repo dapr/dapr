@@ -18,31 +18,33 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"runtime"
 	"sync/atomic"
 	"testing"
 
+	guuid "github.com/google/uuid"
+
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
-	"github.com/dapr/dapr/pkg/components"
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
+	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
+
 	"github.com/dapr/kit/logger"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const bufSize = 1024 * 1024
-
 type server struct {
 	proto.UnimplementedStateStoreServer
 	proto.UnimplementedTransactionalStateStoreServer
+	initCalled         atomic.Int64
+	featuresCalled     atomic.Int64
 	deleteCalled       atomic.Int64
 	onDeleteCalled     func(*proto.DeleteRequest)
 	deleteErr          error
@@ -144,39 +146,16 @@ func (s *server) BulkSet(ctx context.Context, req *proto.BulkSetRequest) (*proto
 }
 
 func (s *server) Init(context.Context, *proto.InitRequest) (*proto.InitResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Init not implemented")
+	s.initCalled.Add(1)
+	return &proto.InitResponse{}, nil
+}
+
+func (s *server) Features(context.Context, *proto.FeaturesRequest) (*proto.FeaturesResponse, error) {
+	s.featuresCalled.Add(1)
+	return &proto.FeaturesResponse{}, nil
 }
 
 var testLogger = logger.NewLogger("state-pluggable-logger")
-
-// getStateStore returns a state store connected to the given server
-func getStateStore(srv *server) (stStore *grpcStateStore, cleanup func(), err error) {
-	lis := bufconn.Listen(bufSize)
-	s := grpc.NewServer()
-	proto.RegisterStateStoreServer(s, srv)
-	proto.RegisterTransactionalStateStoreServer(s, srv)
-	proto.RegisterQueriableStateStoreServer(s, srv)
-	go func() {
-		if serveErr := s.Serve(lis); serveErr != nil {
-			testLogger.Debugf("Server exited with error: %v", serveErr)
-		}
-	}()
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
-		return lis.Dial()
-	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	client := newStateStoreClient(conn)
-	stStore = fromPluggable(testLogger, components.Pluggable{})
-	stStore.Client = client
-	return stStore, func() {
-		lis.Close()
-		conn.Close()
-	}, nil
-}
 
 // wrapString into quotes
 func wrapString(str string) string {
@@ -184,6 +163,59 @@ func wrapString(str string) string {
 }
 
 func TestComponentCalls(t *testing.T) {
+	getStateStore := testingGrpc.TestServerFor(testLogger, func(s *grpc.Server, svc *server) {
+		proto.RegisterStateStoreServer(s, svc)
+		proto.RegisterTransactionalStateStoreServer(s, svc)
+		proto.RegisterQueriableStateStoreServer(s, svc)
+	}, func(cci grpc.ClientConnInterface) *grpcStateStore {
+		client := newStateStoreClient(cci)
+		stStore := NewGRPCStateStore(testLogger, "/tmp/socket.sock")
+		stStore.Client = client
+		return stStore
+	})
+
+	if runtime.GOOS != "windows" {
+		t.Run("test init should populate features and call grpc init", func(t *testing.T) {
+			const (
+				fakeName          = "name"
+				fakeType          = "type"
+				fakeVersion       = "v1"
+				fakeComponentName = "component"
+				fakeSocketFolder  = "/tmp"
+			)
+
+			uniqueID := guuid.New().String()
+			socket := fmt.Sprintf("%s/%s.sock", fakeSocketFolder, uniqueID)
+			defer os.Remove(socket)
+
+			connector := pluggable.NewGRPCConnector(socket, newStateStoreClient)
+			defer connector.Close()
+
+			listener, err := net.Listen("unix", socket)
+			require.NoError(t, err)
+			defer listener.Close()
+			s := grpc.NewServer()
+			srv := &server{}
+			proto.RegisterStateStoreServer(s, srv)
+			go func() {
+				if serveErr := s.Serve(listener); serveErr != nil {
+					testLogger.Debugf("Server exited with error: %v", serveErr)
+				}
+			}()
+
+			ps := fromConnector(testLogger, connector)
+			err = ps.Init(state.Metadata{
+				Base: contribMetadata.Base{},
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, int64(1), srv.featuresCalled.Load())
+			assert.Equal(t, int64(1), srv.initCalled.Load())
+		})
+	} else {
+		t.Logf("skipping pubsub pluggable component init test due to the lack of OS (%s) support", runtime.GOOS)
+	}
+
 	t.Run("features should return the component features'", func(t *testing.T) {
 		stStore, cleanup, err := getStateStore(&server{})
 		require.NoError(t, err)
@@ -614,7 +646,9 @@ func TestComponentCalls(t *testing.T) {
 		}
 		request := &state.QueryRequest{
 			Query: query.Query{
-				Filters: filters,
+				QueryFields: query.QueryFields{
+					Filters: filters,
+				},
 			},
 			Metadata: map[string]string{},
 		}
@@ -622,7 +656,7 @@ func TestComponentCalls(t *testing.T) {
 			{
 				Key:         "",
 				Data:        []byte{},
-				Etag:        &v1.Etag{},
+				Etag:        &proto.Etag{},
 				Error:       "",
 				ContentType: "",
 			},
@@ -651,21 +685,21 @@ func TestComponentCalls(t *testing.T) {
 //nolint:nosnakecase
 func TestMappers(t *testing.T) {
 	t.Run("consistencyOf should return unspecified for unknown consistency", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONSISTENCY_UNSPECIFIED, consistencyOf(""))
+		assert.Equal(t, proto.StateOptions_CONSISTENCY_UNSPECIFIED, consistencyOf(""))
 	})
 
 	t.Run("consistencyOf should return proper consistency when well-known consistency is used", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONSISTENCY_EVENTUAL, consistencyOf(state.Eventual))
-		assert.Equal(t, v1.StateOptions_CONSISTENCY_STRONG, consistencyOf(state.Strong))
+		assert.Equal(t, proto.StateOptions_CONSISTENCY_EVENTUAL, consistencyOf(state.Eventual))
+		assert.Equal(t, proto.StateOptions_CONSISTENCY_STRONG, consistencyOf(state.Strong))
 	})
 
 	t.Run("concurrencyOf should return unspecified for unknown concurrency", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONCURRENCY_UNSPECIFIED, concurrencyOf(""))
+		assert.Equal(t, proto.StateOptions_CONCURRENCY_UNSPECIFIED, concurrencyOf(""))
 	})
 
 	t.Run("concurrencyOf should return proper concurrency when well-known concurrency is used", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONCURRENCY_FIRST_WRITE, concurrencyOf(state.FirstWrite))
-		assert.Equal(t, v1.StateOptions_CONCURRENCY_LAST_WRITE, concurrencyOf(state.LastWrite))
+		assert.Equal(t, proto.StateOptions_CONCURRENCY_FIRST_WRITE, concurrencyOf(state.FirstWrite))
+		assert.Equal(t, proto.StateOptions_CONCURRENCY_LAST_WRITE, concurrencyOf(state.LastWrite))
 	})
 
 	t.Run("toGetRequest should return nil when receiving a nil request", func(t *testing.T) {
@@ -685,7 +719,7 @@ func TestMappers(t *testing.T) {
 		})
 		assert.Equal(t, getRequest.Key, fakeKey)
 		assert.Equal(t, getRequest.Metadata[fakeKey], fakeKey)
-		assert.Equal(t, getRequest.Consistency, v1.StateOptions_CONSISTENCY_EVENTUAL)
+		assert.Equal(t, getRequest.Consistency, proto.StateOptions_CONSISTENCY_EVENTUAL)
 	})
 
 	t.Run("fromGetResponse should map all properties from the given response", func(t *testing.T) {
@@ -694,7 +728,7 @@ func TestMappers(t *testing.T) {
 		fakeETag := "etag"
 		resp := fromGetResponse(&proto.GetResponse{
 			Data: fakeData,
-			Etag: &v1.Etag{
+			Etag: &proto.Etag{
 				Value: fakeETag,
 			},
 			Metadata: map[string]string{
@@ -756,8 +790,8 @@ func TestMappers(t *testing.T) {
 				assert.Equal(t, string(req.Value), wrapString(v))
 			}
 			assert.Equal(t, req.Metadata[fakeKey], fakePropValue)
-			assert.Equal(t, req.Options.Concurrency, v1.StateOptions_CONCURRENCY_LAST_WRITE)
-			assert.Equal(t, req.Options.Consistency, v1.StateOptions_CONSISTENCY_EVENTUAL)
+			assert.Equal(t, req.Options.Concurrency, proto.StateOptions_CONCURRENCY_LAST_WRITE)
+			assert.Equal(t, req.Options.Consistency, proto.StateOptions_CONSISTENCY_EVENTUAL)
 		}
 	})
 
@@ -782,8 +816,8 @@ func TestMappers(t *testing.T) {
 			assert.Equal(t, req.Key, fakeKey)
 			assert.NotNil(t, req.Value)
 			assert.Equal(t, req.Metadata[fakeKey], fakePropValue)
-			assert.Equal(t, req.Options.Concurrency, v1.StateOptions_CONCURRENCY_LAST_WRITE)
-			assert.Equal(t, req.Options.Consistency, v1.StateOptions_CONSISTENCY_EVENTUAL)
+			assert.Equal(t, req.Options.Concurrency, proto.StateOptions_CONCURRENCY_LAST_WRITE)
+			assert.Equal(t, req.Options.Consistency, proto.StateOptions_CONSISTENCY_EVENTUAL)
 		}
 
 		t.Run("toTransact should return err when type is unrecognized", func(t *testing.T) {

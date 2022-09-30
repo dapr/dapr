@@ -37,6 +37,8 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+
+	apiv1 "k8s.io/api/core/v1"
 )
 
 var tr *runner.TestRunner
@@ -53,11 +55,19 @@ const (
 
 	receiveMessageRetries = 5
 
-	publisherAppName  = "pubsub-publisher"
-	subscriberAppName = "pubsub-subscriber"
+	publisherAppName           = "pubsub-publisher"
+	subscriberAppName          = "pubsub-subscriber"
+	publisherPluggableAppName  = "pubsub-publisher-pluggable"
+	subscriberPluggableAppName = "pubsub-subscriber-pluggable"
+	redisPubSubPluggableApp    = "e2e-pluggable_redis-pubsub"
+	PubSubEnvVar               = "DAPR_TEST_PUBSUB_NAME"
+	PubSubPluggableName        = "pluggable-messagebus"
 )
 
-var offset int
+var (
+	offset     int
+	pubsubName string
+)
 
 // sent to the publisher app, which will publish data to dapr.
 type publishCommand struct {
@@ -216,7 +226,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
 	// set to respond with success
-	setDesiredResponse(t, "success", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	log.Printf("Test publish subscribe success flow\n")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
@@ -252,10 +262,10 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
 
 	log.Println("Initialize the sets for this scenario ...")
-	callInitialize(t, publisherExternalURL, protocol)
+	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 
 	// set to respond with specified subscriber response
-	setDesiredResponse(t, subscriberResponse, publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, subscriberResponse, publisherExternalURL, protocol)
 
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
@@ -264,14 +274,14 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		time.Sleep(10 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
 
-		callInitialize(t, publisherExternalURL, protocol)
+		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else {
 		// Sleep a few seconds to ensure there's time for all messages to be delivered at least once, so if they have to be sent to the DLQ, they can be before we change the desired response status
 		time.Sleep(5 * time.Second)
 	}
 
 	// set to respond with success
-	setDesiredResponse(t, "success", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
@@ -299,7 +309,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	return subscriberExternalURL
 }
 
-func callInitialize(t *testing.T, publisherExternalURL string, protocol string) {
+func callInitialize(t *testing.T, subscriberAppName, publisherExternalURL string, protocol string) {
 	req := callSubscriberMethodRequest{
 		ReqID:     "c-" + uuid.New().String(),
 		RemoteApp: subscriberAppName,
@@ -313,7 +323,7 @@ func callInitialize(t *testing.T, publisherExternalURL string, protocol string) 
 	require.Equal(t, http.StatusOK, code)
 }
 
-func setDesiredResponse(t *testing.T, subscriberResponse string, publisherExternalURL string, protocol string) {
+func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, publisherExternalURL, protocol string) {
 	// set to respond with specified subscriber response
 	req := callSubscriberMethodRequest{
 		ReqID:     "c-" + uuid.New().String(),
@@ -405,13 +415,25 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	}
 }
 
+var apps []struct {
+	suite      string
+	publisher  string
+	subscriber string
+} = []struct {
+	suite      string
+	publisher  string
+	subscriber string
+}{
+	{
+		suite:      "built-in",
+		publisher:  publisherAppName,
+		subscriber: subscriberAppName,
+	},
+}
+
 func TestMain(m *testing.M) {
 	utils.SetupLogs("pubsub")
 	utils.InitHTTPClient(true)
-
-	//nolint: gosec
-	offset = rand.Intn(randomOffsetMax) + 1
-	log.Printf("initial offset: %d", offset)
 
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
@@ -436,6 +458,55 @@ func TestMain(m *testing.M) {
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
 		},
+	}
+
+	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
+		redisPubsubPluggableComponent := map[string]apiv1.Container{
+			"redis-pubsub-pluggable.sock": {
+				Name:  "redis-pubsub-pluggable",
+				Image: runner.BuildTestImageName(redisPubSubPluggableApp),
+			},
+		}
+		pluggableTestApps := []kube.AppDescription{
+			{
+				AppName:             publisherPluggableAppName,
+				DaprEnabled:         true,
+				ImageName:           "e2e-pubsub-publisher",
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				AppMemoryLimit:      "200Mi",
+				AppMemoryRequest:    "100Mi",
+				PluggableComponents: redisPubsubPluggableComponent,
+				AppEnv: map[string]string{
+					PubSubEnvVar: PubSubPluggableName,
+				},
+			},
+			{
+				AppName:             subscriberPluggableAppName,
+				DaprEnabled:         true,
+				ImageName:           "e2e-pubsub-subscriber",
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				AppMemoryLimit:      "200Mi",
+				AppMemoryRequest:    "100Mi",
+				PluggableComponents: redisPubsubPluggableComponent,
+				AppEnv: map[string]string{
+					PubSubEnvVar: PubSubPluggableName,
+				},
+			},
+		}
+		testApps = append(testApps, pluggableTestApps...)
+		apps = append(apps, struct {
+			suite      string
+			publisher  string
+			subscriber string
+		}{
+			suite:      "pluggable",
+			publisher:  publisherPluggableAppName,
+			subscriber: subscriberPluggableAppName,
+		})
 	}
 
 	log.Printf("Creating TestRunner\n")
@@ -480,28 +551,33 @@ var pubsubTests = []struct {
 }
 
 func TestPubSubHTTP(t *testing.T) {
-	t.Log("Enter TestPubSubHTTP")
-	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
-	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
+	for _, app := range apps {
+		t.Log("Enter TestPubSubHTTP")
+		publisherExternalURL := tr.Platform.AcquireAppExternalURL(app.publisher)
+		require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 
-	subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
-	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURLHTTP must not be empty!")
+		subscriberExternalURL := tr.Platform.AcquireAppExternalURL(app.subscriber)
+		require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURLHTTP must not be empty!")
 
-	// This initial probe makes the test wait a little bit longer when needed,
-	// making this test less flaky due to delays in the deployment.
-	_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
-	require.NoError(t, err)
+		// This initial probe makes the test wait a little bit longer when needed,
+		// making this test less flaky due to delays in the deployment.
+		_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
+		require.NoError(t, err)
 
-	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
-	require.NoError(t, err)
+		_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
+		require.NoError(t, err)
 
-	err = publishHealthCheck(publisherExternalURL)
-	require.NoError(t, err)
+		err = publishHealthCheck(publisherExternalURL)
+		require.NoError(t, err)
 
-	protocol := "http"
-	for _, tc := range pubsubTests {
-		t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
-			subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol)
-		})
+		protocol := "http"
+		//nolint: gosec
+		offset = rand.Intn(randomOffsetMax) + 1
+		log.Printf("initial %s offset: %d", app.suite, offset)
+		for _, tc := range pubsubTests {
+			t.Run(fmt.Sprintf("%s_%s_%s", app.suite, tc.name, protocol), func(t *testing.T) {
+				subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, app.subscriber, protocol)
+			})
+		}
 	}
 }

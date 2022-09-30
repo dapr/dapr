@@ -33,11 +33,11 @@ import (
 )
 
 const (
-	appName              = "stateapp"            // App name in Dapr.
-	appNamePluggable     = "stateapp-pluggable"  // App name with pluggable components in Dapr.
-	redisPluggableApp    = "e2e-pluggable_redis" // The name of the pluggable component app.
-	numHealthChecks      = 60                    // Number of get calls before starting tests.
-	testManyEntriesCount = 5                     // Anything between 1 and the number above (inclusive).
+	appName              = "stateapp"                       // App name in Dapr.
+	appNamePluggable     = "stateapp-pluggable"             // App name with pluggable components in Dapr.
+	redisPluggableApp    = "e2e-pluggable_redis-statestore" // The name of the pluggable component app.
+	numHealthChecks      = 60                               // Number of get calls before starting tests.
+	testManyEntriesCount = 5                                // Anything between 1 and the number above (inclusive).
 )
 
 type testCommandRequest struct {
@@ -419,9 +419,8 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			Config:         "pluggablecomponentsconfig",
 			PluggableComponents: map[string]apiv1.Container{
-				"dapr-state.redis-pluggable-v1-pluggable-statestore.sock": {
+				"redis-pluggable.sock": {
 					Name:  "redis-pluggable", // e2e-pluggable_redis
 					Image: runner.BuildTestImageName(redisPluggableApp),
 				},

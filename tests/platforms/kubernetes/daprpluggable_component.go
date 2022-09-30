@@ -65,7 +65,7 @@ func adaptAndBuildPluggableComponents(appDesc *AppDescription) []apiv1.Container
 		appDesc.UnixDomainSocketPath = pluggable.GetSocketFolderPath()
 	} else {
 		// if specified so the env var should be set.
-		sidecarSocketFolderEnvVar := fmt.Sprintf("%s=%s", pluggable.DaprSocketFolderEnvVar, appDesc.UnixDomainSocketPath)
+		sidecarSocketFolderEnvVar := fmt.Sprintf("%s=%s", pluggable.SocketFolderEnvVar, appDesc.UnixDomainSocketPath)
 		if appDesc.DaprEnv == "" {
 			appDesc.DaprEnv = sidecarSocketFolderEnvVar
 		} else {
