@@ -2904,7 +2904,9 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("test unsubscribe configuration retries with resiliency", func(t *testing.T) {
+		fakeAPI.configurationSubscribeLock.Lock()
 		fakeAPI.configurationSubscribe["failingUnsubscribeKey"] = make(chan struct{})
+		fakeAPI.configurationSubscribeLock.Unlock()
 
 		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",
@@ -2916,7 +2918,9 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("test unsubscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
+		fakeAPI.configurationSubscribeLock.Lock()
 		fakeAPI.configurationSubscribe["timeoutUnsubscribeKey"] = make(chan struct{})
+		fakeAPI.configurationSubscribeLock.Unlock()
 
 		_, err := client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
 			StoreName: "failConfig",

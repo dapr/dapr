@@ -286,14 +286,24 @@ test: test-deps
 # with "-race", as many packags aren't passing those tests yet.
 # Eventually, the goal is to be able to have all packages pass tests with "-race"
 # Note: CGO is required for tests with "-race"
-TEST_WITH_RACE=./pkg/actors \
-./pkg/apphealth \
-./pkg/runtime
+TEST_WITH_RACE=./pkg/acl/... \
+./pkg/actors \
+./pkg/apis/... \
+./pkg/apphealth/... \
+./pkg/channel/... \
+./pkg/client/... \
+./pkg/components/... \
+./pkg/concurrency/... \
+./pkg/diagnostics/... \
+./pkg/encryption/... \
+./pkg/expr/... \
+./pkg/fswatcher/... \
+./pkg/runtime/...
 
 .PHONY: test-race
 test-race:
 	echo "$(TEST_WITH_RACE)" | xargs \
-		go test -race
+		go test -tags=unit -race
 
 ################################################################################
 # Target: lint                                                                 #

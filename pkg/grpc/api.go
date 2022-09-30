@@ -493,13 +493,9 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 	policy := a.resiliency.EndpointPolicy(ctx, in.Id, fmt.Sprintf("%s:%s", in.Id, req.Message().Method))
 	var resp *invokev1.InvokeMethodResponse
-	var requestErr bool
 	respError := policy(func(ctx context.Context) (rErr error) {
-		requestErr = false
 		resp, rErr = a.directMessaging.Invoke(ctx, in.Id, req)
-
 		if rErr != nil {
-			requestErr = true
 			rErr = status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
 			return rErr
 		}
@@ -509,7 +505,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		// If the status is OK, respError will be nil.
 		var respError error
 		if resp.IsHTTPResponse() {
-			errorMessage := []byte("")
+			errorMessage := []byte{}
 			if resp != nil {
 				_, errorMessage = resp.RawData()
 			}
@@ -528,8 +524,12 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	})
 
 	// In this case, there was an error with the actual request or a resiliency policy stopped the request.
-	if requestErr || (errors.Is(respError, context.DeadlineExceeded) || breaker.IsErrorPermanent(respError)) {
-		return nil, respError
+	if respError != nil {
+		// Check if it's returned by status.Errorf
+		_, ok := respError.(interface{ GRPCStatus() *status.Status })
+		if ok || (errors.Is(respError, context.DeadlineExceeded) || breaker.IsErrorPermanent(respError)) {
+			return nil, respError
+		}
 	}
 	return resp.Message(), respError
 }
