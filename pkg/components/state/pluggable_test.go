@@ -28,9 +28,7 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	testingGrpc "github.com/dapr/dapr/pkg/testing/grpc"
 
@@ -171,7 +169,7 @@ func TestComponentCalls(t *testing.T) {
 		proto.RegisterQueriableStateStoreServer(s, svc)
 	}, func(cci grpc.ClientConnInterface) *grpcStateStore {
 		client := newStateStoreClient(cci)
-		stStore := NewGRPCStateStore(testLogger, components.SocketPathForPluggableComponent("name", "v1"))
+		stStore := NewGRPCStateStore(testLogger, "/tmp/socket.sock")
 		stStore.Client = client
 		return stStore
 	})
@@ -658,7 +656,7 @@ func TestComponentCalls(t *testing.T) {
 			{
 				Key:         "",
 				Data:        []byte{},
-				Etag:        &v1.Etag{},
+				Etag:        &proto.Etag{},
 				Error:       "",
 				ContentType: "",
 			},
@@ -687,21 +685,21 @@ func TestComponentCalls(t *testing.T) {
 //nolint:nosnakecase
 func TestMappers(t *testing.T) {
 	t.Run("consistencyOf should return unspecified for unknown consistency", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONSISTENCY_UNSPECIFIED, consistencyOf(""))
+		assert.Equal(t, proto.StateOptions_CONSISTENCY_UNSPECIFIED, consistencyOf(""))
 	})
 
 	t.Run("consistencyOf should return proper consistency when well-known consistency is used", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONSISTENCY_EVENTUAL, consistencyOf(state.Eventual))
-		assert.Equal(t, v1.StateOptions_CONSISTENCY_STRONG, consistencyOf(state.Strong))
+		assert.Equal(t, proto.StateOptions_CONSISTENCY_EVENTUAL, consistencyOf(state.Eventual))
+		assert.Equal(t, proto.StateOptions_CONSISTENCY_STRONG, consistencyOf(state.Strong))
 	})
 
 	t.Run("concurrencyOf should return unspecified for unknown concurrency", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONCURRENCY_UNSPECIFIED, concurrencyOf(""))
+		assert.Equal(t, proto.StateOptions_CONCURRENCY_UNSPECIFIED, concurrencyOf(""))
 	})
 
 	t.Run("concurrencyOf should return proper concurrency when well-known concurrency is used", func(t *testing.T) {
-		assert.Equal(t, v1.StateOptions_CONCURRENCY_FIRST_WRITE, concurrencyOf(state.FirstWrite))
-		assert.Equal(t, v1.StateOptions_CONCURRENCY_LAST_WRITE, concurrencyOf(state.LastWrite))
+		assert.Equal(t, proto.StateOptions_CONCURRENCY_FIRST_WRITE, concurrencyOf(state.FirstWrite))
+		assert.Equal(t, proto.StateOptions_CONCURRENCY_LAST_WRITE, concurrencyOf(state.LastWrite))
 	})
 
 	t.Run("toGetRequest should return nil when receiving a nil request", func(t *testing.T) {
@@ -721,7 +719,7 @@ func TestMappers(t *testing.T) {
 		})
 		assert.Equal(t, getRequest.Key, fakeKey)
 		assert.Equal(t, getRequest.Metadata[fakeKey], fakeKey)
-		assert.Equal(t, getRequest.Consistency, v1.StateOptions_CONSISTENCY_EVENTUAL)
+		assert.Equal(t, getRequest.Consistency, proto.StateOptions_CONSISTENCY_EVENTUAL)
 	})
 
 	t.Run("fromGetResponse should map all properties from the given response", func(t *testing.T) {
@@ -730,7 +728,7 @@ func TestMappers(t *testing.T) {
 		fakeETag := "etag"
 		resp := fromGetResponse(&proto.GetResponse{
 			Data: fakeData,
-			Etag: &v1.Etag{
+			Etag: &proto.Etag{
 				Value: fakeETag,
 			},
 			Metadata: map[string]string{
@@ -792,8 +790,8 @@ func TestMappers(t *testing.T) {
 				assert.Equal(t, string(req.Value), wrapString(v))
 			}
 			assert.Equal(t, req.Metadata[fakeKey], fakePropValue)
-			assert.Equal(t, req.Options.Concurrency, v1.StateOptions_CONCURRENCY_LAST_WRITE)
-			assert.Equal(t, req.Options.Consistency, v1.StateOptions_CONSISTENCY_EVENTUAL)
+			assert.Equal(t, req.Options.Concurrency, proto.StateOptions_CONCURRENCY_LAST_WRITE)
+			assert.Equal(t, req.Options.Consistency, proto.StateOptions_CONSISTENCY_EVENTUAL)
 		}
 	})
 
@@ -818,8 +816,8 @@ func TestMappers(t *testing.T) {
 			assert.Equal(t, req.Key, fakeKey)
 			assert.NotNil(t, req.Value)
 			assert.Equal(t, req.Metadata[fakeKey], fakePropValue)
-			assert.Equal(t, req.Options.Concurrency, v1.StateOptions_CONCURRENCY_LAST_WRITE)
-			assert.Equal(t, req.Options.Consistency, v1.StateOptions_CONSISTENCY_EVENTUAL)
+			assert.Equal(t, req.Options.Concurrency, proto.StateOptions_CONCURRENCY_LAST_WRITE)
+			assert.Equal(t, req.Options.Consistency, proto.StateOptions_CONSISTENCY_EVENTUAL)
 		}
 
 		t.Run("toTransact should return err when type is unrecognized", func(t *testing.T) {
