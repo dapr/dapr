@@ -948,7 +948,9 @@ func reminderRepeats(ctx context.Context, t *testing.T, dueTime, period, ttl str
 		return
 	}
 	assert.NoError(t, err)
+	testActorsRuntime.remindersLock.RLock()
 	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+	testActorsRuntime.remindersLock.RUnlock()
 
 	cnt := 0
 	var (
@@ -2233,28 +2235,29 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 	actorType := "failingActor"
 	actorID := "failingId"
 	failingState := &daprt.FailingStatestore{
-		Failure: daprt.Failure{
+		Failure: daprt.NewFailure(
 			// Transform the keys into actor format.
-			Fails: map[string]int{
+			map[string]int{
 				constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey"): 1,
 				constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey"):    1,
 				constructCompositeKey("actors", actorType):                                 1, // Default reminder key.
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey"): time.Second * 10,
 				constructCompositeKey(TestAppID, actorType, actorID, "timeoutMultiKey"):    time.Second * 10,
 				constructCompositeKey("actors", actorType):                                 time.Second * 10, // Default reminder key.
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 	failingAppChannel := &daprt.FailingAppChannel{
-		Failure: daprt.Failure{
-			Timeouts: map[string]time.Duration{
+		Failure: daprt.NewFailure(
+			nil,
+			map[string]time.Duration{
 				"timeoutId": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
 			return req.Actor().ActorId
 		},
@@ -2276,7 +2279,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
-		assert.Equal(t, 1, failingAppChannel.Failure.CallCount["timeoutId"])
+		assert.Equal(t, 1, failingAppChannel.Failure.CallCount("timeoutId"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2290,7 +2293,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey")
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 	})
 
 	t.Run("test get state times out with resiliency", func(t *testing.T) {
@@ -2305,7 +2308,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey")
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2327,7 +2330,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey")
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 	})
 
 	t.Run("test state transaction times out with resiliency", func(t *testing.T) {
@@ -2350,7 +2353,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutMultiKey")
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2362,7 +2365,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey("actors", actorType)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 
 		// Key will no longer fail, so now we can check the timeout.
 		start := time.Now()
@@ -2373,7 +2376,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 4, failingState.Failure.CallCount[callKey]) // Should be called 2 more times.
+		assert.Equal(t, 4, failingState.Failure.CallCount(callKey)) // Should be called 2 more times.
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }

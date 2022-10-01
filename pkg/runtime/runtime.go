@@ -182,7 +182,7 @@ type DaprRuntime struct {
 	operatorClient         operatorv1pb.OperatorClient
 	pubsubCtx              context.Context
 	pubsubCancel           context.CancelFunc
-	topicsLock             *sync.Mutex
+	topicsLock             *sync.RWMutex
 	topicRoutes            map[string]TopicRoutes        // Key is "componentName"
 	topicCtxCancels        map[string]context.CancelFunc // Key is "componentName||topicName"
 	inputBindingRoutes     map[string]string
@@ -259,7 +259,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		secretStores:               map[string]secretstores.SecretStore{},
 		stateStores:                map[string]state.Store{},
 		pubSubs:                    map[string]pubsubItem{},
-		topicsLock:                 &sync.Mutex{},
+		topicsLock:                 &sync.RWMutex{},
 		inputBindingRoutes:         map[string]string{},
 		secretsConfiguration:       map[string]config.SecretsScope{},
 		configurationStores:        map[string]configuration.Store{},
@@ -662,13 +662,13 @@ func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, dead
 func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, topic string, route TopicRouteElem) error {
 	subKey := pubsubTopicKey(name, topic)
 
+	a.topicsLock.Lock()
+	defer a.topicsLock.Unlock()
+
 	allowed := a.isPubSubOperationAllowed(name, topic, a.pubSubs[name].scopedSubscriptions)
 	if !allowed {
 		return fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", topic, name)
 	}
-
-	a.topicsLock.Lock()
-	defer a.topicsLock.Unlock()
 
 	log.Debugf("subscribing to topic='%s' on pubsub='%s'", topic, name)
 
@@ -1207,29 +1207,28 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req.WithMetadata(reqMetadata)
 
 		var resp *invokev1.InvokeMethodResponse
-		respErr := false
+		respErr := errors.New("error sending binding event to application")
 		policy := a.resiliency.ComponentInboundPolicy(ctx, bindingName, resiliency.Binding)
 		err := policy(func(ctx context.Context) (err error) {
-			respErr = false
 			resp, err = a.appChannel.InvokeMethod(ctx, req)
 			if err != nil {
 				return err
 			}
 
 			if resp != nil && resp.Status().Code != nethttp.StatusOK {
-				respErr = true
-				return errors.Errorf("Error sending binding event to application, status %d", resp.Status().Code)
+				return fmt.Errorf("%w, status %d", respErr, resp.Status().Code)
 			}
 			return nil
 		})
-		if err != nil && !respErr {
+		if err != nil && !errors.Is(err, respErr) {
 			return nil, errors.Wrap(err, "error invoking app")
 		}
 
 		if span != nil {
 			m := diag.ConstructInputBindingSpanAttributes(
 				bindingName,
-				fmt.Sprintf("%s /%s", nethttp.MethodPost, bindingName))
+				nethttp.MethodPost+" /"+bindingName,
+			)
 			diag.AddAttributesToSpan(span, m)
 			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
@@ -1749,7 +1748,10 @@ func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
+	a.topicsLock.RLock()
 	ps, ok := a.pubSubs[req.PubsubName]
+	a.topicsLock.RUnlock()
+
 	if !ok {
 		return runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
