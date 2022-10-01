@@ -220,7 +220,7 @@ func TestComponentUpdate(t *testing.T) {
 			Namespace: "ns2",
 		}, mockSidecar)
 
-		assert.Zero(t, mockSidecar.Calls)
+		assert.Equal(t, int64(0), mockSidecar.Calls.Load())
 	})
 
 	t.Run("sidecar is updated when component namespace is a match", func(t *testing.T) {
