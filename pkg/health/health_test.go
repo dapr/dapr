@@ -16,6 +16,7 @@ package health
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -99,11 +100,11 @@ func TestApplyOptions(t *testing.T) {
 
 type testServer struct {
 	statusCode    int
-	numberOfCalls int
+	numberOfCalls atomic.Int64
 }
 
 func (t *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	t.numberOfCalls++
+	t.numberOfCalls.Add(1)
 	w.WriteHeader(t.statusCode)
 	w.Write([]byte(""))
 }
@@ -115,11 +116,12 @@ func TestResponses(t *testing.T) {
 		})
 		defer server.Close()
 
-		ch := StartEndpointHealthCheck(server.URL, WithInterval(time.Second*1), WithFailureThreshold(1))
+		ticker := make(chan time.Time)
+		ch := StartEndpointHealthCheck(server.URL, WithTicker(ticker), WithFailureThreshold(1))
 		for {
+			ticker <- time.Now()
 			healthy := <-ch
 			assert.True(t, healthy)
-
 			return
 		}
 	})
@@ -130,11 +132,12 @@ func TestResponses(t *testing.T) {
 		})
 		defer server.Close()
 
-		ch := StartEndpointHealthCheck(server.URL, WithInterval(time.Second*1), WithFailureThreshold(1), WithSuccessStatusCode(201))
+		ticker := make(chan time.Time)
+		ch := StartEndpointHealthCheck(server.URL, WithTicker(ticker), WithFailureThreshold(1), WithSuccessStatusCode(201))
 		for {
+			ticker <- time.Now()
 			healthy := <-ch
 			assert.True(t, healthy)
-
 			return
 		}
 	})
@@ -145,11 +148,12 @@ func TestResponses(t *testing.T) {
 		})
 		defer server.Close()
 
-		ch := StartEndpointHealthCheck(server.URL, WithInterval(time.Second*1), WithFailureThreshold(1))
+		ticker := make(chan time.Time)
+		ch := StartEndpointHealthCheck(server.URL, WithTicker(ticker), WithFailureThreshold(1))
 		for {
+			ticker <- time.Now()
 			healthy := <-ch
 			assert.False(t, healthy)
-
 			return
 		}
 	})
@@ -161,9 +165,11 @@ func TestResponses(t *testing.T) {
 		server := httptest.NewServer(test)
 		defer server.Close()
 
-		ch := StartEndpointHealthCheck(server.URL, WithInterval(time.Second*1), WithFailureThreshold(1))
+		ticker := make(chan time.Time)
+		ch := StartEndpointHealthCheck(server.URL, WithTicker(ticker), WithFailureThreshold(1))
 		count := 0
 		for {
+			ticker <- time.Now()
 			healthy := <-ch
 			count++
 			if count != 2 {
