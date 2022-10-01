@@ -31,7 +31,7 @@ import (
 //nolint:nosnakecase
 type MockServer struct {
 	Error                    error
-	Subscriptions            []*commonv1pb.TopicSubscription
+	Subscriptions            []*runtimev1pb.TopicSubscription
 	Bindings                 []string
 	BindingEventResponse     runtimev1pb.BindingEventResponse
 	TopicEventResponseStatus runtimev1pb.TopicEventResponse_TopicEventResponseStatus

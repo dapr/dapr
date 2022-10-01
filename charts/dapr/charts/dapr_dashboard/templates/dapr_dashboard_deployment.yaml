@@ -1,9 +1,13 @@
+{{- if eq .Values.enabled true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dapr-dashboard
   labels:
     app: dapr-dashboard
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -13,11 +17,9 @@ spec:
     metadata:
       labels:
         app: dapr-dashboard
-        app.kubernetes.io/name: {{ .Release.Name }}
-        app.kubernetes.io/version: {{ .Values.global.tag }}
-        app.kubernetes.io/component: dashboard
-        app.kubernetes.io/part-of: "dapr"
-        app.kubernetes.io/managed-by: "helm"
+        {{- range $key, $value := .Values.global.k8sLabels }}
+        {{ $key }}: {{ tpl $value $ }}
+        {{- end }}
         {{- with .Values.global.labels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -77,4 +79,5 @@ spec:
 {{- if .Values.global.tolerations }}
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
+{{- end }}
 {{- end }}

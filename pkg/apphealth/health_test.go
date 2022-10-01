@@ -138,7 +138,7 @@ func TestAppHealth_ratelimitReports(t *testing.T) {
 	require.False(t, h.ratelimitReports())
 
 	// Run tests for 1 second, constantly
-	// Should succeed only 10 times (+/- 1)
+	// Should succeed only 10 times (+/- 2)
 	time.Sleep(time.Duration(minInterval+10) * time.Microsecond)
 	firehose := func() (passed int64) {
 		var done bool
@@ -160,8 +160,8 @@ func TestAppHealth_ratelimitReports(t *testing.T) {
 
 	passed := firehose()
 
-	assert.GreaterOrEqual(t, passed, int64(9))
-	assert.LessOrEqual(t, passed, int64(11))
+	assert.GreaterOrEqual(t, passed, int64(8))
+	assert.LessOrEqual(t, passed, int64(12))
 
 	// Repeat, but run with 3 parallel goroutines
 	time.Sleep(time.Duration(minInterval+10) * time.Microsecond)
@@ -177,6 +177,6 @@ func TestAppHealth_ratelimitReports(t *testing.T) {
 	wg.Wait()
 
 	passed = totalPassed.Load()
-	assert.GreaterOrEqual(t, passed, int64(9))
-	assert.LessOrEqual(t, passed, int64(11))
+	assert.GreaterOrEqual(t, passed, int64(8))
+	assert.LessOrEqual(t, passed, int64(12))
 }

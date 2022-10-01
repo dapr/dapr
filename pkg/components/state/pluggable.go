@@ -20,9 +20,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
 	"github.com/dapr/components-contrib/state/utils"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/kit/logger"
 
@@ -54,6 +52,13 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 		Properties: metadata.Properties,
 	}
 
+	_, err := ss.Client.Init(ss.Context, &proto.InitRequest{
+		Metadata: protoMetadata,
+	})
+	if err != nil {
+		return err
+	}
+
 	// TODO Static data could be retrieved in another way, a necessary discussion should start soon.
 	// we need to call the method here because features could return an error and the features interface doesn't support errors
 	featureResponse, err := ss.Client.Features(ss.Context, &proto.FeaturesRequest{})
@@ -61,15 +66,12 @@ func (ss *grpcStateStore) Init(metadata state.Metadata) error {
 		return err
 	}
 
-	ss.features = make([]state.Feature, len(featureResponse.Feature))
-	for idx, f := range featureResponse.Feature {
+	ss.features = make([]state.Feature, len(featureResponse.Features))
+	for idx, f := range featureResponse.Features {
 		ss.features[idx] = state.Feature(f)
 	}
 
-	_, err = ss.Client.Init(ss.Context, &proto.InitRequest{
-		Metadata: protoMetadata,
-	})
-	return err
+	return nil
 }
 
 // Features list all implemented features.
@@ -316,7 +318,7 @@ func toSetRequest(req *state.SetRequest) (*proto.SetRequest, error) {
 		Etag:        toETagRequest(req.ETag),
 		Metadata:    req.GetMetadata(),
 		ContentType: strValueIfNotNil(req.ContentType),
-		Options: &v1.StateOptions{
+		Options: &proto.StateOptions{
 			Concurrency: concurrencyOf(req.Options.Concurrency),
 			Consistency: consistencyOf(req.Options.Consistency),
 		},
@@ -340,25 +342,25 @@ func toDeleteRequest(req *state.DeleteRequest) *proto.DeleteRequest {
 		Key:      req.Key,
 		Etag:     toETagRequest(req.ETag),
 		Metadata: req.Metadata,
-		Options: &v1.StateOptions{
+		Options: &proto.StateOptions{
 			Concurrency: concurrencyOf(req.Options.Concurrency),
 			Consistency: consistencyOf(req.Options.Consistency),
 		},
 	}
 }
 
-func fromETagResponse(etag *v1.Etag) *string {
+func fromETagResponse(etag *proto.Etag) *string {
 	if etag == nil {
 		return nil
 	}
 	return &etag.Value
 }
 
-func toETagRequest(etag *string) *v1.Etag {
+func toETagRequest(etag *string) *proto.Etag {
 	if etag == nil {
 		return nil
 	}
-	return &v1.Etag{
+	return &proto.Etag{
 		Value: *etag,
 	}
 }
@@ -375,31 +377,31 @@ func toGetRequest(req *state.GetRequest) *proto.GetRequest {
 }
 
 //nolint:nosnakecase
-var consistencyModels = map[string]v1.StateOptions_StateConsistency{
-	state.Eventual: v1.StateOptions_CONSISTENCY_EVENTUAL,
-	state.Strong:   v1.StateOptions_CONSISTENCY_STRONG,
+var consistencyModels = map[string]proto.StateOptions_StateConsistency{
+	state.Eventual: proto.StateOptions_CONSISTENCY_EVENTUAL,
+	state.Strong:   proto.StateOptions_CONSISTENCY_STRONG,
 }
 
 //nolint:nosnakecase
-func consistencyOf(value string) v1.StateOptions_StateConsistency {
+func consistencyOf(value string) proto.StateOptions_StateConsistency {
 	consistency, ok := consistencyModels[value]
 	if !ok {
-		return v1.StateOptions_CONSISTENCY_UNSPECIFIED
+		return proto.StateOptions_CONSISTENCY_UNSPECIFIED
 	}
 	return consistency
 }
 
 //nolint:nosnakecase
-var concurrencyModels = map[string]v1.StateOptions_StateConcurrency{
-	state.FirstWrite: v1.StateOptions_CONCURRENCY_FIRST_WRITE,
-	state.LastWrite:  v1.StateOptions_CONCURRENCY_LAST_WRITE,
+var concurrencyModels = map[string]proto.StateOptions_StateConcurrency{
+	state.FirstWrite: proto.StateOptions_CONCURRENCY_FIRST_WRITE,
+	state.LastWrite:  proto.StateOptions_CONCURRENCY_LAST_WRITE,
 }
 
 //nolint:nosnakecase
-func concurrencyOf(value string) v1.StateOptions_StateConcurrency {
+func concurrencyOf(value string) proto.StateOptions_StateConcurrency {
 	concurrency, ok := concurrencyModels[value]
 	if !ok {
-		return v1.StateOptions_CONCURRENCY_UNSPECIFIED
+		return proto.StateOptions_CONCURRENCY_UNSPECIFIED
 	}
 	return concurrency
 }
@@ -444,21 +446,21 @@ func fromConnector(_ logger.Logger, connector *pluggable.GRPCConnector[stateStor
 	}
 }
 
-// fromPluggable creates a new state store for the given pluggable component.
-func fromPluggable(l logger.Logger, pc components.Pluggable) *grpcStateStore {
-	return fromConnector(l, pluggable.NewGRPCConnector(pc, newStateStoreClient))
-}
-
 // NewGRPCStateStore creates a new grpc state store using the given socket factory.
-func NewGRPCStateStore(l logger.Logger, socketFactory func(string) string) *grpcStateStore {
-	return fromConnector(l, pluggable.NewGRPCConnectorWithFactory(socketFactory, newStateStoreClient))
+func NewGRPCStateStore(l logger.Logger, socket string) *grpcStateStore {
+	return fromConnector(l, pluggable.NewGRPCConnector(socket, newStateStoreClient))
 }
 
 // newGRPCStateStore creates a new state store for the given pluggable component.
-func newGRPCStateStore(l logger.Logger, pc components.Pluggable) state.Store {
-	return fromPluggable(l, pc)
+func newGRPCStateStore(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) state.Store {
+	return func(l logger.Logger) state.Store {
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, newStateStoreClient))
+	}
 }
 
 func init() {
-	pluggable.AddRegistryFor(components.State, DefaultRegistry.RegisterComponent, newGRPCStateStore)
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.StateStore_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterComponent(newGRPCStateStore(dialer), name)
+	})
 }

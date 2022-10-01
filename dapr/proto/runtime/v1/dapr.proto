@@ -455,6 +455,7 @@ message InvokeActorRequest {
   string actor_id = 2;
   string method = 3;
   bytes  data = 4;
+  map<string, string> metadata = 5;
 }
 
 // InvokeActorResponse is the method that returns an actor invocation response.

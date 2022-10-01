@@ -29,11 +29,7 @@ type Registry struct {
 }
 
 // DefaultRegistry is the singleton with the registry.
-var DefaultRegistry *Registry
-
-func init() {
-	DefaultRegistry = NewRegistry()
-}
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry returns a new pub sub registry.
 func NewRegistry() *Registry {
@@ -70,6 +66,7 @@ func (p *Registry) getPubSub(name, version string) (func() pubsub.PubSub, bool) 
 			return p.wrapFn(pubSubFn), true
 		}
 	}
+
 	return nil, false
 }
 

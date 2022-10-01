@@ -16,13 +16,10 @@ package pluggable
 import (
 	"context"
 	"net"
-	"os"
 	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/dapr/dapr/pkg/components"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,18 +44,6 @@ func TestGRPCConnector(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return
 	}
-	const (
-		fakeName          = "name"
-		fakeType          = "type"
-		fakeVersion       = "v1"
-		fakeComponentName = "component"
-	)
-
-	fakePluggable := components.Pluggable{
-		Name:    fakeName,
-		Type:    fakeType,
-		Version: fakeVersion,
-	}
 
 	t.Run("grpc connection should be idle or transient-failure when the process is listening to the socket", func(t *testing.T) {
 		fakeFactoryCalled := 0
@@ -67,8 +52,8 @@ func TestGRPCConnector(t *testing.T) {
 			fakeFactoryCalled++
 			return clientFake
 		}
-		connector := NewGRPCConnector(fakePluggable, fakeFactory)
-		require.NoError(t, connector.Dial(fakeComponentName))
+		connector := NewGRPCConnector("/tmp/socket.sock", fakeFactory)
+		require.NoError(t, connector.Dial(""))
 		acceptedStatus := []connectivity.State{
 			connectivity.TransientFailure,
 			connectivity.Idle,
@@ -87,18 +72,15 @@ func TestGRPCConnector(t *testing.T) {
 			fakeFactoryCalled++
 			return clientFake
 		}
-		defer os.Clearenv()
-		os.Setenv(DaprSocketFolderEnvVar, "/tmp")
 
-		connector := NewGRPCConnector(fakePluggable, fakeFactory)
+		const fakeSocketPath = "/tmp/socket.sock"
+		connector := NewGRPCConnector(fakeSocketPath, fakeFactory)
 
-		socket := connector.socketPathFor(fakeComponentName)
-
-		listener, err := net.Listen("unix", socket)
+		listener, err := net.Listen("unix", fakeSocketPath)
 		require.NoError(t, err)
 		defer listener.Close()
 
-		require.NoError(t, connector.Dial(fakeComponentName), grpc.WithBlock())
+		require.NoError(t, connector.Dial(""), grpc.WithBlock())
 		defer connector.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -4,6 +4,9 @@ metadata:
   name: dapr-placement-server
   labels:
     app: dapr-placement-server
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
   selector:
     app: dapr-placement-server
