@@ -806,6 +806,11 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
+	if h.appChannel == nil {
+		err := errors.Errorf("app channel is nil. unable to send configuration update from %s", h.storeName)
+		log.Error(err)
+		return err
+	}
 	for key := range e.Items {
 		eventBody, _ := json.Marshal(e)
 		req := invokev1.
@@ -936,7 +941,12 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-
+	if a.appChannel == nil {
+		msg := NewErrorResponse("ERR_APP_CHANNEL_NIL", "app channel is not initialized. cannot subscribe to configuration updates")
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
 	metadata := getMetadataFromRequest(reqCtx)
 	subscribeKeys := make([]string, 0)
 

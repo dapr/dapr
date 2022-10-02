@@ -56,12 +56,13 @@ func RegisterService(server *grpc.Server, director StreamDirector, resiliency re
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func TransparentHandler(director StreamDirector, resiliency resiliency.Provider, isLocalFn func(string) (bool, error)) grpc.StreamHandler {
+func TransparentHandler(director StreamDirector, resiliency resiliency.Provider, isLocalFn func(string) (bool, error), connFactory DirectorConnectionFactory) grpc.StreamHandler {
 	streamer := &handler{
 		director:      director,
 		resiliency:    resiliency,
 		isLocalFn:     isLocalFn,
 		bufferedCalls: sync.Map{},
+		connFactory:   connFactory,
 	}
 	return streamer.handler
 }
@@ -72,6 +73,7 @@ type handler struct {
 	isLocalFn     func(string) (bool, error)
 	bufferedCalls sync.Map
 	headersSent   sync.Map
+	connFactory   DirectorConnectionFactory
 }
 
 // handler is where the real magic of proxying happens.
@@ -111,7 +113,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 
 	cErr := policy(func(ctx context.Context) (rErr error) {
 		// We require that the director's returned context inherits from the serverStream.Context().
-		outgoingCtx, backendConn, teardown, err := s.director(serverStream.Context(), fullMethodName)
+		outgoingCtx, backendConn, target, teardown, err := s.director(serverStream.Context(), fullMethodName)
 		defer teardown()
 		if err != nil {
 			return err
@@ -122,7 +124,19 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
 		clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
 		if err != nil {
-			return err
+			code := status.Code(err)
+			if target != nil && (code == codes.Unavailable || code == codes.Unauthenticated) {
+				backendConn, teardown, err = s.connFactory(outgoingCtx, target.Address, target.ID, target.Namespace, false, true, false)
+				defer teardown()
+				if err != nil {
+					return err
+				}
+
+				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
+				if err != nil {
+					return err
+				}
+			}
 		}
 
 		// Explicitly *do not close* s2cErrChan and c2sErrChan, otherwise the select below will not terminate.

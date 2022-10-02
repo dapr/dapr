@@ -227,5 +227,6 @@ func (p *connectionPool) Release(conn *grpc.ClientConn) {
 	// for concurrent use, connection is closed after all callers release it
 	if p.referenceCount[conn] <= 0 {
 		conn.Close()
+		delete(p.referenceCount, conn)
 	}
 }

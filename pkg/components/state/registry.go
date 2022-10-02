@@ -20,7 +20,6 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -68,9 +67,6 @@ func (s *Registry) getStateStore(name, version string) (func() state.Store, bool
 		}
 	}
 
-	if socket := components.SocketPathForPluggableComponent(name, version); utils.SocketExists(socket) {
-		return s.wrapFn(newGRPCStateStore(socket)), true
-	}
 	return nil, false
 }
 

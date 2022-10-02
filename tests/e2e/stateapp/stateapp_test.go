@@ -420,7 +420,7 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 			MetricsEnabled: true,
 			PluggableComponents: map[string]apiv1.Container{
-				"dapr-state.redis-pluggable-v1.sock": {
+				"redis-pluggable.sock": {
 					Name:  "redis-pluggable", // e2e-pluggable_redis
 					Image: runner.BuildTestImageName(redisPluggableApp),
 				},
