@@ -27,7 +27,7 @@ require (
 	github.com/hashicorp/raft v1.3.10
 	github.com/hashicorp/raft-boltdb v0.0.0-20220329195025-15018e9b97e0
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/microsoft/durabletask-go v0.1.1-0.20220930235310-813e32c27cac
+	github.com/microsoft/durabletask-go v0.1.1-0.20221003221839-ca528f837da0
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
 	github.com/openzipkin/zipkin-go v0.4.0 // indirect
