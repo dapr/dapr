@@ -17,6 +17,8 @@ import (
 	"context"
 
 	dapr "github.com/dapr-sandbox/components-go-sdk"
+	sdkPubSub "github.com/dapr-sandbox/components-go-sdk/pubsub/v1"
+
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/pubsub/redis"
 	"github.com/dapr/kit/logger"
@@ -49,6 +51,8 @@ func (r *redisPb) Publish(req *pubsub.PublishRequest) error {
 var log = logger.NewLogger("redis-pubsub-pluggable")
 
 func main() {
-	redisStreams := redis.NewRedisStreams(log)
-	dapr.MustRun(dapr.UsePubSub(&redisPb{redisStreams}))
+	dapr.Register("redis-pluggable", dapr.WithPubSub(func() sdkPubSub.PubSub {
+		return redis.NewRedisStreams(log)
+	}))
+	dapr.MustRun()
 }

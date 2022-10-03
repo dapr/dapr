@@ -15,6 +15,8 @@ package main
 
 import (
 	dapr "github.com/dapr-sandbox/components-go-sdk"
+	"github.com/dapr-sandbox/components-go-sdk/bindings/v1"
+
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/kit/logger"
 )
@@ -22,6 +24,13 @@ import (
 var log = logger.NewLogger("kafka-bindings-pluggable")
 
 func main() {
-	kafka := kafka.NewKafka(log)
-	dapr.MustRun(dapr.UseInputBinding(kafka), dapr.UseOutputBinding(kafka))
+	dapr.Register("kafka-pluggable",
+		dapr.WithInputBinding(func() bindings.InputBinding {
+			return kafka.NewKafka(log)
+		}),
+		dapr.WithOutputBinding(func() bindings.OutputBinding {
+			return kafka.NewKafka(log)
+		}),
+	)
+	dapr.MustRun()
 }

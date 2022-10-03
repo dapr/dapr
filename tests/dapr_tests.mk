@@ -50,6 +50,7 @@ metadata \
 pluggable_redis-statestore \
 pluggable_redis-pubsub \
 pluggable_kafka-bindings \
+pluggable_mesh \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc

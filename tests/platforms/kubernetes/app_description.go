@@ -29,46 +29,46 @@ const (
 
 // AppDescription holds the deployment information of test app.
 type AppDescription struct {
-	AppName                string                     `json:",omitempty"`
-	AppPort                int                        `json:",omitempty"`
-	AppProtocol            string                     `json:",omitempty"`
-	AppEnv                 map[string]string          `json:",omitempty"`
-	AppVolumeMounts        []apiv1.VolumeMount        `json:",omitempty"`
-	DaprEnabled            bool                       `json:",omitempty"`
-	ImageName              string                     `json:",omitempty"`
-	ImageSecret            string                     `json:",omitempty"`
-	RegistryName           string                     `json:",omitempty"`
-	Replicas               int32                      `json:",omitempty"`
-	IngressEnabled         bool                       `json:",omitempty"`
-	IngressPort            int                        `json:",omitempty"` // Defaults to AppPort if empty
-	MetricsEnabled         bool                       `json:",omitempty"` // This controls the setting for the dapr.io/enable-metrics annotation
-	MetricsPort            string                     `json:",omitempty"`
-	Config                 string                     `json:",omitempty"`
-	AppCPULimit            string                     `json:",omitempty"`
-	AppCPURequest          string                     `json:",omitempty"`
-	AppMemoryLimit         string                     `json:",omitempty"`
-	AppMemoryRequest       string                     `json:",omitempty"`
-	DaprCPULimit           string                     `json:",omitempty"`
-	DaprCPURequest         string                     `json:",omitempty"`
-	DaprMemoryLimit        string                     `json:",omitempty"`
-	DaprMemoryRequest      string                     `json:",omitempty"`
-	DaprEnv                string                     `json:",omitempty"`
-	UnixDomainSocketPath   string                     `json:",omitempty"`
-	Namespace              *string                    `json:",omitempty"`
-	IsJob                  bool                       `json:",omitempty"`
-	SecretStoreDisable     bool                       `json:",omitempty"`
-	DaprVolumeMounts       string                     `json:",omitempty"`
-	Labels                 map[string]string          `json:",omitempty"` // Adds custom labels to pods
-	PodAffinityLabels      map[string]string          `json:",omitempty"` // If set, adds a podAffinity rule matching those labels
-	Volumes                []apiv1.Volume             `json:",omitempty"`
-	InitContainers         []apiv1.Container          `json:",omitempty"`
-	PluggableComponents    map[string]apiv1.Container `json:",omitempty"`
-	PlacementAddresses     []string                   `json:",omitempty"`
-	EnableAppHealthCheck   bool                       `json:",omitempty"`
-	AppHealthCheckPath     string                     `json:",omitempty"`
-	AppHealthProbeInterval int                        `json:",omitempty"` // In seconds
-	AppHealthProbeTimeout  int                        `json:",omitempty"` // In milliseconds
-	AppHealthThreshold     int                        `json:",omitempty"`
+	AppName                string              `json:",omitempty"`
+	AppPort                int                 `json:",omitempty"`
+	AppProtocol            string              `json:",omitempty"`
+	AppEnv                 map[string]string   `json:",omitempty"`
+	AppVolumeMounts        []apiv1.VolumeMount `json:",omitempty"`
+	DaprEnabled            bool                `json:",omitempty"`
+	ImageName              string              `json:",omitempty"`
+	ImageSecret            string              `json:",omitempty"`
+	RegistryName           string              `json:",omitempty"`
+	Replicas               int32               `json:",omitempty"`
+	IngressEnabled         bool                `json:",omitempty"`
+	IngressPort            int                 `json:",omitempty"` // Defaults to AppPort if empty
+	MetricsEnabled         bool                `json:",omitempty"` // This controls the setting for the dapr.io/enable-metrics annotation
+	MetricsPort            string              `json:",omitempty"`
+	Config                 string              `json:",omitempty"`
+	AppCPULimit            string              `json:",omitempty"`
+	AppCPURequest          string              `json:",omitempty"`
+	AppMemoryLimit         string              `json:",omitempty"`
+	AppMemoryRequest       string              `json:",omitempty"`
+	DaprCPULimit           string              `json:",omitempty"`
+	DaprCPURequest         string              `json:",omitempty"`
+	DaprMemoryLimit        string              `json:",omitempty"`
+	DaprMemoryRequest      string              `json:",omitempty"`
+	DaprEnv                string              `json:",omitempty"`
+	UnixDomainSocketPath   string              `json:",omitempty"`
+	Namespace              *string             `json:",omitempty"`
+	IsJob                  bool                `json:",omitempty"`
+	SecretStoreDisable     bool                `json:",omitempty"`
+	DaprVolumeMounts       string              `json:",omitempty"`
+	Labels                 map[string]string   `json:",omitempty"` // Adds custom labels to pods
+	PodAffinityLabels      map[string]string   `json:",omitempty"` // If set, adds a podAffinity rule matching those labels
+	Volumes                []apiv1.Volume      `json:",omitempty"`
+	InitContainers         []apiv1.Container   `json:",omitempty"`
+	PluggableComponents    []apiv1.Container   `json:",omitempty"`
+	PlacementAddresses     []string            `json:",omitempty"`
+	EnableAppHealthCheck   bool                `json:",omitempty"`
+	AppHealthCheckPath     string              `json:",omitempty"`
+	AppHealthProbeInterval int                 `json:",omitempty"` // In seconds
+	AppHealthProbeTimeout  int                 `json:",omitempty"` // In milliseconds
+	AppHealthThreshold     int                 `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {
