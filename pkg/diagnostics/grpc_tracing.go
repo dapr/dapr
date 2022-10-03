@@ -100,7 +100,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 // GRPCTraceStreamServerInterceptor sets the trace context or starts the trace client span based on request.
 func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if strings.Index(info.FullMethod, daprPackagePrefix) == 0 {
+		if strings.Index(info.FullMethod, daprPackagePrefix) == 0 || isWorkflowEngineCalls(info.FullMethod) {
 			return handler(srv, ss)
 		}
 
@@ -242,6 +242,12 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 
 func isInternalCalls(method string) bool {
 	return strings.HasPrefix(method, "/dapr.proto.internals.")
+}
+
+func isWorkflowEngineCalls(method string) bool {
+	// TODO: Find a way to abstract this so that Dapr doesn't need to be aware of the
+	//       details of this gRPC protocol.
+	return strings.HasPrefix(method, "/TaskHubSidecarService")
 }
 
 // spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs.

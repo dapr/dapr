@@ -14,7 +14,9 @@ limitations under the License.
 package actors
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -109,6 +111,7 @@ type actorsRuntime struct {
 	resiliency             resiliency.Provider
 	storeName              string
 	isResiliencyEnabled    bool
+	internalActors         map[string]func(a Actors) InternalActor
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -153,6 +156,7 @@ type ActorsOpts struct {
 	Features         []configuration.FeatureSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
+	InternalActors   map[string]func(a Actors) InternalActor
 }
 
 // NewActors create a new actors runtime with given config.
@@ -188,12 +192,19 @@ func NewActors(opts ActorsOpts) Actors {
 		evaluationChan:         make(chan bool),
 		appHealthy:             atomic.NewBool(true),
 		isResiliencyEnabled:    configuration.IsFeatureEnabled(opts.Features, configuration.Resiliency),
+		internalActors:         opts.InternalActors,
 	}
 }
 
 func (a *actorsRuntime) Init() error {
 	if len(a.config.PlacementAddresses) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
+	}
+
+	for internalActorType := range a.internalActors {
+		// TODO: Make this Debugf
+		log.Infof("registering internal actor type: %v", internalActorType)
+		a.config.HostedActorTypes = append(a.config.HostedActorTypes, internalActorType)
 	}
 
 	if len(a.config.HostedActorTypes) > 0 {
@@ -241,7 +252,8 @@ func (a *actorsRuntime) Init() error {
 }
 
 func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
-	if len(a.config.HostedActorTypes) == 0 {
+	// Internal actors are not included in health checks
+	if len(a.config.HostedActorTypes) == 0 || len(a.config.HostedActorTypes) == len(a.internalActors) {
 		return
 	}
 
@@ -268,7 +280,14 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 
 	// TODO Propagate context.
 	ctx := context.Background()
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+
+	var resp *invokev1.InvokeMethodResponse
+	var err error
+	if a.isInternalActor(actorType) {
+		resp, err = a.callInternalActor(ctx, req)
+	} else {
+		resp, err = a.appChannel.InvokeMethod(ctx, req)
+	}
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
@@ -350,7 +369,11 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	var err error
 
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-		resp, err = a.callLocalActor(ctx, req)
+		if a.isInternalActor(actor.GetActorType()) {
+			resp, err = a.callInternalActor(ctx, req)
+		} else {
+			resp, err = a.callLocalActor(ctx, req)
+		}
 	} else {
 		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, targetActorAddress, appID, req)
 	}
@@ -544,9 +567,69 @@ func (a *actorsRuntime) callRemoteActor(
 	return invokeResponse, nil
 }
 
+func (a *actorsRuntime) callInternalActor(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	actorTypeID := req.Actor()
+	act := a.getOrCreateActor(actorTypeID.GetActorType(), actorTypeID.GetActorId())
+	factory, ok := a.internalActors[act.actorType]
+	if !ok {
+		return nil, fmt.Errorf("internal actor type '%s' is not registered", act.actorType)
+	}
+
+	// The factory is expected to manage its own internal caching of active actor instances
+	impl := factory(a)
+
+	// Internal actors don't support any form of reentrancy (for now)
+	reentrancyID := uuid.New().String()
+	if err := act.lock(&reentrancyID); err != nil {
+		return nil, status.Error(codes.ResourceExhausted, err.Error())
+	}
+	defer act.unlock()
+
+	methodName := req.Message().GetMethod()
+	requestData := req.Message().GetData().GetValue()
+	verb := req.Message().GetHttpExtension().GetVerb()
+
+	// Call the appropriate method based on the method name and verb.
+	var result interface{} = nil
+	var err error = nil
+	if strings.HasPrefix(methodName, "remind/") {
+		reminderName := strings.TrimPrefix(methodName, "remind/")
+		err = impl.InvokeReminder(ctx, act.actorID, reminderName, requestData)
+	} else if strings.HasPrefix(methodName, "timer/") {
+		timerName := strings.TrimPrefix(methodName, "timer/")
+		err = impl.InvokeTimer(ctx, act.actorID, timerName, requestData)
+	} else if verb == commonv1pb.HTTPExtension_DELETE {
+		err = impl.DeactivateActor(ctx, act.actorID)
+	} else {
+		result, err = impl.InvokeMethod(ctx, act.actorID, methodName, requestData)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// results for internal actors are serialized using binary Go serialization (https://go.dev/blog/gob)
+	var resultData []byte
+	if result != nil {
+		var resultBuffer bytes.Buffer
+		enc := gob.NewEncoder(&resultBuffer)
+		if err := enc.Encode(result); err != nil {
+			return nil, err
+		}
+		resultData = resultBuffer.Bytes()
+	}
+	res := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawData(resultData, invokev1.JSONContentType)
+	return res, nil
+}
+
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
 	return strings.Contains(targetActorAddress, "localhost") || strings.Contains(targetActorAddress, "127.0.0.1") ||
 		targetActorAddress == fmt.Sprintf("%s:%v", hostAddress, grpcPort)
+}
+
+func (a *actorsRuntime) isInternalActor(actorType string) bool {
+	return strings.HasPrefix(actorType, "dapr.internal.")
 }
 
 func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
@@ -998,11 +1081,17 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 	log.Debugf("executing reminder %s for actor type %s with id %s", reminder.Name, reminder.ActorType, reminder.ActorID)
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder.Name))
 	req.WithActor(reminder.ActorType, reminder.ActorID)
-	req.WithRawData(b, invokev1.JSONContentType)
 
 	policy := a.resiliency.ActorPreLockPolicy(context.Background(), reminder.ActorType, reminder.ActorID)
 	return policy(func(ctx context.Context) error {
-		_, err := a.callLocalActor(ctx, req)
+		var err error
+		if a.isInternalActor(reminder.ActorType) {
+			req.WithRawData(b, invokev1.OctetStreamContentType)
+			_, err = a.callInternalActor(ctx, req)
+		} else {
+			req.WithRawData(b, invokev1.JSONContentType)
+			_, err = a.callLocalActor(ctx, req)
+		}
 		return err
 	})
 }
@@ -1355,11 +1444,17 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	log.Debugf("executing timer %s for actor type %s with id %s", name, actorType, actorID)
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("timer/%s", name))
 	req.WithActor(actorType, actorID)
-	req.WithRawData(b, invokev1.JSONContentType)
 
 	policy := a.resiliency.ActorPreLockPolicy(context.Background(), actorType, actorID)
 	err = policy(func(ctx context.Context) error {
-		_, err = a.callLocalActor(ctx, req)
+		var err error
+		if a.isInternalActor(actorType) {
+			req.WithRawData(b, invokev1.OctetStreamContentType)
+			_, err = a.callInternalActor(ctx, req)
+		} else {
+			req.WithRawData(b, invokev1.JSONContentType)
+			_, err = a.callLocalActor(ctx, req)
+		}
 		return err
 	})
 	if err != nil {

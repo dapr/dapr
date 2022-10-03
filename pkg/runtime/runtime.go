@@ -68,6 +68,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
@@ -207,6 +208,8 @@ type DaprRuntime struct {
 	resiliency resiliency.Provider
 
 	tracerProvider *sdktrace.TracerProvider
+
+	workflowEngine *wfengine.WorkflowEngine
 }
 
 type ComponentsCallback func(components ComponentRegistry) error
@@ -269,6 +272,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		shutdownC:                  make(chan error, 1),
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
+		workflowEngine:             wfengine.NewWorkflowEngine(),
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -518,6 +522,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		} else {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			grpcAPI.SetActorRuntime(a.actor)
+
+			// init workflow engine, which depends on actors
+			a.workflowEngine.ConfigureActors(a.actor)
+			if err := a.workflowEngine.Start(a.ctx); err != nil {
+				log.Errorf("failed to start workflow engine: %v", err)
+			}
 		}
 	}
 
@@ -1340,7 +1350,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.APIListenAddresses, port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy, a.workflowEngine)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -2131,6 +2141,7 @@ func (a *DaprRuntime) initActors() error {
 		Features:         a.globalConfig.Spec.Features,
 		Resiliency:       a.resiliency,
 		StateStoreName:   a.actorStateStoreName,
+		InternalActors:   nil,
 	})
 	err = act.Init()
 	if err == nil {

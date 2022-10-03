@@ -18,3 +18,6 @@ test_report*
 
 # Go Workspaces (introduced in Go 1.18+)
 go.work
+
+# Binary file generated when running daprd is debug mode, particularly when attaching debuggers
+__debug_bin

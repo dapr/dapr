@@ -41,6 +41,8 @@ const (
 	JSONContentType = "application/json"
 	// ProtobufContentType is the MIME media type for Protobuf.
 	ProtobufContentType = "application/x-protobuf"
+	// OctetStreamContentType is the MIME media type for arbitrary binary data.
+	OctetStreamContentType = "application/octet-stream"
 
 	// ContentTypeHeader is the header key of content-type.
 	ContentTypeHeader = "content-type"
