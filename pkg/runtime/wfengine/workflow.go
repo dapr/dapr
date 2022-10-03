@@ -20,9 +20,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
+
+	"github.com/dapr/dapr/pkg/actors"
 )
 
 type workflowActor struct {
@@ -60,8 +61,7 @@ func NewWorkflowActor(actorRuntime actors.Actors, scheduler workflowScheduler) a
 
 // InvokeMethod implements actors.InternalActor
 func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte) (interface{}, error) {
-	// TODO: Make this Debugf
-	wfLogger.Infof("invoking method '%s' on workflow actor '%s'", methodName, actorID)
+	wfLogger.Debugf("invoking method '%s' on workflow actor '%s'", methodName, actorID)
 
 	var result interface{}
 	var err error
@@ -79,8 +79,7 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 
 // InvokeReminder implements actors.InternalActor
 func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, params []byte) error {
-	// TODO: Make this Debugf
-	wfLogger.Infof("invoking reminder '%s' on workflow actor '%s'", reminderName, actorID)
+	wfLogger.Debugf("invoking reminder '%s' on workflow actor '%s'", reminderName, actorID)
 
 	var err error
 	switch reminderName {
@@ -96,16 +95,14 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 
 // InvokeTimer implements actors.InternalActor
 func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error {
-	// TODO: Make this Debugf
-	wfLogger.Infof("invoking timer '%s' on workflow actor '%s'", timerName, actorID)
+	wfLogger.Debugf("invoking timer '%s' on workflow actor '%s'", timerName, actorID)
 	// TODO
 	return nil
 }
 
 // DeactivateActor implements actors.InternalActor
 func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) error {
-	// TODO: Make this Debugf
-	wfLogger.Infof("deactivating workflow actor '%s'", actorID)
+	wfLogger.Debugf("deactivating workflow actor '%s'", actorID)
 	delete(wf.states, actorID)
 	return nil
 }
@@ -221,8 +218,8 @@ func (wf *workflowActor) loadInternalState(actorID string) (*workflowState, bool
 	}
 
 	// state is not cached, so try to load it from the state store
-	wfLogger.Infof("%s: loading workflow state", actorID) // TODO: Use Debugf
-	return nil, false, nil                                // TODO: Implement fetching from storage after validating saving to storage
+	wfLogger.Debugf("%s: loading workflow state", actorID)
+	return nil, false, nil // TODO: Implement fetching from storage after validating saving to storage
 }
 
 func (wf *workflowActor) saveInternalState(actorID string, state *workflowState) error {
@@ -230,11 +227,11 @@ func (wf *workflowActor) saveInternalState(actorID string, state *workflowState)
 	return nil // TODO: Implement persistence this after validating reminders
 }
 
-func (wf *workflowActor) createReliableReminder(ctx context.Context, actorId string, name string, data any, delay time.Duration) error {
-	wfLogger.Infof("%s: creating '%s' reminder with DueTime = %s", actorId, name, delay) // TODO: Debugf
+func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID string, name string, data any, delay time.Duration) error {
+	wfLogger.Debugf("%s: creating '%s' reminder with DueTime = %s", actorID, name, delay)
 	return wf.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: WorkflowActorType,
-		ActorID:   actorId,
+		ActorID:   actorID,
 		Data:      data,
 		DueTime:   delay.String(),
 		Name:      name,

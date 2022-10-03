@@ -202,8 +202,7 @@ func (a *actorsRuntime) Init() error {
 	}
 
 	for internalActorType := range a.internalActors {
-		// TODO: Make this Debugf
-		log.Infof("registering internal actor type: %v", internalActorType)
+		log.Debugf("registering internal actor type: %v", internalActorType)
 		a.config.HostedActorTypes = append(a.config.HostedActorTypes, internalActorType)
 	}
 
@@ -591,14 +590,14 @@ func (a *actorsRuntime) callInternalActor(ctx context.Context, req *invokev1.Inv
 
 	// Call the appropriate method based on the method name and verb.
 	var result interface{} = nil
-	var err error = nil
+	var err error
 	if strings.HasPrefix(methodName, "remind/") {
 		reminderName := strings.TrimPrefix(methodName, "remind/")
 		err = impl.InvokeReminder(ctx, act.actorID, reminderName, requestData)
 	} else if strings.HasPrefix(methodName, "timer/") {
 		timerName := strings.TrimPrefix(methodName, "timer/")
 		err = impl.InvokeTimer(ctx, act.actorID, timerName, requestData)
-	} else if verb == commonv1pb.HTTPExtension_DELETE {
+	} else if int(verb) == 5 /* commonv1pb.HTTPExtension_DELETE */ {
 		err = impl.DeactivateActor(ctx, act.actorID)
 	} else {
 		result, err = impl.InvokeMethod(ctx, act.actorID, methodName, requestData)
@@ -1447,15 +1446,15 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 
 	policy := a.resiliency.ActorPreLockPolicy(context.Background(), actorType, actorID)
 	err = policy(func(ctx context.Context) error {
-		var err error
+		var callError error
 		if a.isInternalActor(actorType) {
 			req.WithRawData(b, invokev1.OctetStreamContentType)
-			_, err = a.callInternalActor(ctx, req)
+			_, callError = a.callInternalActor(ctx, req)
 		} else {
 			req.WithRawData(b, invokev1.JSONContentType)
-			_, err = a.callLocalActor(ctx, req)
+			_, callError = a.callLocalActor(ctx, req)
 		}
-		return err
+		return callError
 	})
 	if err != nil {
 		log.Errorf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)

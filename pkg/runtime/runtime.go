@@ -525,7 +525,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 			// init workflow engine, which depends on actors
 			a.workflowEngine.ConfigureActors(a.actor)
-			if err := a.workflowEngine.Start(a.ctx); err != nil {
+			if err = a.workflowEngine.Start(a.ctx); err != nil {
 				log.Errorf("failed to start workflow engine: %v", err)
 			}
 		}

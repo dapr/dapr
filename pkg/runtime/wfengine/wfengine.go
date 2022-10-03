@@ -19,10 +19,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/kit/logger"
 	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/grpc"
+
+	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/kit/logger"
 )
 
 type WorkflowEngine struct {
