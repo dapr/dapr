@@ -1025,7 +1025,7 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 
 	policy := a.resiliency.ActorPreLockPolicy(context.Background(), reminder.ActorType, reminder.ActorID)
 	return policy(func(ctx context.Context) error {
-		_, err = a.callLocalActor(ctx, req)
+		_, err := a.callLocalActor(ctx, req)
 		return err
 	})
 }
