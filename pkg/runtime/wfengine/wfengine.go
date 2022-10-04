@@ -29,7 +29,9 @@ import (
 type WorkflowEngine struct {
 	backend       *actorBackend
 	executor      backend.Executor
-	workflowActor actors.InternalActor
+	workflowActor internalActor
+
+	AppChannel *internalActorChannel
 }
 
 var wfLogger = logger.NewLogger("dapr.runtime.wfengine")
@@ -40,7 +42,8 @@ func IsWorkflowRequest(path string) bool {
 
 func NewWorkflowEngine() *WorkflowEngine {
 	engine := &WorkflowEngine{
-		backend: NewActorBackend(),
+		backend:    NewActorBackend(),
+		AppChannel: newInternalActorChannel(),
 	}
 	return engine
 }
@@ -53,6 +56,7 @@ func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
 func (wfe *WorkflowEngine) ConfigureActors(actorRuntime actors.Actors) {
 	wfLogger.Info("configuring workflow engine with actors backend")
 	wfe.backend.SetActorRuntime(actorRuntime)
+	wfe.AppChannel.InitializeActors(actorRuntime, wfe.backend)
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) error {
@@ -60,6 +64,8 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 		return errors.New("backend is not yet configured")
 	} else if wfe.executor == nil {
 		return errors.New("grpc executor is not yet configured")
+	} else if wfe.AppChannel == nil {
+		return errors.New("internal app channel not yet configured")
 	}
 
 	// TODO: Enable concurrency for orchestrations (workflows) and activities.
@@ -72,17 +78,4 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 
 	wfLogger.Info("workflow engine started")
 	return nil
-}
-
-// WorkflowActors returns a set of internal actors used to power the embedded Dapr Workflow engine
-func (wfe *WorkflowEngine) Actors() map[string]func(actors.Actors) actors.InternalActor {
-	internalActors := make(map[string]func(actors.Actors) actors.InternalActor)
-	internalActors[WorkflowActorType] = func(actorRuntime actors.Actors) actors.InternalActor {
-		if wfe.workflowActor == nil {
-			wfe.workflowActor = NewWorkflowActor(actorRuntime, wfe.backend)
-		}
-		return wfe.workflowActor
-	}
-	// TODO: Add an entry for the activity actor
-	return internalActors
 }

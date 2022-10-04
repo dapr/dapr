@@ -41,17 +41,15 @@ type workflowState struct {
 }
 
 const (
-	WorkflowActorType       = "dapr.internal.workflow"
-	ActivityActorType       = "dapr.internal.activity"
 	CallbackChannelProperty = "dapr.callback"
 
 	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
 	GetWorkflowMetadataMethod    = "GetWorkflowMetadata"
 
-	runWorkflowReminder = "run" // internal reminder for executing workflows
+	createWorkflowReminder = "create" // internal reminder for executing workflows
 )
 
-func NewWorkflowActor(actorRuntime actors.Actors, scheduler workflowScheduler) actors.InternalActor {
+func NewWorkflowActor(actorRuntime actors.Actors, scheduler workflowScheduler) internalActor {
 	return &workflowActor{
 		actorRuntime: actorRuntime,
 		states:       make(map[string]*workflowState),
@@ -83,7 +81,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 
 	var err error
 	switch reminderName {
-	case runWorkflowReminder:
+	case createWorkflowReminder:
 		// TODO: timeout implementation for executions that never report back
 		err = wf.runWorkflow(ctx, actorID)
 	default:
@@ -133,7 +131,7 @@ func (wf *workflowActor) createWorkflowInstanceMethod(ctx context.Context, actor
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
-	if err := wf.createReliableReminder(ctx, actorID, runWorkflowReminder, nil, 0); err != nil {
+	if err := wf.createReliableReminder(ctx, actorID, createWorkflowReminder, nil, 0); err != nil {
 		return err
 	}
 
