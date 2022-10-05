@@ -96,6 +96,7 @@ type api struct {
 	shutdown                   func()
 	getComponentsCapabilitesFn func() map[string][]string
 	daprRunTimeVersion         string
+	maxRequestBodySize         int64 // In bytes
 }
 
 type registeredComponent struct {
@@ -136,50 +137,55 @@ const (
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
+// NewAPIOpts contains the options for NewAPI.
+type NewAPIOpts struct {
+	AppID                       string
+	AppChannel                  channel.AppChannel
+	DirectMessaging             messaging.DirectMessaging
+	GetComponentsFn             func() []componentsV1alpha1.Component
+	Resiliency                  resiliency.Provider
+	StateStores                 map[string]state.Store
+	LockStores                  map[string]lock.Store
+	SecretStores                map[string]secretstores.SecretStore
+	SecretsConfiguration        map[string]config.SecretsScope
+	ConfigurationStores         map[string]configuration.Store
+	PubsubAdapter               runtimePubsub.Adapter
+	Actor                       actors.Actors
+	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec                 config.TracingSpec
+	Shutdown                    func()
+	GetComponentsCapabilitiesFn func() map[string][]string
+	MaxRequestBodySize          int64 // In bytes
+}
+
 // NewAPI returns a new API.
-func NewAPI(
-	appID string,
-	appChannel channel.AppChannel,
-	directMessaging messaging.DirectMessaging,
-	getComponentsFn func() []componentsV1alpha1.Component,
-	resiliency resiliency.Provider,
-	stateStores map[string]state.Store,
-	lockStores map[string]lock.Store,
-	secretStores map[string]secretstores.SecretStore,
-	secretsConfiguration map[string]config.SecretsScope,
-	configurationStores map[string]configuration.Store,
-	pubsubAdapter runtimePubsub.Adapter,
-	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec,
-	shutdown func(),
-	getComponentsCapabilitiesFn func() map[string][]string,
-) API {
+func NewAPI(opts NewAPIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
-	for key, store := range stateStores {
+	for key, store := range opts.StateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
 	api := &api{
-		appChannel:                 appChannel,
-		getComponentsFn:            getComponentsFn,
-		resiliency:                 resiliency,
-		directMessaging:            directMessaging,
-		stateStores:                stateStores,
-		lockStores:                 lockStores,
+		id:                         opts.AppID,
+		appChannel:                 opts.AppChannel,
+		directMessaging:            opts.DirectMessaging,
+		getComponentsFn:            opts.GetComponentsFn,
+		resiliency:                 opts.Resiliency,
+		stateStores:                opts.StateStores,
+		lockStores:                 opts.LockStores,
+		secretStores:               opts.SecretStores,
+		secretsConfiguration:       opts.SecretsConfiguration,
+		configurationStores:        opts.ConfigurationStores,
+		pubsubAdapter:              opts.PubsubAdapter,
+		actor:                      opts.Actor,
+		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
+		tracingSpec:                opts.TracingSpec,
+		shutdown:                   opts.Shutdown,
+		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+		maxRequestBodySize:         opts.MaxRequestBodySize,
 		transactionalStateStores:   transactionalStateStores,
-		secretStores:               secretStores,
-		secretsConfiguration:       secretsConfiguration,
-		configurationStores:        configurationStores,
 		configurationSubscribe:     make(map[string]chan struct{}),
-		actor:                      actor,
-		pubsubAdapter:              pubsubAdapter,
-		sendToOutputBindingFn:      sendToOutputBindingFn,
-		id:                         appID,
-		tracingSpec:                tracingSpec,
-		shutdown:                   shutdown,
-		getComponentsCapabilitesFn: getComponentsCapabilitiesFn,
 		daprRunTimeVersion:         version.Version(),
 	}
 
