@@ -14,8 +14,8 @@ limitations under the License.
 package http_test
 
 import (
-	"fmt"
 	nethttp "net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -68,20 +68,20 @@ func TestRegistry(t *testing.T) {
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p)) //nolint:govet
+		assert.True(t, reflect.ValueOf(mock) == reflect.ValueOf(p))
 		p, e = testRegistry.Create(componentName, "v1", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p)) //nolint:govet
+		assert.True(t, reflect.ValueOf(mock) == reflect.ValueOf(p))
 
 		// assert v2
 		pV2, e := testRegistry.Create(componentName, "v2", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2)) //nolint:govet
+		assert.True(t, reflect.ValueOf(mockV2) == reflect.ValueOf(pV2))
 
 		// check case-insensitivity
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2)) //nolint:govet
+		assert.True(t, reflect.ValueOf(mockV2) == reflect.ValueOf(pV2))
 	})
 
 	t.Run("middleware is not registered", func(t *testing.T) {
