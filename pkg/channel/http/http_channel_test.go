@@ -97,8 +97,7 @@ func (t *testStatusCodeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 }
 
 // testBodyHandler sends back the body it receives
-type testBodyHandler struct {
-}
+type testBodyHandler struct{}
 
 func (t *testBodyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("content-type", r.Header.Get("content-type"))
@@ -113,12 +112,12 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 
 	t.Run("pipeline should be called when handlers are not empty", func(t *testing.T) {
 		called := 0
-		middleware := httpMiddleware.Middleware(func(next http.Handler) http.Handler {
+		middleware := func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				called++
 				next.ServeHTTP(w, r)
 			})
-		})
+		}
 		pipeline := httpMiddleware.Pipeline{
 			Handlers: []httpMiddleware.Middleware{
 				middleware,
@@ -143,12 +142,12 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 
 	t.Run("request can be short-circuited by middleware pipeline", func(t *testing.T) {
 		called := 0
-		middleware := httpMiddleware.Middleware(func(next http.Handler) http.Handler {
+		middleware := func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				called++
 				w.WriteHeader(http.StatusBadGateway)
 			})
-		})
+		}
 		pipeline := httpMiddleware.Pipeline{
 			Handlers: []httpMiddleware.Middleware{
 				middleware,
