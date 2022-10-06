@@ -17,7 +17,7 @@ import (
 	"github.com/dapr/components-contrib/middleware"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	"github.com/dapr/dapr/tests/apps/utils"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
