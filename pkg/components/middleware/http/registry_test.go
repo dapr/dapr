@@ -40,12 +40,12 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// Initiate mock object
-		mock := httpMiddleware.Middleware(func(next nethttp.Handler) nethttp.Handler {
+		mock := func(next nethttp.Handler) nethttp.Handler {
 			return nil
-		})
-		mockV2 := httpMiddleware.Middleware(func(next nethttp.Handler) nethttp.Handler {
+		}
+		mockV2 := func(next nethttp.Handler) nethttp.Handler {
 			return nil
-		})
+		}
 		metadata := h.Metadata{}
 
 		// act
@@ -68,20 +68,20 @@ func TestRegistry(t *testing.T) {
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p))
+		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p)) //nolint:govet
 		p, e = testRegistry.Create(componentName, "v1", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p))
+		assert.Equal(t, fmt.Sprintf("%v", mock), fmt.Sprintf("%v", p)) //nolint:govet
 
 		// assert v2
 		pV2, e := testRegistry.Create(componentName, "v2", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2))
+		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2)) //nolint:govet
 
 		// check case-insensitivity
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", metadata)
 		assert.NoError(t, e)
-		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2))
+		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2)) //nolint:govet
 	})
 
 	t.Run("middleware is not registered", func(t *testing.T) {

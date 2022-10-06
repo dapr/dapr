@@ -253,10 +253,11 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		// If there's a status code, it means that a middleware aborted the request
 		// So, we get the response directly from the middlewares
 		if recorder.Code > 0 {
+			//nolint:bodyclose
 			resp = recorder.Result()
-		} else if len(recorder.HeaderMap) > 0 {
+		} else if len(recorder.Header()) > 0 {
 			// Set headers in the outbound request
-			for k, vs := range recorder.HeaderMap {
+			for k, vs := range recorder.Header() {
 				for _, v := range vs {
 					channelReq.Header.Add(k, v)
 				}
@@ -266,7 +267,11 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	if resp == nil {
 		// Send request to user application
+		//nolint:bodyclose
 		resp, err = h.client.Do(channelReq)
+	}
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
