@@ -267,6 +267,9 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		//nolint:bodyclose
 		resp, err = h.client.Do(channelReq)
 	}
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
