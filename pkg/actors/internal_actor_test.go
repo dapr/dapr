@@ -18,10 +18,11 @@ import (
 	context "context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/stretchr/testify/assert"
 )
 
 type mockInternalActor struct {
