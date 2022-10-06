@@ -63,8 +63,8 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/dapr/tests/apps/utils"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
-	"github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -2497,12 +2497,7 @@ func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
 	registry := httpMiddlewareLoader.NewRegistry()
 	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return func(next gohttp.Handler) gohttp.Handler {
-				return gohttp.HandlerFunc(func(w gohttp.ResponseWriter, r *gohttp.Request) {
-					r.Body = io.NopCloser(streams.UppercaseTransformer(r.Body))
-					next.ServeHTTP(w, r)
-				})
-			}, nil
+			return utils.UppercaseMiddleware, nil
 		}
 	}, "uppercase")
 	var handlers []httpMiddleware.Middleware
