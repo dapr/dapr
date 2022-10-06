@@ -192,6 +192,7 @@ func NewActors(opts ActorsOpts) Actors {
 		appHealthy:             atomic.NewBool(true),
 		isResiliencyEnabled:    configuration.IsFeatureEnabled(opts.Features, configuration.Resiliency),
 		internalActors:         opts.InternalActors,
+		internalAppChannel:     newInternalActorChannel(),
 	}
 }
 
@@ -200,15 +201,15 @@ func (a *actorsRuntime) Init() error {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
-	var err error
-	if a.internalAppChannel, err = newInternalActorChannel(a.internalActors); err != nil {
-		return err
-	}
-
-	for internalActorType, implementation := range a.internalAppChannel.actors {
-		log.Debugf("registering internal actor type: %s", internalActorType)
-		implementation.SetActorRuntime(a)
-		a.config.HostedActorTypes = append(a.config.HostedActorTypes, internalActorType)
+	// Configure the internal app channel with the provided internal actors and add
+	// them to the list of hosted actor types.
+	for actorType, actorImpl := range a.internalActors {
+		if err := a.internalAppChannel.AddInternalActor(actorType, actorImpl); err != nil {
+			return err
+		}
+		log.Debugf("registering internal actor type: %s", actorType)
+		actorImpl.SetActorRuntime(a)
+		a.config.HostedActorTypes = append(a.config.HostedActorTypes, actorType)
 	}
 
 	if len(a.config.HostedActorTypes) > 0 {

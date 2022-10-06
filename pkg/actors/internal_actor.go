@@ -42,22 +42,23 @@ type internalActorChannel struct {
 	actors map[string]InternalActor
 }
 
-func newInternalActorChannel(internalActors map[string]InternalActor) (*internalActorChannel, error) {
-	c := &internalActorChannel{
-		actors: make(map[string]InternalActor, len(internalActors)),
+func newInternalActorChannel() *internalActorChannel {
+	return &internalActorChannel{
+		actors: make(map[string]InternalActor),
 	}
-	for k, v := range internalActors {
-		// use internal type name prefixes to avoid conflicting with externally defined actor types
-		internalTypeName := k
-		if !strings.HasPrefix(k, InternalActorTypePrefix) {
-			internalTypeName = InternalActorTypePrefix + k
-		}
-		if _, exists := c.actors[internalTypeName]; exists {
-			return nil, fmt.Errorf("internal actor named '%s' already exists", k)
-		}
-		c.actors[internalTypeName] = v
+}
+
+func (c *internalActorChannel) AddInternalActor(actorType string, actorImpl InternalActor) error {
+	// use internal type name prefixes to avoid conflicting with externally defined actor types
+	internalTypeName := actorType
+	if !strings.HasPrefix(actorType, InternalActorTypePrefix) {
+		internalTypeName = InternalActorTypePrefix + actorType
 	}
-	return c, nil
+	if _, exists := c.actors[internalTypeName]; exists {
+		return fmt.Errorf("internal actor named '%s' already exists", actorType)
+	}
+	c.actors[internalTypeName] = actorImpl
+	return nil
 }
 
 // Contains returns true if this channel invokes actorType or false if it doesn't.
