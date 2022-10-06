@@ -128,15 +128,9 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		return nil, err
 	}
 
-	// results for internal actors are serialized using gob (https://go.dev/blog/gob)
-	var resultData []byte
-	if result != nil {
-		var resultBuffer bytes.Buffer
-		enc := gob.NewEncoder(&resultBuffer)
-		if err := enc.Encode(result); err != nil {
-			return nil, err
-		}
-		resultData = resultBuffer.Bytes()
+	resultData, err := EncodeInternalActorResponse(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode the internal actor response: %w", err)
 	}
 	res := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 		WithRawData(resultData, invokev1.OctetStreamContentType)
@@ -146,4 +140,29 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 // SetAppHealth implements channel.AppChannel
 func (internalActorChannel) SetAppHealth(ah *apphealth.AppHealth) {
 	// no-op
+}
+
+// EncodeInternalActorResponse encodes result using the encoding/gob format.
+func EncodeInternalActorResponse(result any) ([]byte, error) {
+	var resultData []byte
+	if result != nil {
+		var resultBuffer bytes.Buffer
+		enc := gob.NewEncoder(&resultBuffer)
+		if err := enc.Encode(result); err != nil {
+			return nil, err
+		}
+		resultData = resultBuffer.Bytes()
+	}
+	return resultData, nil
+}
+
+// DecodeInternalActorResponse decodes encoding/gob data and stores the result in e.
+func DecodeInternalActorResponse(data []byte, e any) error {
+	// Decode the data using encoding/gob (https://go.dev/blog/gob)
+	buffer := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buffer)
+	if err := dec.Decode(e); err != nil {
+		return err
+	}
+	return nil
 }

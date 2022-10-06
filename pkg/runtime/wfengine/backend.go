@@ -15,9 +15,7 @@ limitations under the License.
 package wfengine
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"errors"
 	"fmt"
 
@@ -107,13 +105,9 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 		if len(data) == 0 {
 			return nil, api.ErrInstanceNotFound
 		}
-
-		// Decode the data using encoding/gob (https://go.dev/blog/gob)
-		buffer := bytes.NewBuffer(data)
-		dec := gob.NewDecoder(buffer)
 		var metadata api.OrchestrationMetadata
-		if err := dec.Decode(&metadata); err != nil {
-			return nil, err
+		if err := actors.DecodeInternalActorResponse(data, &metadata); err != nil {
+			return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
 		}
 		return &metadata, nil
 	}
