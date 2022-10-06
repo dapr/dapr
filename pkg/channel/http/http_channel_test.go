@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	"github.com/dapr/dapr/tests/apps/utils"
+	"github.com/dapr/dapr/utils"
 )
 
 // testConcurrencyHandler is used for testing max concurrency.
