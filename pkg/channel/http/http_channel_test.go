@@ -24,12 +24,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/valyala/fasthttp"
 	"go.uber.org/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 // testConcurrencyHandler is used for testing max concurrency.
@@ -96,9 +96,18 @@ func (t *testStatusCodeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	w.Write([]byte(strconv.Itoa(code)))
 }
 
+// testBodyHandler sends back the body it receives
+type testBodyHandler struct {
+}
+
+func (t *testBodyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("content-type", r.Header.Get("content-type"))
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, r.Body)
+}
+
 func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
-	defaultStatusCode := http.StatusOK
-	th := &testStatusCodeHandler{Code: defaultStatusCode}
+	var th http.Handler = &testStatusCodeHandler{Code: http.StatusOK}
 	server := httptest.NewServer(th)
 	ctx := context.Background()
 
@@ -117,11 +126,11 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &fasthttp.Client{},
+			client:      &http.Client{},
 			pipeline:    pipeline,
 		}
-		fakeReq := invokev1.NewInvokeMethodRequest("method")
-		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
@@ -129,16 +138,15 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		// assert
 		assert.NoError(t, err)
 		assert.Equal(t, 1, called)
-		assert.Equal(t, int32(defaultStatusCode), resp.Status().Code)
+		assert.Equal(t, int32(http.StatusOK), resp.Status().Code)
 	})
 
 	t.Run("request can be short-circuited by middleware pipeline", func(t *testing.T) {
 		called := 0
-		shortcircuitStatusCode := http.StatusBadGateway
 		middleware := httpMiddleware.Middleware(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				called++
-				w.WriteHeader(shortcircuitStatusCode)
+				w.WriteHeader(http.StatusBadGateway)
 			})
 		})
 		pipeline := httpMiddleware.Pipeline{
@@ -148,11 +156,11 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &fasthttp.Client{},
+			client:      &http.Client{},
 			pipeline:    pipeline,
 		}
-		fakeReq := invokev1.NewInvokeMethodRequest("method")
-		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
@@ -160,7 +168,38 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		// assert
 		assert.NoError(t, err)
 		assert.Equal(t, 1, called)
-		assert.Equal(t, int32(shortcircuitStatusCode), resp.Status().Code)
+		assert.Equal(t, int32(http.StatusBadGateway), resp.Status().Code)
+	})
+
+	server.Close()
+
+	th = &testBodyHandler{}
+	server = httptest.NewServer(th)
+
+	t.Run("test uppercase middleware", func(t *testing.T) {
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				utils.UppercaseMiddleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &http.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
+			WithRawData([]byte("m'illumino d'immenso"), "text/plain")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		ct, body := resp.RawData()
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		assert.Equal(t, "text/plain", ct)
+		assert.Equal(t, "M'ILLUMINO D'IMMENSO", string(body))
 	})
 
 	server.Close()
@@ -174,14 +213,14 @@ func TestInvokeMethod(t *testing.T) {
 	t.Run("query string", func(t *testing.T) {
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &fasthttp.Client{},
+			client:      &http.Client{},
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},
 		}
 		th.serverURL = server.URL[len("http://"):]
-		fakeReq := invokev1.NewInvokeMethodRequest("method")
-		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 
 		// act
 		response, err := c.InvokeMethod(ctx, fakeReq)
@@ -195,14 +234,14 @@ func TestInvokeMethod(t *testing.T) {
 	t.Run("tracing is enabled", func(t *testing.T) {
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &fasthttp.Client{},
+			client:      &http.Client{},
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "1",
 			},
 		}
 		th.serverURL = server.URL[len("http://"):]
-		fakeReq := invokev1.NewInvokeMethodRequest("method")
-		fakeReq.WithHTTPExtension(http.MethodPost, "")
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "")
 
 		// act
 		response, err := c.InvokeMethod(ctx, fakeReq)
@@ -226,7 +265,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		server := httptest.NewServer(&handler)
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &fasthttp.Client{},
+			client:      &http.Client{},
 			ch:          make(chan struct{}, 1),
 		}
 
@@ -259,7 +298,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		server := httptest.NewServer(&handler)
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &fasthttp.Client{},
+			client:      &http.Client{},
 			ch:          make(chan struct{}, 1),
 		}
 
@@ -293,7 +332,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		c := Channel{
 			// False address to make first calls fail
 			baseAddress: "http://0.0.0.0:0",
-			client:      &fasthttp.Client{},
+			client:      &http.Client{},
 			ch:          make(chan struct{}, 1),
 		}
 
@@ -323,7 +362,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 func TestInvokeWithHeaders(t *testing.T) {
 	ctx := context.Background()
 	testServer := httptest.NewServer(&testHandlerHeaders{})
-	c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+	c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
 
 	req := invokev1.NewInvokeMethodRequest("method")
 	md := map[string][]string{
@@ -357,11 +396,11 @@ func TestContentType(t *testing.T) {
 		testServer := httptest.NewServer(handler)
 		c := Channel{
 			baseAddress: testServer.URL,
-			client:      &fasthttp.Client{},
+			client:      &http.Client{},
 		}
-		req := invokev1.NewInvokeMethodRequest("method")
-		req.WithRawData(nil, "")
-		req.WithHTTPExtension(http.MethodGet, "")
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithRawData(nil, "").
+			WithHTTPExtension(http.MethodGet, "")
 
 		// act
 		resp, err := c.InvokeMethod(ctx, req)
@@ -377,10 +416,10 @@ func TestContentType(t *testing.T) {
 	t.Run("application/json", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
-		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
-		req := invokev1.NewInvokeMethodRequest("method")
-		req.WithRawData(nil, "application/json")
-		req.WithHTTPExtension(http.MethodPost, "")
+		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithRawData(nil, "application/json").
+			WithHTTPExtension(http.MethodPost, "")
 
 		// act
 		resp, err := c.InvokeMethod(ctx, req)
@@ -396,10 +435,10 @@ func TestContentType(t *testing.T) {
 	t.Run("text/plain", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
-		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
-		req := invokev1.NewInvokeMethodRequest("method")
-		req.WithRawData(nil, "text/plain")
-		req.WithHTTPExtension(http.MethodPost, "")
+		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithRawData(nil, "text/plain").
+			WithHTTPExtension(http.MethodPost, "")
 
 		// act
 		resp, err := c.InvokeMethod(ctx, req)
@@ -417,10 +456,10 @@ func TestAppToken(t *testing.T) {
 	t.Run("token present", func(t *testing.T) {
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
-		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}, appHeaderToken: "token1"}
+		c := Channel{baseAddress: testServer.URL, client: &http.Client{}, appHeaderToken: "token1"}
 
-		req := invokev1.NewInvokeMethodRequest("method")
-		req.WithHTTPExtension(http.MethodPost, "")
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "")
 
 		// act
 		response, err := c.InvokeMethod(ctx, req)
@@ -441,10 +480,10 @@ func TestAppToken(t *testing.T) {
 	t.Run("token not present", func(t *testing.T) {
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
-		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
 
-		req := invokev1.NewInvokeMethodRequest("method")
-		req.WithHTTPExtension(http.MethodPost, "")
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "")
 
 		// act
 		response, err := c.InvokeMethod(ctx, req)
@@ -485,7 +524,7 @@ func TestHealthProbe(t *testing.T) {
 	ctx := context.Background()
 	h := &testStatusCodeHandler{}
 	testServer := httptest.NewServer(h)
-	c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+	c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
 
 	var (
 		success bool

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"time"
@@ -40,10 +41,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	"github.com/dapr/dapr/utils/nethttpadaptor"
 	streamutils "github.com/dapr/dapr/utils/streams"
-	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 const (
@@ -112,12 +110,12 @@ func (h *Channel) GetBaseAddress() string {
 
 // GetAppConfig gets application config from user application
 // GET http://localhost:<app_port>/dapr/config
-func (h *Channel) GetAppConfig(ctx context.Context) (*config.ApplicationConfig, error) {
+func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint).
 		WithHTTPExtension(http.MethodGet, "").
 		WithRawData(nil, invokev1.JSONContentType)
 
-	resp, err := h.InvokeMethod(ctx, req)
+	resp, err := h.InvokeMethod(context.TODO(), req)
 	if err != nil {
 		return nil, err
 	}
@@ -241,41 +239,34 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
-	// Send request to user application
-	resp, err := h.client.Do(channelReq)
-
-	// FIXME as fasthttp requestctx does not support using a response from response pool (i.e fasthttp.AcquireResponse())
-	// this check avoid using it when no handlers are specified, hence improving memory consumption by using response pool.
+	var resp *http.Response
 	if len(h.pipeline.Handlers) > 0 {
+		// Exec pipeline only if at least one handler is specified
+		recorder := httptest.NewRecorder()
+		// Reset the code which is 200 by default
+		recorder.Code = 0
 		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			resp, err := h.client.Do(r)
+			channelReq = r
 		}))
-		resp = execPipeline.ServeHTTP()
+		execPipeline.ServeHTTP(recorder, channelReq)
+
+		// If there's a status code, it means that a middleware aborted the request
+		// So, we get the response directly from the middlewares
+		if recorder.Code > 0 {
+			resp = recorder.Result()
+		} else if len(recorder.HeaderMap) > 0 {
+			// Set headers in the outbound request
+			for k, vs := range recorder.HeaderMap {
+				for _, v := range vs {
+					channelReq.Header.Add(k, v)
+				}
+			}
+		}
 	}
-	if len(h.pipeline.Handlers) == 0 {
+
+	if resp == nil {
 		// Send request to user application
-		response = fasthttp.AcquireResponse()
-		defer fasthttp.ReleaseResponse(response)
-		err = h.client.Do(channelReq, response)
-	} else { // exec pipeline only if at least one handler is specified
-		c := fasthttp.RequestCtx{}
-		c.Init(channelReq, nil, nil)
-
-		defer func() {
-			c.Response.Reset()
-			c.ResetUserValues()
-		}()
-
-		execPipeline := fasthttpadaptor.NewFastHTTPHandler(
-			h.pipeline.Apply(
-				nethttpadaptor.NewNetHTTPHandlerFunc(func(ctx *fasthttp.RequestCtx) {
-					err = h.client.Do(&ctx.Request, &ctx.Response)
-				}),
-			),
-		)
-
-		execPipeline(&c)
-		response = &c.Response
+		resp, err = h.client.Do(channelReq)
 	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
