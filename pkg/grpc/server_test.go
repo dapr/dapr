@@ -95,15 +95,15 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:              "test",
-			HostAddress:        "127.0.0.1",
-			Port:               port,
-			APIListenAddresses: []string{"127.0.0.1"},
-			NameSpace:          "test",
-			TrustDomain:        "test",
-			MaxRequestBodySize: 4,
-			ReadBufferSize:     4,
-			EnableAPILogging:   true,
+			AppID:                "test",
+			HostAddress:          "127.0.0.1",
+			Port:                 port,
+			APIListenAddresses:   []string{"127.0.0.1"},
+			NameSpace:            "test",
+			TrustDomain:          "test",
+			MaxRequestBodySizeMB: 4,
+			ReadBufferSizeKB:     4,
+			EnableAPILogging:     true,
 		}
 		a := &api{}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)
@@ -116,15 +116,15 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:              "test",
-			HostAddress:        "127.0.0.1",
-			Port:               port,
-			APIListenAddresses: []string{"127.0.0.1"},
-			NameSpace:          "test",
-			TrustDomain:        "test",
-			MaxRequestBodySize: 4,
-			ReadBufferSize:     4,
-			EnableAPILogging:   false,
+			AppID:                "test",
+			HostAddress:          "127.0.0.1",
+			Port:                 port,
+			APIListenAddresses:   []string{"127.0.0.1"},
+			NameSpace:            "test",
+			TrustDomain:          "test",
+			MaxRequestBodySizeMB: 4,
+			ReadBufferSizeKB:     4,
+			EnableAPILogging:     false,
 		}
 		a := &api{}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil)

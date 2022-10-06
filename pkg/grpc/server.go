@@ -276,7 +276,7 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 		go s.startWorkloadCertRotation()
 	}
 
-	opts = append(opts, grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySize*1024*1024), grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySize*1024*1024), grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSize*1024)))
+	opts = append(opts, grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySizeMB*1024*1024), grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySizeMB*1024*1024), grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSizeKB*1024)))
 
 	if s.proxy != nil {
 		opts = append(opts, grpcGo.UnknownServiceHandler(s.proxy.Handler()))

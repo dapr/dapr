@@ -15,14 +15,14 @@ package grpc
 
 // ServerConfig is the config object for a grpc server.
 type ServerConfig struct {
-	AppID              string
-	HostAddress        string
-	Port               int
-	APIListenAddresses []string
-	NameSpace          string
-	TrustDomain        string
-	MaxRequestBodySize int
-	UnixDomainSocket   string
-	ReadBufferSize     int
-	EnableAPILogging   bool
+	AppID                string
+	HostAddress          string
+	Port                 int
+	APIListenAddresses   []string
+	NameSpace            string
+	TrustDomain          string
+	MaxRequestBodySizeMB int
+	UnixDomainSocket     string
+	ReadBufferSizeKB     int
+	EnableAPILogging     bool
 }

@@ -291,7 +291,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	}
 
 	if b.config == nil {
-		config := NewConfig(NewConfigOpts{
+		config := NewConfig(ConfigOpts{
 			HostAddress:        "",
 			AppID:              TestAppID,
 			PlacementAddresses: []string{"placement:5050"},
@@ -330,7 +330,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig(NewConfigOpts{
+	config := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          config.ApplicationConfig{},
@@ -350,7 +350,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 
 func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
-	config := NewConfig(NewConfigOpts{
+	config := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{""},
 		AppConfig:          config.ApplicationConfig{},
@@ -369,7 +369,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	var store state.Store
-	config := NewConfig(NewConfigOpts{
+	config := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{""},
 		AppConfig:          config.ApplicationConfig{},
@@ -399,7 +399,7 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 			},
 		},
 	}
-	c := NewConfig(NewConfigOpts{
+	c := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          appConfig,
@@ -1964,7 +1964,7 @@ func TestConfig(t *testing.T) {
 		Reentrancy:                 config.ReentrancyConfig{},
 		RemindersStoragePartitions: 0,
 	}
-	c := NewConfig(NewConfigOpts{
+	c := NewConfig(ConfigOpts{
 		HostAddress:        "localhost:5050",
 		AppID:              "app1",
 		PlacementAddresses: []string{"placement:5050"},
@@ -1987,7 +1987,7 @@ func TestConfig(t *testing.T) {
 func TestReentrancyConfig(t *testing.T) {
 	appConfig := DefaultAppConfig
 	t.Run("Test empty reentrancy values", func(t *testing.T) {
-		c := NewConfig(NewConfigOpts{
+		c := NewConfig(ConfigOpts{
 			HostAddress:        "localhost:5050",
 			AppID:              "app1",
 			PlacementAddresses: []string{"placement:5050"},
@@ -2009,7 +2009,7 @@ func TestReentrancyConfig(t *testing.T) {
 				},
 			},
 		}
-		c := NewConfig(NewConfigOpts{
+		c := NewConfig(ConfigOpts{
 			HostAddress:        "localhost:5050",
 			AppID:              "app1",
 			PlacementAddresses: []string{"placement:5050"},
@@ -2025,7 +2025,7 @@ func TestReentrancyConfig(t *testing.T) {
 
 	t.Run("Test minimum reentrancy values", func(t *testing.T) {
 		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-		c := NewConfig(NewConfigOpts{
+		c := NewConfig(ConfigOpts{
 			HostAddress:        "localhost:5050",
 			AppID:              "app1",
 			PlacementAddresses: []string{"placement:5050"},
@@ -2041,7 +2041,7 @@ func TestReentrancyConfig(t *testing.T) {
 	t.Run("Test full reentrancy values", func(t *testing.T) {
 		reentrancyLimit := 64
 		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}
-		c := NewConfig(NewConfigOpts{
+		c := NewConfig(ConfigOpts{
 			HostAddress:        "localhost:5050",
 			AppID:              "app1",
 			PlacementAddresses: []string{"placement:5050"},
@@ -2184,7 +2184,7 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig(NewConfigOpts{
+	reentrantConfig := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          appConfig,
@@ -2216,7 +2216,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig(NewConfigOpts{
+	reentrantConfig := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          appConfig,
@@ -2248,7 +2248,7 @@ func TestReentrancyStackLimit(t *testing.T) {
 	stackDepth := 0
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}
-	reentrantConfig := NewConfig(NewConfigOpts{
+	reentrantConfig := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          appConfig,
@@ -2283,7 +2283,7 @@ func TestReentrancyPerActor(t *testing.T) {
 			},
 		},
 	}
-	reentrantConfig := NewConfig(NewConfigOpts{
+	reentrantConfig := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{""},
 		AppConfig:          appConfig,
@@ -2323,7 +2323,7 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 			},
 		},
 	}
-	reentrantConfig := NewConfig(NewConfigOpts{
+	reentrantConfig := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{""},
 		AppConfig:          appConfig,
