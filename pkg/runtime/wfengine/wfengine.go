@@ -26,12 +26,17 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-type WorkflowEngine struct {
-	backend       *actorBackend
-	executor      backend.Executor
-	workflowActor internalActor
+const (
+	WorkflowActorType = actors.InternalActorTypePrefix + "wfengine.workflow"
+	ActivityActorType = actors.InternalActorTypePrefix + "wfengine.activity"
+)
 
-	AppChannel *internalActorChannel
+type WorkflowEngine struct {
+	backend  *actorBackend
+	executor backend.Executor
+
+	WorkflowActor actors.InternalActor
+	ActivityActor actors.InternalActor
 }
 
 var wfLogger = logger.NewLogger("dapr.runtime.wfengine")
@@ -41,9 +46,11 @@ func IsWorkflowRequest(path string) bool {
 }
 
 func NewWorkflowEngine() *WorkflowEngine {
+	be := NewActorBackend()
 	engine := &WorkflowEngine{
-		backend:    NewActorBackend(),
-		AppChannel: newInternalActorChannel(),
+		backend:       be,
+		WorkflowActor: NewWorkflowActor(be),
+		ActivityActor: NewActivityActor(be),
 	}
 	return engine
 }
@@ -53,19 +60,16 @@ func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
 	wfe.executor = backend.NewGrpcExecutor(grpcServer, wfe.backend, wfLogger)
 }
 
-func (wfe *WorkflowEngine) ConfigureActors(actorRuntime actors.Actors) {
+func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) {
 	wfLogger.Info("configuring workflow engine with actors backend")
 	wfe.backend.SetActorRuntime(actorRuntime)
-	wfe.AppChannel.InitializeActors(actorRuntime, wfe.backend)
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) error {
-	if wfe.backend == nil {
-		return errors.New("backend is not yet configured")
+	if wfe.backend.actors == nil {
+		return errors.New("backend actor runtime is not configured")
 	} else if wfe.executor == nil {
 		return errors.New("grpc executor is not yet configured")
-	} else if wfe.AppChannel == nil {
-		return errors.New("internal app channel not yet configured")
 	}
 
 	// TODO: Enable concurrency for orchestrations (workflows) and activities.

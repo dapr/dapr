@@ -46,15 +46,19 @@ const (
 	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
 	GetWorkflowMetadataMethod    = "GetWorkflowMetadata"
 
-	createWorkflowReminder = "create" // internal reminder for executing workflows
+	createWorkflowReminder = "start" // internal reminder for executing workflows
 )
 
-func NewWorkflowActor(actorRuntime actors.Actors, scheduler workflowScheduler) internalActor {
+func NewWorkflowActor(scheduler workflowScheduler) actors.InternalActor {
 	return &workflowActor{
-		actorRuntime: actorRuntime,
-		states:       make(map[string]*workflowState),
-		scheduler:    scheduler,
+		states:    make(map[string]*workflowState),
+		scheduler: scheduler,
 	}
+}
+
+// SetActorRuntime implements actors.InternalActor
+func (wf *workflowActor) SetActorRuntime(actorRuntime actors.Actors) {
+	wf.actorRuntime = actorRuntime
 }
 
 // InvokeMethod implements actors.InternalActor
@@ -82,8 +86,10 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	var err error
 	switch reminderName {
 	case createWorkflowReminder:
-		// TODO: timeout implementation for executions that never report back
-		err = wf.runWorkflow(ctx, actorID)
+		// Workflow executions should never take longer than a few seconds at the most
+		timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second) // TODO: Configurable
+		defer cancelTimeout()
+		err = wf.runWorkflow(timeoutCtx, actorID)
 	default:
 		wfLogger.Warnf("reminder '%s' for workflow actor '%s' was not recognized", reminderName, actorID)
 	}
@@ -196,7 +202,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string) error 
 	wi.Properties[CallbackChannelProperty] = callback
 	wf.scheduler.ScheduleWorkflow(wi)
 	select {
-	case <-ctx.Done():
+	case <-ctx.Done(): // caller is responsible for timeout management
 		return ctx.Err()
 	case <-callback:
 	}

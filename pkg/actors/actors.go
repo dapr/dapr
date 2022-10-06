@@ -86,7 +86,7 @@ type Actors interface {
 type GRPCConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
 
 type actorsRuntime struct {
-	appChannel             channel.AppChannel
+	externalAppChannel     channel.AppChannel
 	store                  state.Store
 	transactionalStore     state.TransactionalStore
 	placement              *internal.ActorPlacement
@@ -109,7 +109,8 @@ type actorsRuntime struct {
 	resiliency             resiliency.Provider
 	storeName              string
 	isResiliencyEnabled    bool
-	workflowEngineChannel  channel.AppChannel
+	internalActors         map[string]InternalActor
+	internalAppChannel     *internalActorChannel
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -154,7 +155,7 @@ type ActorsOpts struct {
 	Features         []configuration.FeatureSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
-	InternalActors   map[string]func(a Actors) InternalActor
+	InternalActors   map[string]InternalActor
 }
 
 // NewActors create a new actors runtime with given config.
@@ -169,7 +170,7 @@ func NewActors(opts ActorsOpts) Actors {
 
 	return &actorsRuntime{
 		store:                  opts.StateStore,
-		appChannel:             opts.AppChannel,
+		externalAppChannel:     opts.AppChannel,
 		grpcConnectionFn:       opts.GRPCConnectionFn,
 		config:                 opts.Config,
 		certChain:              opts.CertChain,
@@ -190,7 +191,7 @@ func NewActors(opts ActorsOpts) Actors {
 		evaluationChan:         make(chan bool),
 		appHealthy:             atomic.NewBool(true),
 		isResiliencyEnabled:    configuration.IsFeatureEnabled(opts.Features, configuration.Resiliency),
-		//internalActors:         opts.InternalActors,
+		internalActors:         opts.InternalActors,
 	}
 }
 
@@ -199,13 +200,15 @@ func (a *actorsRuntime) Init() error {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
-	if a.workflowEngineChannel != nil {
-		if config, err := a.workflowEngineChannel.GetAppConfig(); err == nil {
-			for _, internalActorType := range config.Entities {
-				log.Debugf("registering wfengine actor type: %v", internalActorType)
-				a.config.HostedActorTypes = append(a.config.HostedActorTypes, internalActorType)
-			}
-		}
+	var err error
+	if a.internalAppChannel, err = newInternalActorChannel(a.internalActors); err != nil {
+		return err
+	}
+
+	for internalActorType, implementation := range a.internalAppChannel.actors {
+		log.Debugf("registering internal actor type: %s", internalActorType)
+		implementation.SetActorRuntime(a)
+		a.config.HostedActorTypes = append(a.config.HostedActorTypes, internalActorType)
 	}
 
 	if len(a.config.HostedActorTypes) > 0 {
@@ -253,11 +256,11 @@ func (a *actorsRuntime) Init() error {
 }
 
 func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
-	if len(a.config.HostedActorTypes) == 0 || a.appChannel == nil {
+	if len(a.config.HostedActorTypes) == 0 || a.externalAppChannel == nil {
 		return
 	}
 
-	healthAddress := fmt.Sprintf("%s/healthz", a.appChannel.GetBaseAddress())
+	healthAddress := fmt.Sprintf("%s/healthz", a.externalAppChannel.GetBaseAddress())
 	ch := health.StartEndpointHealthCheck(healthAddress, opts...)
 	for {
 		appHealthy := <-ch
@@ -281,8 +284,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	// TODO Propagate context.
 	ctx := context.Background()
 
-	appChannel := a.getAppChannel(actorType)
-	resp, err := appChannel.InvokeMethod(ctx, req)
+	resp, err := a.getAppChannel(actorType).InvokeMethod(ctx, req)
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
@@ -505,8 +507,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	policy := a.resiliency.ActorPostLockPolicy(ctx, act.actorType, act.actorID)
 	var resp *invokev1.InvokeMethodResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		appChannel := a.getAppChannel(act.actorType)
-		resp, rErr = appChannel.InvokeMethod(ctx, req)
+		resp, rErr = a.getAppChannel(act.actorType).InvokeMethod(ctx, req)
 		return rErr
 	})
 
@@ -528,10 +529,10 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 }
 
 func (a *actorsRuntime) getAppChannel(actorType string) channel.AppChannel {
-	if strings.HasPrefix(actorType, "dapr.wfengine.") {
-		return a.workflowEngineChannel
+	if a.internalAppChannel.Contains(actorType) {
+		return a.internalAppChannel
 	} else {
-		return a.appChannel
+		return a.externalAppChannel
 	}
 }
 

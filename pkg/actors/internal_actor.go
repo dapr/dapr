@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package wfengine
+package actors
 
 import (
 	"bytes"
@@ -21,44 +21,59 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
-const (
-	WorkflowActorType = "dapr.wfengine.workflow"
-	ActivityActorType = "dapr.wfengine.activity"
-)
+const InternalActorTypePrefix = "dapr.internal."
 
 // InternalActor represents the interface for invoking an "internal" actor (one which is built into daprd directly).
-type internalActor interface {
-	InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte) (interface{}, error)
+type InternalActor interface {
+	SetActorRuntime(actorsRuntime Actors)
+	InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte) (any, error)
 	DeactivateActor(ctx context.Context, actorID string) error
 	InvokeReminder(ctx context.Context, actorID string, reminderName string, params []byte) error
 	InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error
 }
 
 type internalActorChannel struct {
-	actors map[string]internalActor
+	actors map[string]InternalActor
 }
 
-func newInternalActorChannel() *internalActorChannel {
-	return &internalActorChannel{}
+func newInternalActorChannel(internalActors map[string]InternalActor) (*internalActorChannel, error) {
+	c := &internalActorChannel{
+		actors: make(map[string]InternalActor, len(internalActors)),
+	}
+	for k, v := range internalActors {
+		// use internal type name prefixes to avoid conflicting with externally defined actor types
+		internalTypeName := k
+		if !strings.HasPrefix(k, InternalActorTypePrefix) {
+			internalTypeName = InternalActorTypePrefix + k
+		}
+		if _, exists := c.actors[internalTypeName]; exists {
+			return nil, fmt.Errorf("internal actor named '%s' already exists", k)
+		}
+		c.actors[internalTypeName] = v
+	}
+	return c, nil
 }
 
-func (c *internalActorChannel) InitializeActors(actorRuntime actors.Actors, be *actorBackend) {
-	c.actors = make(map[string]internalActor)
-	c.actors[WorkflowActorType] = NewWorkflowActor(actorRuntime, be)
-	c.actors[ActivityActorType] = nil // TODO
+// Contains returns true if this channel invokes actorType or false if it doesn't.
+func (c *internalActorChannel) Contains(actorType string) bool {
+	_, exists := c.actors[actorType]
+	return exists
 }
 
 // GetAppConfig implements channel.AppChannel
-func (internalActorChannel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (c *internalActorChannel) GetAppConfig() (*config.ApplicationConfig, error) {
+	actorTypes := make([]string, 0, len(c.actors))
+	for actorType := range c.actors {
+		actorTypes = append(actorTypes, actorType)
+	}
 	config := &config.ApplicationConfig{
-		Entities: []string{WorkflowActorType, ActivityActorType},
+		Entities: actorTypes,
 	}
 	return config, nil
 }
@@ -78,16 +93,16 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 	actorType := req.Actor().GetActorType()
 	actor, ok := c.actors[actorType]
 	if !ok {
-		return nil, fmt.Errorf("internal actor type '%s' not recognized.", actorType)
+		return nil, fmt.Errorf("internal actor type '%s' not recognized", actorType)
 	}
 
 	// The actor runtime formats method names as URLs in the form actors/{type}/{id}/method/{methodName}
-	methodUrl := req.Message().GetMethod()
-	methodStartIndex := strings.Index(methodUrl, "/method/")
+	methodURL := req.Message().GetMethod()
+	methodStartIndex := strings.Index(methodURL, "/method/")
 	if methodStartIndex < 0 {
-		return nil, fmt.Errorf("unexpected method format: %s", methodUrl)
+		return nil, fmt.Errorf("unexpected method format: %s", methodURL)
 	}
-	methodName := methodUrl[methodStartIndex+len("/method/"):]
+	methodName := methodURL[methodStartIndex+len("/method/"):]
 
 	requestData := req.Message().GetData().GetValue()
 	verb := req.Message().GetHttpExtension().GetVerb()
@@ -112,7 +127,7 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		return nil, err
 	}
 
-	// results for internal actors are serialized using binary Go serialization (https://go.dev/blog/gob)
+	// results for internal actors are serialized using gob (https://go.dev/blog/gob)
 	var resultData []byte
 	if result != nil {
 		var resultBuffer bytes.Buffer
@@ -123,7 +138,7 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		resultData = resultBuffer.Bytes()
 	}
 	res := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-		WithRawData(resultData, invokev1.JSONContentType)
+		WithRawData(resultData, invokev1.OctetStreamContentType)
 	return res, nil
 }
 

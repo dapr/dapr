@@ -523,8 +523,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 			a.daprHTTPAPI.SetActorRuntime(a.actor)
 			grpcAPI.SetActorRuntime(a.actor)
 
-			// init workflow engine, which depends on actors
-			a.workflowEngine.ConfigureActors(a.actor)
+			a.workflowEngine.SetActorRuntime(a.actor)
 			if err = a.workflowEngine.Start(a.ctx); err != nil {
 				log.Errorf("failed to start workflow engine: %v", err)
 			}
@@ -2131,6 +2130,11 @@ func (a *DaprRuntime) initActors() error {
 		Namespace:          a.namespace,
 		AppConfig:          a.appConfig,
 	})
+
+	internalActors := make(map[string]actors.InternalActor)
+	internalActors[wfengine.WorkflowActorType] = a.workflowEngine.WorkflowActor
+	internalActors[wfengine.ActivityActorType] = a.workflowEngine.ActivityActor
+
 	act := actors.NewActors(actors.ActorsOpts{
 		StateStore:       a.stateStores[a.actorStateStoreName],
 		AppChannel:       a.appChannel,
@@ -2141,7 +2145,7 @@ func (a *DaprRuntime) initActors() error {
 		Features:         a.globalConfig.Spec.Features,
 		Resiliency:       a.resiliency,
 		StateStoreName:   a.actorStateStoreName,
-		InternalActors:   nil,
+		InternalActors:   internalActors,
 	})
 	err = act.Init()
 	if err == nil {
