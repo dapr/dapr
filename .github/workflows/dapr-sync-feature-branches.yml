@@ -29,7 +29,7 @@ jobs:
       - name: Merge master -> ${{ matrix.branch }}
         # artursouza/merge-branch is a fork of devmasx/merge-branch 
         #   to minimize risk of a 3rd party repo running arbitrary code with our creds
-        uses: devmasx/merge-branch@v1.4.0
+        uses: artursouza/merge-branch@v1.4.0
         with:
           type: now
           from_branch: master

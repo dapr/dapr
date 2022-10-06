@@ -27,8 +27,6 @@ type OperatorClient interface {
 	ComponentUpdate(ctx context.Context, in *ComponentUpdateRequest, opts ...grpc.CallOption) (Operator_ComponentUpdateClient, error)
 	// Returns a list of available components
 	ListComponents(ctx context.Context, in *ListComponentsRequest, opts ...grpc.CallOption) (*ListComponentResponse, error)
-	// Returns a list fo available pluggable components
-	ListPluggableComponents(ctx context.Context, in *ListPluggableComponentsRequest, opts ...grpc.CallOption) (*ListPluggableComponentsResponse, error)
 	// Returns a given configuration by name
 	GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
@@ -90,15 +88,6 @@ func (c *operatorClient) ListComponents(ctx context.Context, in *ListComponentsR
 	return out, nil
 }
 
-func (c *operatorClient) ListPluggableComponents(ctx context.Context, in *ListPluggableComponentsRequest, opts ...grpc.CallOption) (*ListPluggableComponentsResponse, error) {
-	out := new(ListPluggableComponentsResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListPluggableComponents", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *operatorClient) GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error) {
 	out := new(GetConfigurationResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/GetConfiguration", in, out, opts...)
@@ -152,8 +141,6 @@ type OperatorServer interface {
 	ComponentUpdate(*ComponentUpdateRequest, Operator_ComponentUpdateServer) error
 	// Returns a list of available components
 	ListComponents(context.Context, *ListComponentsRequest) (*ListComponentResponse, error)
-	// Returns a list fo available pluggable components
-	ListPluggableComponents(context.Context, *ListPluggableComponentsRequest) (*ListPluggableComponentsResponse, error)
 	// Returns a given configuration by name
 	GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 	// Returns a list of pub/sub subscriptions
@@ -175,9 +162,6 @@ func (UnimplementedOperatorServer) ComponentUpdate(*ComponentUpdateRequest, Oper
 }
 func (UnimplementedOperatorServer) ListComponents(context.Context, *ListComponentsRequest) (*ListComponentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListComponents not implemented")
-}
-func (UnimplementedOperatorServer) ListPluggableComponents(context.Context, *ListPluggableComponentsRequest) (*ListPluggableComponentsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListPluggableComponents not implemented")
 }
 func (UnimplementedOperatorServer) GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfiguration not implemented")
@@ -241,24 +225,6 @@ func _Operator_ListComponents_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(OperatorServer).ListComponents(ctx, req.(*ListComponentsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Operator_ListPluggableComponents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListPluggableComponentsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(OperatorServer).ListPluggableComponents(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/ListPluggableComponents",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OperatorServer).ListPluggableComponents(ctx, req.(*ListPluggableComponentsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -363,10 +329,6 @@ var Operator_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListComponents",
 			Handler:    _Operator_ListComponents_Handler,
-		},
-		{
-			MethodName: "ListPluggableComponents",
-			Handler:    _Operator_ListPluggableComponents_Handler,
 		},
 		{
 			MethodName: "GetConfiguration",

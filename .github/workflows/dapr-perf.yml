@@ -38,9 +38,9 @@ env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.22.6"
+  KUBECTLVER: "v1.25.2"
   # Version of Helm
-  HELMVER: "v3.7.2"
+  HELMVER: "v3.10.0"
   # Kubernetes namespace to use
   DAPR_NAMESPACE: "dapr-tests"
   # Timeout for tests
@@ -350,7 +350,7 @@ jobs:
       - name: Deploy dapr to AKS cluster
         if: env.TEST_PREFIX != ''
         env:
-          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_dashboard.enabled=false"
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_PREFIX != ''

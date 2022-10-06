@@ -16,6 +16,7 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,4 +129,17 @@ func CompactJSON[T []byte | string](src T) string {
 	buf := &bytes.Buffer{}
 	_ = json.Compact(buf, []byte(src))
 	return buf.String()
+}
+
+// IsSocket returns if the given file is a unix socket.
+func IsSocket(f fs.FileInfo) bool {
+	return f.Mode()&fs.ModeSocket != 0
+}
+
+// SocketExists returns true if the file in that path is an unix socket.
+func SocketExists(socketPath string) bool {
+	if s, err := os.Stat(socketPath); err == nil {
+		return IsSocket(s)
+	}
+	return false
 }

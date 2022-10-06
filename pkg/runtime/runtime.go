@@ -23,6 +23,7 @@ import (
 	nethttp "net/http"
 	"os"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,7 +54,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -80,6 +80,7 @@ import (
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -110,30 +111,18 @@ const (
 	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
 
 	componentFormat = "%s (%s/%s)"
-)
-
-type ComponentCategory string
-
-const (
-	bindingsComponent      ComponentCategory = "bindings"
-	pubsubComponent        ComponentCategory = "pubsub"
-	secretStoreComponent   ComponentCategory = "secretstores"
-	stateComponent         ComponentCategory = "state"
-	middlewareComponent    ComponentCategory = "middleware"
-	configurationComponent ComponentCategory = "configuration"
-	lockComponent          ComponentCategory = "lock"
 
 	defaultComponentInitTimeout = time.Second * 5
 )
 
-var componentCategoriesNeedProcess = []ComponentCategory{
-	bindingsComponent,
-	pubsubComponent,
-	secretStoreComponent,
-	stateComponent,
-	middlewareComponent,
-	configurationComponent,
-	lockComponent,
+var componentCategoriesNeedProcess = []components.Category{
+	components.CategoryBindings,
+	components.CategoryPubSub,
+	components.CategorySecretStore,
+	components.CategoryStateStore,
+	components.CategoryMiddleware,
+	components.CategoryConfiguration,
+	components.CategoryLock,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -317,13 +306,6 @@ func (a *DaprRuntime) getPodName() string {
 	return os.Getenv("POD_NAME")
 }
 
-func (a *DaprRuntime) loadPluggableComponents() ([]components.Pluggable, error) {
-	if a.runtimeConfig.Mode == modes.StandaloneMode {
-		return pluggable.LoadFromDisk(a.runtimeConfig.Standalone.ComponentsPath)
-	}
-	return pluggable.LoadFromKubernetes(a.namespace, a.podName, a.operatorClient)
-}
-
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
@@ -375,7 +357,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
 		}
-		otelExporter, err := otlptrace.New(context.Background(), client)
+		otelExporter, err := otlptrace.New(a.ctx, client)
 		if err != nil {
 			return err
 		}
@@ -568,6 +550,17 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	return nil
 }
 
+// initPluggableComponents discover pluggable components and initialize with their respective registries.
+func (a *DaprRuntime) initPluggableComponents() {
+	if runtime.GOOS == "windows" {
+		log.Debugf("the current OS does not support pluggable components feature, skipping initialization")
+		return
+	}
+	if err := pluggable.Discover(a.ctx); err != nil {
+		log.Errorf("could not initialize pluggable components %v", err)
+	}
+}
+
 // Sets the status of the app to healthy or un-healthy
 // Callback for apphealth when the detected status changed
 func (a *DaprRuntime) appHealthChanged(status uint8) {
@@ -618,33 +611,12 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetP
 	return httpMiddleware.Pipeline{Handlers: handlers}, nil
 }
 
-// initPluggableComponents register the pluggable components if the featureflag is enabled and execute the required bootstrap.
-func (a *DaprRuntime) initPluggableComponents() {
-	if config.IsFeatureEnabled(a.globalConfig.Spec.Features, config.PluggableComponents) {
-		if err := a.registerPluggableComponents(); err != nil {
-			log.Warnf("failed to register pluggable components: %s", err)
-		}
-	}
-}
-
 func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
 }
 
 func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
 	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
-}
-
-// registerPluggableComponents loads and register the loaded pluggable components.
-func (a *DaprRuntime) registerPluggableComponents() error {
-	pluggables, err := a.loadPluggableComponents()
-	if err != nil {
-		return err
-	}
-	log.Infof("found %d pluggable components", len(pluggables))
-	log.Infof("%d pluggable components were registered", pluggable.Register(pluggables...))
-
-	return nil
 }
 
 func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
@@ -2243,7 +2215,7 @@ func (a *DaprRuntime) appendOrReplaceComponents(component componentsV1alpha1.Com
 	}
 }
 
-func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) ComponentCategory {
+func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) components.Category {
 	for _, category := range componentCategoriesNeedProcess {
 		if strings.HasPrefix(component.Spec.Type, fmt.Sprintf("%s.", category)) {
 			return category
@@ -2333,19 +2305,19 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 	return nil
 }
 
-func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp componentsV1alpha1.Component) error {
+func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp componentsV1alpha1.Component) error {
 	switch category {
-	case bindingsComponent:
+	case components.CategoryBindings:
 		return a.initBinding(comp)
-	case pubsubComponent:
+	case components.CategoryPubSub:
 		return a.initPubSub(comp)
-	case secretStoreComponent:
+	case components.CategorySecretStore:
 		return a.initSecretStore(comp)
-	case stateComponent:
+	case components.CategoryStateStore:
 		return a.initState(comp)
-	case configurationComponent:
+	case components.CategoryConfiguration:
 		return a.initConfiguration(comp)
-	case lockComponent:
+	case components.CategoryLock:
 		return a.initLock(comp)
 	}
 	return nil
@@ -2356,7 +2328,7 @@ func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component)
 	*comp, unreadySecretsStore = a.processComponentSecrets(*comp)
 	if unreadySecretsStore != "" {
 		return componentPreprocessRes{
-			unreadyDependency: componentDependency(secretStoreComponent, unreadySecretsStore),
+			unreadyDependency: componentDependency(components.CategorySecretStore, unreadySecretsStore),
 		}
 	}
 	return componentPreprocessRes{}
@@ -2458,11 +2430,17 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 			log.Warnf("error closing API: %v", err)
 		}
 	}
-	if a.tracerProvider != nil {
-		a.tracerProvider.Shutdown(context.Background())
-	}
+
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	go func() {
+		if a.tracerProvider != nil {
+			a.tracerProvider.Shutdown(shutdownCtx)
+		}
+	}()
+
 	log.Infof("Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
+	shutdownCancel()
 	a.shutdownOutputComponents()
 	a.shutdownC <- nil
 }
@@ -2632,11 +2610,6 @@ func (a *DaprRuntime) createAppChannel() (err error) {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
 	}
 
-	// TODO: Remove once feature is finalized
-	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol && !config.GetNoDefaultContentType() {
-		log.Warn("[DEPRECATION NOTICE] Adding a default content type to incoming service invocation requests is deprecated and will be removed in the future. See https://docs.dapr.io/operations/support/support-preview-features/ for more details. You can opt into the new behavior today by setting the configuration option `ServiceInvocation.NoDefaultContentType` to true.")
-	}
-
 	a.appChannel = ch
 
 	return nil
@@ -2798,7 +2771,7 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	return nil
 }
 
-func componentDependency(compCategory ComponentCategory, name string) string {
+func componentDependency(compCategory components.Category, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
 
