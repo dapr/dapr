@@ -142,8 +142,8 @@ const (
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
 
-// NewActorOpts contains options for NewActors.
-type NewActorOpts struct {
+// ActorsOpts contains options for NewActors.
+type ActorsOpts struct {
 	StateStore       state.Store
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
@@ -156,7 +156,7 @@ type NewActorOpts struct {
 }
 
 // NewActors create a new actors runtime with given config.
-func NewActors(opts NewActorOpts) Actors {
+func NewActors(opts ActorsOpts) Actors {
 	var transactionalStore state.TransactionalStore
 	if opts.StateStore != nil {
 		features := opts.StateStore.Features()

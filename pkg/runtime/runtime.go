@@ -1275,7 +1275,7 @@ func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, bind
 }
 
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
-	a.daprHTTPAPI = http.NewAPI(http.NewAPIOpts{
+	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		AppID:                       a.runtimeConfig.ID,
 		AppChannel:                  a.appChannel,
 		DirectMessaging:             a.directMessaging,
@@ -2121,7 +2121,7 @@ func (a *DaprRuntime) initActors() error {
 		Namespace:          a.namespace,
 		AppConfig:          a.appConfig,
 	})
-	act := actors.NewActors(actors.NewActorOpts{
+	act := actors.NewActors(actors.ActorsOpts{
 		StateStore:       a.stateStores[a.actorStateStoreName],
 		AppChannel:       a.appChannel,
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,

@@ -314,7 +314,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		storeName = b.actorStoreName
 	}
 
-	a := NewActors(NewActorOpts{
+	a := NewActors(ActorsOpts{
 		StateStore:     store,
 		AppChannel:     b.appChannel,
 		Config:         *b.config,
@@ -336,7 +336,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 		AppConfig:          config.ApplicationConfig{},
 	})
 
-	a := NewActors(NewActorOpts{
+	a := NewActors(ActorsOpts{
 		StateStore:     store,
 		AppChannel:     appChannel,
 		Config:         config,
@@ -355,7 +355,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 		PlacementAddresses: []string{""},
 		AppConfig:          config.ApplicationConfig{},
 	})
-	a := NewActors(NewActorOpts{
+	a := NewActors(ActorsOpts{
 		AppChannel:     appChannel,
 		Config:         config,
 		TracingSpec:    spec,
@@ -374,7 +374,7 @@ func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *acto
 		PlacementAddresses: []string{""},
 		AppConfig:          config.ApplicationConfig{},
 	})
-	a := NewActors(NewActorOpts{
+	a := NewActors(ActorsOpts{
 		StateStore:     store,
 		AppChannel:     appChannel,
 		Config:         config,
@@ -404,7 +404,7 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 		PlacementAddresses: []string{"placement:5050"},
 		AppConfig:          appConfig,
 	})
-	a := NewActors(NewActorOpts{
+	a := NewActors(ActorsOpts{
 		StateStore:     store,
 		AppChannel:     appChannel,
 		Config:         c,
