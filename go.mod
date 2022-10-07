@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.3
-	github.com/dapr/components-contrib v1.9.0-rc.1
+	github.com/dapr/components-contrib v1.9.0-rc.1.0.20221007232806-70ddbba66b6c
 	github.com/dapr/kit v0.0.2
 	github.com/fasthttp/router v1.4.12
 	github.com/fsnotify/fsnotify v1.5.4
@@ -182,7 +182,6 @@ require (
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5 // indirect
 	github.com/fatih/color v1.13.0 // indirect
-	github.com/frankban/quicktest v1.14.3 // indirect
 	github.com/go-errors/errors v1.4.0 // indirect
 	github.com/go-kit/kit v0.10.0 // indirect
 	github.com/go-kit/log v0.2.0 // indirect
@@ -285,7 +284,7 @@ require (
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible // indirect
-	github.com/nats-io/nats.go v1.13.1-0.20220308171302-2f2f6968e98d // indirect
+	github.com/nats-io/nats.go v1.17.0 // indirect
 	github.com/nats-io/nkeys v0.3.0 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/nats-io/stan.go v0.8.3 // indirect
@@ -324,7 +323,7 @@ require (
 	github.com/supplyon/gremcos v0.1.0 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.476 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ssm v1.0.476 // indirect
-	github.com/tetratelabs/wazero v1.0.0-pre.1 // indirect
+	github.com/tetratelabs/wazero v1.0.0-pre.2 // indirect
 	github.com/tidwall/gjson v1.14.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
@@ -334,7 +333,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/vektah/gqlparser/v2 v2.4.6 // indirect
 	github.com/vmware/vmware-go-kcl v1.5.0 // indirect
-	github.com/wapc/wapc-go v0.5.2 // indirect
+	github.com/wapc/wapc-go v0.5.4 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.0.2 // indirect
 	github.com/xdg-go/stringprep v1.0.2 // indirect
@@ -357,7 +356,7 @@ require (
 	golang.org/x/sys v0.0.0-20220928140112-f11e5e49a4ec // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11 // indirect
+	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
 	golang.org/x/tools v0.1.11 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
@@ -395,9 +394,6 @@ replace (
 )
 
 replace github.com/eclipse/paho.mqtt.golang => github.com/shivamkm07/paho.mqtt.golang v1.3.6-0.20220106130409-e28a1db639f8
-
-// TEMP
-replace github.com/dapr/components-contrib => github.com/ItalyPaleAle/dapr-components-contrib v1.4.0-rc1.0.20220929203016-8d839c4affe6
 
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
