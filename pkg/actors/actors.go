@@ -2059,11 +2059,15 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
 	actorCountMap := map[string]int{}
 	for _, actorType := range a.config.HostedActorTypes {
-		actorCountMap[actorType] = 0
+		if !isInternalActor(actorType) {
+			actorCountMap[actorType] = 0
+		}
 	}
 	a.actorsTable.Range(func(key, value interface{}) bool {
 		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))
-		actorCountMap[actorType]++
+		if !isInternalActor(actorType) {
+			actorCountMap[actorType]++
+		}
 		return true
 	})
 
@@ -2073,6 +2077,10 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 	}
 
 	return activeActorsCount
+}
+
+func isInternalActor(actorType string) bool {
+	return strings.HasPrefix(actorType, InternalActorTypePrefix)
 }
 
 // Stop closes all network connections and resources used in actor runtime.

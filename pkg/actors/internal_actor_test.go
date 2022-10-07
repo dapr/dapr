@@ -129,3 +129,16 @@ func decodeTestResponse(data []byte) (*invokeMethodCallInfo, error) {
 	}
 	return info, nil
 }
+
+// TestInternalActorsNotCounted verifies that internal actors are not counted in the
+// GetActiveActorsCount API, which should only include counts of user-defined actors.
+func TestInternalActorsNotCounted(t *testing.T) {
+	internalActors := make(map[string]InternalActor)
+	internalActors[InternalActorTypePrefix+"wfengine.workflow"] = &mockInternalActor{}
+	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
+	if !assert.NoError(t, err) {
+		return
+	}
+	actorCounts := testActorRuntime.GetActiveActorsCount(context.Background())
+	assert.Empty(t, actorCounts)
+}

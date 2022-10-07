@@ -69,9 +69,13 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		return err
 	}
 
-	workflowInstanceID := e.GetExecutionStarted().GetOrchestrationInstance().GetInstanceId()
-	if workflowInstanceID == "" {
-		return errors.New("history event must be an ExecutionStartedEvent with a valid orchestration instance ID")
+	var workflowInstanceID string
+	if es := e.GetExecutionStarted(); es == nil {
+		return errors.New("the history event must be an ExecutionStartedEvent")
+	} else if oi := es.GetOrchestrationInstance(); oi == nil {
+		return errors.New("the ExecutionStartedEvent did not contain orchestration instance information")
+	} else {
+		workflowInstanceID = oi.GetInstanceId()
 	}
 
 	eventData, err := backend.MarshalHistoryEvent(e)
