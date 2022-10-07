@@ -72,8 +72,19 @@ func (ia *mockInternalActor) SetActorRuntime(actorsRuntime Actors) {
 func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalActor) (*actorsRuntime, error) {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
-	a := NewActors(store, nil, nil, config, nil, spec, nil, resiliency.New(log), "actorStore", internalActors)
+	config := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		AppConfig:          config.ApplicationConfig{},
+	})
+	a := NewActors(ActorsOpts{
+		StateStore:     store,
+		Config:         config,
+		TracingSpec:    spec,
+		Resiliency:     resiliency.New(log),
+		StateStoreName: "actorStore",
+		InternalActors: internalActors,
+	})
 	if err := a.Init(); err != nil {
 		return nil, err
 	}

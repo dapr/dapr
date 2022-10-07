@@ -70,7 +70,7 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 
 	switch methodName {
 	case CreateWorkflowInstanceMethod:
-		err = wf.createWorkflowInstanceMethod(ctx, actorID, request)
+		err = wf.createWorkflowInstance(ctx, actorID, request)
 	case GetWorkflowMetadataMethod:
 		result, err = wf.getWorkflowMetadata(actorID)
 	default:
@@ -111,7 +111,7 @@ func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) er
 	return nil
 }
 
-func (wf *workflowActor) createWorkflowInstanceMethod(ctx context.Context, actorID string, startEventBytes []byte) error {
+func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID string, startEventBytes []byte) error {
 	// create a new state entry if one doesn't already exist
 	state, exists, err := wf.loadInternalState(actorID)
 	if err != nil {
