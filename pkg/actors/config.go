@@ -55,8 +55,8 @@ const (
 	defaultReentrancyStackLimit = 32
 )
 
-// NewConfigOpts contains options for NewConfig.
-type NewConfigOpts struct {
+// ConfigOpts contains options for NewConfig.
+type ConfigOpts struct {
 	HostAddress        string
 	AppID              string
 	PlacementAddresses []string
@@ -66,7 +66,7 @@ type NewConfigOpts struct {
 }
 
 // NewConfig returns the actor runtime configuration.
-func NewConfig(opts NewConfigOpts) Config {
+func NewConfig(opts ConfigOpts) Config {
 	c := Config{
 		HostAddress:                   opts.HostAddress,
 		AppID:                         opts.AppID,

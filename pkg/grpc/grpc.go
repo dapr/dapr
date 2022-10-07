@@ -143,9 +143,6 @@ func (g *Manager) GetGRPCConnection(parentCtx context.Context, address, id strin
 		transportCredentialsAdded = true
 	}
 
-	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
-	defer cancel()
-
 	dialPrefix := GetDialAddressPrefix(g.mode)
 	if sslEnabled {
 		//nolint:gosec
@@ -160,7 +157,10 @@ func (g *Manager) GetGRPCConnection(parentCtx context.Context, address, id strin
 	}
 
 	opts = append(opts, customOpts...)
+
+	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
 	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
+	cancel()
 	if err != nil {
 		return nil, func() {}, err
 	}

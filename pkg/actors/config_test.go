@@ -32,7 +32,7 @@ const (
 
 func TestDefaultConfigValuesSet(t *testing.T) {
 	appConfig := appConfig.ApplicationConfig{Entities: []string{"actor1"}}
-	config := NewConfig(NewConfigOpts{
+	config := NewConfig(ConfigOpts{
 		HostAddress:        HostAddress,
 		AppID:              AppID,
 		PlacementAddresses: []string{PlacementAddress},
@@ -79,7 +79,7 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 			},
 		},
 	}
-	config := NewConfig(NewConfigOpts{
+	config := NewConfig(ConfigOpts{
 		HostAddress:        HostAddress,
 		AppID:              AppID,
 		PlacementAddresses: []string{PlacementAddress},
@@ -152,7 +152,7 @@ func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
 		},
 	}
 
-	config := NewConfig(NewConfigOpts{
+	config := NewConfig(ConfigOpts{
 		HostAddress:        HostAddress,
 		AppID:              AppID,
 		PlacementAddresses: []string{PlacementAddress},

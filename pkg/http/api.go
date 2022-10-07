@@ -140,8 +140,8 @@ const (
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
-// NewAPIOpts contains the options for NewAPI.
-type NewAPIOpts struct {
+// APIOpts contains the options for NewAPI.
+type APIOpts struct {
 	AppID                       string
 	AppChannel                  channel.AppChannel
 	DirectMessaging             messaging.DirectMessaging
@@ -162,7 +162,7 @@ type NewAPIOpts struct {
 }
 
 // NewAPI returns a new API.
-func NewAPI(opts NewAPIOpts) API {
+func NewAPI(opts APIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range opts.StateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {

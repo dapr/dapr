@@ -1291,7 +1291,7 @@ func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, bind
 }
 
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
-	a.daprHTTPAPI = http.NewAPI(http.NewAPIOpts{
+	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		AppID:                       a.runtimeConfig.ID,
 		AppChannel:                  a.appChannel,
 		DirectMessaging:             a.directMessaging,
@@ -1373,21 +1373,21 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 		trustDomain = a.accessControlList.TrustDomain
 	}
 	return grpc.ServerConfig{
-		AppID:              a.runtimeConfig.ID,
-		HostAddress:        a.hostAddress,
-		Port:               port,
-		APIListenAddresses: apiListenAddresses,
-		NameSpace:          a.namespace,
-		TrustDomain:        trustDomain,
-		MaxRequestBodySize: a.runtimeConfig.MaxRequestBodySize,
-		UnixDomainSocket:   a.runtimeConfig.UnixDomainSocket,
-		ReadBufferSize:     a.runtimeConfig.ReadBufferSize,
-		EnableAPILogging:   a.runtimeConfig.EnableAPILogging,
+		AppID:                a.runtimeConfig.ID,
+		HostAddress:          a.hostAddress,
+		Port:                 port,
+		APIListenAddresses:   apiListenAddresses,
+		NameSpace:            a.namespace,
+		TrustDomain:          trustDomain,
+		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:     a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSizeKB:     a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:     a.runtimeConfig.EnableAPILogging,
 	}
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(grpc.NewAPIOpts{
+	return grpc.NewAPI(grpc.APIOpts{
 		AppID:                       a.runtimeConfig.ID,
 		AppChannel:                  a.appChannel,
 		Resiliency:                  a.resiliency,
@@ -2132,7 +2132,7 @@ func (a *DaprRuntime) initActors() error {
 	if a.actorStateStoreName == "" {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
-	actorConfig := actors.NewConfig(actors.NewConfigOpts{
+	actorConfig := actors.NewConfig(actors.ConfigOpts{
 		HostAddress:        a.hostAddress,
 		AppID:              a.runtimeConfig.ID,
 		PlacementAddresses: a.runtimeConfig.PlacementAddresses,
@@ -2140,8 +2140,7 @@ func (a *DaprRuntime) initActors() error {
 		Namespace:          a.namespace,
 		AppConfig:          a.appConfig,
 	})
-
-	act := actors.NewActors(actors.NewActorOpts{
+	act := actors.NewActors(actors.ActorsOpts{
 		StateStore:       a.stateStores[a.actorStateStoreName],
 		AppChannel:       a.appChannel,
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,

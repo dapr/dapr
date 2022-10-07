@@ -266,8 +266,8 @@ func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.Un
 	return result
 }
 
-// NewAPIOpts contains options for NewAPI.
-type NewAPIOpts struct {
+// APIOpts contains options for NewAPI.
+type APIOpts struct {
 	AppID                       string
 	AppChannel                  channel.AppChannel
 	Resiliency                  resiliency.Provider
@@ -289,7 +289,7 @@ type NewAPIOpts struct {
 }
 
 // NewAPI returns a new gRPC API.
-func NewAPI(opts NewAPIOpts) API {
+func NewAPI(opts APIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range opts.StateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {

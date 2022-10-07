@@ -3335,7 +3335,7 @@ func TestUnlockResponseToGrpcResponse(t *testing.T) {
 
 func TestTryLock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			TracingSpec: config.TracingSpec{},
 		})
 		req := &runtimev1pb.TryLockRequest{
@@ -3350,7 +3350,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3366,7 +3366,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3383,7 +3383,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3402,7 +3402,7 @@ func TestTryLock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3431,7 +3431,7 @@ func TestTryLock(t *testing.T) {
 				Success: true,
 			}, nil
 		})
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3449,7 +3449,7 @@ func TestTryLock(t *testing.T) {
 
 func TestUnlock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			TracingSpec: config.TracingSpec{},
 		})
 
@@ -3465,7 +3465,7 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3482,7 +3482,7 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3499,7 +3499,7 @@ func TestUnlock(t *testing.T) {
 		defer ctl.Finish()
 
 		mockLockStore := daprt.NewMockStore(ctl)
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
@@ -3526,7 +3526,7 @@ func TestUnlock(t *testing.T) {
 				Status: lock.Success,
 			}, nil
 		})
-		api := NewAPI(NewAPIOpts{
+		api := NewAPI(APIOpts{
 			LockStores:  map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec: config.TracingSpec{},
 		})
