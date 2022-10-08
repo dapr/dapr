@@ -86,7 +86,7 @@ type Actors interface {
 type GRPCConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
 
 type actorsRuntime struct {
-	appChannel             channel.AppChannel
+	externalAppChannel     channel.AppChannel
 	store                  state.Store
 	transactionalStore     state.TransactionalStore
 	placement              *internal.ActorPlacement
@@ -109,6 +109,8 @@ type actorsRuntime struct {
 	resiliency             resiliency.Provider
 	storeName              string
 	isResiliencyEnabled    bool
+	internalActors         map[string]InternalActor
+	internalAppChannel     *internalActorChannel
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has.
@@ -153,6 +155,7 @@ type ActorsOpts struct {
 	Features         []configuration.FeatureSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
+	InternalActors   map[string]InternalActor
 }
 
 // NewActors create a new actors runtime with given config.
@@ -167,7 +170,7 @@ func NewActors(opts ActorsOpts) Actors {
 
 	return &actorsRuntime{
 		store:                  opts.StateStore,
-		appChannel:             opts.AppChannel,
+		externalAppChannel:     opts.AppChannel,
 		grpcConnectionFn:       opts.GRPCConnectionFn,
 		config:                 opts.Config,
 		certChain:              opts.CertChain,
@@ -188,12 +191,25 @@ func NewActors(opts ActorsOpts) Actors {
 		evaluationChan:         make(chan bool),
 		appHealthy:             atomic.NewBool(true),
 		isResiliencyEnabled:    configuration.IsFeatureEnabled(opts.Features, configuration.Resiliency),
+		internalActors:         opts.InternalActors,
+		internalAppChannel:     newInternalActorChannel(),
 	}
 }
 
 func (a *actorsRuntime) Init() error {
 	if len(a.config.PlacementAddresses) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
+	}
+
+	// Configure the internal app channel with the provided internal actors and add
+	// them to the list of hosted actor types.
+	for actorType, actorImpl := range a.internalActors {
+		if err := a.internalAppChannel.AddInternalActor(actorType, actorImpl); err != nil {
+			return err
+		}
+		log.Debugf("registering internal actor type: %s", actorType)
+		actorImpl.SetActorRuntime(a)
+		a.config.HostedActorTypes = append(a.config.HostedActorTypes, actorType)
 	}
 
 	if len(a.config.HostedActorTypes) > 0 {
@@ -241,11 +257,11 @@ func (a *actorsRuntime) Init() error {
 }
 
 func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
-	if len(a.config.HostedActorTypes) == 0 {
+	if len(a.config.HostedActorTypes) == 0 || a.externalAppChannel == nil {
 		return
 	}
 
-	healthAddress := fmt.Sprintf("%s/healthz", a.appChannel.GetBaseAddress())
+	healthAddress := fmt.Sprintf("%s/healthz", a.externalAppChannel.GetBaseAddress())
 	ch := health.StartEndpointHealthCheck(healthAddress, opts...)
 	for {
 		appHealthy := <-ch
@@ -268,7 +284,8 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 
 	// TODO Propagate context.
 	ctx := context.Background()
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+
+	resp, err := a.getAppChannel(actorType).InvokeMethod(ctx, req)
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
@@ -491,7 +508,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	policy := a.resiliency.ActorPostLockPolicy(ctx, act.actorType, act.actorID)
 	var resp *invokev1.InvokeMethodResponse
 	err = policy(func(ctx context.Context) (rErr error) {
-		resp, rErr = a.appChannel.InvokeMethod(ctx, req)
+		resp, rErr = a.getAppChannel(act.actorType).InvokeMethod(ctx, req)
 		return rErr
 	})
 
@@ -510,6 +527,14 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	}
 
 	return resp, nil
+}
+
+func (a *actorsRuntime) getAppChannel(actorType string) channel.AppChannel {
+	if a.internalAppChannel.Contains(actorType) {
+		return a.internalAppChannel
+	} else {
+		return a.externalAppChannel
+	}
 }
 
 func (a *actorsRuntime) callRemoteActor(
@@ -2034,11 +2059,15 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
 	actorCountMap := map[string]int{}
 	for _, actorType := range a.config.HostedActorTypes {
-		actorCountMap[actorType] = 0
+		if !isInternalActor(actorType) {
+			actorCountMap[actorType] = 0
+		}
 	}
 	a.actorsTable.Range(func(key, value interface{}) bool {
 		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))
-		actorCountMap[actorType]++
+		if !isInternalActor(actorType) {
+			actorCountMap[actorType]++
+		}
 		return true
 	})
 
@@ -2048,6 +2077,10 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 	}
 
 	return activeActorsCount
+}
+
+func isInternalActor(actorType string) bool {
+	return strings.HasPrefix(actorType, InternalActorTypePrefix)
 }
 
 // Stop closes all network connections and resources used in actor runtime.
