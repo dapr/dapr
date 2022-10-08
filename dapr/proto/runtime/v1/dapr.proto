@@ -27,6 +27,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
 // Dapr service provides APIs to user application to access Dapr building blocks.
 service Dapr {
   // Invokes a method on a remote Dapr app.
+  // Deprecated: Use proxy mode service invocation instead.
   rpc InvokeService(InvokeServiceRequest) returns (common.v1.InvokeResponse) {}
 
   // Gets the state for a specific key.

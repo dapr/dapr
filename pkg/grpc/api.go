@@ -484,7 +484,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	return &emptypb.Empty{}, nil
 }
 
+// Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
+	apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
 
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
@@ -513,6 +515,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		// If the status is OK, respError will be nil.
 		var respError error
 		if resp.IsHTTPResponse() {
+			apiServerLogger.Warn("[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future.")
 			errorMessage := []byte("")
 			if resp != nil {
 				_, errorMessage = resp.RawData()
