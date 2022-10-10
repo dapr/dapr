@@ -22,8 +22,6 @@ type PolicyType string
 type resiliencyMetrics struct {
 	policiesLoadCount syncint64.Counter
 	executionCount    syncint64.Counter
-
-	ctx context.Context
 }
 
 func (m *MetricClient) newResiliencyMetrics() *resiliencyMetrics {

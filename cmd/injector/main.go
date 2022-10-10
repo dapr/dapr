@@ -118,6 +118,5 @@ func init() {
 		if metricClient, err = diag.InitMetrics(diag.Injector, metricsExportedAddress, "", ""); err != nil {
 			log.Fatal(err)
 		}
-
 	}
 }

@@ -201,7 +201,6 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 	startRequest := time.Now()
 
 	err := h.client.Do(channelReq, channelResp)
-
 	if err != nil {
 		// Errors here are network-level errors, so we are not returning them as errors
 		// Instead, we just return a failed probe

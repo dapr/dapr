@@ -16,7 +16,6 @@ package diagnostics
 import (
 	"context"
 	"fmt"
-	"net/textproto"
 	"strings"
 
 	"github.com/valyala/fasthttp"
@@ -27,14 +26,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/diagnostics/propagation"
 	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
-)
-
-const (
-	supportedVersion  = 0
-	maxVersion        = 254
-	maxTracestateLen  = 512
-	TraceparentHeader = "traceparent"
-	TracestateHeader  = "tracestate"
 )
 
 // HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
@@ -84,15 +75,6 @@ func UpdateSpanStatusFromHTTPStatus(span apitrace.Span, kind apitrace.SpanKind, 
 
 	code, desc := semconv.SpanStatusFromHTTPStatusCodeAndSpanKind(httpCode, kind)
 	span.SetStatus(code, desc)
-}
-
-func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
-	s := string(req.Header.Peek(textproto.CanonicalMIMEHeaderKey(name)))
-	if s == "" {
-		return "", false
-	}
-
-	return s, true
 }
 
 func getContextValue(ctx *fasthttp.RequestCtx, key string) string {

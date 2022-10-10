@@ -47,7 +47,7 @@ func main() {
 	cfg := newConfig()
 
 	// Apply options to all loggers.
-	if err := logger.ApplyOptionsToLoggers(&cfg.loggerOptions); err != nil {
+	if err = logger.ApplyOptionsToLoggers(&cfg.loggerOptions); err != nil {
 		log.Fatal(err)
 	}
 	log.Infof("log level set to: %s", cfg.loggerOptions.OutputLevel)
@@ -57,7 +57,6 @@ func main() {
 		if metricClient, err = diag.InitMetrics(diag.Injector, cfg.metricsExportedAddress, "", ""); err != nil {
 			log.Fatal(err)
 		}
-
 	}
 
 	// Start Raft cluster.

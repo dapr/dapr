@@ -31,8 +31,10 @@ import (
 	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
 )
 
-const appHealthCheckMethod = "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck"
-const DaprAppIDKey = "dapr-app-id"
+const (
+	appHealthCheckMethod = "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck"
+	DaprAppIDKey         = "dapr-app-id"
+)
 
 type grpcMetrics struct {
 	serverReceivedBytes syncint64.Histogram

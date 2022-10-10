@@ -307,5 +307,4 @@ func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks 
 	}
 	s.actorPendingCalls.Add(context.Background(), int64(pendingLocks),
 		isemconv.APIActorTypeKey.String(actorType))
-
 }

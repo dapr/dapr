@@ -44,13 +44,10 @@ const (
 	ContentTypeHeader = "content-type"
 	// DaprHeaderPrefix is the prefix if metadata is defined by non user-defined http headers.
 	DaprHeaderPrefix = "dapr-"
-	// gRPCBinaryMetadata is the suffix of grpc metadata binary value.
-	gRPCBinaryMetadataSuffix = "-bin"
 
 	// W3C trace correlation headers.
 	traceparentHeader = "traceparent"
 	tracestateHeader  = "tracestate"
-	tracebinMetadata  = "grpc-trace-bin"
 
 	// DestinationIDHeader is the header carrying the value of the invoked app id.
 	DestinationIDHeader = "destination-app-id"

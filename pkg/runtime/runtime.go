@@ -300,7 +300,8 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	return nil
 }
 
-func (a *DaprRuntime) initOpentelemetry() (err error) {
+func (a *DaprRuntime) initOpentelemetry() {
+	var err error
 	if a.globalConfig.Spec.MetricSpec.Enabled {
 		log.Info("initOpentelemetry start metric client....")
 		var metricClient *diag.MetricClient

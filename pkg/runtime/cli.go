@@ -370,9 +370,7 @@ func FromFlags() (*DaprRuntime, error) {
 
 	a := NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider)
 
-	if err := a.initOpentelemetry(); err != nil {
-		return nil, nil
-	}
+	a.initOpentelemetry()
 
 	return a, nil
 }

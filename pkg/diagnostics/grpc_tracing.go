@@ -34,11 +34,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-const (
-	grpcTraceContextKey = "grpc-trace-bin"
-	RPCProxyAppIDKey    = "dapr-app-id"
-)
-
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
 func GRPCTraceUnaryServerInterceptor(appID string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
@@ -83,9 +78,9 @@ func GRPCTraceStreamServerInterceptor(appID string) grpc.StreamServerInterceptor
 		}
 		ctx := ss.Context()
 		md, _ := metadata.FromIncomingContext(ctx)
-		vals := md.Get(RPCProxyAppIDKey)
+		vals := md.Get(DaprAppIDKey)
 		if len(vals) == 0 {
-			return errors.Errorf("cannot proxy request: missing %s metadata", RPCProxyAppIDKey)
+			return errors.Errorf("cannot proxy request: missing %s metadata", DaprAppIDKey)
 		}
 
 		targetID := vals[0]
@@ -114,7 +109,7 @@ func GRPCTraceStreamServerInterceptor(appID string) grpc.StreamServerInterceptor
 }
 
 func addSpanMetadataAndUpdateStatus(span apitrace.Span, fullMethod, appID string, req interface{}, stream bool) {
-	attrs := []attribute.KeyValue{}
+	var attrs []attribute.KeyValue
 	if !stream {
 		attrs = spanAttributesMapFromGRPC(appID, req, fullMethod)
 		span.SetAttributes(attrs...)
@@ -176,9 +171,7 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 	// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md
 	m := []attribute.KeyValue{}
 
-	var (
-		isExistComponent bool
-	)
+	var isExistComponent bool
 	switch s := req.(type) {
 	// Internal service invocation request
 	case *internalv1pb.InternalInvokeRequest:

@@ -74,14 +74,14 @@ func main() {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
 	flag.Parse()
-	if err := utils.SetEnvVariables(map[string]string{
+	if err = utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: *kubeconfig,
 	}); err != nil {
 		log.Fatalf("error set env failed:  %s", err.Error())
 	}
 
 	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+	if err = logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		log.Fatal(err)
 	}
 

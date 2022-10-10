@@ -131,9 +131,6 @@ const (
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
 	pubsubnameparam          = "pubsubname"
-	traceparentHeader        = "traceparent"
-	tracestateHeader         = "tracestate"
-	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
@@ -1472,12 +1469,12 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 // 3. HTTP header: 'dapr-app-id'.
 func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 	if id := reqCtx.UserValue(idParam); id == nil {
-		if appID := reqCtx.Request.Header.Peek(daprAppID); appID == nil {
+		if appID := reqCtx.Request.Header.Peek(diagUtils.TraceparentHeader); appID == nil {
 			if auth := reqCtx.Request.Header.Peek(fasthttp.HeaderAuthorization); auth != nil &&
 				strings.HasPrefix(string(auth), "Basic ") {
 				if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(auth), "Basic ")); err == nil {
 					pair := strings.Split(string(s), ":")
-					if len(pair) == 2 && pair[0] == daprAppID {
+					if len(pair) == 2 && pair[0] == diagUtils.TraceparentHeader {
 						return pair[1]
 					}
 				}
