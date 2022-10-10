@@ -89,12 +89,10 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
-		unaryClientInterceptor = grpcMiddleware.ChainUnaryClient(
-			unaryClientInterceptor,
-			diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
-		)
-	}
+	unaryClientInterceptor = grpcMiddleware.ChainUnaryClient(
+		unaryClientInterceptor,
+		diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
+	)
 
 	conn, err := grpc.Dial(
 		a.sentryAddress,

@@ -488,19 +488,12 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// pass the trace context to output binding in metadata
-	if span := diagUtils.SpanFromContext(reqCtx); span != nil {
-		sc := span.SpanContext()
-		if req.Metadata == nil {
-			req.Metadata = map[string]string{}
-		}
-		// if sc is not empty context, set traceparent Header.
-		if !sc.Equal(trace.SpanContext{}) {
-			req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
-		}
-		if sc.TraceState().Len() == 0 {
-			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
-		}
+	sc := trace.SpanContextFromContext(reqCtx)
+	if sc.IsValid() {
+		// Populate W3C traceparent to string.
+		req.Metadata[diagUtils.TraceparentHeader] = diagUtils.TraceparentToW3CString(sc)
+		// Populate W3C tracestate to string.
+		req.Metadata[diagUtils.TracestateHeader] = diagUtils.TraceStateToW3CString(sc)
 	}
 
 	start := time.Now()
@@ -1960,12 +1953,11 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Extract trace context from context.
-	span := diagUtils.SpanFromContext(reqCtx)
-	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
+	sc := trace.SpanContextFromContext(reqCtx)
+	// Populate W3C traceparent to string.
+	traceparent := diagUtils.TraceparentToW3CString(sc)
+	// Populate W3C tracestate to string.
+	traceState := diagUtils.TraceStateToW3CString(sc)
 
 	data := body
 
@@ -1975,7 +1967,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			Topic:           topic,
 			DataContentType: contentType,
 			Data:            body,
-			TraceID:         corID,
+			TraceID:         traceparent,
 			TraceState:      traceState,
 			Pubsub:          pubsubName,
 		})

@@ -116,9 +116,7 @@ func (g *Manager) GetGRPCConnection(parentCtx context.Context, address, id strin
 		grpc.WithDefaultServiceConfig(grpcServiceConfig),
 	}
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
-		opts = append(opts, grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
-	}
+	opts = append(opts, grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
 
 	transportCredentialsAdded := false
 	if !skipTLS && g.auth != nil {

@@ -16,8 +16,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc/proxy/codec"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
@@ -93,7 +93,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 
 	// Fetch the AppId so we can reference it for resiliency.
 	md, _ := metadata.FromIncomingContext(serverStream.Context())
-	v := md.Get(diagnostics.GRPCProxyAppIDKey)
+	v := md.Get(invokev1.DaprAppIDKey)
 
 	// The app id check is handled in the StreamDirector. If we don't have it here, we just use a NoOp policy since we know the request is impossible.
 	var policy resiliency.Runner

@@ -344,11 +344,9 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 			return nil, nil
 		}
 
-		if diag.DefaultGRPCMonitoring.IsEnabled() {
-			opts = append(
-				opts,
-				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
-		}
+		opts = append(
+			opts,
+			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
 
 		if len(p.serverAddr) == 1 && strings.HasPrefix(p.serverAddr[0], "dns:///") {
 			// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.

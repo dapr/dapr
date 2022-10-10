@@ -33,7 +33,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -211,10 +210,10 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, authConsts.APITokenHeader))
 	}
 
-	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
+	if s.tracingSpec.Enabled {
 		s.logger.Info("enabled gRPC tracing middleware")
-		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
-		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
+		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID))
+		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID))
 	}
 
 	if s.metricSpec.Enabled {

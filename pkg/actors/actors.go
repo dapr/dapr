@@ -45,7 +45,6 @@ import (
 	configuration "github.com/dapr/dapr/pkg/config"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
@@ -523,8 +522,7 @@ func (a *actorsRuntime) callRemoteActor(
 		return nil, err
 	}
 
-	span := diagUtils.SpanFromContext(ctx)
-	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	ctx = diag.SpanContextToGRPCMetadata(ctx)
 	client := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := client.CallActor(ctx, req.Proto())
 	if err != nil {

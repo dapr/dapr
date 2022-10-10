@@ -378,7 +378,14 @@ func FromFlags() (*DaprRuntime, error) {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider), nil
+
+	a := NewDaprRuntime(runtimeConfig, globalConfig, accessControlList, resiliencyProvider)
+
+	if err := a.initOpentelemetry(); err != nil {
+		return nil, nil
+	}
+
+	return a, nil
 }
 
 func parsePlacementAddr(val string) []string {

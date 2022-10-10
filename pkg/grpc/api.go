@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/version"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/configuration"
 
@@ -415,11 +416,11 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, err
 	}
 
-	span := diagUtils.SpanFromContext(ctx)
-	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
+	sc := trace.SpanContextFromContext(ctx)
+	// Populate W3C traceparent to string.
+	traceparent := diagUtils.TraceparentToW3CString(sc)
+	// Populate W3C tracestate to string.
+	traceState := diagUtils.TraceStateToW3CString(sc)
 
 	body := []byte{}
 	if in.Data != nil {
@@ -434,7 +435,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
 			Data:            body,
-			TraceID:         corID,
+			TraceID:         traceparent,
 			TraceState:      traceState,
 			Pubsub:          in.PubsubName,
 		})

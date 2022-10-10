@@ -24,11 +24,11 @@ import (
 
 	grpcProxy "github.com/dapr/dapr/pkg/grpc/proxy"
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
@@ -72,9 +72,9 @@ func (p *proxy) Handler() grpc.StreamHandler {
 func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *grpcProxy.ProxyTarget, func(), error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
-	v := md.Get(diagnostics.GRPCProxyAppIDKey)
+	v := md.Get(invokev1.DaprAppIDKey)
 	if len(v) == 0 {
-		return ctx, nil, nil, func() {}, errors.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
+		return ctx, nil, nil, func() {}, errors.Errorf("failed to proxy request: required metadata %s not found", invokev1.DaprAppIDKey)
 	}
 
 	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
