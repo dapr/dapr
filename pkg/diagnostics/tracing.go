@@ -19,15 +19,12 @@ import (
 
 	"github.com/pkg/errors"
 
-	// We currently don't depend on the Otel SDK since it has not GAed.
-	// This package, however, only contains the conventions from the Otel Spec,
-	// which we do depend on.
 	itrace "github.com/dapr/dapr/pkg/diagnostics/sdk/trace"
 	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
