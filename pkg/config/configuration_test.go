@@ -85,7 +85,7 @@ func TestMetricSpecForStandAlone(t *testing.T) {
 		{
 			name:          "metric is enabled by default",
 			confFile:      "./testdata/config.yaml",
-			metricEnabled: true,
+			metricEnabled: false,
 		},
 		{
 			name:          "metric is disabled by config",

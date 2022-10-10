@@ -131,7 +131,7 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.DaprAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
 		_, _, _, _, err := proxy.intercept(ctx, "/test")
 
@@ -150,7 +150,7 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.DaprAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown()
@@ -173,7 +173,7 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.DaprAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown()
@@ -204,7 +204,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.DaprAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
@@ -220,7 +220,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.DaprAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown()
@@ -243,7 +243,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.DaprAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 		proxy.intercept(ctx, "/test")
 

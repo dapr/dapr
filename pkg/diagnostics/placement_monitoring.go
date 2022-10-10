@@ -42,10 +42,16 @@ func (m *MetricClient) newPlacementMetrics() *placementMetrics {
 
 // RecordRuntimesCount records the number of connected runtimes.
 func (p *placementMetrics) RecordRuntimesCount(count int64) {
+	if p == nil {
+		return
+	}
 	p.runtimesTotal.Add(context.Background(), count)
 }
 
 // RecordActorRuntimesCount records the number of valid actor runtimes.
 func (p *placementMetrics) RecordActorRuntimesCount(count int64) {
+	if p == nil {
+		return
+	}
 	p.actorRuntimesTotal.Add(context.Background(), count)
 }

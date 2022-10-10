@@ -50,17 +50,26 @@ func (m *MetricClient) newInjectorMetrics() *injectorMetrics {
 
 // RecordSidecarInjectionRequestsCount records the total number of sidecar injection requests.
 func (i *injectorMetrics) RecordSidecarInjectionRequestsCount() {
+	if i == nil {
+		return
+	}
 	i.sidecarInjectionRequestsTotal.Add(context.Background(), 1)
 }
 
 // RecordSuccessfulSidecarInjectionCount records the number of successful sidecar injections.
 func (i *injectorMetrics) RecordSuccessfulSidecarInjectionCount(appID string) {
+	if i == nil {
+		return
+	}
 	i.succeededSidecarInjectedTotal.Add(context.Background(), 1,
 		semconv.ServiceNameKey.String(appID))
 }
 
 // RecordFailedSidecarInjectionCount records the number of failed sidecar injections.
 func (i *injectorMetrics) RecordFailedSidecarInjectionCount(appID, reason string) {
+	if i == nil {
+		return
+	}
 	i.failedSidecarInjectedTotal.Add(context.Background(), 1,
 		semconv.ServiceNameKey.String(appID),
 		isemconv.FailReasonKey.String(reason))

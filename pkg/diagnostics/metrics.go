@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
@@ -119,9 +119,9 @@ func InitMetrics(serviceType ServiceType, address, appID, namespace string) (*Me
 func (m *MetricClient) init() error {
 	var err error
 	ctx := context.Background()
-	client := otlpmetrichttp.NewClient(
-		otlpmetrichttp.WithInsecure(),
-		otlpmetrichttp.WithEndpoint(m.Address))
+	client := otlpmetricgrpc.NewClient(
+		otlpmetricgrpc.WithInsecure(),
+		otlpmetricgrpc.WithEndpoint(m.Address))
 	m.exporter, err = otlpmetric.New(ctx, client)
 	if err != nil {
 		return errors.Errorf("Failed to create the collector exporter: %v", err)

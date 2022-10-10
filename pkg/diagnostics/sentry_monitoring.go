@@ -66,31 +66,49 @@ func (m *MetricClient) newSentryMetrics() *sentryMetrics {
 
 // CertSignRequestReceived counts when CSR received.
 func (s *sentryMetrics) CertSignRequestReceived() {
+	if s == nil {
+		return
+	}
 	s.csrReceivedTotal.Add(context.Background(), 1)
 }
 
 // CertSignSucceed counts succeeded cert issuance.
 func (s *sentryMetrics) CertSignSucceed() {
+	if s == nil {
+		return
+	}
 	s.certSignSuccessTotal.Add(context.Background(), 1)
 }
 
 // CertSignFailed counts succeeded cert issuance.
 func (s *sentryMetrics) CertSignFailed(reason string) {
+	if s == nil {
+		return
+	}
 	s.certSignFailedTotal.Add(context.Background(), 1,
 		isemconv.FailReasonKey.String(reason))
 }
 
 // IssuerCertExpiry records root cert expiry.
 func (s *sentryMetrics) IssuerCertExpiry(expiry *time.Time) {
+	if s == nil {
+		return
+	}
 	s.issuerCertExpiryTimestamp.Add(context.Background(), expiry.Unix())
 }
 
 // ServerCertIssueFailed records server cert issue failure.
 func (s *sentryMetrics) ServerCertIssueFailed(reason string) {
+	if s == nil {
+		return
+	}
 	s.serverTLSCertIssueFailedTotal.Add(context.Background(), 1)
 }
 
 // IssuerCertChanged records issuer credential change.
 func (s *sentryMetrics) IssuerCertChanged() {
+	if s == nil {
+		return
+	}
 	s.issuerCertChangedTotal.Add(context.Background(), 1)
 }
