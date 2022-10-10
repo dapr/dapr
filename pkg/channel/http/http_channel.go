@@ -14,17 +14,18 @@ limitations under the License.
 package http
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"time"
 
-	nethttp "net/http"
-
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -40,6 +41,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	streamutils "github.com/dapr/dapr/utils/streams"
 )
 
 const (
@@ -53,7 +55,7 @@ const (
 
 // Channel is an HTTP implementation of an AppChannel.
 type Channel struct {
-	client              *fasthttp.Client
+	client              *http.Client
 	baseAddress         string
 	ch                  chan struct{}
 	tracingSpec         config.TracingSpec
@@ -75,12 +77,12 @@ func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeli
 
 	c := &Channel{
 		pipeline: pipeline,
-		client: &fasthttp.Client{
-			MaxConnsPerHost:           1000000,
-			MaxIdemponentCallAttempts: 0,
-			MaxResponseBodySize:       maxRequestBodySize * 1024 * 1024,
-			ReadBufferSize:            readBufferSize * 1024,
-			DisablePathNormalizing:    true,
+		// We cannot use fasthttp here because of lack of streaming support
+		client: &http.Client{
+			Transport: &http.Transport{
+				ReadBufferSize:         readBufferSize * 1024,
+				MaxResponseHeaderBytes: int64(readBufferSize) * 1024,
+			},
 		},
 		baseAddress:         fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
 		tracingSpec:         spec,
@@ -89,7 +91,9 @@ func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeli
 	}
 
 	if sslEnabled {
-		c.client.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+		(c.client.Transport.(*http.Transport)).TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
 	}
 
 	if maxConcurrency > 0 {
@@ -107,20 +111,18 @@ func (h *Channel) GetBaseAddress() string {
 // GetAppConfig gets application config from user application
 // GET http://localhost:<app_port>/dapr/config
 func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
-	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint)
-	req.WithHTTPExtension(nethttp.MethodGet, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
+	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint).
+		WithHTTPExtension(http.MethodGet, "").
+		WithRawData(nil, invokev1.JSONContentType)
 
-	// TODO Propagate context
-	ctx := context.Background()
-	resp, err := h.InvokeMethod(ctx, req)
+	resp, err := h.InvokeMethod(context.TODO(), req)
 	if err != nil {
 		return nil, err
 	}
 
 	var config config.ApplicationConfig
 
-	if resp.Status().Code != nethttp.StatusOK {
+	if resp.Status().Code != http.StatusOK {
 		return &config, nil
 	}
 
@@ -157,7 +159,8 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	if httpExt == nil {
 		return nil, status.Error(codes.InvalidArgument, "missing HTTP extension field")
 	}
-	if httpExt.GetVerb() == commonv1pb.HTTPExtension_NONE { //nolint:nosnakecase
+	// Go's net/http library does not support sending requests with the CONNECT method
+	if httpExt.Verb == commonv1pb.HTTPExtension_NONE || httpExt.Verb == commonv1pb.HTTPExtension_CONNECT { //nolint:nosnakecase
 		return nil, status.Error(codes.InvalidArgument, "invalid HTTP verb")
 	}
 
@@ -187,42 +190,41 @@ func (h *Channel) SetAppHealth(ah *apphealth.AppHealth) {
 
 // HealthProbe performs a health probe.
 func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
-	channelReq := fasthttp.AcquireRequest()
-	channelResp := fasthttp.AcquireResponse()
-
-	defer func() {
-		fasthttp.ReleaseRequest(channelReq)
-		fasthttp.ReleaseResponse(channelResp)
-	}()
-
-	channelReq.URI().Update(h.baseAddress + h.appHealthCheckPath)
-	channelReq.URI().DisablePathNormalizing = true
-	channelReq.Header.SetMethod(fasthttp.MethodGet)
+	channelReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseAddress+h.appHealthCheckPath, nil)
+	if err != nil {
+		return false, err
+	}
 
 	diag.DefaultHTTPMonitoring.AppHealthProbeStarted(ctx)
 	startRequest := time.Now()
 
-	err := h.client.Do(channelReq, channelResp)
+	channelResp, err := h.client.Do(channelReq)
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
 	if err != nil {
 		// Errors here are network-level errors, so we are not returning them as errors
 		// Instead, we just return a failed probe
-		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(nethttp.StatusInternalServerError), elapsedMs)
+		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), elapsedMs)
 		//nolint:nilerr
 		return false, nil
 	}
 
-	code := channelResp.StatusCode()
-	status := code >= 200 && code < 300
-	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(code), elapsedMs)
+	// Drain before closing
+	_, _ = io.Copy(io.Discard, channelResp.Body)
+	channelResp.Body.Close()
+
+	status := channelResp.StatusCode >= 200 && channelResp.StatusCode < 300
+	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(channelResp.StatusCode), elapsedMs)
 
 	return status, nil
 }
 
 func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	channelReq := h.constructRequest(ctx, req)
+	channelReq, err := h.constructRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 
 	if h.ch != nil {
 		h.ch <- struct{}{}
@@ -234,74 +236,92 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}()
 
 	// Emit metric when request is sent
-	verb := string(channelReq.Header.Method())
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, verb, req.Message().Method, int64(len(req.Message().Data.GetValue())))
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
-	var (
-		response *fasthttp.Response
-		err      error
-	)
+	var resp *http.Response
+	if len(h.pipeline.Handlers) > 0 {
+		// Exec pipeline only if at least one handler is specified
+		recorder := httptest.NewRecorder()
+		// Reset the code which is 200 by default
+		recorder.Code = 0
+		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			channelReq = r
+		}))
+		execPipeline.ServeHTTP(recorder, channelReq)
 
-	// FIXME as fasthttp requestctx does not support using a response from response pool (i.e fasthttp.AcquireResponse())
-	// this check avoid using it when no handlers are specified, hence improving memory consumption by using response pool.
-	if len(h.pipeline.Handlers) == 0 {
-		// Send request to user application
-		response = fasthttp.AcquireResponse()
-		defer fasthttp.ReleaseResponse(response)
-		err = h.client.Do(channelReq, response)
-	} else { // exec pipeline only if at least one handler is specified
-		c := fasthttp.RequestCtx{}
-		c.Init(channelReq, nil, nil)
-
-		defer func() {
-			c.Response.Reset()
-			c.ResetUserValues()
-		}()
-
-		doReq := func(ctx *fasthttp.RequestCtx) {
-			err = h.client.Do(&ctx.Request, &ctx.Response)
+		// If there's a status code, it means that a middleware aborted the request
+		// So, we get the response directly from the middlewares
+		if recorder.Code > 0 {
+			//nolint:bodyclose
+			resp = recorder.Result()
+		} else if len(recorder.Header()) > 0 {
+			// Set headers in the outbound request
+			for k, vs := range recorder.Header() {
+				for _, v := range vs {
+					channelReq.Header.Add(k, v)
+				}
+			}
 		}
-
-		execPipeline := h.pipeline.Apply(doReq)
-
-		execPipeline(&c)
-		response = &c.Response
 	}
 
-	defer fasthttp.ReleaseRequest(channelReq)
+	if resp == nil {
+		// Send request to user application
+		//nolint:bodyclose
+		resp, err = h.client.Do(channelReq)
+	}
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
+	var contentLength int64
+	if resp != nil && resp.Header != nil {
+		contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+	}
+
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(nethttp.StatusInternalServerError), int64(response.Header.ContentLength()), elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
-	rsp := h.parseChannelResponse(req, response)
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(response.Header.ContentLength()), elapsedMs)
+	rsp, err := h.parseChannelResponse(req, resp)
+	if err != nil {
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		return nil, err
+	}
+
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), contentLength, elapsedMs)
 
 	return rsp, nil
 }
 
-func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) *fasthttp.Request {
-	channelReq := fasthttp.AcquireRequest()
-
+func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) (*http.Request, error) {
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	var uri string
-	method := req.Message().GetMethod()
+	verb := req.Message().HttpExtension.Verb.String()
+	method := req.Message().Method
 	if strings.HasPrefix(method, "/") {
-		uri = fmt.Sprintf("%s%s", h.baseAddress, method)
+		uri = h.baseAddress + method
 	} else {
-		uri = fmt.Sprintf("%s/%s", h.baseAddress, method)
+		uri = h.baseAddress + "/" + method
 	}
-	channelReq.URI().Update(uri)
-	channelReq.URI().DisablePathNormalizing = true
-	channelReq.URI().SetQueryString(req.EncodeHTTPQueryString())
-	channelReq.Header.SetMethod(req.Message().HttpExtension.Verb.String())
+	qs := req.EncodeHTTPQueryString()
+	if qs != "" {
+		uri += "?" + qs
+	}
+
+	ct, body := req.RawData()
+
+	channelReq, err := http.NewRequestWithContext(ctx, verb, uri, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
 
 	// Recover headers
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
+	channelReq.Header.Set("content-type", ct)
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
@@ -316,28 +336,32 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		channelReq.Header.Set(authConsts.APITokenHeader, h.appHeaderToken)
 	}
 
-	// Set Content body and types
-	contentType, body := req.RawData()
-	channelReq.Header.SetContentType(contentType)
-	channelReq.SetBody(body)
-
-	return channelReq
+	return channelReq, nil
 }
 
-func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *fasthttp.Response) *invokev1.InvokeMethodResponse {
-	var statusCode int
+func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channelResp *http.Response) (*invokev1.InvokeMethodResponse, error) {
 	var contentType string
-	var body []byte
 
-	statusCode = resp.StatusCode()
+	contentType = channelResp.Header.Get("content-type")
 
-	resp.Header.SetNoDefaultContentType(true)
-	contentType = (string)(resp.Header.ContentType())
-	body = resp.Body()
+	// Limit response body if needed
+	var body io.ReadCloser
+	if h.maxResponseBodySize > 0 {
+		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySize)*1024*1024)
+	} else {
+		body = channelResp.Body
+	}
+
+	bodyData, err := io.ReadAll(body)
+	if err != nil {
+		return nil, err
+	}
 
 	// Convert status code
-	rsp := invokev1.NewInvokeMethodResponse(int32(statusCode), "", nil)
-	rsp.WithFastHTTPHeaders(&resp.Header).WithRawData(body, contentType)
+	rsp := invokev1.
+		NewInvokeMethodResponse(int32(channelResp.StatusCode), "", nil).
+		WithHTTPHeaders(channelResp.Header).
+		WithRawData(bodyData, contentType)
 
-	return rsp
+	return rsp, nil
 }
