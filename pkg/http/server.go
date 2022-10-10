@@ -27,7 +27,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/pprofhandler"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -37,7 +36,6 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	"github.com/dapr/dapr/utils/nethttpadaptor"
 	"github.com/dapr/kit/logger"
 )
 
@@ -255,11 +253,7 @@ func (s *server) usePublicRouter() fasthttp.RequestHandler {
 }
 
 func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return fasthttpadaptor.NewFastHTTPHandler(
-		s.pipeline.Apply(
-			nethttpadaptor.NewNetHTTPHandlerFunc(next),
-		),
-	)
+	return s.pipeline.Apply(next)
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
