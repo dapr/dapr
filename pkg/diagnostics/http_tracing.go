@@ -133,7 +133,7 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) []attribute.KeyV
 		m = append(m, semconv.RPCServiceKey.String(daprRPCServiceInvocationService))
 		targetID := getContextValue(ctx, "id")
 		m = append(m, semconv.NetPeerNameKey.String(targetID))
-		method := fmt.Sprintf("CallLocal/%s/%s", targetID, getContextValue(ctx, "method"))
+		method = fmt.Sprintf("CallLocal/%s/%s", targetID, getContextValue(ctx, "method"))
 		m = append(m, isemconv.APIKey.String(method))
 
 	case "publish":

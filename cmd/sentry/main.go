@@ -93,7 +93,6 @@ func main() {
 		if metricClient, err = diag.InitMetrics(diag.Injector, metricsExportedAddress, "", ""); err != nil {
 			log.Fatal(err)
 		}
-
 	}
 
 	issuerCertPath := filepath.Join(*credsPath, credentials.IssuerCertFilename)

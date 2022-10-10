@@ -4,6 +4,7 @@ import (
 	"context"
 
 	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
+
 	"go.opentelemetry.io/otel/metric/instrument"
 	"go.opentelemetry.io/otel/metric/instrument/syncint64"
 	"go.opentelemetry.io/otel/metric/unit"

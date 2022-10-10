@@ -20,6 +20,7 @@ import (
 	"time"
 
 	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
+
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric/instrument"
