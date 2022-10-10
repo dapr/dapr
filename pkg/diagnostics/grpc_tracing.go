@@ -178,51 +178,52 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 		m = append(m, semconv.RPCServiceKey.String(daprRPCServiceInvocationService))
 
 		internalV := fmt.Sprintf("CallLocal/%s/%s", appID, s.Message.GetMethod())
-		m = append(m, daprAPISpanNameInternalKey.String(internalV))
-		m = append(m, isemconv.APIInvokeMethodKey.String(s.Message.GetMethod()))
+		m = append(m, daprAPISpanNameInternalKey.String(internalV),
+			isemconv.APIInvokeMethodKey.String(s.Message.GetMethod()))
 
 	// Dapr APIs
 	case *runtimev1pb.InvokeServiceRequest:
-		m = append(m, semconv.RPCServiceKey.String(daprRPCServiceInvocationService))
-		m = append(m, semconv.NetPeerNameKey.String(s.GetId()))
+		m = append(m,
+			semconv.RPCServiceKey.String(daprRPCServiceInvocationService),
+			semconv.NetPeerNameKey.String(s.GetId()))
 		internalV := fmt.Sprintf("CallLocal/%s/%s", s.GetId(), s.Message.GetMethod())
 		m = append(m, daprAPISpanNameInternalKey.String(internalV))
 
 	case *runtimev1pb.PublishEventRequest:
-		m = append(m, semconv.RPCServiceKey.String(daprRPCDaprService))
-		m = append(m, semconv.MessagingSystemKey.String("pubsub"))
-		m = append(m, semconv.MessagingDestinationKey.String(s.GetTopic()))
-		m = append(m, semconv.MessagingDestinationKindTopic)
+		m = append(m, semconv.RPCServiceKey.String(daprRPCDaprService),
+			semconv.MessagingSystemKey.String("pubsub"),
+			semconv.MessagingDestinationKey.String(s.GetTopic()),
+			semconv.MessagingDestinationKindTopic)
 
 	case *runtimev1pb.InvokeBindingRequest:
 		isExistComponent = true
-		m = append(m, isemconv.ComponentBindings)
-		m = append(m, isemconv.ComponentNameKey.String(s.GetName()))
+		m = append(m, isemconv.ComponentBindings,
+			isemconv.ComponentNameKey.String(s.GetName()))
 
 	case *runtimev1pb.GetStateRequest:
 		isExistComponent = true
-		m = append(m, isemconv.ComponentStates)
-		m = append(m, isemconv.ComponentNameKey.String(s.GetStoreName()))
+		m = append(m, isemconv.ComponentStates,
+			isemconv.ComponentNameKey.String(s.GetStoreName()))
 
 	case *runtimev1pb.SaveStateRequest:
 		isExistComponent = true
-		m = append(m, isemconv.ComponentStates)
-		m = append(m, isemconv.ComponentNameKey.String(s.GetStoreName()))
+		m = append(m, isemconv.ComponentStates,
+			isemconv.ComponentNameKey.String(s.GetStoreName()))
 
 	case *runtimev1pb.DeleteStateRequest:
 		isExistComponent = true
-		m = append(m, isemconv.ComponentStates)
-		m = append(m, isemconv.ComponentNameKey.String(s.GetStoreName()))
+		m = append(m, isemconv.ComponentStates,
+			isemconv.ComponentNameKey.String(s.GetStoreName()))
 
 	case *runtimev1pb.GetSecretRequest:
 		isExistComponent = true
-		m = append(m, isemconv.ComponentSecrets)
-		m = append(m, isemconv.ComponentNameKey.String(s.GetStoreName()))
+		m = append(m, isemconv.ComponentSecrets,
+			isemconv.ComponentNameKey.String(s.GetStoreName()))
 	}
 
 	if isExistComponent {
-		m = append(m, semconv.RPCServiceKey.String(daprRPCDaprService))
-		m = append(m, isemconv.ComponentMethodKey.String(rpcMethod))
+		m = append(m, semconv.RPCServiceKey.String(daprRPCDaprService),
+			isemconv.ComponentMethodKey.String(rpcMethod))
 	} else {
 		m = append(m, isemconv.APIKey.String(rpcMethod))
 	}

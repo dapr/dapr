@@ -138,8 +138,8 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) []attribute.KeyV
 
 	case "publish":
 		isExistComponent = true
-		m = append(m, semconv.MessagingSystemKey.String("pubsub"))
-		m = append(m, semconv.MessagingDestinationKindTopic)
+		m = append(m, semconv.MessagingSystemKey.String("pubsub"),
+			semconv.MessagingDestinationKindTopic)
 		topic := getContextValue(ctx, "topic")
 		m = append(m, semconv.MessagingDestinationKey.String(topic))
 	}
@@ -154,8 +154,8 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) []attribute.KeyV
 	}
 
 	// Populate dapr original api attributes.
-	m = append(m, isemconv.APIProtocolHTTP)
-	m = append(m, isemconv.APIStatusCodeKey.Int(statusCode))
+	m = append(m, isemconv.APIProtocolHTTP,
+		isemconv.APIStatusCodeKey.Int(statusCode))
 
 	return m
 }
