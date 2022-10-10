@@ -19,10 +19,9 @@ import (
 
 	"google.golang.org/grpc/peer"
 
-	"github.com/dapr/dapr/pkg/placement/monitoring"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-
 	"github.com/dapr/kit/retry"
 )
 
@@ -279,8 +278,8 @@ func (p *Service) performTableDissemination() {
 	p.streamConnPoolLock.RUnlock()
 	nTargetConns := len(p.raftNode.FSM().State().Members())
 
-	monitoring.RecordRuntimesCount(nStreamConnPool)
-	monitoring.RecordActorRuntimesCount(nTargetConns)
+	diag.DefaultPlacementMonitoring.RecordRuntimesCount(int64(nStreamConnPool))
+	diag.DefaultPlacementMonitoring.RecordActorRuntimesCount(int64(nTargetConns))
 
 	// ignore dissemination if there is no member update.
 	if cnt := p.memberUpdateCount.Load(); cnt > 0 {

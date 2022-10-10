@@ -305,6 +305,7 @@ func (a *DaprRuntime) initOpentelemetry() (err error) {
 		log.Info("initOpentelemetry start metric client....")
 		var metricClient *diag.MetricClient
 		if metricClient, err = diag.InitMetrics(
+			diag.Daprd,
 			a.globalConfig.Spec.MetricSpec.ExporterAddress,
 			a.runtimeConfig.ID, a.namespace); err != nil {
 			log.Errorf("failed to initialize metrics, err: %s", err.Error())

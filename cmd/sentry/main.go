@@ -24,19 +24,22 @@ import (
 	"k8s.io/client-go/util/homedir"
 
 	"github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
 	"github.com/dapr/dapr/pkg/sentry/config"
-	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.sentry")
+var (
+	log          = logger.NewLogger("dapr.sentry")
+	metricClient *diag.MetricClient
+)
 
 //nolint:gosec
 const (
@@ -48,12 +51,19 @@ const (
 )
 
 func main() {
+	var err error
+	var metricsExportedAddress string
+	var metricsEnabled bool
+
 	configName := flag.String("config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	credsPath := flag.String("issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
 	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
 	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
 	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
+
+	flag.BoolVar(&metricsEnabled, "metrics-enabled", false, "Metric enabled, default false")
+	flag.StringVar(&metricsExportedAddress, "exporterAddress", "", "Metric exported address")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -82,13 +92,12 @@ func main() {
 	log.Infof("starting sentry certificate authority -- version %s -- commit %s", version.Version(), version.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
+	if metricsEnabled {
+		// Initialize injector service metrics
+		if metricClient, err = diag.InitMetrics(diag.Injector, metricsExportedAddress, "", ""); err != nil {
+			log.Fatal(err)
+		}
 
-	if err := monitoring.InitMetrics(); err != nil {
-		log.Fatal(err)
 	}
 
 	issuerCertPath := filepath.Join(*credsPath, credentials.IssuerCertFilename)
@@ -122,7 +131,7 @@ func main() {
 		for {
 			select {
 			case <-issuerEvent:
-				monitoring.IssuerCertChanged()
+				diag.DefaultSentryMonitoring.IssuerCertChanged()
 				log.Debug("received issuer credentials changed signal")
 				// Batch all signals within 2s of each other
 				if restart == nil {
@@ -162,4 +171,8 @@ func main() {
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
 	<-time.After(shutdownDuration)
+
+	if metricClient != nil {
+		metricClient.Close()
+	}
 }

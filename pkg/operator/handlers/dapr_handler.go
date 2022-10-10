@@ -16,11 +16,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	"github.com/dapr/kit/logger"
-
-	"github.com/dapr/dapr/pkg/operator/monitoring"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -188,7 +187,7 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 		return err
 	}
 
-	monitoring.RecordServiceUpdatedCount(appID)
+	diag.DefaultOperatorMonitoring.RecordServiceUpdatedCount(appID)
 	return nil
 }
 
@@ -204,7 +203,7 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService typ
 		return err
 	}
 	log.Debugf("created service: %s", expectedService)
-	monitoring.RecordServiceCreatedCount(appID)
+	diag.DefaultOperatorMonitoring.RecordServiceCreatedCount(appID)
 	return nil
 }
 

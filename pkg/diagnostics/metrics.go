@@ -45,6 +45,26 @@ var (
 	DefaultComponentMonitoring *componentMetrics
 	// DefaultResiliencyMonitoring holds resiliency specific metrics.
 	DefaultResiliencyMonitoring *resiliencyMetrics
+
+	// DefaultPlacementMonitoring holds placement specific metrics.
+	DefaultPlacementMonitoring *placementMetrics
+	// DefaultSentryMonitoring holds sentry specific metrics.
+	DefaultSentryMonitoring *sentryMetrics
+	// DefaultOperatorMonitoring holds operator specific metrics.
+	DefaultOperatorMonitoring *operatorMetrics
+	// DefaultInjectorMonitoring holds injector specific metrics.
+	DefaultInjectorMonitoring *injectorMetrics
+)
+
+// ServiceType service type, such as dapr system service or dapr sidecar.
+type ServiceType string
+
+const (
+	Daprd     ServiceType = "daprd"
+	Placement ServiceType = "placement"
+	Sentry    ServiceType = "sentry"
+	Injector  ServiceType = "injector"
+	Operator  ServiceType = "operator"
 )
 
 // MetricClient is a metric client.
@@ -60,7 +80,7 @@ type MetricClient struct {
 }
 
 // InitMetrics initializes metrics.
-func InitMetrics(address, appID, namespace string) (*MetricClient, error) {
+func InitMetrics(serviceType ServiceType, address, appID, namespace string) (*MetricClient, error) {
 	var err error
 	if address == "" {
 		address = defaultMetricExporterAddr
@@ -73,11 +93,25 @@ func InitMetrics(address, appID, namespace string) (*MetricClient, error) {
 	if err = client.init(); err != nil {
 		return nil, err
 	}
-	DefaultMonitoring = client.newServiceMetrics()
-	DefaultGRPCMonitoring = client.newGRPCMetrics()
-	DefaultHTTPMonitoring = client.newHTTPMetrics()
-	DefaultComponentMonitoring = client.newComponentMetrics()
-	DefaultResiliencyMonitoring = client.newResiliencyMetrics()
+
+	switch serviceType {
+	case Daprd:
+		DefaultMonitoring = client.newServiceMetrics()
+		DefaultGRPCMonitoring = client.newGRPCMetrics()
+		DefaultHTTPMonitoring = client.newHTTPMetrics()
+		DefaultComponentMonitoring = client.newComponentMetrics()
+		DefaultResiliencyMonitoring = client.newResiliencyMetrics()
+	case Placement:
+		DefaultPlacementMonitoring = client.newPlacementMetrics()
+	case Operator:
+		DefaultOperatorMonitoring = client.newOperatorMetrics()
+	case Injector:
+		DefaultInjectorMonitoring = client.newInjectorMetrics()
+	case Sentry:
+		DefaultSentryMonitoring = client.newSentryMetrics()
+	default:
+		return nil, errors.Errorf("unknown service type: %s", serviceType)
+	}
 
 	return client, nil
 }
