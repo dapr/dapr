@@ -14,17 +14,17 @@ limitations under the License.
 package http
 
 import (
-	"net/http"
+	"github.com/valyala/fasthttp"
 )
 
-type Middleware = func(next http.Handler) http.Handler
+type Middleware func(h fasthttp.RequestHandler) fasthttp.RequestHandler
 
 // HTTPPipeline defines the middleware pipeline to be plugged into Dapr sidecar.
 type Pipeline struct {
 	Handlers []Middleware
 }
 
-func (p Pipeline) Apply(handler http.Handler) http.Handler {
+func (p Pipeline) Apply(handler fasthttp.RequestHandler) fasthttp.RequestHandler {
 	for i := len(p.Handlers) - 1; i >= 0; i-- {
 		handler = p.Handlers[i](handler)
 	}
