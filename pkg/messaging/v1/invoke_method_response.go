@@ -70,12 +70,6 @@ func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodR
 	return imr
 }
 
-// WithFastHTTPHeaders populates HTTP response header to gRPC header metadata.
-func (imr *InvokeMethodResponse) WithHTTPHeaders(headers map[string][]string) *InvokeMethodResponse {
-	imr.r.Headers = MetadataToInternalMetadata(headers)
-	return imr
-}
-
 // WithFastHTTPHeaders populates fasthttp response header to gRPC header metadata.
 func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
 	md := DaprInternalMetadata{}
