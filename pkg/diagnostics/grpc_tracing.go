@@ -168,7 +168,7 @@ func SpanContextToGRPCMetadata(ctx context.Context) context.Context {
 }
 
 func isInternalCalls(method string) bool {
-	return strings.HasPrefix(method, "/internals.")
+	return strings.HasPrefix(method, "/dapr.proto.internals.")
 }
 
 // spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs.
