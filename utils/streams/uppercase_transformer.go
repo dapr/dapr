@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,22 +11,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package streams
 
 import (
-	"net/http"
+	"bufio"
+	"io"
+	"strings"
+
+	"github.com/tidwall/transform"
 )
 
-type Middleware = func(next http.Handler) http.Handler
-
-// HTTPPipeline defines the middleware pipeline to be plugged into Dapr sidecar.
-type Pipeline struct {
-	Handlers []Middleware
-}
-
-func (p Pipeline) Apply(handler http.Handler) http.Handler {
-	for i := len(p.Handlers) - 1; i >= 0; i-- {
-		handler = p.Handlers[i](handler)
-	}
-	return handler
+// UppercaseTransformer uppercases all characters in the stream, by calling strings.ToUpper() on them.
+func UppercaseTransformer(r io.Reader) io.Reader {
+	br := bufio.NewReader(r)
+	return transform.NewTransformer(func() ([]byte, error) {
+		c, _, err := br.ReadRune()
+		if err != nil {
+			return nil, err
+		}
+		return []byte(strings.ToUpper(string([]rune{c}))), nil
+	})
 }

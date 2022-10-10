@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/middleware"
@@ -1985,8 +1984,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
 				called++
 				return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-					return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-						return func(ctx *fasthttp.RequestCtx) {}
+					return func(next http.Handler) http.Handler {
+						return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 					}, nil
 				}
 			},
