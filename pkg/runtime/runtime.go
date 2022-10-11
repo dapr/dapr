@@ -1300,7 +1300,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
-		ExtendedMetadata:a.extendedMetadata,
+		ExtendedMetadata:            a.extendedMetadata,
 		MaxRequestBodySize:          int64(a.runtimeConfig.MaxRequestBodySize) << 20, // Convert from MB to bytes
 	})
 
@@ -1399,7 +1399,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsFn:             a.getComponents,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
-		ExtendedMetadata: a.extendedMetadata,
+		ExtendedMetadata:            a.extendedMetadata,
 	})
 }
 

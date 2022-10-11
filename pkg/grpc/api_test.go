@@ -3249,7 +3249,7 @@ func TestTryLock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName: "abc",
@@ -3266,7 +3266,7 @@ func TestTryLock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			LockStores:       map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName: "abc",
@@ -3283,7 +3283,7 @@ func TestTryLock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			LockStores:       map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:  "abc",
@@ -3301,7 +3301,7 @@ func TestTryLock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			LockStores:       map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 
 		req := &runtimev1pb.TryLockRequest{
@@ -3319,9 +3319,9 @@ func TestTryLock(t *testing.T) {
 
 		mockLockStore := daprt.NewMockStore(ctl)
 		api := NewAPI(APIOpts{
-			LockStores:  map[string]lock.Store{"mock": mockLockStore},
-			TracingSpec: config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			LockStores:       map[string]lock.Store{"mock": mockLockStore},
+			TracingSpec:      config.TracingSpec{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 
 		req := &runtimev1pb.TryLockRequest{
@@ -3351,7 +3351,7 @@ func TestTryLock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			LockStores:       map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "mock",
@@ -3369,7 +3369,7 @@ func TestUnlock(t *testing.T) {
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -3387,7 +3387,7 @@ func TestUnlock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			LockStores:       map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -3405,7 +3405,7 @@ func TestUnlock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			LockStores:       map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
@@ -3423,7 +3423,7 @@ func TestUnlock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			LockStores:       map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -3451,7 +3451,7 @@ func TestUnlock(t *testing.T) {
 		api := NewAPI(APIOpts{
 			LockStores:       map[string]lock.Store{"mock": mockLockStore},
 			TracingSpec:      config.TracingSpec{},
-			extendedMetadata: &daprMetadata.DefaultStore{},
+			ExtendedMetadata: &daprMetadata.DefaultStore{},
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "mock",

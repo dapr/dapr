@@ -286,7 +286,7 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
-	extendedMetadata            daprMetadata.Store
+	ExtendedMetadata            daprMetadata.Store
 }
 
 // NewAPI returns a new gRPC API.
@@ -318,7 +318,7 @@ func NewAPI(opts APIOpts) API {
 		shutdown:                    opts.Shutdown,
 		getComponentsFn:             opts.GetComponentsFn,
 		getComponentsCapabilitiesFn: opts.GetComponentsCapabilitiesFn,
-		extendedMetadata:            opts.extendedMetadata,
+		extendedMetadata:            opts.ExtendedMetadata,
 	}
 }
 

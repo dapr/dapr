@@ -152,7 +152,7 @@ type APIOpts struct {
 	TracingSpec                 config.TracingSpec
 	Shutdown                    func()
 	GetComponentsCapabilitiesFn func() map[string][]string
-	extendedMetadata            daprMetadata.Store
+	ExtendedMetadata            daprMetadata.Store
 	MaxRequestBodySize          int64 // In bytes
 }
 
@@ -181,7 +181,7 @@ func NewAPI(opts APIOpts) API {
 		tracingSpec:                 opts.TracingSpec,
 		shutdown:                    opts.Shutdown,
 		getComponentsCapabilitiesFn: opts.GetComponentsCapabilitiesFn,
-		extendedMetadata:            opts.extendedMetadata,
+		extendedMetadata:            opts.ExtendedMetadata,
 		maxRequestBodySize:          opts.MaxRequestBodySize,
 		transactionalStateStores:    transactionalStateStores,
 		configurationSubscribe:      make(map[string]chan struct{}),
