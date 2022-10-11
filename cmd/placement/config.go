@@ -82,7 +82,7 @@ func newConfig() *config {
 	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
 
-	flag.BoolVar(&cfg.metricsEnabled, "metrics-enabled", false, "Metric enabled, default false")
+	flag.BoolVar(&cfg.metricsEnabled, "enable-metrics", false, "Metric enabled, default false")
 	flag.StringVar(&cfg.metricsExportedAddress, "exporterAddress", "", "Metric exported address")
 
 	cfg.loggerOptions = logger.DefaultOptions()

@@ -118,7 +118,7 @@ func init() {
 	flag.IntVar(&maxPodRestartsPerMinute, "max-pod-restarts-per-minute", defaultMaxPodRestartsPerMinute, "Maximum number of pods in an invalid state that can be restarted per minute")
 	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
 
-	flag.BoolVar(&metricsEnabled, "metrics-enabled", false, "Metric enabled, default false")
+	flag.BoolVar(&metricsEnabled, "enable-metrics", false, "Metric enabled, default false")
 	flag.StringVar(&metricsExportedAddress, "exporterAddress", "", "Metric exported address")
 
 	flag.Parse()

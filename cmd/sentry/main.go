@@ -61,7 +61,7 @@ func main() {
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
 	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
 
-	flag.BoolVar(&metricsEnabled, "metrics-enabled", false, "Metric enabled, default false")
+	flag.BoolVar(&metricsEnabled, "enable-metrics", false, "Metric enabled, default false")
 	flag.StringVar(&metricsExportedAddress, "exporterAddress", "", "Metric exported address")
 
 	loggerOptions := logger.DefaultOptions()

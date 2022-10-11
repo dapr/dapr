@@ -95,7 +95,7 @@ func init() {
 	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-secret-key", credentials.RootCertFilename, "Certificate Authority certificate secret key")
 	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-secret-key", credentials.IssuerCertFilename, "Issuer certificate secret key")
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-secret-key", credentials.IssuerKeyFilename, "Issuer private key secret key")
-	flag.BoolVar(&metricsEnabled, "metrics-enabled", false, "Metric enabled, default false")
+	flag.BoolVar(&metricsEnabled, "enable-metrics", false, "Metric enabled, default false")
 	flag.StringVar(&metricsExportedAddress, "exporterAddress", "", "Metric exported address")
 
 	flag.Parse()
