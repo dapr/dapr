@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"io"
 	"strings"
+	"unicode"
 
 	"github.com/tidwall/transform"
 )
@@ -29,6 +30,23 @@ func UppercaseTransformer(r io.Reader) io.Reader {
 		if err != nil {
 			return nil, err
 		}
-		return []byte(strings.ToUpper(string([]rune{c}))), nil
+
+		return RuneToUppercase(c), nil
 	})
+}
+
+// RuneToUppercase converts a rune into a byte slice where all lowercase letters (Unicode-aware) are converted to uppercase ones.
+func RuneToUppercase(c rune) []byte {
+	// Optimize for ASCII characters
+	if c < 128 {
+		b := byte(c)
+		if 'a' <= b && b <= 'z' {
+			return []byte{b - 0x20}
+		} else {
+			return []byte{b}
+		}
+	}
+
+	// Unicode
+	return []byte(strings.Map(unicode.ToUpper, string([]rune{c})))
 }
