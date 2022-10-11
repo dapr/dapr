@@ -70,16 +70,13 @@ type Channel struct {
 //
 //nolint:gosec
 func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySizeMB, readBufferSizeKB int) (channel.AppChannel, error) {
-	scheme := httpScheme
-	if sslEnabled {
-		scheme = httpsScheme
-	}
-
 	var tlsConfig *tls.Config
+	scheme := httpScheme
 	if sslEnabled {
 		tlsConfig = &tls.Config{
 			InsecureSkipVerify: true,
 		}
+		scheme = httpsScheme
 	}
 
 	c := &Channel{
