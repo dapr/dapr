@@ -94,6 +94,7 @@ type api struct {
 	tracingSpec                 config.TracingSpec
 	shutdown                    func()
 	getComponentsCapabilitiesFn func() map[string][]string
+	maxRequestBodySize          int64 // In bytes
 }
 
 type registeredComponent struct {
@@ -133,52 +134,57 @@ const (
 	daprAppID                = "dapr-app-id"
 )
 
+// APIOpts contains the options for NewAPI.
+type APIOpts struct {
+	AppID                       string
+	AppChannel                  channel.AppChannel
+	DirectMessaging             messaging.DirectMessaging
+	GetComponentsFn             func() []componentsV1alpha1.Component
+	Resiliency                  resiliency.Provider
+	StateStores                 map[string]state.Store
+	LockStores                  map[string]lock.Store
+	SecretStores                map[string]secretstores.SecretStore
+	SecretsConfiguration        map[string]config.SecretsScope
+	ConfigurationStores         map[string]configuration.Store
+	PubsubAdapter               runtimePubsub.Adapter
+	Actor                       actors.Actors
+	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec                 config.TracingSpec
+	Shutdown                    func()
+	GetComponentsCapabilitiesFn func() map[string][]string
+	extendedMetadata            daprMetadata.Store
+	MaxRequestBodySize          int64 // In bytes
+}
+
 // NewAPI returns a new API.
-func NewAPI(
-	appID string,
-	appChannel channel.AppChannel,
-	directMessaging messaging.DirectMessaging,
-	getComponentsFn func() []componentsV1alpha1.Component,
-	resiliency resiliency.Provider,
-	stateStores map[string]state.Store,
-	lockStores map[string]lock.Store,
-	secretStores map[string]secretstores.SecretStore,
-	secretsConfiguration map[string]config.SecretsScope,
-	configurationStores map[string]configuration.Store,
-	pubsubAdapter runtimePubsub.Adapter,
-	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec,
-	shutdown func(),
-	getComponentsCapabilitiesFn func() map[string][]string,
-	extendedMetadata daprMetadata.Store,
-) API {
+func NewAPI(opts APIOpts) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
-	for key, store := range stateStores {
+	for key, store := range opts.StateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
 			transactionalStateStores[key] = store.(state.TransactionalStore)
 		}
 	}
 	api := &api{
-		appChannel:                  appChannel,
-		getComponentsFn:             getComponentsFn,
-		resiliency:                  resiliency,
-		directMessaging:             directMessaging,
-		stateStores:                 stateStores,
-		lockStores:                  lockStores,
+		id:                          opts.AppID,
+		appChannel:                  opts.AppChannel,
+		directMessaging:             opts.DirectMessaging,
+		getComponentsFn:             opts.GetComponentsFn,
+		resiliency:                  opts.Resiliency,
+		stateStores:                 opts.StateStores,
+		lockStores:                  opts.LockStores,
+		secretStores:                opts.SecretStores,
+		secretsConfiguration:        opts.SecretsConfiguration,
+		configurationStores:         opts.ConfigurationStores,
+		pubsubAdapter:               opts.PubsubAdapter,
+		actor:                       opts.Actor,
+		sendToOutputBindingFn:       opts.SendToOutputBindingFn,
+		tracingSpec:                 opts.TracingSpec,
+		shutdown:                    opts.Shutdown,
+		getComponentsCapabilitiesFn: opts.GetComponentsCapabilitiesFn,
+		extendedMetadata:            opts.extendedMetadata,
+		maxRequestBodySize:          opts.MaxRequestBodySize,
 		transactionalStateStores:    transactionalStateStores,
-		secretStores:                secretStores,
-		secretsConfiguration:        secretsConfiguration,
-		configurationStores:         configurationStores,
 		configurationSubscribe:      make(map[string]chan struct{}),
-		actor:                       actor,
-		pubsubAdapter:               pubsubAdapter,
-		sendToOutputBindingFn:       sendToOutputBindingFn,
-		id:                          appID,
-		tracingSpec:                 tracingSpec,
-		shutdown:                    shutdown,
-		getComponentsCapabilitiesFn: getComponentsCapabilitiesFn,
-		extendedMetadata:            extendedMetadata,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -795,6 +801,11 @@ type configurationEventHandler struct {
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
+	if h.appChannel == nil {
+		err := errors.Errorf("app channel is nil. unable to send configuration update from %s", h.storeName)
+		log.Error(err)
+		return err
+	}
 	for key := range e.Items {
 		req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("/configuration/%s/%s", h.storeName, key))
 		req.WithHTTPExtension(nethttp.MethodPost, "")
@@ -910,7 +921,12 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-
+	if a.appChannel == nil {
+		msg := NewErrorResponse("ERR_APP_CHANNEL_NIL", "app channel is not initialized. cannot subscribe to configuration updates")
+		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+		return
+	}
 	metadata := getMetadataFromRequest(reqCtx)
 	subscribeKeys := make([]string, 0)
 

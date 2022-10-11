@@ -23,6 +23,7 @@ jobs:
               'halspang',
               'ItalyPaleAle',
               'johnewart',
+              'mcandeia',
               'msfussell',
               'mukundansundar',
               'pkedy',
@@ -109,7 +110,7 @@ jobs:
                     command: "ok-to-test",
                     issue: issue,
                   };
-      
+
                   // Fire repository_dispatch event to trigger e2e test
                   await github.repos.createDispatchEvent({
                     owner: issue.owner,
@@ -135,7 +136,7 @@ jobs:
                     command: "ok-to-perf",
                     issue: issue,
                   };
-      
+
                   // Fire repository_dispatch event to trigger e2e test
                   await github.repos.createDispatchEvent({
                     owner: issue.owner,

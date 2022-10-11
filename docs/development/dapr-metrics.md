@@ -83,6 +83,11 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_actor_deactivated_total: The number of the successful actor deactivation.
 * dapr_runtime_actor_deactivated_failed_total: The number of the failed actor deactivation.
 
+#### Resiliency
+
+* dapr_runtime_resiliency_loaded: The number of resiliency policies loaded.
+* dapr_runtime_resiliency_count: The number of times a resiliency policy has been executed.
+
 ### gRPC monitoring metrics
 
 Dapr leverages opencensus ocgrpc plugin to generate gRPC server and client metrics.

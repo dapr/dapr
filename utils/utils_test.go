@@ -14,7 +14,9 @@ limitations under the License.
 package utils
 
 import (
+	"net"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -126,5 +128,33 @@ func TestEnvOrElse(t *testing.T) {
 
 		require.NoError(t, os.Setenv(fakeEnVar, fakeEnvVarValue))
 		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), fakeEnvVarValue)
+	})
+}
+
+func TestSocketExists(t *testing.T) {
+	// Unix Domain Socket does not work on windows.
+	if runtime.GOOS == "windows" {
+		return
+	}
+	t.Run("socket exists should return false if file does not exists", func(t *testing.T) {
+		assert.False(t, SocketExists("/fake/path"))
+	})
+
+	t.Run("socket exists should return false if file exists but it's not a socket", func(t *testing.T) {
+		file, err := os.CreateTemp("/tmp", "prefix")
+		require.NoError(t, err)
+		defer os.Remove(file.Name())
+
+		assert.False(t, SocketExists(file.Name()))
+	})
+
+	t.Run("socket exists should return true if file exists and its a socket", func(t *testing.T) {
+		const fileName = "/tmp/socket1234.sock"
+		defer os.Remove(fileName)
+		listener, err := net.Listen("unix", fileName)
+		require.NoError(t, err)
+		defer listener.Close()
+
+		assert.True(t, SocketExists(fileName))
 	})
 }

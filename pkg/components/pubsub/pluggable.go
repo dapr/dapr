@@ -20,7 +20,6 @@ import (
 
 	"github.com/dapr/components-contrib/pubsub"
 
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	proto "github.com/dapr/dapr/pkg/proto/components/v1"
 
@@ -62,8 +61,8 @@ func (p *grpcPubSub) Init(metadata pubsub.Metadata) error {
 		return err
 	}
 
-	p.features = make([]pubsub.Feature, len(featureResponse.Feature))
-	for idx, f := range featureResponse.Feature {
+	p.features = make([]pubsub.Feature, len(featureResponse.Features))
+	for idx, f := range featureResponse.Features {
 		p.features[idx] = pubsub.Feature(f)
 	}
 
@@ -196,15 +195,20 @@ func fromConnector(l logger.Logger, connector *pluggable.GRPCConnector[proto.Pub
 }
 
 // NewGRPCPubSub creates a new grpc pubsub using the given socket factory.
-func NewGRPCPubSub(l logger.Logger, socketFactory func(string) string) *grpcPubSub {
-	return fromConnector(l, pluggable.NewGRPCConnectorWithFactory(socketFactory, proto.NewPubSubClient))
+func NewGRPCPubSub(l logger.Logger, socket string) *grpcPubSub {
+	return fromConnector(l, pluggable.NewGRPCConnector(socket, proto.NewPubSubClient))
 }
 
 // newGRPCPubSub creates a new grpc pubsub for the given pluggable component.
-func newGRPCPubSub(l logger.Logger, pc components.Pluggable) pubsub.PubSub {
-	return fromConnector(l, pluggable.NewGRPCConnector(pc, proto.NewPubSubClient))
+func newGRPCPubSub(dialer pluggable.GRPCConnectionDialer) func(l logger.Logger) pubsub.PubSub {
+	return func(l logger.Logger) pubsub.PubSub {
+		return fromConnector(l, pluggable.NewGRPCConnectorWithDialer(dialer, proto.NewPubSubClient))
+	}
 }
 
 func init() {
-	pluggable.AddRegistryFor(components.PubSub, DefaultRegistry.RegisterComponent, newGRPCPubSub)
+	//nolint:nosnakecase
+	pluggable.AddServiceDiscoveryCallback(proto.PubSub_ServiceDesc.ServiceName, func(name string, dialer pluggable.GRPCConnectionDialer) {
+		DefaultRegistry.RegisterComponent(newGRPCPubSub(dialer), name)
+	})
 }
