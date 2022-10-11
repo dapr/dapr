@@ -436,15 +436,6 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 	}
 }
 
-func cloneBytes(data []byte) []byte {
-	if data == nil {
-		return nil
-	}
-	cloneData := make([]byte, len(data))
-	copy(cloneData, data)
-	return cloneData
-}
-
 // ProtobufToJSON serializes Protobuf message to json format.
 func ProtobufToJSON(message protoreflect.ProtoMessage) ([]byte, error) {
 	marshaler := protojson.MarshalOptions{
