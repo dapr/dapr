@@ -14,6 +14,9 @@ limitations under the License.
 package components
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/dapr/components-contrib/middleware"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -24,7 +27,37 @@ import (
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return utils.UppercaseMiddleware, nil
+			// Apply to request only by default
+			var request, response bool
+			switch strings.ToLower(metadata.Properties["direction"]) {
+			case "response":
+				request = false
+				response = true
+			case "both":
+				request = true
+				response = true
+			case "request":
+				request = true
+				response = false
+			default:
+				request = true
+				response = false
+			}
+
+			if response && request {
+				return func(next http.Handler) http.Handler {
+					return utils.UppercaseRequestMiddleware(
+						utils.UppercaseResponseMiddleware(next),
+					)
+				}, nil
+			} else if response {
+				return utils.UppercaseResponseMiddleware, nil
+			} else if request {
+				return utils.UppercaseRequestMiddleware, nil
+			}
+
+			// Should never get here
+			return nil, nil
 		}
 	}, "uppercase")
 }

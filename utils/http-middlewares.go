@@ -20,10 +20,36 @@ import (
 	"github.com/dapr/dapr/utils/streams"
 )
 
-// UppercaseMiddleware is a HTTP middleware that transforms the body to uppercase
-func UppercaseMiddleware(next http.Handler) http.Handler {
+// UppercaseRequestMiddleware is a HTTP middleware that transforms the request body to uppercase
+func UppercaseRequestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = io.NopCloser(streams.UppercaseTransformer(r.Body))
 		next.ServeHTTP(w, r)
 	})
+}
+
+// UppercaseResponseMiddleware is a HTTP middleware that transforms the response body to uppercase
+func UppercaseResponseMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		urw := &uppercaseResponseWriter{w}
+		next.ServeHTTP(urw, r)
+	})
+}
+
+type uppercaseResponseWriter struct {
+	http.ResponseWriter
+}
+
+func (urw *uppercaseResponseWriter) Write(p []byte) (n int, err error) {
+	var written int
+	for _, c := range string(p) {
+		written, err = urw.ResponseWriter.Write(
+			streams.RuneToUppercase(c),
+		)
+		n += written
+		if err != nil {
+			return n, err
+		}
+	}
+	return n, nil
 }

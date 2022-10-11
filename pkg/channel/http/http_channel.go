@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"strings"
 	"time"
@@ -243,43 +242,38 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	var resp *http.Response
 	if len(h.pipeline.Handlers) > 0 {
 		// Exec pipeline only if at least one handler is specified
-		recorder := httptest.NewRecorder()
-		// Reset the code which is 200 by default
-		recorder.Code = 0
-		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			channelReq = r
-		}))
-		execPipeline.ServeHTTP(recorder, channelReq)
-
-		// If there's a status code, it means that a middleware aborted the request
-		// So, we get the response directly from the middlewares
-		if recorder.Code > 0 {
-			//nolint:bodyclose
-			resp = recorder.Result()
-		} else if len(recorder.Header()) > 0 {
-			// Set headers in the outbound request
-			for k, vs := range recorder.Header() {
-				for _, v := range vs {
-					channelReq.Header.Add(k, v)
-				}
-			}
+		rw := &rwRecorder{
+			w: &bytes.Buffer{},
 		}
-	}
-
-	if resp == nil {
+		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
+			// Send request to user application
+			clientResp, clientErr := h.client.Do(r)
+			if clientResp != nil {
+				copyHeader(wr.Header(), clientResp.Header)
+				wr.WriteHeader(clientResp.StatusCode)
+				_, _ = io.Copy(wr, clientResp.Body)
+			}
+			if clientErr != nil {
+				err = clientErr
+			}
+		}))
+		execPipeline.ServeHTTP(rw, channelReq)
+		resp = rw.Result()
+	} else {
 		// Send request to user application
 		//nolint:bodyclose
 		resp, err = h.client.Do(channelReq)
-	}
-	if resp != nil {
-		defer resp.Body.Close()
 	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
 	var contentLength int64
-	if resp != nil && resp.Header != nil {
-		contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+	if resp != nil {
+		defer resp.Body.Close()
+
+		if resp.Header != nil {
+			contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+		}
 	}
 
 	if err != nil {
@@ -367,4 +361,12 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channe
 		WithRawData(bodyData, contentType)
 
 	return rsp, nil
+}
+
+func copyHeader(dst http.Header, src http.Header) {
+	for k, vv := range src {
+		for _, v := range vv {
+			dst.Add(k, v)
+		}
+	}
 }

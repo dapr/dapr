@@ -2497,7 +2497,7 @@ func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
 	registry := httpMiddlewareLoader.NewRegistry()
 	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return utils.UppercaseMiddleware, nil
+			return utils.UppercaseRequestMiddleware, nil
 		}
 	}, "uppercase")
 	var handlers []httpMiddleware.Middleware

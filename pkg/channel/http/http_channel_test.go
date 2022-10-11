@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -96,13 +97,36 @@ func (t *testStatusCodeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	w.Write([]byte(strconv.Itoa(code)))
 }
 
-// testBodyHandler sends back the body it receives
-type testBodyHandler struct{}
+// testBodyEchoHandler sends back the body it receives
+type testBodyEchoHandler struct{}
 
-func (t *testBodyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (t *testBodyEchoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("content-type", r.Header.Get("content-type"))
 	w.WriteHeader(http.StatusOK)
 	io.Copy(w, r.Body)
+}
+
+// testUppercaseHandler responds with "true" if the body contains all-uppercase ASCII characters, or "false" otherwise
+type testUppercaseHandler struct{}
+
+func (t *testUppercaseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("content-type", "text/plain")
+
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	for i := 0; i < len(b); i++ {
+		if b[i] < 'A' || b[i] > 'Z' {
+			w.Write([]byte("false"))
+			return
+		}
+	}
+
+	w.Write([]byte("true"))
 }
 
 func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
@@ -135,7 +159,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, fakeReq)
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 1, called)
 		assert.Equal(t, int32(http.StatusOK), resp.Status().Code)
 	})
@@ -165,20 +189,19 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, fakeReq)
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 1, called)
 		assert.Equal(t, int32(http.StatusBadGateway), resp.Status().Code)
 	})
 
 	server.Close()
 
-	th = &testBodyHandler{}
-	server = httptest.NewServer(th)
-
 	t.Run("test uppercase middleware", func(t *testing.T) {
+		server = httptest.NewServer(&testBodyEchoHandler{})
+		defer server.Close()
 		pipeline := httpMiddleware.Pipeline{
 			Handlers: []httpMiddleware.Middleware{
-				utils.UppercaseMiddleware,
+				utils.UppercaseRequestMiddleware,
 			},
 		}
 		c := Channel{
@@ -195,13 +218,96 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		ct, body := resp.RawData()
 
 		// assert
-		assert.NoError(t, err)
-		assert.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		require.NoError(t, err)
+		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
 		assert.Equal(t, "text/plain", ct)
 		assert.Equal(t, "M'ILLUMINO D'IMMENSO", string(body))
 	})
 
-	server.Close()
+	t.Run("test uppercase middleware on request only", func(t *testing.T) {
+		server = httptest.NewServer(&testUppercaseHandler{})
+		defer server.Close()
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				utils.UppercaseRequestMiddleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &http.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
+			WithRawData([]byte("helloworld"), "text/plain")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		ct, body := resp.RawData()
+
+		// assert
+		require.NoError(t, err)
+		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		assert.Equal(t, "text/plain", ct)
+		assert.Equal(t, "true", string(body))
+	})
+
+	t.Run("test uppercase middleware on response only", func(t *testing.T) {
+		server = httptest.NewServer(&testUppercaseHandler{})
+		defer server.Close()
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				utils.UppercaseResponseMiddleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &http.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
+			WithRawData([]byte("helloworld"), "text/plain")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		ct, body := resp.RawData()
+
+		// assert
+		require.NoError(t, err)
+		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		assert.Equal(t, "text/plain", ct)
+		assert.Equal(t, "FALSE", string(body))
+	})
+
+	t.Run("test uppercase middleware on both request and response", func(t *testing.T) {
+		server = httptest.NewServer(&testUppercaseHandler{})
+		defer server.Close()
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				utils.UppercaseRequestMiddleware,
+				utils.UppercaseResponseMiddleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &http.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
+			WithRawData([]byte("helloworld"), "text/plain")
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		ct, body := resp.RawData()
+
+		// assert
+		require.NoError(t, err)
+		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		assert.Equal(t, "text/plain", ct)
+		assert.Equal(t, "TRUE", string(body))
+	})
 }
 
 func TestInvokeMethod(t *testing.T) {
