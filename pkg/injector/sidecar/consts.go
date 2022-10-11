@@ -23,7 +23,6 @@ const (
 	SidecarHTTPPortName           = "dapr-http"
 	SidecarGRPCPortName           = "dapr-grpc"
 	SidecarInternalGRPCPortName   = "dapr-internal"
-	SidecarMetricsPortName        = "dapr-metrics"
 	SidecarDebugPortName          = "dapr-debug"
 	SidecarHealthzPath            = "healthz"
 	APIVersionV1                  = "v1.0"
