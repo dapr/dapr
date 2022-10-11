@@ -81,7 +81,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 		{
 			AppName:        "serviceinvocation-callee-0",
@@ -89,7 +88,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 		},
 		{
 			AppName:        "serviceinvocation-callee-1",
@@ -97,7 +95,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 		},
 		{
 			AppName:        "serviceinvocation-callee-2",
@@ -105,7 +102,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 			Config:         "app-channel-pipeline",
 		},
 		{
@@ -114,7 +110,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
 		{
@@ -123,7 +118,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 			Namespace:      &secondaryNamespace,
 		},
 		{
@@ -132,7 +126,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 			Namespace:      &secondaryNamespace,
 			AppProtocol:    "grpc",
 		},
@@ -142,7 +135,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc_proxy_client",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 		{
 			AppName:        "grpcproxyserver",
@@ -150,7 +142,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc_proxy_server",
 			Replicas:       1,
 			IngressEnabled: false,
-			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 			AppPort:        50051,
 		},

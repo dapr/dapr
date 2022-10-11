@@ -407,7 +407,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-stateapp",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 	}
 
@@ -418,7 +417,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-stateapp",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			PluggableComponents: map[string]apiv1.Container{
 				"redis-pluggable.sock": {
 					Name:  "redis-pluggable", // e2e-pluggable_redis

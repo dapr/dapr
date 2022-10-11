@@ -82,7 +82,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-metadata",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 	}
 

@@ -422,7 +422,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-pubsub-publisher",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 		{
 			AppName:        subscriberAppName,
@@ -430,7 +429,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-pubsub-subscriber_grpc",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
 	}

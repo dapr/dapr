@@ -64,7 +64,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-middleware",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			Config:         "pipeline",
 		},
 		{
@@ -73,7 +72,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-middleware",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			Config:         "app-channel-pipeline",
 		},
 		{
@@ -82,7 +80,6 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-middleware",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 		},
 	}
 
