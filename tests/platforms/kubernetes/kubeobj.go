@@ -84,7 +84,6 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-memory-request":            appDesc.DaprMemoryRequest,
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
-			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
 			"dapr.io/enable-api-logging":                strconv.FormatBool(EnableAPILogging),
 			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
 		}
@@ -94,9 +93,6 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	}
 	if appDesc.AppProtocol != "" {
 		annotationObject["dapr.io/app-protocol"] = appDesc.AppProtocol
-	}
-	if appDesc.MetricsPort != "" {
-		annotationObject["dapr.io/metrics-port"] = appDesc.MetricsPort
 	}
 	if appDesc.Config != "" {
 		annotationObject["dapr.io/config"] = appDesc.Config

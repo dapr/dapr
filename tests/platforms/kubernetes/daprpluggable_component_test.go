@@ -29,7 +29,6 @@ func TestBuildPluggableComponents(t *testing.T) {
 			RegistryName:   "dariotest",
 			Replicas:       1,
 			IngressEnabled: true,
-			MetricsEnabled: true,
 			PluggableComponents: map[string]apiv1.Container{
 				"my-socket": {},
 			},

@@ -13,9 +13,9 @@ global:
     disruption:
       minimumAvailable: ""
       maximumUnavailable: "25%"
-  prometheus:
+  metrics:
     enabled: true
-    port: 9090
+    exporterAddress: "localhost:8081"
   mtls:
     enabled: true
     workloadCertTTL: 24h

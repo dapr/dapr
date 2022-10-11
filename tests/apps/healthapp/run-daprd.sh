@@ -11,7 +11,6 @@ export APP_PROTOCOL=grpc
     --app-id healthcheck \
     --dapr-http-port 3602 \
     --dapr-grpc-port 6602 \
-    --metrics-port 9090 \
     --app-port $APP_PORT \
     --app-protocol $APP_PROTOCOL \
     --components-path ./components \
