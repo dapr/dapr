@@ -78,18 +78,22 @@ func IsJSONContentType(contentType string) bool {
 
 // MetadataToInternalMetadata converts metadata to dapr internal metadata map.
 func MetadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
-	internalMD := DaprInternalMetadata{}
+	internalMD := make(DaprInternalMetadata, len(md))
 	for k, values := range md {
-		listValue := internalv1pb.ListStringValue{}
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
+			vals := make([]string, len(values))
 			// binary key requires base64 encoded.
-			for _, val := range values {
-				listValue.Values = append(listValue.Values, base64.StdEncoding.EncodeToString([]byte(val)))
+			for i, val := range values {
+				vals[i] = base64.StdEncoding.EncodeToString([]byte(val))
+			}
+			internalMD[k] = &internalv1pb.ListStringValue{
+				Values: vals,
 			}
 		} else {
-			listValue.Values = append(listValue.Values, values...)
+			internalMD[k] = &internalv1pb.ListStringValue{
+				Values: values,
+			}
 		}
-		internalMD[k] = &listValue
 	}
 
 	return internalMD

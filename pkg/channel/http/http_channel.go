@@ -55,45 +55,49 @@ const (
 
 // Channel is an HTTP implementation of an AppChannel.
 type Channel struct {
-	client              *http.Client
-	baseAddress         string
-	ch                  chan struct{}
-	tracingSpec         config.TracingSpec
-	appHeaderToken      string
-	maxResponseBodySize int
-	appHealthCheckPath  string
-	appHealth           *apphealth.AppHealth
-	pipeline            httpMiddleware.Pipeline
+	client                *http.Client
+	baseAddress           string
+	ch                    chan struct{}
+	tracingSpec           config.TracingSpec
+	appHeaderToken        string
+	maxResponseBodySizeMB int
+	appHealthCheckPath    string
+	appHealth             *apphealth.AppHealth
+	pipeline              httpMiddleware.Pipeline
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
 //
 //nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize, readBufferSize int) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySizeMB, readBufferSizeKB int) (channel.AppChannel, error) {
 	scheme := httpScheme
 	if sslEnabled {
 		scheme = httpsScheme
 	}
 
-	c := &Channel{
-		pipeline: pipeline,
-		// We cannot use fasthttp here because of lack of streaming support
-		client: &http.Client{
-			Transport: &http.Transport{
-				ReadBufferSize:         readBufferSize * 1024,
-				MaxResponseHeaderBytes: int64(readBufferSize) * 1024,
-			},
-		},
-		baseAddress:         fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
-		tracingSpec:         spec,
-		appHeaderToken:      auth.GetAppToken(),
-		maxResponseBodySize: maxRequestBodySize,
-	}
-
+	var tlsConfig *tls.Config
 	if sslEnabled {
-		(c.client.Transport.(*http.Transport)).TLSClientConfig = &tls.Config{
+		tlsConfig = &tls.Config{
 			InsecureSkipVerify: true,
 		}
+	}
+
+	c := &Channel{
+		pipeline: pipeline,
+		client: &http.Client{
+			Transport: &http.Transport{
+				ReadBufferSize:         readBufferSizeKB << 10,
+				MaxResponseHeaderBytes: int64(readBufferSizeKB) << 10,
+				MaxConnsPerHost:        256,
+				MaxIdleConns:           64, // A local channel connects to a single host
+				MaxIdleConnsPerHost:    64,
+				TLSClientConfig:        tlsConfig,
+			},
+		},
+		baseAddress:           fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
+		tracingSpec:           spec,
+		appHeaderToken:        auth.GetAppToken(),
+		maxResponseBodySizeMB: maxRequestBodySizeMB,
 	}
 
 	if maxConcurrency > 0 {
@@ -299,22 +303,25 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) (*http.Request, error) {
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
-	var uri string
 	verb := req.Message().HttpExtension.Verb.String()
 	method := req.Message().Method
-	if strings.HasPrefix(method, "/") {
-		uri = h.baseAddress + method
-	} else {
-		uri = h.baseAddress + "/" + method
+
+	uri := strings.Builder{}
+	uri.WriteString(h.baseAddress)
+	if len(method) > 0 && method[0] != '/' {
+		uri.WriteRune('/')
 	}
+	uri.WriteString(method)
+
 	qs := req.EncodeHTTPQueryString()
 	if qs != "" {
-		uri += "?" + qs
+		uri.WriteRune('?')
+		uri.WriteString(qs)
 	}
 
 	ct, body := req.RawData()
 
-	channelReq, err := http.NewRequestWithContext(ctx, verb, uri, bytes.NewReader(body))
+	channelReq, err := http.NewRequestWithContext(ctx, verb, uri.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -340,14 +347,12 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 }
 
 func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channelResp *http.Response) (*invokev1.InvokeMethodResponse, error) {
-	var contentType string
-
-	contentType = channelResp.Header.Get("content-type")
+	contentType := channelResp.Header.Get("content-type")
 
 	// Limit response body if needed
 	var body io.ReadCloser
-	if h.maxResponseBodySize > 0 {
-		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySize)*1024*1024)
+	if h.maxResponseBodySizeMB > 0 {
+		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySizeMB)<<20)
 	} else {
 		body = channelResp.Body
 	}
