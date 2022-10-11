@@ -303,8 +303,9 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) (*http.Request, error) {
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
-	verb := req.Message().HttpExtension.Verb.String()
-	method := req.Message().Method
+	msg := req.Message()
+	verb := msg.HttpExtension.Verb.String()
+	method := msg.Method
 
 	uri := strings.Builder{}
 	uri.WriteString(h.baseAddress)
