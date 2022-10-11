@@ -9,6 +9,3 @@ spec:
   metadata:
     - name: scopes
       value: "*"
-scopes:
-  - middlewareapp
-  - app-channel-middleware
