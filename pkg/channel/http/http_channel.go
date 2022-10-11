@@ -247,6 +247,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		}
 		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
 			// Send request to user application
+			// (Body is closed below, but linter isn't detecting that)
+			//nolint:bodyclose
 			clientResp, clientErr := h.client.Do(r)
 			if clientResp != nil {
 				copyHeader(wr.Header(), clientResp.Header)
@@ -261,6 +263,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		resp = rw.Result()
 	} else {
 		// Send request to user application
+		// (Body is closed below, but linter isn't detecting that)
 		//nolint:bodyclose
 		resp, err = h.client.Do(channelReq)
 	}
