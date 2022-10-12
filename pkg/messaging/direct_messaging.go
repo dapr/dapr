@@ -397,7 +397,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 			}
 
 			readErr = stream.RecvMsg(chunk)
-			if err != nil {
+			if readErr != nil {
 				pw.CloseWithError(readErr)
 				return
 			}
