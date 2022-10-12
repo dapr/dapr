@@ -317,8 +317,8 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 					Container: DaprSideCarName,
 					Previous:  true,
 				})
-				body, err := request.DoRaw(context.Background())
-				if err != nil {
+				var body []byte
+				if body, err = request.DoRaw(context.Background()); err != nil {
 					log.Printf("(%s) get previous pod log failed. err: %s\n", name, err.Error())
 				}
 				log.Printf("previous pod: %s, logs: %s\n", name, string(body))
