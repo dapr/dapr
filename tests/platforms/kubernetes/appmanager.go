@@ -314,7 +314,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 				name := pod.Name
 				podStatus[name] = pod.Status.ContainerStatuses
 				request := podClient.GetLogs(name, &apiv1.PodLogOptions{
-					Container: "daprd",
+					Container: DaprSideCarName,
 					Previous:  true,
 				})
 				body, _ := request.DoRaw(context.Background())
