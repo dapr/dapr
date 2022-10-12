@@ -34,13 +34,17 @@ spec:
       labels:
         testapp: actorapp
       annotations:
+        dapr.io/sidecar-listen-addresses: "127.0.0.1"
+        dapr.io/app-protocol: "http"
         dapr.io/enabled: "true"
         dapr.io/app-id: "actorapp"
         dapr.io/app-port: "3000"
     spec:
+      imagePullSecrets:
+      - name: mechatoken
       containers:
       - name: actorapp
-        image: docker.io/YOUR_ALIAS/e2e-actorapp:dev
+        image: csighub.tencentyun.com/mecha-e2e/e2e-stateapp:dev-linux-amd64
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
