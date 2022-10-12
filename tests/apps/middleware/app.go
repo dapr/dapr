@@ -92,7 +92,7 @@ func logCall(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	body, _ := io.ReadAll(r.Body)
 
-	log.Println("Got: %s", string(body))
+	log.Printf("Got: %s\n", string(body))
 	w.Write(body)
 }
 
