@@ -84,7 +84,7 @@ func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeli
 			Transport: &http.Transport{
 				ReadBufferSize:         readBufferSizeKB << 10,
 				MaxResponseHeaderBytes: int64(readBufferSizeKB) << 10,
-				MaxConnsPerHost:        512,
+				MaxConnsPerHost:        1024,
 				MaxIdleConns:           64, // A local channel connects to a single host
 				MaxIdleConnsPerHost:    64,
 				TLSClientConfig:        tlsConfig,
