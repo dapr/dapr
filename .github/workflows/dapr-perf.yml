@@ -34,7 +34,7 @@ on:
 
 env:
   # Version of Go
-  GOVER: "1.19"
+  GOVER: "^1.19.2"
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
