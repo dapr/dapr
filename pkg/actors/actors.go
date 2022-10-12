@@ -279,6 +279,7 @@ func decomposeCompositeKey(compositeKey string) []string {
 
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID))
+	req.WithActor(actorType, actorID)
 	req.WithHTTPExtension(nethttp.MethodDelete, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
 
@@ -1015,15 +1016,25 @@ func (a *actorsRuntime) executeReminder(reminder *Reminder) error {
 		Period:  reminder.Period,
 		Data:    reminder.Data,
 	}
-	b, err := json.Marshal(&r)
-	if err != nil {
-		return err
-	}
 
 	log.Debugf("executing reminder %s for actor type %s with id %s", reminder.Name, reminder.ActorType, reminder.ActorID)
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder.Name))
 	req.WithActor(reminder.ActorType, reminder.ActorID)
-	req.WithRawData(b, invokev1.JSONContentType)
+
+	if isInternalActor(reminder.ActorType) {
+		// Use a binary encoding (instead of JSON) for internal reminders to help preserve type information
+		b, err := EncodeInternalActorData(r)
+		if err != nil {
+			return err
+		}
+		req.WithRawData(b, invokev1.OctetStreamContentType)
+	} else {
+		b, err := json.Marshal(&r)
+		if err != nil {
+			return err
+		}
+		req.WithRawData(b, invokev1.JSONContentType)
+	}
 
 	policy := a.resiliency.ActorPreLockPolicy(context.Background(), reminder.ActorType, reminder.ActorID)
 	return policy(func(ctx context.Context) error {

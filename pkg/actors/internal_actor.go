@@ -34,7 +34,7 @@ type InternalActor interface {
 	SetActorRuntime(actorsRuntime Actors)
 	InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte) (any, error)
 	DeactivateActor(ctx context.Context, actorID string) error
-	InvokeReminder(ctx context.Context, actorID string, reminderName string, params []byte) error
+	InvokeReminder(ctx context.Context, actorID string, reminderName string, data any, dueTime string, period string) error
 	InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error
 }
 
@@ -97,38 +97,46 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		return nil, fmt.Errorf("internal actor type '%s' not recognized", actorType)
 	}
 
-	// The actor runtime formats method names as URLs in the form actors/{type}/{id}/method/{methodName}
-	methodURL := req.Message().GetMethod()
-	methodStartIndex := strings.Index(methodURL, "/method/")
-	if methodStartIndex < 0 {
-		return nil, fmt.Errorf("unexpected method format: %s", methodURL)
-	}
-	methodName := methodURL[methodStartIndex+len("/method/"):]
+	var result interface{} = nil
+	var err error
 
-	requestData := req.Message().GetData().GetValue()
 	verb := req.Message().GetHttpExtension().GetVerb()
 	actorID := req.Actor().GetActorId()
 
-	// Call the appropriate method based on the method name and verb.
-	var result interface{} = nil
-	var err error
-	if strings.HasPrefix(methodName, "remind/") {
-		reminderName := strings.TrimPrefix(methodName, "remind/")
-		err = actor.InvokeReminder(ctx, actorID, reminderName, requestData)
-	} else if strings.HasPrefix(methodName, "timer/") {
-		timerName := strings.TrimPrefix(methodName, "timer/")
-		err = actor.InvokeTimer(ctx, actorID, timerName, requestData)
-	} else if verb == commonv1pb.HTTPExtension_DELETE { //nolint:nosnakecase
+	if verb == commonv1pb.HTTPExtension_DELETE { //nolint:nosnakecase
 		err = actor.DeactivateActor(ctx, actorID)
 	} else {
-		result, err = actor.InvokeMethod(ctx, actorID, methodName, requestData)
+		// The actor runtime formats method names as URLs in the form actors/{type}/{id}/method/{methodName}
+		methodURL := req.Message().GetMethod()
+		methodStartIndex := strings.Index(methodURL, "/method/")
+		if methodStartIndex < 0 {
+			return nil, fmt.Errorf("unexpected method format: %s", methodURL)
+		}
+		methodName := methodURL[methodStartIndex+len("/method/"):]
+
+		requestData := req.Message().GetData().GetValue()
+
+		// Check for well-known method names; otherwise, just call InvokeMethod on the internal actor.
+		if strings.HasPrefix(methodName, "remind/") {
+			reminderName := strings.TrimPrefix(methodName, "remind/")
+			reminderInfo := new(ReminderResponse)
+			if err = DecodeInternalActorData(requestData, reminderInfo); err != nil {
+				return nil, fmt.Errorf("unexpected reminder data format: %s", requestData)
+			}
+			err = actor.InvokeReminder(ctx, actorID, reminderName, reminderInfo.Data, reminderInfo.DueTime, reminderInfo.Period)
+		} else if strings.HasPrefix(methodName, "timer/") {
+			timerName := strings.TrimPrefix(methodName, "timer/")
+			err = actor.InvokeTimer(ctx, actorID, timerName, requestData)
+		} else {
+			result, err = actor.InvokeMethod(ctx, actorID, methodName, requestData)
+		}
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	resultData, err := EncodeInternalActorResponse(result)
+	resultData, err := EncodeInternalActorData(result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode the internal actor response: %w", err)
 	}
@@ -142,22 +150,22 @@ func (internalActorChannel) SetAppHealth(ah *apphealth.AppHealth) {
 	// no-op
 }
 
-// EncodeInternalActorResponse encodes result using the encoding/gob format.
-func EncodeInternalActorResponse(result any) ([]byte, error) {
-	var resultData []byte
+// EncodeInternalActorData encodes result using the encoding/gob format.
+func EncodeInternalActorData(result any) ([]byte, error) {
+	var data []byte
 	if result != nil {
 		var resultBuffer bytes.Buffer
 		enc := gob.NewEncoder(&resultBuffer)
 		if err := enc.Encode(result); err != nil {
 			return nil, err
 		}
-		resultData = resultBuffer.Bytes()
+		data = resultBuffer.Bytes()
 	}
-	return resultData, nil
+	return data, nil
 }
 
-// DecodeInternalActorResponse decodes encoding/gob data and stores the result in e.
-func DecodeInternalActorResponse(data []byte, e any) error {
+// DecodeInternalActorData decodes encoding/gob data and stores the result in e.
+func DecodeInternalActorData(data []byte, e any) error {
 	// Decode the data using encoding/gob (https://go.dev/blog/gob)
 	buffer := bytes.NewBuffer(data)
 	dec := gob.NewDecoder(buffer)

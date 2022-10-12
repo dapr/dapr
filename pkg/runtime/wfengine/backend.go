@@ -110,7 +110,7 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 			return nil, api.ErrInstanceNotFound
 		}
 		var metadata api.OrchestrationMetadata
-		if err := actors.DecodeInternalActorResponse(data, &metadata); err != nil {
+		if err := actors.DecodeInternalActorData(data, &metadata); err != nil {
 			return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
 		}
 		return &metadata, nil
@@ -127,9 +127,22 @@ func (*actorBackend) AbandonOrchestrationWorkItem(context.Context, *backend.Orch
 	panic("unimplemented")
 }
 
-// AddNewOrchestrationEvent implements backend.Backend
-func (*actorBackend) AddNewOrchestrationEvent(context.Context, api.InstanceID, *backend.HistoryEvent) error {
-	panic("unimplemented")
+// AddNewOrchestrationEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
+func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.InstanceID, e *backend.HistoryEvent) error {
+	data, err := backend.MarshalHistoryEvent(e)
+	if err != nil {
+		return err
+	}
+
+	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
+	req := invokev1.
+		NewInvokeMethodRequest(AddWorkflowEventMethod).
+		WithActor(WorkflowActorType, string(id)).
+		WithRawData(data, invokev1.OctetStreamContentType)
+	if _, err := be.actors.Call(ctx, req); err != nil {
+		return err
+	}
+	return nil
 }
 
 // CompleteActivityWorkItem implements backend.Backend
@@ -153,7 +166,7 @@ func (*actorBackend) CreateTaskHub(context.Context) error {
 
 // DeleteTaskHub implements backend.Backend
 func (*actorBackend) DeleteTaskHub(context.Context) error {
-	panic("unimplemented")
+	return errors.New("not supported")
 }
 
 // GetActivityWorkItem implements backend.Backend
@@ -169,7 +182,7 @@ func (be *actorBackend) GetActivityWorkItem(ctx context.Context) (*backend.Activ
 
 // GetOrchestrationRuntimeState implements backend.Backend
 func (*actorBackend) GetOrchestrationRuntimeState(context.Context, *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
-	panic("unimplemented")
+	return nil, errors.New("not supported")
 }
 
 // GetOrchestrationWorkItem implements backend.Backend

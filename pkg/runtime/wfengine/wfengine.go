@@ -55,6 +55,14 @@ func NewWorkflowEngine() *WorkflowEngine {
 	return engine
 }
 
+// InternalActors returns a map of internal actors that are used to implement workflows
+func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
+	internalActors := make(map[string]actors.InternalActor)
+	internalActors[WorkflowActorType] = wfe.WorkflowActor
+	internalActors[ActivityActorType] = wfe.ActivityActor
+	return internalActors
+}
+
 func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
 	wfLogger.Info("configuring workflow engine gRPC endpoint")
 	wfe.executor = backend.NewGrpcExecutor(grpcServer, wfe.backend, wfLogger)
