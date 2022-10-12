@@ -313,13 +313,16 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 			for i, pod := range podList.Items {
 				name := pod.Name
 				podStatus[name] = pod.Status.ContainerStatuses
+				request := podClient.GetLogs(name, &apiv1.PodLogOptions{
+					Container: "daprd",
+					Previous:  true,
+				})
+				body, _ := request.DoRaw(context.Background())
+				log.Printf("(%s) pod logs: %s\n", name, string(body))
 				// Reset Spec and ObjectMeta which could contain sensitive info like credentials
 				pod.Spec.Reset()
 				pod.ObjectMeta.Reset()
 				podList.Items[i] = pod
-				request := podClient.GetLogs(name, &apiv1.PodLogOptions{})
-				body, _ := request.DoRaw(context.Background())
-				log.Printf("(%s) pod logs: %s\n", name, string(body))
 			}
 			j, _ := json.Marshal(podList)
 			log.Printf("deployment %s relate pods: %s", m.app.AppName, string(j))
@@ -793,6 +796,7 @@ func (m *AppManager) StreamContainerLogs() error {
 				req := podClient.GetLogs(pod, &apiv1.PodLogOptions{
 					Container: container,
 					Follow:    true,
+					Previous:  true,
 				})
 				stream, err := req.Stream(m.ctx)
 				if err != nil {
