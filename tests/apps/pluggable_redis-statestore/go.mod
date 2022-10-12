@@ -6,7 +6,7 @@ replace github.com/dapr/dapr => ../../../
 
 require (
 	github.com/dapr-sandbox/components-go-sdk v0.0.0-20220928114348-32097c6273eb
-	github.com/dapr/components-contrib v1.9.0-rc.1.0.20221010224008-a6177d343a69
+	github.com/dapr/components-contrib v1.9.0-rc.3.0.20221012190858-80adc9adfe81
 	github.com/dapr/kit v0.0.2
 )
 
@@ -24,10 +24,10 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
-	golang.org/x/net v0.0.0-20220927171203-f486391704dc // indirect
-	golang.org/x/sys v0.0.0-20220928140112-f11e5e49a4ec // indirect
+	golang.org/x/net v0.0.0-20221004154528-8021a29435af // indirect
+	golang.org/x/sys v0.0.0-20221010170243-090e33056c14 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	google.golang.org/genproto v0.0.0-20220622171453-ea41d75dfa0f // indirect
-	google.golang.org/grpc v1.48.0 // indirect
-	google.golang.org/protobuf v1.28.0 // indirect
+	google.golang.org/genproto v0.0.0-20221010155953-15ba04fc1c0e // indirect
+	google.golang.org/grpc v1.50.0 // indirect
+	google.golang.org/protobuf v1.28.1 // indirect
 )
