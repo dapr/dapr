@@ -116,9 +116,9 @@ func (t *TracingClient) init() error {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	defaultTracer = otel.GetTracerProvider().Tracer(
-		"mecha",
-		apitrace.WithInstrumentationVersion("v0.27.0"),
-		apitrace.WithSchemaURL("go.opentelemetry.io/otel/tracing"),
+		"dapr",
+		apitrace.WithInstrumentationVersion("v0.31.0"),
+		apitrace.WithSchemaURL("https://dapr.io"),
 	)
 
 	return nil

@@ -149,9 +149,9 @@ func (m *MetricClient) init() error {
 		controller.WithResource(res))
 	global.SetMeterProvider(m.pusher)
 	// only global one meter, not multiple meters.
-	m.meter = global.Meter("mecha",
-		metric.WithInstrumentationVersion("v0.27.0"),
-		metric.WithSchemaURL("go.opentelemetry.io/otel/metric"))
+	m.meter = global.Meter("dapr",
+		metric.WithInstrumentationVersion("v0.31.0"),
+		metric.WithSchemaURL("https://dapr.io"))
 
 	if err := m.pusher.Start(ctx); err != nil {
 		return errors.Errorf("could not start metric controller: %v", err)

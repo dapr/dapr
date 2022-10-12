@@ -311,12 +311,15 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 		podStatus := map[string][]apiv1.ContainerStatus{}
 		if err == nil {
 			for i, pod := range podList.Items {
+				name := pod.Name
+				podStatus[name] = pod.Status.ContainerStatuses
 				// Reset Spec and ObjectMeta which could contain sensitive info like credentials
 				pod.Spec.Reset()
 				pod.ObjectMeta.Reset()
 				podList.Items[i] = pod
-
-				podStatus[pod.Name] = pod.Status.ContainerStatuses
+				request := podClient.GetLogs(name, &apiv1.PodLogOptions{})
+				body, _ := request.DoRaw(context.Background())
+				log.Printf("(%s) pod logs: %s\n", name, string(body))
 			}
 			j, _ := json.Marshal(podList)
 			log.Printf("deployment %s relate pods: %s", m.app.AppName, string(j))
