@@ -18,14 +18,14 @@ sed -e "s;{{TS_ROUTES}};$SERVICE_CIDR,$POD_CIDR;g" ./tests/config/tailscale_subn
 
 # Wait for tailscale pod to be ready
 for i in 1 2 3 4 5; do
-    echo "waiting for the tailscale pod" && [[ $(kubectl get pods -l app=tailscale -n $DAPR_TEST_NAMESPACE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') == "True" ]] && break || sleep 10
+    echo "waiting for the tailscale pod" && [[ $(kubectl get pods -l app=tailscale-subnet-router -n $DAPR_TEST_NAMESPACE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') == "True" ]] && break || sleep 10
 done
 
-if [[ $(kubectl get pods -l app=tailscale -n $DAPR_TEST_NAMESPACE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; then
+if [[ $(kubectl get pods -l app=tailscale-subnet-router -n $DAPR_TEST_NAMESPACE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; then
     echo "tailscale pod couldn't be ready"
     exit 1
 fi
 
 echo "tailscale pod is now ready"
 sleep 5
-kubectl logs -l app=tailscale -n $DAPR_TEST_NAMESPACE
+kubectl logs -l app=tailscale-subnet-router -n $DAPR_TEST_NAMESPACE
