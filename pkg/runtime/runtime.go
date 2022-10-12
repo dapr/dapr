@@ -906,8 +906,13 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 }
 
 func (a *DaprRuntime) initProxy() {
-	a.proxy = messaging.NewProxy(a.grpc.GetGRPCConnection, a.runtimeConfig.ID,
-		fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, a.runtimeConfig.ApplicationPort), a.runtimeConfig.InternalGRPCPort, a.accessControlList, a.runtimeConfig.AppSSL, a.resiliency)
+	a.proxy = messaging.NewProxy(messaging.ProxyOpts{
+		AppClient:         a.grpc.AppClient,
+		ConnectionFactory: a.grpc.GetGRPCConnection,
+		AppID:             a.runtimeConfig.ID,
+		ACL:               a.accessControlList,
+		Resiliency:        a.resiliency,
+	})
 
 	log.Info("gRPC proxy enabled")
 }

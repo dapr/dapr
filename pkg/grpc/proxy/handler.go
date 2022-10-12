@@ -111,10 +111,13 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		}
 	}
 
+	clientStreamOpts := []grpc.CallOption{
+		grpc.CallContentSubtype((&codec.Proxy{}).Name()),
+	}
 	cErr := policy(func(ctx context.Context) (rErr error) {
 		// We require that the director's returned context inherits from the serverStream.Context().
 		outgoingCtx, backendConn, target, teardown, err := s.director(serverStream.Context(), fullMethodName)
-		defer teardown()
+		defer teardown(false)
 		if err != nil {
 			return err
 		}
@@ -122,17 +125,21 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 
 		// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-		clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
+		clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOpts...)
 		if err != nil {
 			code := status.Code(err)
 			if target != nil && (code == codes.Unavailable || code == codes.Unauthenticated) {
-				backendConn, teardown, err = s.connFactory(outgoingCtx, target.Address, target.ID, target.Namespace, false, true, false)
-				defer teardown()
+				// Destroy the connection so it can be recreated
+				teardown(true)
+
+				// Re-connect
+				backendConn, teardown, err = s.connFactory(outgoingCtx, target.Address, target.ID, target.Namespace)
+				defer teardown(false)
 				if err != nil {
 					return err
 				}
 
-				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
+				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOpts...)
 				if err != nil {
 					return err
 				}
@@ -174,6 +181,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		}
 		return status.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
 	})
+
 	// Clear the request's buffered calls.
 	s.bufferedCalls.Delete(requestID)
 	s.headersSent.Delete(requestID)

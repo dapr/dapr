@@ -262,17 +262,17 @@ func (s *ProxyHappySuite) SetupSuite() {
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 	)
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
-	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *ProxyTarget, func(), error) {
+	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *ProxyTarget, func(bool), error) {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if ok {
 			if _, exists := md[rejectingMdKey]; exists {
-				return ctx, nil, nil, func() {}, status.Errorf(codes.PermissionDenied, "testing rejection")
+				return ctx, nil, nil, func(bool) {}, status.Errorf(codes.PermissionDenied, "testing rejection")
 			}
 		}
 		// Explicitly copy the metadata, otherwise the tests will fail.
 		outCtx, _ := context.WithCancel(ctx)
 		outCtx = metadata.NewOutgoingContext(outCtx, md.Copy())
-		return outCtx, s.serverClientConn, nil, func() {}, nil
+		return outCtx, s.serverClientConn, nil, func(bool) {}, nil
 	}
 	s.proxy = grpc.NewServer(
 		grpc.UnknownServiceHandler(TransparentHandler(director, resiliency.New(nil), func(string) (bool, error) { return true, nil }, nil)),

@@ -18,7 +18,10 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -32,12 +35,14 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
 	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances.
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
-	dialTimeout       = time.Second * 30
+	dialTimeout       = 30 * time.Second
+	maxConnIdle       = 3 * time.Minute
 )
 
 // ClientConnCloser combines grpc.ClientConnInterface and io.Closer
@@ -50,7 +55,6 @@ type ClientConnCloser interface {
 // Manager is a wrapper around gRPC connection pooling.
 type Manager struct {
 	AppClient      ClientConnCloser
-	lock           *sync.RWMutex
 	connectionPool *connectionPool
 	auth           security.Authenticator
 	mode           modes.DaprMode
@@ -59,7 +63,6 @@ type Manager struct {
 // NewGRPCManager returns a new grpc manager.
 func NewGRPCManager(mode modes.DaprMode) *Manager {
 	return &Manager{
-		lock:           &sync.RWMutex{},
 		connectionPool: newConnectionPool(),
 		mode:           mode,
 	}
@@ -72,60 +75,82 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 
 // CreateLocalChannel creates a new gRPC AppChannel.
 func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
-	conn, _, err := g.GetGRPCConnection(context.TODO(), fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled)
+	conn, err := g.connectLocal(context.TODO(), port, sslEnabled)
 	if err != nil {
-		return nil, errors.Errorf("error establishing connection to app grpc on port %v: %s", port, err)
+		return nil, fmt.Errorf("error establishing a grpc connection to app on port %v: %w", port, err)
 	}
-
 	g.AppClient = conn
+
 	ch := grpcChannel.CreateLocalChannel(port, maxConcurrency, conn, spec, maxRequestBodySize, readBufferSize)
 	return ch, nil
 }
 
-// GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist.
-func (g *Manager) GetGRPCConnection(parentCtx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error) {
-	releaseFactory := func(conn *grpc.ClientConn) func() {
-		return func() {
-			g.connectionPool.Release(conn)
-		}
-	}
-
-	// share pooled connection
-	if !recreateIfExists {
-		g.lock.RLock()
-		if conn, ok := g.connectionPool.Share(address); ok {
-			g.lock.RUnlock()
-
-			teardown := releaseFactory(conn)
-			return conn, teardown, nil
-		}
-		g.lock.RUnlock()
-
-		g.lock.RLock()
-		// read the value once again, as a concurrent writer could create it
-		if conn, ok := g.connectionPool.Share(address); ok {
-			g.lock.RUnlock()
-
-			teardown := releaseFactory(conn)
-			return conn, teardown, nil
-		}
-		g.lock.RUnlock()
-	}
-
-	opts := []grpc.DialOption{
-		grpc.WithDefaultServiceConfig(grpcServiceConfig),
-	}
+func (g *Manager) connectLocal(parentCtx context.Context, port int, sslEnabled bool) (conn *grpc.ClientConn, err error) {
+	opts := make([]grpc.DialOption, 0, 2)
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
-		opts = append(opts, grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
+		opts = append(opts,
+			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+		)
 	}
 
-	transportCredentialsAdded := false
-	if !skipTLS && g.auth != nil {
+	if sslEnabled {
+		//nolint:gosec
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+		})))
+	} else {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	dialPrefix := GetDialAddressPrefix(g.mode)
+	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+
+	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
+	defer cancel()
+	return grpc.DialContext(ctx, dialPrefix+address, opts...)
+}
+
+// GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist.
+func (g *Manager) GetGRPCConnection(
+	parentCtx context.Context,
+	address string,
+	id string,
+	namespace string,
+	customOpts ...grpc.DialOption,
+) (conn *grpc.ClientConn, teardown func(destroy bool), err error) {
+	// Load or create a connection
+	conn, err = g.connectionPool.Get(address, func() (*grpc.ClientConn, error) {
+		return g.connectRemote(parentCtx, address, id, namespace, customOpts...)
+	})
+	if err != nil {
+		return nil, nopTeardown, err
+	}
+	return conn, g.connTeardownFactory(address, conn), nil
+}
+
+func (g *Manager) connectRemote(
+	parentCtx context.Context,
+	address string,
+	id string,
+	namespace string,
+	customOpts ...grpc.DialOption,
+) (conn *grpc.ClientConn, err error) {
+	opts := make([]grpc.DialOption, 0, 3+len(customOpts))
+	opts = append(opts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
+
+	if diag.DefaultGRPCMonitoring.IsEnabled() {
+		opts = append(opts,
+			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+		)
+	}
+
+	if g.auth != nil {
 		signedCert := g.auth.GetCurrentSignedCert()
-		cert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
+		var cert tls.Certificate
+		cert, err = tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 		if err != nil {
-			return nil, func() {}, errors.Errorf("error generating x509 Key Pair: %s", err)
+			return nil, errors.Errorf("error loading x509 Key Pair: %s", err)
 		}
 
 		var serverName string
@@ -140,93 +165,255 @@ func (g *Manager) GetGRPCConnection(parentCtx context.Context, address, id strin
 			RootCAs:      signedCert.TrustChain,
 		})
 		opts = append(opts, grpc.WithTransportCredentials(ta))
-		transportCredentialsAdded = true
-	}
-
-	dialPrefix := GetDialAddressPrefix(g.mode)
-	if sslEnabled {
-		//nolint:gosec
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			InsecureSkipVerify: true,
-		})))
-		transportCredentialsAdded = true
-	}
-
-	if !transportCredentialsAdded {
+	} else {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
 	opts = append(opts, customOpts...)
 
+	dialPrefix := GetDialAddressPrefix(g.mode)
+
 	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
-	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
+	conn, err = grpc.DialContext(ctx, dialPrefix+address, opts...)
 	cancel()
 	if err != nil {
-		return nil, func() {}, err
+		return nil, err
 	}
 
-	teardown := releaseFactory(conn)
-	g.lock.Lock()
-	g.connectionPool.Register(address, conn)
-	g.lock.Unlock()
+	return conn, nil
+}
 
-	return conn, teardown, nil
+func (g *Manager) connTeardownFactory(address string, conn *grpc.ClientConn) func(destroy bool) {
+	return func(destroy bool) {
+		if destroy {
+			g.connectionPool.Destroy(address, conn)
+		} else {
+			g.connectionPool.Release(address, conn)
+		}
+	}
+}
+
+func nopTeardown(destroy bool) {
+	// Nop
+}
+
+type connectionPoolItem struct {
+	connections []*connectionPoolItemConnection
+	lock        sync.RWMutex
+}
+
+type connectionPoolItemConnection struct {
+	conn           *grpc.ClientConn
+	referenceCount int32
+	idleSince      atomic.Pointer[time.Time]
+}
+
+// Expired returns true if the connection has expired and should not be used
+func (pic *connectionPoolItemConnection) Expired() bool {
+	idle := pic.idleSince.Load()
+	return idle != nil && time.Since(*idle) < maxConnIdle
+}
+
+// MarkIdle sets the current time as when the connection became idle
+func (pic *connectionPoolItemConnection) MarkIdle() {
+	pic.idleSince.Store(ptr.Of(time.Now()))
 }
 
 type connectionPool struct {
-	pool           map[string]*grpc.ClientConn
-	referenceCount map[*grpc.ClientConn]int
-	referenceLock  *sync.RWMutex
+	pool *sync.Map
 }
 
 func newConnectionPool() *connectionPool {
 	return &connectionPool{
-		pool:           map[string]*grpc.ClientConn{},
-		referenceCount: map[*grpc.ClientConn]int{},
-		referenceLock:  &sync.RWMutex{},
+		pool: &sync.Map{},
 	}
 }
 
+// Get takes a connection from the pool or, if no connection exists, creates a new one using createFn, then stores it and returns it.
+func (p *connectionPool) Get(address string, createFn func() (*grpc.ClientConn, error)) (conn *grpc.ClientConn, err error) {
+	item := p.loadOrStoreItem(address)
+
+	// Try getting an existing connection
+	item.lock.RLock()
+	conn = p.doShare(address, item)
+	item.lock.RUnlock()
+	if conn != nil {
+		return conn, nil
+	}
+
+	// Couldn't find one, so acquire a write lock and create one
+	item.lock.Lock()
+
+	// Before we create a new one, make sure that no other goroutine has created one in the meanwhile
+	conn = p.doShare(address, item)
+	if conn != nil {
+		item.lock.Unlock()
+		return conn, nil
+	}
+
+	// Create a connection using createFn
+	conn, err = createFn()
+	if err != nil {
+		item.lock.Unlock()
+		return nil, err
+	}
+	p.doRegister(address, conn, item)
+
+	item.lock.Unlock()
+
+	return conn, nil
+}
+
+// Register a new connection.
 func (p *connectionPool) Register(address string, conn *grpc.ClientConn) {
-	if oldConn, ok := p.pool[address]; ok {
-		// oldConn is not used by pool anymore
-		p.Release(oldConn)
-	}
+	item := p.loadOrStoreItem(address)
 
-	p.pool[address] = conn
-	// conn is used by caller and pool
-	// NOTE: pool should also increment referenceCount not to close the pooled connection
-
-	p.referenceLock.Lock()
-	p.referenceCount[conn] = 2
-	p.referenceLock.Unlock()
+	item.lock.Lock()
+	p.doRegister(address, conn, item)
+	item.lock.Unlock()
 }
 
-func (p *connectionPool) Share(address string) (*grpc.ClientConn, bool) {
-	conn, ok := p.pool[address]
+func (p *connectionPool) doRegister(address string, conn *grpc.ClientConn, item *connectionPoolItem) {
+	// Expand the slice if needed
+	l := len(item.connections)
+	if l > 0 {
+		tmp := item.connections
+		item.connections = make([]*connectionPoolItemConnection, l+1)
+		copy(item.connections, tmp)
+	} else {
+		// Create a slice with length = 1 as most addresses will only have 1 active connection at a given time
+		item.connections = make([]*connectionPoolItemConnection, 1)
+	}
+	store := &connectionPoolItemConnection{
+		conn: conn,
+	}
+	store.MarkIdle()
+	item.connections[l] = store
+}
+
+// Share takes a connection from the pool and increments its reference count.
+// The result can be nil if no available connection can be found.
+func (p *connectionPool) Share(address string) *grpc.ClientConn {
+	itemI, ok := p.pool.Load(address)
 	if !ok {
-		return nil, false
+		return nil
 	}
+	item := itemI.(*connectionPoolItem)
 
-	p.referenceLock.Lock()
-	p.referenceCount[conn]++
-	p.referenceLock.Unlock()
-	return conn, true
+	item.lock.RLock()
+	conn := p.doShare(address, item)
+	item.lock.RUnlock()
+
+	return conn
 }
 
-func (p *connectionPool) Release(conn *grpc.ClientConn) {
-	p.referenceLock.Lock()
-	defer p.referenceLock.Unlock()
+func (p *connectionPool) doShare(address string, item *connectionPoolItem) *grpc.ClientConn {
+	// If there's more than 1 connection, grab the first one whose reference count is less than 100 (assuming the default value for MaxConcurrentStreams
+	for i := 0; i < len(item.connections); i++ {
+		// Check if the connection is still valid first
+		// First we check if the referenceCount is 0, and then we check if the connection has expired
+		// This should be safe for concurrent use
+		if atomic.LoadInt32(&item.connections[i].referenceCount) == 0 && item.connections[i].Expired() {
+			continue
+		}
 
-	if _, ok := p.referenceCount[conn]; !ok {
+		// Increment the reference counter to signal that we're using the connection
+		count := atomic.AddInt32(&item.connections[i].referenceCount, 1)
+
+		// If the reference count is less than 100, we can use this connection
+		if count < 100 {
+			return item.connections[i].conn
+		}
+
+		atomic.AddInt32(&item.connections[i].referenceCount, -1)
+	}
+
+	// Could not find a connection with less than 100 active streams, so return nil
+	return nil
+}
+
+// Release is called when the method has finished using the connection.
+// This decrements the reference counter for the connection.
+func (p *connectionPool) Release(address string, conn *grpc.ClientConn) {
+	itemI, ok := p.pool.Load(address)
+	if !ok {
+		return
+	}
+	item := itemI.(*connectionPoolItem)
+
+	item.lock.RLock()
+	for _, el := range item.connections {
+		if el.conn == conn {
+			count := atomic.AddInt32(&el.referenceCount, -1)
+			if count <= 0 {
+				el.MarkIdle()
+			}
+			item.lock.RUnlock()
+			return
+		}
+	}
+	item.lock.RUnlock()
+}
+
+// Destroy a connection, forcibly removing ti from the pool
+func (p *connectionPool) Destroy(address string, conn *grpc.ClientConn) {
+	itemI, ok := p.pool.Load(address)
+	if !ok {
 		return
 	}
 
-	p.referenceCount[conn]--
+	item := itemI.(*connectionPoolItem)
 
-	// for concurrent use, connection is closed after all callers release it
-	if p.referenceCount[conn] <= 0 {
-		conn.Close()
-		delete(p.referenceCount, conn)
+	item.lock.Lock()
+	n := 0
+	for i := 0; i < len(item.connections); i++ {
+		el := item.connections[i]
+		if el.conn == conn {
+			// Close and filter out the connection
+			_ = el.conn.Close()
+			continue
+		}
+
+		item.connections[n] = el
+		n++
 	}
+	item.connections = item.connections[:n]
+	item.lock.Unlock()
+}
+
+// Purge connections that have been idle for longer than maxConnIdle.
+// Note that this method should not be called by multiple goroutines at the same time.
+func (p *connectionPool) Purge() {
+	p.pool.Range(func(keyI any, itemI any) bool {
+		item := itemI.(*connectionPoolItem)
+
+		item.lock.Lock()
+		n := 0
+		for i := 0; i < len(item.connections); i++ {
+			el := item.connections[i]
+
+			// If the connection has no use and the last usage was more than maxConnIdle ago, then close it and filter it out
+			// Ok to load the reference count non-atomically because we have a write lock
+			if el.referenceCount <= 0 && el.Expired() {
+				_ = el.conn.Close()
+				continue
+			}
+
+			item.connections[n] = el
+			n++
+		}
+		item.connections = item.connections[:n]
+		item.lock.Unlock()
+
+		return true
+	})
+}
+
+func (p *connectionPool) loadOrStoreItem(address string) *connectionPoolItem {
+	itemI, ok := p.pool.Load(address)
+	if !ok {
+		// Use LoadOrStore here in case another goroutine is in the exact same spot
+		itemI, _ = p.pool.LoadOrStore(address, &connectionPoolItem{})
+	}
+	return itemI.(*connectionPoolItem)
 }

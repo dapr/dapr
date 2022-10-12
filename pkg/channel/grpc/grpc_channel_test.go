@@ -85,7 +85,13 @@ func closeConnection(t *testing.T, conn *grpc.ClientConn) {
 func TestInvokeMethod(t *testing.T) {
 	conn := createConnection(t)
 	defer closeConnection(t, conn)
-	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", maxRequestBodySize: 4, readBufferSize: 4}
+	c := Channel{
+		baseAddress:          "localhost:9998",
+		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
+		appHealthClient:      runtimev1pb.NewAppCallbackHealthCheckClient(conn),
+		appMetadataToken:     "token1",
+		maxRequestBodySizeMB: 4,
+	}
 	ctx := context.Background()
 
 	req := invokev1.NewInvokeMethodRequest("method")
@@ -107,7 +113,13 @@ func TestInvokeMethod(t *testing.T) {
 
 func TestHealthProbe(t *testing.T) {
 	conn := createConnection(t)
-	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", maxRequestBodySize: 4, readBufferSize: 4}
+	c := Channel{
+		baseAddress:          "localhost:9998",
+		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
+		appHealthClient:      runtimev1pb.NewAppCallbackHealthCheckClient(conn),
+		appMetadataToken:     "token1",
+		maxRequestBodySizeMB: 4,
+	}
 	ctx := context.Background()
 
 	var (

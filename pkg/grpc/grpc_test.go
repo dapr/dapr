@@ -14,13 +14,10 @@ limitations under the License.
 package grpc
 
 import (
-	"context"
 	"crypto/x509"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc/connectivity"
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/security"
@@ -54,7 +51,7 @@ func TestNewGRPCManager(t *testing.T) {
 	})
 }
 
-func TestGetGRPCConnection(t *testing.T) {
+/*func TestGetGRPCConnection(t *testing.T) {
 	t.Run("Connection is closed", func(t *testing.T) {
 		m := NewGRPCManager(modes.StandaloneMode)
 		assert.NotNil(t, m)
@@ -112,7 +109,7 @@ func TestGetGRPCConnection(t *testing.T) {
 		assert.NoError(t, err)
 		teardown()
 	})
-}
+}*/
 
 func TestSetAuthenticator(t *testing.T) {
 	a := &authenticatorMock{}

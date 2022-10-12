@@ -41,26 +41,31 @@ type Proxy interface {
 
 type proxy struct {
 	appID             string
+	appClient         grpc.ClientConnInterface
 	connectionFactory messageClientConnection
 	remoteAppFn       func(appID string) (remoteApp, error)
-	remotePort        int
 	telemetryFn       func(context.Context) context.Context
-	localAppAddress   string
 	acl               *config.AccessControlList
-	sslEnabled        bool
 	resiliency        resiliency.Provider
 }
 
+// ProxyOpts is the struct with options for NewProxy.
+type ProxyOpts struct {
+	AppClient         grpc.ClientConnInterface
+	ConnectionFactory messageClientConnection
+	AppID             string
+	ACL               *config.AccessControlList
+	Resiliency        resiliency.Provider
+}
+
 // NewProxy returns a new proxy.
-func NewProxy(connectionFactory messageClientConnection, appID string, localAppAddress string, remoteDaprPort int, acl *config.AccessControlList, sslEnabled bool, resiliency resiliency.Provider) Proxy {
+func NewProxy(opts ProxyOpts) Proxy {
 	return &proxy{
-		appID:             appID,
-		connectionFactory: connectionFactory,
-		localAppAddress:   localAppAddress,
-		remotePort:        remoteDaprPort,
-		acl:               acl,
-		sslEnabled:        sslEnabled,
-		resiliency:        resiliency,
+		appClient:         opts.AppClient,
+		appID:             opts.AppID,
+		connectionFactory: opts.ConnectionFactory,
+		acl:               opts.ACL,
+		resiliency:        opts.Resiliency,
 	}
 }
 
@@ -69,24 +74,28 @@ func (p *proxy) Handler() grpc.StreamHandler {
 	return grpcProxy.TransparentHandler(p.intercept, p.resiliency, p.IsLocal, grpcProxy.DirectorConnectionFactory(p.connectionFactory))
 }
 
-func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *grpcProxy.ProxyTarget, func(), error) {
+func nopTeardown(destroy bool) {
+	// Nop
+}
+
+func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *grpcProxy.ProxyTarget, func(destroy bool), error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	v := md.Get(diagnostics.GRPCProxyAppIDKey)
 	if len(v) == 0 {
-		return ctx, nil, nil, func() {}, errors.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
+		return ctx, nil, nil, nopTeardown, errors.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
 	}
 
 	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 	appID := v[0]
 
 	if p.remoteAppFn == nil {
-		return ctx, nil, nil, func() {}, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
+		return ctx, nil, nil, nopTeardown, errors.Errorf("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
 	}
 
 	target, isLocal, err := p.isLocalInternal(appID)
 	if err != nil {
-		return ctx, nil, nil, func() {}, err
+		return ctx, nil, nil, nopTeardown, err
 	}
 
 	if isLocal {
@@ -94,16 +103,15 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, config.GRPCProtocol, p.acl) //nolint:nosnakecase
 			if !ok {
-				return ctx, nil, nil, func() {}, status.Errorf(codes.PermissionDenied, authError)
+				return ctx, nil, nil, nopTeardown, status.Errorf(codes.PermissionDenied, authError)
 			}
 		}
 
-		conn, teardown, cErr := p.connectionFactory(outCtx, p.localAppAddress, p.appID, "", true, false, p.sslEnabled, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
-		return outCtx, conn, nil, teardown, cErr
+		return outCtx, p.appClient.(*grpc.ClientConn), nil, nopTeardown, nil
 	}
 
 	// proxy to a remote daprd
-	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, false, false, false, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
+	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace, grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 	outCtx = p.telemetryFn(outCtx)
 
 	return outCtx, conn, &grpcProxy.ProxyTarget{ID: target.id, Namespace: target.namespace, Address: target.address}, teardown, cErr
