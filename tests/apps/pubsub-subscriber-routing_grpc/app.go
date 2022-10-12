@@ -72,7 +72,7 @@ var (
 type server struct{}
 
 func main() {
-	log.Printf("Initializing grpc")
+	log.Println("Initializing grpc")
 
 	/* #nosec */
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", appPort))
@@ -128,7 +128,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 		}
 	}
 
-	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
+	log.Printf("(%s) Got invoked method %s\n", reqID, in.Method)
 
 	lock.Lock()
 	defer lock.Unlock()
@@ -155,7 +155,7 @@ func (s *server) getMessages(reqID string) []byte {
 	}
 
 	rawResp, _ := json.Marshal(resp)
-	log.Printf("(%s) getMessages response: %s", reqID, string(rawResp))
+	log.Printf("(%s) getMessages response: %s\n", reqID, string(rawResp))
 	return rawResp
 }
 
@@ -192,7 +192,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	defer lock.Unlock()
 
 	reqID := uuid.New().String()
-	log.Printf("(%s) Message arrived - Topic: %s, Message: %s, Path: %s", reqID, in.Topic, string(in.Data), in.Path)
+	log.Printf("(%s) Message arrived - Topic: %s, Message: %s, Path: %s\n", reqID, in.Topic, string(in.Data), in.Path)
 
 	var set *sets.String
 	switch in.Path {
@@ -209,7 +209,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	case pathF:
 		set = &routedMessagesF
 	default:
-		log.Printf("(%s) Responding with DROP. in.Path not found", reqID)
+		log.Printf("(%s) Responding with DROP. in.Path not found\n", reqID)
 		// Return success with DROP status to drop message.
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
@@ -220,7 +220,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 
 	set.Insert(msg)
 
-	log.Printf("(%s) Responding with SUCCESS", reqID)
+	log.Printf("(%s) Responding with SUCCESS\n", reqID)
 	return &runtimev1pb.TopicEventResponse{
 		Status: runtimev1pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 	}, nil
@@ -235,6 +235,6 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*run
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
 func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
-	log.Printf("Invoked from binding: %s", in.Name)
+	log.Printf("Invoked from binding: %s\n", in.Name)
 	return &runtimev1pb.BindingEventResponse{}, nil
 }

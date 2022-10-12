@@ -109,7 +109,7 @@ var (
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, _ *http.Request) {
-	log.Printf("indexHandler called")
+	log.Println("indexHandler called")
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
@@ -194,7 +194,7 @@ func readMessageBody(reqID string, r *http.Request) (msg string, err error) {
 		err = json.Unmarshal([]byte(msg), &actualMsg)
 		if err != nil {
 			// Log only
-			log.Printf("(%s) Error extracing JSON from raw event: %v", reqID, err)
+			log.Printf("(%s) Error extracing JSON from raw event: %v\n", reqID, err)
 		} else {
 			msg = actualMsg
 		}
@@ -213,10 +213,10 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Before we handle the error, see if we need to respond in another way
 	// We still want the message so we can log it
-	log.Printf("(%s) subscribeHandler called %s. Message: %s", reqID, r.URL, msg)
+	log.Printf("(%s) subscribeHandler called %s. Message: %s\n", reqID, r.URL, msg)
 	switch desiredResponse {
 	case respondWithRetry:
-		log.Printf("(%s) Responding with RETRY", reqID)
+		log.Printf("(%s) Responding with RETRY\n", reqID)
 		// do not store received messages, respond with success but a retry status
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -225,12 +225,12 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	case respondWithError:
-		log.Printf("(%s) Responding with ERROR", reqID)
+		log.Printf("(%s) Responding with ERROR\n", reqID)
 		// do not store received messages, respond with error
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	case respondWithInvalidStatus:
-		log.Printf("(%s) Responding with INVALID", reqID)
+		log.Printf("(%s) Responding with INVALID\n", reqID)
 		// do not store received messages, respond with success but an invalid status
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -241,7 +241,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("(%s) Responding with DROP due to error: %v", reqID, err)
+		log.Printf("(%s) Responding with DROP due to error: %v\n", reqID, err)
 		// Return 200 with DROP status to drop message
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -272,7 +272,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		// is thre for an unknown URL path
 
 		errorMessage := fmt.Sprintf("Unexpected/Multiple redelivery of message from %s", r.URL.String())
-		log.Printf("(%s) Responding with DROP. %s", reqID, errorMessage)
+		log.Printf("(%s) Responding with DROP. %s\n", reqID, errorMessage)
 		// Return success with DROP status to drop message
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
@@ -284,10 +284,10 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	if desiredResponse == respondWithEmptyJSON {
-		log.Printf("(%s) Responding with {}", reqID)
+		log.Printf("(%s) Responding with {}\n", reqID)
 		w.Write([]byte("{}"))
 	} else {
-		log.Printf("(%s) Responding with SUCCESS", reqID)
+		log.Printf("(%s) Responding with SUCCESS\n", reqID)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: "consumed",
 			Status:  "SUCCESS",
@@ -296,29 +296,29 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func extractMessage(reqID string, body []byte) (string, error) {
-	log.Printf("(%s) extractMessage() called with body=%s", reqID, string(body))
+	log.Printf("(%s) extractMessage() called with body=%s\n", reqID, string(body))
 
 	m := make(map[string]interface{})
 	err := json.Unmarshal(body, &m)
 	if err != nil {
-		log.Printf("(%s) Could not unmarshal: %v", reqID, err)
+		log.Printf("(%s) Could not unmarshal: %v\n", reqID, err)
 		return "", err
 	}
 
 	if m["data_base64"] != nil {
 		b, err := base64.StdEncoding.DecodeString(m["data_base64"].(string))
 		if err != nil {
-			log.Printf("(%s) Could not base64 decode: %v", reqID, err)
+			log.Printf("(%s) Could not base64 decode: %v\n", reqID, err)
 			return "", err
 		}
 
 		msg := string(b)
-		log.Printf("(%s) output from base64='%s'", reqID, msg)
+		log.Printf("(%s) output from base64='%s'\n", reqID, msg)
 		return msg, nil
 	}
 
 	msg := m["data"].(string)
-	log.Printf("(%s) output='%s'", reqID, msg)
+	log.Printf("(%s) output='%s'\n", reqID, msg)
 
 	return msg, nil
 }
@@ -352,7 +352,7 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 		ReceivedByTopicDeadLetter: unique(receivedMessagesDeadLetter.List()),
 	}
 
-	log.Printf("getReceivedMessages called. reqID=%s response=%s", reqID, response)
+	log.Printf("getReceivedMessages called. reqID=%s response=%s\n", reqID, response)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
@@ -365,7 +365,7 @@ func setDesiredResponse(resp respondWith, msg string) http.HandlerFunc {
 		defer r.Body.Close()
 		lock.Lock()
 		defer lock.Unlock()
-		log.Print(msg)
+		log.Println(msg)
 		desiredResponse = resp
 		w.WriteHeader(http.StatusOK)
 	}
@@ -391,7 +391,7 @@ func initializeSets() {
 
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
-	log.Printf("Called appRouter()")
+	log.Println("Called appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
 
 	// Log requests and their processing time
@@ -430,6 +430,6 @@ func main() {
 	// initialize sets on application start
 	initializeSets()
 
-	log.Printf("Dapr E2E test app: pubsub - listening on http://localhost:%d", appPort)
+	log.Printf("Dapr E2E test app: pubsub - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

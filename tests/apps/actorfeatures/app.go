@@ -201,7 +201,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logsHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr %s request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing dapr %s request for %s\n", r.Method, r.URL.RequestURI())
 	if r.Method == "DELETE" {
 		resetLogs()
 	}
@@ -221,7 +221,7 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 		getActorRemindersPartitions(),
 	}
 
-	log.Printf("Processing dapr request for %s, responding with %v", r.URL.RequestURI(), daprConfigResponse)
+	log.Printf("Processing dapr request for %s, responding with %v\n", r.URL.RequestURI(), daprConfigResponse)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -229,7 +229,7 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing actor method request for %s", r.URL.RequestURI())
+	log.Printf("Processing actor method request for %s\n", r.URL.RequestURI())
 
 	start := epoch()
 
@@ -301,7 +301,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s actor request for %s\n", r.Method, r.URL.RequestURI())
 
 	start := epoch()
 
@@ -309,7 +309,7 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
 	if actorType != registeredActorType {
-		log.Printf("Unknown actor type: %s", actorType)
+		log.Printf("Unknown actor type: %s\n", actorType)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -330,7 +330,7 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 
 // calls Dapr's Actor method/timer/reminder: simulating actor client call.
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s test request for %s\n", r.Method, r.URL.RequestURI())
 
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
@@ -355,7 +355,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		defer r.Body.Close()
 		if err != nil {
-			log.Printf("Could not get reminder request: %s", err.Error())
+			log.Printf("Could not get reminder request: %s\n", err.Error())
 			return
 		}
 
@@ -364,7 +364,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 
 	body, err := httpCall(r.Method, url, req, expectedHTTPCode)
 	if err != nil {
-		log.Printf("Could not read actor's test response: %s", err.Error())
+		log.Printf("Could not read actor's test response: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -377,7 +377,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	var response daprActorResponse
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Printf("Could not parse actor's test response: %s", err.Error())
+		log.Printf("Could not parse actor's test response: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -386,12 +386,12 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testCallMetadataHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s test request for %s\n", r.Method, r.URL.RequestURI())
 
 	metadataURL := fmt.Sprintf("%s/metadata", daprV1URL)
 	body, err := httpCall(r.Method, metadataURL, nil, 200)
 	if err != nil {
-		log.Printf("Could not read metadata response: %s", err.Error())
+		log.Printf("Could not read metadata response: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -400,12 +400,12 @@ func testCallMetadataHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func shutdownHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s test request for %s\n", r.Method, r.URL.RequestURI())
 
 	shutdownURL := fmt.Sprintf("%s/shutdown", daprV1URL)
 	_, err := httpCall(r.Method, shutdownURL, nil, 204)
 	if err != nil {
-		log.Printf("Could not shutdown sidecar: %s", err.Error())
+		log.Printf("Could not shutdown sidecar: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -417,19 +417,19 @@ func shutdownHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func shutdownSidecarHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s test request for %s\n", r.Method, r.URL.RequestURI())
 
 	shutdownURL := fmt.Sprintf("%s/shutdown", daprV1URL)
 	_, err := httpCall(r.Method, shutdownURL, nil, 204)
 	if err != nil {
-		log.Printf("Could not shutdown sidecar: %s", err.Error())
+		log.Printf("Could not shutdown sidecar: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
 func testEnvHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s test request for %s\n", r.Method, r.URL.RequestURI())
 
 	envName := mux.Vars(r)["envName"]
 	if r.Method == "GET" {
@@ -443,7 +443,7 @@ func testEnvHandler(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		defer r.Body.Close()
 		if err != nil {
-			log.Printf("Could not read config env value: %s", err.Error())
+			log.Printf("Could not read config env value: %s\n", err.Error())
 			return
 		}
 
@@ -490,7 +490,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 
 		_, err := httpCall("POST", url, operations, 201)
 		if err != nil {
-			log.Printf("actor state call failed: %s", err.Error())
+			log.Printf("actor state call failed: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
@@ -500,7 +500,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 
 		_, err := httpCall("GET", url, nil, 200)
 		if err != nil {
-			log.Printf("actor state call failed: %s", err.Error())
+			log.Printf("actor state call failed: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
@@ -509,7 +509,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 		url = fmt.Sprintf(actorGetStateURLFormat, actorType, id, "keynotpresent")
 		body, err := httpCall("GET", url, nil, 204)
 		if err != nil {
-			log.Printf("actor state call failed: %s", err.Error())
+			log.Printf("actor state call failed: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
@@ -524,7 +524,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 		url = fmt.Sprintf(actorGetStateURLFormat, actorType, "actoriddoesnotexist", "keynotpresent")
 		_, err = httpCall("GET", url, nil, 400)
 		if err != nil {
-			log.Printf("actor state call failed: %s", err.Error())
+			log.Printf("actor state call failed: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
@@ -552,7 +552,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 
 		_, err := httpCall("POST", url, operations, 201)
 		if err != nil {
-			log.Printf("actor state call failed: %s", err.Error())
+			log.Printf("actor state call failed: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
@@ -562,7 +562,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 
 		_, err := httpCall("GET", url, nil, 200)
 		if err != nil {
-			log.Printf("actor state call failed: %s", err.Error())
+			log.Printf("actor state call failed: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
@@ -572,7 +572,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 
 		body, err := httpCall("GET", url, nil, 204)
 		if err != nil {
-			log.Printf("actor state call failed: %s", err.Error())
+			log.Printf("actor state call failed: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
@@ -677,6 +677,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Actor App - listening on http://localhost:%d", appPort)
+	log.Printf("Actor App - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

@@ -87,7 +87,7 @@ func TestJobPublishMessage(t *testing.T) {
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/getMessages", externalURL)
-	log.Printf("Getting messages received by subscriber using url %s", url)
+	log.Printf("Getting messages received by subscriber using url %s\n", url)
 
 	request := callSubscriberMethodRequest{
 		RemoteApp: subscriberAppName,
@@ -109,10 +109,10 @@ func TestJobPublishMessage(t *testing.T) {
 			continue
 		}
 
-		log.Printf("Subscriber receieved %d messages on pubsub-job-topic-http", len(appResp.ReceivedByTopicJob))
+		log.Printf("Subscriber receieved %d messages on pubsub-job-topic-http\n", len(appResp.ReceivedByTopicJob))
 
 		if len(appResp.ReceivedByTopicJob) == 0 {
-			log.Printf("No message received, retrying.")
+			log.Println("No message received, retrying.")
 			time.Sleep(2 * time.Second)
 		} else {
 			break

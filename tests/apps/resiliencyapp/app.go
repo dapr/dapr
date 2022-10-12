@@ -75,7 +75,7 @@ func healthz(w http.ResponseWriter, r *http.Request) {
 
 func unknownHandler(w http.ResponseWriter, r *http.Request) {
 	// Just some debugging, if this is printed the app isn't setup correctly.
-	log.Printf("Unknown route called: %s", r.RequestURI)
+	log.Printf("Unknown route called: %s\n", r.RequestURI)
 	w.WriteHeader(http.StatusNotFound)
 }
 
@@ -135,7 +135,7 @@ func resiliencyBindingHandler(w http.ResponseWriter, r *http.Request) {
 		callCount = records[len(records)-1].Count + 1
 	}
 
-	log.Printf("Seen %s %d times.", message.ID, callCount)
+	log.Printf("Seen %s %d times.\n", message.ID, callCount)
 
 	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
 	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
@@ -169,7 +169,7 @@ func resiliencyPubsubHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	log.Printf("Raw body: %s", string(body))
+	log.Printf("Raw body: %s\n", string(body))
 
 	var rawBody map[string]interface{}
 	json.Unmarshal(body, &rawBody)
@@ -185,7 +185,7 @@ func resiliencyPubsubHandler(w http.ResponseWriter, r *http.Request) {
 		callCount = records[len(records)-1].Count + 1
 	}
 
-	log.Printf("Seen %s %d times.", message.ID, callCount)
+	log.Printf("Seen %s %d times.\n", message.ID, callCount)
 
 	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
 	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
@@ -215,7 +215,7 @@ func resiliencyServiceInvocationHandler(w http.ResponseWriter, r *http.Request) 
 		callCount = records[len(records)-1].Count + 1
 	}
 
-	log.Printf("Seen %s %d times.", message.ID, callCount)
+	log.Printf("Seen %s %d times.\n", message.ID, callCount)
 
 	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
 	if message.ResponseCode != nil {
@@ -245,13 +245,13 @@ func resiliencyActorMethodHandler(w http.ResponseWriter, r *http.Request) {
 		callCount = records[len(records)-1].Count + 1
 	}
 
-	log.Printf("Seen %s %d times.", message.ID, callCount)
+	log.Printf("Seen %s %d times.\n", message.ID, callCount)
 
 	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
 	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
 		if message.Timeout != nil {
 			// This request can still succeed if the resiliency policy timeout is longer than this sleep.
-			log.Printf("Sleeping: %v", *message.Timeout)
+			log.Printf("Sleeping: %v\n", *message.Timeout)
 			time.Sleep(*message.Timeout)
 		} else {
 			log.Println("Forcing failure.")
@@ -265,7 +265,7 @@ func resiliencyActorMethodHandler(w http.ResponseWriter, r *http.Request) {
 // App startup/endpoint setup.
 func initGRPCClient() {
 	url := fmt.Sprintf("localhost:%d", 50001)
-	log.Printf("Connecting to dapr using url %s", url)
+	log.Printf("Connecting to dapr using url %s\n", url)
 	var grpcConn *grpc.ClientConn
 	for retries := 10; retries > 0; retries-- {
 		var err error
@@ -275,11 +275,11 @@ func initGRPCClient() {
 		}
 
 		if retries == 0 {
-			log.Printf("Could not connect to dapr: %v", err)
+			log.Printf("Could not connect to dapr: %v\n", err)
 			log.Panic(err)
 		}
 
-		log.Printf("Could not connect to dapr: %v, retrying...", err)
+		log.Printf("Could not connect to dapr: %v, retrying...\n", err)
 		time.Sleep(5 * time.Second)
 	}
 
@@ -324,7 +324,7 @@ func main() {
 	callTracking = map[string][]CallRecord{}
 	initGRPCClient()
 
-	log.Printf("Resiliency App - listening on http://localhost:%d", appPort)
+	log.Printf("Resiliency App - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }
 
@@ -344,7 +344,7 @@ func TestGetCallCount(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestGetCallCountGRPC(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Getting call counts for gRPC")
+	log.Println("Getting call counts for gRPC")
 
 	req := runtimev1pb.InvokeServiceRequest{
 		Id: "resiliencyappgrpc",
@@ -367,7 +367,7 @@ func TestGetCallCountGRPC(w http.ResponseWriter, r *http.Request) {
 
 func TestInvokeOutputBinding(w http.ResponseWriter, r *http.Request) {
 	binding := mux.Vars(r)["binding"]
-	log.Printf("Making call to output binding %s.", binding)
+	log.Printf("Making call to output binding %s.\n", binding)
 
 	var message FailureMessage
 	err := json.NewDecoder(r.Body).Decode(&message)
@@ -386,7 +386,7 @@ func TestInvokeOutputBinding(w http.ResponseWriter, r *http.Request) {
 
 	_, err = daprClient.InvokeBinding(context.Background(), req)
 	if err != nil {
-		log.Printf("Error invoking binding: %s", err.Error())
+		log.Printf("Error invoking binding: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
@@ -403,7 +403,7 @@ func TestPublishMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Publishing to %s/%s - %+v", pubsub, topic, message)
+	log.Printf("Publishing to %s/%s - %+v\n", pubsub, topic, message)
 	b, _ := json.Marshal(message)
 
 	req := &runtimev1pb.PublishEventRequest{
@@ -415,14 +415,14 @@ func TestPublishMessage(w http.ResponseWriter, r *http.Request) {
 
 	_, err = daprClient.PublishEvent(context.Background(), req)
 	if err != nil {
-		log.Printf("Error publishing event: %s", err.Error())
+		log.Printf("Error publishing event: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
 func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 	protocol := mux.Vars(r)["protocol"]
-	log.Printf("Invoking resiliency service with %s", protocol)
+	log.Printf("Invoking resiliency service with %s\n", protocol)
 
 	targetApp := r.URL.Query().Get("target_app")
 	targetMethod := r.URL.Query().Get("target_method")
@@ -480,7 +480,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 
 		_, err = daprClient.InvokeService(r.Context(), req)
 		if err != nil {
-			log.Printf("Failed to invoke service: %s", err.Error())
+			log.Printf("Failed to invoke service: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("failed to call grpc service: %s", err.Error())))
 			return
@@ -493,7 +493,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		log.Printf("Proxying message: %+v", message)
+		log.Printf("Proxying message: %+v\n", message)
 		b, _ := json.Marshal(message)
 
 		conn, err := grpc.Dial("localhost:50001", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -507,7 +507,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", "resiliencyappgrpc")
 		_, err = client.SayHello(ctx, &pb.HelloRequest{Name: string(b)})
 		if err != nil {
-			log.Printf("could not proxy request: %s", err.Error())
+			log.Printf("could not proxy request: %s\n", err.Error())
 			w.WriteHeader(500)
 			w.Write([]byte(fmt.Sprintf("failed to proxy request: %s", err.Error())))
 			return
@@ -517,7 +517,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 
 func TestInvokeActorMethod(w http.ResponseWriter, r *http.Request) {
 	protocol := mux.Vars(r)["protocol"]
-	log.Printf("Invoking resiliency actor with %s", protocol)
+	log.Printf("Invoking resiliency actor with %s\n", protocol)
 
 	if protocol == "http" {
 		httpClient.Timeout = time.Minute
@@ -528,7 +528,7 @@ func TestInvokeActorMethod(w http.ResponseWriter, r *http.Request) {
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			log.Printf("An error occurred calling actors: %s", err.Error())
+			log.Printf("An error occurred calling actors: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -552,7 +552,7 @@ func TestInvokeActorMethod(w http.ResponseWriter, r *http.Request) {
 
 		_, err = daprClient.InvokeActor(r.Context(), req)
 		if err != nil {
-			log.Printf("An error occurred calling actors: %s", err.Error())
+			log.Printf("An error occurred calling actors: %s\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

@@ -97,7 +97,7 @@ type receivedMessagesResponse struct {
 }
 
 func main() {
-	log.Printf("Initializing grpc")
+	log.Println("Initializing grpc")
 
 	/* #nosec */
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", appPort))
@@ -130,14 +130,14 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 
 func (s *server) GetReceivedTopics(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	failedMessage := messages.getFailed()
-	log.Printf("failed message %s", failedMessage)
+	log.Printf("failed message %s\n", failedMessage)
 	resp := receivedMessagesResponse{
 		ReceivedMessages: messages.getAllSuccessful(),
 		FailedMessage:    failedMessage,
 	}
 	rawResp, err := json.Marshal(resp)
 	if err != nil {
-		log.Printf("Could not encode response: %s", err.Error())
+		log.Printf("Could not encode response: %s\n", err.Error())
 		return &commonv1pb.InvokeResponse{}, err
 	}
 	data := anypb.Any{
@@ -162,14 +162,14 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 
 	var message string
 	err := json.Unmarshal(in.Data, &message)
-	log.Printf("Got message: %s", message)
+	log.Printf("Got message: %s\n", message)
 	if err != nil {
-		log.Printf("error parsing test-topic input binding payload: %s", err)
+		log.Printf("error parsing test-topic input binding payload: %s\n", err)
 		return &runtimev1pb.TopicEventResponse{}, nil
 	}
 	if fail := messages.fail(message); fail {
 		// simulate failure. fail only for the first time.
-		log.Print("failing message")
+		log.Println("failing message")
 		return &runtimev1pb.TopicEventResponse{}, nil
 	}
 	messages.add(message)

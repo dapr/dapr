@@ -120,9 +120,9 @@ func startGRPC() {
 	}()
 
 	// Blocking call
-	log.Printf("Health App GRPC server listening on :%s", appPort)
+	log.Printf("Health App GRPC server listening on :%s\n", appPort)
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("Failed to start gRPC server: %v", err)
+		log.Fatalf("Failed to start gRPC server: %v\n", err)
 	}
 	log.Println("App shut down")
 }
@@ -164,11 +164,11 @@ func (c *countAndLast) MarshalJSON() ([]byte, error) {
 
 func startControlServer() {
 	// Wait until the first health probe
-	log.Print("Waiting for signalto start control server…")
+	log.Println("Waiting for signalto start control server…")
 	<-ready
 
 	port, _ := strconv.Atoi(controlPort)
-	log.Printf("Health App control server listening on http://:%d", port)
+	log.Printf("Health App control server listening on http://:%d\n", port)
 	utils.StartServer(port, func() *mux.Router {
 		r := mux.NewRouter().StrictSlash(true)
 
@@ -265,7 +265,7 @@ func publishMessage(count int) {
 	body := fmt.Sprintf(`{"orderId": "%d"}`, count)
 	res, err := httpClient.Post(u, "application/json", strings.NewReader(body))
 	if err != nil {
-		log.Printf("Failed to publish message. Error: %v", err)
+		log.Printf("Failed to publish message. Error: %v\n", err)
 		return
 	}
 	// Drain before closing
@@ -275,7 +275,7 @@ func publishMessage(count int) {
 
 func startHTTP() {
 	port, _ := strconv.Atoi(appPort)
-	log.Printf("Health App HTTP server listening on http://:%d", port)
+	log.Printf("Health App HTTP server listening on http://:%d\n", port)
 	utils.StartServer(port, httpRouter, true, false)
 }
 

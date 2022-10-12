@@ -123,7 +123,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testTopicHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("testTopicHandler called")
+	log.Println("testTopicHandler called")
 	if r.Method == http.MethodOptions {
 		log.Println("test-topic binding input has been accepted")
 		// Sending StatusOK back to the topic, so it will not attempt to redeliver on session restart.
@@ -134,15 +134,15 @@ func testTopicHandler(w http.ResponseWriter, r *http.Request) {
 
 	var message string
 	err := json.NewDecoder(r.Body).Decode(&message)
-	log.Printf("Got message: %s", message)
+	log.Printf("Got message: %s\n", message)
 	if err != nil {
-		log.Printf("error parsing test-topic input binding payload: %s", err)
+		log.Printf("error parsing test-topic input binding payload: %s\n", err)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 	if fail := messages.fail(message); fail {
 		// simulate failure. fail only for the first time.
-		log.Print("failing message")
+		log.Println("failing message")
 		w.WriteHeader(http.StatusInternalServerError)
 
 		return
@@ -152,7 +152,7 @@ func testTopicHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testRoutedTopicHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("testRoutedTopicHandler called")
+	log.Println("testRoutedTopicHandler called")
 	if r.Method == http.MethodOptions {
 		log.Println("test-topic routed binding input has been accepted")
 		// Sending StatusOK back to the topic, so it will not attempt to redeliver on session restart.
@@ -163,9 +163,9 @@ func testRoutedTopicHandler(w http.ResponseWriter, r *http.Request) {
 
 	var message string
 	err := json.NewDecoder(r.Body).Decode(&message)
-	log.Printf("Got message: %s", message)
+	log.Printf("Got message: %s\n", message)
 	if err != nil {
-		log.Printf("error parsing test-topic input binding payload: %s", err)
+		log.Printf("error parsing test-topic input binding payload: %s\n", err)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -175,13 +175,13 @@ func testRoutedTopicHandler(w http.ResponseWriter, r *http.Request) {
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	failedMessage := messages.getFailed()
-	log.Printf("failed message %s", failedMessage)
+	log.Printf("failed message %s\n", failedMessage)
 	if err := json.NewEncoder(w).Encode(testHandlerResponse{
 		ReceivedMessages: messages.getAllSuccessful(),
 		FailedMessage:    failedMessage,
 		RoutedMessages:   messages.getAllRouted(),
 	}); err != nil {
-		log.Printf("error encoding saved messages: %s", err)
+		log.Printf("error encoding saved messages: %s\n", err)
 
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(testHandlerResponse{
@@ -209,6 +209,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
+	log.Printf("Hello Dapr - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }
