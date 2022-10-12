@@ -2682,7 +2682,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 					return nil
 				},
 			}
-			rt.grpc.AppClient = &mockClientConn
+			rt.grpc.SetAppClient(&mockClientConn)
 
 			err := rt.publishMessageGRPC(context.Background(), testPubSubMessage)
 			if tc.ExpectError {
@@ -3081,7 +3081,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer rt.grpc.CloseAppClient()
 
 			// act
 			err = rt.publishMessageGRPC(context.Background(), tc.message)
@@ -3710,10 +3710,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
 			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
+			defer rt.grpc.CloseAppClient()
 
 			// act
-			resp := rt.getSubscribedBindingsGRPC()
+			resp, _ := rt.getSubscribedBindingsGRPC()
 
 			// assert
 			assert.Equal(t, tc.expectedResponse, resp, "expected response to match")

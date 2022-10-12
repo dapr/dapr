@@ -41,7 +41,7 @@ type Proxy interface {
 
 type proxy struct {
 	appID             string
-	appClient         grpc.ClientConnInterface
+	appClientFn       func() (grpc.ClientConnInterface, error)
 	connectionFactory messageClientConnection
 	remoteAppFn       func(appID string) (remoteApp, error)
 	telemetryFn       func(context.Context) context.Context
@@ -51,7 +51,7 @@ type proxy struct {
 
 // ProxyOpts is the struct with options for NewProxy.
 type ProxyOpts struct {
-	AppClient         grpc.ClientConnInterface
+	AppClientFn       func() (grpc.ClientConnInterface, error)
 	ConnectionFactory messageClientConnection
 	AppID             string
 	ACL               *config.AccessControlList
@@ -61,7 +61,7 @@ type ProxyOpts struct {
 // NewProxy returns a new proxy.
 func NewProxy(opts ProxyOpts) Proxy {
 	return &proxy{
-		appClient:         opts.AppClient,
+		appClientFn:       opts.AppClientFn,
 		appID:             opts.AppID,
 		connectionFactory: opts.ConnectionFactory,
 		acl:               opts.ACL,
@@ -107,7 +107,12 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 			}
 		}
 
-		return outCtx, p.appClient.(*grpc.ClientConn), nil, nopTeardown, nil
+		var appClient grpc.ClientConnInterface
+		appClient, err = p.appClientFn()
+		if err != nil {
+			return ctx, nil, nil, nopTeardown, err
+		}
+		return outCtx, appClient.(*grpc.ClientConn), nil, nopTeardown, nil
 	}
 
 	// proxy to a remote daprd

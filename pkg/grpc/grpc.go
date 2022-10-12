@@ -17,7 +17,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"net"
 	"strconv"
 	"sync"
@@ -45,26 +44,33 @@ const (
 	maxConnIdle       = 3 * time.Minute
 )
 
-// ClientConnCloser combines grpc.ClientConnInterface and io.Closer
-// to cover the methods used from *grpc.ClientConn.
-type ClientConnCloser interface {
-	grpc.ClientConnInterface
-	io.Closer
+// AppChannelConfig contains the configuration for the app channel.
+type AppChannelConfig struct {
+	Port                 int
+	MaxConcurrency       int
+	TracingSpec          config.TracingSpec
+	SSLEnabled           bool
+	MaxRequestBodySizeMB int
+	ReadBufferSizeKB     int
 }
 
 // Manager is a wrapper around gRPC connection pooling.
 type Manager struct {
-	AppClient      ClientConnCloser
+	conn           grpc.ClientConnInterface
 	connectionPool *connectionPool
 	auth           security.Authenticator
 	mode           modes.DaprMode
+	channelConfig  *AppChannelConfig
+	lock           *sync.RWMutex
 }
 
 // NewGRPCManager returns a new grpc manager.
-func NewGRPCManager(mode modes.DaprMode) *Manager {
+func NewGRPCManager(mode modes.DaprMode, channelConfig *AppChannelConfig) *Manager {
 	return &Manager{
 		connectionPool: newConnectionPool(),
 		mode:           mode,
+		channelConfig:  channelConfig,
+		lock:           &sync.RWMutex{},
 	}
 }
 
@@ -73,16 +79,74 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 	g.auth = auth
 }
 
-// CreateLocalChannel creates a new gRPC AppChannel.
-func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize int, readBufferSize int) (channel.AppChannel, error) {
-	conn, err := g.connectLocal(context.TODO(), port, sslEnabled)
+// GetAppChannel returns a connection to the local channel.
+// If there's no active connection to the app, it creates one.
+func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
+	conn, err := g.GetAppClient()
 	if err != nil {
-		return nil, fmt.Errorf("error establishing a grpc connection to app on port %v: %w", port, err)
+		return nil, err
 	}
-	g.AppClient = conn
 
-	ch := grpcChannel.CreateLocalChannel(port, maxConcurrency, conn, spec, maxRequestBodySize, readBufferSize)
+	ch := grpcChannel.CreateLocalChannel(
+		g.channelConfig.Port,
+		g.channelConfig.MaxConcurrency,
+		conn.(*grpc.ClientConn),
+		g.channelConfig.TracingSpec,
+		g.channelConfig.MaxRequestBodySizeMB,
+		g.channelConfig.ReadBufferSizeKB,
+	)
 	return ch, nil
+}
+
+// GetAppClient returns the gRPC connection to the local app.
+// If there's no active connection to the app, it creates one.
+func (g *Manager) GetAppClient() (grpc.ClientConnInterface, error) {
+	// Return the existing connection if active
+	g.lock.RLock()
+	if g.conn != nil {
+		g.lock.RUnlock()
+		return g.conn, nil
+	}
+	g.lock.RUnlock()
+
+	// Need to connect; get a write lock
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	// Check again if we have an existing connection after re-acquiring the lock
+	if g.conn != nil {
+		return g.conn, nil
+	}
+
+	// connectLocal implements a timeout, so we can use a background context here
+	conn, err := g.connectLocal(context.Background(), g.channelConfig.Port, g.channelConfig.SSLEnabled)
+	if err != nil {
+		return nil, fmt.Errorf("error establishing a grpc connection to app on port %v: %w", g.channelConfig.Port, err)
+	}
+	g.conn = conn
+
+	return g.conn, nil
+}
+
+// CloseAppClient closes the active app client connection.
+func (g *Manager) CloseAppClient() error {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	if g.conn != nil {
+		conn, ok := g.conn.(interface{ Close() error })
+		g.conn = nil
+		if ok {
+			return conn.Close()
+		}
+	}
+	return nil
+}
+
+// SetAppClient sets the connection to the app.
+// This is mostly useful for testing.
+func (g *Manager) SetAppClient(conn grpc.ClientConnInterface) {
+	g.conn = conn
 }
 
 func (g *Manager) connectLocal(parentCtx context.Context, port int, sslEnabled bool) (conn *grpc.ClientConn, err error) {

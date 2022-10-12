@@ -44,23 +44,18 @@ func connectionFn(ctx context.Context, address, id string, namespace string, cus
 	return conn, teardown, err
 }
 
-var appClient grpc.ClientConnInterface
-
-func init() {
-	var err error
-	appClient, _, err = connectionFn(context.Background(), "a:123", "a", "")
-	if err != nil {
-		panic(err)
-	}
+func appClientFn() (grpc.ClientConnInterface, error) {
+	appClient, _, err := connectionFn(context.Background(), "a:123", "a", "")
+	return appClient, err
 }
 
 func TestNewProxy(t *testing.T) {
 	p := NewProxy(ProxyOpts{
 		ConnectionFactory: connectionFn,
+		AppClientFn:       appClientFn,
 		AppID:             "a",
 		ACL:               nil,
 		Resiliency:        resiliency.New(nil),
-		AppClient:         appClient,
 	})
 	proxy := p.(*proxy)
 
@@ -72,10 +67,10 @@ func TestNewProxy(t *testing.T) {
 func TestSetRemoteAppFn(t *testing.T) {
 	p := NewProxy(ProxyOpts{
 		ConnectionFactory: connectionFn,
+		AppClientFn:       appClientFn,
 		AppID:             "a",
 		ACL:               nil,
 		Resiliency:        resiliency.New(nil),
-		AppClient:         appClient,
 	})
 	p.SetRemoteAppFn(func(s string) (remoteApp, error) {
 		return remoteApp{
@@ -93,10 +88,10 @@ func TestSetRemoteAppFn(t *testing.T) {
 func TestSetTelemetryFn(t *testing.T) {
 	p := NewProxy(ProxyOpts{
 		ConnectionFactory: connectionFn,
+		AppClientFn:       appClientFn,
 		AppID:             "a",
 		ACL:               nil,
 		Resiliency:        resiliency.New(nil),
-		AppClient:         appClient,
 	})
 	p.SetTelemetryFn(func(ctx context.Context) context.Context {
 		return ctx
@@ -113,9 +108,9 @@ func TestSetTelemetryFn(t *testing.T) {
 func TestHandler(t *testing.T) {
 	p := NewProxy(ProxyOpts{
 		ConnectionFactory: connectionFn,
+		AppClientFn:       appClientFn,
 		AppID:             "a",
 		Resiliency:        resiliency.New(nil),
-		AppClient:         appClient,
 	})
 	h := p.Handler()
 
@@ -126,9 +121,9 @@ func TestIntercept(t *testing.T) {
 	t.Run("no app-id in metadata", func(t *testing.T) {
 		p := NewProxy(ProxyOpts{
 			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
 			AppID:             "a",
 			Resiliency:        resiliency.New(nil),
-			AppClient:         appClient,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx
@@ -152,9 +147,9 @@ func TestIntercept(t *testing.T) {
 	t.Run("app-id exists in metadata", func(t *testing.T) {
 		p := NewProxy(ProxyOpts{
 			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
 			AppID:             "a",
 			Resiliency:        resiliency.New(nil),
-			AppClient:         appClient,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx
@@ -176,9 +171,9 @@ func TestIntercept(t *testing.T) {
 	t.Run("proxy to the app", func(t *testing.T) {
 		p := NewProxy(ProxyOpts{
 			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
 			AppID:             "a",
 			Resiliency:        resiliency.New(nil),
-			AppClient:         appClient,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx
@@ -203,9 +198,9 @@ func TestIntercept(t *testing.T) {
 	t.Run("proxy to a remote app", func(t *testing.T) {
 		p := NewProxy(ProxyOpts{
 			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
 			AppID:             "a",
 			Resiliency:        resiliency.New(nil),
-			AppClient:         appClient,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			ctx = metadata.AppendToOutgoingContext(ctx, "a", "b")
@@ -239,10 +234,10 @@ func TestIntercept(t *testing.T) {
 
 		p := NewProxy(ProxyOpts{
 			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
 			AppID:             "a",
 			ACL:               acl,
 			Resiliency:        resiliency.New(nil),
-			AppClient:         appClient,
 		})
 		p.SetRemoteAppFn(func(s string) (remoteApp, error) {
 			return remoteApp{
@@ -268,9 +263,9 @@ func TestIntercept(t *testing.T) {
 	t.Run("SetRemoteAppFn never called", func(t *testing.T) {
 		p := NewProxy(ProxyOpts{
 			ConnectionFactory: connectionFn,
+			AppClientFn:       appClientFn,
 			AppID:             "a",
 			Resiliency:        resiliency.New(nil),
-			AppClient:         appClient,
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx

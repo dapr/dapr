@@ -39,13 +39,13 @@ func (a *authenticatorMock) CreateSignedWorkloadCert(id, namespace, trustDomain 
 
 func TestNewGRPCManager(t *testing.T) {
 	t.Run("with self hosted", func(t *testing.T) {
-		m := NewGRPCManager(modes.StandaloneMode)
+		m := NewGRPCManager(modes.StandaloneMode, &AppChannelConfig{})
 		assert.NotNil(t, m)
 		assert.Equal(t, modes.StandaloneMode, m.mode)
 	})
 
 	t.Run("with kubernetes", func(t *testing.T) {
-		m := NewGRPCManager(modes.KubernetesMode)
+		m := NewGRPCManager(modes.KubernetesMode, &AppChannelConfig{})
 		assert.NotNil(t, m)
 		assert.Equal(t, modes.KubernetesMode, m.mode)
 	})
@@ -113,7 +113,7 @@ func TestNewGRPCManager(t *testing.T) {
 
 func TestSetAuthenticator(t *testing.T) {
 	a := &authenticatorMock{}
-	m := NewGRPCManager(modes.StandaloneMode)
+	m := NewGRPCManager(modes.StandaloneMode, &AppChannelConfig{})
 	m.SetAuthenticator(a)
 
 	assert.Equal(t, a, m.auth)
