@@ -796,7 +796,6 @@ func (m *AppManager) StreamContainerLogs() error {
 				req := podClient.GetLogs(pod, &apiv1.PodLogOptions{
 					Container: container,
 					Follow:    true,
-					Previous:  true,
 				})
 				stream, err := req.Stream(m.ctx)
 				if err != nil {
