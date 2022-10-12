@@ -62,7 +62,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testLogCall(w http.ResponseWriter, r *http.Request) {
-	log.Printf("testLogCall is called")
+	log.Println("testLogCall is called")
 
 	service := mux.Vars(r)["service"]
 
@@ -70,7 +70,7 @@ func testLogCall(w http.ResponseWriter, r *http.Request) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/logCall", daprPort, service)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer([]byte(input))) //nolint:gosec
 	if err != nil {
-		log.Printf("Could not call service")
+		log.Println("Could not call service")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -87,12 +87,12 @@ func testLogCall(w http.ResponseWriter, r *http.Request) {
 }
 
 func logCall(w http.ResponseWriter, r *http.Request) {
-	log.Printf("logCall is called")
+	log.Println("logCall is called")
 
 	defer r.Body.Close()
 	body, _ := io.ReadAll(r.Body)
 
-	log.Printf("Got: %s", string(body))
+	log.Println("Got: %s", string(body))
 	w.Write(body)
 }
 
@@ -114,6 +114,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Middleware App - listening on http://localhost:%d", appPort)
+	log.Printf("Middleware App - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

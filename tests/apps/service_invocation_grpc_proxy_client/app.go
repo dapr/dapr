@@ -53,7 +53,7 @@ func run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Greeting: %s", resp.GetMessage())
+	log.Printf("Greeting: %s\n", resp.GetMessage())
 
 	appResp := appResponse{
 		Message: "success",
@@ -80,6 +80,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Hello Dapr - listening on http://localhost:%d", 3000)
+	log.Printf("Hello Dapr - listening on http://localhost:%d\n", 3000)
 	utils.StartServer(3000, appRouter, true, false)
 }

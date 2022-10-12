@@ -74,7 +74,7 @@ type receivedMessagesResponse struct {
 type server struct{}
 
 func main() {
-	log.Printf("Initializing grpc")
+	log.Println("Initializing grpc")
 
 	/* #nosec */
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", appPort))
@@ -126,7 +126,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 		}
 	}
 
-	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
+	log.Printf("(%s) Got invoked method %s\n", reqID, in.Method)
 
 	lock.Lock()
 	defer lock.Unlock()
@@ -159,7 +159,7 @@ func (s *server) getMessages(reqID string) []byte {
 	}
 
 	rawResp, _ := json.Marshal(resp)
-	log.Printf("(%s) getMessages response: %s", reqID, string(rawResp))
+	log.Printf("(%s) getMessages response: %s\n", reqID, string(rawResp))
 	return rawResp
 }
 
@@ -217,19 +217,19 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	defer lock.Unlock()
 
 	reqID := uuid.New().String()
-	log.Printf("(%s) Message arrived - Topic: %s, Message: %s", reqID, in.Topic, string(in.Data))
+	log.Printf("(%s) Message arrived - Topic: %s, Message: %s\n", reqID, in.Topic, string(in.Data))
 
 	if respondWithRetry {
-		log.Printf("(%s) Responding with RETRY", reqID)
+		log.Printf("(%s) Responding with RETRY\n", reqID)
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_RETRY, //nolint:nosnakecase
 		}, nil
 	} else if respondWithError {
-		log.Printf("(%s) Responding with ERROR", reqID)
+		log.Printf("(%s) Responding with ERROR\n", reqID)
 		// do not store received messages, respond with error
 		return nil, errors.New("error response")
 	} else if respondWithInvalidStatus {
-		log.Printf("(%s) Responding with INVALID", reqID)
+		log.Printf("(%s) Responding with INVALID\n", reqID)
 		// do not store received messages, respond with success but an invalid status
 		return &runtimev1pb.TopicEventResponse{
 			Status: 4,
@@ -237,7 +237,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	}
 
 	if in.Data == nil {
-		log.Printf("(%s) Responding with DROP. in.Data is nil", reqID)
+		log.Printf("(%s) Responding with DROP. in.Data is nil\n", reqID)
 		// Return success with DROP status to drop message
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
@@ -247,7 +247,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	var msg string
 	err := json.Unmarshal(in.Data, &msg)
 	if err != nil {
-		log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
+		log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v\n", reqID, err)
 		// Return success with DROP status to drop message
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
@@ -260,7 +260,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 		var actualMsg string
 		err = json.Unmarshal([]byte(msg), &actualMsg)
 		if err != nil {
-			log.Printf("(%s) Error extracing JSON from raw event: %v", reqID, err)
+			log.Printf("(%s) Error extracing JSON from raw event: %v\n", reqID, err)
 		} else {
 			msg = actualMsg
 		}
@@ -275,15 +275,15 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	} else if strings.HasPrefix(in.Topic, pubsubRaw) && !receivedMessagesRaw.Has(msg) {
 		receivedMessagesRaw.Insert(msg)
 	} else {
-		log.Printf("(%s) Received duplicate message: %s - %s", reqID, in.Topic, msg)
+		log.Printf("(%s) Received duplicate message: %s - %s\n", reqID, in.Topic, msg)
 	}
 
 	if respondWithEmptyJSON {
-		log.Printf("(%s) Responding with {}", reqID)
+		log.Printf("(%s) Responding with {}\n", reqID)
 		return &runtimev1pb.TopicEventResponse{}, nil
 	}
 
-	log.Printf("(%s) Responding with SUCCESS", reqID)
+	log.Printf("(%s) Responding with SUCCESS\n", reqID)
 	return &runtimev1pb.TopicEventResponse{
 		Status: runtimev1pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 	}, nil
@@ -298,6 +298,6 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*run
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
 func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
-	log.Printf("Invoked from binding: %s", in.Name)
+	log.Printf("Invoked from binding: %s\n", in.Name)
 	return &runtimev1pb.BindingEventResponse{}, nil
 }

@@ -67,7 +67,7 @@ var httpClient = utils.NewHTTPClient()
 
 // indexHandler is the handler for root path.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("indexHandler is called\n")
+	log.Println("indexHandler is called")
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
@@ -76,7 +76,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 // this handles /dapr/subscribe, which is called from dapr into this app.
 // this returns the list of topics the app is subscribed to.
 func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("configureSubscribeHandler called\n")
+	log.Println("configureSubscribeHandler called")
 
 	var t topicsList
 	t.Topic = append(t.Topic, pubsubHTTPTopic)
@@ -116,10 +116,10 @@ func testAPI(wg *sync.WaitGroup, successCount, errorCount *uint32, invoke func()
 
 	err := invoke()
 	if err != nil {
-		log.Printf("Error calling Dapr %s API: %+v", id, err)
+		log.Printf("Error calling Dapr %s API: %+v\n", id, err)
 		atomic.AddUint32(errorCount, 1)
 	} else {
-		log.Printf("Success calling Dapr %s API", id)
+		log.Printf("Success calling Dapr %s API\n", id)
 		atomic.AddUint32(successCount, 1)
 	}
 }
@@ -159,7 +159,7 @@ func onInputBinding(w http.ResponseWriter, r *http.Request) {
 	log.Printf("onInputBinding(): called %s\n", r.URL)
 
 	if r.Method == http.MethodOptions {
-		log.Printf("%s binding input has been accepted", bindingsTopic)
+		log.Printf("%s binding input has been accepted\n", bindingsTopic)
 		// Sending StatusOK back to the topic, so it will not attempt to redeliver.
 		w.WriteHeader(http.StatusOK)
 		return
@@ -187,7 +187,7 @@ func getPubsubDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
 		DaprGRPCSuccess: int(pubsubDaprGRPCSuccess),
 	}
 
-	log.Printf("DaprAPIResponse=%+v", response)
+	log.Printf("DaprAPIResponse=%+v\n", response)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
@@ -203,7 +203,7 @@ func getBindingsDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
 		DaprGRPCSuccess: int(bindingsDaprGRPCSuccess),
 	}
 
-	log.Printf("DaprAPIResponse=%+v", response)
+	log.Printf("DaprAPIResponse=%+v\n", response)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
@@ -211,7 +211,7 @@ func getBindingsDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
 
 // appRouter initializes restful api router.
 func appRouter() *mux.Router {
-	log.Printf("Enter appRouter()")
+	log.Println("Enter appRouter()")
 	router := mux.NewRouter().StrictSlash(true)
 
 	// Log requests and their processing time
@@ -230,6 +230,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Hello Dapr v2 - listening on http://localhost:%d", appPort)
+	log.Printf("Hello Dapr v2 - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

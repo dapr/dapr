@@ -132,7 +132,7 @@ func validateReminderLogs(t *testing.T, numActorsToCheck int) error {
 
 		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
 
-		log.Printf("Deleting logs via %s ...", logsURL)
+		log.Printf("Deleting logs via %s ...\n", logsURL)
 		_, err := utils.HTTPDelete(logsURL)
 		if err != nil {
 			return err
@@ -146,13 +146,13 @@ func validateReminderLogs(t *testing.T, numActorsToCheck int) error {
 
 	return backoff.RetryNotify(
 		func() error {
-			log.Printf("Getting logs from %s to see if reminders did trigger for %d actors ...", logsURL, numActorsToCheck)
+			log.Printf("Getting logs from %s to see if reminders did trigger for %d actors ...\n", logsURL, numActorsToCheck)
 			resp, errb := utils.HTTPGet(logsURL)
 			if errb != nil {
 				return errb
 			}
 
-			log.Print("Checking if all reminders did trigger ...")
+			log.Println("Checking if all reminders did trigger ...")
 			// Errors below should NOT be considered flakyness and must be investigated.
 			// If there was no other error until now, there should be reminders triggered.
 			for i := 0; i < numActorsToCheck; i++ {
@@ -161,7 +161,7 @@ func validateReminderLogs(t *testing.T, numActorsToCheck int) error {
 				// Due to possible load stress, we do not expect all reminders to be called at the same frequency.
 				// There are other E2E tests that validate the correct frequency of reminders in a happy path.
 				if count == 0 {
-					log.Printf("Reminder %s for Actor %s was not invoked.", reminderName, actorID)
+					log.Printf("Reminder %s for Actor %s was not invoked.\n", reminderName, actorID)
 					return fmt.Errorf("Reminder %s for Actor %s was not invoked.", reminderName, actorID)
 				}
 			}
@@ -170,7 +170,7 @@ func validateReminderLogs(t *testing.T, numActorsToCheck int) error {
 		},
 		backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10),
 		func(err error, d time.Duration) {
-			log.Printf("Error while getting logs: '%v' - retrying in %s", err, d)
+			log.Printf("Error while getting logs: '%v' - retrying in %s\n", err, d)
 		},
 	)
 }
@@ -182,7 +182,7 @@ func TestActorReminder(t *testing.T) {
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
-	log.Printf("Checking if app is healthy ...")
+	log.Println("Checking if app is healthy ...")
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err, "failed to check app's health status")
 
@@ -235,7 +235,7 @@ func TestActorReminder(t *testing.T) {
 				err = tr.Platform.SetAppEnv(appName, "TEST_APP_ACTOR_REMINDERS_PARTITIONS", strconv.Itoa(newPartitionCount))
 				require.NoError(t, err)
 
-				log.Printf("Waiting for app %s to restart ...", appName)
+				log.Printf("Waiting for app %s to restart ...\n", appName)
 
 				// Sleep for some time to let the sidecar restart.
 				// Calling the health-check right away might trigger a false-positive health prior to actual restart.
@@ -268,7 +268,7 @@ func TestActorReminder(t *testing.T) {
 				},
 				backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10),
 				func(err error, d time.Duration) {
-					log.Printf("Error while invoking actor: '%v' - retrying in %s", err, d)
+					log.Printf("Error while invoking actor: '%v' - retrying in %s\n", err, d)
 				},
 			)
 			require.NoError(t, err)
@@ -291,7 +291,7 @@ func TestActorReminder(t *testing.T) {
 				},
 				backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10),
 				func(err error, d time.Duration) {
-					log.Printf("error while registering the reminder: '%v' - retrying in %s", err, d)
+					log.Printf("error while registering the reminder: '%v' - retrying in %s\n", err, d)
 				},
 			)
 			require.NoError(t, err)
@@ -314,6 +314,6 @@ func TestActorReminder(t *testing.T) {
 			require.NoError(t, err, "failed to un-register reminder")
 		}
 
-		log.Print("Done.")
+		log.Println("Done.")
 	})
 }

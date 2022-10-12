@@ -179,7 +179,7 @@ func TestActorInvocation(t *testing.T) {
 
 		res, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "testmethod"), []byte{})
 		if err != nil {
-			log.Printf("failed to invoke method testmethod. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to invoke method testmethod. Error='%v\n' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke testmethod")
 	})
@@ -203,10 +203,10 @@ func httpGet(url string) ([]byte, error) {
 	res, err := utils.HTTPGet(url)
 	dur := time.Now().Sub(start)
 	if err != nil {
-		log.Printf("GET %s ERROR after %s: %v", url, dur, err)
+		log.Printf("GET %s ERROR after %s: %v\n", url, dur, err)
 		return nil, err
 	}
-	log.Printf("GET %s completed in %s", url, dur)
+	log.Printf("GET %s completed in %s\n", url, dur)
 	return res, nil
 }
 
@@ -216,10 +216,10 @@ func httpPost(url string, data []byte) ([]byte, error) {
 	res, err := utils.HTTPPost(url, data)
 	dur := time.Now().Sub(start)
 	if err != nil {
-		log.Printf("POST %s ERROR after %s: %v", url, dur, err)
+		log.Printf("POST %s ERROR after %s: %v\n", url, dur, err)
 		return nil, err
 	}
-	log.Printf("POST %s completed in %s", url, dur)
+	log.Printf("POST %s completed in %s\n", url, dur)
 	return res, nil
 }
 
@@ -229,10 +229,10 @@ func httpDelete(url string) ([]byte, error) {
 	res, err := utils.HTTPDelete(url)
 	dur := time.Now().Sub(start)
 	if err != nil {
-		log.Printf("DELETE %s ERROR after %s: %v", url, dur, err)
+		log.Printf("DELETE %s ERROR after %s: %v\n", url, dur, err)
 		return nil, err
 	}
-	log.Printf("DELETE %s completed in %s", url, dur)
+	log.Printf("DELETE %s completed in %s\n", url, dur)
 	return res, nil
 }
 
@@ -255,25 +255,25 @@ func TestActorFeatures(t *testing.T) {
 
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "savestatetest"), []byte{})
 		if err != nil {
-			log.Printf("failed to invoke method savestatetest. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to invoke method savestatetest. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method savestatetest")
 
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "getstatetest"), []byte{})
 		if err != nil {
-			log.Printf("failed to invoke method getstatetest. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to invoke method getstatetest. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method getstatetest")
 
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "savestatetest2"), []byte{})
 		if err != nil {
-			log.Printf("failed to invoke method savestatetest2. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to invoke method savestatetest2. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method savestatetest2")
 
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "getstatetest2"), []byte{})
 		if err != nil {
-			log.Printf("failed to invoke method getstatetest2. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to invoke method getstatetest2. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method getstatetest2")
 	})
@@ -285,7 +285,7 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
@@ -300,7 +300,7 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err, "failed to marshal JSON")
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
 		if err != nil {
-			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to set reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to set reminder")
 
@@ -309,13 +309,13 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 		count := countActorAction(res, actorID, reminderName)
@@ -330,7 +330,7 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
@@ -342,7 +342,7 @@ func TestActorFeatures(t *testing.T) {
 		reqBody, _ := json.Marshal(req)
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
 		if err != nil {
-			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to set reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to set reminder")
 
@@ -351,13 +351,13 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 		require.True(t, countActorAction(res, actorID, reminderName) == 1, "condition failed")
@@ -370,7 +370,7 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
@@ -383,7 +383,7 @@ func TestActorFeatures(t *testing.T) {
 		reqBody, _ := json.Marshal(req)
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
 		if err != nil {
-			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to set reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to set reminder")
 
@@ -394,7 +394,7 @@ func TestActorFeatures(t *testing.T) {
 		reqBody, _ = json.Marshal(req)
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
@@ -403,13 +403,13 @@ func TestActorFeatures(t *testing.T) {
 		// Delete reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to delete reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to delete reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to delete reminder")
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 		require.True(t, countActorAction(res, actorID, reminderName) == 1, "condition failed")
@@ -422,7 +422,7 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to set reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
@@ -435,7 +435,7 @@ func TestActorFeatures(t *testing.T) {
 		reqBody, _ := json.Marshal(req)
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
 		if err != nil {
-			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to set reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to set reminder")
 
@@ -444,7 +444,7 @@ func TestActorFeatures(t *testing.T) {
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 
@@ -459,13 +459,13 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 		require.Greater(t, countActorAction(res, actorID, reminderName), firstCount)
@@ -479,7 +479,7 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
@@ -492,7 +492,7 @@ func TestActorFeatures(t *testing.T) {
 		reqBody, _ := json.Marshal(req)
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
 		if err != nil {
-			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to set reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to set reminder")
 
@@ -501,7 +501,7 @@ func TestActorFeatures(t *testing.T) {
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 
@@ -510,7 +510,7 @@ func TestActorFeatures(t *testing.T) {
 		// Min call is based off of having a 1s period/due time, the amount of seconds we've waited, and a bit of room for timing.
 		require.GreaterOrEqual(t, firstCount, minFirstCount)
 
-		log.Printf("Restarting %s ...", appName)
+		log.Printf("Restarting %s ...\n", appName)
 		err := tr.Platform.Restart(appName)
 		require.NoError(t, err)
 
@@ -533,7 +533,7 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 	})
@@ -545,7 +545,7 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset reminder")
 
@@ -560,7 +560,7 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err, "failed to marshal JSON")
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
 		if err != nil {
-			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to set reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to set reminder")
 
@@ -569,14 +569,14 @@ func TestActorFeatures(t *testing.T) {
 		// get reminder
 		res, err = httpGet(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		if err != nil {
-			log.Printf("failed to get reminder. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get reminder. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get reminder")
 		require.True(t, len(res) == 0, "Reminder %s exist", reminderName)
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 		count := countActorAction(res, actorID, reminderName)
@@ -590,13 +590,13 @@ func TestActorFeatures(t *testing.T) {
 		// Activate actor.
 		res, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "justToActivate"), []byte{})
 		if err != nil {
-			log.Printf("warn: failed to activate actor. Error='%v' Response='%s'", err, string(res))
+			log.Printf("warn: failed to activate actor. Error='%v' Response='%s'\n", err, string(res))
 		}
 
 		// Reset timer
 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
 		if err != nil {
-			log.Printf("failed to reset timer. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to reset timer. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to reset timer")
 
@@ -609,7 +609,7 @@ func TestActorFeatures(t *testing.T) {
 		reqBody, _ := json.Marshal(req)
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName), reqBody)
 		if err != nil {
-			log.Printf("failed to set timer. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to set timer. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to set timer")
 
@@ -621,7 +621,7 @@ func TestActorFeatures(t *testing.T) {
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 		require.True(t, countActorAction(res, actorID, timerName) >= 1)
@@ -662,7 +662,7 @@ func TestActorFeatures(t *testing.T) {
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 		require.Equal(t, 1, countActorAction(res, actorID, timerName))
@@ -690,7 +690,7 @@ func TestActorFeatures(t *testing.T) {
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 		logOne := findNthActorAction(res, actorID, "concurrency", 1)
@@ -701,7 +701,7 @@ func TestActorFeatures(t *testing.T) {
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
 		startEndTimeCheck := (logOne.StartTimestamp >= logTwo.EndTimestamp) || (logTwo.StartTimestamp >= logOne.EndTimestamp)
 		if !startEndTimeCheck {
-			log.Printf("failed for start/end time check: logOne.StartTimestamp='%d' logOne.EndTimestamp='%d' logTwo.StartTimestamp='%d' logTwo.EndTimestamp='%d'",
+			log.Printf("failed for start/end time check: logOne.StartTimestamp='%d' logOne.EndTimestamp='%d' logTwo.StartTimestamp='%d' logTwo.EndTimestamp='%d'\n",
 				logOne.StartTimestamp, logOne.EndTimestamp, logTwo.StartTimestamp, logTwo.EndTimestamp)
 		}
 		require.True(t, startEndTimeCheck)
@@ -732,7 +732,7 @@ func TestActorFeatures(t *testing.T) {
 
 		res, err = httpGet(logsURL)
 		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get logs. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
 		logOne := findActorAction(res, actorIDOne, "concurrency")
@@ -744,7 +744,7 @@ func TestActorFeatures(t *testing.T) {
 		// Both methods run in parallel, with the sleep time both should start before the other ends.
 		startEndTimeCheck := (logOne.StartTimestamp <= logTwo.EndTimestamp) && (logTwo.StartTimestamp <= logOne.EndTimestamp)
 		if !startEndTimeCheck {
-			log.Printf("failed for start/end time check: logOne.StartTimestamp='%d' logOne.EndTimestamp='%d' logTwo.StartTimestamp='%d' logTwo.EndTimestamp='%d'",
+			log.Printf("failed for start/end time check: logOne.StartTimestamp='%d' logOne.EndTimestamp='%d' logTwo.StartTimestamp='%d' logTwo.EndTimestamp='%d'\n",
 				logOne.StartTimestamp, logOne.EndTimestamp, logTwo.StartTimestamp, logTwo.EndTimestamp)
 		}
 		require.True(t, startEndTimeCheck)
@@ -833,7 +833,7 @@ func TestActorFeatures(t *testing.T) {
 
 		res, err = httpGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 		if err != nil {
-			log.Printf("failed to get metadata. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get metadata. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get metadata")
 
@@ -848,7 +848,7 @@ func TestActorFeatures(t *testing.T) {
 		for index := 0; index < actorsToCheckMetadata; index++ {
 			res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
 			if err != nil {
-				log.Printf("failed to check metadata for actor %d. Error='%v' Response='%s'", index, err, string(res))
+				log.Printf("failed to check metadata for actor %d. Error='%v' Response='%s'\n", index, err, string(res))
 			}
 			require.NoError(t, err, "failed to check metadata for actor %d", index)
 		}
@@ -858,7 +858,7 @@ func TestActorFeatures(t *testing.T) {
 
 		res, err = httpGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 		if err != nil {
-			log.Printf("failed to get metadata. Error='%v' Response='%s'", err, string(res))
+			log.Printf("failed to get metadata. Error='%v' Response='%s'\n", err, string(res))
 		}
 		require.NoError(t, err, "failed to get metadata")
 

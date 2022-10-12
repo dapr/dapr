@@ -32,7 +32,7 @@ func SetupLogs(testName string) {
 	if logPath != "" {
 		err := os.MkdirAll(logPath, os.ModePerm)
 		if err != nil {
-			log.Printf("Failed to create output log directory '%s' Error was: '%s'", logPath, err)
+			log.Printf("Failed to create output log directory '%s' Error was: '%s'\n", logPath, err)
 			return
 		}
 
@@ -40,10 +40,10 @@ func SetupLogs(testName string) {
 		target := filepath.Join(logPath, testName+"_"+date+".log")
 		logFile, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0o666)
 		if err != nil {
-			log.Printf("Failed to open log file '%s' Error was: '%s'", target, err)
+			log.Printf("Failed to open log file '%s' Error was: '%s'\n", target, err)
 			return
 		}
-		log.Printf("Saving test %s logs to %s", testName, target)
+		log.Printf("Saving test %s logs to %s\n", testName, target)
 		log.SetOutput(io.MultiWriter(os.Stdout, logFile))
 	}
 }

@@ -159,7 +159,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 
 		// debuggability - trace info about the first message.  don't trace others so it doesn't flood log.
 		if i == offset {
-			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
+			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic\n", url, jsonValue)
 		}
 
 		rateLimit.Take()
@@ -215,7 +215,7 @@ func postSingleMessage(url string, data []byte) (int, error) {
 	start := time.Now()
 	_, statusCode, err := utils.HTTPPostWithStatus(url, data)
 	if err != nil {
-		log.Printf("Publish failed with error=%s (body=%s) (duration=%s)", err.Error(), data, utils.FormatDuration(time.Now().Sub(start)))
+		log.Printf("Publish failed with error=%s (body=%s) (duration=%s)\n", err.Error(), data, utils.FormatDuration(time.Now().Sub(start)))
 		return http.StatusInternalServerError, err
 	}
 	if (statusCode != http.StatusOK) && (statusCode != http.StatusNoContent) {
@@ -249,7 +249,7 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 	url := fmt.Sprintf("http://%s/tests/publish", publisherExternalURL)
 
 	// debuggability - trace info about the first message.  don't trace others so it doesn't flood log.
-	log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
+	log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic\n", url, jsonValue)
 
 	statusCode, err := postSingleMessage(url, jsonValue)
 	require.Error(t, err)
@@ -285,7 +285,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
-		log.Printf("Validating no redelivered messages...")
+		log.Println("Validating no redelivered messages...")
 		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
 			// empty string slices
@@ -296,12 +296,12 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			ReceivedByTopicDead: []string{},
 		})
 	} else if subscriberResponse == "error" {
-		log.Printf("Validating redelivered messages...")
+		log.Println("Validating redelivered messages...")
 		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages)
 	} else {
 		// validate redelivery of messages
-		log.Printf("Validating redelivered messages...")
+		log.Println("Validating redelivered messages...")
 		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
 	}
@@ -340,7 +340,7 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, validateDeadLetter bool, sentMessages receivedMessagesResponse) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
-	log.Printf("Getting messages received by subscriber using url %s", url)
+	log.Printf("Getting messages received by subscriber using url %s\n", url)
 
 	request := callSubscriberMethodRequest{
 		RemoteApp: subscriberApp,
@@ -356,9 +356,9 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		var resp []byte
 		start := time.Now()
 		resp, err = utils.HTTPPost(url, rawReq)
-		log.Printf("(reqID=%s) Attempt %d complete; took %s", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
+		log.Printf("(reqID=%s) Attempt %d complete; took %s\n", request.ReqID, retryCount, utils.FormatDuration(time.Now().Sub(start)))
 		if err != nil {
-			log.Printf("(reqID=%s) Error in response: %v", request.ReqID, err)
+			log.Printf("(reqID=%s) Error in response: %v\n", request.ReqID, err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
@@ -366,13 +366,13 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		err = json.Unmarshal(resp, &appResp)
 		if err != nil {
 			err = fmt.Errorf("(reqID=%s) failed to unmarshal JSON. Error: %v. Raw data: %s", request.ReqID, err, string(resp))
-			log.Printf("Error in response: %v", err)
+			log.Printf("Error in response: %v\n", err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 
 		log.Printf(
-			"subscriber received %d/%d messages on pubsub-a-topic, %d/%d on pubsub-b-topic and %d/%d on pubsub-c-topic, %d/%d on pubsub-raw-topic and %d/%d on dead letter topic",
+			"subscriber received %d/%d messages on pubsub-a-topic, %d/%d on pubsub-b-topic and %d/%d on pubsub-c-topic, %d/%d on pubsub-raw-topic and %d/%d on dead letter topic\n",
 			len(appResp.ReceivedByTopicA), len(sentMessages.ReceivedByTopicA),
 			len(appResp.ReceivedByTopicB), len(sentMessages.ReceivedByTopicB),
 			len(appResp.ReceivedByTopicC), len(sentMessages.ReceivedByTopicC),
@@ -385,7 +385,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
 			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) ||
 			(validateDeadLetter && len(appResp.ReceivedByTopicDeadLetter) != len(sentMessages.ReceivedByTopicDeadLetter)) {
-			log.Printf("Differing lengths in received vs. sent messages, retrying.")
+			log.Println("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(10 * time.Second)
 		} else {
 			break
@@ -573,7 +573,7 @@ func TestPubSubHTTP(t *testing.T) {
 		protocol := "http"
 		//nolint: gosec
 		offset = rand.Intn(randomOffsetMax) + 1
-		log.Printf("initial %s offset: %d", app.suite, offset)
+		log.Printf("initial %s offset: %d\n", app.suite, offset)
 		for _, tc := range pubsubTests {
 			t.Run(fmt.Sprintf("%s_%s_%s", app.suite, tc.name, protocol), func(t *testing.T) {
 				subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, app.subscriber, protocol)

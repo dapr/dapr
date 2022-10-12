@@ -143,7 +143,7 @@ func startPortForwarding(req PortForwardRequest) error {
 
 	go func() {
 		if err = fw.ForwardPorts(); err != nil {
-			log.Printf("Error closing port fowarding: %+v", err)
+			log.Printf("Error closing port fowarding: %+v\n", err)
 			// TODO: How to handle error?
 		}
 		log.Println("Closed port fowarding")

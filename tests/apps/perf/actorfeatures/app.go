@@ -72,24 +72,24 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr request for %s, responding with %v", r.URL.RequestURI(), daprConfigResponse)
+	log.Printf("Processing dapr request for %s, responding with %v\n", r.URL.RequestURI(), daprConfigResponse)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(daprConfigResponse)
 }
 
 func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing actor method request for %s", r.URL.RequestURI())
+	log.Printf("Processing actor method request for %s\n", r.URL.RequestURI())
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 }
 
 func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s actor request for %s\n", r.Method, r.URL.RequestURI())
 	actorType := mux.Vars(r)["actorType"]
 
 	if actorType != registeredActorType {
-		log.Printf("Unknown actor type: %s", actorType)
+		log.Printf("Unknown actor type: %s\n", actorType)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -123,7 +123,7 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Actor App - listening on http://localhost:%d", appPort)
+	log.Printf("Actor App - listening on http://localhost:%d\n", appPort)
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
 }

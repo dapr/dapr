@@ -114,11 +114,11 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func save(states []daprState, statestore string, meta map[string]string) (int, error) {
-	log.Printf("Processing save request for %d entries.", len(states))
+	log.Printf("Processing save request for %d entries.\n", len(states))
 
 	jsonValue, err := json.Marshal(states)
 	if err != nil {
-		log.Printf("Could save states in Dapr: %s", err.Error())
+		log.Printf("Could save states in Dapr: %s\n", err.Error())
 		return http.StatusInternalServerError, err
 	}
 
@@ -130,7 +130,7 @@ func load(data []byte, statestore string, meta map[string]string) (int, error) {
 	if len(meta) != 0 {
 		stateURL += "?" + metadata2RawQuery(meta)
 	}
-	log.Printf("Posting %d bytes of state to %s", len(data), stateURL)
+	log.Printf("Posting %d bytes of state to %s\n", len(data), stateURL)
 	res, err := httpClient.Post(stateURL, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -145,13 +145,13 @@ func load(data []byte, statestore string, meta map[string]string) (int, error) {
 }
 
 func get(key, statestore string, meta map[string]string) (*appState, error) {
-	log.Printf("Processing get request for %s.", key)
+	log.Printf("Processing get request for %s.\n", key)
 	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("Fetching state from %s", url)
+	log.Printf("Fetching state from %s\n", url)
 	// url is created from user input, it is OK since this is a test app only and will not run in prod.
 	/* #nosec */
 	res, err := httpClient.Get(url)
@@ -169,7 +169,7 @@ func get(key, statestore string, meta map[string]string) (*appState, error) {
 		return nil, fmt.Errorf("failed to get value for key %s from Dapr: %s", key, body)
 	}
 
-	log.Printf("Found state for key %s: %s", key, body)
+	log.Printf("Found state for key %s: %s\n", key, body)
 
 	state, err := parseState(key, body)
 	if err != nil {
@@ -199,7 +199,7 @@ func parseState(key string, body []byte) (*appState, error) {
 }
 
 func getAll(states []daprState, statestore string, meta map[string]string) ([]daprState, error) {
-	log.Printf("Processing get request for %d states.", len(states))
+	log.Printf("Processing get request for %d states.\n", len(states))
 
 	output := make([]daprState, 0, len(states))
 	for _, state := range states {
@@ -208,19 +208,19 @@ func getAll(states []daprState, statestore string, meta map[string]string) ([]da
 			return nil, err
 		}
 
-		log.Printf("Result for get request for key %s: %v", state.Key, value)
+		log.Printf("Result for get request for key %s: %v\n", state.Key, value)
 		output = append(output, daprState{
 			Key:   state.Key,
 			Value: value,
 		})
 	}
 
-	log.Printf("Result for get request for %d states: %v", len(states), output)
+	log.Printf("Result for get request for %d states: %v\n", len(states), output)
 	return output, nil
 }
 
 func getBulk(states []daprState, statestore string) ([]daprState, error) {
-	log.Printf("Processing get bulk request for %d states.", len(states))
+	log.Printf("Processing get bulk request for %d states.\n", len(states))
 
 	output := make([]daprState, 0, len(states))
 
@@ -228,7 +228,7 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Fetching bulk state from %s", url)
+	log.Printf("Fetching bulk state from %s\n", url)
 
 	req := bulkGetRequest{}
 	for _, s := range states {
@@ -274,12 +274,12 @@ func getBulk(states []daprState, statestore string) ([]daprState, error) {
 		})
 	}
 
-	log.Printf("Result for bulk get request for %d states: %v", len(states), output)
+	log.Printf("Result for bulk get request for %d states: %v\n", len(states), output)
 	return output, nil
 }
 
 func delete(key, statestore string, meta map[string]string) error {
-	log.Printf("Processing delete request for %s.", key)
+	log.Printf("Processing delete request for %s.\n", key)
 	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
 		return err
@@ -290,7 +290,7 @@ func delete(key, statestore string, meta map[string]string) error {
 		return fmt.Errorf("could not create delete request for key %s in Dapr: %s", key, err.Error())
 	}
 
-	log.Printf("Deleting state for %s", url)
+	log.Printf("Deleting state for %s\n", url)
 	res, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("could not delete key %s in Dapr: %s", key, err.Error())
@@ -305,7 +305,7 @@ func delete(key, statestore string, meta map[string]string) error {
 }
 
 func deleteAll(states []daprState, statestore string, meta map[string]string) error {
-	log.Printf("Processing delete request for %d states.", len(states))
+	log.Printf("Processing delete request for %d states.\n", len(states))
 
 	for _, state := range states {
 		err := delete(state.Key, statestore, meta)
@@ -335,11 +335,11 @@ func executeTransaction(states []daprState, statestore string) error {
 		"metadata":   map[string]string{metadataPartitionKey: partitionKey},
 	})
 	if err != nil {
-		log.Printf("Could save transactional operations in Dapr: %s", err.Error())
+		log.Printf("Could save transactional operations in Dapr: %s\n", err.Error())
 		return err
 	}
 
-	log.Printf("Posting state to %s with '%s'", stateTransactionURL, jsonValue)
+	log.Printf("Posting state to %s with '%s'\n", stateTransactionURL, jsonValue)
 	res, err := httpClient.Post(stateTransactionURL, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		return err
@@ -351,13 +351,13 @@ func executeTransaction(states []daprState, statestore string) error {
 }
 
 func executeQuery(query []byte, statestore string, meta map[string]string) ([]daprState, error) {
-	log.Printf("Processing query request '%s'.", string(query))
+	log.Printf("Processing query request '%s'.\n", string(query))
 
 	queryURL := fmt.Sprintf(queryURLTemplate, daprHTTPPort, statestore)
 	if len(meta) != 0 {
 		queryURL += "?" + metadata2RawQuery(meta)
 	}
-	log.Printf("Posting %d bytes of state to %s", len(query), queryURL)
+	log.Printf("Posting %d bytes of state to %s\n", len(query), queryURL)
 	resp, err := httpClient.Post(queryURL, "application/json", bytes.NewBuffer(query)) //nolint:bodyclose
 	if err != nil {
 		return nil, err
@@ -377,7 +377,7 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 		return nil, fmt.Errorf("could not unmarshal query response from Dapr: %s", err.Error())
 	}
 
-	log.Printf("Query returned %d results", len(qres.Results))
+	log.Printf("Query returned %d results\n", len(qres.Results))
 	output := make([]daprState, 0, len(qres.Results))
 	for _, item := range qres.Results {
 		output = append(output, daprState{
@@ -388,14 +388,14 @@ func executeQuery(query []byte, statestore string, meta map[string]string) ([]da
 		})
 	}
 
-	log.Printf("Result for query request for %d states: %v", len(output), output)
+	log.Printf("Result for query request for %d states: %v\n", len(output), output)
 	return output, nil
 }
 
 func parseRequestBody(w http.ResponseWriter, r *http.Request) (*requestResponse, error) {
 	req := &requestResponse{}
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-		log.Printf("Could not parse request body: %s", err.Error())
+		log.Printf("Could not parse request body: %s\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(requestResponse{
 			Message: err.Error(),
@@ -411,7 +411,7 @@ func parseRequestBody(w http.ResponseWriter, r *http.Request) (*requestResponse,
 
 func getRequestBody(w http.ResponseWriter, r *http.Request) (data []byte, err error) {
 	if data, err = io.ReadAll(r.Body); err != nil {
-		log.Printf("Could not read request body: %s", err.Error())
+		log.Printf("Could not read request body: %s\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(requestResponse{
 			Message: err.Error(),
@@ -443,7 +443,7 @@ func metadata2RawQuery(meta map[string]string) string {
 
 // handles all APIs for HTTP calls
 func httpHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing request for %s", r.URL.RequestURI())
+	log.Printf("Processing request for %s\n", r.URL.RequestURI())
 
 	var req *requestResponse
 	var data []byte
@@ -506,7 +506,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	statusCheck := (statusCode == http.StatusOK || statusCode == http.StatusNoContent)
 	if err != nil && statusCheck {
-		log.Printf("Error: %v", err)
+		log.Printf("Error: %v\n", err)
 		statusCode = http.StatusInternalServerError
 		res.Message = err.Error()
 	}
@@ -514,7 +514,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	res.EndTime = epoch()
 
 	if !statusCheck {
-		log.Printf("Error status code %v: %v", statusCode, res.Message)
+		log.Printf("Error status code %v: %v\n", statusCode, res.Message)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -621,13 +621,13 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		statusCode = http.StatusInternalServerError
 		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd)
-		log.Print(unsupportedCommandMessage)
+		log.Println(unsupportedCommandMessage)
 		res.Message = unsupportedCommandMessage
 	}
 
 	res.EndTime = epoch()
 	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
-		log.Printf("Error status code %v: %v", statusCode, res.Message)
+		log.Printf("Error status code %v: %v\n", statusCode, res.Message)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -803,7 +803,7 @@ func appRouter() *mux.Router {
 func main() {
 	grpcClient = utils.GetGRPCClient(daprGRPCPort)
 
-	log.Printf("State App - listening on http://localhost:%d", appPort)
-	log.Printf("State endpoint - to be saved at %s", fmt.Sprintf(stateURLTemplate, daprHTTPPort, "statestore"))
+	log.Printf("State App - listening on http://localhost:%d\n", appPort)
+	log.Printf("State endpoint - to be saved at %s\n", fmt.Sprintf(stateURLTemplate, daprHTTPPort, "statestore"))
 	utils.StartServer(appPort, appRouter, true, false)
 }

@@ -27,9 +27,9 @@ func writeSecrets() {
 	data := []byte(`{"secret-key": "secret-value"}`)
 	err := os.WriteFile("/tmp/testdata/secrets.json", data, fs.ModePerm)
 	if err != nil {
-		log.Printf("failed to write secret file: %v", err)
+		log.Printf("failed to write secret file: %v\n", err)
 	} else {
-		log.Printf("secret file is written")
+		log.Println("secret file is written")
 	}
 }
 
@@ -43,16 +43,16 @@ func writeTLSCertAndKey() {
 	if _, err := os.Stat(directory); os.IsNotExist(err) {
 		err := os.MkdirAll(directory, os.ModePerm)
 		if err != nil {
-			log.Printf("failed to create directory: %v", err)
+			log.Printf("failed to create directory: %v\n", err)
 		}
 	}
 
 	// generate the certs
 	err := utils.GenerateTLSCertAndKey(host, validFrom, validFor, directory)
 	if err != nil {
-		log.Printf("failed to generate TLS cert and key: %v", err)
+		log.Printf("failed to generate TLS cert and key: %v\n", err)
 	} else {
-		log.Printf("TLS cert and key is generated")
+		log.Println("TLS cert and key is generated")
 	}
 }
 

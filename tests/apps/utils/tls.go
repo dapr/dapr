@@ -54,12 +54,12 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 
 	b, err := x509.MarshalPKCS8PrivateKey(tlsKey)
 	if err != nil {
-		log.Printf("Unable to marshal ECDSA private key: %v", err)
+		log.Printf("Unable to marshal ECDSA private key: %v\n", err)
 		return err
 	}
 
 	if err = bytesToPemFile(path.Join(directory, "key.pem"), "PRIVATE KEY", b); err != nil {
-		log.Printf("Unable to write key.pem: %v", err)
+		log.Printf("Unable to write key.pem: %v\n", err)
 		return err
 	}
 
@@ -96,12 +96,12 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &tlsKey.PublicKey, tlsKey)
 	if err != nil {
-		log.Printf("Unable to create certificate: %v", err)
+		log.Printf("Unable to create certificate: %v\n", err)
 		return err
 	}
 
 	if err := bytesToPemFile(path.Join(directory, "cert.pem"), "CERTIFICATE", certBytes); err != nil {
-		log.Printf("Unable to write cert.pem: %v", err)
+		log.Printf("Unable to write cert.pem: %v\n", err)
 		return err
 	}
 

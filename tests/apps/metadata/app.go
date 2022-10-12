@@ -89,7 +89,7 @@ func getMetadata() (data mockMetadata, err error) {
 
 // handles all APIs
 func handler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing request for %s", r.URL.RequestURI())
+	log.Printf("Processing request for %s\n", r.URL.RequestURI())
 
 	var metadata mockMetadata
 	var err error
@@ -116,7 +116,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	res.EndTime = epoch()
 
 	if statusCode != http.StatusOK {
-		log.Printf("Error status code %v: %v", statusCode, res.Message)
+		log.Printf("Error status code %v: %v\n", statusCode, res.Message)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
@@ -170,7 +170,7 @@ func startServer() {
 }
 
 func main() {
-	log.Printf("Metadata App - listening on http://localhost:%d", appPort)
-	log.Printf("Metadata endpoint - to be served at %s", metadataURL)
+	log.Printf("Metadata App - listening on http://localhost:%d\n", appPort)
+	log.Printf("Metadata endpoint - to be served at %s\n", metadataURL)
 	startServer()
 }

@@ -86,13 +86,13 @@ func (s *stateActor) getActorState(actorType, actorID string, data []byte, metad
 
 func (s *stateActor) onActivated(actorType, actorID string) error {
 	hostname, _ := os.Hostname()
-	log.Printf("%s.%s, %s, %s", actorType, actorID, hostname, "Activated")
+	log.Printf("%s.%s, %s, %s\n", actorType, actorID, hostname, "Activated")
 	return nil
 }
 
 func (s *stateActor) onDeactivated(actorType, actorID string) error {
 	hostname, _ := os.Hostname()
-	log.Printf("%s.%s, %s, %s", actorType, actorID, hostname, "Deactivated")
+	log.Printf("%s.%s, %s, %s\n", actorType, actorID, hostname, "Deactivated")
 	return nil
 }
 

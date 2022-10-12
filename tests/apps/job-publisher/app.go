@@ -36,7 +36,7 @@ const (
 var httpClient = utils.NewHTTPClient()
 
 func stopSidecar() {
-	log.Printf("Shutting down the sidecar at %s", fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
+	log.Printf("Shutting down the sidecar at %s\n", fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
 	for retryCount := 0; retryCount < 200; retryCount++ {
 		r, err := httpClient.Post(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort), "", bytes.NewBuffer([]byte{}))
 		if r != nil {
@@ -45,26 +45,26 @@ func stopSidecar() {
 			r.Body.Close()
 		}
 		if err != nil {
-			log.Printf("Error stopping the sidecar %s", err)
+			log.Printf("Error stopping the sidecar %s\n", err.Error())
 		}
 
 		if r.StatusCode != 200 && r.StatusCode != 204 {
-			log.Printf("Received Non-200 from shutdown API. Code: %d", r.StatusCode)
+			log.Printf("Received Non-200 from shutdown API. Code: %d\n", r.StatusCode)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 		break
 	}
-	log.Printf("Sidecar stopped")
+	log.Println("Sidecar stopped")
 }
 
 func publishMessagesToPubsub() error {
 	daprPubsubURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPort, pubsubName, pubsubTopic)
 	jsonValue, err := json.Marshal(message)
 	if err != nil {
-		log.Printf("Error marshalling %s to JSON", message)
+		log.Printf("Error marshalling %s to JSON\n", message)
 	}
-	log.Printf("Publishing to %s", daprPubsubURL)
+	log.Printf("Publishing to %s\n", daprPubsubURL)
 	r, err := httpClient.Post(daprPubsubURL, "application/json", bytes.NewBuffer(jsonValue))
 	if r != nil {
 		// Drain before closing
@@ -72,7 +72,7 @@ func publishMessagesToPubsub() error {
 		r.Body.Close()
 	}
 	if err != nil {
-		log.Printf("Error publishing messages to pubsub: %+v", err)
+		log.Printf("Error publishing messages to pubsub: %s\n", err.Error())
 	}
 	return err
 }
@@ -81,7 +81,7 @@ func main() {
 	for retryCount := 0; retryCount < publishRetries; retryCount++ {
 		err := publishMessagesToPubsub()
 		if err != nil {
-			log.Printf("Unable to publish, retrying.")
+			log.Println("Unable to publish, retrying.")
 			time.Sleep(10 * time.Second)
 		} else {
 			// Wait for a minute before shutting down to give time for any validation by E2E test code.

@@ -91,17 +91,17 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func greenTest(commandRequest testCommandRequest) (int, appResponse) {
-	log.Printf("GreenTest - message: %s", commandRequest.Message)
+	log.Printf("GreenTest - message: %s\n", commandRequest.Message)
 	return http.StatusOK, appResponse{Message: "Hello green dapr!"}
 }
 
 func blueTest(commandRequest testCommandRequest) (int, appResponse) {
-	log.Printf("BlueTest - message: %s", commandRequest.Message)
+	log.Printf("BlueTest - message: %s\n", commandRequest.Message)
 	return http.StatusOK, appResponse{Message: "Hello blue dapr!"}
 }
 
 func envTest(commandRequest testCommandRequest) (int, appResponse) {
-	log.Printf("envTest - message: %s", commandRequest.Message)
+	log.Printf("envTest - message: %s\n", commandRequest.Message)
 	daprHTTPPort, ok := os.LookupEnv("DAPR_HTTP_PORT")
 	if !ok {
 		log.Println("Expected DAPR_HTTP_PORT to be set.")
@@ -134,6 +134,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Hello Dapr - listening on http://localhost:%d", appPort)
+	log.Printf("Hello Dapr - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

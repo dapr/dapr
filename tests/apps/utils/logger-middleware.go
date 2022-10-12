@@ -36,12 +36,12 @@ func LoggerMiddleware(next http.Handler) http.Handler {
 
 		ctx := context.WithValue(r.Context(), "reqid", reqID) //nolint:staticcheck
 
-		log.Printf("Received request %s %s (source=%s, reqID=%s)", r.Method, r.URL.Path, r.RemoteAddr, reqID)
+		log.Printf("Received request %s %s (source=%s, reqID=%s)\n", r.Method, r.URL.Path, r.RemoteAddr, reqID)
 
 		// Process the request
 		start := time.Now()
 		next.ServeHTTP(w, r.WithContext(ctx))
 		dur := time.Now().Sub(start)
-		log.Printf("Request %s: completed in %s", reqID, dur)
+		log.Printf("Request %s: completed in %s\n", reqID, dur)
 	})
 }

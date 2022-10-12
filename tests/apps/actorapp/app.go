@@ -99,7 +99,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logsHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr request for %s", r.URL.RequestURI())
+	log.Printf("Processing dapr request for %s\n", r.URL.RequestURI())
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -107,7 +107,7 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr request for %s", r.URL.RequestURI())
+	log.Printf("Processing dapr request for %s\n", r.URL.RequestURI())
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -115,7 +115,7 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing actor method request for %s", r.URL.RequestURI())
+	log.Printf("Processing actor method request for %s\n", r.URL.RequestURI())
 
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
@@ -141,13 +141,13 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 
 //nolint:forbidigo
 func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s actor request for %s\n", r.Method, r.URL.RequestURI())
 
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
 
 	if actorType != registeredActorType {
-		log.Printf("Unknown actor type: %s", actorType)
+		log.Printf("Unknown actor type: %s\n", actorType)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -178,18 +178,18 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 //
 //nolint:gosec
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s test request for %s\n", r.Method, r.URL.RequestURI())
 
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
 	method := mux.Vars(r)["method"]
 
 	invokeURL := fmt.Sprintf(actorMethodURLFormat, actorType, id, method)
-	log.Printf("Invoking %s", invokeURL)
+	log.Printf("Invoking %s\n", invokeURL)
 
 	res, err := http.Post(invokeURL, "application/json", bytes.NewBuffer([]byte{}))
 	if err != nil {
-		log.Printf("Could not test actor: %s", err.Error())
+		log.Printf("Could not test actor: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -197,7 +197,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Printf("Could not read actor's test response: %s", err.Error())
+		log.Printf("Could not read actor's test response: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -236,6 +236,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Actor App - listening on http://localhost:%d", appPort)
+	log.Printf("Actor App - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

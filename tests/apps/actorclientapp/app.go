@@ -47,7 +47,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+	log.Printf("Processing %s test request for %s\n", r.Method, r.URL.RequestURI())
 
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
@@ -56,7 +56,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 
 	body, err := httpCall(r.Method, url, "fakereq", 200)
 	if err != nil {
-		log.Printf("Could not read actor's test response: %s", err.Error())
+		log.Printf("Could not read actor's test response: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -69,7 +69,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	var response daprActorResponse
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Printf("Could not parse actor's test response: %s", err.Error())
+		log.Printf("Could not parse actor's test response: %s\n", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -128,6 +128,6 @@ func appRouter() *mux.Router {
 }
 
 func main() {
-	log.Printf("Actor Client - listening on http://localhost:%d", appPort)
+	log.Printf("Actor Client - listening on http://localhost:%d\n", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }
