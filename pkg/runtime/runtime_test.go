@@ -2682,7 +2682,9 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 					return nil
 				},
 			}
-			rt.grpc.SetAppClient(&mockClientConn)
+			rt.grpc.SetLocalConnCreateFn(func() (grpc.ClientConnInterface, error) {
+				return &mockClientConn, nil
+			})
 
 			err := rt.publishMessageGRPC(context.Background(), testPubSubMessage)
 			if tc.ExpectError {

@@ -41,6 +41,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
+	gogrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -245,13 +246,16 @@ type pubsubItem struct {
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	grpcAppChannelConfig := &grpc.AppChannelConfig{
-		Port:                 runtimeConfig.ApplicationPort,
-		MaxConcurrency:       runtimeConfig.MaxConcurrency,
-		TracingSpec:          globalConfig.Spec.TracingSpec,
-		SSLEnabled:           runtimeConfig.AppSSL,
-		MaxRequestBodySizeMB: runtimeConfig.MaxRequestBodySize,
-		ReadBufferSizeKB:     runtimeConfig.ReadBufferSize,
+	grpcAppChannelConfig := &grpc.AppChannelConfig{}
+	if globalConfig != nil {
+		grpcAppChannelConfig.TracingSpec = globalConfig.Spec.TracingSpec
+	}
+	if runtimeConfig != nil {
+		grpcAppChannelConfig.Port = runtimeConfig.ApplicationPort
+		grpcAppChannelConfig.MaxConcurrency = runtimeConfig.MaxConcurrency
+		grpcAppChannelConfig.SSLEnabled = runtimeConfig.AppSSL
+		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.MaxRequestBodySize
+		grpcAppChannelConfig.ReadBufferSizeKB = runtimeConfig.ReadBufferSize
 	}
 
 	rt := &DaprRuntime{
@@ -1694,7 +1698,8 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoutes, error) {
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency, resiliencyEnabled)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		conn, err := a.grpc.GetAppClient()
+		var conn gogrpc.ClientConnInterface
+		conn, err = a.grpc.GetAppClient()
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
