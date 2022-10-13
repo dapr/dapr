@@ -490,8 +490,9 @@ func TestHeaders(t *testing.T) {
 
 	t.Run("grpc-to-http", func(t *testing.T) {
 		body, err := json.Marshal(testCommandRequest{
-			RemoteApp: "serviceinvocation-callee-0",
-			Method:    "grpc-to-http",
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "grpc-to-http",
+			RemoteAppTracing: "true",
 		})
 		require.NoError(t, err)
 
@@ -517,7 +518,6 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "localhost:50001", requestHeaders["Dapr-Authority"][0])
 		assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
 		assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
-		assert.NotNil(t, requestHeaders["Traceparent"][0])
 		assert.NotNil(t, requestHeaders["User-Agent"][0])
 		assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
 		assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
@@ -533,8 +533,9 @@ func TestHeaders(t *testing.T) {
 
 	t.Run("http-to-grpc", func(t *testing.T) {
 		body, err := json.Marshal(testCommandRequest{
-			RemoteApp: "grpcapp",
-			Method:    "http-to-grpc",
+			RemoteApp:        "grpcapp",
+			Method:           "http-to-grpc",
+			RemoteAppTracing: "true",
 		})
 		require.NoError(t, err)
 
@@ -564,12 +565,6 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "DaprValue1", requestHeaders["daprtest-request-1"][0])
 		assert.Equal(t, "DaprValue2", requestHeaders["daprtest-request-2"][0])
 		assert.NotNil(t, requestHeaders["user-agent"][0])
-		traceParentRq := requestHeaders["traceparent"]
-		if assert.NotNil(t, traceParentRq, "traceparent is missing from the request") {
-			if assert.Equal(t, 1, len(traceParentRq), "traceparent is missing from the request") {
-				assert.NotEqual(t, "", traceParentRq[0], "traceparent is missing from the request")
-			}
-		}
 		assert.Equal(t, hostIP, requestHeaders["x-forwarded-for"][0])
 		assert.Equal(t, hostname, requestHeaders["x-forwarded-host"][0])
 		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
@@ -730,7 +725,6 @@ func verifyHTTPToHTTPTracing(t *testing.T, url string, expectedTraceID string) {
 
 	require.NoError(t, err)
 
-	assert.NotNil(t, requestHeaders["Traceparent"][0])
 	assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
 
 	traceParentRs := responseHeaders["Traceparent"]
@@ -770,7 +764,6 @@ func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, 
 	assert.True(t, strings.HasPrefix(requestHeaders["Content-Type"][0], "application/json"))
 	assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
 	assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
-	assert.NotNil(t, requestHeaders["Traceparent"][0])
 	assert.NotNil(t, requestHeaders["User-Agent"][0])
 	assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
 	assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
