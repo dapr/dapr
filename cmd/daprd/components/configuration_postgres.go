@@ -11,18 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package components
 
-// ServerConfig is the config object for a grpc server.
-type ServerConfig struct {
-	AppID                string
-	HostAddress          string
-	Port                 int
-	APIListenAddresses   []string
-	NameSpace            string
-	TrustDomain          string
-	MaxRequestBodySizeMB int
-	UnixDomainSocket     string
-	ReadBufferSizeKB     int
-	EnableAPILogging     bool
+import (
+	configPostgres "github.com/dapr/components-contrib/configuration/postgres"
+	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+)
+
+func init() {
+	configurationLoader.DefaultRegistry.RegisterComponent(configPostgres.NewPostgresConfigurationStore, "postgres")
 }

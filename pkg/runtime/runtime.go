@@ -23,6 +23,7 @@ import (
 	nethttp "net/http"
 	"os"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -79,6 +80,7 @@ import (
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
+	"github.com/dapr/dapr/pkg/components/pluggable"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -363,7 +365,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
 		}
-		otelExporter, err := otlptrace.New(context.Background(), client)
+		otelExporter, err := otlptrace.New(a.ctx, client)
 		if err != nil {
 			return err
 		}
@@ -426,6 +428,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry = opts.bindingRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
+
+	a.initPluggableComponents()
 
 	go a.processComponents()
 
@@ -552,6 +556,17 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	return nil
+}
+
+// initPluggableComponents discover pluggable components and initialize with their respective registries.
+func (a *DaprRuntime) initPluggableComponents() {
+	if runtime.GOOS == "windows" {
+		log.Debugf("the current OS does not support pluggable components feature, skipping initialization")
+		return
+	}
+	if err := pluggable.Discover(a.ctx); err != nil {
+		log.Errorf("could not initialize pluggable components %v", err)
+	}
 }
 
 // Sets the status of the app to healthy or un-healthy
@@ -1260,23 +1275,25 @@ func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, bind
 }
 
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID,
-		a.appChannel,
-		a.directMessaging,
-		a.getComponents,
-		a.resiliency,
-		a.stateStores,
-		a.lockStores,
-		a.secretStores,
-		a.secretsConfiguration,
-		a.configurationStores,
-		a.getPublishAdapter(),
-		a.actor,
-		a.sendToOutputBinding,
-		a.globalConfig.Spec.TracingSpec,
-		a.ShutdownWithWait,
-		a.getComponentsCapabilitesMap,
-	)
+	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
+		AppID:                       a.runtimeConfig.ID,
+		AppChannel:                  a.appChannel,
+		DirectMessaging:             a.directMessaging,
+		GetComponentsFn:             a.getComponents,
+		Resiliency:                  a.resiliency,
+		StateStores:                 a.stateStores,
+		LockStores:                  a.lockStores,
+		SecretStores:                a.secretStores,
+		SecretsConfiguration:        a.secretsConfiguration,
+		ConfigurationStores:         a.configurationStores,
+		PubsubAdapter:               a.getPublishAdapter(),
+		Actor:                       a.actor,
+		SendToOutputBindingFn:       a.sendToOutputBinding,
+		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		Shutdown:                    a.ShutdownWithWait,
+		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		MaxRequestBodySize:          int64(a.runtimeConfig.MaxRequestBodySize) << 20, // Convert from MB to bytes
+	})
 
 	serverConf := http.ServerConfig{
 		AppID:              a.runtimeConfig.ID,
@@ -1339,29 +1356,41 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, apiListenAddresses, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize, a.runtimeConfig.UnixDomainSocket, a.runtimeConfig.ReadBufferSize, a.runtimeConfig.EnableAPILogging)
+	return grpc.ServerConfig{
+		AppID:                a.runtimeConfig.ID,
+		HostAddress:          a.hostAddress,
+		Port:                 port,
+		APIListenAddresses:   apiListenAddresses,
+		NameSpace:            a.namespace,
+		TrustDomain:          trustDomain,
+		MaxRequestBodySizeMB: a.runtimeConfig.MaxRequestBodySize,
+		UnixDomainSocket:     a.runtimeConfig.UnixDomainSocket,
+		ReadBufferSizeKB:     a.runtimeConfig.ReadBufferSize,
+		EnableAPILogging:     a.runtimeConfig.EnableAPILogging,
+	}
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID,
-		a.appChannel,
-		a.resiliency,
-		a.stateStores,
-		a.secretStores,
-		a.secretsConfiguration,
-		a.configurationStores,
-		a.lockStores,
-		a.getPublishAdapter(),
-		a.directMessaging,
-		a.actor,
-		a.sendToOutputBinding,
-		a.globalConfig.Spec.TracingSpec,
-		a.accessControlList,
-		string(a.runtimeConfig.ApplicationProtocol),
-		a.getComponents,
-		a.ShutdownWithWait,
-		a.getComponentsCapabilitesMap,
-	)
+	return grpc.NewAPI(grpc.APIOpts{
+		AppID:                       a.runtimeConfig.ID,
+		AppChannel:                  a.appChannel,
+		Resiliency:                  a.resiliency,
+		StateStores:                 a.stateStores,
+		SecretStores:                a.secretStores,
+		SecretsConfiguration:        a.secretsConfiguration,
+		ConfigurationStores:         a.configurationStores,
+		LockStores:                  a.lockStores,
+		PubsubAdapter:               a.getPublishAdapter(),
+		DirectMessaging:             a.directMessaging,
+		Actor:                       a.actor,
+		SendToOutputBindingFn:       a.sendToOutputBinding,
+		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		AccessControlList:           a.accessControlList,
+		AppProtocol:                 string(a.runtimeConfig.ApplicationProtocol),
+		Shutdown:                    a.ShutdownWithWait,
+		GetComponentsFn:             a.getComponents,
+		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+	})
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
@@ -1939,9 +1968,10 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 	}
 
 	// Every error from now on is a retriable error.
-	log.Warnf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	log.Warnf(errMsg)
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-	return errors.Errorf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
+	return errors.Errorf(errMsg)
 }
 
 func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
@@ -2083,12 +2113,25 @@ func (a *DaprRuntime) initActors() error {
 	if a.actorStateStoreName == "" {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID,
-		a.runtimeConfig.PlacementAddresses, a.runtimeConfig.InternalGRPCPort,
-		a.namespace, a.appConfig)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig,
-		a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.Features,
-		a.resiliency, a.actorStateStoreName)
+	actorConfig := actors.NewConfig(actors.ConfigOpts{
+		HostAddress:        a.hostAddress,
+		AppID:              a.runtimeConfig.ID,
+		PlacementAddresses: a.runtimeConfig.PlacementAddresses,
+		Port:               a.runtimeConfig.InternalGRPCPort,
+		Namespace:          a.namespace,
+		AppConfig:          a.appConfig,
+	})
+	act := actors.NewActors(actors.ActorsOpts{
+		StateStore:       a.stateStores[a.actorStateStoreName],
+		AppChannel:       a.appChannel,
+		GRPCConnectionFn: a.grpc.GetGRPCConnection,
+		Config:           actorConfig,
+		CertChain:        a.runtimeConfig.CertChain,
+		TracingSpec:      a.globalConfig.Spec.TracingSpec,
+		Features:         a.globalConfig.Spec.Features,
+		Resiliency:       a.resiliency,
+		StateStoreName:   a.actorStateStoreName,
+	})
 	err = act.Init()
 	if err == nil {
 		a.actor = act
@@ -2403,11 +2446,17 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 			log.Warnf("error closing API: %v", err)
 		}
 	}
-	if a.tracerProvider != nil {
-		a.tracerProvider.Shutdown(context.Background())
-	}
+
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	go func() {
+		if a.tracerProvider != nil {
+			a.tracerProvider.Shutdown(shutdownCtx)
+		}
+	}()
+
 	log.Infof("Waiting %s to finish outstanding operations", duration)
 	<-time.After(duration)
+	shutdownCancel()
 	a.shutdownOutputComponents()
 	a.shutdownC <- nil
 }
