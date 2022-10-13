@@ -114,9 +114,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	if err != nil {
 		return err
 	} else if !exists {
-		state = &workflowState{
-			inbox: []*backend.HistoryEvent{},
-		}
+		state = &workflowState{}
 	}
 
 	startEvent, err := backend.UnmarshalHistoryEvent(startEventBytes)
@@ -124,6 +122,16 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		return err
 	} else if startEvent.GetExecutionStarted() == nil {
 		return errors.New("invalid execution start event")
+	}
+
+	// We block creation of existing workflows unless they are in a completed state.
+	if exists {
+		runtimeState := getRuntimeState(actorID, state)
+		if runtimeState.IsCompleted() {
+			state = &workflowState{}
+		} else {
+			return fmt.Errorf("an active workflow with ID '%s' already exists", actorID)
+		}
 	}
 
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
