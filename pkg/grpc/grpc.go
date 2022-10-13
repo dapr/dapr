@@ -132,7 +132,20 @@ func (g *Manager) GetAppClient() (grpc.ClientConnInterface, error) {
 func (g *Manager) CloseAppClient() error {
 	g.lock.Lock()
 	defer g.lock.Unlock()
+	return g.doCloseAppClient()
+}
 
+// SetAppClient sets the connection to the app.
+func (g *Manager) SetAppClient(conn grpc.ClientConnInterface) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	// Ignore errors here
+	_ = g.doCloseAppClient()
+	g.conn = conn
+}
+
+func (g *Manager) doCloseAppClient() error {
 	if g.conn != nil {
 		conn, ok := g.conn.(interface{ Close() error })
 		g.conn = nil
@@ -141,12 +154,6 @@ func (g *Manager) CloseAppClient() error {
 		}
 	}
 	return nil
-}
-
-// SetAppClient sets the connection to the app.
-// This is mostly useful for testing.
-func (g *Manager) SetAppClient(conn grpc.ClientConnInterface) {
-	g.conn = conn
 }
 
 func (g *Manager) connectLocal(parentCtx context.Context, port int, sslEnabled bool) (conn *grpc.ClientConn, err error) {
