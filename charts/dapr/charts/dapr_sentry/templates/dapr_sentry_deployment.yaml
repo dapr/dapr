@@ -148,6 +148,10 @@ spec:
 {{- end }}
         - "--trust-domain"
         - {{ .Values.tls.trustDomain }}
+{{- if .Values.tokenAudience }}
+        - "--token-audience"
+        - {{ .Values.tokenAudience }}
+{{- end }}
       serviceAccountName: dapr-operator
       volumes:
         - name: credentials
