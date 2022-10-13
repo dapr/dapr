@@ -55,6 +55,7 @@ const (
 // Config holds the Dapr Runtime configuration.
 type Config struct {
 	ID                           string
+	Namespace                    string
 	HTTPPort                     int
 	PublicPort                   *int
 	ProfilePort                  int
@@ -88,6 +89,7 @@ type Config struct {
 // NewRuntimeConfigOpts contains options for NewRuntimeConfig.
 type NewRuntimeConfigOpts struct {
 	ID                           string
+	Namespace                    string
 	PlacementAddresses           []string
 	controlPlaneAddress          string
 	AllowedOrigins               string
@@ -134,6 +136,7 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 
 	return &Config{
 		ID:                  opts.ID,
+		Namespace:           opts.Namespace,
 		HTTPPort:            opts.HTTPPort,
 		PublicPort:          opts.PublicPort,
 		InternalGRPCPort:    opts.InternalGRPCPort,

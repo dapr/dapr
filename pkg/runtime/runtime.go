@@ -307,7 +307,7 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 }
 
 func (a *DaprRuntime) getNamespace() string {
-	return os.Getenv("NAMESPACE")
+	return a.runtimeConfig.Namespace
 }
 
 func (a *DaprRuntime) getPodName() string {

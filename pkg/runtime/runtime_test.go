@@ -3815,6 +3815,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 func NewTestDaprRuntimeConfig(mode modes.DaprMode, protocol string, appPort int) *Config {
 	return NewRuntimeConfig(NewRuntimeConfigOpts{
 		ID:                           TestRuntimeConfigID,
+		Namespace:                    os.Getenv("NAMESPACE"),
 		PlacementAddresses:           []string{"10.10.10.12"},
 		controlPlaneAddress:          "10.10.10.11",
 		AllowedOrigins:               cors.DefaultAllowedOrigins,
