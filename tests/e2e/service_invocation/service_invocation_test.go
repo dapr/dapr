@@ -743,8 +743,9 @@ func verifyHTTPToHTTPTracing(t *testing.T, url string, expectedTraceID string) {
 
 func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, expectedForwarded string) {
 	body, err := json.Marshal(testCommandRequest{
-		RemoteApp: "serviceinvocation-callee-0",
-		Method:    "http-to-http",
+		RemoteApp:        "serviceinvocation-callee-0",
+		Method:           "http-to-http",
+		RemoteAppTracing: "true",
 	})
 	require.NoError(t, err)
 
