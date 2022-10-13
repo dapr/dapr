@@ -725,6 +725,7 @@ func verifyHTTPToHTTPTracing(t *testing.T, url string, expectedTraceID string) {
 
 	require.NoError(t, err)
 
+	assert.NotNil(t, requestHeaders["Traceparent"][0])
 	assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
 
 	traceParentRs := responseHeaders["Traceparent"]

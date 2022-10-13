@@ -33,6 +33,12 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 	testValue := &internalv1pb.ListStringValue{
 		Values: []string{"fakeValue"},
 	}
+	testValue1 := &internalv1pb.ListStringValue{
+		Values: []string{"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
+	}
+	testValue2 := &internalv1pb.ListStringValue{
+		Values: []string{"a=123"},
+	}
 
 	fakeMetadata := map[string]*internalv1pb.ListStringValue{
 		"custom-header": testValue,
@@ -42,9 +48,11 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 		":authority":    testValue,
 		"grpc-timeout":  testValue,
 		"content-type":  testValue, // skip
+		"traceparent":   testValue1,
+		"tracestate":    testValue2,
 	}
 
-	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout"}
+	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout", "traceparent", "tracestate"}
 	savedHeaderKeyNames := []string{}
 	ctx := context.Background()
 	InternalMetadataToHTTPHeader(ctx, fakeMetadata, func(k, v string) {

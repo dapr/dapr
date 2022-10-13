@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/diagnostics/propagation"
 	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 // HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
@@ -45,6 +46,10 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		attrs := spanAttributesMapFromHTTPContext(ctx)
 		span.SetAttributes(attrs...)
 
+		// Check if response has traceparent header and add if absent
+		if ctx.Response.Header.Peek(diagUtils.TraceparentHeader) == nil {
+			diagUtils.SpanContextToMetadata(span.SpanContext(), ctx.Response.Header.Set)
+		}
 		UpdateSpanStatusFromHTTPStatus(span,
 			apitrace.SpanKindClient,
 			ctx.Response.StatusCode())
