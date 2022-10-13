@@ -117,8 +117,7 @@ spec:
         - "--log-as-json"
 {{- end }}
 {{- if eq .Values.global.metrics.enabled true }}
-        - "--enable-metrics"
-        - "true"
+        - "--enable-metrics=true"
         - "--replicationFactor"
         - "{{ .Values.replicationFactor }}"
         - "--exporterAddress"

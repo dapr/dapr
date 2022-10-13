@@ -87,10 +87,8 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 		return nil, errors.Wrap(err, "failed to create tls config from cert and key")
 	}
 
-	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
-
-	unaryClientInterceptor = grpcMiddleware.ChainUnaryClient(
-		unaryClientInterceptor,
+	unaryClientInterceptor := grpcMiddleware.ChainUnaryClient(
+		grpcRetry.UnaryClientInterceptor(),
 		diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
 	)
 
