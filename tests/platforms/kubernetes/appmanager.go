@@ -326,6 +326,8 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 				pod.Spec.Reset()
 				pod.ObjectMeta.Reset()
 				podList.Items[i] = pod
+
+				podStatus[pod.Name] = pod.Status.ContainerStatuses
 			}
 			j, _ := json.Marshal(podList)
 			log.Printf("deployment %s relate pods: %s", m.app.AppName, string(j))
