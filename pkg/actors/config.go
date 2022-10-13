@@ -37,7 +37,7 @@ type Config struct {
 	EntityConfigs                 map[string]EntityConfig
 }
 
-// Remap of app_config.EntityConfig but with more useful types for actors.go.
+// Remap of daprAppConfig.EntityConfig but with more useful types for actors.go.
 type EntityConfig struct {
 	Entities                   []string
 	ActorIdleTimeout           time.Duration
@@ -55,52 +55,62 @@ const (
 	defaultReentrancyStackLimit = 32
 )
 
+// ConfigOpts contains options for NewConfig.
+type ConfigOpts struct {
+	HostAddress        string
+	AppID              string
+	PlacementAddresses []string
+	Port               int
+	Namespace          string
+	AppConfig          daprAppConfig.ApplicationConfig
+}
+
 // NewConfig returns the actor runtime configuration.
-func NewConfig(hostAddress, appID string, placementAddresses []string, port int, namespace string, appConfig daprAppConfig.ApplicationConfig) Config {
+func NewConfig(opts ConfigOpts) Config {
 	c := Config{
-		HostAddress:                   hostAddress,
-		AppID:                         appID,
-		PlacementAddresses:            placementAddresses,
-		HostedActorTypes:              appConfig.Entities,
-		Port:                          port,
+		HostAddress:                   opts.HostAddress,
+		AppID:                         opts.AppID,
+		PlacementAddresses:            opts.PlacementAddresses,
+		Port:                          opts.Port,
+		Namespace:                     opts.Namespace,
+		DrainRebalancedActors:         opts.AppConfig.DrainRebalancedActors,
+		HostedActorTypes:              opts.AppConfig.Entities,
+		Reentrancy:                    opts.AppConfig.Reentrancy,
+		RemindersStoragePartitions:    opts.AppConfig.RemindersStoragePartitions,
 		HeartbeatInterval:             defaultHeartbeatInterval,
 		ActorDeactivationScanInterval: defaultActorScanInterval,
 		ActorIdleTimeout:              defaultActorIdleTimeout,
 		DrainOngoingCallTimeout:       defaultOngoingCallTimeout,
-		DrainRebalancedActors:         appConfig.DrainRebalancedActors,
-		Namespace:                     namespace,
-		Reentrancy:                    appConfig.Reentrancy,
-		RemindersStoragePartitions:    appConfig.RemindersStoragePartitions,
 		EntityConfigs:                 make(map[string]EntityConfig),
 	}
 
-	scanDuration, err := time.ParseDuration(appConfig.ActorScanInterval)
+	scanDuration, err := time.ParseDuration(opts.AppConfig.ActorScanInterval)
 	if err == nil {
 		c.ActorDeactivationScanInterval = scanDuration
 	}
 
-	idleDuration, err := time.ParseDuration(appConfig.ActorIdleTimeout)
+	idleDuration, err := time.ParseDuration(opts.AppConfig.ActorIdleTimeout)
 	if err == nil {
 		c.ActorIdleTimeout = idleDuration
 	}
 
-	drainCallDuration, err := time.ParseDuration(appConfig.DrainOngoingCallTimeout)
+	drainCallDuration, err := time.ParseDuration(opts.AppConfig.DrainOngoingCallTimeout)
 	if err == nil {
 		c.DrainOngoingCallTimeout = drainCallDuration
 	}
 
-	if appConfig.Reentrancy.MaxStackDepth == nil {
+	if opts.AppConfig.Reentrancy.MaxStackDepth == nil {
 		reentrancyLimit := defaultReentrancyStackLimit
 		c.Reentrancy.MaxStackDepth = &reentrancyLimit
 	}
 
 	// Make a map of the hosted actors so we can reference it below.
-	hostedTypes := make(map[string]bool, len(appConfig.Entities))
-	for _, hostedType := range appConfig.Entities {
+	hostedTypes := make(map[string]bool, len(opts.AppConfig.Entities))
+	for _, hostedType := range opts.AppConfig.Entities {
 		hostedTypes[hostedType] = true
 	}
 
-	for _, entityConfg := range appConfig.EntityConfigs {
+	for _, entityConfg := range opts.AppConfig.EntityConfigs {
 		config := translateEntityConfig(entityConfg)
 		for _, entity := range entityConfg.Entities {
 			if _, ok := hostedTypes[entity]; ok {
