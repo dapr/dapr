@@ -246,18 +246,6 @@ type pubsubItem struct {
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	grpcAppChannelConfig := &grpc.AppChannelConfig{}
-	if globalConfig != nil {
-		grpcAppChannelConfig.TracingSpec = globalConfig.Spec.TracingSpec
-	}
-	if runtimeConfig != nil {
-		grpcAppChannelConfig.Port = runtimeConfig.ApplicationPort
-		grpcAppChannelConfig.MaxConcurrency = runtimeConfig.MaxConcurrency
-		grpcAppChannelConfig.SSLEnabled = runtimeConfig.AppSSL
-		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.MaxRequestBodySize
-		grpcAppChannelConfig.ReadBufferSizeKB = runtimeConfig.ReadBufferSize
-	}
-
 	rt := &DaprRuntime{
 		ctx:                        ctx,
 		cancel:                     cancel,
@@ -267,7 +255,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		componentsLock:             &sync.RWMutex{},
 		components:                 make([]componentsV1alpha1.Component, 0),
 		actorStateStoreLock:        &sync.RWMutex{},
-		grpc:                       grpc.NewGRPCManager(runtimeConfig.Mode, grpcAppChannelConfig),
+		grpc:                       createGRPCManager(runtimeConfig, globalConfig),
 		inputBindings:              map[string]bindings.InputBinding{},
 		outputBindings:             map[string]bindings.OutputBinding{},
 		secretStores:               map[string]secretstores.SecretStore{},
@@ -2907,4 +2895,22 @@ func (a *DaprRuntime) stopReadingFromBindings() {
 // Returns "componentName||topicName", which is used as key for some maps
 func pubsubTopicKey(componentName, topicName string) string {
 	return componentName + "||" + topicName
+}
+
+func createGRPCManager(runtimeConfig *Config, globalConfig *config.Configuration) *grpc.Manager {
+	grpcAppChannelConfig := &grpc.AppChannelConfig{}
+	if globalConfig != nil {
+		grpcAppChannelConfig.TracingSpec = globalConfig.Spec.TracingSpec
+	}
+	if runtimeConfig != nil {
+		grpcAppChannelConfig.Port = runtimeConfig.ApplicationPort
+		grpcAppChannelConfig.MaxConcurrency = runtimeConfig.MaxConcurrency
+		grpcAppChannelConfig.SSLEnabled = runtimeConfig.AppSSL
+		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.MaxRequestBodySize
+		grpcAppChannelConfig.ReadBufferSizeKB = runtimeConfig.ReadBufferSize
+	}
+
+	m := grpc.NewGRPCManager(runtimeConfig.Mode, grpcAppChannelConfig)
+	m.StartCollector()
+	return m
 }

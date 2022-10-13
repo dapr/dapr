@@ -18,10 +18,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	clocklib "github.com/benbjohnson/clock"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/kit/ptr"
 )
+
+// Real-time clock (wrapper around time.Time) to allow mocking
+var clock = clocklib.New()
+
+// Maximum number of concurrent streams in a single gRPC connection
+// This is the default value used by gRPC servers and clients
+const grpcMaxConcurrentStreams = 100
 
 // ConnectionPool holds a pool of connections to the same address.
 type ConnectionPool struct {
@@ -64,12 +72,15 @@ func (p *ConnectionPool) Get(createFn func() (grpc.ClientConnInterface, error)) 
 	}
 
 	// Create a connection using createFn
-	conn, err = createFn()
+	newConn, err := createFn()
 	if err != nil {
 		return nil, err
 	}
-	p.doRegister(conn)
+	p.doRegister(newConn)
 
+	// Share the newly-created connection
+	// Invoke doShare here so the reference count is increased
+	conn = p.doShare()
 	return conn, nil
 }
 
@@ -112,7 +123,7 @@ func (p *ConnectionPool) Share() grpc.ClientConnInterface {
 // doShare performs the sharing of the connection from the pool, incrementing its reference count.
 // This needs to be wrapped in a (read/write) lock.
 func (p *ConnectionPool) doShare() grpc.ClientConnInterface {
-	// If there's more than 1 connection, grab the first one whose reference count is less than 100 (assuming the default value for MaxConcurrentStreams
+	// If there's more than 1 connection, grab the first one whose reference count is less or equal than 100 (grpcMaxConcurrentStreams)
 	for i := 0; i < len(p.connections); i++ {
 		// Check if the connection is still valid first
 		// First we check if the referenceCount is 0, and then we check if the connection has expired
@@ -124,8 +135,8 @@ func (p *ConnectionPool) doShare() grpc.ClientConnInterface {
 		// Increment the reference counter to signal that we're using the connection
 		count := atomic.AddInt32(&p.connections[i].referenceCount, 1)
 
-		// If the reference count is less than 100, we can use this connection
-		if count < 100 {
+		// If the reference count is less (or equal) than 100, we can use this connection
+		if count <= grpcMaxConcurrentStreams {
 			return p.connections[i].conn
 		}
 
@@ -204,7 +215,7 @@ func (p *ConnectionPool) Purge() {
 		// If the connection has no use and the last usage was more than maxConnIdle ago, then close it and filter it out
 		// Ok to load the reference count non-atomically because we have a write lock
 		// Also, don't remove connections until we reach minActiveConns
-		if i > p.minActiveConns && el.referenceCount <= 0 && el.Expired(p.maxConnIdle) {
+		if i >= p.minActiveConns && el.referenceCount <= 0 && el.Expired(p.maxConnIdle) {
 			if closer, ok := el.conn.(interface{ Close() error }); ok {
 				_ = closer.Close()
 			}
@@ -227,12 +238,12 @@ type connectionPoolConnection struct {
 // Expired returns true if the connection has Expired and should not be used.
 func (pic *connectionPoolConnection) Expired(maxConnIdle time.Duration) bool {
 	idle := pic.idleSince.Load()
-	return idle != nil && time.Since(*idle) < maxConnIdle
+	return idle != nil && clock.Since(*idle) > maxConnIdle
 }
 
 // MarkIdle sets the current time as when the connection became idle.
 func (pic *connectionPoolConnection) MarkIdle() {
-	pic.idleSince.Store(ptr.Of(time.Now()))
+	pic.idleSince.Store(ptr.Of(clock.Now()))
 }
 
 // RemoteConnectionPool is used to hold connections to remote addresses.

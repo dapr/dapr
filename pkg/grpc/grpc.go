@@ -234,6 +234,18 @@ func (g *Manager) connTeardownFactory(address string, conn *grpc.ClientConn) fun
 	}
 }
 
+// StartCollector starts a background goroutine that periodically watches for expired connections and purges them.
+func (g *Manager) StartCollector() {
+	go func() {
+		t := time.NewTicker(45 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			g.localConn.Purge()
+			g.remoteConns.Purge()
+		}
+	}()
+}
+
 func nopTeardown(destroy bool) {
 	// Nop
 }

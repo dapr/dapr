@@ -60,6 +60,7 @@ require (
 )
 
 require (
+	github.com/benbjohnson/clock v1.3.0
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.7.0
