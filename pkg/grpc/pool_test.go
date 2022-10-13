@@ -295,9 +295,14 @@ func TestConnectionPool(t *testing.T) {
 			require.Equal(t, int32(100), cp.connections[0].referenceCount)
 			require.Equal(t, int32(0), cp.connections[1].referenceCount)
 
-			// Wait 15 seconds (more than expiration time) and repeat
-			// Now the second connection should be purged
+			// Wait 15 seconds (more than expiration time)
+			// Share should return nil because the first connection is full, and the second has expired
 			clockMock.Add(15 * time.Second)
+			conn := cp.Share()
+			require.Nil(t, conn)
+			require.Equal(t, int32(0), cp.connections[1].referenceCount)
+
+			// Now the second connection should be purged
 			cp.Purge()
 
 			require.Len(t, cp.connections, 1)
@@ -322,7 +327,13 @@ func TestConnectionPool(t *testing.T) {
 			require.Equal(t, int32(0), cp.connections[0].referenceCount)
 			require.Equal(t, idleStart, *(cp.connections[0].idleSince.Load()))
 
-			// Wait 15 seconds (more than expiration time) and repeat
+			// Wait 15 seconds (more than expiration time)
+			// Share should return nil because the connection has expired
+			clockMock.Add(15 * time.Second)
+			conn = cp.Share()
+			require.Nil(t, conn)
+			require.Equal(t, int32(0), cp.connections[0].referenceCount)
+
 			// Now the first connection should be purged if minActiveConns == 0 only
 			clockMock.Add(15 * time.Second)
 			cp.Purge()
