@@ -85,12 +85,15 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 // InvokeReminder implements actors.InternalActor
 func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data any, dueTime string, period string) error {
 	wfLogger.Debugf("invoking reminder '%s' on workflow actor '%s'", reminderName, actorID)
+
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second) // TODO: Configurable
 	defer cancelTimeout()
-	err := wf.runWorkflow(timeoutCtx, actorID, reminderName)
-	// TODO: Delete the recurring reminder
-	return err
+	if err := wf.runWorkflow(timeoutCtx, actorID, reminderName); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // InvokeTimer implements actors.InternalActor
@@ -126,7 +129,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
-	if err := wf.createReliableReminder(ctx, actorID, "start", nil, 0); err != nil {
+	if _, err := wf.createReliableReminder(ctx, actorID, "start", nil, 0); err != nil {
 		return err
 	}
 
@@ -179,26 +182,7 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	}
 	state.inbox = append(state.inbox, e)
 
-	// Reminders need to have unique names or else they may not fire in certain race conditions.
-	var reminderName string
-	if tc := e.GetTaskCompleted(); tc != nil {
-		reminderName = fmt.Sprintf("task-completed-%d", tc.TaskScheduledId)
-	} else if tf := e.GetTaskFailed(); tf != nil {
-		reminderName = fmt.Sprintf("task-failed-%d", tf.TaskScheduledId)
-	} else if sc := e.GetSubOrchestrationInstanceCompleted(); sc != nil {
-		reminderName = fmt.Sprintf("sub-workflow-completed-%d", sc.TaskScheduledId)
-	} else if sf := e.GetSubOrchestrationInstanceFailed(); sf != nil {
-		reminderName = fmt.Sprintf("sub-workflow-failed-%d", sf.TaskScheduledId)
-	} else if er := e.GetEventRaised(); er != nil {
-		// external events don't have any unique metadata, so we attach UUIDs
-		reminderName = fmt.Sprintf("event-received-%s-%s", er.Name, uuid.New())
-	} else if es := e.GetEventSent(); es != nil {
-		// external events don't have any unique metadata, so we attach UUIDs
-		reminderName = fmt.Sprintf("event-sent-%s-%s", es.Name, uuid.New())
-	} else {
-		return fmt.Errorf("don't know how to handle %v", e)
-	}
-	if err := wf.createReliableReminder(ctx, actorID, reminderName, nil, 0); err != nil {
+	if _, err := wf.createReliableReminder(ctx, actorID, "new-event", nil, 0); err != nil {
 		return err
 	}
 	return wf.saveInternalState(actorID, state)
@@ -261,12 +245,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if delay < 0 {
 				delay = 0
 			}
-			reminderName := fmt.Sprintf("timer-%d", tf.TimerId)
-			if err := wf.createReliableReminder(ctx, actorID, reminderName, nil, delay); err != nil {
+			reminderPrefix := fmt.Sprintf("timer-%d", tf.TimerId)
+			if reminderName, err := wf.createReliableReminder(ctx, actorID, reminderPrefix, nil, delay); err != nil {
 				// TODO: This needs to be a retriable error
 				return fmt.Errorf("actor %s failed to create reminder for timer: %w", actorID, err)
+			} else {
+				state.timers[reminderName] = t
 			}
-			state.timers[reminderName] = t
 		}
 	}
 
@@ -319,6 +304,11 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
+	// If the workflow continue-as-new'd, we need to reset the history
+	if runtimeState.ContinuedAsNew() {
+		state.history = nil
+	}
+
 	// Update the workflow history
 	for _, e := range runtimeState.NewEvents() {
 		state.history = append(state.history, e)
@@ -349,14 +339,16 @@ func (wf *workflowActor) saveInternalState(actorID string, state *workflowState)
 	return nil // TODO: Implement persistence this after validating reminders
 }
 
-func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID string, name string, data any, delay time.Duration) error {
-	wfLogger.Debugf("%s: creating '%s' reminder with DueTime = %s", actorID, name, delay)
-	return wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
+func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID string, namePrefix string, data any, delay time.Duration) (string, error) {
+	// Reminders need to have unique names or else they may not fire in certain race conditions.
+	reminderName := fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])
+	wfLogger.Debugf("%s: creating '%s' reminder with DueTime = %s", actorID, reminderName, delay)
+	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: WorkflowActorType,
 		ActorID:   actorID,
 		Data:      data,
 		DueTime:   delay.String(),
-		Name:      name,
+		Name:      reminderName,
 		Period:    "", // TODO: Add configurable period to enable durability
 	})
 }
