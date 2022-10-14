@@ -13,7 +13,8 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=actorjava \
+E2E_TEST_APPS=service_invocation
+#E2E_TEST_APPS=actorjava \
 actordotnet \
 actorpython \
 actorphp \
@@ -52,16 +53,18 @@ pluggable_redis-pubsub \
 pluggable_kafka-bindings \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc
+#PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc
+PERF_TEST_APPS=
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
 
 # PERFORMANCE test app root directory
-PERF_TESTAPP_DIR=./tests/apps/perf
+#PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer \
+PERF_TESTS=
+#PERF_TESTS=actor_timer \
 actor_reminder \
 actor_activation \
 service_invocation_http \
