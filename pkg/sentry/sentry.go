@@ -92,7 +92,7 @@ func (s *sentry) createCAServer() (ca.CertificateAuthority, identity.Validator) 
 	monitoring.IssuerCertExpiry(certExpiry)
 
 	// Create identity validator
-	v, validatorErr := createValidator()
+	v, validatorErr := s.createValidator()
 	if validatorErr != nil {
 		log.Fatalf("error creating validator: %s", validatorErr)
 	}
@@ -173,14 +173,14 @@ func watchCertExpiry(ctx context.Context, certAuth ca.CertificateAuthority) {
 	}
 }
 
-func createValidator() (identity.Validator, error) {
+func (s *sentry) createValidator() (identity.Validator, error) {
 	if config.IsKubernetesHosted() {
 		// we're in Kubernetes, create client and init a new serviceaccount token validator
 		kubeClient, err := k8s.GetClient()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create kubernetes client")
 		}
-		return kubernetes.NewValidator(kubeClient), nil
+		return kubernetes.NewValidator(kubeClient, s.conf.TokenAudience), nil
 	}
 	return selfhosted.NewValidator(), nil
 }
