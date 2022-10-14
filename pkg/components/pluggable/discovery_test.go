@@ -29,11 +29,26 @@ type fakeReflectService struct {
 	listServicesCalled atomic.Int64
 	listServicesResp   []string
 	listServicesErr    error
+	onResetCalled      func()
 }
 
 func (f *fakeReflectService) ListServices() ([]string, error) {
 	f.listServicesCalled.Add(1)
 	return f.listServicesResp, f.listServicesErr
+}
+
+func (f *fakeReflectService) Reset() {
+	f.onResetCalled()
+}
+
+type fakeGrpcCloser struct {
+	grpcConnectionCloser
+	onCloseCalled func()
+}
+
+func (f *fakeGrpcCloser) Close() error {
+	f.onCloseCalled()
+	return nil
 }
 
 func TestServiceCallback(t *testing.T) {
@@ -46,6 +61,27 @@ func TestServiceCallback(t *testing.T) {
 		})
 		callback([]service{{protoRef: fakeServiceName, componentName: fakeComponentName}})
 		assert.Equal(t, 1, called)
+	})
+}
+
+func TestConnectionCloser(t *testing.T) {
+	t.Run("connection closer should call grpc close and client reset", func(t *testing.T) {
+		const close, reset = "close", "reset"
+		callOrder := []string{}
+		fakeCloser := &fakeGrpcCloser{
+			onCloseCalled: func() {
+				callOrder = append(callOrder, close)
+			},
+		}
+		fakeService := &fakeReflectService{
+			onResetCalled: func() {
+				callOrder = append(callOrder, reset)
+			},
+		}
+		closer := reflectServiceConnectionCloser(fakeCloser, fakeService)
+		closer()
+		assert.Len(t, callOrder, 2)
+		assert.Equal(t, callOrder, []string{reset, close})
 	})
 }
 
