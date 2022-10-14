@@ -100,10 +100,16 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 		"DaprTest-Response-1", "DaprTest-Response-Value-1",
 		"DaprTest-Response-2", "DaprTest-Response-Value-2")
 
+	if val, ok := md["Daprtest-Traceid"]; ok {
+		header.Append("traceparent", val[0])
+	}
 	grpc.SendHeader(ctx, header)
 	trailer := metadata.Pairs(
 		"DaprTest-Trailer-1", "DaprTest-Trailer-Value-1",
 		"DaprTest-Trailer-2", "DaprTest-Trailer-Value-2")
+	if val, ok := md["Daprtest-Traceid"]; ok {
+		trailer.Append("traceparent", val[0])
+	}
 	grpc.SetTrailer(ctx, trailer)
 
 	return json.Marshal(requestMD)
