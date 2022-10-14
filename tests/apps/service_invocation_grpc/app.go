@@ -89,7 +89,7 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	requestMD := map[string][]string{}
-	fmt.Print("incoming md: ")
+	fmt.Println("incoming md: ")
 	for k, vals := range md {
 		requestMD[k] = vals
 		fmt.Printf("%s='%q' ", k, vals)
@@ -100,14 +100,14 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 		"DaprTest-Response-1", "DaprTest-Response-Value-1",
 		"DaprTest-Response-2", "DaprTest-Response-Value-2")
 
-	if val, ok := md["Daprtest-Traceid"]; ok {
+	if val, ok := md["daprtest-traceid"]; ok {
 		header.Append("traceparent", val[0])
 	}
 	grpc.SendHeader(ctx, header)
 	trailer := metadata.Pairs(
 		"DaprTest-Trailer-1", "DaprTest-Trailer-Value-1",
 		"DaprTest-Trailer-2", "DaprTest-Trailer-Value-2")
-	if val, ok := md["Daprtest-Traceid"]; ok {
+	if val, ok := md["daprtest-traceid"]; ok {
 		trailer.Append("traceparent", val[0])
 	}
 	grpc.SetTrailer(ctx, trailer)
