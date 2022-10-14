@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	isemconv "github.com/dapr/dapr/pkg/diagnostics/semconv"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -59,6 +60,17 @@ func GRPCTraceUnaryServerInterceptor(appID string) grpc.UnaryServerInterceptor {
 
 		resp, err := handler(ctx, req)
 		span.SetAttributes(reqSpanAttr...)
+
+		// Add grpc-trace-bin header for all non-invocation api's
+		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
+			sc := span.SpanContext()
+			traceparent := diagUtils.TraceparentToW3CString(sc)
+			tracestate := diagUtils.TraceStateToW3CString(sc)
+			pairs := metadata.Pairs(
+				diagUtils.TraceparentHeader, traceparent,
+				diagUtils.TracestateHeader, tracestate)
+			grpc.SetHeader(ctx, pairs)
+		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
 		span.End()
