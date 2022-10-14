@@ -101,6 +101,12 @@ func TestTraceStateFromW3CString(t *testing.T) {
 		got := TraceStateFromW3CString(scText)
 		assert.Equal(t, ts, *got)
 	})
+	t.Run("invalid Tracestate", func(t *testing.T) {
+		ts := trace.TraceState{}
+		// A non-parsable tracestate should equate back to an empty one.
+		got := TraceStateFromW3CString("bad tracestate")
+		assert.Equal(t, ts, *got)
+	})
 }
 
 func TestStartInternalCallbackSpan(t *testing.T) {
