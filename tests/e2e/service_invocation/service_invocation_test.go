@@ -435,8 +435,9 @@ func TestHeaders(t *testing.T) {
 
 	t.Run("grpc-to-grpc", func(t *testing.T) {
 		body, err := json.Marshal(testCommandRequest{
-			RemoteApp: "grpcapp",
-			Method:    "grpc-to-grpc",
+			RemoteApp:        "grpcapp",
+			Method:           "grpc-to-grpc",
+			RemoteAppTracing: "true",
 		})
 		require.NoError(t, err)
 
