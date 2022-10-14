@@ -98,7 +98,7 @@ func TestConnectionPool(t *testing.T) {
 		cp.Release(conn)
 		require.Equal(t, int32(0), cp.connections[0].referenceCount)
 		require.False(t, conns[0].Closed)
-		require.NotNil(t, cp.connections[0].idleSince)
+		require.NotNil(t, cp.connections[0].idleSince.Load())
 		require.Equal(t, clock.Now(), *(cp.connections[0].idleSince.Load()))
 	})
 
