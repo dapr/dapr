@@ -280,9 +280,47 @@ test: test-deps
 		go test ./tests/...
 
 ################################################################################
+# Target: test-race                                                            #
+################################################################################
+# Note that we are expliciting maintaing an allow-list of packages that should be tested
+# with "-race", as many packags aren't passing those tests yet.
+# Eventually, the goal is to be able to have all packages pass tests with "-race"
+# Note: CGO is required for tests with "-race"
+TEST_WITH_RACE=./pkg/acl/... \
+./pkg/actors \
+./pkg/apis/... \
+./pkg/apphealth/... \
+./pkg/channel/... \
+./pkg/client/... \
+./pkg/components/... \
+./pkg/concurrency/... \
+./pkg/diagnostics/... \
+./pkg/encryption/... \
+./pkg/expr/... \
+./pkg/fswatcher/... \
+./pkg/grpc/... \
+./pkg/health/... \
+./pkg/http/... \
+./pkg/injector/... \
+./pkg/messages/... \
+./pkg/messaging/... \
+./pkg/metrics/... \
+./pkg/middleware/... \
+./pkg/modes/... \
+./pkg/operator/... \
+./pkg/placement/... \
+./pkg/proto/... \
+./pkg/resiliency/... \
+./pkg/runtime/...
+
+.PHONY: test-race
+test-race:
+	echo "$(TEST_WITH_RACE)" | xargs \
+		go test -tags=unit -race
+
+################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
 # Please use golangci-lint version v1.48.0 , otherwise you might encounter errors.
 # You can download version v1.48.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.48.0
 .PHONY: lint
