@@ -182,11 +182,14 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		"my-metadata": {
 			Values: []string{"value1", "value2", "value3"},
 		},
+		"traceparent": {
+			Values: []string{"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
+		},
 	}
 
 	t.Run("with grpc header conversion for grpc headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, grpcMetadata, true)
-		assert.Equal(t, 6, convertedMD.Len())
+		assert.Equal(t, 8, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD[":authority"][0])
 		assert.Equal(t, "1S", convertedMD["grpc-timeout"][0])
 		assert.Equal(t, "gzip, deflate", convertedMD["grpc-encoding"][0])
@@ -194,6 +197,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		assert.Equal(t, "value1", convertedMD["my-metadata"][0])
 		assert.Equal(t, "value2", convertedMD["my-metadata"][1])
 		assert.Equal(t, "value3", convertedMD["my-metadata"][2])
+		assert.Equal(t, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", convertedMD["traceparent"][0])
 	})
 }
 

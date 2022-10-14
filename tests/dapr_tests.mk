@@ -13,7 +13,8 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=actorjava \
+E2E_TEST_APPS=service_invocation
+# E2E_TEST_APPS=actorjava \
 actordotnet \
 actorpython \
 actorphp \

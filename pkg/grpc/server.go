@@ -210,21 +210,17 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, authConsts.APITokenHeader))
 	}
 
-	if s.tracingSpec.Enabled {
-		s.logger.Info("enabled gRPC tracing middleware")
-		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID))
-		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID))
-	}
+	s.logger.Info("enabled gRPC tracing middleware")
+	intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID))
+	intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID))
 
-	if s.metricSpec.Enabled {
-		s.logger.Info("enabled gRPC metrics middleware")
-		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
+	s.logger.Info("enabled gRPC metrics middleware")
+	intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 
-		if s.kind == apiServer {
-			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingServerInterceptor())
-		} else if s.kind == internalServer {
-			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingClientInterceptor())
-		}
+	if s.kind == apiServer {
+		intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingServerInterceptor())
+	} else if s.kind == internalServer {
+		intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingClientInterceptor())
 	}
 
 	enableAPILogging := s.config.EnableAPILogging
