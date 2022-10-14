@@ -683,7 +683,6 @@ func TestHeaders(t *testing.T) {
 
 		require.NoError(t, err)
 
-		assert.NotNil(t, requestHeaders["Traceparent"][0])
 		assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
 	})
 }
