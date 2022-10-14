@@ -54,6 +54,7 @@ func main() {
 	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
 	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
+	tokenAudience := flag.String("token-audience", "", "Expected audience for tokens; multiple values can be separated by a comma. Defaults to the audience expected by the Kubernetes control plane")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -107,6 +108,9 @@ func main() {
 	config.IssuerKeyPath = issuerKeyPath
 	config.RootCertPath = rootCertPath
 	config.TrustDomain = *trustDomain
+	if *tokenAudience != "" {
+		config.TokenAudience = tokenAudience
+	}
 
 	watchDir := filepath.Dir(config.IssuerCertPath)
 
