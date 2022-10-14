@@ -622,13 +622,6 @@ func TestHeaders(t *testing.T) {
 
 		require.NoError(t, err)
 
-		traceParentRq := requestHeaders["traceparent"]
-		if assert.NotNil(t, traceParentRq, "traceparent is missing from the request") {
-			if assert.Equal(t, 1, len(traceParentRq), "traceparent is missing from the request") {
-				assert.NotEqual(t, "", traceParentRq[0], "traceparent is missing from the request")
-			}
-		}
-
 		traceParentRs := responseHeaders["traceparent"]
 		if assert.NotNil(t, traceParentRs, "traceparent is missing from the response") {
 			if assert.Equal(t, 1, len(traceParentRs), "traceparent is missing from the response") {
