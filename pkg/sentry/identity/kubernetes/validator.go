@@ -11,6 +11,7 @@ import (
 	k8s "k8s.io/client-go/kubernetes"
 	kauth "k8s.io/client-go/kubernetes/typed/authentication/v1"
 
+	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/dapr/pkg/sentry/identity"
 )
 
@@ -45,10 +46,14 @@ func (v *validator) Validate(id, token, namespace string) error {
 		return errors.Errorf("%s: token field in request must not be empty", errPrefix)
 	}
 
+	audiences := v.audiences
+	if len(audiences) == 0 {
+		audiences = []string{sentryConsts.ServiceAccountTokenAudience}
+	}
 	tokenReview := &kauthapi.TokenReview{
 		Spec: kauthapi.TokenReviewSpec{
 			Token:     token,
-			Audiences: v.audiences,
+			Audiences: audiences,
 		},
 	}
 	review, err := v.auth.TokenReviews().Create(context.TODO(), tokenReview, v1.CreateOptions{})

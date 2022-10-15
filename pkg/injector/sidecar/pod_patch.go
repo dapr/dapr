@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
+	"github.com/dapr/kit/ptr"
 )
 
 // PatchOperation represents a discreet change to be applied to a Kubernetes resource.
@@ -51,7 +52,7 @@ var DaprPortEnv = []corev1.EnvVar{
 func AddDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
 	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/env", ContainersPath, i)
+		path := fmt.Sprintf("%s/%d/env", PatchPathContainers, i)
 		patchOps := getEnvPatchOperations(container.Env, DaprPortEnv, path)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
@@ -71,18 +72,25 @@ func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path st
 			},
 		}
 	}
+
 	// If there are existing env vars, then we are adding to an existing slice of env vars.
 	path += "/-"
 
 	var patchOps []PatchOperation
-LoopEnv:
 	for _, env := range addEnv {
+		isConflict := false
 		for _, actual := range envs {
 			if actual.Name == env.Name {
 				// Add only env vars that do not conflict with existing user defined/injected env vars.
-				continue LoopEnv
+				isConflict = true
+				break
 			}
 		}
+
+		if isConflict {
+			continue
+		}
+
 		patchOps = append(patchOps, PatchOperation{
 			Op:    "add",
 			Path:  path,
@@ -92,30 +100,29 @@ LoopEnv:
 	return patchOps
 }
 
-// AddSocketVolumeToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
-func AddSocketVolumeToContainers(containers []corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
+// AddSocketVolumeMountToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
+func AddSocketVolumeMountToContainers(containers []corev1.Container, socketVolumeMount *corev1.VolumeMount) []PatchOperation {
 	if socketVolumeMount == nil {
 		return []PatchOperation{}
 	}
 
-	return addVolumeToContainers(containers, *socketVolumeMount)
+	return addVolumeMountToContainers(containers, *socketVolumeMount)
 }
 
-func addVolumeToContainers(containers []corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
+func addVolumeMountToContainers(containers []corev1.Container, addMounts corev1.VolumeMount) []PatchOperation {
 	volumeMount := []corev1.VolumeMount{addMounts}
 	volumeMountPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
-		path := fmt.Sprintf("%s/%d/volumeMounts", ContainersPath, i)
-		patchOps := getVolumeMountPatchOperations(container.VolumeMounts, volumeMount, path)
+		path := fmt.Sprintf("%s/%d/volumeMounts", PatchPathContainers, i)
+		patchOps := getVolumeMountsPatchOperations(container.VolumeMounts, volumeMount, path)
 		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
 	}
 	return volumeMountPatchOps
 }
 
-// It does not override existing values for those variables if they have been defined already.
-func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
+func getVolumeMountsPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, path string) []PatchOperation {
 	if len(volumeMounts) == 0 {
-		// If there are no volume mount variables defined in the container, we initialize a slice of environment vars.
+		// If there are no volume mounts defined in the container, we initialize a slice of volume mounts.
 		return []PatchOperation{
 			{
 				Op:    "add",
@@ -124,11 +131,11 @@ func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts 
 			},
 		}
 	}
+
 	// If there are existing volume mounts, then we are adding to an existing slice of volume mounts.
 	path += "/-"
 
 	var patchOps []PatchOperation
-
 	for _, addMount := range addMounts {
 		isConflict := false
 		for _, mount := range volumeMounts {
@@ -139,20 +146,74 @@ func getVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts 
 			}
 		}
 
-		if !isConflict {
-			patchOps = append(patchOps, PatchOperation{
-				Op:    "add",
-				Path:  path,
-				Value: addMount,
-			})
+		if isConflict {
+			continue
 		}
+
+		patchOps = append(patchOps, PatchOperation{
+			Op:    "add",
+			Path:  path,
+			Value: addMount,
+		})
 	}
 
 	return patchOps
 }
 
-// GetUnixDomainSocketVolume returns a volume mount for the pod to append the UNIX domain socket.
-func GetUnixDomainSocketVolume(pod *corev1.Pod) *corev1.VolumeMount {
+// AddServiceAccountTokenVolume adds the projected volume for the service account token to the daprd
+// The containers can be injected or user-defined.
+func AddServiceAccountTokenVolume(containers []corev1.Container) []PatchOperation {
+	envPatchOps := make([]PatchOperation, 0, len(containers))
+	for i, container := range containers {
+		path := fmt.Sprintf("%s/%d/env", PatchPathContainers, i)
+		patchOps := getEnvPatchOperations(container.Env, DaprPortEnv, path)
+		envPatchOps = append(envPatchOps, patchOps...)
+	}
+	return envPatchOps
+}
+
+func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volume, path string) []PatchOperation {
+	if len(volumes) == 0 {
+		// If there are no volumes defined in the container, we initialize a slice of volumes.
+		return []PatchOperation{
+			{
+				Op:    "add",
+				Path:  path,
+				Value: addVolumes,
+			},
+		}
+	}
+
+	// If there are existing volumes, then we are adding to an existing slice of volumes.
+	path += "/-"
+
+	var patchOps []PatchOperation
+	for _, addVolume := range addVolumes {
+		isConflict := false
+		for _, mount := range volumes {
+			// conflict cases
+			if addVolume.Name == mount.Name {
+				isConflict = true
+				break
+			}
+		}
+
+		if isConflict {
+			continue
+		}
+
+		patchOps = append(patchOps, PatchOperation{
+			Op:    "add",
+			Path:  path,
+			Value: addVolume,
+		})
+	}
+
+	return patchOps
+}
+
+// GetUnixDomainSocketVolumeMount returns a volume mount for the pod to append the UNIX domain socket.
+func GetUnixDomainSocketVolumeMount(pod *corev1.Pod) *corev1.VolumeMount {
 	unixDomainSocket := Annotations(pod.Annotations).GetString(annotations.KeyUnixDomainSocketPath)
 	if unixDomainSocket == "" {
 		return nil
@@ -168,16 +229,24 @@ func GetUnixDomainSocketVolume(pod *corev1.Pod) *corev1.VolumeMount {
 	return &corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: unixDomainSocket}
 }
 
-// GetTokenVolumeMount returns the VolumeMount for the Kubernetes service account.
-func GetTokenVolumeMount(podSpec corev1.PodSpec) *corev1.VolumeMount {
-	for _, c := range podSpec.Containers {
-		for _, v := range c.VolumeMounts {
-			if v.MountPath == KubernetesMountPath {
-				return &v
-			}
-		}
+// GetTokenVolume returns the volume projection for the Kubernetes service account.
+// Requests a new projected volume with a service account token for our specific audience.
+func GetTokenVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: TokenVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Projected: &corev1.ProjectedVolumeSource{
+				DefaultMode: ptr.Of(int32(420)),
+				Sources: []corev1.VolumeProjection{{
+					ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+						Audience:          sentryConsts.ServiceAccountTokenAudience,
+						ExpirationSeconds: ptr.Of(int64(7200)),
+						Path:              "token",
+					},
+				}},
+			},
+		},
 	}
-	return nil
 }
 
 // GetTrustAnchorsAndCertChain returns the trust anchor and certs.

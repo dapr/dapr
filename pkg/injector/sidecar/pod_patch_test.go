@@ -262,7 +262,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := AddSocketVolumeToContainers([]coreV1.Container{tc.mockContainer}, tc.socketMount)
+			patchEnv := AddSocketVolumeMountToContainers([]coreV1.Container{tc.mockContainer}, tc.socketMount)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
 		})

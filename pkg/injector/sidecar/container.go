@@ -47,8 +47,6 @@ type ContainerConfig struct {
 	Namespace                   string
 	PlacementServiceAddress     string
 	SentryAddress               string
-	SocketVolumeMount           *corev1.VolumeMount
-	TokenVolumeMount            *corev1.VolumeMount
 	Tolerations                 []corev1.Toleration
 	TrustAnchors                string
 	VolumeMounts                []corev1.VolumeMount
@@ -208,6 +206,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 				},
 			},
 		},
+		VolumeMounts: []corev1.VolumeMount{},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        probeHTTPHandler,
 			InitialDelaySeconds: cfg.Annotations.GetInt32OrDefault(annotations.KeyReadinessProbeDelaySeconds, annotations.DefaultHealthzProbeDelaySeconds),
@@ -251,14 +250,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 			}
 			break
 		}
-	}
-
-	if cfg.SocketVolumeMount != nil {
-		container.VolumeMounts = []corev1.VolumeMount{*cfg.SocketVolumeMount}
-	}
-
-	if cfg.TokenVolumeMount != nil {
-		container.VolumeMounts = append(container.VolumeMounts, *cfg.TokenVolumeMount)
 	}
 
 	if len(cfg.VolumeMounts) > 0 {

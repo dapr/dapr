@@ -121,7 +121,7 @@ func (s *sentry) run(certAuth ca.CertificateAuthority, v identity.Validator) {
 	}()
 
 	// Start the server; this is a blocking call
-	log.Infof("sentry certificate authority is running, protecting ya'll")
+	log.Infof("sentry certificate authority is running, protecting y'all")
 	serverRunErr := s.server.Run(s.conf.Port, certAuth.GetCACertBundle())
 	if serverRunErr != nil {
 		log.Fatalf("error starting gRPC server: %s", serverRunErr)

@@ -505,14 +505,16 @@ func TestGetSidecarContainer(t *testing.T) {
 			annotations.KeyUnixDomainSocketPath: socketPath,
 		}
 
-		socketMount := &corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: socketPath}
-
 		container, _ := GetSidecarContainer(ContainerConfig{
-			Annotations:       an,
-			SocketVolumeMount: socketMount,
+			Annotations: an,
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: UnixDomainSocketVolume, MountPath: socketPath},
+			},
 		})
 
-		assert.Equal(t, []corev1.VolumeMount{*socketMount}, container.VolumeMounts)
+		assert.Len(t, container.VolumeMounts, 1)
+		assert.Equal(t, UnixDomainSocketVolume, container.VolumeMounts[0].Name)
+		assert.Equal(t, socketPath, container.VolumeMounts[0].MountPath)
 	})
 
 	t.Run("disable Builtin K8s Secret Store", func(t *testing.T) {
@@ -747,7 +749,7 @@ func TestAppendUnixDomainSocketVolume(t *testing.T) {
 			pod.Annotations = tc.annotations
 			pod.Spec.Volumes = tc.originalVolumes
 
-			socketMount := GetUnixDomainSocketVolume(&pod)
+			socketMount := GetUnixDomainSocketVolumeMount(&pod)
 
 			if tc.exportMount == nil {
 				assert.Equal(t, tc.exportMount, socketMount)

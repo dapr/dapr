@@ -16,7 +16,6 @@ package injector
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
@@ -37,7 +36,7 @@ const (
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
-) ([]sidecar.PatchOperation, error) {
+) (patchOps []sidecar.PatchOperation, err error) {
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
@@ -46,8 +45,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	}
 
 	log.Infof(
-		"AdmissionReview for Kind=%v, Namespace=%v Name=%v (%v) UID=%v "+
-			"patchOperation=%v UserInfo=%v",
+		"AdmissionReview for Kind=%v, Namespace=%s Name=%s (%s) UID=%v patchOperation=%v UserInfo=%v",
 		req.Kind,
 		req.Namespace,
 		req.Name,
@@ -73,8 +71,22 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	apiSvcAddress := sidecar.ServiceAddress(sidecar.ServiceAPI, namespace, i.config.KubeClusterDomain)
 
 	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(context.TODO(), kubeClient, namespace)
-	socketVolumeMount := sidecar.GetUnixDomainSocketVolume(&pod)
 
+	// Get all volume mounts
+	volumeMounts := sidecar.GetVolumeMounts(pod)
+	socketVolumeMount := sidecar.GetUnixDomainSocketVolumeMount(&pod)
+	if socketVolumeMount != nil {
+		volumeMounts = append(volumeMounts, *socketVolumeMount)
+	}
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      sidecar.TokenVolumeName,
+		MountPath: sidecar.TokenVolumeKubernetesMountPath,
+	})
+
+	// Projected volume with the token
+	tokenVolume := sidecar.GetTokenVolume()
+
+	// Get the sidecar container
 	sidecarContainer, err := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
 		AppID:                       appID,
 		Annotations:                 an,
@@ -82,48 +94,46 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		CertKey:                     certKey,
 		ControlPlaneAddress:         apiSvcAddress,
 		DaprSidecarImage:            image,
-		Identity:                    fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName),
+		Identity:                    req.Namespace + ":" + pod.Spec.ServiceAccountName,
 		IgnoreEntrypointTolerations: i.config.GetIgnoreEntrypointTolerations(),
 		ImagePullPolicy:             i.config.GetPullPolicy(),
 		MTLSEnabled:                 mTLSEnabled(daprClient),
 		Namespace:                   req.Namespace,
 		PlacementServiceAddress:     placementAddress,
 		SentryAddress:               sentryAddress,
-		SocketVolumeMount:           socketVolumeMount,
-		TokenVolumeMount:            sidecar.GetTokenVolumeMount(pod.Spec),
 		Tolerations:                 pod.Spec.Tolerations,
 		TrustAnchors:                trustAnchors,
-		VolumeMounts:                sidecar.GetVolumeMounts(pod),
+		VolumeMounts:                volumeMounts,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	var (
-		path                 string
-		value                any
-		envPatchOps          []sidecar.PatchOperation
-		socketVolumePatchOps []sidecar.PatchOperation
-	)
+	// Create the list of patch operations
+	patchOps = []sidecar.PatchOperation{}
 	if len(pod.Spec.Containers) == 0 {
-		path = sidecar.ContainersPath
-		value = []corev1.Container{*sidecarContainer}
-	} else {
-		envPatchOps = sidecar.AddDaprEnvVarsToContainers(pod.Spec.Containers)
-		socketVolumePatchOps = sidecar.AddSocketVolumeToContainers(pod.Spec.Containers, socketVolumeMount)
-		path = sidecar.ContainersPath + "/-"
-		value = sidecarContainer
-	}
-
-	patchOps := []sidecar.PatchOperation{
-		{
+		patchOps = append(patchOps, sidecar.PatchOperation{
 			Op:    "add",
-			Path:  path,
-			Value: value,
-		},
+			Path:  sidecar.PatchPathContainers,
+			Value: []corev1.Container{*sidecarContainer},
+		})
+	} else {
+		patchOps = append(patchOps, sidecar.PatchOperation{
+			Op:    "add",
+			Path:  sidecar.PatchPathContainers + "/-",
+			Value: sidecarContainer,
+		})
+		patchOps = append(patchOps,
+			sidecar.AddDaprEnvVarsToContainers(pod.Spec.Containers)...)
+		patchOps = append(patchOps,
+			sidecar.AddSocketVolumeMountToContainers(pod.Spec.Containers, socketVolumeMount)...)
 	}
-	patchOps = append(patchOps, envPatchOps...)
-	patchOps = append(patchOps, socketVolumePatchOps...)
+	volumePatchOps := sidecar.GetVolumesPatchOperations(
+		pod.Spec.Volumes,
+		[]corev1.Volume{tokenVolume},
+		sidecar.PatchPathVolumes,
+	)
+	patchOps = append(patchOps, volumePatchOps...)
 
 	return patchOps, nil
 }
