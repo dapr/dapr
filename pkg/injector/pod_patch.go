@@ -39,7 +39,8 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 ) (patchOps []sidecar.PatchOperation, err error) {
 	req := ar.Request
 	var pod corev1.Pod
-	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
+	err = json.Unmarshal(req.Object.Raw, &pod)
+	if err != nil {
 		errors.Wrap(err, "could not unmarshal raw object")
 		return nil, err
 	}
@@ -61,7 +62,8 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	}
 
 	appID := sidecar.GetAppID(pod.ObjectMeta)
-	if err := validation.ValidateKubernetesAppID(appID); err != nil {
+	err = validation.ValidateKubernetesAppID(appID)
+	if err != nil {
 		return nil, err
 	}
 

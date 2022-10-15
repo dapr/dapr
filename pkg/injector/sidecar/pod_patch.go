@@ -76,8 +76,8 @@ func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path st
 	// If there are existing env vars, then we are adding to an existing slice of env vars.
 	path += "/-"
 
-	var patchOps []PatchOperation
-	for _, env := range addEnv {
+	patchOps := make([]PatchOperation, len(addEnv))
+	for i, env := range addEnv {
 		isConflict := false
 		for _, actual := range envs {
 			if actual.Name == env.Name {
@@ -91,11 +91,11 @@ func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path st
 			continue
 		}
 
-		patchOps = append(patchOps, PatchOperation{
+		patchOps[i] = PatchOperation{
 			Op:    "add",
 			Path:  path,
 			Value: env,
-		})
+		}
 	}
 	return patchOps
 }
@@ -135,8 +135,8 @@ func getVolumeMountsPatchOperations(volumeMounts []corev1.VolumeMount, addMounts
 	// If there are existing volume mounts, then we are adding to an existing slice of volume mounts.
 	path += "/-"
 
-	var patchOps []PatchOperation
-	for _, addMount := range addMounts {
+	patchOps := make([]PatchOperation, len(addMounts))
+	for i, addMount := range addMounts {
 		isConflict := false
 		for _, mount := range volumeMounts {
 			// conflict cases
@@ -150,11 +150,11 @@ func getVolumeMountsPatchOperations(volumeMounts []corev1.VolumeMount, addMounts
 			continue
 		}
 
-		patchOps = append(patchOps, PatchOperation{
+		patchOps[i] = PatchOperation{
 			Op:    "add",
 			Path:  path,
 			Value: addMount,
-		})
+		}
 	}
 
 	return patchOps
@@ -187,8 +187,8 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 	// If there are existing volumes, then we are adding to an existing slice of volumes.
 	path += "/-"
 
-	var patchOps []PatchOperation
-	for _, addVolume := range addVolumes {
+	patchOps := make([]PatchOperation, len(addVolumes))
+	for i, addVolume := range addVolumes {
 		isConflict := false
 		for _, mount := range volumes {
 			// conflict cases
@@ -202,11 +202,11 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 			continue
 		}
 
-		patchOps = append(patchOps, PatchOperation{
+		patchOps[i] = PatchOperation{
 			Op:    "add",
 			Path:  path,
 			Value: addVolume,
-		})
+		}
 	}
 
 	return patchOps
