@@ -39,6 +39,7 @@ type SentryConfig struct {
 	RootCertPath     string
 	IssuerCertPath   string
 	IssuerKeyPath    string
+	TokenAudience    *string
 }
 
 var configGetters = map[string]func(string) (SentryConfig, error){
