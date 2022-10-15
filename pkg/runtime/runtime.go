@@ -2133,9 +2133,8 @@ func (a *DaprRuntime) initActors() error {
 		AppConfig:          a.appConfig,
 	})
 
-	internalActors := make(map[string]actors.InternalActor)
-	internalActors[wfengine.WorkflowActorType] = a.workflowEngine.WorkflowActor
-	internalActors[wfengine.ActivityActorType] = a.workflowEngine.ActivityActor
+	// The workflow engine registers internal actors that drive workflow execution.
+	internalActors := a.workflowEngine.InternalActors()
 
 	act := actors.NewActors(actors.ActorsOpts{
 		StateStore:       a.stateStores[a.actorStateStoreName],

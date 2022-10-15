@@ -26,8 +26,10 @@ import (
 )
 
 type mockInternalActor struct {
-	TestOutput    any
-	actorsRuntime Actors
+	TestOutput        any
+	InvokedReminders  []*reminder
+	DeactivationCalls []string
+	actorsRuntime     Actors
 }
 
 type invokeMethodCallInfo struct {
@@ -37,9 +39,18 @@ type invokeMethodCallInfo struct {
 	Output     any
 }
 
+type reminder struct {
+	ActorID string
+	Name    string
+	Data    any
+	DueTime string
+	Period  string
+}
+
 // DeactivateActor implements InternalActor
-func (*mockInternalActor) DeactivateActor(ctx context.Context, actorID string) error {
-	panic("unimplemented")
+func (ia *mockInternalActor) DeactivateActor(ctx context.Context, actorID string) error {
+	ia.DeactivationCalls = append(ia.DeactivationCalls, actorID)
+	return nil
 }
 
 // InvokeMethod implements InternalActor
@@ -54,8 +65,16 @@ func (ia *mockInternalActor) InvokeMethod(ctx context.Context, actorID string, m
 }
 
 // InvokeReminder implements InternalActor
-func (*mockInternalActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, params []byte) error {
-	panic("unimplemented")
+func (ia *mockInternalActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data any, dueTime string, period string) error {
+	r := &reminder{
+		Name:    reminderName,
+		ActorID: actorID,
+		Data:    data,
+		DueTime: dueTime,
+		Period:  period,
+	}
+	ia.InvokedReminders = append(ia.InvokedReminders, r)
+	return nil
 }
 
 // InvokeTimer implements InternalActor
@@ -92,7 +111,7 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 	return a.(*actorsRuntime), nil
 }
 
-func TestCallInternalActor(t *testing.T) {
+func TestInternalActorCall(t *testing.T) {
 	const (
 		testActorType = InternalActorTypePrefix + "pet"
 		testActorID   = "dog"
@@ -103,15 +122,14 @@ func TestCallInternalActor(t *testing.T) {
 
 	internalActors := make(map[string]InternalActor)
 	internalActors[testActorType] = &mockInternalActor{TestOutput: testOutput}
-
-	req := invokev1.NewInvokeMethodRequest(testMethod).
-		WithActor(testActorType, testActorID).
-		WithRawData([]byte(testInput), invokev1.OctetStreamContentType)
-
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	if !assert.NoError(t, err) {
 		return
 	}
+
+	req := invokev1.NewInvokeMethodRequest(testMethod).
+		WithActor(testActorType, testActorID).
+		WithRawData([]byte(testInput), invokev1.OctetStreamContentType)
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	if assert.NoError(t, err) && assert.NotNil(t, resp) {
 		// Verify the response metadata matches what we expect
@@ -133,9 +151,67 @@ func TestCallInternalActor(t *testing.T) {
 	}
 }
 
+func TestInternalActorReminder(t *testing.T) {
+	const testActorType = InternalActorTypePrefix + "test"
+	ia := &mockInternalActor{}
+	internalActors := make(map[string]InternalActor)
+	internalActors[testActorType] = ia
+	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	testReminder := &Reminder{
+		ActorType: testActorType,
+		ActorID:   "myActor",
+		DueTime:   "2s",
+		Period:    "2s",
+		Name:      "reminder1",
+		Data:      []byte("こんにちは！"),
+	}
+	if err = testActorRuntime.executeReminder(testReminder); !assert.NoError(t, err) {
+		return
+	}
+	if !assert.Len(t, ia.InvokedReminders, 1) {
+		return
+	}
+	invokedReminder := ia.InvokedReminders[0]
+	assert.Equal(t, testReminder.ActorID, invokedReminder.ActorID)
+	assert.Equal(t, testReminder.Name, invokedReminder.Name)
+	assert.Equal(t, testReminder.Data, invokedReminder.Data)
+	assert.Equal(t, testReminder.DueTime, invokedReminder.DueTime)
+	assert.Equal(t, testReminder.Period, invokedReminder.Period)
+}
+
+func TestInternalActorDeactivation(t *testing.T) {
+	const (
+		testActorType = InternalActorTypePrefix + "test"
+		testActorID   = "foo"
+	)
+	ia := &mockInternalActor{}
+	internalActors := make(map[string]InternalActor)
+	internalActors[testActorType] = ia
+	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	// Call the internal actor to "activate" it
+	req := invokev1.NewInvokeMethodRequest("Foo").WithActor(testActorType, testActorID)
+	_, err = testActorRuntime.callLocalActor(context.Background(), req)
+	assert.NoError(t, err)
+
+	// Deactivate the actor, ensuring no errors and that the correct actor ID was provided.
+	if err = testActorRuntime.deactivateActor(testActorType, testActorID); assert.NoError(t, err) {
+		if assert.Len(t, ia.DeactivationCalls, 1) {
+			assert.Equal(t, testActorID, ia.DeactivationCalls[0])
+		}
+	}
+}
+
 func decodeTestResponse(data []byte) (*invokeMethodCallInfo, error) {
 	info := new(invokeMethodCallInfo)
-	if err := DecodeInternalActorResponse(data, info); err != nil {
+	if err := DecodeInternalActorData(data, info); err != nil {
 		return nil, err
 	}
 	return info, nil
