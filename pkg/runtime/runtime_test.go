@@ -3300,27 +3300,27 @@ func TestPubsubWithResiliency(t *testing.T) {
 	defer stopRuntime(t, r)
 
 	failingPubsub := daprt.FailingPubsub{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingTopic": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutTopic": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	failingAppChannel := daprt.FailingAppChannel{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingSubTopic": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutSubTopic": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
 			rawData := req.Message().Data.Value
 			data := make(map[string]string)
@@ -3347,7 +3347,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		err := r.Publish(req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingPubsub.Failure.CallCount["failingTopic"])
+		assert.Equal(t, 2, failingPubsub.Failure.CallCount("failingTopic"))
 	})
 
 	t.Run("pubsub publish times out with resiliency", func(t *testing.T) {
@@ -3361,7 +3361,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingPubsub.Failure.CallCount["timeoutTopic"])
+		assert.Equal(t, 2, failingPubsub.Failure.CallCount("timeoutTopic"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3394,7 +3394,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		err := r.beginPubSub("failPubsub")
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["failingSubTopic"])
+		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("failingSubTopic"))
 	})
 
 	t.Run("pubsub times out sending event to app with resiliency", func(t *testing.T) {
@@ -3426,7 +3426,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 
 		// This is eaten, technically.
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingAppChannel.Failure.CallCount["timeoutSubTopic"])
+		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("timeoutSubTopic"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }
@@ -3784,10 +3784,10 @@ func TestMTLS(t *testing.T) {
 }
 
 type mockBinding struct {
-	hasError bool
-	data     string
-	metadata map[string]string
-	closeErr error
+	readErrorCh chan bool
+	data        string
+	metadata    map[string]string
+	closeErr    error
 }
 
 func (b *mockBinding) Init(metadata bindings.Metadata) error {
@@ -3806,7 +3806,9 @@ func (b *mockBinding) Read(ctx context.Context, handler bindings.Handler) error 
 			Metadata: metadata,
 			Data:     []byte(b.data),
 		})
-		b.hasError = err != nil
+		if b.readErrorCh != nil {
+			b.readErrorCh <- (err != nil)
+		}
 	}()
 
 	return nil
@@ -3895,12 +3897,13 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch := make(chan bool, 1)
+		b.readErrorCh = ch
 		rt.readFromBinding(ctx, testInputBindingName, &b)
-		time.Sleep(500 * time.Millisecond)
 		cancel()
 
-		assert.False(t, b.hasError)
+		assert.False(t, <-ch)
 	})
 
 	t.Run("app returns error", func(t *testing.T) {
@@ -3931,12 +3934,13 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch := make(chan bool, 1)
+		b.readErrorCh = ch
 		rt.readFromBinding(ctx, testInputBindingName, &b)
-		time.Sleep(500 * time.Millisecond)
 		cancel()
 
-		assert.True(t, b.hasError)
+		assert.True(t, <-ch)
 	})
 
 	t.Run("binding has data and metadata", func(t *testing.T) {
@@ -3967,9 +3971,10 @@ func TestReadInputBindings(t *testing.T) {
 		rt.inputBindingRoutes[testInputBindingName] = testInputBindingName
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch := make(chan bool, 1)
+		b.readErrorCh = ch
 		rt.readFromBinding(ctx, testInputBindingName, &b)
-		time.Sleep(500 * time.Millisecond)
 		cancel()
 
 		assert.Equal(t, string(testInputBindingData), b.data)
@@ -4385,15 +4390,15 @@ func TestBindingResiliency(t *testing.T) {
 	defer stopRuntime(t, r)
 
 	failingChannel := daprt.FailingAppChannel{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"inputFailingKey": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"inputTimeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
 			return string(req.Message().Data.Value)
 		},
@@ -4403,15 +4408,15 @@ func TestBindingResiliency(t *testing.T) {
 	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
 
 	failingBinding := daprt.FailingBinding{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"outputFailingKey": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"outputTimeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	r.bindingsRegistry.RegisterOutputBinding(
@@ -4435,7 +4440,7 @@ func TestBindingResiliency(t *testing.T) {
 		_, err := r.sendToOutputBinding("failOutput", req)
 
 		assert.Nil(t, err)
-		assert.Equal(t, 2, failingBinding.Failure.CallCount["outputFailingKey"])
+		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputFailingKey"))
 	})
 
 	t.Run("output binding times out with resiliency", func(t *testing.T) {
@@ -4448,7 +4453,7 @@ func TestBindingResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.NotNil(t, err)
-		assert.Equal(t, 2, failingBinding.Failure.CallCount["outputTimeoutKey"])
+		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputTimeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -4456,7 +4461,7 @@ func TestBindingResiliency(t *testing.T) {
 		_, err := r.sendBindingEventToApp("failingInputBinding", []byte("inputFailingKey"), map[string]string{})
 
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingChannel.Failure.CallCount["inputFailingKey"])
+		assert.Equal(t, 2, failingChannel.Failure.CallCount("inputFailingKey"))
 	})
 
 	t.Run("input binding times out with resiliency", func(t *testing.T) {
@@ -4465,7 +4470,7 @@ func TestBindingResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingChannel.Failure.CallCount["inputTimeoutKey"])
+		assert.Equal(t, 2, failingChannel.Failure.CallCount("inputTimeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }
