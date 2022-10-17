@@ -134,9 +134,9 @@ spec:
         - name: IGNORE_ENTRYPOINT_TOLERATIONS
           value: "{{ .Values.ignoreEntrypointTolerations }}"
 {{- end }}
-{{- if .Values.runDaprdAsNonRoot }}
-        - name: RUN_AS_NON_ROOT
-          value: "{{ .Values.runDaprdAsNonRoot }}"
+{{- if .Values.sidecarRunAsNonRoot }}
+        - name: SIDECAR_RUN_AS_NON_ROOT
+          value: "{{ .Values.sidecarRunAsNonRoot }}"
 {{- end }}
         ports:
         - name: https

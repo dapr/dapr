@@ -32,7 +32,7 @@ type Config struct {
 	KubeClusterDomain           string `envconfig:"KUBE_CLUSTER_DOMAIN"`
 	AllowedServiceAccounts      string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
 	IgnoreEntrypointTolerations string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
-	RunAsNonRoot                string `envconfig:"RUN_AS_NON_ROOT"`
+	RunAsNonRoot                string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
 
 	parsedEntrypointTolerations []corev1.Toleration
 }
