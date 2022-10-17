@@ -134,6 +134,10 @@ spec:
         - name: IGNORE_ENTRYPOINT_TOLERATIONS
           value: "{{ .Values.ignoreEntrypointTolerations }}"
 {{- end }}
+{{- if .Values.runDaprdAsNonRoot }}
+        - name: RUN_AS_NON_ROOT
+          value: "{{ .Values.runDaprdAsNonRoot }}"
+{{- end }}
         ports:
         - name: https
           containerPort: 4000

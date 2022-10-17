@@ -32,6 +32,7 @@ type Config struct {
 	KubeClusterDomain           string `envconfig:"KUBE_CLUSTER_DOMAIN"`
 	AllowedServiceAccounts      string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
 	IgnoreEntrypointTolerations string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
+	RunAsNonRoot                string `envconfig:"RUN_AS_NON_ROOT"`
 
 	parsedEntrypointTolerations []corev1.Toleration
 }
@@ -85,6 +86,10 @@ func (c Config) GetPullPolicy() corev1.PullPolicy {
 
 func (c *Config) GetIgnoreEntrypointTolerations() []corev1.Toleration {
 	return c.parsedEntrypointTolerations
+}
+
+func (c *Config) GetRunAsNonRoot() bool {
+	return utils.IsTruthy(c.RunAsNonRoot)
 }
 
 func (c *Config) parseTolerationsJSON() {

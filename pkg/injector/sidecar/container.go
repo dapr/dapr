@@ -52,6 +52,8 @@ type ContainerConfig struct {
 	Tolerations                 []corev1.Toleration
 	TrustAnchors                string
 	VolumeMounts                []corev1.VolumeMount
+	RunAsNonRoot                bool
+	ReadOnlyRootFilesystem      bool
 }
 
 var (
@@ -191,8 +193,8 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		ImagePullPolicy: cfg.ImagePullPolicy,
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: ptr.Of(false),
-			RunAsNonRoot:             ptr.Of(true),
-			ReadOnlyRootFilesystem:   ptr.Of(true),
+			RunAsNonRoot:             ptr.Of(cfg.RunAsNonRoot),
+			ReadOnlyRootFilesystem:   ptr.Of(cfg.ReadOnlyRootFilesystem),
 		},
 		Ports: ports,
 		Args:  append(cmd, args...),
