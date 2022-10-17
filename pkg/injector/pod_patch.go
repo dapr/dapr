@@ -95,7 +95,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		TrustAnchors:                trustAnchors,
 		VolumeMounts:                sidecar.GetVolumeMounts(pod),
 		RunAsNonRoot:                i.config.GetRunAsNonRoot(),
-		ReadOnlyRootFilesystem:      true,
+		ReadOnlyRootFilesystem:      i.config.GetReadOnlyRootFilesystem(),
 	})
 	if err != nil {
 		return nil, err

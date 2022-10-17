@@ -33,6 +33,7 @@ type Config struct {
 	AllowedServiceAccounts      string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
 	IgnoreEntrypointTolerations string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
 	RunAsNonRoot                string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
+	ReadOnlyRootFilesystem      string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 
 	parsedEntrypointTolerations []corev1.Toleration
 }
@@ -90,6 +91,10 @@ func (c *Config) GetIgnoreEntrypointTolerations() []corev1.Toleration {
 
 func (c *Config) GetRunAsNonRoot() bool {
 	return utils.IsTruthy(c.RunAsNonRoot)
+}
+
+func (c *Config) GetReadOnlyRootFilesystem() bool {
+	return utils.IsTruthy(c.ReadOnlyRootFilesystem)
 }
 
 func (c *Config) parseTolerationsJSON() {
