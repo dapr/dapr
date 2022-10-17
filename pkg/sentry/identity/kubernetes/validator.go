@@ -18,16 +18,23 @@ const (
 	errPrefix = "csr validation failed"
 )
 
-func NewValidator(client k8s.Interface) identity.Validator {
+func NewValidator(client k8s.Interface, tokenAudience *string) identity.Validator {
+	var audiences []string
+	if tokenAudience != nil && *tokenAudience != "" {
+		audiences = strings.Split(*tokenAudience, ",")
+	}
+
 	return &validator{
-		client: client,
-		auth:   client.AuthenticationV1(),
+		client:    client,
+		auth:      client.AuthenticationV1(),
+		audiences: audiences,
 	}
 }
 
 type validator struct {
-	client k8s.Interface
-	auth   kauth.AuthenticationV1Interface
+	client    k8s.Interface
+	auth      kauth.AuthenticationV1Interface
+	audiences []string
 }
 
 func (v *validator) Validate(id, token, namespace string) error {
@@ -38,7 +45,13 @@ func (v *validator) Validate(id, token, namespace string) error {
 		return errors.Errorf("%s: token field in request must not be empty", errPrefix)
 	}
 
-	review, err := v.auth.TokenReviews().Create(context.TODO(), &kauthapi.TokenReview{Spec: kauthapi.TokenReviewSpec{Token: token}}, v1.CreateOptions{})
+	tokenReview := &kauthapi.TokenReview{
+		Spec: kauthapi.TokenReviewSpec{
+			Token:     token,
+			Audiences: v.audiences,
+		},
+	}
+	review, err := v.auth.TokenReviews().Create(context.TODO(), tokenReview, v1.CreateOptions{})
 	if err != nil {
 		return err
 	}
