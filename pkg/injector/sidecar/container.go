@@ -191,6 +191,8 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		ImagePullPolicy: cfg.ImagePullPolicy,
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: ptr.Of(false),
+			RunAsNonRoot:             ptr.Of(true),
+			ReadOnlyRootFilesystem:   ptr.Of(true),
 		},
 		Ports: ports,
 		Args:  append(cmd, args...),
