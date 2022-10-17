@@ -90,10 +90,18 @@ func (c *Config) GetIgnoreEntrypointTolerations() []corev1.Toleration {
 }
 
 func (c *Config) GetRunAsNonRoot() bool {
+	// Default is true if empty
+	if c.RunAsNonRoot == "" {
+		return true
+	}
 	return utils.IsTruthy(c.RunAsNonRoot)
 }
 
 func (c *Config) GetReadOnlyRootFilesystem() bool {
+	// Default is true if empty
+	if c.ReadOnlyRootFilesystem == "" {
+		return true
+	}
 	return utils.IsTruthy(c.ReadOnlyRootFilesystem)
 }
 
