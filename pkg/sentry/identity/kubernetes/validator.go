@@ -82,7 +82,7 @@ tr: // TODO: Remove once the NoDefaultTokenAudience feature is finalized
 
 	// TODO: Remove once the NoDefaultTokenAudience feature is finalized
 	if showDefaultTokenAudienceWarning {
-		log.Warn("WARNING: Sentry accepted a token with the audience for the Kubernetes API server. This is deprecated and only supported to ensure a smooth upgrade from Dapr pre-1.10. You can disable this by setting the 'Sentry.NoDefaultTokenAudience' feature flag. See: https://docs.dapr.io/operations/support/support-preview-features/")
+		log.Warn("WARNING: Sentry accepted a token with the audience for the Kubernetes API server. This is deprecated and only supported to ensure a smooth upgrade from Dapr pre-1.10.")
 	}
 
 	if len(prts) != 4 || prts[0] != "system" {
