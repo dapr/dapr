@@ -338,8 +338,8 @@ func TestSidecarContainerVolumeMounts(t *testing.T) {
 		assert.Equal(t, 4, len(c.VolumeMounts))
 		assert.Equal(t, *socketVolumeMount, c.VolumeMounts[0])
 		assert.Equal(t, *tokenVolumeMount, c.VolumeMounts[1])
-		assert.Equal(t, volumeMounts[0], c.VolumeMounts[2])
-		assert.Equal(t, volumeMounts[1], c.VolumeMounts[3])
+		assert.Equal(t, volumeMounts[2], c.VolumeMounts[2])
+		assert.Equal(t, volumeMounts[3], c.VolumeMounts[3])
 	})
 }
 

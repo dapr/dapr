@@ -77,7 +77,8 @@ func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path st
 	path += "/-"
 
 	patchOps := make([]PatchOperation, len(addEnv))
-	for i, env := range addEnv {
+	n := 0
+	for _, env := range addEnv {
 		isConflict := false
 		for _, actual := range envs {
 			if actual.Name == env.Name {
@@ -91,13 +92,14 @@ func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path st
 			continue
 		}
 
-		patchOps[i] = PatchOperation{
+		patchOps[n] = PatchOperation{
 			Op:    "add",
 			Path:  path,
 			Value: env,
 		}
+		n++
 	}
-	return patchOps
+	return patchOps[:n]
 }
 
 // AddSocketVolumeMountToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
@@ -136,7 +138,8 @@ func getVolumeMountsPatchOperations(volumeMounts []corev1.VolumeMount, addMounts
 	path += "/-"
 
 	patchOps := make([]PatchOperation, len(addMounts))
-	for i, addMount := range addMounts {
+	n := 0
+	for _, addMount := range addMounts {
 		isConflict := false
 		for _, mount := range volumeMounts {
 			// conflict cases
@@ -150,14 +153,15 @@ func getVolumeMountsPatchOperations(volumeMounts []corev1.VolumeMount, addMounts
 			continue
 		}
 
-		patchOps[i] = PatchOperation{
+		patchOps[n] = PatchOperation{
 			Op:    "add",
 			Path:  path,
 			Value: addMount,
 		}
+		n++
 	}
 
-	return patchOps
+	return patchOps[:n]
 }
 
 // AddServiceAccountTokenVolume adds the projected volume for the service account token to the daprd
@@ -188,7 +192,8 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 	path += "/-"
 
 	patchOps := make([]PatchOperation, len(addVolumes))
-	for i, addVolume := range addVolumes {
+	n := 0
+	for _, addVolume := range addVolumes {
 		isConflict := false
 		for _, mount := range volumes {
 			// conflict cases
@@ -202,14 +207,15 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 			continue
 		}
 
-		patchOps[i] = PatchOperation{
+		patchOps[n] = PatchOperation{
 			Op:    "add",
 			Path:  path,
 			Value: addVolume,
 		}
+		n++
 	}
 
-	return patchOps
+	return patchOps[:n]
 }
 
 // GetUnixDomainSocketVolumeMount returns a volume mount for the pod to append the UNIX domain socket.
