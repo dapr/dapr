@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,11 +38,11 @@ import (
 
 type mockComponentUpdateServer struct {
 	grpc.ServerStream
-	Calls int
+	Calls atomic.Int64
 }
 
 func (m *mockComponentUpdateServer) Send(*operatorv1pb.ComponentUpdateEvent) error {
-	m.Calls++
+	m.Calls.Add(1)
 	return nil
 }
 
@@ -202,6 +203,9 @@ func TestComponentUpdate(t *testing.T) {
 			// Send a component update, give sidecar time to register
 			time.Sleep(time.Millisecond * 500)
 
+			api.connLock.Lock()
+			defer api.connLock.Unlock()
+
 			for _, connUpdateChan := range api.allConnUpdateChan {
 				connUpdateChan <- &c
 
@@ -216,7 +220,7 @@ func TestComponentUpdate(t *testing.T) {
 			Namespace: "ns2",
 		}, mockSidecar)
 
-		assert.Zero(t, mockSidecar.Calls)
+		assert.Equal(t, int64(0), mockSidecar.Calls.Load())
 	})
 
 	t.Run("sidecar is updated when component namespace is a match", func(t *testing.T) {
@@ -244,6 +248,9 @@ func TestComponentUpdate(t *testing.T) {
 			// Send a component update, give sidecar time to register
 			time.Sleep(time.Millisecond * 500)
 
+			api.connLock.Lock()
+			defer api.connLock.Unlock()
+
 			for _, connUpdateChan := range api.allConnUpdateChan {
 				connUpdateChan <- &c
 
@@ -258,7 +265,7 @@ func TestComponentUpdate(t *testing.T) {
 			Namespace: "ns1",
 		}, mockSidecar)
 
-		assert.Equal(t, 1, mockSidecar.Calls)
+		assert.Equal(t, int64(1), mockSidecar.Calls.Load())
 	})
 }
 
