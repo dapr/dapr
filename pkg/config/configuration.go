@@ -35,8 +35,14 @@ import (
 type Feature string
 
 const (
-	Resiliency     Feature = "Resiliency"
+	// Enable support for resiliency
+	Resiliency Feature = "Resiliency"
+	// Enables the app health check feature, allowing the use of the CLI flags
 	AppHealthCheck Feature = "AppHealthCheck"
+	// Make Sentry not accept tokens with audience set to the Kubernetes API server
+	// For a smoother upgrade path
+	// See: https://github.com/dapr/dapr/pull/5371
+	NoDefaultTokenAudience Feature = "Sentry.NoDefaultTokenAudience"
 )
 
 // end feature flags section

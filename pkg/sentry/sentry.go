@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/identity"
@@ -180,7 +181,11 @@ func (s *sentry) createValidator() (identity.Validator, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create kubernetes client")
 		}
-		return kubernetes.NewValidator(kubeClient, s.conf.TokenAudience), nil
+
+		// TODO: Remove once the NoDefaultTokenAudience feature is finalized
+		noDefaultTokenAudience := daprGlobalConfig.IsFeatureEnabled(s.conf.Features, daprGlobalConfig.NoDefaultTokenAudience)
+
+		return kubernetes.NewValidator(kubeClient, s.conf.GetTokenAudiences(), noDefaultTokenAudience), nil
 	}
 	return selfhosted.NewValidator(), nil
 }
