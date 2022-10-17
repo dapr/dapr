@@ -83,6 +83,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	volumeMounts = append(volumeMounts, corev1.VolumeMount{
 		Name:      sidecar.TokenVolumeName,
 		MountPath: sidecar.TokenVolumeKubernetesMountPath,
+		ReadOnly:  true,
 	})
 
 	// Projected volume with the token
