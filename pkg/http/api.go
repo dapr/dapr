@@ -1441,6 +1441,12 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		msg        *ErrorResponse
 	)
 	err := policy(func(ctx context.Context) (rErr error) {
+		if r != nil {
+			if rc, ok := r.(io.Closer); ok {
+				_ = rc.Close()
+			}
+		}
+
 		rResp, rErr := a.directMessaging.Invoke(ctx, targetID, req)
 
 		if rErr != nil {
