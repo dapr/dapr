@@ -129,14 +129,14 @@ func (imr *InvokeMethodResponse) WithReplay(enabled bool) *InvokeMethodResponse 
 
 // Status gets Response status.
 func (imr *InvokeMethodResponse) Status() *internalv1pb.Status {
-	return imr.r.GetStatus()
+	return imr.r.Status
 }
 
 // IsHTTPResponse returns true if response status code is http response status.
 func (imr *InvokeMethodResponse) IsHTTPResponse() bool {
 	// gRPC status code <= 15 - https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
 	// HTTP status code >= 100 - https://tools.ietf.org/html/rfc2616#section-10
-	return imr.r.GetStatus().Code >= 100
+	return imr.r.Status.Code >= 100
 }
 
 // Proto returns the internal InvokeMethodResponse Proto object.
@@ -195,10 +195,9 @@ func (imr *InvokeMethodResponse) ContentType() string {
 		return ""
 	}
 
-	contentType := m.GetContentType()
-	dataTypeURL := m.GetData().GetTypeUrl()
+	contentType := m.ContentType
 
-	if dataTypeURL != "" {
+	if m.Data != nil && m.Data.TypeUrl != "" {
 		contentType = ProtobufContentType
 	}
 

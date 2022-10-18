@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -53,45 +54,46 @@ const (
 
 // Channel is an HTTP implementation of an AppChannel.
 type Channel struct {
-	client              *http.Client
-	baseAddress         string
-	ch                  chan struct{}
-	tracingSpec         config.TracingSpec
-	appHeaderToken      string
-	maxResponseBodySize int
-	appHealthCheckPath  string
-	appHealth           *apphealth.AppHealth
-	pipeline            httpMiddleware.Pipeline
+	client                *http.Client
+	baseAddress           string
+	ch                    chan struct{}
+	tracingSpec           config.TracingSpec
+	appHeaderToken        string
+	maxResponseBodySizeMB int
+	appHealthCheckPath    string
+	appHealth             *apphealth.AppHealth
+	pipeline              httpMiddleware.Pipeline
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
 //
 //nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySize, readBufferSize int) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, pipeline httpMiddleware.Pipeline, spec config.TracingSpec, sslEnabled bool, maxRequestBodySizeMB, readBufferSizeKB int) (channel.AppChannel, error) {
+	var tlsConfig *tls.Config
 	scheme := httpScheme
 	if sslEnabled {
+		tlsConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
 		scheme = httpsScheme
 	}
 
 	c := &Channel{
 		pipeline: pipeline,
-		// We cannot use fasthttp here because of lack of streaming support
 		client: &http.Client{
 			Transport: &http.Transport{
-				ReadBufferSize:         readBufferSize * 1024,
-				MaxResponseHeaderBytes: int64(readBufferSize) * 1024,
+				ReadBufferSize:         readBufferSizeKB << 10,
+				MaxResponseHeaderBytes: int64(readBufferSizeKB) << 10,
+				MaxConnsPerHost:        1024,
+				MaxIdleConns:           64, // A local channel connects to a single host
+				MaxIdleConnsPerHost:    64,
+				TLSClientConfig:        tlsConfig,
 			},
 		},
-		baseAddress:         fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
-		tracingSpec:         spec,
-		appHeaderToken:      auth.GetAppToken(),
-		maxResponseBodySize: maxRequestBodySize,
-	}
-
-	if sslEnabled {
-		(c.client.Transport.(*http.Transport)).TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: true,
-		}
+		baseAddress:           fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
+		tracingSpec:           spec,
+		appHeaderToken:        auth.GetAppToken(),
+		maxResponseBodySizeMB: maxRequestBodySizeMB,
 	}
 
 	if maxConcurrency > 0 {
@@ -137,8 +139,7 @@ func (h *Channel) GetAppConfig(ctx context.Context) (*config.ApplicationConfig, 
 	case "v1":
 		fallthrough
 	default:
-		err = json.
-			NewDecoder(resp.RawData()).
+		err = json.NewDecoder(resp.RawData()).
 			Decode(&config)
 		if err != nil {
 			return nil, err
@@ -239,16 +240,42 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
-	// Send request to user application
-	resp, err := h.client.Do(channelReq)
-
-	// TODO: need to support pipelines per https://github.com/dapr/dapr/pull/5262
+	var resp *http.Response
+	if len(h.pipeline.Handlers) > 0 {
+		// Exec pipeline only if at least one handler is specified
+		rw := &rwRecorder{
+			w: &bytes.Buffer{},
+		}
+		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
+			// Send request to user application
+			// (Body is closed below, but linter isn't detecting that)
+			//nolint:bodyclose
+			clientResp, clientErr := h.client.Do(r)
+			if clientResp != nil {
+				copyHeader(wr.Header(), clientResp.Header)
+				wr.WriteHeader(clientResp.StatusCode)
+				_, _ = io.Copy(wr, clientResp.Body)
+			}
+			if clientErr != nil {
+				err = clientErr
+			}
+		}))
+		execPipeline.ServeHTTP(rw, channelReq)
+		resp = rw.Result()
+	} else {
+		// Send request to user application
+		// (Body is closed below, but linter isn't detecting that)
+		//nolint:bodyclose
+		resp, err = h.client.Do(channelReq)
+	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
 	var contentLength int64
-	if resp != nil && resp.Header != nil {
-		contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+	if resp != nil {
+		if resp.Header != nil {
+			contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+		}
 	}
 
 	if err != nil {
@@ -256,7 +283,12 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		return nil, err
 	}
 
-	rsp := h.parseChannelResponse(req, resp)
+	rsp, err := h.parseChannelResponse(req, resp)
+	if err != nil {
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		return nil, err
+	}
+
 	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), contentLength, elapsedMs)
 
 	return rsp, nil
@@ -264,20 +296,23 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) (*http.Request, error) {
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
-	var uri string
-	verb := req.Message().HttpExtension.Verb.String()
-	method := req.Message().Method
-	if strings.HasPrefix(method, "/") {
-		uri = h.baseAddress + method
-	} else {
-		uri = h.baseAddress + "/" + method
+	msg := req.Message()
+	verb := msg.HttpExtension.Verb.String()
+
+	uri := strings.Builder{}
+	uri.WriteString(h.baseAddress)
+	if len(msg.Method) > 0 && msg.Method[0] != '/' {
+		uri.WriteRune('/')
 	}
+	uri.WriteString(msg.Method)
+
 	qs := req.EncodeHTTPQueryString()
 	if qs != "" {
-		uri += "?" + qs
+		uri.WriteRune('?')
+		uri.WriteString(qs)
 	}
 
-	channelReq, err := http.NewRequestWithContext(ctx, verb, uri, req.RawData())
+	channelReq, err := http.NewRequestWithContext(ctx, verb, uri.String(), req.RawData())
 	if err != nil {
 		return nil, err
 	}
@@ -302,15 +337,13 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	return channelReq, nil
 }
 
-func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channelResp *http.Response) *invokev1.InvokeMethodResponse {
-	var contentType string
-
-	contentType = channelResp.Header.Get("content-type")
+func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channelResp *http.Response) (*invokev1.InvokeMethodResponse, error) {
+	contentType := channelResp.Header.Get("content-type")
 
 	// Limit response body if needed
 	var body io.ReadCloser
-	if h.maxResponseBodySize > 0 {
-		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySize)*1024*1024)
+	if h.maxResponseBodySizeMB > 0 {
+		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySizeMB)<<20)
 	} else {
 		body = channelResp.Body
 	}
@@ -321,5 +354,13 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channe
 		WithHTTPHeaders(channelResp.Header).
 		WithRawData(body, contentType)
 
-	return rsp
+	return rsp, nil
+}
+
+func copyHeader(dst http.Header, src http.Header) {
+	for k, vv := range src {
+		for _, v := range vv {
+			dst.Add(k, v)
+		}
+	}
 }

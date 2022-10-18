@@ -24,11 +24,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/utils"
 )
 
 // testConcurrencyHandler is used for testing max concurrency.
@@ -95,21 +97,51 @@ func (t *testStatusCodeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	w.Write([]byte(strconv.Itoa(code)))
 }
 
-// TODO: Disabled because of lack of support for fasthttp
-/*func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
-	defaultStatusCode := http.StatusOK
-	th := &testStatusCodeHandler{Code: defaultStatusCode}
+// testBodyEchoHandler sends back the body it receives
+type testBodyEchoHandler struct{}
+
+func (t *testBodyEchoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("content-type", r.Header.Get("content-type"))
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, r.Body)
+}
+
+// testUppercaseHandler responds with "true" if the body contains all-uppercase ASCII characters, or "false" otherwise
+type testUppercaseHandler struct{}
+
+func (t *testUppercaseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("content-type", "text/plain")
+
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	for i := 0; i < len(b); i++ {
+		if b[i] < 'A' || b[i] > 'Z' {
+			w.Write([]byte("false"))
+			return
+		}
+	}
+
+	w.Write([]byte("true"))
+}
+
+func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
+	var th http.Handler = &testStatusCodeHandler{Code: http.StatusOK}
 	server := httptest.NewServer(th)
 	ctx := context.Background()
 
 	t.Run("pipeline should be called when handlers are not empty", func(t *testing.T) {
 		called := 0
-		middleware := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-			return func(ctx *fasthttp.RequestCtx) {
+		middleware := func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				called++
-				h(ctx)
-			}
-		})
+				next.ServeHTTP(w, r)
+			})
+		}
 		pipeline := httpMiddleware.Pipeline{
 			Handlers: []httpMiddleware.Middleware{
 				middleware,
@@ -120,27 +152,27 @@ func (t *testStatusCodeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 			client:      &http.Client{},
 			pipeline:    pipeline,
 		}
-		fakeReq := invokev1.NewInvokeMethodRequest("method")
-		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		defer fakeReq.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 1, called)
-		assert.Equal(t, int32(defaultStatusCode), resp.Status().Code)
+		assert.Equal(t, int32(http.StatusOK), resp.Status().Code)
 	})
 
 	t.Run("request can be short-circuited by middleware pipeline", func(t *testing.T) {
 		called := 0
-		shortcircuitStatusCode := http.StatusBadGateway
-		middleware := httpMiddleware.Middleware(func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-			return func(ctx *fasthttp.RequestCtx) {
+		middleware := func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				called++
-				ctx.Response.SetStatusCode(shortcircuitStatusCode)
-			}
-		})
+				w.WriteHeader(http.StatusBadGateway)
+			})
+		}
 		pipeline := httpMiddleware.Pipeline{
 			Handlers: []httpMiddleware.Middleware{
 				middleware,
@@ -151,20 +183,146 @@ func (t *testStatusCodeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 			client:      &http.Client{},
 			pipeline:    pipeline,
 		}
-		fakeReq := invokev1.NewInvokeMethodRequest("method")
-		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		defer fakeReq.Close()
 
 		// act
 		resp, err := c.InvokeMethod(ctx, fakeReq)
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 1, called)
-		assert.Equal(t, int32(shortcircuitStatusCode), resp.Status().Code)
+		assert.Equal(t, int32(http.StatusBadGateway), resp.Status().Code)
 	})
 
 	server.Close()
-}*/
+
+	t.Run("test uppercase middleware", func(t *testing.T) {
+		server = httptest.NewServer(&testBodyEchoHandler{})
+		defer server.Close()
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				utils.UppercaseRequestMiddleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &http.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
+			WithRawDataString("m'illumino d'immenso", "text/plain")
+		defer fakeReq.Close()
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(resp.RawData())
+		require.NoError(t, err)
+
+		// assert
+		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		assert.Equal(t, "text/plain", resp.ContentType())
+		assert.Equal(t, "M'ILLUMINO D'IMMENSO", string(body))
+	})
+
+	t.Run("test uppercase middleware on request only", func(t *testing.T) {
+		server = httptest.NewServer(&testUppercaseHandler{})
+		defer server.Close()
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				utils.UppercaseRequestMiddleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &http.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
+			WithRawDataString("helloworld", "text/plain")
+		defer fakeReq.Close()
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(resp.RawData())
+		require.NoError(t, err)
+
+		// assert
+		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		assert.Equal(t, "text/plain", resp.ContentType())
+		assert.Equal(t, "true", string(body))
+	})
+
+	t.Run("test uppercase middleware on response only", func(t *testing.T) {
+		server = httptest.NewServer(&testUppercaseHandler{})
+		defer server.Close()
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				utils.UppercaseResponseMiddleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &http.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
+			WithRawDataString("helloworld", "text/plain")
+		defer fakeReq.Close()
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(resp.RawData())
+		require.NoError(t, err)
+
+		// assert
+		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		assert.Equal(t, "text/plain", resp.ContentType())
+		assert.Equal(t, "FALSE", string(body))
+	})
+
+	t.Run("test uppercase middleware on both request and response", func(t *testing.T) {
+		server = httptest.NewServer(&testUppercaseHandler{})
+		defer server.Close()
+		pipeline := httpMiddleware.Pipeline{
+			Handlers: []httpMiddleware.Middleware{
+				utils.UppercaseRequestMiddleware,
+				utils.UppercaseResponseMiddleware,
+			},
+		}
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &http.Client{},
+			pipeline:    pipeline,
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
+			WithRawDataString("helloworld", "text/plain")
+		defer fakeReq.Close()
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(resp.RawData())
+		require.NoError(t, err)
+
+		// assert
+		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		assert.Equal(t, "text/plain", resp.ContentType())
+		assert.Equal(t, "TRUE", string(body))
+	})
+}
 
 func TestInvokeMethod(t *testing.T) {
 	th := &testHTTPHandler{t: t, serverURL: ""}

@@ -36,6 +36,7 @@ type healthCheckOptions struct {
 	failureThreshold  int
 	interval          time.Duration
 	successStatusCode int
+	ticker            <-chan time.Time
 }
 
 // StartEndpointHealthCheck starts a health check on the specified address with the given options.
@@ -51,7 +52,10 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 	signalChan := make(chan bool, 1)
 
 	go func(ch chan<- bool, endpointAddress string, options *healthCheckOptions) {
-		ticker := time.NewTicker(options.interval)
+		ticker := options.ticker
+		if ticker == nil {
+			ticker = time.NewTicker(options.interval).C
+		}
 		failureCount := 0
 		time.Sleep(options.initialDelay)
 
@@ -66,7 +70,7 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 		req.Header.SetMethod(fasthttp.MethodGet)
 		defer fasthttp.ReleaseRequest(req)
 
-		for range ticker.C {
+		for range ticker {
 			resp := fasthttp.AcquireResponse()
 			err := client.DoTimeout(req, resp, options.requestTimeout)
 			if err != nil || resp.StatusCode() != options.successStatusCode {
@@ -125,5 +129,11 @@ func WithSuccessStatusCode(code int) Option {
 func WithInterval(interval time.Duration) Option {
 	return func(o *healthCheckOptions) {
 		o.interval = interval
+	}
+}
+
+func WithTicker(ticker <-chan time.Time) Option {
+	return func(o *healthCheckOptions) {
+		o.ticker = ticker
 	}
 }

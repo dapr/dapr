@@ -322,7 +322,6 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 			n, err = r.Read(buf)
 			if err == io.EOF {
 				proto.Payload.Complete = true
-				err = nil
 			} else if err != nil {
 				return nil, err
 			}

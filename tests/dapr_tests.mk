@@ -531,6 +531,7 @@ delete-minikube:
 	minikube delete
 
 # Delete all stored test results
+.PHONY: test-clean
 test-clean:
 	-rm -rv ./tests/e2e/*/dist
 	-rm -rv ./tests/perf/*/dist

@@ -170,11 +170,11 @@ func (imr *InvokeMethodRequest) WithReplay(enabled bool) *InvokeMethodRequest {
 // EncodeHTTPQueryString generates querystring for http using http extension object.
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	m := imr.r.Message
-	if m == nil || m.GetHttpExtension() == nil {
+	if m == nil || m.HttpExtension == nil {
 		return ""
 	}
 
-	return m.GetHttpExtension().Querystring
+	return m.HttpExtension.Querystring
 }
 
 // APIVersion gets API version of InvokeMethodRequest.
@@ -184,7 +184,7 @@ func (imr *InvokeMethodRequest) APIVersion() internalv1pb.APIVersion {
 
 // Metadata gets Metadata of InvokeMethodRequest.
 func (imr *InvokeMethodRequest) Metadata() DaprInternalMetadata {
-	return imr.r.GetMetadata()
+	return imr.r.Metadata
 }
 
 // Proto returns InternalInvokeRequest Proto object.
@@ -217,7 +217,7 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 
 // Actor returns actor type and id.
 func (imr *InvokeMethodRequest) Actor() *internalv1pb.Actor {
-	return imr.r.GetActor()
+	return imr.r.Actor
 }
 
 // Message gets InvokeRequest Message object.
