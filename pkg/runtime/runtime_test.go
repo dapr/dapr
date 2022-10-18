@@ -3538,8 +3538,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		_, err := r.Subscribe(sub)
 		end := time.Now()
 
-		// This is eaten, technically.
-		assert.NoError(t, err)
+		assert.Error(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("timeoutSubTopic"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})

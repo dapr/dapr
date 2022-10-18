@@ -654,9 +654,6 @@ func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, dead
 func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, subscription *runtimePubsub.Subscription) error {
 	subKey := pubsubTopicKey(subscription.PubsubName, subscription.Topic)
 
-	a.topicsLock.Lock()
-	defer a.topicsLock.Unlock()
-
 	allowed := a.isPubSubOperationAllowed(subscription.PubsubName, subscription.Topic, a.pubSubs[subscription.PubsubName].scopedSubscriptions)
 	if !allowed {
 		return fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", subscription.Topic, subscription.PubsubName)
