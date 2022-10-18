@@ -108,14 +108,8 @@ func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHead
 
 // WithRawData sets message data and content_type.
 func (imr *InvokeMethodRequest) WithRawData(data io.ReadCloser, contentType string) *InvokeMethodRequest {
-	if imr.replay != nil {
-		// We are panicking here because we can't return errors
-		// This is just to catch issues during development however, and will never happen at runtime
-		panic("WithRawData cannot be invoked after replaying has been enabled")
-	}
-
+	imr.replayableRequest.WithRawData(data)
 	imr.r.Message.ContentType = contentType
-	imr.data = data
 	return imr
 }
 
@@ -198,16 +192,11 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 		return nil, errors.New("message is nil")
 	}
 
-	var (
-		data []byte
-		err  error
-	)
-	if imr.data != nil {
-		data, err = io.ReadAll(imr.RawData())
-		if err != nil {
-			return nil, err
-		}
+	data, err := io.ReadAll(imr.RawData())
+	if err != nil {
+		return nil, err
 	}
+
 	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeRequest)
 	m.Message.Data = &anypb.Any{
 		Value: data,

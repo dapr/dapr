@@ -14,8 +14,10 @@ limitations under the License.
 package streams
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"sync"
 )
 
 /*!
@@ -24,23 +26,27 @@ Copyright 2009 The Go Authors. All rights reserved.
 License: BSD (https://github.com/golang/go/blob/go1.18.3/LICENSE)
 */
 
-// TeeReadCloser is like io.TeeReader but returns a stream that can be closed, and which closes the readable stream.
-func TeeReadCloser(r io.ReadCloser, w io.Writer) io.ReadCloser {
-	return &teeReadCloser{
+// NewTeeReadCloser returns a stream that is like io.TeeReader but returns a stream that can be closed, and which closes the readable stream.
+func NewTeeReadCloser(r io.ReadCloser, w io.Writer) *TeeReadCloser {
+	return &TeeReadCloser{
 		r: r,
 		w: w,
 	}
 }
 
-// teeReadCloser is an io.TeeReader that also implements the io.Closer interface to close the readable stream.
-type teeReadCloser struct {
-	r   io.ReadCloser
-	w   io.Writer
-	eof bool
+// TeeReadCloser is an io.TeeReader that also implements the io.Closer interface to close the readable stream.
+type TeeReadCloser struct {
+	r    io.ReadCloser
+	w    io.Writer
+	eof  bool
+	lock sync.Mutex
 }
 
 // Close implements io.Closer.
-func (t *teeReadCloser) Close() error {
+func (t *TeeReadCloser) Close() error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	var errR, errW error
 	errR = t.r.Close()
 	// w does not need to implement the io.Closer interface
@@ -60,8 +66,26 @@ func (t *teeReadCloser) Close() error {
 	return nil
 }
 
+// Stop closes the underlying writer, which will blocks all future read operations with ErrClosedPipe, but doesn't close the reader stream.
+// It's meant to be used when the reader needs to be swapped.
+func (t *TeeReadCloser) Stop() (err error) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	// w does not need to implement the io.Closer interface
+	if w, ok := t.w.(io.Closer); ok {
+		err = w.Close()
+	}
+	t.w = nil
+
+	return err
+}
+
 // Read from the R stream and tee it into the w stream.
-func (t *teeReadCloser) Read(p []byte) (n int, err error) {
+func (t *TeeReadCloser) Read(p []byte) (n int, err error) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	if t.r == nil || t.w == nil {
 		return 0, io.ErrClosedPipe
 	}
@@ -70,7 +94,7 @@ func (t *teeReadCloser) Read(p []byte) (n int, err error) {
 	}
 
 	n, err = t.r.Read(p)
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		t.eof = true
 	}
 	if n > 0 {

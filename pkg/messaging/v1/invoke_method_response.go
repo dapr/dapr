@@ -67,15 +67,8 @@ func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *Inv
 
 // WithRawData sets message data and content_type.
 func (imr *InvokeMethodResponse) WithRawData(data io.ReadCloser, contentType string) *InvokeMethodResponse {
-	if imr.replay != nil {
-		// We are panicking here because we can't return errors
-		// This is just to catch issues during development however, and will never happen at runtime
-		panic("WithRawData cannot be invoked after replaying has been enabled")
-	}
-
+	imr.replayableRequest.WithRawData(data)
 	imr.r.Message.ContentType = contentType
-	imr.data = data
-
 	return imr
 }
 
@@ -150,16 +143,11 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 		return nil, errors.New("message is nil")
 	}
 
-	var (
-		data []byte
-		err  error
-	)
-	if imr.data != nil {
-		data, err = io.ReadAll(imr.RawData())
-		if err != nil {
-			return nil, err
-		}
+	data, err := io.ReadAll(imr.RawData())
+	if err != nil {
+		return nil, err
 	}
+
 	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeResponse)
 	m.Message.Data = &anypb.Any{
 		Value: data,

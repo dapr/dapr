@@ -40,6 +40,7 @@ import (
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/version"
 	streamutils "github.com/dapr/dapr/utils/streams"
+	"github.com/dapr/kit/ptr"
 
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
@@ -1434,54 +1435,52 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	policy := a.resiliency.EndpointPolicy(ctx, targetID, targetID+":"+invokeMethodName)
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
 	var (
-		resp          *invokev1.InvokeMethodResponse
-		r             io.Reader
-		statusCode    int
-		errBody       []byte
-		msg           ErrorResponse
-		errorOccurred bool
+		r          io.Reader
+		statusCode int
+		errBody    []byte
+		msg        *ErrorResponse
 	)
 	err := policy(func(ctx context.Context) (rErr error) {
-		if resp != nil {
-			resp.Close()
-		}
-		resp, rErr = a.directMessaging.Invoke(ctx, targetID, req)
+		rResp, rErr := a.directMessaging.Invoke(ctx, targetID, req)
 
 		if rErr != nil {
-			// Allowlists policies that are applied on the callee side can return a Permission Denied error.
+			// Allowlist policies that are applied on the callee side can return a Permission Denied error.
 			// For everything else, treat it as a gRPC transport error
-			errorOccurred = true
 			statusCode = fasthttp.StatusInternalServerError
 			if status.Code(rErr) == codes.PermissionDenied {
 				statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
-			msg = NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr))
+			msg = ptr.Of(NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr)))
+			if rResp != nil {
+				rResp.Close()
+			}
 			return rErr
 		}
 
-		errorOccurred = false
-		invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
-		r = resp.RawData()
-		reqCtx.Response.Header.SetContentType(resp.ContentType())
+		invokev1.InternalMetadataToHTTPHeader(reqCtx, rResp.Headers(), reqCtx.Response.Header.Set)
+		reqCtx.Response.Header.SetContentType(rResp.ContentType())
+		msg = nil
+		r = rResp.RawData()
 
 		// Construct response
-		statusCode = int(resp.Status().Code)
-		if !resp.IsHTTPResponse() {
+		statusCode = int(rResp.Status().Code)
+		if !rResp.IsHTTPResponse() {
 			statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 			if statusCode != fasthttp.StatusOK {
-				errBody, rErr = invokev1.ProtobufToJSON(resp.Status())
+				errBody, rErr = invokev1.ProtobufToJSON(rResp.Status())
 				if rErr != nil {
-					errorOccurred = true
-					msg = NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error())
+					msg = ptr.Of(NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()))
 					statusCode = fasthttp.StatusInternalServerError
 					return rErr
 				}
 				r = io.NopCloser(bytes.NewReader(errBody))
-				resp.Close()
+				rResp.Close()
+				return nil
 			}
 		} else if statusCode != fasthttp.StatusOK {
-			return errors.Errorf("Received non-successful status code: %d", statusCode)
+			return fmt.Errorf("received non-successful status code: %d", statusCode)
 		}
+
 		return nil
 	})
 
@@ -1489,16 +1488,26 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
 		respond(reqCtx, withError(500, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
 		cancel()
+		if r != nil {
+			if rc, ok := r.(io.Closer); ok {
+				_ = rc.Close()
+			}
+		}
 		return
 	}
 
-	if errorOccurred {
-		respond(reqCtx, withError(statusCode, msg))
+	if msg != nil {
+		respond(reqCtx, withError(statusCode, *msg))
 		cancel()
+		if r != nil {
+			if rc, ok := r.(io.Closer); ok {
+				_ = rc.Close()
+			}
+		}
 		return
 	}
 
-	// This will also close the response stream automatically; no need to invoke resp.Close()
+	// This will also close the response stream automatically; no need to invoke rResp.Close()
 	respond(reqCtx, withStream(statusCode, r, cancel))
 }
 
