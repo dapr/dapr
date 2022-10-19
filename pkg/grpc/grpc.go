@@ -83,7 +83,7 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 }
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist.
-func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error) {
+func (g *Manager) GetGRPCConnection(parentCtx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error) {
 	releaseFactory := func(conn *grpc.ClientConn) func() {
 		return func() {
 			g.connectionPool.Release(conn)
@@ -143,9 +143,6 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 		transportCredentialsAdded = true
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
-	defer cancel()
-
 	dialPrefix := GetDialAddressPrefix(g.mode)
 	if sslEnabled {
 		//nolint:gosec
@@ -160,15 +157,18 @@ func (g *Manager) GetGRPCConnection(ctx context.Context, address, id string, nam
 	}
 
 	opts = append(opts, customOpts...)
+
+	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
 	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
+	cancel()
 	if err != nil {
 		return nil, func() {}, err
 	}
 
 	teardown := releaseFactory(conn)
 	g.lock.Lock()
-	defer g.lock.Unlock()
 	g.connectionPool.Register(address, conn)
+	g.lock.Unlock()
 
 	return conn, teardown, nil
 }
@@ -198,8 +198,8 @@ func (p *connectionPool) Register(address string, conn *grpc.ClientConn) {
 	// NOTE: pool should also increment referenceCount not to close the pooled connection
 
 	p.referenceLock.Lock()
-	defer p.referenceLock.Unlock()
 	p.referenceCount[conn] = 2
+	p.referenceLock.Unlock()
 }
 
 func (p *connectionPool) Share(address string) (*grpc.ClientConn, bool) {
@@ -209,9 +209,8 @@ func (p *connectionPool) Share(address string) (*grpc.ClientConn, bool) {
 	}
 
 	p.referenceLock.Lock()
-	defer p.referenceLock.Unlock()
-
 	p.referenceCount[conn]++
+	p.referenceLock.Unlock()
 	return conn, true
 }
 

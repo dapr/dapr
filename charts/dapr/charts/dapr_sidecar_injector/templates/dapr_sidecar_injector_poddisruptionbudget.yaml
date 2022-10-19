@@ -9,6 +9,9 @@ metadata:
   name: dapr-sidecar-injector-disruption-budget
   labels:
     app: dapr-sidecar-injector
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
 {{- if .Values.global.ha.disruption.minimumAvailable }}
   minAvailable: {{ .Values.global.ha.disruption.minimumAvailable }}
