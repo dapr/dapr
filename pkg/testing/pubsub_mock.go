@@ -141,7 +141,6 @@ func (m *InMemoryPubsub) Publish(req *pubsub.PublishRequest) error {
 			ContentType: req.ContentType,
 		}
 	}
-	m.lock.Unlock()
 	return nil
 }
 
