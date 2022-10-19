@@ -82,12 +82,15 @@ type Actors interface {
 	GetActiveActorsCount(ctx context.Context) []ActiveActorsCount
 }
 
+// GRPCConnectionFn is the type of the function that returns a gRPC connection
+type GRPCConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
+
 type actorsRuntime struct {
 	appChannel             channel.AppChannel
 	store                  state.Store
 	transactionalStore     state.TransactionalStore
 	placement              *internal.ActorPlacement
-	grpcConnectionFn       func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error)
+	grpcConnectionFn       GRPCConnectionFn
 	config                 Config
 	actorsTable            *sync.Map
 	activeTimers           *sync.Map
@@ -139,32 +142,39 @@ const (
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
 
+// ActorsOpts contains options for NewActors.
+type ActorsOpts struct {
+	StateStore       state.Store
+	AppChannel       channel.AppChannel
+	GRPCConnectionFn GRPCConnectionFn
+	Config           Config
+	CertChain        *daprCredentials.CertChain
+	TracingSpec      configuration.TracingSpec
+	Features         []configuration.FeatureSpec
+	Resiliency       resiliency.Provider
+	StateStoreName   string
+}
+
 // NewActors create a new actors runtime with given config.
-func NewActors(
-	stateStore state.Store,
-	appChannel channel.AppChannel,
-	grpcConnectionFn func(ctx context.Context, address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(), error),
-	config Config,
-	certChain *daprCredentials.CertChain,
-	tracingSpec configuration.TracingSpec,
-	features []configuration.FeatureSpec,
-	resiliency resiliency.Provider,
-	stateStoreName string,
-) Actors {
+func NewActors(opts ActorsOpts) Actors {
 	var transactionalStore state.TransactionalStore
-	if stateStore != nil {
-		features := stateStore.Features()
+	if opts.StateStore != nil {
+		features := opts.StateStore.Features()
 		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
-			transactionalStore = stateStore.(state.TransactionalStore)
+			transactionalStore = opts.StateStore.(state.TransactionalStore)
 		}
 	}
 
 	return &actorsRuntime{
-		appChannel:             appChannel,
-		config:                 config,
-		store:                  stateStore,
+		store:                  opts.StateStore,
+		appChannel:             opts.AppChannel,
+		grpcConnectionFn:       opts.GRPCConnectionFn,
+		config:                 opts.Config,
+		certChain:              opts.CertChain,
+		tracingSpec:            opts.TracingSpec,
+		resiliency:             opts.Resiliency,
+		storeName:              opts.StateStoreName,
 		transactionalStore:     transactionalStore,
-		grpcConnectionFn:       grpcConnectionFn,
 		actorsTable:            &sync.Map{},
 		activeTimers:           &sync.Map{},
 		activeTimersLock:       &sync.RWMutex{},
@@ -177,11 +187,7 @@ func NewActors(
 		evaluationBusy:         false,
 		evaluationChan:         make(chan bool),
 		appHealthy:             atomic.NewBool(true),
-		certChain:              certChain,
-		tracingSpec:            tracingSpec,
-		resiliency:             resiliency,
-		storeName:              stateStoreName,
-		isResiliencyEnabled:    configuration.IsFeatureEnabled(features, configuration.Resiliency),
+		isResiliencyEnabled:    configuration.IsFeatureEnabled(opts.Features, configuration.Resiliency),
 	}
 }
 

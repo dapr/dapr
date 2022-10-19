@@ -291,7 +291,14 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	}
 
 	if b.config == nil {
-		config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
+		config := NewConfig(ConfigOpts{
+			HostAddress:        "",
+			AppID:              TestAppID,
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               0,
+			Namespace:          "",
+			AppConfig:          config.ApplicationConfig{},
+		})
 		b.config = &config
 	}
 
@@ -307,7 +314,15 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 		storeName = b.actorStoreName
 	}
 
-	a := NewActors(store, b.appChannel, nil, *b.config, nil, tracingSpec, b.featureSpec, resiliency.FromConfigurations(log, testResiliency), storeName)
+	a := NewActors(ActorsOpts{
+		StateStore:     store,
+		AppChannel:     b.appChannel,
+		Config:         *b.config,
+		TracingSpec:    tracingSpec,
+		Features:       b.featureSpec,
+		Resiliency:     resiliency.FromConfigurations(log, testResiliency),
+		StateStoreName: storeName,
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -315,16 +330,38 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", config.ApplicationConfig{})
-	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+	config := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		AppConfig:          config.ApplicationConfig{},
+	})
+
+	a := NewActors(ActorsOpts{
+		StateStore:     store,
+		AppChannel:     appChannel,
+		Config:         config,
+		TracingSpec:    spec,
+		Resiliency:     resiliency.New(log),
+		StateStoreName: "actorStore",
+	})
 
 	return a.(*actorsRuntime)
 }
 
 func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
-	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
-	a := NewActors(nil, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+	config := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{""},
+		AppConfig:          config.ApplicationConfig{},
+	})
+	a := NewActors(ActorsOpts{
+		AppChannel:     appChannel,
+		Config:         config,
+		TracingSpec:    spec,
+		Resiliency:     resiliency.New(log),
+		StateStoreName: "actorStore",
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -332,8 +369,19 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	var store state.Store
-	config := NewConfig("", TestAppID, []string{""}, 0, "", config.ApplicationConfig{})
-	a := NewActors(store, appChannel, nil, config, nil, spec, nil, resiliency.New(log), "actorStore")
+	config := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{""},
+		AppConfig:          config.ApplicationConfig{},
+	})
+	a := NewActors(ActorsOpts{
+		StateStore:     store,
+		AppChannel:     appChannel,
+		Config:         config,
+		TracingSpec:    spec,
+		Resiliency:     resiliency.New(log),
+		StateStoreName: "actorStore",
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -351,8 +399,20 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 			},
 		},
 	}
-	c := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
-	a := NewActors(store, appChannel, nil, c, nil, spec, []config.FeatureSpec{}, resiliency.New(log), "actorStore")
+	c := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		AppConfig:          appConfig,
+	})
+	a := NewActors(ActorsOpts{
+		StateStore:     store,
+		AppChannel:     appChannel,
+		Config:         c,
+		TracingSpec:    spec,
+		Features:       []config.FeatureSpec{},
+		Resiliency:     resiliency.New(log),
+		StateStoreName: "actorStore",
+	})
 
 	return a.(*actorsRuntime)
 }
@@ -948,7 +1008,9 @@ func reminderRepeats(ctx context.Context, t *testing.T, dueTime, period, ttl str
 		return
 	}
 	assert.NoError(t, err)
+	testActorsRuntime.remindersLock.RLock()
 	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+	testActorsRuntime.remindersLock.RUnlock()
 
 	cnt := 0
 	var (
@@ -1904,7 +1966,14 @@ func TestConfig(t *testing.T) {
 		Reentrancy:                 config.ReentrancyConfig{},
 		RemindersStoragePartitions: 0,
 	}
-	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+	c := NewConfig(ConfigOpts{
+		HostAddress:        "localhost:5050",
+		AppID:              "app1",
+		PlacementAddresses: []string{"placement:5050"},
+		Port:               3500,
+		Namespace:          "default",
+		AppConfig:          appConfig,
+	})
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
 	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
@@ -1920,7 +1989,14 @@ func TestConfig(t *testing.T) {
 func TestReentrancyConfig(t *testing.T) {
 	appConfig := DefaultAppConfig
 	t.Run("Test empty reentrancy values", func(t *testing.T) {
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+		c := NewConfig(ConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
 		assert.False(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
@@ -1935,7 +2011,14 @@ func TestReentrancyConfig(t *testing.T) {
 				},
 			},
 		}
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+		c := NewConfig(ConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
 		assert.False(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
@@ -1944,7 +2027,14 @@ func TestReentrancyConfig(t *testing.T) {
 
 	t.Run("Test minimum reentrancy values", func(t *testing.T) {
 		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+		c := NewConfig(ConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
 		assert.True(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
@@ -1953,7 +2043,14 @@ func TestReentrancyConfig(t *testing.T) {
 	t.Run("Test full reentrancy values", func(t *testing.T) {
 		reentrancyLimit := 64
 		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}
-		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, 3500, "default", appConfig)
+		c := NewConfig(ConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
 		assert.True(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
 		assert.Equal(t, 64, *c.Reentrancy.MaxStackDepth)
@@ -2089,7 +2186,11 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
+	reentrantConfig := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
@@ -2117,7 +2218,11 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
+	reentrantConfig := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
 	reentrantAppChannel.callLog = []string{}
@@ -2145,7 +2250,11 @@ func TestReentrancyStackLimit(t *testing.T) {
 	stackDepth := 0
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}
-	reentrantConfig := NewConfig("", TestAppID, []string{"placement:5050"}, 0, "", appConfig)
+	reentrantConfig := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{"placement:5050"},
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
@@ -2176,7 +2285,11 @@ func TestReentrancyPerActor(t *testing.T) {
 			},
 		},
 	}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{""},
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
 	reentrantAppChannel.callLog = []string{}
@@ -2212,7 +2325,11 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 			},
 		},
 	}
-	reentrantConfig := NewConfig("", TestAppID, []string{""}, 0, "", appConfig)
+	reentrantConfig := NewConfig(ConfigOpts{
+		AppID:              TestAppID,
+		PlacementAddresses: []string{""},
+		AppConfig:          appConfig,
+	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
 	reentrantAppChannel.callLog = []string{}
@@ -2233,28 +2350,29 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 	actorType := "failingActor"
 	actorID := "failingId"
 	failingState := &daprt.FailingStatestore{
-		Failure: daprt.Failure{
+		Failure: daprt.NewFailure(
 			// Transform the keys into actor format.
-			Fails: map[string]int{
+			map[string]int{
 				constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey"): 1,
 				constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey"):    1,
 				constructCompositeKey("actors", actorType):                                 1, // Default reminder key.
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey"): time.Second * 10,
 				constructCompositeKey(TestAppID, actorType, actorID, "timeoutMultiKey"):    time.Second * 10,
 				constructCompositeKey("actors", actorType):                                 time.Second * 10, // Default reminder key.
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 	failingAppChannel := &daprt.FailingAppChannel{
-		Failure: daprt.Failure{
-			Timeouts: map[string]time.Duration{
+		Failure: daprt.NewFailure(
+			nil,
+			map[string]time.Duration{
 				"timeoutId": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
 			return req.Actor().ActorId
 		},
@@ -2276,7 +2394,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
-		assert.Equal(t, 1, failingAppChannel.Failure.CallCount["timeoutId"])
+		assert.Equal(t, 1, failingAppChannel.Failure.CallCount("timeoutId"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2290,7 +2408,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey")
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 	})
 
 	t.Run("test get state times out with resiliency", func(t *testing.T) {
@@ -2305,7 +2423,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey")
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2327,7 +2445,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey")
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 	})
 
 	t.Run("test state transaction times out with resiliency", func(t *testing.T) {
@@ -2350,7 +2468,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutMultiKey")
 		assert.Error(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -2362,7 +2480,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		callKey := constructCompositeKey("actors", actorType)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, failingState.Failure.CallCount[callKey])
+		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 
 		// Key will no longer fail, so now we can check the timeout.
 		start := time.Now()
@@ -2373,7 +2491,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Error(t, err)
-		assert.Equal(t, 4, failingState.Failure.CallCount[callKey]) // Should be called 2 more times.
+		assert.Equal(t, 4, failingState.Failure.CallCount(callKey)) // Should be called 2 more times.
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }

@@ -133,10 +133,15 @@ func GetIntOrDefault(m map[string]string, key string, def int) int {
 	return def
 }
 
+// IsSocket returns if the given file is a unix socket.
+func IsSocket(f fs.FileInfo) bool {
+	return f.Mode()&fs.ModeSocket != 0
+}
+
 // SocketExists returns true if the file in that path is an unix socket.
 func SocketExists(socketPath string) bool {
 	if s, err := os.Stat(socketPath); err == nil {
-		return s.Mode()&fs.ModeSocket != 0
+		return IsSocket(s)
 	}
 	return false
 }

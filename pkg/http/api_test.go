@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/fasthttputil"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -62,6 +63,8 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/dapr/utils"
+	"github.com/dapr/dapr/utils/nethttpadaptor"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -681,11 +684,13 @@ func TestPopulateMetadataForBulkPublishEntry(t *testing.T) {
 func TestShutdownEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	shutdownCh := make(chan struct{})
 	m := mock.Mock{}
 	m.On("shutdown", mock.Anything).Return()
 	testAPI := &api{
 		shutdown: func() {
 			m.MethodCalled("shutdown")
+			close(shutdownCh)
 		},
 	}
 
@@ -695,8 +700,11 @@ func TestShutdownEndpoints(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
-		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
-			<-time.After(200 * time.Millisecond)
+		select {
+		case <-time.After(time.Second):
+			t.Fatal("Did not shut down within 1 second")
+		case <-shutdownCh:
+			// All good
 		}
 		m.AssertCalled(t, "shutdown")
 	})
@@ -1299,17 +1307,17 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	failingDirectMessaging := &daprt.FailingDirectMessaging{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingKey":        1,
 				"extraFailingKey":   3,
 				"circuitBreakerKey": 10,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutKey": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	fakeServer := newFakeHTTPServer()
@@ -1331,7 +1339,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["failingKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey"))
 	})
 
 	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
@@ -1348,7 +1356,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["timeoutKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("timeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -1364,7 +1372,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount["extraFailingKey"])
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("extraFailingKey"))
 	})
 
 	t.Run("Test invoke direct messages can trip circuit breaker", func(t *testing.T) {
@@ -1378,13 +1386,13 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 		// Circuit Breaker trips on the 5th failure, stopping retries.
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 
 		// Request occurs when the circuit breaker is open, which shouldn't even hit the app.
 		resp = fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Contains(t, string(resp.RawBody), "circuit breaker is open", "Should have received a circuit breaker open error.")
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount["circuitBreakerKey"])
+		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 	})
 
 	fakeServer.Shutdown()
@@ -2098,15 +2106,15 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	failingActors := &actors.FailingActors{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingId": 1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutId": time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 
 	t.Run("Direct Message - retries with resiliency", func(t *testing.T) {
@@ -2116,7 +2124,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingActors.Failure.CallCount["failingId"])
+		assert.Equal(t, 2, failingActors.Failure.CallCount("failingId"))
 	})
 
 	fakeServer.Shutdown()
@@ -2877,13 +2885,7 @@ func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
 	registry := httpMiddlewareLoader.NewRegistry()
 	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-				return func(ctx *fasthttp.RequestCtx) {
-					body := string(ctx.PostBody())
-					ctx.Request.SetBody([]byte(strings.ToUpper(body)))
-					h(ctx)
-				}
-			}, nil
+			return utils.UppercaseRequestMiddleware, nil
 		}
 	}, "uppercase")
 	var handlers []httpMiddleware.Middleware
@@ -3109,7 +3111,11 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		handler := pipeline.Apply(router.Handler)
+		handler := fasthttpadaptor.NewFastHTTPHandler(
+			pipeline.Apply(
+				nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler),
+			),
+		)
 		if err := fasthttp.Serve(f.ln, diag.HTTPTraceMiddleware(handler, "fakeAppID", spec)); err != nil {
 			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
 		}
@@ -3219,8 +3225,8 @@ func TestV1StateEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	var fakeStore state.Store = fakeStateStoreQuerier{}
 	failingStore := &daprt.FailingStatestore{
-		Failure: daprt.Failure{
-			Fails: map[string]int{
+		Failure: daprt.NewFailure(
+			map[string]int{
 				"failingGetKey":        1,
 				"failingSetKey":        1,
 				"failingDeleteKey":     1,
@@ -3230,7 +3236,7 @@ func TestV1StateEndpoints(t *testing.T) {
 				"failingMultiKey":      1,
 				"failingQueryKey":      1,
 			},
-			Timeouts: map[string]time.Duration{
+			map[string]time.Duration{
 				"timeoutGetKey":        time.Second * 10,
 				"timeoutSetKey":        time.Second * 10,
 				"timeoutDeleteKey":     time.Second * 10,
@@ -3240,8 +3246,8 @@ func TestV1StateEndpoints(t *testing.T) {
 				"timeoutMultiKey":      time.Second * 10,
 				"timeoutQueryKey":      time.Second * 10,
 			},
-			CallCount: map[string]int{},
-		},
+			map[string]int{},
+		),
 	}
 	fakeStores := map[string]state.Store{
 		"store1":    fakeStore,
@@ -3549,7 +3555,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingGetKey"))
 	})
 
 	t.Run("get state request times out with resiliency", func(t *testing.T) {
@@ -3560,7 +3566,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3574,7 +3580,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingSetKey"))
 	})
 
 	t.Run("set state request times out with resiliency", func(t *testing.T) {
@@ -3590,7 +3596,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3599,7 +3605,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingDeleteKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingDeleteKey"))
 	})
 
 	t.Run("delete state request times out with resiliency", func(t *testing.T) {
@@ -3610,7 +3616,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutDeleteKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutDeleteKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3624,8 +3630,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkGetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkGetKey"))
 	})
 
 	t.Run("bulk state get times out on single with resiliency", func(t *testing.T) {
@@ -3646,8 +3652,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Len(t, bulkResponse, 2)
 		assert.NotEmpty(t, bulkResponse[0].Error)
 		assert.Empty(t, bulkResponse[1].Error)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkGetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodTimeoutBulkGetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkGetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodTimeoutBulkGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3667,8 +3673,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingBulkSetKey"])
-		assert.Equal(t, 1, failingStore.Failure.CallCount["goodBulkSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkSetKey"))
+		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkSetKey"))
 	})
 
 	t.Run("bulk state set times out with resiliency", func(t *testing.T) {
@@ -3689,8 +3695,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutBulkSetKey"])
-		assert.Equal(t, 0, failingStore.Failure.CallCount["goodTimeoutBulkSetKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkSetKey"))
+		assert.Equal(t, 0, failingStore.Failure.CallCount("goodTimeoutBulkSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -3712,7 +3718,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingMultiKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingMultiKey"))
 	})
 
 	t.Run("state transaction times out with resiliency", func(t *testing.T) {
@@ -3733,7 +3739,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutMultiKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutMultiKey"))
 	})
 
 	t.Run("state query retries with resiliency", func(t *testing.T) {
@@ -3745,7 +3751,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["failingQueryKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingQueryKey"))
 	})
 
 	t.Run("state query times out with resiliency", func(t *testing.T) {
@@ -3757,7 +3763,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeoutQueryKey"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutQueryKey"))
 	})
 }
 
@@ -3951,11 +3957,11 @@ func TestV1SecretEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	fakeStore := daprt.FakeSecretStore{}
 	failingStore := daprt.FailingSecretStore{
-		Failure: daprt.Failure{
-			Fails:     map[string]int{"key": 1, "bulk": 1},
-			Timeouts:  map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
-			CallCount: map[string]int{},
-		},
+		Failure: daprt.NewFailure(
+			map[string]int{"key": 1, "bulk": 1},
+			map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
+			map[string]int{},
+		),
 	}
 	fakeStores := map[string]secretstores.SecretStore{
 		"store1":     fakeStore,
@@ -4099,7 +4105,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["key"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("key"))
 	})
 
 	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
@@ -4111,7 +4117,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["timeout"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
@@ -4121,7 +4127,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"metadata.key": "bulk"})
 
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["bulk"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("bulk"))
 	})
 
 	t.Run("Get bulk secret - timeout before request ends", func(t *testing.T) {
@@ -4132,7 +4138,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingStore.Failure.CallCount["bulkTimeout"])
+		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 }
