@@ -253,6 +253,13 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 			container.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
 				RunAsUserName: ptr.Of("ContainerAdministrator"),
 			}
+
+			// We also need to set RunAsNonRoot and ReadOnlyRootFilesystem to false, which would impact Linux too.
+			// The injector has no way to know if the pod is going to be deployed on Windows or Linux, so we need to err on the side of most compatibility.
+			// On Linux, our containers run with a non-root user, so the net effect shouldn't change: daprd is running as non-root and has no permission to write on the root FS.
+			// However certain security scanner may complain about this.
+			container.SecurityContext.RunAsNonRoot = ptr.Of(false)
+			container.SecurityContext.ReadOnlyRootFilesystem = ptr.Of(false)
 			break
 		}
 	}
