@@ -15,6 +15,7 @@ package resiliency_test
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,19 +88,20 @@ func TestPolicyTimeout(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for i := range tests {
+		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
-			called := false
+			called := atomic.Bool{}
 			fn := func(ctx context.Context) error {
 				time.Sleep(test.sleepTime)
-				called = true
+				called.Store(true)
 				return nil
 			}
 
 			policy := resiliency.Policy(context.Background(), log, "timeout", test.timeout, nil, nil)
 			policy(fn)
 
-			assert.Equal(t, test.expected, called)
+			assert.Equal(t, test.expected, called.Load())
 		})
 	}
 }

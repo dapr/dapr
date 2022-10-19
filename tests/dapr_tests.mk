@@ -282,9 +282,6 @@ push-kind-perf-app-all: $(PUSH_KIND_PERF_APPS_TARGETS)
 .PHONY: test-deps
 test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
-	# In golang >=1.16 there is a new way to do this with `go install gotest.tools/gotestsum@latest`
-	# But this doesn't work with <=1.15.
-	# (see: https://golang.org/ref/mod#go-install)
 	command -v gotestsum || go install gotest.tools/gotestsum@latest
 
 # start all e2e tests
@@ -529,6 +526,14 @@ describe-minikube-env:
 	export DAPR_TEST_REGISTRY=\n\
 	export MINIKUBE_NODE_IP="
 
-# Setup minikube
+# Delete minikube
 delete-minikube:
 	minikube delete
+
+# Delete all stored test results
+.PHONY: test-clean
+test-clean:
+	-rm -rv ./tests/e2e/*/dist
+	-rm -rv ./tests/perf/*/dist
+	-rm test_report_*.json
+	-rm test_report_*.xml
